@@ -20,7 +20,11 @@ from app.modules.authorization.runtime import (
     SubmissionBundlePreparationPreflightResourceContext,
     SubmissionBundlePreparationResourceContext,
 )
-from tests.test_authorization import _PreparedTestSession, _runtime_context, _runtime_service
+from tests.authorization.runtime_support import (
+    _PreparedTestSession,
+    _runtime_context,
+    _runtime_service,
+)
 
 
 def _request_values(context, project_id, task_id, assignment_id):

@@ -13,7 +13,13 @@ from app.modules.authorization.repository import AdminAuthorizationRepository
 OrderedRequest = tuple[str, str, dict[str, str], dict[str, str], str]
 
 
-async def wait_for_named_database_lock(database_url: str, application_name: str) -> None:
+async def wait_for_named_database_lock(
+    database_url: str,
+    application_name: str,
+    *,
+    expected_waiter_pid: int | None = None,
+    expected_blocker_pid: int | None = None,
+) -> None:
     """Observe a late-named waiter without retaining a transaction activity snapshot."""
     engine = create_async_engine(database_url, isolation_level="AUTOCOMMIT")
     try:
@@ -22,9 +28,16 @@ async def wait_for_named_database_lock(database_url: str, application_name: str)
                 waiting = await connection.scalar(
                     text(
                         "select exists(select 1 from pg_stat_activity where "
-                        "application_name=:name and wait_event_type='Lock')"
+                        "application_name=:name and wait_event_type='Lock' "
+                        "and (cast(:waiter as integer) is null or pid=cast(:waiter as integer)) "
+                        "and (cast(:blocker as integer) is null or "
+                        "pg_blocking_pids(pid)=array[cast(:blocker as integer)]))"
                     ),
-                    {"name": application_name},
+                    {
+                        "name": application_name,
+                        "waiter": expected_waiter_pid,
+                        "blocker": expected_blocker_pid,
+                    },
                 )
                 if waiting:
                     return

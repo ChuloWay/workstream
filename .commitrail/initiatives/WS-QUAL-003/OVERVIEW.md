@@ -21,8 +21,8 @@
 - AUTH cleanup: [12 — projection proof and staged AUTH audit](WS-QUAL-003-12.md).
   The human expanded this change to use reviewed commit checkpoints in one PR;
   projection proof is its first stage, not its completion boundary.
-- Next usable boundary within 12: implement its concrete authentication and
-  actor-resolution audit map through reviewed checkpoints. The shared concurrency-observer repair is included in 11
+- Next usable boundary within 12: verify and review its selected authentication
+  and actor-resolution implementation checkpoint. The shared concurrency-observer repair is included in 11
   by human authorization; the full suite audit remains open.
 - Preserve: intended production semantics, public boundaries, real database/isolation/
   concurrency proof, current coverage floors, full hosted execution, human merge.
@@ -116,7 +116,9 @@ No fixed reduction percentage or same-day completion claim overrides safety.
   stored-fact substitutions through the real replay matcher, and adds the
   artifact-policy positive. These controlled audit-port substitutions prove
   service matching, not database corruption or PostgreSQL isolation. The
-  remaining AUTH monolith and actor-resolution families are still unaudited.
+  same change also selects all 34 actor-registry tests and 51 authentication
+  tests for decomposition and proof repair. Their exact map and checkpoint
+  limitations live in record 12; remaining AUTH lifecycle families are unaudited.
 - PROJECT slice 07 replaces the remaining mixed diagnostic composer tests with
   exact facts/digests and owner selectors. Each invalid-parent case now starts
   with a valid record, so a pre-existing missing target cannot hide a broken

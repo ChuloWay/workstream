@@ -196,7 +196,8 @@ values from the implementation under test.
 ## Concrete stages B–D: authentication and actor-resolution proof
 
 This extension makes stages 2–4 concrete under the existing human-authorized
-single-PR expansion. It does not claim the backend changes below are implemented.
+single-PR expansion. The implementation checkpoint below records the selected repairs;
+its review and hosted execution remain distinct from the plan's feasibility proof.
 The reviewed starting source is `ca86fb38e8d9d4fb4dafc9cd0256fa0aa6ed6de6`.
 
 ### Selected boundary and additional allowed files
@@ -410,7 +411,7 @@ required; a smaller file does not itself justify removing any of them.
 | `test_actors_me_returns_contributor_without_token_role_authority` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
 | `test_patch_actors_me_updates_only_display_fields` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
 | `test_patch_actors_me_maps_database_failure_to_retryable_unavailable` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
-| `test_actor_self_evidence_failure_is_retryable_and_rolls_back_touch` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_actor_self_evidence_failure_is_retryable_and_rolls_back_touch` | `test_self_api.py` | Rename to `test_actor_self_evidence_failure_is_retryable_before_touch`; prove no touch occurs when earlier AUTH evidence fails. |
 | `test_missing_bearer_has_no_actor_self_decision_evidence` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
 | `test_suspended_profile_is_readable_but_not_mutable` | `test_self_api_lifecycle.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
 | `test_revoked_identity_link_is_denied_by_actor_api` | `test_self_api_lifecycle.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
@@ -436,7 +437,7 @@ required; a smaller file does not itself justify removing any of them.
 | No helper consumer imports a test-bearing monolith | AST inspection of the three consumers and support imports | Negative structure; unchanged consumer test bodies |
 | Each selected authentication behavior survives or improves | Named table cases and their final mapped split nodes | Focused real verifier tests locally; no live network |
 | Key-resolution deadline includes lock wait | `test_jwks_lock_wait_is_inside_total_deadline` | Real asyncio lock with no HTTP access; deadline-removal probe |
-| Refresh single-flight is genuine | Existing two single-flight names, strengthened | Observed real lock contention and held async transport; exclusion-removal probe |
+| Refresh single-flight is genuine | `test_unknown_kid_refresh_is_single_flight`, same-kid and distinct-kid-after-cooldown cases | Observed real lock contention and held async transport; exclusion- and generation-removal probes |
 | First-access race produces one persisted identity | Existing first-access race name, strengthened | Hosted PostgreSQL, independent PIDs, both misses, exact blocker |
 | Revocation and legacy concurrent mutation protections survive | Existing named actor race tests in destination table | Hosted PostgreSQL; no mock downgrade |
 | Lane discovery includes all moved proof | Existing lane catalogue/discovery tests and hosted final manifest | Exact source/destination node reconciliation, no skips/deselections |
@@ -458,14 +459,54 @@ selection, debt and honest remaining-scope reporting. Architecture review is
 needed only if inspection finds a changed runtime/public boundary; none is
 planned. Reuse existing focused reviewers; no blanket nine-agent fanout.
 
+### Implementation checkpoint: what changed and why
+
+The 85 selected original functions contained 141 expanded cases: 104
+authentication and 37 actor cases. Their replacements collect 198: 127 and 71.
+That increase is primarily independently named failures formerly hidden inside
+loops and mixed tests, not 57 new product behaviors. The exact 331 original
+assertion spans are mapped to surviving nodes in the required machine-readable
+assertion map. A map verifies custody; semantic review must still verify meaning.
+
+The 1,594-line actor monolith is removed. The remaining authentication monolith
+shrinks from 7,304 to 5,822 lines; extracting AUTH runtime helpers reduces its
+consumer monolith from 13,384 to 13,318. These files are not yet fully decomposed.
+All new actor/authentication files remain below 500 lines. The remaining
+23 authentication tests, 163 AUTH tests, and 16 external helper-consumer tests
+retain identical AST bodies. Their broader lifecycle audit is not claimed here.
+
+| Repair | Why the retained proof earns its cost |
+| --- | --- |
+| Real JWKS lock deadline, single-flight and generation reuse | Old delayed-HTTP/gather tests survived deadline/exclusion removal. New tests detect a held-lock timeout and duplicate HTTP; cooldown is expired independently for generation reuse. |
+| Duplicate JWK and overlength role fixtures | Otherwise-valid duplicate keys and a long role before valid roles prevent unrelated validation/count guards from masking the intended defect. |
+| Actor identity substitutions and bounded candidate query | Exact controlled selectors reject one changed identity field at a time; ordered real rows place ineligible candidates before eligible rows so pagination cannot conceal a missing filter. |
+| Three PostgreSQL races | First-access, revocation and legacy activation observe the actual waiter blocked on the exact holder before release; tasks are awaited/cancelled on failure. |
+| Staged rollback versus early denial | First-access audit failure observes stored transaction-local rows/event before failing. Self-update failure observes staged timestamps/evidence; earlier evidence failure proves touch never ran. |
+| Event provenance, timestamp and no-effect checks | Winner request/correlation and both event shapes are exact; timestamps are seeded instead of sleeping; rate/admission denial forbids links and events as well as profiles. |
+
+Only redundant proof is pruned: the malformed wrong-use JWKS parameter is
+replaced by the existing valid-key `test_incompatible_jwk_metadata_is_rejected`
+use case; direct agent-admission rejection survives through the actual agent
+route; duplicate service-token rejection survives in
+`test_unknown_service_creates_nothing`. The distinct known-service human-entry
+denial remains separately named. UUID/object truthiness is replaced with actual
+identity relations and successful verification. No legacy product path is
+removed merely because its name says legacy.
+
+The exact-PID observer regression first establishes a real blocked connection,
+then uses one actual observer query for each selector. Its test-only poll
+override checks that the unchanged default is 5,000; it does not spend thousands
+of queries proving the same deliberately wrong PID remains wrong. The original
+late-waiter/fresh-snapshot regression retains its normal polling behavior.
+
 ## Source reconciliation
 
 - Source reconciliation: discovery used main `369903ae`, including merged
   observer repair PR378. Integrated base `8c00fb3d` also includes PR376's
   Commitrail contribution-path simplification. Product PR377 owns finalization,
   not this AUTH replay family.
-- Next usable boundary within this change: implement the concrete authentication
-  and actor-resolution stages above after their plan review. The projection slice does not complete those
-  large-file obligations and is no longer the whole intended merge outcome.
+- Next usable boundary within this change: reconcile the complete selected
+  implementation, execute hosted PostgreSQL/coverage proof and replay affected
+  internal reviews. The projection checkpoint alone is not the intended merge outcome.
 - Remaining risks: PostgreSQL integrity and owner-query isolation are separate
   proof boundaries; most repository tests remain unaudited.

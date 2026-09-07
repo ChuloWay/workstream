@@ -129,7 +129,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         runner.ADMIN_RUNNER_MODULE,
     } == modules_by_lane["schema_contracts"]
     assert {
-        "tests/test_actors.py",
+        "tests/actors/test_first_access_postgresql.py",
         "tests/authorization/guide_compilation_projections/test_replay_evidence.py",
         "tests/test_auth_concurrency_observer.py",
         "tests/test_artifact_admission.py",

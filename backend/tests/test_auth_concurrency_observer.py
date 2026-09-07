@@ -90,6 +90,56 @@ async def require_exact_blocker(connection, waiter_pid, blocker_pid):
     raise AssertionError("exact waiter never blocked on the expected holder")
 
 
+@pytest.mark.parametrize("selector", ["exact", "wrong-blocker", "wrong-waiter"])
+async def test_observer_requires_exact_waiter_and_blocker(postgres_database_url, selector, monkeypatch):
+    """A real lock wait belonging to another backend cannot satisfy exact custody."""
+    engine = create_async_engine(postgres_database_url)
+    contender = None
+    name = f"auth-exact-waiter-{uuid4().hex}"
+    key = uuid4().int % (2**63)
+
+    def one_observation(default_poll_budget):
+        assert default_poll_budget == 5000
+        return range(1)
+
+    # The wait is established below. One real SQL observation discriminates the
+    # selector; thousands of deliberately unsuccessful polls add no protection.
+    monkeypatch.setattr(support, "range", one_observation, raising=False)
+    try:
+        async with engine.connect() as blocker, engine.connect() as waiter:
+            blocker_pid = await blocker.scalar(text("select pg_backend_pid()"))
+            waiter_pid = await waiter.scalar(text("select pg_backend_pid()"))
+            assert waiter_pid != blocker_pid
+            await blocker.execute(text("select pg_advisory_xact_lock(:key)"), {"key": key})
+            await waiter.execute(
+                text("select set_config('application_name', :name, true)"), {"name": name}
+            )
+            contender = asyncio.create_task(
+                waiter.execute(text("select pg_advisory_xact_lock(:key)"), {"key": key})
+            )
+            try:
+                await asyncio.wait_for(
+                    require_exact_blocker(blocker, waiter_pid, blocker_pid), timeout=5
+                )
+                observation = support.wait_for_named_database_lock(
+                    postgres_database_url,
+                    name,
+                    expected_waiter_pid=blocker_pid if selector == "wrong-waiter" else waiter_pid,
+                    expected_blocker_pid=waiter_pid if selector == "wrong-blocker" else blocker_pid,
+                )
+                if selector == "exact":
+                    await asyncio.wait_for(observation, timeout=5)
+                else:
+                    with pytest.raises(AssertionError, match="never reached the database lock"):
+                        await asyncio.wait_for(observation, timeout=10)
+                assert not contender.done()
+            finally:
+                contender.cancel()
+                await asyncio.gather(contender, return_exceptions=True)
+    finally:
+        await engine.dispose()
+
+
 @pytest.mark.parametrize("transaction_cached", [False, True], ids=["fresh", "cached-baseline"])
 async def test_observer_detects_waiter_after_initial_miss(
     postgres_database_url, monkeypatch, transaction_cached
