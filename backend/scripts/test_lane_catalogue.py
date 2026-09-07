@@ -137,6 +137,12 @@ SHARED_FOUNDATION_MODULES = (
 )
 
 PROJECT_MODULES = (
+    "tests/projects/submission_policy_mutations/test_authority.py",
+    "tests/projects/submission_policy_mutations/test_commands.py",
+    "tests/projects/submission_policy_mutations/test_lineage.py",
+    "tests/projects/submission_policy_mutations/test_replay.py",
+    "tests/projects/submission_policy_mutations/test_repository.py",
+    "tests/projects/submission_policy_mutations/test_public_routes.py",
     "tests/projects/guide_compilation/test_authorized_concurrency_postgresql.py",
     "tests/projects/guide_compilation/test_authorized_execution_service.py",
     "tests/projects/guide_compilation/test_authorized_recovery_postgresql.py",

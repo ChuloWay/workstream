@@ -1,7 +1,7 @@
 # WS-QUAL-003-10 — Submission-policy mutation proof audit
 
 - Initiative: WS-QUAL-003
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended outcome: replace the mixed controlled-port manual submission-policy
   test family with small tests that discriminate each retained behavior.
 
@@ -14,6 +14,9 @@ change does not implement POL-04A2 or activate another product capability.
 Allowed files:
 
 - This record and `OVERVIEW.md` for the audit disposition.
+- `backend/app/modules/projects/schemas.py`: reject empty manual create
+  `policy_version` with the same minimum length already required for update's
+  successor identity. No other schema behavior or migration change.
 - `backend/tests/test_projects.py`: replace the controlled-port family from
   `test_submission_artifact_policy_create_update_conceals_service_before_lookup`
   through `test_submission_artifact_policy_manual_service_fail_closed_guards`,
@@ -48,6 +51,8 @@ isolation, uniqueness, row locks, handle binding or transaction rollback.
 | Behavior | Required proof |
 | --- | --- |
 | Public service denial before lookup; missing/malformed replay keys; malformed snapshot/CAS input | `test_public_routes.py`: exact error and first owner-call/auth non-call where reachable; schema cases independently reject |
+| Empty creation version must not enter mutation as a valid policy identity | `test_create_schema_rejects_empty_policy_version`: fails against original schema, passes after the one-field minimum-length repair; normal create remains its positive control |
+| Replay recovery still requires the exact covered PM admission lookup | `test_replay_requires_current_pm_admission`: exact permission/project/role filter; missing admission denies before replay or product lookup for create/update |
 | Covered system/project PM provenance and exact PREP action/caller/scope/resource | `test_commands.py`: real create/update orchestration and fixture-owned expected facts; returned handle identity preserved |
 | Consume denial and changed locked lineage precede replay reservation/product effects | `test_commands.py`: observe empty product/replay call history inside consume and assert non-calls after denial; independent create/update cases |
 | Replacement preserves predecessor linkage and completes exact replay response | `test_commands.py`: compare staged successor, supersession selector and response; no claim of commit |
@@ -85,3 +90,51 @@ Human review focus: meaningful proof instead of more coverage-only cases; no
 mock rollback or scheduling-only race claim; no weakened guards; bounded modules.
 Next after this family remains AUTH's recorded concurrency diagnosis, not another
 automatic implementation in the same PR.
+
+## Paired-audit correction
+
+Create accepted an empty `policy_version` while update required a non-empty
+successor. This is a required version identity (canonical data model and policy
+uniqueness), not optional display text. The focused repair aligns creation with
+the existing successor rule. Its regression must fail against the original
+schema. No claim is made that schema validation alone proves database custody.
+
+## Original-proof dispositions
+
+The ten replaced monolith definitions and their independently failing assertions
+are reconciled below. Prefixes abbreviate only
+`test_submission_artifact_policy_`; all new names are exact.
+
+| Original suffix | Surviving proof / disposition |
+| --- | --- |
+| `create_update_conceals_service_before_lookup` | `test_public_mutation_conceals_service_before_owner_lookup` (POST/PATCH) |
+| `create_rejects_malformed_snapshot_uuid` | `test_create_schema_rejects_malformed_snapshot`; remove false pre-actor claim |
+| `create_rejects_invalid_idempotency_before_auth`, `update_rejects_invalid_idempotency_before_auth` | `test_invalid_key_precedes_actor_resolution` (POST/PATCH, absent/malformed); exploding actor override proves non-call |
+| `update_rejects_invalid_preconditions` | `test_update_schema_rejects_invalid_precondition` retains all four cases |
+| `replay_repository_idempotency_classifies_cross_action_states` | `test_reservation_classifies_existing_exact_row`, `test_reservation_rejects_changed_namespace_facts`, `test_reservation_insert_binds_exact_values`, `test_conflicting_reservation_without_matching_row_is_integrity_error`, `test_namespace_query_binds_exact_selectors`, `test_operation_lookup_uses_exact_operation_predicate`, `test_completion_requires_exact_pending_row` |
+| `authority_service_is_flush_only` | `test_replay_delegates_exact_custody_without_transaction_ownership`, `test_replay_requires_active_root_transaction`, `test_invalid_human_replay_facts_never_reach_repository`, `test_fixed_service_replay_preserves_exact_custody`, `test_fixed_service_replay_rejects_changed_custody` |
+| `manual_service_executes_authorized_create_and_update` | `test_mutation_stages_exact_policy_provenance`, `test_mutation_binds_exact_prepared_facts`, `test_committed_replay_returns_original_without_mutation`; ordinary no-replay branch is exercised by both real commands |
+| `manual_lineage_loads_exact_locked_context` | `test_lineage_loads_exact_owner_context`, `test_missing_lineage_denies`, `test_incompatible_lineage_denies`, `test_warning_acknowledgement_digest_binds_exact_provenance`; exact owner selectors and lock-request order retained |
+| `manual_service_fail_closed_guards` | `test_human_authority_requires_covered_grant`, `test_invalid_human_replay_facts_never_reach_repository`, `test_replay_requires_current_pm_admission`, `test_unsupported_prepare_forwards_exact_denial` |
+
+Pruned artificial cases: successful insert followed by the same transaction
+losing its inserted row; caller-supplied random create-policy identity where the
+real caller derives it internally; isolated no-replay/return-value assertions.
+The latter behaviors remain exercised by actual create/update commands and an
+exact operation-query predicate test, not deleted coverage with no replacement.
+Column-name presence in a SELECT becomes exact WHERE predicates/values and
+INSERT conflict behavior. Pending/committed fixture shapes match schema state.
+
+New missing-proof cases establish exact PREP inputs, consume-time absence of
+product/replay effects, stale-lock rejection, cross-project/actor/link replay
+denial, replay admission, warning provenance and empty-version rejection.
+These are controlled-port or pure/schema proofs, not database enforcement.
+The schema regression first failed with `DID NOT RAISE ValidationError` against
+the original field; only then was the minimum length added.
+
+Retained PostgreSQL limits remain explicit: sequential create replay proves one
+policy and the same response, not replay/audit cardinality; concurrent CAS proves
+one draft and one superseded row, not the exact loser error/evidence cardinality;
+reservation contention proves same-human exact retry, not cross-action races.
+No new mocked test upgrades those claims. Those broader database proof gaps
+remain for the later transaction-family audit.

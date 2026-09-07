@@ -1,0 +1,186 @@
+"""SQL-port query and classification proof; real contention remains in PostgreSQL."""
+
+from dataclasses import asdict
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+from uuid import UUID
+
+import pytest
+from sqlalchemy.dialects import postgresql
+
+from app.modules.projects import submission_policy_mutation_service as module
+from app.modules.projects.submission_policy_mutation_repository import (
+    SubmissionPolicyMutationReplayRepository,
+)
+from projects.submission_policy_mutations import rows
+
+
+@pytest.fixture
+def repo_case():
+    facts = rows.replay_facts()
+    values = asdict(facts)
+    del values["resource_context"]
+    values["resource_context_json"] = facts.resource_context.model_dump(mode="json")
+    values["resource_context_digest"] = module.authorization_resource_digest(facts.resource_context)
+    record = SimpleNamespace(
+        id=rows.OPERATION,
+        status="pending",
+        **values,
+        response_json=None,
+        committed_policy_id=None,
+        committed_at=None,
+    )
+    session = SimpleNamespace(
+        scalar=AsyncMock(return_value=None), get=AsyncMock(return_value=record)
+    )
+    repository = SubmissionPolicyMutationReplayRepository(session)
+    repository.find_by_operation = AsyncMock(return_value=None)
+    repository._find_namespace = AsyncMock(return_value=record)
+    return SimpleNamespace(session=session, repository=repository, record=record, values=values)
+
+
+@pytest.mark.parametrize("status,expected", [("pending", "pending"), ("committed", "replayed")])
+async def test_reservation_classifies_existing_exact_row(repo_case, status, expected):
+    case = repo_case
+    case.record.status = status
+    if status == "committed":
+        case.record.response_json = {"id": str(rows.POLICY)}
+        case.record.committed_policy_id = str(rows.POLICY)
+        case.record.committed_at = rows.NOW
+    assert await case.repository.reserve(**case.values) == (expected, case.record)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("request_digest", "sha256:" + "c" * 64),
+        ("idempotency_key", rows.OPERATION),
+        ("action_id", "project.submission_artifact_policy.update"),
+    ],
+)
+async def test_reservation_rejects_changed_namespace_facts(repo_case, field, value):
+    values = {**repo_case.values, field: value}
+    assert await repo_case.repository.reserve(**values) == ("mismatch", repo_case.record)
+
+
+async def test_reservation_insert_binds_exact_values(repo_case):
+    case = repo_case
+    case.session.scalar.return_value = rows.OPERATION
+    assert await case.repository.reserve(**case.values) == ("claimed", case.record)
+    case.session.get.assert_awaited_once_with(
+        module.SubmissionPolicyMutationIdempotencyRecord, rows.OPERATION
+    )
+    compiled = case.session.scalar.await_args.args[0].compile(dialect=postgresql.dialect())
+    assert {key: value for key, value in compiled.params.items() if key != "id"} == {
+        **case.values,
+        "status": "pending",
+    }
+    assert str(compiled).endswith(
+        "ON CONFLICT DO NOTHING RETURNING submission_policy_mutation_idempotency_records.id"
+    )
+
+
+async def test_conflicting_reservation_without_matching_row_is_integrity_error(repo_case):
+    case = repo_case
+    case.session.scalar.return_value = None
+    case.session.get.return_value = None
+    case.repository._find_namespace.return_value = None
+    with pytest.raises(module.ProjectRepositoryIntegrityError, match="reservation disappeared"):
+        await case.repository.reserve(**case.values)
+
+
+def predicates(statement):
+    compiled = statement.whereclause.compile(dialect=postgresql.dialect())
+    return str(compiled), compiled.params
+
+
+def expected_predicate(field, value):
+    column = f"submission_policy_mutation_idempotency_records.{field}"
+    if value is None:
+        return f"{column} IS NULL"
+    return f"{column} = %({field}_1)s" + ("::UUID" if isinstance(value, UUID) else "")
+
+
+@pytest.mark.parametrize("service", [False, True])
+async def test_namespace_query_binds_exact_selectors(repo_case, service):
+    case = repo_case
+    identity = "workstream.project.setup" if service else None
+    setup = str(rows.SETUP) if service else None
+    task, correlation = (rows.REPORT, rows.OPERATION) if service else (None, None)
+    action = "project.submission_artifact_policy.derive" if service else case.values["action_id"]
+    await SubmissionPolicyMutationReplayRepository._find_namespace(
+        case.repository,
+        actor_profile_id=str(rows.ACTOR),
+        idempotency_key=None if service else rows.KEY,
+        service_identity=identity,
+        setup_run_id=setup,
+        setup_generation=4,
+        setup_task_id=task,
+        correlation_id=correlation,
+        action_id=action,
+    )
+    sql, params = predicates(case.session.scalar.await_args.args[0])
+    table = "submission_policy_mutation_idempotency_records"
+    fields = {"actor_profile_id": str(rows.ACTOR)}
+    if service:
+        fields.update(
+            service_identity=identity,
+            setup_run_id=setup,
+            setup_generation=4,
+            setup_task_id=task,
+            correlation_id=correlation,
+            action_id=action,
+        )
+    else:
+        fields["idempotency_key"] = rows.KEY
+    expected = [expected_predicate(field, value) for field, value in fields.items()]
+    if not service:
+        expected.insert(1, f"{table}.service_identity IS NULL")
+    assert sql == " AND ".join(expected)
+    assert params == {f"{field}_1": value for field, value in fields.items()}
+
+
+async def test_operation_lookup_uses_exact_operation_predicate(repo_case):
+    repo_case.session.scalar.return_value = repo_case.record
+    result = await SubmissionPolicyMutationReplayRepository.find_by_operation(
+        repo_case.repository, rows.OPERATION
+    )
+    assert result is repo_case.record
+    sql, params = predicates(repo_case.session.scalar.await_args.args[0])
+    assert (
+        sql
+        == "submission_policy_mutation_idempotency_records.operation_id = %(operation_id_1)s::UUID"
+    )
+    assert params == {"operation_id_1": rows.OPERATION}
+
+
+@pytest.mark.parametrize("matched", [False, True])
+async def test_completion_requires_exact_pending_row(repo_case, matched):
+    case = repo_case
+    values = {
+        key: value
+        for key, value in case.values.items()
+        if key
+        not in {
+            "project_id",
+            "guide_id",
+            "source_snapshot_id",
+            "policy_id",
+            "resource_context_json",
+        }
+    }
+    case.session.scalar.return_value = rows.OPERATION if matched else None
+    call = case.repository.complete(
+        **values, response_json={"id": str(rows.POLICY)}, committed_policy_id=str(rows.POLICY)
+    )
+    if matched:
+        assert await call is None
+    else:
+        with pytest.raises(module.ProjectRepositoryIntegrityError, match="invalid.*completion"):
+            await call
+    sql, params = predicates(case.session.scalar.await_args.args[0])
+    fields = {"operation_id": values["operation_id"], **values, "status": "pending"}
+    assert sorted(sql.split(" AND ")) == sorted(
+        expected_predicate(field, value) for field, value in fields.items()
+    )
+    assert params == {f"{field}_1": value for field, value in fields.items() if value is not None}

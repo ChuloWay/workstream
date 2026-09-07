@@ -96,6 +96,12 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/projects/sufficiency_mutations/test_replay.py",
             "tests/projects/sufficiency_mutations/test_replay_repository.py",
             "tests/projects/sufficiency_mutations/test_public_routes.py",
+            "tests/projects/submission_policy_mutations/test_authority.py",
+            "tests/projects/submission_policy_mutations/test_commands.py",
+            "tests/projects/submission_policy_mutations/test_lineage.py",
+            "tests/projects/submission_policy_mutations/test_replay.py",
+            "tests/projects/submission_policy_mutations/test_repository.py",
+            "tests/projects/submission_policy_mutations/test_public_routes.py",
             "tests/projects/test_retired_submission_derivation_route.py",
             "tests/test_projects.py",
         }
@@ -425,6 +431,29 @@ def test_sufficiency_coverage_gate_selects_complete_mutation_family() -> None:
     database_module = "tests/projects/sufficiency_mutations/test_acknowledgement_postgresql.py"
     assert database_module not in shlex.split(command.replace("\\\n", " "))
     assert database_module in catalogue.PROJECT_MODULES
+
+
+def test_submission_policy_coverage_selects_controlled_port_family() -> None:
+    source = (runner.ROOT.parent / ".github/workflows/backend.yml").read_text()
+    step = source.split("      - name: Submission policy authority foundation per-file coverage\n", 1)[1].split("      - name:", 1)[0]
+    command = step.split("        run: |\n", 1)[1]
+    modules = [
+        "tests/projects/submission_policy_mutations/test_authority.py",
+        "tests/projects/submission_policy_mutations/test_commands.py",
+        "tests/projects/submission_policy_mutations/test_lineage.py",
+        "tests/projects/submission_policy_mutations/test_replay.py",
+        "tests/projects/submission_policy_mutations/test_repository.py",
+        "tests/projects/submission_policy_mutations/test_public_routes.py",
+    ]
+    assert shlex.split(command.replace("\\\n", " ")) == [
+        "set", "-euo", "pipefail", "coverage", "run", "--append", "-m", "pytest", "-q",
+        "-p", "pytest_asyncio.plugin", *modules,
+        "for", "source", "in", "app/modules/projects/submission_policy_mutation_repository.py",
+        "app/modules/projects/submission_policy_mutation_service.py", "do", "coverage", "report",
+        "--include=${source}", "--precision=2", "--fail-under=90", "done",
+    ]
+    assert set(modules) <= set(catalogue.PROJECT_MODULES)
+    assert "tests/test_projects.py" in catalogue.PROJECT_MODULES
 
 
 @pytest.mark.parametrize(
