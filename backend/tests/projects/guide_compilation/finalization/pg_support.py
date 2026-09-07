@@ -16,6 +16,7 @@ from app.modules.authorization.api import (
     ProjectSetupFinalizationAuthorityReceipt,
     setup_finalization_authority_digest,
 )
+from app.modules.projects.api import ProjectGuideSetupFinalizationError
 from app.modules.projects.guide_compilation.finalization import GuideCompilationFinalizationService
 from ..helpers import seed_database
 from .pg_prerequisites import compilation_and_projections
@@ -182,7 +183,11 @@ async def database_case(url, *, classification="draft_ready", project=True):
 async def finalize(factory, values, command, *, events=None):
     async with factory() as session, session.begin():
         authority = DatabaseAuthorization(session, values, events=events)
-        return await GuideCompilationFinalizationService(session, authority).finalize(command)
+        try:
+            return await GuideCompilationFinalizationService(session, authority).finalize(command)
+        except ProjectGuideSetupFinalizationError as exc:
+            # Preserve public failure semantics while exposing fixture SQL diagnostics.
+            raise exc from exc.__context__
 
 
 async def stored_state(factory, command):

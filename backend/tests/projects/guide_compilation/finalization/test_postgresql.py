@@ -183,13 +183,14 @@ async def test_preloaded_product_rows_are_refreshed_before_authority_consumption
             target = "stale-cache-probe" if owner == "guide" else "superseded"
             original_value = getattr(cached, field)
             assert original_value != target
-            # A deliberately changed stored view leaves SQLAlchemy's identity map stale.
-            await session.execute(text(f"alter table {table} disable trigger user"))
+            # This rolled-back refresh probe deliberately bypasses custody, including
+            # guide-version foreign keys; it does not claim a valid lifecycle mutation.
+            await session.execute(text(f"alter table {table} disable trigger all"))
             await session.execute(
                 text(f"update {table} set {field}=:value where id=:id"),
                 {"value": target, "id": cached.id},
             )
-            await session.execute(text(f"alter table {table} enable trigger user"))
+            await session.execute(text(f"alter table {table} enable trigger all"))
             assert getattr(cached, field) == original_value
             authority = DatabaseAuthorization(session, values)
             with pytest.raises(
