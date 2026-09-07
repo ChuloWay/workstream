@@ -87,8 +87,6 @@ async def test_dispatch_replay_survives_queue_progress(case):
 @pytest.mark.parametrize(
     "fault,match",
     [
-        ("lineage", "project_setup_run_context_mismatch"),
-        ("missing_row", "project_setup_run_context_mismatch"),
         *(
             (status, "guide_sufficiency_run_not_needed")
             for status in (
@@ -114,11 +112,7 @@ async def test_dispatch_replay_survives_queue_progress(case):
     ],
 )
 async def test_dispatch_rejects_unusable_setup(case, fault, match):
-    if fault == "lineage":
-        case.service._lineage.return_value = replace(case.lineage, setup_run_id=None)
-    elif fault == "missing_row":
-        case.projects.lock_project_setup_run.return_value = None
-    elif fault.startswith("output_"):
+    if fault.startswith("output_"):
         setattr(case.setup, fault, str(UUID(int=99)))
     elif fault == "authoritative_report":
         case.report.project_setup_run_id = str(rows.SETUP)

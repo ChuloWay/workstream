@@ -1486,6 +1486,7 @@ class GuideSufficiencyMutationService:
                 setup_run is None
                 or setup_run.id != str(final.setup_run_id)
                 or setup_run.setup_generation != final.setup_generation
+                or report.setup_generation != final.setup_generation
                 or setup_run.output_sufficiency_report_id != report.id
                 or setup_run.output_submission_artifact_policy_id is not None
             ):

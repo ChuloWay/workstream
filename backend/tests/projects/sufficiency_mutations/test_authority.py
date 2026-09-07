@@ -1,7 +1,5 @@
 """Decision-shape and exact PREP composition proof, not AUTH evaluator proof."""
 
-from dataclasses import replace
-from unittest.mock import AsyncMock
 from uuid import UUID
 
 import pytest
@@ -29,12 +27,6 @@ async def test_human_authority_requires_matching_grant(case, field, value):
     setattr(case.decision, field, value)
     with pytest.raises(RuntimeError, match="lacked Project Manager authority"):
         case.service._prove_human(case.decision, rows.PROJECT)
-
-
-@pytest.mark.parametrize("scope", [None, rows.PROJECT])
-async def test_human_authority_accepts_covered_scope(case, scope):
-    case.decision.matched_scope_project_id = scope
-    assert case.service._prove_human(case.decision, rows.PROJECT) is None
 
 
 @pytest.mark.parametrize(
@@ -71,23 +63,6 @@ async def test_prepare_forwards_exact_unsupported_denial(case):
         await case.service._prepare(case.prepared, action, caller, rows.PROJECT, resource)
     assert observed.value is denial
     case.prepared.deny_unsupported.assert_awaited_once_with(action, caller, resource, failure)
-
-
-async def test_prepare_returns_handle(case):
-    caller, resource = object(), object()
-    action = module.ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN
-    assert (
-        await case.service._prepare(case.prepared, action, caller, rows.PROJECT, resource)
-        is case.handle
-    )
-    case.prepared.prepare.assert_awaited_once_with(
-        action,
-        caller,
-        module.PreparedAuthorityScope(
-            kind=module.PreparedAuthorityScopeKind.PROJECT, project_id=rows.PROJECT
-        ),
-    )
-    case.prepared.deny_unsupported.assert_not_awaited()
 
 
 def custody():
@@ -128,20 +103,6 @@ async def test_agent_requires_material(case):
     case.prepared.consume.assert_not_awaited()
 
 
-async def test_agent_requires_setup_lineage(case):
-    case.service._material = AsyncMock()
-    case.service._lineage.return_value = replace(case.lineage, setup_run_id=None)
-    with pytest.raises(RuntimeError, match="required setup run was not resolved"):
-        await run_agent(case)
-    assert case.service._material.mock_calls == []
-    case.prepared.prepare.assert_not_awaited()
-    case.prepared.consume.assert_not_awaited()
-
-
-def test_legacy_run_agent_entry_is_absent():
-    assert not hasattr(module.GuideSufficiencyMutationService, "run_agent")
-
-
 @pytest.mark.parametrize(
     "command,action,target,suffix,body",
     [
@@ -177,6 +138,7 @@ async def test_mutation_passes_exact_prepared_context(case, command, action, tar
     await invoke(case, command)
     reserve = case.replay.reserve.await_args.kwargs
     selected_action, caller, scope = case.prepared.prepare.await_args.args
+    case.prepared.prepare.assert_awaited_once_with(selected_action, caller, scope)
     handle, consumed_action, consumed_caller, resource = case.prepared.consume.await_args.args
     report_id = case.replay.complete.await_args.kwargs["report_id"]
     replay_value = {

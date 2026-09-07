@@ -175,6 +175,7 @@ PROJECT_MODULES = (
     "tests/projects/sufficiency_mutations/test_dispatch.py",
     "tests/projects/sufficiency_mutations/test_report_create.py",
     "tests/projects/sufficiency_mutations/test_acknowledgement.py",
+    "tests/projects/sufficiency_mutations/test_acknowledgement_postgresql.py",
     "tests/projects/sufficiency_mutations/test_replay.py",
     "tests/projects/sufficiency_mutations/test_replay_repository.py",
     "tests/projects/sufficiency_mutations/test_public_routes.py",

@@ -16,7 +16,7 @@
 - Next usable boundary after 09: remaining PROJECT submission-policy mutation
   family, then AUTH's recorded concurrency diagnosis before decomposition.
   The full suite audit remains open.
-- Preserve: production semantics, public boundaries, real database/isolation/
+- Preserve: intended production semantics, public boundaries, real database/isolation/
   concurrency proof, current coverage floors, full hosted execution, human merge.
 - Product work: POL-04A2 remains planned; this initiative does not implement it.
 
@@ -52,6 +52,10 @@ fixture, actual production call, discriminating assertion and side effects.
 Classify it as keep, consolidate, remove with named surviving proof, strengthen,
 or missing proof to add. No deletion is justified by file size, similar names,
 identical AST bodies alone, coverage percentage or a desired test-count target.
+Audit the implementation alongside its tests. Confirmed defects require a
+bounded production correction and a regression that rejects the pre-fix behavior;
+test growth alone is not progress. Prefer realistic fixtures, strict failure
+ports and proof at the actual transaction boundary over branch-count exercises.
 
 Use the existing behavior-ownership catalogue and behavior contracts when they
 already map a changed proof. Reconcile references to deleted/renamed tests in
@@ -112,7 +116,9 @@ No fixed reduction percentage or same-day completion claim overrides safety.
 - PROJECT slice 09 replaces the six mixed controlled-port sufficiency mutation
   tests as one family: report creation, acknowledgement, dispatch, authority,
   lineage, replay and public concealment. Fresh negative controls cover missing
-  guards and exact PREP facts; no product behavior or PostgreSQL proof changes.
+  guards and exact PREP facts. Its paired audit removes redundant/impossible
+  cases, repairs missing report-generation validation during acknowledgement,
+  and adds real late-conflict rollback proof for report, replay and AUTH effects.
   Submission-policy mutation tests and other PROJECT families remain unaudited.
 - Before routine AUTH decomposition, diagnose the intermittent three-admin
   suspension race in `test_actor_profile_lifecycle_real_postgres_concurrency`.

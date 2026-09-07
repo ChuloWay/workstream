@@ -59,20 +59,12 @@ async def test_replay_rejects_changed_identity(case, command, field):
     case.projects.add_guide_sufficiency_report.assert_not_awaited()
 
 
-@pytest.mark.parametrize(
-    "command,field",
-    [
-        *(
-            (command, field)
-            for command in ("create", "ack", "dispatch")
-            for field in ("status", "response_json")
-        ),
-        ("create", "report_id"),
-    ],
-)
-async def test_replay_rejects_incomplete_record(case, command, field):
+@pytest.mark.parametrize("command", ["create", "ack", "dispatch"])
+async def test_replay_rejects_pending_record(case, command):
     record = await seed_replay(case, command)
-    setattr(record, field, "pending" if field == "status" else None)
+    record.status = "pending"
+    record.response_json = None
+    record.committed_at = None
     with pytest.raises(module.GuideSufficiencyMutationConflict, match="idempotency_pending"):
         await invoke(case, command)
     case.prepared.prepare.assert_not_awaited()

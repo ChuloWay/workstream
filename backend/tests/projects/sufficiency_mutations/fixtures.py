@@ -35,7 +35,7 @@ def case():
     prepared = SimpleNamespace(
         prepare=AsyncMock(return_value=handle),
         consume=AsyncMock(return_value=decision),
-        deny_unsupported=AsyncMock(),
+        deny_unsupported=AsyncMock(side_effect=RuntimeError("unexpected authorization denial")),
     )
 
     async def add_report(value):

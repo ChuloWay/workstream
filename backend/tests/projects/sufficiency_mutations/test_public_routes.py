@@ -18,17 +18,18 @@ from projects.sufficiency_mutations.commands import create_payload
 
 
 @pytest.mark.parametrize(
-    "suffix,body",
+    "suffix,body,lookup_method",
     [
-        ("sufficiency-reports", create_payload().model_dump(mode="json")),
-        (f"source-snapshots/{rows.SNAPSHOT}/run-sufficiency-agent", None),
+        ("sufficiency-reports", create_payload().model_dump(mode="json"), "get_guide"),
+        (f"source-snapshots/{rows.SNAPSHOT}/run-sufficiency-agent", None, "get_guide"),
         (
             f"sufficiency-reports/{rows.REPORT}/acknowledge-warnings",
             {"acknowledgement_note": "Understood"},
+            "get_guide_sufficiency_report",
         ),
     ],
 )
-async def test_public_mutation_conceals_service(monkeypatch, suffix, body):
+async def test_public_mutation_conceals_service(monkeypatch, suffix, body, lookup_method):
     app = create_app(Settings(environment="test"))
 
     async def verified_service():
@@ -38,7 +39,7 @@ async def test_public_mutation_conceals_service(monkeypatch, suffix, body):
     resolver = AsyncMock(side_effect=AssertionError("service reached actor resolution"))
     lookup = AsyncMock(side_effect=AssertionError("service reached project lookup"))
     monkeypatch.setattr(module, "resolve_authorization_actor", resolver)
-    monkeypatch.setattr(ProjectRepository, "get_guide", lookup)
+    monkeypatch.setattr(ProjectRepository, lookup_method, lookup)
     async with AsyncClient(
         transport=ASGITransport(app=app, raise_app_exceptions=False), base_url="http://testserver"
     ) as client:

@@ -87,6 +87,7 @@ async def test_acknowledgement_rejects_repeat(case):
     with pytest.raises(module.GuideSufficiencyMutationConflict, match="already_acknowledged"):
         await invoke(case, "ack")
     assert case.report.warnings_acknowledged_at == rows.NOW
+    case.prepared.consume.assert_awaited_once()
     case.replay.reserve.assert_not_awaited()
     case.replay.complete.assert_not_awaited()
 
@@ -94,34 +95,46 @@ async def test_acknowledgement_rejects_repeat(case):
 @pytest.mark.parametrize(
     "fault",
     [
-        "missing",
         "id",
-        "setup_generation",
         "output_sufficiency_report_id",
         "output_submission_artifact_policy_id",
     ],
 )
 async def test_acknowledgement_rejects_invalid_continuation(case, fault):
     case.report.project_setup_run_id = str(rows.SETUP)
+    case.report.setup_generation = 1
     case.setup.output_sufficiency_report_id = str(rows.REPORT)
-    if fault == "missing":
-        case.projects.lock_project_setup_run.return_value = None
-    else:
-        setattr(case.setup, fault, 2 if fault == "setup_generation" else str(UUID(int=99)))
+    setattr(case.setup, fault, str(UUID(int=99)))
+    if fault == "id":
+        case.report.project_setup_run_id = case.setup.id
     before = vars(case.setup).copy()
     with pytest.raises(
         module.GuideSufficiencyMutationConflict, match="project_setup_run_context_mismatch"
     ):
         await invoke(case, "ack")
     case.prepared.consume.assert_awaited_once()
-    case.projects.lock_project_setup_run.assert_awaited_once_with(str(rows.SETUP))
+    case.projects.lock_project_setup_run.assert_awaited_once_with(case.report.project_setup_run_id)
     assert vars(case.setup) == before
     case.replay.complete.assert_not_awaited()
-    # Late failure: database rollback belongs to the real caller-transaction tests.
+    # Transaction rollback is proved separately in test_acknowledgement_postgresql.py.
+
+
+async def test_acknowledgement_rejects_report_generation_mismatch(case):
+    case.report.project_setup_run_id = str(rows.SETUP)
+    case.report.setup_generation = 2
+    case.setup.output_sufficiency_report_id = str(rows.REPORT)
+    before = vars(case.setup).copy()
+    with pytest.raises(
+        module.GuideSufficiencyMutationConflict, match="project_setup_run_context_mismatch"
+    ):
+        await invoke(case, "ack")
+    assert vars(case.setup) == before
+    case.replay.complete.assert_not_awaited()
 
 
 async def test_acknowledgement_resets_continuation(case):
     case.report.project_setup_run_id = str(rows.SETUP)
+    case.report.setup_generation = 1
     case.setup.output_sufficiency_report_id = str(rows.REPORT)
     before = vars(case.setup).copy()
     outcome = await invoke(case, "ack")

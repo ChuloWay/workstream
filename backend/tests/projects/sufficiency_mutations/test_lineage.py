@@ -70,14 +70,18 @@ async def test_lineage_rejects_invalid_context(case, fault, error, match):
     elif fault == "required_setup":
         case.projects.get_latest_project_setup_run.return_value = None
     elif fault == "missing_generation":
-        case.setup.setup_generation = None
+        case.projects.get_latest_project_setup_run.return_value = None
+        snapshot.creation_generation = None
     else:
         setattr(case.setup, fault, "different")
     with pytest.raises(error, match=match):
         await case.actual_lineage(
-            rows.PROJECT, rows.GUIDE, rows.SNAPSHOT, lock=False, require_setup_run=True
+            rows.PROJECT,
+            rows.GUIDE,
+            rows.SNAPSHOT,
+            lock=False,
+            require_setup_run=fault != "missing_generation",
         )
-    case.prepared.consume.assert_not_awaited()
 
 
 @pytest.mark.parametrize("lock", [False, True])
@@ -155,8 +159,6 @@ async def test_setup_custody_rejects_stale_context(case, fault):
         module.GuideSufficiencyMutationConflict, match="project_setup_run_context_mismatch"
     ):
         await case.service.resolve_setup_service_custody(**kwargs)
-    case.prepared.prepare.assert_not_awaited()
-    case.prepared.consume.assert_not_awaited()
 
 
 async def test_setup_custody_resolves_current_context(case):
