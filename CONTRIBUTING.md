@@ -103,6 +103,12 @@ active queue or approval gate.
 - Preserve security defaults and existing coverage floors.
 - Record important reviewer findings and how they were resolved.
 - Reconcile with current `main` and rerun affected checks.
+- Before marking the PR ready, assess its impact on
+  [`docs/roadmap_status.md`](docs/roadmap_status.md). Update affected capability,
+  exposure, completed/remaining work, and next-dependency sections in this same
+  PR to reflect its intended merged outcome, including relevant changes from
+  `main`. If there is no impact, explain why in the PR instead of making a
+  no-op edit. Do not defer this to a separate post-merge roadmap PR.
 - In the change record, declare the intended merge outcome and durable
   disposition (`Planned`, `Complete`, `Stopped`, or `Superseded`). Update an
   initiative overview or index row only when its durable meaning changes.

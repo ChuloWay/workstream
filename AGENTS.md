@@ -131,6 +131,14 @@ Before reporting completion:
 
 - run a stale wording scan
 - check markdown links
+- assess `docs/roadmap_status.md` in every PR before marking it ready. If the
+  change affects a capability, its exposure, completed work, remaining scope,
+  or next dependency, update the affected roadmap sections in that same PR to
+  reflect its intended merged outcome. Reconcile again after incorporating
+  relevant changes from `main`. If there is no roadmap impact, state why in
+  the PR; do not make a no-op roadmap edit. Do not defer an affected roadmap
+  update to a separate post-merge PR. Do not treat planned/open work as already
+  delivered on `main`.
 - verify the local XLSX has one sheet only when local sheet exports are present
 - verify the current Workstream definition appears in README and local sheet exports when local sheet exports are present
 - update related docs/templates and local sheet exports together when the roadmap changes
