@@ -20,6 +20,7 @@ from app.modules.projects.api import ProjectGuideSetupFinalizationError
 from app.modules.projects.guide_compilation.finalization import GuideCompilationFinalizationService
 from ..helpers import seed_database
 from .pg_prerequisites import compilation_and_projections
+from .pg_diagnostics import lineage_mismatches
 
 
 class DatabasePrepared(PreparedSetupFinalization):
@@ -181,13 +182,15 @@ async def database_case(url, *, classification="draft_ready", project=True):
 
 
 async def finalize(factory, values, command, *, events=None):
-    async with factory() as session, session.begin():
-        authority = DatabaseAuthorization(session, values, events=events)
-        try:
+    try:
+        async with factory() as session, session.begin():
+            authority = DatabaseAuthorization(session, values, events=events)
             return await GuideCompilationFinalizationService(session, authority).finalize(command)
-        except ProjectGuideSetupFinalizationError as exc:
-            # Preserve public failure semantics while exposing fixture SQL diagnostics.
-            raise exc from exc.__context__
+    except ProjectGuideSetupFinalizationError as exc:
+        # Diagnose only unexpected SQL failures, after the caller transaction rolls back.
+        if str(exc) == "storage_unavailable" and getattr(authority, "last_facts", None):
+            exc.add_note(f"Installed lineage mismatches: {await lineage_mismatches(factory, authority.last_facts)}")
+        raise exc from exc.__context__
 
 
 async def stored_state(factory, command):
