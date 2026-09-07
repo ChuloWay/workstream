@@ -17,9 +17,10 @@
 - PROJECT submission-policy family: [10 — manual mutation and replay proof](WS-QUAL-003-10.md).
 - Replay correction: [11 — realistic conflicts and retained-case rationale](WS-QUAL-003-11.md).
   Its reconciliation supersedes the affected historical test mappings in 09/10.
-- Next usable boundary after 11: remaining AUTH proof audit and decomposition;
-  the shared concurrency-observer repair is included in 11 by human authorization.
-  The full suite audit remains open.
+- AUTH replay slice: [12 — exact historical projection decision proof](WS-QUAL-003-12.md).
+- Next usable boundary after 12: remaining AUTH monolith/actor-resolution audit
+  and decomposition. The shared concurrency-observer repair is included in 11
+  by human authorization; the full suite audit remains open.
 - Preserve: intended production semantics, public boundaries, real database/isolation/
   concurrency proof, current coverage floors, full hosted execution, human merge.
 - Product work: POL-04A2 remains planned; this initiative does not implement it.
@@ -105,8 +106,12 @@ No fixed reduction percentage or same-day completion claim overrides safety.
   digest passed the old prefix assertions; the new equality checks reject it.
   The fake validator no longer repeats a composer guard that could mask a broken
   composer. Repository/transaction proof remains separate and unchanged.
-- AUTH projection replay uses a nonexistent decision in its negative test;
-  add existing-but-tampered stored decision coverage, not more random-ID cases.
+- AUTH slice 12 distinguishes missing decisions from existing mismatched
+  decisions. It preserves the missing-row guard, exercises twelve independent
+  stored-fact substitutions through the real replay matcher, and adds the
+  artifact-policy positive. These controlled audit-port substitutions prove
+  service matching, not database corruption or PostgreSQL isolation. The
+  remaining AUTH monolith and actor-resolution families are still unaudited.
 - PROJECT slice 07 replaces the remaining mixed diagnostic composer tests with
   exact facts/digests and owner selectors. Each invalid-parent case now starts
   with a valid record, so a pre-existing missing target cannot hide a broken

@@ -1,7 +1,7 @@
 # WS-QUAL-003-12 — Exact historical projection decision proof
 
 - Initiative: WS-QUAL-003
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: meaningful projection replay evidence and smaller shared test setup, without changing product authority or blocking product implementation.
 
 ## Intent
@@ -12,7 +12,7 @@ valuable protection, justify each retained case, and avoid a count-driven purge.
 
 ## Current behavior
 
-`test_policy_and_replay.py` names a mismatched-decision test but supplies only a
+Before this change, `test_policy_and_replay.py` named a mismatched-decision test but supplied only a
 random absent ID. `projection_replay_event_matches` validates eleven independent
 stored facts; the absent-row test cannot detect removing any of those checks.
 The exact-replay test exercises only the sufficiency adapter and repeats a
@@ -111,6 +111,42 @@ Deleting the random-ID test would also lose missing-row coverage, so rename and
 retain it while adding the distinct existing-row substitution boundary.
 Plan review confirmed fixture feasibility and required the canonical acceptance
 heading (PLAN-12-001); that mechanical correction is applied.
+
+## Retained-case rationale and replacement map
+
+The changed family has 21 expanded cases before this change and 34 afterward.
+No behavior is deleted or skipped. Thirteen additions are twelve independently
+failing stored-fact substitutions and one second-adapter positive; the shared
+predicate does not receive a redundant Cartesian product with both adapters.
+
+| Existing test suffix / cases | Disposition and distinct purpose |
+| --- | --- |
+| `artifact_policy_projection_uses_only_its_existing_action` / 1 | Keep exact action, permission and authority digest separation |
+| `projection_requires_exact_project_setup_authority` / 6 | Keep wrong service, suspended actor and revoked link for each adapter; these are distinct identity guards |
+| `projection_requires_active_action_matrix` / 4 | Keep absent matrix row and unavailable action for each adapter; neither implies the other |
+| `policy_projection_rejects_wrong_deterministic_output` / 1 | Keep the caller's wrong output identity rejection |
+| `projection_exact_replay_uses_original_decision` / 1 | Move to `test_replay_evidence.py`; retain digest parity and add artifact-policy wiring, exact lookup and evidence fields |
+| `projection_replay_retires_mutation_authority` / 2 | Move; keep both unchanged and changed next-fact attempts after successful replay |
+| `projection_replay_rejects_mismatched_decision_without_new_evidence` / 1 | Rename to `projection_replay_rejects_missing_decision_without_new_evidence`; an absent ID proves absence, not substitution |
+| `projection_replay_rejects_every_prepared_custody_mismatch` / 4 | Rename `every` to `listed`; retain action, caller binding, replaced transaction and scope guards |
+| `projection_replay_rejects_project_setup_resource_guard` / 1 | Keep owner-resource rejection, separately from handle custody |
+
+All suffixes above have the `test_` prefix. The four non-replay policy tests
+retain AST-identical bodies and parameter sets. Repeated original/replay
+preparation is replaced by `ReplayCase`, not a second authorization evaluator.
+The historical AUTH-12J pre-cutover contract's old `every` and `mismatched`
+references resolve through this map; the historical snapshot is not rewritten.
+The two old test modules shrink from 480 to 257 lines; with the new 84-line
+support, 174-line evidence module and six support lines, this family grows by
+41 lines to cover the missing behavior. This is proof repair, not a claimed
+test-count or source-volume reduction.
+
+The new negative cases each substitute only one returned fact of the exact
+existing decision. They assert denial, spent authority, no new event and an
+unchanged deep snapshot of the original evidence; a mutable alias cannot stand
+in for an immutable comparison. Successful replay checks each adapter's
+explicit action/permission/resource shape, rather than deriving all expected
+values from the implementation under test.
 
 ## Reconciliation
 
