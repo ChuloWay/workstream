@@ -179,18 +179,18 @@ async def test_preloaded_product_rows_are_refreshed_before_authority_consumption
             model = ProjectGuide if owner == "guide" else SubmissionArtifactPolicy
             cached = await session.scalar(select(model))
             table = model.__tablename__
-            field = "version" if owner == "guide" else "lifecycle_status"
+            field = "status" if owner == "guide" else "lifecycle_status"
             target = "stale-cache-probe" if owner == "guide" else "superseded"
             original_value = getattr(cached, field)
             assert original_value != target
-            # This rolled-back refresh probe deliberately bypasses custody, including
-            # guide-version foreign keys; it does not claim a valid lifecycle mutation.
-            await session.execute(text(f"alter table {table} disable trigger all"))
+            # Deliberately inject an unsupported guide status without changing foreign
+            # keys. This rolled-back refresh probe is not a valid lifecycle transition.
+            await session.execute(text(f"alter table {table} disable trigger user"))
             await session.execute(
                 text(f"update {table} set {field}=:value where id=:id"),
                 {"value": target, "id": cached.id},
             )
-            await session.execute(text(f"alter table {table} enable trigger all"))
+            await session.execute(text(f"alter table {table} enable trigger user"))
             assert getattr(cached, field) == original_value
             authority = DatabaseAuthorization(session, values)
             with pytest.raises(
