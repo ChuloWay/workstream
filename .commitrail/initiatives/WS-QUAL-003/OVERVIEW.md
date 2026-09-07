@@ -13,8 +13,8 @@
 - PROJECT diagnostic slice: [07 — independent diagnostic-read proof](WS-QUAL-003-07.md).
 - PROJECT fence slice: [08 — deterministic mutation execution-fence proof](WS-QUAL-003-08.md).
 - PROJECT sufficiency family: [09 — mutation composition and replay proof](WS-QUAL-003-09.md).
-- Next usable boundary after 09: remaining PROJECT submission-policy mutation
-  family, then AUTH's recorded concurrency diagnosis before decomposition.
+- PROJECT submission-policy family: [10 — manual mutation and replay proof](WS-QUAL-003-10.md).
+- Next usable boundary after 10: AUTH's recorded concurrency diagnosis before decomposition.
   The full suite audit remains open.
 - Preserve: intended production semantics, public boundaries, real database/isolation/
   concurrency proof, current coverage floors, full hosted execution, human merge.
@@ -119,7 +119,10 @@ No fixed reduction percentage or same-day completion claim overrides safety.
   guards and exact PREP facts. Its paired audit removes redundant/impossible
   cases, repairs missing report-generation validation during acknowledgement,
   and adds real late-conflict rollback proof for report, replay and AUTH effects.
-  Submission-policy mutation tests and other PROJECT families remain unaudited.
+  Slice 10 audits the mixed controlled-port submission-policy family, replaces
+  weak query/provenance assertions, rejects empty creation-version identities,
+  and preserves the real PostgreSQL family unchanged. Other PROJECT families
+  and the recorded transaction-proof limitations remain unaudited.
 - Before routine AUTH decomposition, diagnose the intermittent three-admin
   suspension race in `test_actor_profile_lifecycle_real_postgres_concurrency`.
   Main run `34032455068` returned `[500, 200]` rather than `[200, 200]`; unchanged
