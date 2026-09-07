@@ -282,8 +282,8 @@ def _receipt_guard() -> None:
          or sufficient.material_sha256 is distinct from a.guide_material_hash
          or sufficient.output_digest is distinct from project_guide_projection_business_digest(sufficient)
          or (select status from guide_sufficiency_reports where id=new.sufficiency_report_id)
-              is distinct from case new.result_classification when 'guide_blocked' then 'blocked'
-                when 'draft_ready' then 'passed' else 'passed_with_warnings' end
+              is distinct from (case new.result_classification when 'guide_blocked' then 'blocked'
+                when 'draft_ready' then 'passed' else 'passed_with_warnings' end)
       then raise exception 'finalization sufficiency custody mismatch' using errcode='23514'; end if;
       if new.result_classification='guide_blocked' then
         if exists(select 1 from project_guide_component_projection_operations
@@ -397,9 +397,9 @@ def _setup_guard() -> None:
            or (to_jsonb(new)-allowed_columns) is distinct from (to_jsonb(old)-allowed_columns)
            or new.status not in ('sufficiency_blocked','policy_draft_ready')
            or new.output_sufficiency_report_id is null
-           or new.current_step is distinct from case new.status
+           or new.current_step is distinct from (case new.status
               when 'sufficiency_blocked' then 'guide_sufficiency'
-              else 'submission_artifact_policy_derivation' end
+              else 'submission_artifact_policy_derivation' end)
            or (new.status='sufficiency_blocked' and new.output_submission_artifact_policy_id is not null)
            or (new.status='policy_draft_ready' and new.output_submission_artifact_policy_id is null)
         then raise exception 'invalid finalization setup transition' using errcode='23514'; end if;
@@ -449,8 +449,8 @@ def _deferred_custody() -> None:
          or s.setup_generation is distinct from receipt.setup_generation
          or s.celery_task_id is distinct from receipt.celery_task_id
          or s.status is distinct from receipt.setup_outcome
-         or s.current_step is distinct from case receipt.setup_outcome when 'sufficiency_blocked'
-              then 'guide_sufficiency' else 'submission_artifact_policy_derivation' end
+         or s.current_step is distinct from (case receipt.setup_outcome when 'sufficiency_blocked'
+              then 'guide_sufficiency' else 'submission_artifact_policy_derivation' end)
          or s.output_sufficiency_report_id is distinct from receipt.sufficiency_report_id
          or s.output_submission_artifact_policy_id is distinct from receipt.artifact_policy_id
          or s.finished_at is distinct from receipt.created_at
@@ -462,8 +462,15 @@ def _deferred_custody() -> None:
     end; $$;
     """)
     for table in ("project_guide_setup_finalizations", "project_setup_runs"):
+        condition = (
+            "when (new.status in ('sufficiency_blocked','policy_draft_ready') "
+            "or new.output_sufficiency_report_id is not null "
+            "or new.output_submission_artifact_policy_id is not null) "
+            if table == "project_setup_runs" else ""
+        )
         op.execute(f"create constraint trigger finalization_atomic_custody after insert or update on {table} "
-                   "deferrable initially deferred for each row execute function validate_project_setup_finalization_custody()")
+                   "deferrable initially deferred for each row " + condition +
+                   "execute function validate_project_setup_finalization_custody()")
 
 
 def downgrade() -> None:
