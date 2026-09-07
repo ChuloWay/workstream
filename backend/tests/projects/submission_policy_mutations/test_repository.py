@@ -1,6 +1,6 @@
 """SQL-port query and classification proof; real contention remains in PostgreSQL."""
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call
 from uuid import UUID
@@ -76,7 +76,22 @@ async def test_reservation_rejects_changed_operation_facts(repo_case, field, val
 
 async def test_reservation_rejects_different_operation_in_human_namespace(repo_case):
     case = repo_case
-    values = {**case.values, "operation_id": UUID(int=99)}
+    original = rows.replay_facts()
+    operation, link = UUID(int=99), UUID(int=100)
+    digest = "sha256:" + "e" * 64
+    # A new identity link changes operation custody, not the actor/key namespace.
+    facts = replace(
+        original,
+        operation_id=operation,
+        identity_link_id=str(link),
+        request_digest=digest,
+        resource_context=original.resource_context.model_copy(
+            update={"operation_id": operation, "request_digest": digest}
+        ),
+    )
+    # Use the unchanged validator to establish admissible input, not an expected
+    # SQL/result oracle. Lookup selectors and mismatch below remain independent.
+    values = module.SubmissionPolicyMutationService._replay_values(facts)
     selectors = {
         name: values[name]
         for name in (

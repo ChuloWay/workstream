@@ -85,6 +85,13 @@ Exact-head results belong in the PR, not as transient status in this record.
 The prior audit exposed fixture inconsistency, not a demonstrated runtime defect.
 Controlled SQL ports establish query composition and classification only; they
 do not establish database isolation or exhaustive rejection of every custody field.
+Security review also caught an initially inconsistent new-operation request:
+its embedded context retained the old operation. The corrected fixture models
+changed identity-link/operation/request custody within the same actor/key
+namespace, rebuilds matching context and passes the unchanged `_replay_values`
+validator before reservation. That validator establishes input feasibility,
+not the expected SQL selectors or result. No end-to-end authentication claim is
+made by this controlled-port test.
 
 ## Retained-case rationale
 
