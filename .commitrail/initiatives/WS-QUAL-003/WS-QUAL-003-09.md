@@ -36,12 +36,16 @@ Allowed:
   `test_report_create.py`, `test_acknowledgement.py`, `test_replay.py`,
   `test_replay_repository.py`, `test_public_routes.py`.
 - `backend/scripts/test_lane_catalogue.py` and
-  `backend/tests/test_ci_lane_catalogue.py`: exact full-module PROJECT ownership.
+  `backend/tests/test_ci_lane_catalogue.py`: exact full-module PROJECT ownership
+  and token-level coverage-command regression.
+- `.github/workflows/backend.yml`: only replace the sufficiency coverage step's
+  obsolete selectors with its two exact retained test nodes and all new family
+  test modules; preserve both production coverage targets and the 90% floor.
 - `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`: canonical smaller inventory;
   remove obsolete function entries without adding debt or exceptions.
 
 Not allowed: production, migrations, grants, routes, worker implementation,
-dependencies, workflow/coverage changes, conftest, real database test deletion,
+dependencies, other workflow changes or coverage weakening, conftest, real database test deletion,
 new runtime semantics, AUTH suspension-race repair, or edits to unrelated tests.
 
 ## Design
@@ -59,6 +63,10 @@ Separate service composition from SQL-port failure handling and public-route
 concealment. Keep real PostgreSQL/persisted AUTH evidence tests in their existing
 locations unchanged. Mock rollback or staged audit counters are not database
 atomicity evidence. Do not claim these tests enforce handle/session binding.
+Setup-linked acknowledgement validation occurs after consumption and in-memory
+acknowledgement changes. Its late rejection tests prove the conflict and absence
+of continuation reset/replay completion, not absence of those earlier changes.
+Actual rollback guarantees remain the responsibility of retained PostgreSQL tests.
 
 ## Acceptance criteria
 
@@ -80,13 +88,16 @@ lines, with a 75-line target; helpers stay below100 lines.
 | Queue progress does not invalidate committed replay | `test_dispatch_replay_survives_queue_progress` |
 | Missing setup lineage/row, completed work, missing material/task identity, stale task ID reject before consume | `test_dispatch_rejects_unusable_setup` |
 | Create stages exact human report provenance and stable replay completion | `test_create_stages_human_report` |
+| Each command forwards fixture-owned exact PREP caller, scope and resource facts | `test_mutation_passes_exact_prepared_context` |
 | Initial and locked lineage differ: create/ack/dispatch deny before consume | `test_mutation_rejects_changed_locked_lineage` |
 | Consume failure cannot produce product effect or complete replay (each command) | `test_mutation_consume_failure_has_no_product_effect` |
 | Existing report cannot be created again; lost insert race conceals integrity error | `test_create_rejects_existing_report`, `test_create_conceals_insert_conflict` |
 | Acknowledgement binds actor/link/grant/action/decision/note and time | `test_acknowledgement_stages_exact_provenance` |
 | Missing/foreign initial report, missing locked report, changed snapshot hash, non-warning status reject before consume | `test_acknowledgement_rejects_invalid_report` |
 | Already acknowledged report cannot be changed again | `test_acknowledgement_rejects_repeat` |
-| New reservation pending/mismatch dispositions prevent protected mutation for each command | `test_mutation_requires_claimed_reservation` |
+| Setup-linked acknowledgement rejects missing/wrong run, generation, output report or existing downstream policy without continuation reset/completion | `test_acknowledgement_rejects_invalid_continuation` |
+| Valid setup-linked acknowledgement resets exact enqueue fields and completes replay | `test_acknowledgement_resets_continuation` |
+| New reservation pending/mismatch/replayed dispositions prevent protected mutation for each command | `test_mutation_requires_claimed_reservation` |
 | Exact report and acknowledgement replay returns stored response after reauthorization, without another product effect | `test_mutation_recovers_committed_response` |
 | Each existing mismatch/pending/resource-digest case rejects independently for create/ack/dispatch | `test_replay_rejects_changed_identity`, `test_replay_rejects_incomplete_record`, `test_replay_rejects_changed_resource_digest` |
 | Disappeared reservation after both insert outcomes and failed completion | `test_reservation_disappearance_is_integrity_error`, `test_missing_completion_is_integrity_error` |
@@ -111,6 +122,10 @@ Lead runs the six original tests locally before replacement, then all new
 family modules and catalogue tests. Ruff, canonical debt inventory/validation,
 Commitrail, Markdown links, stale scans and diff checks must pass. Hosted CI owns
 the full suite, PostgreSQL tests, manifest reconciliation and coverage floors.
+The workflow regression must assert exact pytest selector tokens: the retained
+worker-composition and setup-service-adoption nodes plus every replacement test
+module, with no obsolete `-k` expression. It must retain both per-file coverage
+targets and the existing 90% threshold.
 
 Run passing controls plus temporary discriminating defects for wrong authority,
 masked lineage rejection, omitted replay reauthorization, duplicate replay
