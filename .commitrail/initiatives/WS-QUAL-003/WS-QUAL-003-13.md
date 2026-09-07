@@ -189,6 +189,7 @@ Parameter cases must remain independently identifiable in final assertion map.
 | Target sees granted role but cannot read protected definitions | `test_target_role_projection_does_not_grant_catalogue_access` | Real grants reflected in self-read; definitions403/permission_not_granted |
 | Read query and grant request validation | `test_invalid_admin_request_is_bounded` | Preserve individually mapped original invalid field/cursor/selector cases |
 | Concurrent bootstrap has one winner | `test_concurrent_bootstrap_has_one_persisted_winner` | Two sessions, exact control-lock wait, grant/control/success event and losing conflict |
+| Race proof detects a missing owner lock | `test_bootstrap_race_proof_rejects_missing_owner_lock` | Hosted-only negative control removes exactly the real owner's FOR UPDATE in memory; the unchanged race proof must fail specifically at exact-lock observation, not setup or timeout; monkeypatch restored |
 | Same-key concurrency recovers | `test_concurrent_same_key_grant_returns_one_result` | Exact reservation wait, matching outputs, one grant and evidence pair |
 | Distinct-key concurrency cannot double issue | `test_concurrent_distinct_keys_create_one_active_grant` | Exact control wait, 201/409, one persisted grant |
 | Cross-revoke retains effective administrator | `test_cross_revoke_retains_one_effective_admin` | Exact control wait, one revoke and one denied caller, one effective surviving administrator |
@@ -286,3 +287,16 @@ CLI privacy and empty-stderr proof remain unchanged from the first checkpoint.
 All new PostgreSQL modules are explicitly registered in existing hosted lanes.
 This checkpoint still requires hosted PostgreSQL results, fault/lock probes,
 and affected exact-head reviews before the PR can be reported ready.
+
+The hosted negative-control test mutates the real control-lock method only in
+test memory and requires the unchanged bootstrap race proof to reject it at
+its observer. Access-administrator issuance is also an explicit grant evidence
+case, so typed issue/invalidation protection is not hidden in setup alone.
+
+The first hosted execution exposed two test assumptions: persisted audit actor
+attribution is `actor_id` (not the audit input's `actor_ref`), and the first
+mutation-route commit may belong to independent rate control. Grant fault
+injection now captures the real grant service's session and fails only its
+commit. The unchanged staged-state assertions rejected the earlier hook because
+issue had staged no grant and revoke still showed active state. This supplies
+an executed early-failure counterexample rather than a mock-only rollback claim.

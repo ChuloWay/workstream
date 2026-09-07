@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.actors.service import ActorService
 from app.modules.audit.service import AuditService
+from app.modules.authorization.admin_service import AdminRoleGrantService
 from tests.authorization.admin_access.read_support import READ_ACTIONS
 from tests.authorization.admin_access.support import (
     ActorObservation,
@@ -30,15 +31,32 @@ class FailureObservation:
         self.actor = await observed_actor(session, self.actor_id)
 
 
-def fail_next_commit(monkeypatch: pytest.MonkeyPatch, actor_id: UUID) -> FailureObservation:
-    """Do not synthesize writes; inspect the actual first commit's transaction."""
+def fail_next_commit(
+    monkeypatch: pytest.MonkeyPatch,
+    actor_id: UUID,
+    *,
+    grant_operation: str | None = None,
+) -> FailureObservation:
+    """Fail the feature commit, not an independent mutation rate-control commit."""
     probe = FailureObservation(actor_id)
     original = AsyncSession.commit
     attempted = False
+    owner_session: AsyncSession | None = None
+    if grant_operation is not None:
+        assert grant_operation in {"issue", "revoke"}
+        method = f"complete_{grant_operation}"
+        complete = getattr(AdminRoleGrantService, method)
+
+        async def remember_owner(service, *args, **kwargs):
+            nonlocal owner_session
+            owner_session = service._session
+            return await complete(service, *args, **kwargs)
+
+        monkeypatch.setattr(AdminRoleGrantService, method, remember_owner)
 
     async def fail_commit(session):
         nonlocal attempted
-        if attempted:
+        if attempted or (grant_operation is not None and session is not owner_session):
             return await original(session)
         attempted = True
         await probe.capture(session)

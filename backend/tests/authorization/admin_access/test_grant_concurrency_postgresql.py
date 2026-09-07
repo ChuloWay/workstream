@@ -5,7 +5,11 @@ from uuid import uuid4
 import pytest
 
 from scripts.bootstrap_access_administrator import _run as run_bootstrap
-from tests.authorization.admin_access.concurrency_support import ordered_owner_calls
+from app.modules.authorization.repository import AdminAuthorizationRepository
+from tests.authorization.admin_access.concurrency_support import (
+    control_owner_without_row_lock,
+    ordered_owner_calls,
+)
 from tests.authorization.admin_access.support import (
     AdminAccess,
     SignedAccess,
@@ -50,6 +54,26 @@ async def test_concurrent_bootstrap_has_one_persisted_winner(
     conflicts = [e for e in rows["audit_events"] if e["event_type"] == "AdminRoleGrantIssueDenied"]
     assert len(conflicts) == 1
     assert conflicts[0]["target_actor_ref"] == str(second.id)
+
+
+async def test_bootstrap_race_proof_rejects_missing_owner_lock(
+    signed_access: SignedAccess,
+    auth_database_env: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    broken_owner = control_owner_without_row_lock()
+    with monkeypatch.context() as patch:
+        patch.setattr(AdminAuthorizationRepository, "lock_control", broken_owner)
+        with pytest.raises(AssertionError, match="actual owner lock observation failed") as failure:
+            await test_concurrent_bootstrap_has_one_persisted_winner(
+                signed_access,
+                auth_database_env,
+                monkeypatch,
+            )
+    assert isinstance(failure.value.__cause__, AssertionError)
+    assert (
+        str(failure.value.__cause__) == "ordered lifecycle request never reached the database lock"
+    )
 
 
 async def test_concurrent_same_key_grant_returns_one_result(

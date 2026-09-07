@@ -43,7 +43,7 @@ async def test_admin_read_blocks_exact_authority_transition(
     action, _ = READ_ACTIONS[surface]
     events = await authority_events(action=action, event_type="SensitiveAuthorizationAllowed")
     assert len(events) == 1
-    assert events[0].actor_ref == str(reader.id)
+    assert events[0].actor_id == str(reader.id)
     assert events[0].matched_grant_id == grant_id
     denied = await access.signed.client.get(
         read_path(access.target.id, surface), headers=reader.headers

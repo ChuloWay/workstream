@@ -1,8 +1,11 @@
 """Hold the actual owner lock until an independent observer sees the exact waiter."""
 
+import ast
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+import inspect
+import textwrap
 from typing import Any
 from uuid import uuid4
 
@@ -11,6 +14,7 @@ from sqlalchemy import text
 
 from app.db import session as db_session
 from app.modules.actors.service import ActorService
+from app.modules.authorization import repository as authorization_repository
 
 from app.modules.authorization.repository import (
     AdminAuthorizationRepository,
@@ -26,6 +30,27 @@ class LockObservation:
     holder_pid: int | None = None
     waiter_pid: int | None = None
     observed: bool = False
+
+
+def control_owner_without_row_lock():
+    """Mutate only the real owner's FOR UPDATE for the hosted negative control."""
+    source = inspect.getsource(AdminAuthorizationRepository.lock_control)
+    tree = ast.parse(textwrap.dedent(source))
+    removed = []
+
+    class RemoveLock(ast.NodeTransformer):
+        def visit_Call(self, node):
+            node = self.generic_visit(node)
+            if isinstance(node.func, ast.Attribute) and node.func.attr == "with_for_update":
+                removed.append(node)
+                return node.func.value
+            return node
+
+    tree = ast.fix_missing_locations(RemoveLock().visit(tree))
+    assert len(removed) == 1, "probe must remove exactly the owner's control-row lock"
+    namespace = dict(vars(authorization_repository))
+    exec(compile(tree, "<control-lock-negative-probe>", "exec"), namespace)
+    return namespace["lock_control"]
 
 
 async def ordered_owner_calls(

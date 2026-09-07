@@ -23,6 +23,7 @@ from tests.authorization.admin_access.support import (
         ("issue", "project_manager", True),
         ("issue", "audit_authority", True),
         ("issue", "audit_authority", False),
+        ("issue", "access_administrator", False),
         ("revoke", "operator", False),
     ],
 )
@@ -73,7 +74,7 @@ async def test_grant_mutation_exact_replay_has_one_effect(
     ]
     assert len(success) == 1
     assert success[0]["entity_id"] == first.json()["resource_id"]
-    assert success[0]["actor_ref"] == str(access.admin.id)
+    assert success[0]["actor_id"] == str(access.admin.id)
     assert str(success[0]["idempotency_reference"]) == str(records[0]["id"])
     invalidations = [e for e in events if e["event_type"] == "AuthorityInvalidationRequested"]
     assert len(invalidations) == 1
@@ -160,7 +161,7 @@ async def test_grant_mutation_mismatch_preserves_product_state(
     assert len(added) == 1
     assert added[0]["event_type"] == "SensitiveAuthorizationDenied"
     assert added[0]["denial_code"] == "idempotency_mismatch"
-    assert added[0]["actor_ref"] == str(access.admin.id)
+    assert added[0]["actor_id"] == str(access.admin.id)
     assert added[0]["action_id"] == f"admin_role_grant.{operation}"
 
 

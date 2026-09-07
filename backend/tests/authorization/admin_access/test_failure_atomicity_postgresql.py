@@ -112,7 +112,7 @@ async def test_grant_mutation_commit_failure_rolls_back(
     before_actor = await seed_old_observation(access.admin.id)
     before = await authority_snapshot()
     key = str(uuid4())
-    probe = fail_next_commit(monkeypatch, access.admin.id)
+    probe = fail_next_commit(monkeypatch, access.admin.id, grant_operation=operation)
     if operation == "issue":
         response = await access.signed.issue(access.admin, body, key=key)
     else:
