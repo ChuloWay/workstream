@@ -87,7 +87,7 @@ No thresholds, selection requirements, or existing assertions are weakened.
 | Handle lifetime | Consume/replay at most once; close, copy/pickle, session swap, nested or replaced root, commit and rollback invalidate; no provider I/O or serialized transport |
 | Concrete new finalization | All three result classifications succeed with real service identity, real projection authority, exact allow event and immutable receipt in one PostgreSQL transaction |
 | Replay | Identical replay preserves receipt and evidence counts; missing/foreign/mutated historical decision fails; freshly revoked actor/link denies despite a previously successful receipt |
-| Revocation ordering | Real independent sessions prove committed revocation before preparation denies and overlapping revocation serializes on canonical authority locks; use observable lock contention, not sleeps |
+| Revocation ordering | Independent sessions use production `ActorLifecycleService` and `IdentityLinkLifecycleService` (or their exact existing composition), with an authorized admin; revocation-first denies and finalization-first serializes on profile/link locks, observed through PostgreSQL activity rather than sleeps |
 | Atomic failure | Evidence-write failure, invalid authority receipt or closure failure leaves no setup mutation, finalization receipt or orphan allow after rollback |
 | Hidden boundary | Default finalizer remains denied; no live route/worker reference to the factory; component projections retain their own actions |
 | Gate integrity | Explicit node registration, unchanged global 78% floor and repository floors, at least 90% coverage for new/materially changed AUTH surfaces |
@@ -97,11 +97,61 @@ The existing `pg_support.database_case` and `pg_prerequisites` supply actual
 compiled/projected parents through AUTH-12J. Integration constructs the new
 concrete adapter explicitly in the same caller session instead of using the
 old strict finalization test port. Revocation tests target the persisted setup
-service actor/link and retain separate successful finalization controls.
+service actor/link through the production lifecycle services and retain separate
+successful non-revoked controls for actor and link cases. Seed authorized admin
+prerequisites; do not replace the lifecycle path with raw SQL status updates.
 Negative database cases retain valid controls and compare durable state after
 rollback. Unit doubles claim only contract/ordering behavior. PostgreSQL tests
 own storage, revocation and independent-session serialization claims. Each
 critical assertion has a discriminating mutation or concrete counterexample.
+
+### Planned test symbols and assertion ownership
+
+The symbols below are future implementation tests, not executed evidence.
+AUTH unit modules live in `backend/tests/authorization/setup_finalization/`;
+PostgreSQL modules live in `backend/tests/projects/guide_compilation/finalization/`.
+
+| Planned symbol | Variants and compatible custody |
+|---|---|
+| `test_catalogue.py::test_finalization_action_service_matrix` | Every service identity x action permission; only setup service + finalization action succeeds; pure catalogue and real PREP/kernel service execution |
+| `test_catalogue.py::test_human_and_direct_kernel_finalization_denied` | Human project manager/admin and fixed-service direct-kernel calls deny for exact and legacy resources; pure service |
+| `test_resource_context.py::test_each_finalization_fact_is_bound` | Exhaustive field inventory below, each with a valid baseline; pure validated-resource and adapter/PREP consumption |
+| `test_resource_context.py::test_preparation_locator_and_principal_are_bound` | Project, operation, correlation, actor, link, request and scope substitution; exact public locator -> prepared binding -> consume; pure service |
+| `test_resource_context.py::test_deterministic_finalization_identity_is_exact` | Receipt, operation and correlation independently forged; source seed control preserved; pure contract |
+| `test_resource_context.py::test_policy_tuple_and_transition_shape` | Three valid classifications; partial nullable tuples and conflicting classification/outcome reject; pure contract |
+| `test_prepared.py::test_exact_resource_kinds_cannot_be_substituted` | Legacy setup context and projection contexts cannot consume finalization; finalization context cannot consume projection/other action; pure PREP/kernel |
+| `test_prepared.py::test_handle_lifetime_is_bound` | Consume then consume/replay; replay then consume/replay; closed context; different session/root; nested, committed, rolled-back, inactive/replaced transaction; pure service, backed by PG cases below |
+| `test_adapter.py::test_prepared_finalization_is_process_local` | Copy, deepcopy, pickle and arbitrary handle replacement deny; pure contract |
+| `test_adapter.py::test_prepare_consume_and_close_fail_closed` | Prepare/consume/evidence/exit exceptions keep public denial mapping and close once; caller exceptions are not remapped; pure service |
+| `test_replay.py::test_historical_decision_envelope_is_exact` | Missing/wrong decision and one-at-a-time event domain/type/actor-ref/actor/action/permission/project/resource/request/correlation/allow/digest substitutions; pure replay, not storage custody |
+| `test_authorization_postgresql.py::test_concrete_finalization_is_atomic` | guide_blocked, draft_ready, draft_ready_with_warnings; real compilation + AUTH12J projections + concrete adapter + receipt + exact audit row in caller transaction |
+| `test_authorization_postgresql.py::test_concrete_replay_is_exact` | Unchanged receipt/result and event counts with current valid authority; real PostgreSQL |
+| `test_authorization_postgresql.py::test_revoked_service_denies_new_and_replay` | Actor suspension/deactivation and link revocation through production lifecycle services; both new finalization and stored-receipt replay; valid non-revoked controls |
+| `test_authorization_postgresql.py::test_finalization_failure_rolls_back_all_effects` | Evidence insertion failure, invalid returned authority receipt, close failure and caller rollback; durable setup/receipt/allow-event comparisons with actual PG writes before failure where relevant |
+| `test_authorization_postgresql.py::test_stored_replay_decision_substitution_denied` | Stored foreign/missing/mismatched decision fixture reaches replay validation; explicitly bounded transactional tampering where append-only constraints prohibit a naturally persisted invalid row |
+| `test_authorization_concurrency_postgresql.py::test_finalization_and_revocation_serialize` | Actor and link lifecycle x revocation-first/finalization-first; distinct sessions/PIDs, named lock waiter and exact blocker, retained valid controls and cleanup of tasks |
+| `test_structure.py::test_finalization_authority_has_no_live_reachability` | Factory explicit, default denial retained, no HTTP/Celery/provider reference; structural and default-service tests, not live execution proof |
+| Existing catalogue and hosted evidence tests | Exact new module registration, all canonical nodes complete once, aggregate and new-owner coverage floors unchanged |
+
+The exhaustive fact-mutation inventory is every field of
+`ProjectSetupFinalizationFacts`: `project_id`, `guide_id`, `guide_version`,
+`source_snapshot_id`, `source_snapshot_hash`, `setup_run_id`, `setup_generation`,
+`celery_task_id`, `source_state_digest`, `operation_id`, `correlation_id`,
+`finalization_id`, `attempt_id`, `request_operation_id`, `provider_idempotency_key`,
+`compilation_id`, `canonical_input_hash`, `result_hash`, `result_schema_version`,
+`compilation_agent_name`, `compilation_agent_version`, `component_hashes`,
+`result_classification`, `setup_outcome`, `sufficiency_operation_id`,
+`sufficiency_report_id`, `sufficiency_output_digest`, `artifact_policy_operation_id`,
+`artifact_policy_id`, `artifact_policy_output_digest`. Each component hash key
+gets an independent mutation. Tests assert the expected inventory matches the
+public dataclass so future fields cannot silently escape proof.
+
+For a field whose representation requires coupled values, distinguish malformed
+shape rejection from a valid alternate fact vector reaching AUTH consumption or
+replay; an earlier dataclass error is not proof of the later binding guard.
+Unbound preflight facts are supplied only after POL obtains its serialization
+locks; prove their exact digest appears in allow evidence and that changing a
+fact invalidates historical replay, rather than claiming preflight knew them.
 
 ## Verification and reviewers
 
