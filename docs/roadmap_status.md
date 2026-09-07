@@ -22,8 +22,9 @@ Workstream turns governed work into trusted `ContributionRecord` facts:
 ```text
 Project Guide
 -> governed Task
+-> artifact preparation and pre-submission intake checks
 -> immutable Submission
--> deterministic Checks
+-> post-submission evaluation against locked requirements
 -> authorized Review
 -> controlled Revision when required
 -> Contribution Records
@@ -70,6 +71,29 @@ with `routing_recommendation = allow_review`. That fact unlocks the live
 review/revision path. Review decisions must then create contribution and
 conditional compensation facts atomically before v0.1 can be released.
 
+## Pre-Submission And Post-Submission Checking
+
+Both stages enforce quality, but answer different questions and produce
+different outcomes. They are not one combined checker phase.
+
+| Stage | Purpose and examples | Policy and execution boundary | Outcome |
+| --- | --- | --- | --- |
+| Pre-submission intake checks | Is this package acceptable to submit? Check completeness, required/forbidden files, evidence integrity, and configured intake-quality rules. | The locked `PreSubmitCheckerPolicy` and effective artifact policy drive the pre-submission catalogue during continuous artifact preparation, before a Submission exists. | Blocking failures return correction feedback and prevent Submission creation. Passing intake does not prove the task is accepted or ready for review. |
+| Post-submission evaluation | Does the submitted work meet the configured task/project checks? Evaluate the exact stored work and evidence under the locked requirements. | The Submission-stamped `PostSubmitCheckerPolicy` drives the durable checker registry after immutable Submission creation. Only supported, registered checks execute. | Persist a durable current result; blocking failures prevent review admission. Eligible results produce `allow_review`, not final acceptance. |
+
+The unified guide agent proposes both sets of policy bindings in one setup
+result. Trusted compilation, validation, and the governing approval path turn
+those proposals into separate locked policies; setup inference is not a second
+agent run judging a contributor's submission. An agent-based evaluator or quality
+judge would require its own supported checker implementation and policy binding;
+it is not implied to be live by the unified setup agent or the roadmap.
+
+Authorized reviewers still own `accept`, `needs_revision`, and `reject`.
+Neither checker stage can substitute for that decision. Pre-submission feedback
+cannot be reused as post-submission review-gate evidence. See the
+[checker architecture](architecture_checker_framework.md) and
+[pre-submit versus durable contract](spec_chunk_8_submission_artifact_policy_checkers.md#pre-submit-versus-durable-runs).
+
 ## End-To-End Lifecycle Scoreboard
 
 | Lifecycle stage | Status on `main` | What is already proven | What remains before v0.1 |
@@ -81,8 +105,9 @@ conditional compensation facts atomically before v0.1 can be released.
 | Contribution policy administration | **Hidden and proven** | Finance Authority adapter-binding lifecycle; ContributionPolicy read/create/update/publish/retire behavior; immutable operation and event history | Activate the five policy actions, expose validation, bind one published complete version to the active guide generation |
 | Task readiness and claim | **Foundation plus planned replacement** | Task records, lifecycle guards, assignments, locked work context, public owner facts | A task must inherit the guide-bound ContributionPolicyVersion before `READY`; claim copies the prepared task context into TaskAssignment without a current-policy lookup; activate exact task authority |
 | Contributor artifact preparation | **Hidden and proven** | One outer ZIP; bounded scratch inspection; canonical manifest; platform and project prechecks; unchanged-work rejection; durable put intent; verification; capacity-charged ready admission | Connect only the active unified guide/checker lineage and complete the later public admission-only cutover |
+| Pre-submission intake checking | **Hidden and proven; unified-guide integration remains** | Separate versioned pre-submission catalogue, locked effective-plan compilation, platform/project checks during continuous preparation, and blocking feedback before Submission creation | Connect approved unified-guide pre-submit policy lineage through task/assignment preparation and complete the canonical public cutover; passing intake must never substitute for post-submit evaluation |
 | Immutable Submission creation | **Hidden and proven** | Contributor preparation authority; atomic admission consumption; TASK-owned Submission creation; fixed-service artifact binding; replay/concurrency/rollback proof | Stamp the assignment's exact ContributionPolicyVersion and unified policy lineage; remove the legacy Submission path only after remediation and review prerequisites are ready |
-| Post-submit checking and `allow_review` | **Planned; immediate integration milestone** | Checker contracts, registry/runner foundations, existing pre-review behavior, artifact materialization foundations | Publish one CHECKER post-submit API; materialize the exact Submission; persist one durable current superseding result; activate fixed services; automatically dispatch it and publish the canonical `allow_review` manifest |
+| Post-submission evaluation and `allow_review` | **Planned; immediate integration milestone** | Separate durable checker contracts and registry/runner foundations, existing pre-review behavior, artifact materialization foundations | Publish one CHECKER post-submit API; evaluate the exact Submission against its locked policy; persist one durable current superseding result; activate fixed services; automatically dispatch it and publish the canonical `allow_review` manifest |
 | Review queue and lease | **Hidden persistence foundation** | Queue/admission idempotency and ReviewLease/preference persistence; complete unavailable REV action/principal catalogue and typed AUTH contracts | Packet-membership contract and manifest; Review schema; canonical admission from `allow_review`; claim/lease/packet authority; lease copies the Submission-stamped policy version with no CON lookup |
 | Review decision and revision | **Planned** | Review/revision policy identities and mutation authority; approved same-task revision-rebase semantics | Immutable findings and decisions; `accept`, `needs_revision`, and `reject`; complete-context revision preparation; finding responses; replacement contributor rules; replay and recovery |
 | Contribution and compensation truth | **Schema foundations plus hidden policy behavior** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings; hidden policy administration | Persist ContributionRecord and CompensationAward; atomically create one reviewer record for every final review and, on accept only, FinalAcceptance plus the submitter record; evaluate frozen rules into zero, one, or two awards |
@@ -182,6 +207,11 @@ The next dependency-safe product sequence is:
    and policy context before `READY`. Claim copies it to TaskAssignment; it
    performs no ContributionPolicy selection. Submission later copies the
    assignment's attempt version.
+   **Complete pre-submission intake integration before creating the Submission:**
+   continuous artifact preparation executes the locked intake plan, returns
+   correction feedback on blocking failures, and publishes ready admission only
+   after the required preparation/custody checks. TASK then consumes that
+   admission to create the immutable Submission with the same assignment lineage.
 6. **Produce canonical `allow_review`.** Materialize the exact immutable
    Submission, execute the locked post-submit plan, persist one current result,
    activate only its fixed services, and automatically publish an exact
@@ -210,8 +240,10 @@ the seven hosted CI lanes. The audit also corrected concrete sufficiency and
 submission-policy validation defects. These are delivered bounded repairs,
 not a claim that every test or subsystem is fully audited.
 
-Remaining work includes AUTH historical-evidence and actor-resolution proof,
-oversized AUTH/test-module decomposition, and the remaining TASK, CHECKER,
+The selected AUTH projection replay, actor-resolution, and authentication audit
+and decomposition are also delivered, including stronger first-access race
+proof. That does not complete the remaining AUTH lifecycle families or the full
+suite audit. Remaining work includes those AUTH families and the TASK, CHECKER,
 ART, CON, REV, and tooling audit. The audit requires behavioral proof, not only
 file splitting or coverage percentages. Real PostgreSQL, concurrency, storage,
 and full hosted coverage checks remain required. Product implementation is
@@ -239,6 +271,8 @@ Hidden ContributionPolicy behavior (complete)
 Both chains
   -> terminal Project Guide activation
   -> Task readiness and assignment lineage
+  -> artifact preparation + locked pre-submission intake checks
+  -> ready admission after intake and custody checks
   -> immutable admitted Submission
   -> durable current post-submit result
   -> canonical allow_review
@@ -261,8 +295,12 @@ v0.1 is not ready until all of the following are true:
 - One active Project Guide generation contains a complete approved compilation
   and every required policy identity/hash, including ContributionPolicyVersion.
 - A task cannot enter `READY` without that complete locked context.
-- A contributor can claim, submit one immutable ZIP, pass both checker phases,
-  and receive a durable ready admission without a parallel legacy path.
+- A contributor can claim and prepare one ZIP under the locked pre-submit
+  policy. Blocking intake failures return feedback and create no Submission;
+  successful preparation produces ready admission after the required custody
+  checks, without a parallel legacy path.
+- TASK consumes that admission to create the immutable Submission with exact
+  assignment/policy lineage. Pre-submit feedback is not post-submit proof.
 - The immutable Submission automatically reaches exactly one current
   post-submit result and an exact `allow_review` manifest when eligible.
 - A reviewer can claim only that admitted version, access only its bounded
