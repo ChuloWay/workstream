@@ -226,6 +226,9 @@ Additional allowed files:
   not hidden product assertions that replace the test's primary behavior.
 - Existing `backend/tests/auth_concurrency_support.py`: only if the first-access
   proof needs a bounded extension of the real observer; otherwise reuse unchanged.
+- `backend/tests/test_auth_concurrency_observer.py`: prove the optional exact
+  waiter/blocker selectors on the existing observer, including wrong-blocker
+  rejection. Preserve its original fresh-versus-cached snapshot regression.
 - `backend/scripts/test_structure_boundary.py` and
   `backend/tests/architecture/test_test_structure_boundary.py`: explicitly
   include the authentication/actor test directories in existing structural and
@@ -254,8 +257,15 @@ Preserve real RSA signatures, issuer/audience/time validation, bounded network
 clients and credential isolation. Fixtures remain owner-local: cache cleanup
 applies to the same authentication families, database fixtures remain opt-in,
 and existing actor eligibility tests do not acquire new autouse DB setup.
-A moved helper must preserve module-scoped RSA fixture behavior and path
-resolution; compute repository paths from the new location deliberately.
+A moved helper must preserve module-scoped RSA fixture behavior. Explicitly
+re-export shared RSA/cache fixtures into the remaining `test_auth.py`; keep its
+opt-in database fixture unchanged. Delete the unused actor `alembic_config`
+helper rather than carrying dead setup into a new module. Preserve path
+resolution wherever paths are actually used.
+
+Separately prove the 32-role cap and overlength-role filtering. Place the
+overlength role before valid roles; the old final-position example was masked
+by the count cap. Compatibility normalization remains a current boundary.
 
 The old JWKS lock-wait test delays HTTP without holding the refresh lock. Keep
 that useful behavior as `test_jwks_http_request_is_inside_total_deadline`; add
@@ -278,17 +288,27 @@ transaction is released. The winner holds the actual identity advisory lock;
 the contender is observed blocked on that exact backend (not merely any Lock
 wait). Release the winner only after that observation. Assert the loser's
 post-lock lookup returns the same stored profile/link and follows touch, with
-exactly one profile, one link and one creation-event pair. Cleanup awaits or
-cancels tasks on failure so no locks leak. The existing
+exactly one profile, one link and one creation-event pair. Assert both complete
+persisted events: request/correlation, actor/target references, entity/resource
+IDs, event types and after_facts belong to the winner. The contender must not
+create another pair. Cleanup awaits or cancels tasks on failure so no locks leak. The existing
 `test_concurrent_first_access_leaves_one_profile_link_and_event_pair` becomes
 this deterministic proof; PostgreSQL execution is hosted-only.
 
 Keep revocation/update and legacy-activation concurrency proofs with real
-transactions. The controlled authorization-lock test gains one-fact-at-a-time
+transactions, adding exact waiter/blocker observation before releasing either
+holder. Extend the existing AUTOCOMMIT observer with expected waiter/blocker PIDs
+rather than duplicating its polling loop. Prove a wrong blocker cannot satisfy
+the observation. Seed deliberately old persisted timestamps for repeated-access
+advancement; do not depend on a timing sleep. Rate-limit denial forbids profiles,
+links and provisioning/decision evidence, matching unavailable-rate-control proof.
+The controlled authorization-lock test gains one-fact-at-a-time
 profile/link owner, issuer, subject and kind substitution with exact selector
-arguments; do not call this direct-SQL or database locking proof.
-Split the mixed existing-actor/legacy negative bucket. Its duplicate service
-early rejection may map to `test_unknown_service_creates_nothing`; suspended,
+arguments and lock flags. Keep missing-profile and missing-link cases separate
+from the drift matrix and valid control; do not call this direct-SQL or database locking proof.
+Split the mixed existing-actor/legacy negative bucket. Only its duplicate
+`resolve_verified_actor(service_token)` rejection may map to
+`test_unknown_service_creates_nothing`; suspended,
 revoked, malformed stored profile and unknown-legacy cases retain distinct
 survivors. Historical compatibility behavior is not obsolete just because its
 name says legacy: it remains protected while current runtime consumers exist.
@@ -378,8 +398,8 @@ required; a smaller file does not itself justify removing any of them.
 | `test_actor_admin_reads_are_bounded_and_reuse_exact_repository_lookups` | `test_admin_views.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
 | `test_service_identity_lock_has_a_distinct_domain_without_changing_external_keys` | `test_repository_contract.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
 | `test_actor_resolution_fails_closed_on_profile_or_subject_kind_drift` | `test_resolution_service.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
-| `test_actor_authorization_lock_rejects_disappearance_and_identity_drift` | `test_resolution_service.py` | Strengthen exact selectors and one-field identity-drift matrix. |
-| `test_active_human_write_actor_revalidates_exact_profile_then_link` | `test_resolution_service.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_actor_authorization_lock_rejects_disappearance_and_identity_drift` | `test_authorization_locks.py` | Strengthen exact selectors and one-field identity-drift matrix. |
+| `test_active_human_write_actor_revalidates_exact_profile_then_link` | `test_authorization_locks.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
 | `test_actor_timestamp_touch_fails_closed_before_writes_on_missing_rows` | `test_repository_contract.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
 | `test_first_human_access_atomically_creates_profile_link_and_events` | `test_first_access_postgresql.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
 | `test_concurrent_first_access_leaves_one_profile_link_and_event_pair` | `test_first_access_postgresql.py` | Strengthen actual dual-miss, exact-lock-wait and winner-reuse proof. |
@@ -392,11 +412,11 @@ required; a smaller file does not itself justify removing any of them.
 | `test_patch_actors_me_maps_database_failure_to_retryable_unavailable` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
 | `test_actor_self_evidence_failure_is_retryable_and_rolls_back_touch` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
 | `test_missing_bearer_has_no_actor_self_decision_evidence` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
-| `test_suspended_profile_is_readable_but_not_mutable` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
-| `test_revoked_identity_link_is_denied_by_actor_api` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
-| `test_deactivated_actor_is_denied_by_actor_self_api` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
-| `test_nonhuman_actor_self_api_denials_create_nothing` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
-| `test_revocation_wins_synchronized_actor_update_recheck` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_suspended_profile_is_readable_but_not_mutable` | `test_self_api_lifecycle.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_revoked_identity_link_is_denied_by_actor_api` | `test_self_api_lifecycle.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_deactivated_actor_is_denied_by_actor_self_api` | `test_self_api_lifecycle.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_nonhuman_actor_self_api_denials_create_nothing` | `test_self_api_lifecycle.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_revocation_wins_synchronized_actor_update_recheck` | `test_self_api_lifecycle.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
 | `test_actor_api_accepts_verifier_identity_bounds` | `test_identity_bounds_and_rate_controls.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
 | `test_verified_identity_rejects_values_above_persisted_provenance_bound` | `test_identity_bounds_and_rate_controls.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
 | `test_first_access_rate_limit_denies_without_actor_write` | `test_identity_bounds_and_rate_controls.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
@@ -444,8 +464,8 @@ planned. Reuse existing focused reviewers; no blanket nine-agent fanout.
   observer repair PR378. Integrated base `8c00fb3d` also includes PR376's
   Commitrail contribution-path simplification. Product PR377 owns finalization,
   not this AUTH replay family.
-- Next usable boundary within this change: map the actor-resolution and AUTH
-  monolith stages above. The projection slice does not complete those
+- Next usable boundary within this change: implement the concrete authentication
+  and actor-resolution stages above after their plan review. The projection slice does not complete those
   large-file obligations and is no longer the whole intended merge outcome.
 - Remaining risks: PostgreSQL integrity and owner-query isolation are separate
   proof boundaries; most repository tests remain unaudited.
