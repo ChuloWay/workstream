@@ -25,12 +25,63 @@ after an insert or conflict without a supported deletion/transaction boundary.
 - `backend/tests/projects/submission_policy_mutations/test_repository.py`.
 - A rationale table in this record covering the existing submission-policy family.
 - `backend/tests/projects/sufficiency_mutations/test_replay_repository.py`.
+- AUTH expansion authorized below: `backend/tests/test_auth.py` (extract only
+  the lock observer and duplicated ordered-request harness; preserve lifecycle
+  scenarios and assertions), `backend/tests/auth_concurrency_support.py`,
+  `backend/tests/test_auth_concurrency_observer.py`.
+- `backend/scripts/test_lane_catalogue.py` and
+  `backend/tests/test_ci_lane_catalogue.py`: register the new observer tests in
+  the existing shared-foundations selection, without changing partition rules.
+- `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`: canonical reduced-span/hash
+  reconciliation only; no new debt, exemptions or changed limits.
 
 ### Not allowed
 
-Production, schema, migration, CI, coverage-floor, public-interface, real
-PostgreSQL-test or product implementation changes. No AUTH race repair here.
+Production, schema, migration, workflows, coverage-floor, public-interface or
+product implementation changes. No broad AUTH/TASK/PROJECT test rewrite, timeout
+increase, expected-status weakening, skipped case or deletion of database proof.
 Do not edit the product worktree or make this cleanup its prerequisite.
+
+## Human-authorized scope expansion
+
+On 2026-09-07 the user explicitly authorized expanding this same PR:
+“yes correct do that so we get done once thats better yes expend and note why
+its expandand and the authority i gave you”. This authorizes the bounded AUTH
+concurrency-test diagnosis and repair here; it is not authorization to merge.
+
+Reason: hosted run `34130769728` failed the unchanged
+`test_actor_identity_link_lifecycle_real_postgres_concurrency` ordered
+revoke/reactivate scenario with `[500, 409]` instead of `[200, 200]`.
+Six other lanes passed. The prior passing run does not erase that failure.
+This deliberately supersedes the original exclusion of AUTH race repair from 11.
+
+The observer polls `pg_stat_activity` repeatedly inside one transaction, without
+refreshing the activity snapshot. PostgreSQL documents transaction-local activity
+snapshot caching. A first observation before the waiter is named can therefore
+remain stale. This is a concrete harness risk, but the original 500 log alone
+does not identify its exception. Repair proof must distinguish those statements.
+
+Extract the existing AUTH observer and duplicated ordered-request harness into
+one small test-support module. Only the observer uses AUTOCOMMIT so each poll
+gets fresh activity; product transactions and lock order remain unchanged.
+The harness retains and re-raises observer errors as diagnostic assertion causes,
+even if HTTP middleware converts them to 500 responses. It cancels and awaits
+its own outstanding tasks before restoring the patched method.
+
+Hosted PostgreSQL proof starts observation before a preconnected waiter is named
+and blocked. Real independent blocker/waiter/observer connections, exact waiter
+PID and `pg_blocking_pids` establish actual contention. A transaction-cached
+baseline control must miss the late waiter; the repaired observer must detect
+it under the same existing timeout. That explicit counterexample is not a
+waived lifecycle failure. Existing ordered lifecycle races must still pass
+their original response, row-state, idempotency and audit assertions.
+
+Local controlled-port tests prove exception-cause propagation and cancellation
+cleanup only. They do not claim PostgreSQL execution. All new modules stay under
+500 lines, helpers under 100 and new tests under 120. Existing monolith tests
+shrink by removing duplicated harness code; their remaining decomposition is
+not claimed complete. If evidence instead identifies a product defect, document
+and review its exact repair scope before changing production.
 
 ## Design and decisions
 
@@ -63,6 +114,17 @@ because persisted action and grant provenance differ. Reject count-driven prunin
 - Each retained submission-policy test has a rationale; parameter matrices name
   their distinct branches or deliberate interactions, without claiming all guards.
 - Changed modules remain below 500 lines and tests below 120 lines.
+- New AUTH modules obey those limits; the existing AUTH monolith shrinks with
+  all lifecycle assertions preserved (not a claim it is already below 500).
+- `test_observer_detects_waiter_after_initial_miss` supplies real PostgreSQL
+  fresh/cached controls with deterministic first-observation ordering and exact
+  blocker/waiter custody; hosted only.
+- `test_ordered_requests_preserves_observer_exception` identifies the original
+  observation failure instead of an unexplained HTTP 500.
+- `test_ordered_requests_cleans_up_pending_task` proves owned tasks finish before
+  method restoration on request failure; no orphan waiter remains.
+- Both existing AUTH profile and identity-link concurrency tests retain every
+  original lifecycle, response, replay and audit assertion and pass hosted CI.
 
 ## Risk and review routing
 
@@ -166,6 +228,7 @@ conditions and stored transaction evidence still have audit work remaining.
 
 - Current-source reconciliation: based on merged PR375; product POL-04A2 owns
   separate files. Coordinate the shared overview wording only.
-- Next usable boundary: separate AUTH race diagnosis; no automatic start.
+- Next usable boundary: remaining AUTH proof audit/decomposition; the narrow
+  observer failure is now included by explicit human scope expansion.
 - Remaining risks: most repository tests still require semantic audit. Existing
   transaction proof limitations in record 10 remain open.
