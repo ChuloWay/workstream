@@ -35,6 +35,6 @@ for current product capability.
 | WS-ENG-001–008 | Superseded | Historical evidence remains in Git history |
 | [WS-ENG-009](initiatives/WS-ENG-009/OVERVIEW.md) | Complete | Apply scoped reviewer improvements to POL-04A2; whole-product stress testing remains separate |
 
-Reconciled through merged PR #363 and the WS-ENG-009-02 reviewer-efficiency
-change. Git history is authoritative if this durable index conflicts with a
-merged change; inspect GitHub for transient work.
+Git history is authoritative if this durable index conflicts with a merged
+change; inspect GitHub for transient work. Update an affected row when its
+durable disposition or next usable boundary changes.

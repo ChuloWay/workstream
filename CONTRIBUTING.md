@@ -44,11 +44,17 @@ On other hosts, use the required Agent Gates check in GitHub Actions.
 The backend Docker service mounts only `backend/`; it is not a repository-root
 tooling environment. Do not change dependency hashes to force a host install.
 
-For an obvious low-risk correction, record intent and scope in the pull
-request. A meaningful implementation change uses one record based on
-`.commitrail/CHANGE_TEMPLATE.md`. Multi-PR work also uses one concise initiative
-overview. Commitrail records are useful context, not runtime locks or
-permission to contribute.
+For an editorial correction to README or ordinary documentation outside
+process-control paths, record intent and scope in the pull request. A meaningful
+standalone change uses `.commitrail/changes/<lowercase-kebab-slug>.md`, based on
+`.commitrail/CHANGE_TEMPLATE.md`, declaring exactly one live `Initiative: None`,
+without an initiative overview or index row.
+Work in an existing initiative keeps its initiative record; multi-PR work also
+uses one concise overview. The [Commitrail contribution paths](.commitrail/README.md#smallest-useful-record)
+list the exact paths that require a record even for a small correction.
+Substantive specification or behavior changes need a record regardless of path;
+the path check cannot determine semantic risk. Commitrail records explain work;
+GitHub permissions and branch protection govern contribution authority.
 
 ## Find The Current Contract
 

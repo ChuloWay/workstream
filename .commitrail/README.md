@@ -27,10 +27,25 @@ approval, and merge.
 
 | Change | Record |
 |---|---|
-| Obvious low-risk correction | PR description only |
-| Meaningful single-PR change | One file based on `CHANGE_TEMPLATE.md` |
+| Editorial correction to README or ordinary documentation outside process-control paths | PR description with intent and scope |
+| Meaningful single-PR change without an initiative | One `changes/<slug>.md` based on `CHANGE_TEMPLATE.md` |
 | Multi-PR initiative | One initiative `OVERVIEW.md` plus one change record per PR |
 | Exceptional risk | Add only evidence or decisions needed to control that risk |
+
+Use a lowercase kebab-case standalone filename, for example
+`changes/fix-guide-validation.md` and declare `- Initiative: None` exactly once.
+Standalone records need no initiative overview
+or index row. Changes belonging to an existing initiative keep its record layout.
+Exactly one change record is used per implementation PR across both layouts.
+
+The validator requires a record for changes under `backend/`, `frontend/src/`,
+`scripts/`, `.agents/skills/`, `.codex/agents/`, `.ci/`, `.github/workflows/`,
+`.commitrail/`, and `docs/engineering/`, and for `AGENTS.md`, `CONTRIBUTING.md`,
+and `.github/pull_request_template.md`. Even a small correction in those paths
+uses a concise record. Mixing a README edit with those changes is not exempt.
+Other paths are not classified semantically by this gate: meaningful behavior,
+configuration, dependency, or specification changes still require a record and
+appropriate review. A passing path check does not establish low risk.
 
 Do not commit transient labels such as “in review,” “CI pending,” or “ready to
 merge.” GitHub already owns those facts. Durable dispositions are `Planned`,
