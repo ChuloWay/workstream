@@ -40,7 +40,7 @@ Not allowed: production, migrations, workflow/coverage changes, grants, routes,
 dependencies, conftest, real database tests, AUTH race repairs or other monolith
 assertion removal. No helpers imported from collected test modules.
 
-## Design and acceptance criteria
+## Acceptance criteria
 
 Use explicit standard mock ports, with the real service context manager invoked.
 Both service variants must execute each applicable proof independently.
