@@ -72,7 +72,7 @@ both adapter paths receive independent positive wiring proof instead.
 No new database test is needed for that bounded service claim. Existing hosted
 projection atomicity/concurrency tests remain unchanged and must still pass.
 
-## Acceptance criteria and proof mapping
+## Acceptance criteria
 
 | Behavior | Named proof | Custody |
 | --- | --- | --- |
@@ -109,6 +109,8 @@ projection concurrency/rollback execution. SQL-port proof remains separate.
 Discovery confirms a missing proof, not a demonstrated production bypass.
 Deleting the random-ID test would also lose missing-row coverage, so rename and
 retain it while adding the distinct existing-row substitution boundary.
+Plan review confirmed fixture feasibility and required the canonical acceptance
+heading (PLAN-12-001); that mechanical correction is applied.
 
 ## Reconciliation
 
