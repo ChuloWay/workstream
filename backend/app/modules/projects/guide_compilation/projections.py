@@ -58,7 +58,7 @@ from app.modules.projects.service import (
     PolicySetupBlocked,
     build_verified_guide_sufficiency_material,
 )
-from app.modules.projects.setup_queue import pre_submit_setup_task_id
+from app.modules.projects.api.setup_identity import pre_submit_setup_task_id
 
 from .contracts import AcceptedCompilationResult
 from .custody_payloads import (

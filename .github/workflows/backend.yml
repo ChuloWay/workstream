@@ -561,7 +561,7 @@ jobs:
             --cov=app.modules.projects.api.guide_compilation \
             --cov=app.modules.projects.guide_compilation.finalization \
             --cov=app.modules.projects.guide_compilation.finalization_payloads \
-            --cov=app.modules.projects.guide_compilation.custody_payloads \
+            --cov=app.modules.projects.api.setup_identity --cov=app.modules.projects.guide_compilation.custody_payloads \
             --cov-branch --cov-report=term-missing --cov-fail-under=90
 
       - name: Project authorization-read composer coverage

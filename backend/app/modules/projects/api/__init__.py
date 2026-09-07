@@ -43,7 +43,10 @@ from app.modules.projects.api.locked_policy import (
     ProjectLockedPolicyPreSubmitStatus,
 )
 
+from app.modules.projects.api.setup_identity import pre_submit_setup_task_id
+
 __all__ = (
+    "pre_submit_setup_task_id",
     "ProjectGuideSetupFinalizationCommand",
     "ProjectGuideSetupFinalizationReceipt",
     "ProjectGuideSetupFinalizationError",

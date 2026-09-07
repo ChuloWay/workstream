@@ -7,6 +7,7 @@ from alembic import command as alembic_command
 from alembic.config import Config
 import pytest
 from sqlalchemy import text
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import DBAPIError
 
 from app.modules.projects.guide_compilation.models import ProjectGuideSetupFinalization
@@ -40,7 +41,11 @@ async def test_finalization_schema_matches_model_columns_and_composite_custody(
             )
         table = ProjectGuideSetupFinalization.__table__
         assert columns == set(table.columns.keys())
-        assert {constraint.name for constraint in table.constraints} <= constraints
+        preparer = postgresql.dialect().identifier_preparer
+        assert {
+            preparer.format_constraint(constraint, _alembic_quote=False)
+            for constraint in table.constraints
+        } == constraints
         assert {
             "fk_finalization_exact_attempt",
             "fk_finalization_exact_setup",

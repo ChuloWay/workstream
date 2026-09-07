@@ -1643,6 +1643,7 @@ def test_finalization_partition_additions_are_exact_and_cannot_authorize_neighbo
         "backend/app/modules/projects/guide_compilation/custody_payloads.py",
         "backend/app/modules/projects/guide_compilation/finalization.py",
         "backend/app/modules/projects/guide_compilation/finalization_payloads.py",
+        "backend/app/modules/projects/api/setup_identity.py",
     }
     assert ownership.POL_04A2_CALLABLE_TARGETS == expected
     trusted = _partition([])

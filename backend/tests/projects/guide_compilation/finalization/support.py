@@ -29,7 +29,7 @@ from app.modules.projects.guide_compilation.finalization_payloads import (
     require_source_shape,
 )
 from app.modules.projects.models import ProjectSetupRun
-from app.modules.projects.setup_queue import pre_submit_setup_task_id
+from app.modules.projects.api.setup_identity import pre_submit_setup_task_id
 from ..helpers import result
 
 NOW = datetime(2026, 9, 7, tzinfo=UTC)

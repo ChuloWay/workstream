@@ -1,14 +1,18 @@
 """Real finalization persistence, atomic rollback, replay, and resource isolation."""
 
+from dataclasses import replace
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 
 from app.modules.authorization.api import AuthorizationDenied, setup_finalization_facts_digest
 from app.modules.projects.api import ProjectGuideSetupFinalizationError
 from app.modules.projects.guide_compilation.finalization import GuideCompilationFinalizationService
+from app.modules.projects.guide_compilation.models import ProjectGuideComponentProjectionOperation
+from .pg_generations import second_generation
+from .pg_prerequisites import compilation_and_projections
 from .pg_support import DatabaseAuthorization, database_case, finalize, stored_state
 
 
@@ -96,7 +100,7 @@ async def test_finalization_never_commits_caller_transaction(clean_postgres_data
         assert (await stored_state(factory, command))[1:] == (None, 0)
 
 
-@pytest.mark.parametrize("foreign_project", [True, False])
+@pytest.mark.parametrize("foreign_project", [True, False], ids=["foreign-project", "foreign-guide"])
 async def test_cross_project_finalization_is_concealed(clean_postgres_database, foreign_project):
     async with database_case(clean_postgres_database) as (values, factory, command):
         project, guide = uuid4(), uuid4()
@@ -193,3 +197,75 @@ async def test_preloaded_product_rows_are_refreshed_before_authority_consumption
                 await GuideCompilationFinalizationService(session, authority).finalize(command)
             assert authority.events == ["prepare", "close"]
             await session.rollback()
+
+
+@pytest.mark.parametrize("component", ["guide_sufficiency", "submission_artifact_policy"])
+async def test_mixed_generation_projection_set_denies_finalization_without_consumption(
+    clean_postgres_database, component, monkeypatch
+):
+    async with database_case(clean_postgres_database) as (values, factory, first):
+        next_context = await second_generation(factory, values)
+        next_values = values | {key: uuid4() for key in ("operation", "request", "key")}
+        current = await compilation_and_projections(
+            clean_postgres_database,
+            factory,
+            next_values,
+            compilation_context=next_context,
+            predecessor_id=first.compilation_id,
+        )
+        before = await stored_state(factory, current)
+        async with factory() as session, session.begin():
+            old_operation = await session.scalar(
+                select(ProjectGuideComponentProjectionOperation).where(
+                    ProjectGuideComponentProjectionOperation.setup_run_id
+                    == str(first.setup_run_id),
+                    ProjectGuideComponentProjectionOperation.component == component,
+                )
+            )
+            assert old_operation.setup_generation == 1
+            authority = DatabaseAuthorization(session, values)
+            service = GuideCompilationFinalizationService(session, authority)
+            original = service._repository.lock_finalization
+
+            async def mixed_view(command, attempt_id):
+                view = await original(command, attempt_id)
+                assert view.compilation_is_current and view.setup.setup_generation == 2
+                assert all(op.setup_generation == 2 for op in view.operations)
+                return replace(
+                    view,
+                    operations=tuple(
+                        old_operation if op.component == component else op for op in view.operations
+                    ),
+                )
+
+            monkeypatch.setattr(service._repository, "lock_finalization", mixed_view)
+            with pytest.raises(
+                ProjectGuideSetupFinalizationError, match="^source_state_unavailable$"
+            ):
+                await service.finalize(current)
+            assert authority.events == ["prepare", "close"]
+        assert await stored_state(factory, current) == before
+        # A control using the same stored generation succeeds without the injected view defect.
+        await finalize(factory, values, current)
+
+
+async def test_database_replay_denial_closes_without_new_effect(
+    clean_postgres_database, monkeypatch
+):
+    from .pg_support import DatabasePrepared
+
+    async with database_case(clean_postgres_database) as (values, factory, command):
+        await finalize(factory, values, command)
+        before = await stored_state(factory, command)
+        events = []
+
+        async def deny_replay(handle, facts, stored_decision_id):
+            handle.require_open()
+            handle.port.events.append("replay")
+            raise AuthorizationDenied("test port rejects replay")
+
+        monkeypatch.setattr(DatabasePrepared, "validate_replay", deny_replay)
+        with pytest.raises(ProjectGuideSetupFinalizationError, match="^service_authority_denied$"):
+            await finalize(factory, values, command, events=events)
+        assert events == ["prepare", "replay", "close"]
+        assert await stored_state(factory, command) == before

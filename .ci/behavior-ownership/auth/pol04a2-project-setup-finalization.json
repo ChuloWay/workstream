@@ -21,5 +21,5 @@
   "schema": "workstream.behavior-ownership.v1",
   "status": "candidate",
   "target": "backend/app/modules/authorization/api/project_setup_finalization.py",
-  "unresolved_reason": "POL-04A2 implementation review and hosted proof pending"
+  "unresolved_reason": "Behavior catalogue adoption with named tests, outcomes, and boundaries remains separate from implementation review"
 }

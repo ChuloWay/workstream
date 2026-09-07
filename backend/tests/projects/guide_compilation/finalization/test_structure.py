@@ -1,6 +1,8 @@
 """Syntax-aware negative reachability proofs for the hidden finalization owner."""
 
 import ast
+import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -9,6 +11,8 @@ SOURCES = (
     OWNER / "finalization.py",
     OWNER / "finalization_payloads.py",
     OWNER / "custody_payloads.py",
+    OWNER / "repository.py",
+    OWNER.parent / "api/setup_identity.py",
 )
 
 
@@ -106,3 +110,52 @@ def test_negative_structure_probe_detects_forbidden_calls(tmp_path):
     imports, calls = imports_and_calls((path,))
     assert "app.modules.projects.service" in imports
     assert "project_guide_sufficiency" in calls
+
+
+def assert_no_queue_dependency(paths):
+    """Reject broker infrastructure and dispatch calls in the finalization owners."""
+    imports, calls = imports_and_calls(paths)
+    assert not any(
+        name.startswith(("celery", "kombu", "app.workers", "app.modules.projects.setup_queue"))
+        or name == "setup_queue"
+        for name in imports
+    )
+    assert calls.isdisjoint(
+        {
+            "enqueue_pre_submit_setup_pipeline",
+            "dispatch_pre_submit_setup_pipeline_after_commit",
+            "apply_async",
+            "send_task",
+            "delay",
+        }
+    )
+
+
+def test_finalization_sources_cannot_import_or_dispatch_queue():
+    assert_no_queue_dependency(SOURCES)
+
+
+def test_finalization_import_graph_excludes_queue_runtime():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import app.modules.projects.guide_compilation.finalization; "
+            "assert not any(n.startswith(('celery', 'kombu', 'app.workers', "
+            "'app.modules.projects.setup_queue')) for n in sys.modules)",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_queue_structure_proof_rejects_injected_enqueue(tmp_path):
+    import pytest
+
+    source = tmp_path / "queue_mutant.py"
+    source.write_text("enqueue_pre_submit_setup_pipeline(project_id='forged')\n")
+    with pytest.raises(AssertionError):
+        assert_no_queue_dependency((*SOURCES, source))

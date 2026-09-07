@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.modules.projects.api.setup_identity import pre_submit_setup_task_id
+
 import asyncio
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -164,7 +166,7 @@ async def test_verified_worker_stops_exactly_on_blocked_sufficiency(
         guide_id=guide_id,
         source_snapshot_id=snapshot_id,
         setup_generation=3,
-        celery_task_id=project_setup_worker.pre_submit_setup_task_id(setup_run_id, 3),
+        celery_task_id=pre_submit_setup_task_id(setup_run_id, 3),
     )
     authorized_run.assert_awaited_once_with(
         session,

@@ -93,7 +93,11 @@ async def test_consume_exception_has_no_product_effect():
     assert "persist" not in case.repo.calls
 
 
-@pytest.mark.parametrize("error", [AuthorizationDenied("denied"), RuntimeError("unexpected")])
+@pytest.mark.parametrize(
+    "error",
+    [AuthorizationDenied("denied"), RuntimeError("unexpected")],
+    ids=["denied", "exception"],
+)
 async def test_prepared_authority_closes_once_on_consume_denial(error):
     case = scenario()
     case.auth.consume_error = error

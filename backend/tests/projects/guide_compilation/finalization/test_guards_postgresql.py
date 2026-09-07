@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -15,6 +15,10 @@ from app.modules.projects.guide_compilation.finalization_payloads import (
 )
 from app.modules.projects.guide_compilation.repository import GuideCompilationRepository
 from ..helpers import seed_database
+from app.modules.projects.guide_compilation.models import ProjectGuideComponentProjectionOperation
+from .pg_forgery import rebind_forged_evidence
+from .pg_generations import second_generation
+from .pg_prerequisites import compilation_and_projections
 from .pg_support import DatabaseAuthorization, database_case, finalize, stored_state
 
 
@@ -165,6 +169,14 @@ async def test_finalization_finished_at_is_postgresql_owned(clean_postgres_datab
         "delete from project_setup_runs",
         "truncate project_setup_runs cascade",
     ],
+    ids=[
+        "receipt-update",
+        "receipt-delete",
+        "receipt-truncate",
+        "setup-update",
+        "setup-delete",
+        "setup-truncate",
+    ],
 )
 async def test_finalized_setup_cannot_be_rewritten(clean_postgres_database, statement):
     async with database_case(clean_postgres_database) as (values, factory, command):
@@ -206,21 +218,31 @@ async def test_receipt_compilation_attempt_setup_tuple_must_match(clean_postgres
                 await session.flush()
 
 
+@pytest.mark.parametrize(
+    "field", ["artifact_policy_operation_id", "artifact_policy_id", "artifact_policy_output_digest"]
+)
 @pytest.mark.parametrize("classification", ["guide_blocked", "draft_ready"])
 async def test_nullable_finalization_custody_cannot_bypass_guards(
-    clean_postgres_database, classification
+    clean_postgres_database, classification, field
 ):
     async with database_case(clean_postgres_database, classification=classification) as (
         values,
         factory,
         command,
     ):
-        with pytest.raises(DBAPIError):
+        with pytest.raises(
+            DBAPIError,
+            match="ck_project_guide_setup_finalizations_ck_finalization_pr_ac00|finalization policy custody mismatch",
+        ):
             async with factory() as session, session.begin():
                 row, _ = await pending_receipt(session, values, command)
-                row.artifact_policy_operation_id = (
-                    uuid4() if classification == "guide_blocked" else None
+                value = (
+                    "sha256:" + "f" * 64
+                    if field.endswith("digest")
+                    else (str(uuid4()) if field == "artifact_policy_id" else uuid4())
                 )
+                setattr(row, field, value if classification == "guide_blocked" else None)
+                await rebind_forged_evidence(session, row)
                 session.add(row)
                 await session.flush()
 
@@ -248,3 +270,93 @@ async def test_legacy_setup_transition_needs_no_finalization_receipt(clean_postg
             )
     finally:
         await engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "compilation_id",
+        "sufficiency_operation_id",
+        "sufficiency_report_id",
+        "artifact_policy_operation_id",
+        "artifact_policy_id",
+    ],
+)
+async def test_receipt_rejects_existing_foreign_compilation_and_projection_owners(
+    clean_postgres_database, field
+):
+    async with database_case(clean_postgres_database) as (values, factory, first):
+        next_context = await second_generation(factory, values)
+        next_values = values | {key: uuid4() for key in ("operation", "request", "key")}
+        current = await compilation_and_projections(
+            clean_postgres_database,
+            factory,
+            next_values,
+            compilation_context=next_context,
+            predecessor_id=first.compilation_id,
+        )
+        before = await stored_state(factory, current)
+        with pytest.raises(
+            DBAPIError,
+            match="finalization (compilation|sufficiency|policy|projection) (lineage|custody) mismatch",
+        ):
+            async with factory() as session, session.begin():
+                row, _ = await pending_receipt(session, values, current)
+                operations = (
+                    await session.scalars(
+                        select(ProjectGuideComponentProjectionOperation).where(
+                            ProjectGuideComponentProjectionOperation.setup_run_id
+                            == str(first.setup_run_id)
+                        )
+                    )
+                ).all()
+                assert len(operations) == 2 and all(op.setup_generation == 1 for op in operations)
+                by_component = {op.component: op for op in operations}
+                foreign = {
+                    "compilation_id": first.compilation_id,
+                    "sufficiency_operation_id": by_component["guide_sufficiency"].operation_id,
+                    "sufficiency_report_id": by_component["guide_sufficiency"].report_id,
+                    "artifact_policy_operation_id": by_component[
+                        "submission_artifact_policy"
+                    ].operation_id,
+                    "artifact_policy_id": by_component["submission_artifact_policy"].policy_id,
+                }
+                setattr(row, field, foreign[field])
+                await rebind_forged_evidence(session, row)
+                session.add(row)
+                await session.flush()
+        assert await stored_state(factory, current) == before
+        await finalize(factory, values, current)
+
+
+async def test_receipt_actor_identity_link_must_belong_to_actor(clean_postgres_database):
+    async with database_case(clean_postgres_database) as (values, factory, command):
+        actor, link = str(uuid4()), str(uuid4())
+        async with factory() as session, session.begin():
+            await session.execute(
+                text(
+                    "insert into actor_profiles(id,actor_kind,status,provisioning_method,created_by) "
+                    "values(:actor,'human','active','automatic_first_access','test')"
+                ),
+                {"actor": actor},
+            )
+            await session.execute(
+                text(
+                    "insert into actor_identity_links(id,actor_profile_id,issuer,subject,subject_kind,status,linked_by) "
+                    "values(:link,:actor,'https://identity.flowresearch.tech',:actor,'human','active','test')"
+                ),
+                {"link": link, "actor": actor},
+            )
+        before = await stored_state(factory, command)
+        with pytest.raises(DBAPIError, match="finalization authority mismatch"):
+            async with factory() as session, session.begin():
+                row, _ = await pending_receipt(session, values, command)
+                assert (
+                    row.actor_profile_id == str(values["actor"]) and row.actor_profile_id != actor
+                )
+                row.identity_link_id = link
+                await rebind_forged_evidence(session, row)
+                session.add(row)
+                await session.flush()
+        assert await stored_state(factory, command) == before
+        await finalize(factory, values, command)

@@ -46,7 +46,7 @@ from ..helpers import (
 )
 
 
-async def request_compilation(factory, values):
+async def request_compilation(factory, values, compilation_context, predecessor_id):
     """Exercise real human request authority using a narrowly seeded project manager."""
     human, link, grant = uuid4(), uuid4(), uuid4()
     async with factory() as session, session.begin():
@@ -85,8 +85,10 @@ async def request_compilation(factory, values):
         request_id=uuid4(),
         correlation_id=uuid4(),
     )
-    attempt_identity = identity(context(values))
-    all_facts = asdict(persistence_facts(values, uuid4(), attempt_identity))
+    attempt_identity = identity(compilation_context)
+    all_facts = asdict(
+        persistence_facts(values, uuid4(), attempt_identity, predecessor_id=predecessor_id)
+    )
     facts = ProjectGuideCompilationRequestFacts(
         **{
             name: all_facts[name]
@@ -103,11 +105,18 @@ async def request_compilation(factory, values):
 
 
 async def compilation_and_projections(
-    url, factory, values, *, classification="draft_ready", project=True
+    url,
+    factory,
+    values,
+    *,
+    classification="draft_ready",
+    project=True,
+    compilation_context=None,
+    predecessor_id=None,
 ):
     """Persist one accepted compilation with real custody guards and real projection adapters."""
-    requested = await request_compilation(factory, values)
-    compilation_context = context(values)
+    compilation_context = compilation_context or context(values)
+    requested = await request_compilation(factory, values, compilation_context, predecessor_id)
     outcome = result()
     if classification != "draft_ready":
         patch = {
@@ -136,7 +145,9 @@ async def compilation_and_projections(
             attempt_id=requested.attempt_id, context=compilation_context, result=outcome
         )
     accepted = accepted_compilation_result(outcome)
-    facts = persistence_facts(values, requested.attempt_id, identity(compilation_context))
+    facts = persistence_facts(
+        values, requested.attempt_id, identity(compilation_context), predecessor_id=predecessor_id
+    )
     hashes = accepted.component_hashes
     facts = replace(
         facts,
@@ -162,7 +173,7 @@ async def compilation_and_projections(
         compilation = await GuideCompilationRepository(session).persist_accepted(
             attempt_id=requested.attempt_id,
             context=compilation_context,
-            expected_predecessor_id=None,
+            expected_predecessor_id=predecessor_id,
             actor=service_actor(values),
             facts=facts,
             authorization_decision_event_id=decision,
@@ -181,7 +192,7 @@ async def compilation_and_projections(
     return ProjectGuideSetupFinalizationCommand(
         project_id=values["project"],
         guide_id=values["guide"],
-        setup_run_id=values["setup_1"],
-        setup_generation=1,
+        setup_run_id=compilation_context.setup_run_id,
+        setup_generation=compilation_context.setup_generation,
         compilation_id=compilation.id,
     )

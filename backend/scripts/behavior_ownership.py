@@ -192,6 +192,7 @@ POL_04A2_CALLABLE_TARGETS = frozenset(
         "backend/app/modules/projects/guide_compilation/custody_payloads.py",
         "backend/app/modules/projects/guide_compilation/finalization.py",
         "backend/app/modules/projects/guide_compilation/finalization_payloads.py",
+        "backend/app/modules/projects/api/setup_identity.py",
     }
 )
 POL_04A3_CALLABLE_TARGETS = frozenset(

@@ -694,6 +694,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/setup_identity.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/projects/authorization_reads.py"
     },
     {
@@ -1009,7 +1013,7 @@
       "target": "backend/scripts/week2_api_e2e.py"
     }
   ],
-  "authority_digest": "e373021394c60470f4d449caddab39b4b8be39e3ebfb6f1a2aacf00666e614e6",
+  "authority_digest": "5c09586178caa84e1109c8953206fad7200722afc6aa8af781fb93a8a0ffd016",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
