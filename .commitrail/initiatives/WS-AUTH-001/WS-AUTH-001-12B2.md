@@ -1,0 +1,125 @@
+# Chunk Contract: WS-AUTH-001-12B2 - Exact Setup Finalization Authority
+
+Status: Planned.
+Risk: L1 authorization and immutable audit custody.
+
+## Intent and current boundary
+
+POL-04A2 and AUTH-12J are complete. POL owns hidden atomic finalization and
+its database constraints; AUTH owns the preceding component projection
+adapters. This change supplies the concrete authorization adapter for the
+existing finalization port and activates only `project.setup_run.update` for
+fixed `workstream.project.setup`.
+
+A caller must prove current service authority for exactly the finalization
+whose locked facts become an immutable receipt. Production worker routing
+remains outside this chunk: POL-04B owns the later live one-call cutover.
+
+## Allowed files
+
+- This change record, AUTH `OVERVIEW.md`, `.commitrail/INDEX.md`, POL overview,
+  `docs/spec_authorization_service.md`, and `docs/roadmap_status.md` for the
+  resulting capability and next boundary.
+- `backend/app/modules/authorization/project_setup_finalization.py` and
+  `domain/project_setup_finalization.py` (new purpose-specific adapter and
+  exact resource/preparation/replay rules).
+- `backend/app/modules/authorization/catalogue.py`, `runtime.py`, `kernel.py`,
+  `prepared.py`, `domain/prepared_service.py`, and
+  `prepared_projection_replay.py` for narrow shared PREP integration.
+- `backend/app/adapters/auth/__init__.py` for the explicit composition-root factory.
+- `backend/app/modules/authorization/api/project_setup_finalization.py` and
+  `backend/app/modules/projects/guide_compilation/finalization.py` only to
+  transmit the already-derived correlation ID in the preparation locator.
+- `backend/tests/authorization/setup_finalization/` (new bounded proof modules),
+  `backend/tests/projects/guide_compilation/finalization/` (locator updates and
+  real-adapter PostgreSQL integration), existing exact authorization catalogue
+  assertions and architecture tests affected by the new action availability.
+- `backend/scripts/test_lane_catalogue.py`, `backend/tests/test_ci_lane_catalogue.py`,
+  `.github/workflows/backend.yml`, and affected exact ownership/boundary records
+  only for additive registration and coverage enforcement.
+
+## Prohibited changes
+
+No HTTP or Celery call-graph cutover, worker edits, provider calls, new
+projection execution, policy/compiler behavior, human authority, service
+provisioning shortcut, migration, settlement, review/contribution behavior,
+serialized handles, compatibility path, or generic setup-ledger capability.
+The finalizer remains unavailable by default; the explicit concrete AUTH
+factory is exercised by integration callers until POL-04B supplies live wiring.
+No thresholds, selection requirements, or existing assertions are weakened.
+
+## Design and implementation plan
+
+1. Add required `correlation_id` to the public locator and supply the existing
+   deterministic finalization correlation in POL. Preparation happens before
+   locked facts are available; independently derived operation and correlation
+   UUIDs cannot be reconstructed from the locator's current operation alone.
+   Do not substitute the operation ID as the audit correlation: migration 0010
+   requires exact receipt/audit correlation equality.
+2. Define frozen, closed preparation and final resource contexts. Recompose the
+   complete public finalization facts and canonical digests; validate exact
+   deterministic receipt/operation/correlation identity, classification/output
+   shape, actor/link identity, and locator agreement. The final resource is
+   `project_guide_setup_finalization`, never the old generic setup mutation
+   context. Reject the legacy `ProjectSetupRunMutationResourceContext` on
+   direct kernel, human PREP and service PREP paths for this active action.
+   AUTH consumes locked facts; it does not query private POL owners.
+3. Reuse `fixed_service_prepared_authorization`, its canonical service identity
+   admission, authority row locks, opaque single-use handle and caller-owned
+   root transaction. Add one exact finalization binding to shared PREP and one
+   exact service-resource guard. Human and unrelated-service paths deny, even
+   with broad project grants. Do not alter existing projection semantics.
+4. Implement `PreparedSetupFinalization` with consume and replay paths. New
+   consumption writes the existing canonical allow evidence and returns every
+   field of the public authority receipt. Replay requires freshly prepared
+   current authority and exact stored decision identity/envelope/digest; it
+   creates no second allow event and consumes/closes its handle once.
+5. Export the explicit adapter factory through `app/adapters/auth/__init__.py`. Keep
+   live POL wiring and the unavailable default unchanged. Update current docs
+   only after implementation and proof establish the new hidden capability.
+
+## Acceptance and proof matrix
+
+| Boundary | Required proof and custody |
+|---|---|
+| Exact service availability | All-pairs service/action denial and human denial for the active action; planned downstream actions remain unavailable |
+| Facts and preparation | Every locator, actor/link, operation/correlation, project/guide/source, setup generation, compilation identity, classification and output digest is bound; scalar mutations fail with valid controls |
+| Handle lifetime | Consume/replay at most once; close, copy/pickle, session swap, nested or replaced root, commit and rollback invalidate; no provider I/O or serialized transport |
+| Concrete new finalization | All three result classifications succeed with real service identity, real projection authority, exact allow event and immutable receipt in one PostgreSQL transaction |
+| Replay | Identical replay preserves receipt and evidence counts; missing/foreign/mutated historical decision fails; freshly revoked actor/link denies despite a previously successful receipt |
+| Revocation ordering | Real independent sessions prove committed revocation before preparation denies and overlapping revocation serializes on canonical authority locks; use observable lock contention, not sleeps |
+| Atomic failure | Evidence-write failure, invalid authority receipt or closure failure leaves no setup mutation, finalization receipt or orphan allow after rollback |
+| Hidden boundary | Default finalizer remains denied; no live route/worker reference to the factory; component projections retain their own actions |
+| Gate integrity | Explicit node registration, unchanged global 78% floor and repository floors, at least 90% coverage for new/materially changed AUTH surfaces |
+
+Tests must reach their named assertion with complete persisted prerequisites.
+The existing `pg_support.database_case` and `pg_prerequisites` supply actual
+compiled/projected parents through AUTH-12J. Integration constructs the new
+concrete adapter explicitly in the same caller session instead of using the
+old strict finalization test port. Revocation tests target the persisted setup
+service actor/link and retain separate successful finalization controls.
+Negative database cases retain valid controls and compare durable state after
+rollback. Unit doubles claim only contract/ordering behavior. PostgreSQL tests
+own storage, revocation and independent-session serialization claims. Each
+critical assertion has a discriminating mutation or concrete counterexample.
+
+## Verification and reviewers
+
+Use focused local tests and lint; hosted CI owns PostgreSQL, independent-session
+races, full-suite reconciliation and coverage because this workstation is
+resource constrained. New test modules stay below 500 lines with bounded helpers.
+Future implementation test paths above are planned and do not claim execution.
+
+Before implementation, run architecture/security and QA/product plan review,
+including correlation feasibility, exact resource dispatch and fixture reachability.
+Implementation reviewers cover architecture, security, QA/test delta,
+product/operations and reuse; add CI integrity for registration/gates and docs
+for capability updates. Lead owns shared checks and freezes a clean exact target.
+
+Human review focus: only exact finalization ledger authority becomes available;
+POL still owns product state and the future live cutover. The user owns merge.
+
+## Durable outcome
+
+Planned. On successful delivery, mark this boundary Complete and point to
+POL-04B as the next usable boundary. Do not start POL-04B automatically.

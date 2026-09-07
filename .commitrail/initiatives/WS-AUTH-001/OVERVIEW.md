@@ -1,6 +1,8 @@
 # WS-AUTH-001 — Workstream authorization service
 
-Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
+Current change: [WS-AUTH-001-12B2](WS-AUTH-001-12B2.md).
+
+Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 [`CHUNK_MAP.md`](pre-cutover/CHUNK_MAP.md), and
 [`planning/chunk contracts`](pre-cutover/chunks/).
 
