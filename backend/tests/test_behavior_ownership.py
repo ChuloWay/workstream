@@ -1635,3 +1635,19 @@ def test_collect_only_runner_adds_collection_flag(
         collect_only=True,
     ) == 0
     assert "--collect-only" in captured
+
+
+def test_finalization_partition_additions_are_exact_and_cannot_authorize_neighbors():
+    expected = {
+        "backend/app/modules/authorization/api/project_setup_finalization.py",
+        "backend/app/modules/projects/guide_compilation/custody_payloads.py",
+        "backend/app/modules/projects/guide_compilation/finalization.py",
+        "backend/app/modules/projects/guide_compilation/finalization_payloads.py",
+    }
+    assert ownership.POL_04A2_CALLABLE_TARGETS == expected
+    trusted = _partition([])
+    ownership._validate_additive_partition_transition(_partition(sorted(expected)), trusted)
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted(expected | {"backend/app/modules/projects/guide_compilation/live_finalization.py"})), trusted
+        )

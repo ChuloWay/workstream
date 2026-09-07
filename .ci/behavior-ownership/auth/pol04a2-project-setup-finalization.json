@@ -1,0 +1,25 @@
+{
+  "behavior_id": "candidate:pol04a2.project-setup-finalization",
+  "callables": [
+    "app.modules.authorization.api.project_setup_finalization.PreparedSetupFinalization.__copy__",
+    "app.modules.authorization.api.project_setup_finalization.PreparedSetupFinalization.__deepcopy__",
+    "app.modules.authorization.api.project_setup_finalization.PreparedSetupFinalization.__reduce_ex__",
+    "app.modules.authorization.api.project_setup_finalization.PreparedSetupFinalization.consume_new",
+    "app.modules.authorization.api.project_setup_finalization.PreparedSetupFinalization.validate_replay",
+    "app.modules.authorization.api.project_setup_finalization.ProjectSetupFinalizationAuthorityReceipt.__post_init__",
+    "app.modules.authorization.api.project_setup_finalization.ProjectSetupFinalizationFacts.__post_init__",
+    "app.modules.authorization.api.project_setup_finalization.ProjectSetupFinalizationLocator.__post_init__",
+    "app.modules.authorization.api.project_setup_finalization.SetupFinalizationAuthorizationPort.prepare_setup_finalization",
+    "app.modules.authorization.api.project_setup_finalization._digest",
+    "app.modules.authorization.api.project_setup_finalization._validate_components",
+    "app.modules.authorization.api.project_setup_finalization.setup_finalization_authority_digest",
+    "app.modules.authorization.api.project_setup_finalization.setup_finalization_fact_values",
+    "app.modules.authorization.api.project_setup_finalization.setup_finalization_facts_digest",
+    "app.modules.authorization.api.project_setup_finalization.setup_finalization_identity"
+  ],
+  "group": "auth",
+  "schema": "workstream.behavior-ownership.v1",
+  "status": "candidate",
+  "target": "backend/app/modules/authorization/api/project_setup_finalization.py",
+  "unresolved_reason": "POL-04A2 implementation review and hosted proof pending"
+}

@@ -38,7 +38,7 @@ _RESOURCE_TYPES = frozenset(
     audit_event project_create_operation project_submission_artifact_policy_mutation
     pre_submit_checker_input project_guide_compilation_request
     project_guide_compilation_attempt project_guide_sufficiency_projection
-    project_submission_artifact_policy_projection""".split()
+    project_submission_artifact_policy_projection project_guide_setup_finalization""".split()
 )
 _UUID_TARGET_KINDS = frozenset(
     {

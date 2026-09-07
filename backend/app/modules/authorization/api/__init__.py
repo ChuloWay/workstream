@@ -54,7 +54,37 @@ from .project_guide_projections import (
     projection_authority_digest,
 )
 
+from .project_setup_finalization import (
+    FINALIZATION_ACTION,
+    FINALIZATION_PERMISSION,
+    FINALIZATION_RESOURCE,
+    FINALIZATION_SERVICE,
+    PreparedSetupFinalization,
+    ProjectSetupFinalizationAuthorityReceipt,
+    ProjectSetupFinalizationFacts,
+    ProjectSetupFinalizationLocator,
+    SetupFinalizationAuthorizationPort,
+    setup_finalization_authority_digest,
+    setup_finalization_fact_values,
+    setup_finalization_facts_digest,
+    setup_finalization_identity,
+)
+
 __all__ = (
+    "FINALIZATION_ACTION",
+    "FINALIZATION_PERMISSION",
+    "FINALIZATION_RESOURCE",
+    "FINALIZATION_SERVICE",
+    "PreparedSetupFinalization",
+    "ProjectSetupFinalizationAuthorityReceipt",
+    "ProjectSetupFinalizationFacts",
+    "ProjectSetupFinalizationLocator",
+    "SetupFinalizationAuthorizationPort",
+    "setup_finalization_authority_digest",
+    "setup_finalization_fact_values",
+    "setup_finalization_facts_digest",
+    "setup_finalization_identity",
+
     "ActionId",
     "AdapterBindingCreateFacts",
     "AdapterBindingAuthorizationPort",

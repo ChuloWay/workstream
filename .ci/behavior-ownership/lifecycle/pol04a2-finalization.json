@@ -1,0 +1,14 @@
+{
+  "behavior_id": "candidate:pol04a2.finalization",
+  "callables": [
+    "app.modules.projects.guide_compilation.finalization.GuideCompilationFinalizationService.__init__",
+    "app.modules.projects.guide_compilation.finalization.GuideCompilationFinalizationService._finalize",
+    "app.modules.projects.guide_compilation.finalization.GuideCompilationFinalizationService.finalize",
+    "app.modules.projects.guide_compilation.finalization._UnavailableAuthorization.prepare_setup_finalization"
+  ],
+  "group": "lifecycle",
+  "schema": "workstream.behavior-ownership.v1",
+  "status": "candidate",
+  "target": "backend/app/modules/projects/guide_compilation/finalization.py",
+  "unresolved_reason": "POL-04A2 implementation review and hosted proof pending"
+}

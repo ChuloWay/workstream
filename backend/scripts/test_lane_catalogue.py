@@ -137,6 +137,15 @@ SHARED_FOUNDATION_MODULES = (
 )
 
 PROJECT_MODULES = (
+    "tests/projects/guide_compilation/finalization/test_concurrency_postgresql.py",
+    "tests/projects/guide_compilation/finalization/test_contracts.py",
+    "tests/projects/guide_compilation/finalization/test_guards_postgresql.py",
+    "tests/projects/guide_compilation/finalization/test_lineage.py",
+    "tests/projects/guide_compilation/finalization/test_migration_postgresql.py",
+    "tests/projects/guide_compilation/finalization/test_postgresql.py",
+    "tests/projects/guide_compilation/finalization/test_replay.py",
+    "tests/projects/guide_compilation/finalization/test_service.py",
+    "tests/projects/guide_compilation/finalization/test_structure.py",
     "tests/projects/guide_compilation/test_authorized_concurrency_postgresql.py",
     "tests/projects/guide_compilation/test_authorized_execution_service.py",
     "tests/projects/guide_compilation/test_authorized_recovery_postgresql.py",

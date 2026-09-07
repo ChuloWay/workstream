@@ -1,0 +1,13 @@
+{
+  "behavior_id": "candidate:pol04a2.custody-payloads",
+  "callables": [
+    "app.modules.projects.guide_compilation.custody_payloads.policy_digest",
+    "app.modules.projects.guide_compilation.custody_payloads.report_digest",
+    "app.modules.projects.guide_compilation.custody_payloads.source_state"
+  ],
+  "group": "lifecycle",
+  "schema": "workstream.behavior-ownership.v1",
+  "status": "candidate",
+  "target": "backend/app/modules/projects/guide_compilation/custody_payloads.py",
+  "unresolved_reason": "POL-04A2 implementation review and hosted proof pending"
+}
