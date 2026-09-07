@@ -37,6 +37,11 @@ Exact-operation fixtures resolve that operation and prohibit namespace fallback.
 A separate different-operation/same-human-key conflict proves legitimate fallback
 and exact selectors. Preserve existing SQL predicate proofs independently.
 Remove the two unsupported disappearance simulations, not production guards.
+Replace them with realistic same-actor/key pending and committed conflict
+classification and changed-request rejection. The merged hosted coverage has
+never entered this repository's conflict classifier (lines 94, 105, 106), while
+covering the two impossible disappearance simulations. This is a distinct missing
+behavior boundary, not a request to recover coverage through arbitrary faults.
 Retain create/update identity and reservation-disposition matrices: these public
 entry points have separate orchestration and error propagation, so each must
 reject every listed substitution/state. Shared helpers alone do not establish
@@ -52,6 +57,8 @@ because persisted action and grant provenance differ. Reject count-driven prunin
 - Removing fallback is detected by that conflict test, not by fixture setup.
 - Unsupported disappearance cases are removed with their proof limits recorded;
   real contention, rollback and completion guards remain tested and unchanged.
+- Sufficiency conflict controls resolve the exact actor/action/key request and
+  distinguish pending, committed and changed request digest without row insertion.
 - Each retained submission-policy test has a rationale; parameter matrices name
   their distinct branches or deliberate interactions, without claiming all guards.
 - Changed modules remain below 500 lines and tests below 120 lines.
