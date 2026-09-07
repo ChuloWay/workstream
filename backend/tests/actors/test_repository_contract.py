@@ -121,6 +121,7 @@ async def test_contributor_candidate_query_filters_and_paginates_without_gaps(
         event.remove(engine, "before_cursor_execute", record_sql)
 
     expected = eligible_ids[1:] if after_first else eligible_ids[:2]
+    # limit=1 returns two rows: the extra row is the next-cursor lookahead.
     assert [row.id for row in rows] == [str(value) for value in expected]
     assert len(statements) == 1
     assert "count(" not in statements[0].lower()

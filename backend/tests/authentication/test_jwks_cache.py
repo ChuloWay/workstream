@@ -100,7 +100,10 @@ async def test_rotation_clears_matching_negative_kid() -> None:
         return Response(200, json={"keys": keys})
 
     verifier = FlowAuthVerifier(
-        production_verifier_settings(),
+        production_verifier_settings(
+            token_jwks_cache_ttl_seconds=30,
+            token_unknown_kid_cache_ttl_seconds=300,
+        ),
         jwks_transport=MockTransport(rotating_jwks),
         monotonic=lambda: clock[0],
     )
@@ -110,8 +113,10 @@ async def test_rotation_clears_matching_negative_kid() -> None:
     with pytest.raises(AuthVerificationError, match="unknown"):
         await verifier.verify(rotated_token)
     clock[0] = 62.0
+    assert verifier._negative_kids["rotated-key"] > clock[0]
     with pytest.raises(AuthVerificationError, match="unknown"):
         await verifier.verify(issue_asymmetric_token(rotated_key, kid="rotation-trigger"))
+    assert "rotated-key" not in verifier._negative_kids
 
     result = await verifier.verify(rotated_token)
 

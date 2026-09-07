@@ -483,6 +483,7 @@ retain identical AST bodies. Their broader lifecycle audit is not claimed here.
 | --- | --- |
 | Real JWKS lock deadline, single-flight and generation reuse | Old delayed-HTTP/gather tests survived deadline/exclusion removal. New tests detect a held-lock timeout and duplicate HTTP; cooldown is expired independently for generation reuse. |
 | Duplicate JWK and overlength role fixtures | Otherwise-valid duplicate keys and a long role before valid roles prevent unrelated validation/count guards from masking the intended defect. |
+| Rotation clears a still-live negative entry | A short positive-key TTL forces refresh while the longer negative TTL remains live. Assert that rotation removes the matching entry; positive-key verification alone bypasses the negative cache and cannot prove cleanup. |
 | Actor identity substitutions and bounded candidate query | Exact controlled selectors reject one changed identity field at a time; ordered real rows place ineligible candidates before eligible rows so pagination cannot conceal a missing filter. |
 | Three PostgreSQL races | First-access, revocation and legacy activation observe the actual waiter blocked on the exact holder before release; tasks are awaited/cancelled on failure. |
 | Staged rollback versus early denial | First-access audit failure observes stored transaction-local rows/event before failing. Self-update failure observes staged timestamps/evidence; earlier evidence failure proves touch never ran. |

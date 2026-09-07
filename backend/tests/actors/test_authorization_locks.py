@@ -57,9 +57,7 @@ async def test_actor_authorization_lock_rejects_disappeared_rows(missing):
     service, repository = controlled_service(original)
     setattr(repository, missing, None)
 
-    with pytest.raises(
-        RuntimeError, match=f"{'profile' if missing == 'profile' else 'link'} disappeared"
-    ):
+    with pytest.raises(RuntimeError, match=f"{missing} disappeared"):
         await service.lock_actor_self_for_authorization(original)
 
     expected = [("profile", original.profile.id, True)]
@@ -71,8 +69,8 @@ async def test_actor_authorization_lock_rejects_disappeared_rows(missing):
 @pytest.mark.parametrize(
     ("row", "field", "value"),
     [
-        ("profile", "id", "different-profile"),
-        ("link", "actor_profile_id", "different-owner"),
+        ("profile", "id", None),
+        ("link", "actor_profile_id", None),
         ("link", "issuer", "https://other.example.test"),
         ("link", "subject", "different-subject"),
         ("link", "subject_kind", "service"),
