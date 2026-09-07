@@ -130,15 +130,13 @@ No fixed reduction percentage or same-day completion claim overrides safety.
   weak query/provenance assertions, rejects empty creation-version identities,
   and preserves the real PostgreSQL family unchanged. Other PROJECT families
   and the recorded transaction-proof limitations remain unaudited.
-- Slice 11 includes the observer diagnosis before routine AUTH decomposition,
-  covering the intermittent three-admin
-  suspension race in `test_actor_profile_lifecycle_real_postgres_concurrency`.
-  Main run `34032455068` returned `[500, 200]` rather than `[200, 200]`; unchanged
-  source passed another run. A test-only lock-observer timeout/assertion is a
-  plausible cause, not a confirmed diagnosis. Capture the exception class and
-  hook phase, then observe the exact waiter PID on a fresh database to distinguish
-  harness failure from a runtime fault. Preserve the success assertion, rollback
-  checks and real concurrent sessions; do not retry away, skip or weaken it.
+- Slice 11 repaired the shared AUTH concurrency observer: a real PostgreSQL
+  counterexample reproduced the transaction-cached observer miss and verified
+  fresh observation while the exact waiter remained blocked. The extracted
+  harness preserves diagnostic exception causes and original profile/link
+  lifecycle assertions. This proves the observer defect and repair, not the
+  exact cause of the historical HTTP 500 responses. Remaining AUTH proof audit
+  and decomposition continue without repeating this completed diagnosis.
 - CON publication non-reuse and reverse-order concurrency test names overstate
   their actual one-call assertions; preserve real races and repair the claims.
 - Guide extraction has a parent-coverage bucket mixing limits, seccomp and
