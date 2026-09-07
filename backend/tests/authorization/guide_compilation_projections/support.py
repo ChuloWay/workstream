@@ -99,6 +99,8 @@ def custody(
     identity: ServiceIdentity = ServiceIdentity.PROJECT_SETUP,
     actor_status: ActorStatus = ActorStatus.ACTIVE,
     link_status: IdentityLinkStatus = IdentityLinkStatus.ACTIVE,
+    request_id: UUID | None = None,
+    correlation_id: UUID | None = None,
 ) -> tuple[FixedServicePreparedAuthorization, Session, Evidence]:
     session = Session()
     repository = Repository(identity=identity, actor_status=actor_status, link_status=link_status)
@@ -109,8 +111,8 @@ def custody(
         identity_link_id=uuid4(),
         identity_link_status=link_status,
         service_identity=identity,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=request_id if request_id is not None else uuid4(),
+        correlation_id=correlation_id if correlation_id is not None else uuid4(),
     )
     kernel = AuthorizationService(
         session,

@@ -32,8 +32,7 @@ RECOVERY_PATHS = (
 )
 TRUSTED_LEDGER_RELOCATIONS = {
     ".ci/auth-boundaries/TEST_STRUCTURE_DEBT.json": (
-        ".agent-loop/initiatives/WS-AUTH-003-module-boundary-recovery/"
-        "TEST_STRUCTURE_DEBT.json"
+        ".agent-loop/initiatives/WS-AUTH-003-module-boundary-recovery/TEST_STRUCTURE_DEBT.json"
     ),
 }
 HARD_LIMITS = {
@@ -148,9 +147,10 @@ def scoped_test_paths(root: Path) -> list[Path]:
         path = root / value
         if value.startswith("backend/tests/") and path.is_file():
             result.add(path)
-    pol03a_tests = root / POL_03A_TEST_ROOT
-    if pol03a_tests.is_dir():
-        result.update(pol03a_tests.rglob("*.py"))
+    for directory in (POL_03A_TEST_ROOT, "backend/tests/actors", "backend/tests/authentication"):
+        selected = root / directory
+        if selected.is_dir():
+            result.update(selected.rglob("*.py"))
     return sorted(result)
 
 
@@ -182,6 +182,7 @@ def _function_kind(node: ast.FunctionDef | ast.AsyncFunctionDef, *, test_file: b
 
 def _qualified_functions(tree: ast.Module) -> Iterable[tuple[str, ast.AST]]:
     """Yield qualified function names without losing nested/class ownership."""
+
     def walk(body: list[ast.stmt], prefix: tuple[str, ...]) -> Iterable[tuple[str, ast.AST]]:
         for node in body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -478,6 +479,7 @@ def _validate_trusted_transition(
         raise TestStructureError("invalid_trusted_debt_ledger")
     trusted_items = _parse_debt_entries(trusted.get("entries", []))
     current_items = _parse_debt_entries(current["entries"])
+
     def key(item: DebtItem) -> tuple[str, str, str | None]:
         return item.kind, item.path, item.qualified_symbol
 
@@ -536,7 +538,9 @@ def _test_nodes(root: Path) -> set[str]:
         _, _, tree = _read_source(path)
         relative = _safe_relative(path, root).removeprefix("backend/")
         for symbol, node in _qualified_functions(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith(
+                "test_"
+            ):
                 result.add(f"{relative}::{symbol.replace('.', '::')}")
     return result
 

@@ -43,7 +43,7 @@ from app.modules.artifacts.service import (
     _AdmissionScopeSpec,
 )
 from app.modules.artifacts.router import ArtifactReplicaResponse
-from tests.test_authorization import _runtime_context, _runtime_service
+from tests.authorization.runtime_support import _runtime_context, _runtime_service
 
 
 OPERATOR_ACTIONS = (

@@ -3,6 +3,14 @@
 # pyright: reportOptionalSubscript=false, reportRedeclaration=false
 from __future__ import annotations
 
+from tests.authorization.runtime_support import (
+    _runtime_context,
+    _DecisionEvidence,
+    _runtime_service,
+    _PreparedTestSession,
+)
+
+
 import ast
 import asyncio
 import base64
@@ -2238,8 +2246,6 @@ def test_closed_permission_and_action_catalogue_is_exact_and_non_executable() ->
         ACTION_BY_ID[ActionId.ACTOR_PROFILE_READ_SELF] = ACTION_DEFINITIONS[0]
 
 
-
-
 def test_project_mutation_resources_and_prepared_scopes_are_closed() -> None:
     """Bind every planned project mutation to one typed system/project scope."""
     project_id, guide_id, snapshot_id, report_id = (uuid4() for _ in range(4))
@@ -2881,6 +2887,7 @@ def test_art_custody_documentation_matches_the_independent_activation_fixture() 
     assert (
             "73 PermissionIds, 111 ActionIds, 61 active actions, and\n50 planned actions" in operations
     )
+
 
 def test_rev_custody_documentation_matches_the_independent_catalogue_fixture() -> None:
     repository_root = Path(__file__).resolve().parents[2]
@@ -3612,84 +3619,6 @@ def test_rev_custody_catalogue_mutations_fail_closed(mutation: str) -> None:
 
     with pytest.raises(RuntimeError, match=message):
         _index_actions(tuple(definitions))
-
-
-def _runtime_context(
-    *,
-    actor_status: ActorStatus = ActorStatus.ACTIVE,
-    link_status: IdentityLinkStatus = IdentityLinkStatus.ACTIVE,
-    actor_kind: ActorKind = ActorKind.HUMAN,
-    service_identity: ServiceIdentity = ServiceIdentity.ARTIFACT_VERIFIER,
-) -> AuthorizationContext:
-    context_type = (
-        ServiceAuthorizationContext
-        if actor_kind is ActorKind.SERVICE
-        else HumanAuthorizationContext
-    )
-    service_fields = (
-        {"service_identity": service_identity} if actor_kind is ActorKind.SERVICE else {}
-    )
-    return context_type(
-        actor_profile_id=uuid4(),
-        actor_kind=actor_kind,
-        actor_status=actor_status,
-        identity_link_id=uuid4(),
-        identity_link_status=link_status,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
-        **service_fields,
-    )
-
-
-class _DecisionEvidence:
-    def __init__(self) -> None:
-        self.events: list[AuthorityAuditEventInput] = []
-
-    async def add_authority_event(self, event: AuthorityAuditEventInput) -> None:
-        self.events.append(event)
-
-
-_DEFAULT_REVALIDATOR = object()
-
-
-def _runtime_service(
-    context: AuthorizationContext,
-    *,
-    session=None,
-    admin_repository=None,
-    revalidate=_DEFAULT_REVALIDATOR,
-    revalidate_service=None,
-) -> tuple[AuthorizationService, _DecisionEvidence]:
-    if revalidate is _DEFAULT_REVALIDATOR:
-
-        async def revalidate(current, _resource):
-            return current
-
-    service = AuthorizationService(
-        session if session is not None else object(),  # type: ignore[arg-type]
-        context,
-        revalidate_actor_self=revalidate,
-        revalidate_service=revalidate_service,
-        admin_repository=admin_repository,
-    )
-    evidence = _DecisionEvidence()
-    service._audit = evidence  # type: ignore[assignment]
-    return service, evidence
-
-
-class _PreparedTestSession:
-    """Minimal stable-root session contract for capability unit tests."""
-
-    def __init__(self) -> None:
-        self.root = SimpleNamespace(is_active=True)
-        self.nested = False
-        self.sync_session = self
-
-    def get_transaction(self):
-        return self.root
-
-    def in_nested_transaction(self) -> bool:
-        return self.nested
 
 
 @pytest.mark.asyncio
@@ -9720,6 +9649,7 @@ async def test_authorization_dependency_admits_service_without_human_rate_contro
     assert (await get_authorization_actor_identity(human)).actor_kind.value == "human"
     assert calls == [token]
 
+
 @pytest.mark.parametrize(
     ("profile_status", "link_status"),
     [("suspended", "active"), ("deactivated", "active"), ("active", "revoked")],
@@ -9754,6 +9684,7 @@ async def test_inactive_service_dependency_stages_no_observation(
 
     await anext(dependency)
     await dependency.aclose()
+
 
 async def test_service_denial_rolls_back_observations_before_clean_restage(
     monkeypatch: pytest.MonkeyPatch,
@@ -9813,6 +9744,7 @@ async def test_service_denial_rolls_back_observations_before_clean_restage(
     assert session.rollback_count == 1
     assert session.commit_count == 1
 
+
 async def test_service_dependency_cancellation_rolls_back_staged_observation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -9854,6 +9786,7 @@ async def test_service_dependency_cancellation_rolls_back_staged_observation(
     assert observations == ["staged"]
     assert session.rollback_count == 1
 
+
 @pytest.mark.parametrize("failure_type", [AuthorizationEvidenceUnavailable, SQLAlchemyError])
 async def test_service_observation_persistence_failure_is_retryable_and_private(
     monkeypatch: pytest.MonkeyPatch,
@@ -9892,6 +9825,7 @@ async def test_service_observation_persistence_failure_is_retryable_and_private(
     assert exc_info.value.error_code == "service_unavailable"
     assert private_subject not in str(exc_info.value)
     assert session.rollback_count == 1
+
 
 def test_authorization_runtime_contracts_are_strict_and_two_argument() -> None:
     context = _runtime_context()
