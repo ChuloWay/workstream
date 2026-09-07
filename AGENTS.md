@@ -82,6 +82,11 @@ definition or ownership boundary of Workstream.
 - Every non-trivial task starts with the smallest useful Commitrail record: one
   combined change record for meaningful bounded work, plus one concise
   initiative overview only for multi-PR work.
+- Standalone changes use `.commitrail/changes/<lowercase-kebab-slug>.md`, declare
+  exactly one live `Initiative: None`, and need no initiative overview or index
+  row. Existing initiatives keep their records.
+  Editorial README/ordinary-doc corrections may use PR intent and scope only;
+  `.commitrail/README.md` lists process-control paths that always need a record.
 - Do not implement a bounded change until its allowed files, prohibited
   changes, acceptance criteria, risk class, verification, reviewers, and human
   review focus are explicit.

@@ -28,10 +28,15 @@ Intent -> Plan -> Bounded Change -> Tests -> Review -> PR -> Human Merge
 
 ## Proportional records
 
-A small obvious correction may use its PR description. A meaningful one-PR
-change uses one combined change record. Multi-PR work adds one concise
-initiative overview. Extra assurance or decision records are exceptional and
-must earn their maintenance cost.
+An editorial README or ordinary-documentation correction outside process-control
+paths may use PR intent and scope only. The [canonical contribution paths](../../.commitrail/README.md#smallest-useful-record)
+list paths that always require a record, including scripts and this operating
+guide. A meaningful standalone change uses
+`.commitrail/changes/<lowercase-kebab-slug>.md` with `Initiative: None` and needs
+no initiative overview or index row. Existing initiatives keep their records;
+multi-PR work adds one concise overview. Substantive specification or behavior
+changes need a record regardless of path. Extra assurance or decision records
+are exceptional and must earn their maintenance cost.
 
 The combined record owns durable intent, design, scope, acceptance criteria, and
 remaining risks. Its PR links those sections and owns exact-head command/review

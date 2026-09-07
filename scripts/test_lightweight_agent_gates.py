@@ -157,6 +157,7 @@ class LightweightAgentGateTests(unittest.TestCase):
         self.assertIn("python3 scripts/check_commitrail_records.py", agent_gates)
         self.assertNotIn("python3 scripts/check_chunk_state_sync.py", agent_gates)
         self.assertIn("scripts.test_commitrail_contracts", agent_gates)
+        self.assertIn("scripts.test_commitrail_contribution_paths", agent_gates)
         self.assertIn('WORKSTREAM_BASE_SHA: ${{ github.event.pull_request.base.sha }}', agent_gates)
         self.assertNotIn("scripts.test_chunk_state_sync", agent_gates)
         self.assertIn("--require-hashes", agent_gates)
