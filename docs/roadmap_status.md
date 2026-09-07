@@ -5,6 +5,12 @@ This is the public, human-readable source for what Workstream can do on
 next, and what remains before v0.1 is ready. It uses capability milestones,
 not calendar promises.
 
+**v0.1 is Workstream's first usable release: the minimum complete product, not
+an expansion beyond an already-working MVP.** Individual backend foundations
+are implemented, but Workstream is not yet usable through its complete governed
+work lifecycle. The remaining v0.1 release requirements establish that baseline;
+they are not optional enhancements to a finished product.
+
 Implementation claims require merged code, migrations, tests, and review
 evidence. A plan or open pull request is not implemented behavior. Open pull
 requests are the transient view of work currently under review.
@@ -26,6 +32,13 @@ Project Guide
 ```
 
 The v0.1 release bar is one secured, observable, recoverable end-to-end path.
+Authorization, locked project rules, exact artifact identity, attributable
+review, and durable contribution facts are necessary for that path to be
+trustworthy. Integration and failure-recovery proof are part of making it
+function correctly, not a later quality upgrade. This does not require every
+future feature, an exhaustive cleanup of the codebase, or proof of unlimited
+scale before first use; the release gates below define the bounded requirement.
+
 Marketplace expansion, blockchain settlement, external source adapters,
 automated routing, agent workspaces, and runtime reputation projection remain
 outside v0.1.
@@ -142,6 +155,12 @@ Only open pull requests describe transient work. Use the repository's
 [open pull-request view](https://github.com/Flow-Research/workstream/pulls) to
 see whether any item below is already under review.
 
+Product implementation is underway on hidden unified-guide setup finalization,
+alongside the AUTH test-proof audit and decomposition. These are parallel
+workstreams, not a pause awaiting completion of the full quality audit.
+The sequence below describes product dependencies; production activation still
+requires its exact owner-proven prerequisites.
+
 The next dependency-safe product sequence is:
 
 1. **Finish the hidden unified-guide generation.** Implement POL finalization,
@@ -181,6 +200,26 @@ The next dependency-safe product sequence is:
 10. **Release proof.** Expose stable APIs and frontend surfaces, exercise the
     complete path through real database, durable-job, storage, security, failure,
     and recovery tests, then run the internal pilot.
+
+## Engineering Quality Alongside Product Work
+
+The [behavior-first audit](../.commitrail/initiatives/WS-QUAL-003/OVERVIEW.md)
+has delivered focused PROJECT proof repairs, fixture separation, real
+rollback checks, a shared AUTH concurrency-observer repair, and a rebalance of
+the seven hosted CI lanes. The audit also corrected concrete sufficiency and
+submission-policy validation defects. These are delivered bounded repairs,
+not a claim that every test or subsystem is fully audited.
+
+Remaining work includes AUTH historical-evidence and actor-resolution proof,
+oversized AUTH/test-module decomposition, and the remaining TASK, CHECKER,
+ART, CON, REV, and tooling audit. The audit requires behavioral proof, not only
+file splitting or coverage percentages. Real PostgreSQL, concurrency, storage,
+and full hosted coverage checks remain required. Product implementation is
+already progressing alongside this audit with separate file ownership.
+
+Commitrail's contribution-path and reviewer-routing improvements are delivered.
+They support this work; they do not complete a product capability or create a
+second permission system.
 
 ## Critical Dependency Map
 
