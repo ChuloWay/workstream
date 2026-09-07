@@ -31,24 +31,49 @@ def reservation_values():
     )
 
 
-@pytest.mark.parametrize("inserted", [False, True])
-async def test_reservation_disappearance_is_integrity_error(inserted):
+@pytest.fixture
+def conflict_case():
+    values = reservation_values()
+    row = SimpleNamespace(
+        id=UUID(int=30), **values, status="pending", response_json=None, committed_at=None
+    )
     session = SimpleNamespace(
-        scalar=AsyncMock(return_value=str(UUID(int=30)) if inserted else None),
-        get=AsyncMock(return_value=None),
+        scalar=AsyncMock(return_value=None), get=AsyncMock()
     )
     repository = module.GuideSufficiencyMutationReplayRepository(session)
-    repository.find = AsyncMock(return_value=None)
-    with pytest.raises(module.ProjectRepositoryIntegrityError, match="reservation disappeared"):
-        await repository.reserve(**reservation_values())
-    if inserted:
-        session.get.assert_awaited_once()
-        repository.find.assert_not_awaited()
-    else:
-        repository.find.assert_awaited_once_with(
-            str(rows.ACTOR), "project.guide_sufficiency.run", rows.KEY
-        )
-        session.get.assert_not_awaited()
+
+    async def find(actor, action, key):
+        assert (actor, action, key) == (row.actor_profile_id, row.action_id, row.idempotency_key)
+        return row
+
+    repository.find = AsyncMock(side_effect=find)
+    return SimpleNamespace(repository=repository, session=session, row=row, values=values)
+
+
+@pytest.mark.parametrize("status,expected", [("pending", "pending"), ("committed", "replayed")])
+async def test_reservation_classifies_existing_conflict(conflict_case, status, expected):
+    case = conflict_case
+    case.row.status = status
+    if status == "committed":
+        case.row.response_json = {"id": str(rows.REPORT)}
+        case.row.report_id = case.values["report_id"] = str(rows.REPORT)
+        case.row.committed_at = rows.NOW
+    assert await case.repository.reserve(**case.values) == (expected, case.row)
+    case.repository.find.assert_awaited_once_with(
+        str(rows.ACTOR), "project.guide_sufficiency.run", rows.KEY
+    )
+    case.session.get.assert_not_awaited()
+
+
+async def test_reservation_rejects_changed_request(conflict_case):
+    case = conflict_case
+    values = {**case.values, "request_digest": "sha256:" + "f" * 64}
+    assert values["request_digest"] != case.row.request_digest
+    assert await case.repository.reserve(**values) == ("mismatch", case.row)
+    case.repository.find.assert_awaited_once_with(
+        str(rows.ACTOR), "project.guide_sufficiency.run", rows.KEY
+    )
+    case.session.get.assert_not_awaited()
 
 
 async def test_reservation_returns_claimed_row(monkeypatch):

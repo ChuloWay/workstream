@@ -9,6 +9,7 @@ import json
 import logging
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -28,7 +29,6 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import (  # type: ignore[import-not-found]
     AsyncSession,
-    create_async_engine,
 )
 from fastapi import HTTPException
 
@@ -70,6 +70,7 @@ from app.modules.authorization.service_actor_service import (
     ServiceActorProvisioningUnavailable,
 )
 from project_create_fixtures import seed_historical_project
+from auth_concurrency_support import ordered_control_requests, wait_for_named_database_lock
 from app.modules.tasks.models import AuditEvent
 from app.schemas.auth import normalize_legacy_roles
 from scripts.bootstrap_access_administrator import (
@@ -5960,27 +5961,6 @@ async def test_actor_identity_link_lifecycle_real_postgres_matrix(
             assert private not in evidence
 
 
-async def _wait_for_named_database_lock(database_url: str, application_name: str) -> None:
-    """Observe the ordered lifecycle request waiting on a PostgreSQL lock."""
-    engine = create_async_engine(database_url)
-    try:
-        async with engine.connect() as connection:
-            for _ in range(5000):
-                waiting = await connection.scalar(
-                    text(
-                        "select exists(select 1 from pg_stat_activity where "
-                        "application_name=:name and wait_event_type='Lock')"
-                    ),
-                    {"name": application_name},
-                )
-                if waiting:
-                    return
-                await asyncio.sleep(0)
-    finally:
-        await engine.dispose()
-    raise AssertionError("ordered lifecycle request never reached the database lock")
-
-
 async def test_actor_profile_lifecycle_real_postgres_concurrency(
     auth_database_env: str,
     rsa_signing_material: tuple[rsa.RSAPrivateKey, dict[str, Any]],
@@ -6123,61 +6103,10 @@ async def test_actor_profile_lifecycle_real_postgres_concurrency(
             assert response.status_code == 201, response.text
             return response.json()["resource_id"]
 
-        async def ordered_requests(
-            first_name: str,
-            requests: tuple[
-                tuple[str, str, dict[str, str], dict[str, str], str],
-                tuple[str, str, dict[str, str], dict[str, str], str],
-            ],
-        ) -> tuple[tuple[str, Response], tuple[str, Response]]:
-            original_lock_control = AdminAuthorizationRepository.lock_control
-            first_locked = asyncio.Event()
-            waiter_name = f"auth09d-{uuid4().hex}"
-
-            async def ordered_lock_control(self):
-                if current_task_name() == first_name:
-                    control = await original_lock_control(self)
-                    first_locked.set()
-                    await asyncio.wait_for(
-                        _wait_for_named_database_lock(auth_database_env, waiter_name),
-                        timeout=5,
-                    )
-                    return control
-                await first_locked.wait()
-                await self._session.execute(
-                    text("select set_config('application_name', :name, true)"),
-                    {"name": waiter_name},
-                )
-                return await original_lock_control(self)
-
-            monkeypatch.setattr(
-                AdminAuthorizationRepository,
-                "lock_control",
-                ordered_lock_control,
-            )
-            try:
-                tasks = [
-                    asyncio.create_task(
-                        client.post(
-                            request_path,
-                            headers={**request_headers, "Idempotency-Key": key},
-                            json=body,
-                        ),
-                        name=name,
-                    )
-                    for name, request_path, request_headers, body, key in requests
-                ]
-                responses = await asyncio.wait_for(asyncio.gather(*tasks), timeout=60)
-                return (
-                    (requests[0][4], responses[0]),
-                    (requests[1][4], responses[1]),
-                )
-            finally:
-                monkeypatch.setattr(
-                    AdminAuthorizationRepository,
-                    "lock_control",
-                    original_lock_control,
-                )
+        ordered_requests = partial(
+            ordered_control_requests,
+            client=client, monkeypatch=monkeypatch, database_url=auth_database_env,
+        )
 
         def lifecycle_request(
             *,
@@ -6730,7 +6659,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
                 )
                 await asyncio.wait_for(second_entered.wait(), timeout=20)
                 await asyncio.wait_for(
-                    _wait_for_named_database_lock(auth_database_env, waiter_name),
+                    wait_for_named_database_lock(auth_database_env, waiter_name),
                     timeout=20,
                 )
                 release_first.set()
@@ -6817,58 +6746,10 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
                     },
                 )
 
-        async def ordered_requests(
-            first_name: str,
-            requests: tuple[
-                tuple[str, str, dict[str, str], dict[str, str], str],
-                tuple[str, str, dict[str, str], dict[str, str], str],
-            ],
-        ) -> tuple[tuple[str, Response], tuple[str, Response]]:
-            original_lock_control = AdminAuthorizationRepository.lock_control
-            first_locked = asyncio.Event()
-            waiter_name = f"auth09db-{uuid4().hex}"
-
-            async def ordered_lock_control(self):
-                if current_task_name() == first_name:
-                    control = await original_lock_control(self)
-                    first_locked.set()
-                    await asyncio.wait_for(
-                        _wait_for_named_database_lock(auth_database_env, waiter_name),
-                        timeout=5,
-                    )
-                    return control
-                await first_locked.wait()
-                await self._session.execute(
-                    text("select set_config('application_name', :name, true)"),
-                    {"name": waiter_name},
-                )
-                return await original_lock_control(self)
-
-            monkeypatch.setattr(
-                AdminAuthorizationRepository,
-                "lock_control",
-                ordered_lock_control,
-            )
-            try:
-                tasks = [
-                    asyncio.create_task(
-                        client.post(
-                            path,
-                            headers={**request_headers, "Idempotency-Key": key},
-                            json=body,
-                        ),
-                        name=name,
-                    )
-                    for name, path, request_headers, body, key in requests
-                ]
-                responses = await asyncio.wait_for(asyncio.gather(*tasks), timeout=60)
-                return (requests[0][4], responses[0]), (requests[1][4], responses[1])
-            finally:
-                monkeypatch.setattr(
-                    AdminAuthorizationRepository,
-                    "lock_control",
-                    original_lock_control,
-                )
+        ordered_requests = partial(
+            ordered_control_requests,
+            client=client, monkeypatch=monkeypatch, database_url=auth_database_env,
+        )
 
         def link_request(
             name: str,
@@ -7127,7 +7008,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
             )
             await asyncio.wait_for(second_entered.wait(), timeout=20)
             await asyncio.wait_for(
-                _wait_for_named_database_lock(auth_database_env, second_name),
+                wait_for_named_database_lock(auth_database_env, second_name),
                 timeout=20,
             )
             third_task = asyncio.create_task(
@@ -7142,7 +7023,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
             )
             await asyncio.wait_for(third_entered.wait(), timeout=20)
             await asyncio.wait_for(
-                _wait_for_named_database_lock(auth_database_env, third_name),
+                wait_for_named_database_lock(auth_database_env, third_name),
                 timeout=20,
             )
             release_first.set()
@@ -7326,7 +7207,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
                 assert waiter is not None
                 await require_waiter(waiter)
                 await asyncio.wait_for(
-                    _wait_for_named_database_lock(auth_database_env, waiter_name),
+                    wait_for_named_database_lock(auth_database_env, waiter_name),
                     timeout=20,
                 )
                 release_first.set()
