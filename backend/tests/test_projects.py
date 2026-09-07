@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from app.modules.projects.api.setup_identity import pre_submit_setup_task_id
-
 import asyncio
 import hashlib
 import inspect
@@ -25,8 +23,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from fastapi import HTTPException
 from sqlalchemy.schema import CreateIndex
 
-from app.core.config import get_settings
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.core.hashing import canonical_json_hash
 from app.core import project_agents as project_agents_core
 from app.adapters.project_agents import build_project_guide_agent_runtime
@@ -103,7 +100,7 @@ from app.modules.authorization.models import (
 from app.modules.authorization.prepared import PreparedAuthorizationService
 from app.modules.authorization.repository import AdminAuthorizationRepository
 from app.modules.authorization.catalogue import ActionId
-from app.modules.projects import repository as project_repository_module
+from app.modules.projects import api as project_setup_identity, repository as project_repository_module
 from app.modules.projects import service as project_service_module
 from app.modules.projects import (
     submission_policy_mutation_service as submission_policy_mutation_service_module,
@@ -787,7 +784,7 @@ async def test_project_setup_dispatch_rejects_missing_durable_run(
 async def test_project_setup_dispatch_reuses_exact_queued_task_without_republish(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    expected = pre_submit_setup_task_id("run-1", 1)
+    expected = project_setup_identity.pre_submit_setup_task_id("run-1", 1)
     setup_run = SimpleNamespace(status="queued", celery_task_id=expected)
 
     class Repository:
@@ -2257,7 +2254,7 @@ async def test_create_guide_never_enqueues_setup_or_runs_agents(
                 "setup_generation": setup_generation,
             }
         )
-        return pre_submit_setup_task_id(setup_run_id, setup_generation)
+        return project_setup_identity.pre_submit_setup_task_id(setup_run_id, setup_generation)
 
     monkeypatch.setenv("WORKSTREAM_PROJECT_SETUP_PIPELINE_AUTOSTART", "true")
     monkeypatch.setenv("WORKSTREAM_CELERY_TASK_ALWAYS_EAGER", "false")
@@ -2681,7 +2678,7 @@ async def test_create_source_snapshot_autostart_waits_for_verified_material(
                 "setup_generation": setup_generation,
             }
         )
-        return pre_submit_setup_task_id(setup_run_id, setup_generation)
+        return project_setup_identity.pre_submit_setup_task_id(setup_run_id, setup_generation)
 
     project = await create_project(project_client)
     guide = await create_guide(project_client, project["id"], complete_guide_payload())
@@ -2808,7 +2805,7 @@ async def prepare_verified_sufficiency_route(
                     setup_generation=1,
                     status=setup_status,
                     current_step="guide_sufficiency",
-                    celery_task_id=pre_submit_setup_task_id(
+                    celery_task_id=project_setup_identity.pre_submit_setup_task_id(
                         setup_run_id, 1
                     ),
                     created_by="project-manager-subject",
@@ -3770,7 +3767,7 @@ async def test_guide_source_metadata_snapshot_replay_stays_queued_for_verified_b
 
     def capture_dispatch(**facts: str) -> str:
         dispatched.append(facts)
-        return pre_submit_setup_task_id(
+        return project_setup_identity.pre_submit_setup_task_id(
             facts["setup_run_id"], int(facts["setup_generation"])
         )
 
@@ -5184,7 +5181,7 @@ async def test_verified_setup_enqueue_failure_is_sanitized_and_retryable(
             setup_run_id=run.id,
             setup_generation=run.setup_generation,
         )
-    expected_task_id = pre_submit_setup_task_id(
+    expected_task_id = project_setup_identity.pre_submit_setup_task_id(
         run.id, run.setup_generation
     )
     assert task_id == expected_task_id
@@ -5225,7 +5222,7 @@ async def test_dispatch_pending_republishes_only_after_stale_cutoff(
         )
         assert run is not None
         run.status = "dispatch_pending"
-        run.celery_task_id = pre_submit_setup_task_id(
+        run.celery_task_id = project_setup_identity.pre_submit_setup_task_id(
             run.id, run.setup_generation
         )
         run.updated_at = datetime.now(UTC)
@@ -5292,7 +5289,7 @@ async def test_project_setup_worker_unexpected_error_does_not_leak_raw_exception
             current_step="queued",
             created_by="test-project-manager",
         )
-        setup_run.celery_task_id = project_setup_worker_module.pre_submit_setup_task_id(
+        setup_run.celery_task_id = project_setup_worker_module.project_setup_identity.pre_submit_setup_task_id(
             setup_run.id,
             setup_run.setup_generation,
         )
@@ -6045,7 +6042,7 @@ async def test_setup_service_recovers_exact_committed_sufficiency_replay(
             session.add(setup_run)
         setup_run.status = "running_sufficiency_agent"
         setup_run.current_step = "guide_sufficiency"
-        setup_run.celery_task_id = pre_submit_setup_task_id(
+        setup_run.celery_task_id = project_setup_identity.pre_submit_setup_task_id(
             setup_run.id,
             setup_run.setup_generation,
         )
@@ -6142,7 +6139,7 @@ async def test_setup_service_rejects_terminal_change_during_agent_execution(
             session.add(setup_run)
         setup_run.status = "running_sufficiency_agent"
         setup_run.current_step = "guide_sufficiency"
-        setup_run.celery_task_id = pre_submit_setup_task_id(
+        setup_run.celery_task_id = project_setup_identity.pre_submit_setup_task_id(
             setup_run.id, setup_run.setup_generation
         )
         await session.commit()
@@ -6238,7 +6235,7 @@ async def test_project_setup_worker_persists_sanitized_domain_failure(
             current_step="queued",
             created_by="test-project-manager",
         )
-        setup_run.celery_task_id = project_setup_worker_module.pre_submit_setup_task_id(
+        setup_run.celery_task_id = project_setup_worker_module.project_setup_identity.pre_submit_setup_task_id(
             setup_run.id,
             setup_run.setup_generation,
         )
@@ -6355,7 +6352,7 @@ async def test_project_setup_worker_rejects_stale_delivery_without_redrive(
             error_summary="project setup failed; inspect server logs with the setup run id",
         )
         setup_run.celery_task_id = (
-            pre_submit_setup_task_id(setup_run.id, setup_run.setup_generation)
+            project_setup_identity.pre_submit_setup_task_id(setup_run.id, setup_run.setup_generation)
             if task_id_matches
             else str(uuid4())
         )
@@ -7504,7 +7501,7 @@ async def test_manual_sufficiency_dispatch_commits_stable_custody_before_publish
     assert replayed.status_code == 202, replayed.text
     assert replayed.json() == accepted.json()
     assert accepted.json()["status"] == "dispatch_pending"
-    assert accepted.json()["celery_task_id"] == pre_submit_setup_task_id(
+    assert accepted.json()["celery_task_id"] == project_setup_identity.pre_submit_setup_task_id(
         accepted.json()["id"], accepted.json()["setup_generation"]
     )
     assert publishes == 1

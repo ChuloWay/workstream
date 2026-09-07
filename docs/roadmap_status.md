@@ -64,7 +64,7 @@ conditional compensation facts atomically before v0.1 can be released.
 | Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls | Final end-to-end operational and conformance proof |
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
 | Project Guide source custody | **Live foundation** | Project Manager ingestion; immutable snapshots; verified binding and reads; PDF, DOCX, PPTX, XLSX and image handling; bounded extraction | Complete the unified-generation cutover and later remove remaining legacy inference paths |
-| Unified Project Guide compilation | **Hidden and proven** | One immutable model attempt; persisted complete result; crash/recovery custody; deterministic sufficiency and submission-artifact-policy projections; exact AUTH request/execute/projection adapters | Finalize the setup ledger, activate finalization authority, cut live execution over, add approval and deterministic post-submit projection, expose one checker-service port |
+| Unified Project Guide compilation | **Hidden and proven** | One immutable model attempt; persisted complete result; crash/recovery custody; deterministic sufficiency and submission-artifact-policy projections; immutable atomic setup finalization; exact AUTH request/execute/projection adapters | Activate finalization authority, cut live execution over, add approval and deterministic post-submit projection, expose one checker-service port |
 | Contribution policy administration | **Hidden and proven** | Finance Authority adapter-binding lifecycle; ContributionPolicy read/create/update/publish/retire behavior; immutable operation and event history | Activate the five policy actions, expose validation, bind one published complete version to the active guide generation |
 | Task readiness and claim | **Foundation plus planned replacement** | Task records, lifecycle guards, assignments, locked work context, public owner facts | A task must inherit the guide-bound ContributionPolicyVersion before `READY`; claim copies the prepared task context into TaskAssignment without a current-policy lookup; activate exact task authority |
 | Contributor artifact preparation | **Hidden and proven** | One outer ZIP; bounded scratch inspection; canonical manifest; platform and project prechecks; unchanged-work rejection; durable put intent; verification; capacity-charged ready admission | Connect only the active unified guide/checker lineage and complete the later public admission-only cutover |
@@ -144,8 +144,8 @@ see whether any item below is already under review.
 
 The next dependency-safe product sequence is:
 
-1. **Finish the hidden unified-guide generation.** Implement POL finalization,
-   then its exact AUTH finalization gate, followed by the live unified
+1. **Connect the unified-guide generation.** Activate the exact AUTH gate for
+   hidden atomic setup finalization, followed by the live unified
    compilation cutover. This completes one stored setup result without
    reviving the three legacy inference calls.
 2. **Complete guide policy approval.** Project Manager approval consumes the
@@ -248,7 +248,7 @@ reader does not need internal engineering records to understand the roadmap
 above. The main
 remaining trace sequence is:
 
-- Unified guide: `POL-04A2 -> AUTH-12B2 -> POL-04B -> POL-05A -> AUTH-12F4
+- Unified guide: `AUTH-12B2 -> POL-04B -> POL-05A -> AUTH-12F4
   -> POL-05B -> POL-06A -> AUTH-12G -> POL-06B -> POL-07 -> AUTH-12H`.
 - Contribution lineage: `CP05 -> CP06 -> CP07 -> CP08 -> ARCH-03A -> ARCH-03B
   -> ARCH-03C -> CP09`.
