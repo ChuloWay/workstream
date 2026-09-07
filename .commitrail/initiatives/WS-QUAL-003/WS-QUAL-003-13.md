@@ -19,10 +19,12 @@ reviewed commits, not a separate planning PR followed by tiny cleanup PRs.
 Baseline is main `0e34911be4cdc25b3ec79dbcb097b62181958304` (PR379).
 `backend/tests/test_auth.py` retains 23 named tests. Eight selected tests occupy
 the bootstrap/admin-access family; fifteen other test bodies remain unchanged.
-The 1,040-line `test_signed_tokens_bootstrap_and_admin_grant_lifecycle` mixes
+The 1,041-line `test_signed_tokens_bootstrap_and_admin_grant_lifecycle` mixes
 signed-token admission, bootstrap, reads, concealment, fault injection, grant
 issue/revoke, scope and replay. Its final event totals depend on the entire
 history instead of identifying each mutation's effects.
+The selected eight functions contain 203 assertion statements; this is an
+inventory, not a required retained-test count or a semantic equivalence claim.
 
 `test_admin_bootstrap_replay_and_cross_revoke_are_concurrency_safe` combines
 bootstrap, timestamp ordering, same-key recovery, distinct-key duplication,
@@ -62,6 +64,10 @@ These are observed proof weaknesses, not established production defects.
 - `backend/scripts/test_lane_catalogue.py` and
   `backend/tests/test_ci_lane_catalogue.py`: register moved tests in existing
   lanes and prove no omission. Preserve unrelated product registrations.
+- `backend/scripts/test_structure_boundary.py` and
+  `backend/tests/architecture/test_test_structure_boundary.py`: explicitly scan
+  the complete new `authorization/admin_access` directory and prove that files
+  lacking AUTH imports or AUTH basenames cannot evade structural inventory.
 
 ### Not allowed
 
@@ -86,8 +92,14 @@ setup for the other tests instead of replaying every previous behavior. Setup
 must use real owners or valid fresh rows and must fail promptly on invalid
 preconditions. Faults are test-local and installed only after setup.
 
+The new package's `conftest.py` explicitly re-exports `clear_settings_cache`
+(preserving autouse), `rsa_signing_material` (preserving module scope), and
+`auth_database_env` (remaining opt-in) from `tests.authentication.fixtures`.
+Sibling packages do not inherit `authentication/conftest.py`. Re-export the
+moved database fixture in the old monolith for its unchanged consumers.
+
 Keep each new file below 500 lines, tests at most 120 and helpers at most 100.
-Do not hide the old 1,040-line scenario in a helper. Separate meaningful failure
+Do not hide the old 1,041-line scenario in a helper. Separate meaningful failure
 cases; do not multiply equivalent parameter combinations for coverage.
 
 Reuse `auth_concurrency_support.wait_for_named_database_lock` with exact waiter
@@ -126,7 +138,7 @@ Destination paths below are relative to `tests/authorization/admin_access/`.
 | `test_admin_bootstrap_replay_and_cross_revoke_are_concurrency_safe` | Split `test_grant_concurrency_postgresql.py` and `test_timestamp_concurrency_postgresql.py`; preserve each distinct operation/order and replace arrival-only claims with exact custody |
 | `test_actor_admin_reads_hold_caller_and_grant_locks_through_disclosure` | `test_read_concurrency_postgresql.py`; retain profile/link × suspend/deactivate/link-revoke/grant-revoke cases with exact blocker, independent fresh setup and denied subsequent disclosure |
 
-## Acceptance criteria and named future proof
+## Acceptance criteria
 
 Every row is a future proof requirement, not an executed result. All database,
 API and concurrency tests below run in hosted CI only; command tests are local.
@@ -152,10 +164,25 @@ Parameter cases must remain independently identifiable in final assertion map.
 | Grant issue/revoke faults roll back | `test_grant_mutation_commit_failure_rolls_back` | Separate operations; real staged state/event observed before fault, fresh DB restored afterward |
 | Grant recovery is exact | `test_grant_mutation_exact_replay_has_one_effect` | Issue/revoke stable response, one persisted operation and linked evidence |
 | Replay mismatch does not mutate | `test_grant_mutation_mismatch_preserves_product_state` | Separate issue/revoke mismatch; bounded denial evidence distinguished from forbidden success |
+| Issue/revoke namespaces do not alias | `test_same_caller_key_is_isolated_by_grant_operation` | Real PG: same actor and key issue then revoke; two exact operation-specific reservation rows/results and linked events, no cross-operation replay or mismatch |
 | Distinct duplicate differs from replay | `test_distinct_operation_duplicate_grant_is_conflict` | New key, same target/role, one grant |
-| Actor eligibility denial is concealed | `test_ineligible_grant_targets_share_missing_response` | Real service/suspended/no-active-link targets and genuinely absent control |
+| Actor eligibility denial is concealed | `test_ineligible_grant_targets_share_missing_response` | Real service/suspended/no-active-link targets and genuinely absent actor target; valid AuthorityControl remains present in every case |
 | Project audit reads cannot cross scope | `test_project_auditor_reads_only_granted_project` | Two persisted projects, exact selected rows; foreign request denied |
 | Audit authority cannot mutate | `test_audit_authority_cannot_issue_grant` | Valid active auditor; mutation denied without grant |
+| Catalogue reads succeed under administrator authority | `test_admin_catalogue_read_returns_public_definitions` | Separate permission/role routes; preserve original exact response totals/role ordering, prove caller observation |
+| Catalogue commit failure rolls back observation | `test_catalogue_read_commit_failure_rolls_back_observation` | Staged caller timestamp observed before injected commit failure; fresh DB unchanged and bounded 503 |
+| Own admin profile read returns committed observation | `test_self_admin_profile_read_returns_committed_observation` | Real API+PG: persisted updated/seen/verified values advance; response matches persisted profile timestamps; one allow event and no new grant/reservation |
+| Own admin link read returns committed observation | `test_self_admin_link_read_returns_committed_observation` | Real API+PG: persisted timestamps advance; response verification timestamp matches; one allow event and no new grant/reservation |
+| Own PATCH commit failure rolls back | `test_admin_self_patch_commit_failure_rolls_back` | Actual new display name and observation staged before fault; fresh DB original values, no successful effect |
+| Own PATCH commits requested values | `test_admin_self_patch_commits_requested_observation` | Real signed API+PG: exact display name and advanced observations persist |
+| Self-grant cannot escalate authority | `test_self_admin_grant_is_denied_without_grant` | Real route, 403/self_grant_forbidden and unchanged product grants |
+| Self-revoke is forbidden | `test_self_admin_revoke_preserves_grant` | Real route, 403/self_role_revoke_forbidden; exact bootstrap grant remains active |
+| Revoked/absent grants are concealed equally | `test_revoked_and_absent_grants_share_concealed_revoke_response` | Real revoked row and absent UUID, normalized equal 404; no second revoke effect |
+| System audit authority has bounded reads | `test_system_auditor_has_exact_read_surface` | Six independent routes: permissions, definitions, list, actor history, profile, link; real grant and persisted expected scope/rows |
+| Grant list returns exact scoped rows | `test_admin_grant_list_returns_exact_scope_and_count` | Actual grants in system and project scopes; exact selected row identities and totals |
+| History preserves reason but conceals identity secrets | `test_admin_grant_history_has_bounded_payload` | Exact target row/reason; signed token and subject absent from serialized response |
+| Grant cursor page starts correctly | `test_admin_grant_first_page_has_bounded_cursor` | Real list with limit1; one expected row and usable next cursor; malformed derivative separately rejected |
+| Target sees granted role but cannot read protected definitions | `test_target_role_projection_does_not_grant_catalogue_access` | Real grants reflected in self-read; definitions403/permission_not_granted |
 | Read query and grant request validation | `test_invalid_admin_request_is_bounded` | Preserve individually mapped original invalid field/cursor/selector cases |
 | Concurrent bootstrap has one winner | `test_concurrent_bootstrap_has_one_persisted_winner` | Two sessions, exact control-lock wait, grant/control/success event and losing conflict |
 | Same-key concurrency recovers | `test_concurrent_same_key_grant_returns_one_result` | Exact reservation wait, matching outputs, one grant and evidence pair |
@@ -164,6 +191,8 @@ Parameter cases must remain independently identifiable in final assertion map.
 | Issue/revoke follows serialized authority | `test_issue_against_revocation_obeys_lock_order` | Both winner orders independently; exact waiter/blocker, exact permitted/forbidden grant and events |
 | Older observation cannot regress timestamps | `test_older_read_cannot_regress_committed_observation` | Ordered real requests/commits, captured newer timestamps, monotonic final stored values |
 | Read holds exact authority through disclosure | `test_admin_read_blocks_exact_authority_transition` | Eight cases with exact reader blocker; later revoked caller denied without timestamp/success effects |
+| New owner files cannot evade structural scan | `test_admin_access_directory_is_unconditionally_scoped` | Existing architecture test module; synthetic no-AUTH-import/no-AUTH-basename fixture included recursively; omission mutation fails |
+| Extracted fixtures retain isolation | `test_admin_access_fixture_collection_is_complete` (verification inventory, not an extra product test) | Mixed collection with test_auth, new CLI/PG nodes and database-reset tests resolves fixtures without shadowing root conftest; actual hosted execution proves cleanup |
 
 Any additional original assertion not enumerated in the table must acquire its
 own named survivor in the exact assertion map before the source is removed;
@@ -204,3 +233,13 @@ not fail fixture setup. All full database/coverage custody stays hosted.
   matrices in the remaining authentication monolith, then remaining AUTH owners.
 - Remaining risks: new isolated cases may increase fixture cost; final hosted
   timings and genuine duplicate-survivor review must evaluate that tradeoff.
+
+## Plan review corrections
+
+Pre-implementation review found missing explicit structural-directory custody,
+sibling fixture exports, and named preservation rows for several original
+behaviors. These are now required above. The absent-target fixture keeps the
+real control row; a missing control row is an infrastructure error, not an
+actor-concealment negative. Same-key issue/revoke operation isolation is distinct
+from same-operation recovery and control-row serialization. These corrections
+establish plan feasibility only; they do not claim future tests have run.
