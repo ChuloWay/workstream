@@ -118,8 +118,8 @@ class DatabasePrepared(PreparedSetupFinalization):
             project_id=str(facts.project_id),
             resource_type=FINALIZATION_RESOURCE,
             resource_id=str(facts.finalization_id),
-            request_id=str(facts.operation_id),
-            correlation_id=str(facts.correlation_id),
+            request_id=facts.operation_id,
+            correlation_id=facts.correlation_id,
             denial_code=None,
         )
         if (
