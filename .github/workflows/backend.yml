@@ -548,6 +548,22 @@ jobs:
             coverage report --include="${source}" --precision=2 --fail-under=90
           done
 
+      - name: POL-04A2 finalization branch coverage
+        working-directory: backend
+        run: |
+          COVERAGE_FILE=.coverage-finalization pytest -q \
+            tests/projects/guide_compilation/finalization/test_contracts.py \
+            tests/projects/guide_compilation/finalization/test_service.py \
+            tests/projects/guide_compilation/finalization/test_lineage.py \
+            tests/projects/guide_compilation/finalization/test_replay.py \
+            tests/projects/guide_compilation/finalization/test_structure.py \
+            --cov=app.modules.authorization.api.project_setup_finalization \
+            --cov=app.modules.projects.api.guide_compilation \
+            --cov=app.modules.projects.guide_compilation.finalization \
+            --cov=app.modules.projects.guide_compilation.finalization_payloads \
+            --cov=app.modules.projects.api.setup_identity --cov=app.modules.projects.guide_compilation.custody_payloads \
+            --cov-branch --cov-report=term-missing --cov-fail-under=90
+
       - name: Project authorization-read composer coverage
         working-directory: backend
         run: |

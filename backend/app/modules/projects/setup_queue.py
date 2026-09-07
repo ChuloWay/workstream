@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 import logging
-from uuid import NAMESPACE_URL, uuid5
+from app.modules.projects.api import setup_identity
 
 from celery.exceptions import CeleryError
 from kombu.exceptions import KombuError
@@ -25,16 +25,6 @@ def dispatch_stale_before() -> datetime:
 
 class ProjectSetupQueueError(RuntimeError):
     """Raised when Workstream cannot enqueue project setup automation."""
-
-
-def pre_submit_setup_task_id(setup_run_id: str, setup_generation: int) -> str:
-    """Return the stable broker/execution id for one setup generation."""
-    return str(
-        uuid5(
-            NAMESPACE_URL,
-            f"workstream.project_setup.guide_sufficiency:{setup_run_id}:{setup_generation}",
-        )
-    )
 
 
 def enqueue_pre_submit_setup_pipeline(
@@ -89,7 +79,7 @@ async def dispatch_pre_submit_setup_pipeline_after_commit(
     from app.modules.projects.repository import ProjectRepository
 
     repository = ProjectRepository(session)
-    expected_task_id = pre_submit_setup_task_id(setup_run_id, setup_generation)
+    expected_task_id = setup_identity.pre_submit_setup_task_id(setup_run_id, setup_generation)
     setup_run = await repository.lock_project_setup_run(setup_run_id)
     if setup_run is None:
         raise ProjectSetupQueueError("project setup run missing before dispatch")

@@ -60,7 +60,7 @@ from app.modules.projects.service import (
     validate_sufficiency_report_payload,
     verified_guide_sufficiency_agent_item,
 )
-from app.modules.projects.setup_queue import pre_submit_setup_task_id
+from app.modules.projects.api.setup_identity import pre_submit_setup_task_id
 from app.modules.projects.sufficiency_mutation_repository import (
     GuideSufficiencyMutationReplayRepository,
 )

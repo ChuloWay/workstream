@@ -186,6 +186,15 @@ POL_04A_PARTITION_TARGETS = frozenset(
         *POL_04A_CALLABLE_TARGETS,
     }
 )
+POL_04A2_CALLABLE_TARGETS = frozenset(
+    {
+        "backend/app/modules/authorization/api/project_setup_finalization.py",
+        "backend/app/modules/projects/guide_compilation/custody_payloads.py",
+        "backend/app/modules/projects/guide_compilation/finalization.py",
+        "backend/app/modules/projects/guide_compilation/finalization_payloads.py",
+        "backend/app/modules/projects/api/setup_identity.py",
+    }
+)
 POL_04A3_CALLABLE_TARGETS = frozenset(
     {
         "backend/app/modules/authorization/api/project_guide_projections.py",
@@ -383,6 +392,7 @@ def _validate_additive_partition_transition(
         | MODULE_PUBLIC_API_FOUNDATION_TARGETS
         | POL_03A_CALLABLE_TARGETS
         | POL_04A_PARTITION_TARGETS
+        | POL_04A2_CALLABLE_TARGETS
         | POL_04A3_PARTITION_TARGETS
         | AUTH_12I_TARGETS
         | AUTH_12J_TARGETS
@@ -688,6 +698,7 @@ def validate_catalogue(
         AUTH_BOUNDARY_FOUNDATION_TARGETS
         | POL_03A_CALLABLE_TARGETS
         | POL_04A_CALLABLE_TARGETS
+        | POL_04A2_CALLABLE_TARGETS
         | POL_04A3_CALLABLE_TARGETS
     ):
         raise BehaviorOwnershipError("unresolved_auth_boundary_foundation")

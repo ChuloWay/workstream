@@ -679,6 +679,31 @@ may update only the prior row's lifecycle closeout metadata
 current lineage directly. Policy body, policy hash, source snapshot binding,
 approval actor, approval role, and approval timestamp are not edited in place.
 
+## ProjectGuideSetupFinalization
+
+The hidden finalizer records one immutable receipt per setup generation,
+compilation, operation, and authorization decision. Composite custody binds the
+accepted compilation, attempt and request, exact sufficiency projection/report,
+and the artifact-policy projection/draft when required. Canonical fact and
+authority digests include the complete lineage and explicit nullable policy
+triple.
+
+In one caller-owned root transaction, the receipt and setup transition commit
+or roll back with staged authorization evidence. `guide_blocked` closes as
+`sufficiency_blocked`; ready and warning results close as `policy_draft_ready`.
+Only status, diagnostic step, the two output pointers, and completion time
+change; `updated_at` is preserved. PostgreSQL assigns receipt creation and setup
+completion the same transaction timestamp and prevents receipt or finalized
+setup rewrites. Legacy-only setup generations retain their existing lifecycle.
+
+Exact replay uses the stored pre-finalization source digest and verifies the
+closed setup outputs and timestamp before returning the stored receipt. It
+creates no new evidence or projection. Production finalization authority remains
+unavailable until AUTH-12B2; HTTP and Celery composition belongs to POL-04B.
+Finalization grants no approval, activation, post-submit, or task-readiness
+behavior. Later live post-submit integration requires separately reviewed
+custody because this finalized setup row is immutable.
+
 ## EffectiveProjectSubmissionArtifactPolicy
 
 Generated server-side from:

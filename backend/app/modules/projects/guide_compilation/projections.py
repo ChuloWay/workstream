@@ -58,9 +58,14 @@ from app.modules.projects.service import (
     PolicySetupBlocked,
     build_verified_guide_sufficiency_material,
 )
-from app.modules.projects.setup_queue import pre_submit_setup_task_id
+from app.modules.projects.api.setup_identity import pre_submit_setup_task_id
 
 from .contracts import AcceptedCompilationResult
+from .custody_payloads import (
+    source_state as _source_state,
+    report_digest as _report_digest,
+    policy_digest as _policy_digest,
+)
 from .models import ProjectGuideComponentProjectionOperation
 from .projection_payloads import (
     PROJECTOR_NAME,
@@ -68,13 +73,10 @@ from .projection_payloads import (
     LockedProjection as _LockedProjection,
     ProjectionSeed as _ProjectionSeed,
     policy_body as _policy_body,
-    policy_digest as _policy_digest,
     policy_facts as _policy_facts,
     policy_output as _policy_output,
-    report_digest as _report_digest,
     report_output as _report_output,
     report_payload as _report_payload,
-    source_state as _source_state,
     sufficiency_facts as _sufficiency_facts,
 )
 from .repository import GuideCompilationIntegrityError, GuideCompilationRepository
