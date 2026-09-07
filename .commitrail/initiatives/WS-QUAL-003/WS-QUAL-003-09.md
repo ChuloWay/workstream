@@ -1,7 +1,7 @@
 # WS-QUAL-003-09 — Audit the sufficiency-mutation service test family
 
 - Initiative: WS-QUAL-003
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Replace the complete mixed controlled-port sufficiency
   mutation family with cohesive, independently discriminating behavior tests.
 
@@ -135,6 +135,28 @@ mutation or complete repository-audit claim. Freeze one clean candidate for the
 impact-routed reviews; batch valid findings before replay and hosted rerun.
 
 ## Reconciliation
+
+The six former mixed controlled-port tests are replaced by 37 named tests in
+eight behavior modules. Their 971 lines leave the monolith; the replacement
+family and three passive support modules total 1,205 lines. This is deliberately
+not a net source-count reduction: independent negative controls and missing
+PREP, continuation and route proof replace compact but masked multi-behavior
+tests. The largest new module is 246 lines; the longest new test is 73 lines.
+All retained monolith definitions, including PostgreSQL tests, remain
+AST-identical. No real database case or coverage floor is removed.
+
+The original six tests passed before replacement. New family and catalogue
+checks pass 141 cases. Out-of-tree probes begin from passing controls and detect
+missing-grant acceptance, ignored foreign-guide lineage, omitted replay
+reauthorization, duplicate replay product effect, omitted consumption, and
+bypassed public service rejection at assertions, not setup failures.
+
+Plan review corrected the stale focused coverage selector, missing `replayed`
+reservation rejection, setup-linked acknowledgement coverage and explicit PREP
+fact mapping. Structural inventory removes three oversized function entries and
+adds none. The workflow selects the two retained nodes plus all replacement
+modules; its targets and threshold remain unchanged. This disposition records
+the intended merged audit boundary, not transient CI or approval state.
 
 - Current source: main `9b6750fb`, merged fence slice08.
 - Next usable boundary: remaining PROJECT submission-policy mutation family;
