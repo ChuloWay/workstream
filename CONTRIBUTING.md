@@ -47,7 +47,8 @@ tooling environment. Do not change dependency hashes to force a host install.
 For an editorial correction to README or ordinary documentation outside
 process-control paths, record intent and scope in the pull request. A meaningful
 standalone change uses `.commitrail/changes/<lowercase-kebab-slug>.md`, based on
-`.commitrail/CHANGE_TEMPLATE.md`, without an initiative overview or index row.
+`.commitrail/CHANGE_TEMPLATE.md`, declaring exactly one live `Initiative: None`,
+without an initiative overview or index row.
 Work in an existing initiative keeps its initiative record; multi-PR work also
 uses one concise overview. The [Commitrail contribution paths](.commitrail/README.md#smallest-useful-record)
 list the exact paths that require a record even for a small correction.
