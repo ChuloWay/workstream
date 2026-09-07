@@ -10,12 +10,12 @@ Continue the human-authorized behavior-first test audit. A missing decision is
 not evidence that an existing but mismatched decision is rejected. Preserve
 valuable protection, justify each retained case, and avoid a count-driven purge.
 
-## Current behavior
+## Baseline behavior
 
 Before this change, `test_policy_and_replay.py` named a mismatched-decision test but supplied only a
 random absent ID. `projection_replay_event_matches` validates eleven independent
-stored facts; the absent-row test cannot detect removing any of those checks.
-The exact-replay test exercises only the sufficiency adapter and repeats a
+stored facts; the old absent-row test could not detect removing any of those checks.
+The old exact-replay test exercised only the sufficiency adapter and repeated a
 two-service setup also present in authority-retirement and custody-guard tests.
 The real kernel/PREP runs against controlled session, owner-lock and audit ports;
 these tests do not execute SQL or establish real transaction isolation.
@@ -137,8 +137,8 @@ preparation is replaced by `ReplayCase`, not a second authorization evaluator.
 The historical AUTH-12J pre-cutover contract's old `every` and `mismatched`
 references resolve through this map; the historical snapshot is not rewritten.
 The two old test modules shrink from 480 to 257 lines; with the new 84-line
-support, 174-line evidence module and six support lines, this family grows by
-41 lines to cover the missing behavior. This is proof repair, not a claimed
+support, 174-line evidence module and two net support lines, this family grows by
+37 lines (685 to 722) to cover the missing behavior. This is proof repair, not a claimed
 test-count or source-volume reduction.
 
 The new negative cases each substitute only one returned fact of the exact
@@ -150,8 +150,10 @@ values from the implementation under test.
 
 ## Reconciliation
 
-- Current-source reconciliation: main `369903ae` includes merged observer
-  repair PR378. Product PR377 owns finalization, not this AUTH replay family.
+- Source reconciliation: discovery used main `369903ae`, including merged
+  observer repair PR378. Integrated base `8c00fb3d` also includes PR376's
+  Commitrail contribution-path simplification. Product PR377 owns finalization,
+  not this AUTH replay family.
 - Next usable boundary: remaining AUTH monolith/actor-resolution audit and
   decomposition. This change does not complete those large-file obligations.
 - Remaining risks: PostgreSQL integrity and owner-query isolation are separate
