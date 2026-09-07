@@ -157,6 +157,7 @@ SHARED_FOUNDATION_MODULES = (
 )
 
 PROJECT_MODULES = (
+    "tests/projects/test_active_guide_repository.py",
     "tests/projects/guide_compilation/finalization/test_concurrency_postgresql.py",
     "tests/projects/guide_compilation/finalization/test_contracts.py",
     "tests/projects/guide_compilation/finalization/test_guards_postgresql.py",

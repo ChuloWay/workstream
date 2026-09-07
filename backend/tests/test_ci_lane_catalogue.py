@@ -54,6 +54,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         modules_by_lane["project_lifecycle_a"]
         == modules_by_lane["project_lifecycle_b"]
         == {
+            "tests/projects/test_active_guide_repository.py",
             "tests/projects/guide_compilation/finalization/test_concurrency_postgresql.py",
             "tests/projects/guide_compilation/finalization/test_contracts.py",
             "tests/projects/guide_compilation/finalization/test_guards_postgresql.py",
