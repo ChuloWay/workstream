@@ -5,7 +5,7 @@
 - Intended merge outcome: Isolate and strengthen execution-fence delegation and
   cleanup proof without changing production or claiming mocked database locks.
 
-## Intent and current behavior
+## Intent
 
 Continue the PROJECT mutation audit after PR #372. The mixed
 `test_sufficiency_mutation_fail_closed_internal_guards` in `test_projects.py`
