@@ -26,3 +26,21 @@ def clear_settings_cache() -> Iterator[None]:
 def rsa_signing_material() -> tuple[rsa.RSAPrivateKey, dict[str, Any]]:
     private_key = rsa.generate_private_key(public_exponent=65_537, key_size=2_048)
     return private_key, rsa_public_jwk(private_key, kid="issuer-key-1")
+
+
+@pytest.fixture
+def auth_database_env(
+    monkeypatch: pytest.MonkeyPatch,
+    clean_postgres_database: str,
+) -> Iterator[str]:
+    """Run auth route persistence tests against a clean migrated schema."""
+    monkeypatch.setenv("WORKSTREAM_DATABASE_URL", clean_postgres_database)
+    monkeypatch.setenv(
+        "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET",
+        "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    )
+    get_settings.cache_clear()
+    try:
+        yield clean_postgres_database
+    finally:
+        get_settings.cache_clear()

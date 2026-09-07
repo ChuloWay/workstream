@@ -243,3 +243,21 @@ real control row; a missing control row is an infrastructure error, not an
 actor-concealment negative. Same-key issue/revoke operation isolation is distinct
 from same-operation recovery and control-row serialization. These corrections
 establish plan feasibility only; they do not claim future tests have run.
+
+## Implementation checkpoints
+
+The first checkpoint moves five original CLI functions into six focused
+functions (seven expanded cases become eight because interrupt and pre-outcome
+failure are independent). All fifteen original assertion spans are mapped.
+Exact actor/mode forwarding, forbidden dispatch on malformed arguments, cleanup
+calls, and empty stderr strengthen the original command proof. A process-local
+stderr-leak mutant survives the original malformed-argument test but fails the
+new stderr assertion. This is a test defect, not an observed production leak.
+
+The database fixture moves unchanged to shared authentication fixtures, with
+explicit sibling exports. The new owner directory is explicitly scanned and
+registered in existing lanes. All eighteen tests still in the monolith retain
+AST-identical bodies at this checkpoint. Mixed fixture collection succeeds;
+that is not PostgreSQL execution. The three selected large API/concurrency
+functions and their 188 original assertion spans still require the subsequent
+implementation checkpoint and hosted proof in this same PR.

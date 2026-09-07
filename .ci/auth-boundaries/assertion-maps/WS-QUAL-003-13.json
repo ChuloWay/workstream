@@ -1,0 +1,567 @@
+{
+  "chunk_id": "WS-QUAL-003-13",
+  "schema": "workstream.auth-assertion-map.v1",
+  "mappings": [
+    {
+      "old_revision": "0e34911be4cdc25b3ec79dbcb097b62181958304",
+      "old_test_node": "tests/test_auth.py::test_bootstrap_command_manifest_matches_the_active_catalogue",
+      "old_assertion_id": "assertion:1375:1375:e25f783cf32782e502386a114384abd167f7dc7e5c44aaa30cda41bc7d313e9f",
+      "old_source_span": [
+        1375,
+        1375
+      ],
+      "old_content_sha256": "e25f783cf32782e502386a114384abd167f7dc7e5c44aaa30cda41bc7d313e9f",
+      "new_test_node": "tests/authorization/admin_access/test_bootstrap_cli.py::test_bootstrap_command_manifest_matches_the_active_catalogue",
+      "invariant_category": "bootstrap_command_manifest_matches_the_active_catalogue",
+      "target_layer": "domain",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "replay": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "revocation": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "evidence": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "concealment": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        }
+      }
+    },
+    {
+      "old_revision": "0e34911be4cdc25b3ec79dbcb097b62181958304",
+      "old_test_node": "tests/test_auth.py::test_bootstrap_command_manifest_matches_the_active_catalogue",
+      "old_assertion_id": "assertion:1376:1376:8580c25b9d0e709842cf64b324bf13f09a0e8ab3c0655e17420fc005f94e2f82",
+      "old_source_span": [
+        1376,
+        1376
+      ],
+      "old_content_sha256": "8580c25b9d0e709842cf64b324bf13f09a0e8ab3c0655e17420fc005f94e2f82",
+      "new_test_node": "tests/authorization/admin_access/test_bootstrap_cli.py::test_bootstrap_command_manifest_matches_the_active_catalogue",
+      "invariant_category": "bootstrap_command_manifest_matches_the_active_catalogue",
+      "target_layer": "domain",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "replay": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "revocation": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "evidence": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "concealment": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        }
+      }
+    },
+    {
+      "old_revision": "0e34911be4cdc25b3ec79dbcb097b62181958304",
+      "old_test_node": "tests/test_auth.py::test_bootstrap_command_manifest_matches_the_active_catalogue",
+      "old_assertion_id": "assertion:1377:1377:b2d1927409a59c144ee7a226736a7d1b35a993ce2a00e4879917d0d746d30812",
+      "old_source_span": [
+        1377,
+        1377
+      ],
+      "old_content_sha256": "b2d1927409a59c144ee7a226736a7d1b35a993ce2a00e4879917d0d746d30812",
+      "new_test_node": "tests/authorization/admin_access/test_bootstrap_cli.py::test_bootstrap_command_manifest_matches_the_active_catalogue",
+      "invariant_category": "bootstrap_command_manifest_matches_the_active_catalogue",
+      "target_layer": "domain",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "replay": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "revocation": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "evidence": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "concealment": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        }
+      }
+    },
+    {
+      "old_revision": "0e34911be4cdc25b3ec79dbcb097b62181958304",
+      "old_test_node": "tests/test_auth.py::test_bootstrap_cli_preserves_committed_outcome_when_engine_cleanup_fails",
+      "old_assertion_id": "assertion:1387:1387:a771a4966bd0ddd1ddd5f6e2a5ab9c03ef1266eca9b2a52d9b08388f86578299",
+      "old_source_span": [
+        1387,
+        1387
+      ],
+      "old_content_sha256": "a771a4966bd0ddd1ddd5f6e2a5ab9c03ef1266eca9b2a52d9b08388f86578299",
+      "new_test_node": "tests/authorization/admin_access/test_bootstrap_cli.py::test_bootstrap_cli_preserves_committed_outcome_when_engine_cleanup_fails",
+      "invariant_category": "bootstrap_cli_preserves_committed_outcome_when_engine_cleanup_fails",
+      "target_layer": "service",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "replay": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "revocation": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "evidence": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "concealment": "preserved"
+      }
+    },
+    {
+      "old_revision": "0e34911be4cdc25b3ec79dbcb097b62181958304",
+      "old_test_node": "tests/test_auth.py::test_bootstrap_cli_preserves_committed_outcome_when_engine_cleanup_fails",
+      "old_assertion_id": "assertion:1401:1401:ff5ee387d6f17cf2a9e6e9fb696a637d7d34613ea4b94bd8c2b3eb44918187e0",
+      "old_source_span": [
+        1401,
+        1401
+      ],
+      "old_content_sha256": "ff5ee387d6f17cf2a9e6e9fb696a637d7d34613ea4b94bd8c2b3eb44918187e0",
+      "new_test_node": "tests/authorization/admin_access/test_bootstrap_cli.py::test_bootstrap_cli_preserves_committed_outcome_when_engine_cleanup_fails",
+      "invariant_category": "bootstrap_cli_preserves_committed_outcome_when_engine_cleanup_fails",
+      "target_layer": "service",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "replay": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "revocation": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "evidence": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "concealment": "preserved"
+      }
+    },
+    {
+      "old_revision": "0e34911be4cdc25b3ec79dbcb097b62181958304",
+      "old_test_node": "tests/test_auth.py::test_bootstrap_cli_preserves_committed_outcome_when_engine_cleanup_fails",
+      "old_assertion_id": "assertion:1402:1407:6d4dcbfb8012669b138a3fd67c3b41460ced17e0008408c0b9d7c9f591cf2917",
+      "old_source_span": [
+        1402,
+        1407
+      ],
+      "old_content_sha256": "6d4dcbfb8012669b138a3fd67c3b41460ced17e0008408c0b9d7c9f591cf2917",
+      "new_test_node": "tests/authorization/admin_access/test_bootstrap_cli.py::test_bootstrap_cli_preserves_committed_outcome_when_engine_cleanup_fails",
+      "invariant_category": "bootstrap_cli_preserves_committed_outcome_when_engine_cleanup_fails",
+      "target_layer": "service",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "replay": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "revocation": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "evidence": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "concealment": "preserved"
+      }
+    },
+    {
+      "old_revision": "0e34911be4cdc25b3ec79dbcb097b62181958304",
+      "old_test_node": "tests/test_auth.py::test_bootstrap_cli_does_not_relabel_internal_type_error_as_invalid_request",
+      "old_assertion_id": "assertion:1415:1415:a771a4966bd0ddd1ddd5f6e2a5ab9c03ef1266eca9b2a52d9b08388f86578299",
+      "old_source_span": [
+        1415,
+        1415
+      ],
+      "old_content_sha256": "a771a4966bd0ddd1ddd5f6e2a5ab9c03ef1266eca9b2a52d9b08388f86578299",
+      "new_test_node": "tests/authorization/admin_access/test_bootstrap_cli.py::test_bootstrap_cli_does_not_relabel_internal_type_error_as_invalid_request",
+      "invariant_category": "bootstrap_cli_does_not_relabel_internal_type_error_as_invalid_request",
+      "target_layer": "service",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "replay": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "revocation": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "evidence": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "concealment": "preserved"
+      }
+    },
+    {
+      "old_revision": "0e34911be4cdc25b3ec79dbcb097b62181958304",
+      "old_test_node": "tests/test_auth.py::test_bootstrap_cli_does_not_relabel_internal_type_error_as_invalid_request",
+      "old_assertion_id": "assertion:1424:1424:c7598e5f87e2e832d39a203f626df63780e38526e411ceb322b4bbf7c063ff29",
+      "old_source_span": [
+        1424,
+        1424
+      ],
+      "old_content_sha256": "c7598e5f87e2e832d39a203f626df63780e38526e411ceb322b4bbf7c063ff29",
+      "new_test_node": "tests/authorization/admin_access/test_bootstrap_cli.py::test_bootstrap_cli_does_not_relabel_internal_type_error_as_invalid_request",
+      "invariant_category": "bootstrap_cli_does_not_relabel_internal_type_error_as_invalid_request",
+      "target_layer": "service",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "replay": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "revocation": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "evidence": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "concealment": "preserved"
+      }
+    },
+    {
+      "old_revision": "0e34911be4cdc25b3ec79dbcb097b62181958304",
+      "old_test_node": "tests/test_auth.py::test_bootstrap_cli_does_not_relabel_internal_type_error_as_invalid_request",
+      "old_assertion_id": "assertion:1425:1425:7beba6e578a10575f63985aa6c9804d58d3185f40dff5f8b4d68c66f8f0226e1",
+      "old_source_span": [
+        1425,
+        1425
+      ],
+      "old_content_sha256": "7beba6e578a10575f63985aa6c9804d58d3185f40dff5f8b4d68c66f8f0226e1",
+      "new_test_node": "tests/authorization/admin_access/test_bootstrap_cli.py::test_bootstrap_cli_does_not_relabel_internal_type_error_as_invalid_request",
+      "invariant_category": "bootstrap_cli_does_not_relabel_internal_type_error_as_invalid_request",
+      "target_layer": "service",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "replay": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "revocation": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "evidence": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "concealment": "preserved"
+      }
+    },
+    {
+      "old_revision": "0e34911be4cdc25b3ec79dbcb097b62181958304",
+      "old_test_node": "tests/test_auth.py::test_bootstrap_cli_rejects_arguments_without_echoing_them",
+      "old_assertion_id": "assertion:1451:1451:a580a3e1405721e0a5eb3419522b1106915083e2aba73324140ffa0c39c0a637",
+      "old_source_span": [
+        1451,
+        1451
+      ],
+      "old_content_sha256": "a580a3e1405721e0a5eb3419522b1106915083e2aba73324140ffa0c39c0a637",
+      "new_test_node": "tests/authorization/admin_access/test_bootstrap_cli.py::test_bootstrap_cli_rejects_arguments_without_echoing_them",
+      "invariant_category": "bootstrap_cli_rejects_arguments_without_echoing_them",
+      "target_layer": "service",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "replay": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "revocation": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "evidence": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "concealment": "preserved"
+      }
+    },
+    {
+      "old_revision": "0e34911be4cdc25b3ec79dbcb097b62181958304",
+      "old_test_node": "tests/test_auth.py::test_bootstrap_cli_rejects_arguments_without_echoing_them",
+      "old_assertion_id": "assertion:1452:1452:6dc7ff258b8274cbe231e06ab9d99722aa2e4eefc4bb3aec905ea73ec530f474",
+      "old_source_span": [
+        1452,
+        1452
+      ],
+      "old_content_sha256": "6dc7ff258b8274cbe231e06ab9d99722aa2e4eefc4bb3aec905ea73ec530f474",
+      "new_test_node": "tests/authorization/admin_access/test_bootstrap_cli.py::test_bootstrap_cli_rejects_arguments_without_echoing_them",
+      "invariant_category": "bootstrap_cli_rejects_arguments_without_echoing_them",
+      "target_layer": "service",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "replay": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "revocation": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "evidence": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "concealment": "preserved"
+      }
+    },
+    {
+      "old_revision": "0e34911be4cdc25b3ec79dbcb097b62181958304",
+      "old_test_node": "tests/test_auth.py::test_bootstrap_cli_reports_interrupt_and_pre_outcome_cleanup_failure",
+      "old_assertion_id": "assertion:1471:1471:a20d21bd161d754f11ded53e59fbe467afaefa90a82265a3d3b3876cecd7d379",
+      "old_source_span": [
+        1471,
+        1471
+      ],
+      "old_content_sha256": "a20d21bd161d754f11ded53e59fbe467afaefa90a82265a3d3b3876cecd7d379",
+      "new_test_node": "tests/authorization/admin_access/test_bootstrap_cli.py::test_bootstrap_cli_reports_interrupt",
+      "invariant_category": "bootstrap_cli_reports_interrupt",
+      "target_layer": "service",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "replay": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "revocation": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "evidence": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "concealment": "preserved"
+      }
+    },
+    {
+      "old_revision": "0e34911be4cdc25b3ec79dbcb097b62181958304",
+      "old_test_node": "tests/test_auth.py::test_bootstrap_cli_reports_interrupt_and_pre_outcome_cleanup_failure",
+      "old_assertion_id": "assertion:1472:1472:145c4ca500b42a85a114e20e5dc2162706c8b809245b5875a9f0e83b187f6f06",
+      "old_source_span": [
+        1472,
+        1472
+      ],
+      "old_content_sha256": "145c4ca500b42a85a114e20e5dc2162706c8b809245b5875a9f0e83b187f6f06",
+      "new_test_node": "tests/authorization/admin_access/test_bootstrap_cli.py::test_bootstrap_cli_reports_interrupt",
+      "invariant_category": "bootstrap_cli_reports_interrupt",
+      "target_layer": "service",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "replay": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "revocation": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "evidence": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "concealment": "preserved"
+      }
+    },
+    {
+      "old_revision": "0e34911be4cdc25b3ec79dbcb097b62181958304",
+      "old_test_node": "tests/test_auth.py::test_bootstrap_cli_reports_interrupt_and_pre_outcome_cleanup_failure",
+      "old_assertion_id": "assertion:1483:1483:a20d21bd161d754f11ded53e59fbe467afaefa90a82265a3d3b3876cecd7d379",
+      "old_source_span": [
+        1483,
+        1483
+      ],
+      "old_content_sha256": "a20d21bd161d754f11ded53e59fbe467afaefa90a82265a3d3b3876cecd7d379",
+      "new_test_node": "tests/authorization/admin_access/test_bootstrap_cli.py::test_bootstrap_cli_reports_pre_outcome_cleanup_failure",
+      "invariant_category": "bootstrap_cli_reports_pre_outcome_cleanup_failure",
+      "target_layer": "service",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "replay": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "revocation": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "evidence": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "concealment": "preserved"
+      }
+    },
+    {
+      "old_revision": "0e34911be4cdc25b3ec79dbcb097b62181958304",
+      "old_test_node": "tests/test_auth.py::test_bootstrap_cli_reports_interrupt_and_pre_outcome_cleanup_failure",
+      "old_assertion_id": "assertion:1484:1484:7beba6e578a10575f63985aa6c9804d58d3185f40dff5f8b4d68c66f8f0226e1",
+      "old_source_span": [
+        1484,
+        1484
+      ],
+      "old_content_sha256": "7beba6e578a10575f63985aa6c9804d58d3185f40dff5f8b4d68c66f8f0226e1",
+      "new_test_node": "tests/authorization/admin_access/test_bootstrap_cli.py::test_bootstrap_cli_reports_pre_outcome_cleanup_failure",
+      "invariant_category": "bootstrap_cli_reports_pre_outcome_cleanup_failure",
+      "target_layer": "service",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "replay": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "revocation": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "evidence": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This command presentation assertion claims no database, concurrent session, durable replay or lifecycle mutation."
+        },
+        "concealment": "preserved"
+      }
+    }
+  ]
+}

@@ -122,6 +122,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_api_rate_controls.py",
     "tests/test_audit.py",
     "tests/test_auth.py",
+    "tests/authorization/admin_access/test_bootstrap_cli.py",
     "tests/test_auth_concurrency_observer.py",
     "tests/test_authorization.py",
     "tests/authorization/guide_compilation/test_adapter_contract.py",

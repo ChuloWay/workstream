@@ -6,6 +6,7 @@ from tests.authentication.support import (
     jwks_transport,
 )
 from tests.authentication.fixtures import (
+    auth_database_env as auth_database_env,
     clear_settings_cache as clear_settings_cache,
     rsa_signing_material as rsa_signing_material,
 )
@@ -15,7 +16,6 @@ import ast
 import asyncio
 import json
 import logging
-from collections.abc import Iterator
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
@@ -69,10 +69,8 @@ from project_create_fixtures import seed_historical_project
 from auth_concurrency_support import ordered_control_requests, wait_for_named_database_lock
 from app.modules.tasks.models import AuditEvent
 from scripts.bootstrap_access_administrator import (
-    BOOTSTRAP_COMMAND_MANIFEST,
     _run as run_admin_bootstrap,
 )
-from scripts import bootstrap_access_administrator as bootstrap_command
 
 
 def _application_paths(app) -> set[str]:
@@ -166,22 +164,6 @@ def current_task_name() -> str:
     return task.get_name()
 
 
-@pytest.fixture
-def auth_database_env(
-    monkeypatch: pytest.MonkeyPatch,
-    clean_postgres_database: str,
-) -> Iterator[str]:
-    """Run auth route persistence tests against a clean migrated schema."""
-    monkeypatch.setenv("WORKSTREAM_DATABASE_URL", clean_postgres_database)
-    monkeypatch.setenv(
-        "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET",
-        "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
-    )
-    get_settings.cache_clear()
-    try:
-        yield clean_postgres_database
-    finally:
-        get_settings.cache_clear()
 
 
 def test_legacy_compatibility_dependency_has_fixed_consumer_allowlist() -> None:
@@ -1371,117 +1353,14 @@ async def test_signed_tokens_bootstrap_and_admin_grant_lifecycle(
     await db_session.dispose_engine()
 
 
-def test_bootstrap_command_manifest_matches_the_active_catalogue() -> None:
-    assert BOOTSTRAP_COMMAND_MANIFEST.action_id.value == "admin_role_grant.bootstrap"
-    assert BOOTSTRAP_COMMAND_MANIFEST.permission_id.value == "admin_role.grant"
-    assert BOOTSTRAP_COMMAND_MANIFEST.principal == "workstream:system:bootstrap"
 
 
-def test_bootstrap_cli_preserves_committed_outcome_when_engine_cleanup_fails(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    actor_id, grant_id = uuid4(), uuid4()
-
-    async def successful_run(_actor_profile_id: UUID, *, execute: bool):
-        assert execute is True
-        return 0, {
-            "result_code": "bootstrapped",
-            "actor_profile_id": str(actor_id),
-            "grant_id": str(grant_id),
-            "changed": True,
-        }
-
-    async def failed_cleanup() -> None:
-        raise RuntimeError("forced cleanup failure")
-
-    monkeypatch.setattr(bootstrap_command, "_run", successful_run)
-    monkeypatch.setattr(bootstrap_command, "dispose_engine", failed_cleanup)
-
-    assert bootstrap_command.main(["--actor-profile-id", str(actor_id), "--execute"]) == 0
-    assert json.loads(capsys.readouterr().out) == {
-        "result_code": "bootstrapped",
-        "actor_profile_id": str(actor_id),
-        "grant_id": str(grant_id),
-        "changed": True,
-    }
 
 
-def test_bootstrap_cli_does_not_relabel_internal_type_error_as_invalid_request(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    async def broken_run(_actor_profile_id: UUID, *, execute: bool):
-        assert execute is True
-        raise TypeError("forced internal contract failure")
-
-    async def clean_disposal() -> None:
-        return None
-
-    monkeypatch.setattr(bootstrap_command, "_run", broken_run)
-    monkeypatch.setattr(bootstrap_command, "dispose_engine", clean_disposal)
-
-    assert bootstrap_command.main(["--actor-profile-id", str(uuid4()), "--execute"]) == 1
-    assert json.loads(capsys.readouterr().out) == {"result_code": "infrastructure_failure"}
 
 
-@pytest.mark.parametrize(
-    ("argv", "expected_code", "expected_result"),
-    [
-        ([], 2, "invalid_request"),
-        (["--actor-profile-id", "not-a-uuid", "--execute"], 2, "invalid_request"),
-        (
-            ["--actor-profile-id", str(uuid4()), "--dry-run", "--execute"],
-            2,
-            "invalid_request",
-        ),
-    ],
-)
-def test_bootstrap_cli_rejects_arguments_without_echoing_them(
-    argv: list[str],
-    expected_code: int,
-    expected_result: str,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    async def clean_disposal() -> None:
-        return None
-
-    monkeypatch.setattr(bootstrap_command, "dispose_engine", clean_disposal)
-    assert bootstrap_command.main(argv) == expected_code
-    assert json.loads(capsys.readouterr().out) == {"result_code": expected_result}
 
 
-def test_bootstrap_cli_reports_interrupt_and_pre_outcome_cleanup_failure(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    actor_id = uuid4()
-    calls = 0
-
-    def interrupted_then_clean(coroutine):
-        nonlocal calls
-        calls += 1
-        coroutine.close()
-        if calls == 1:
-            raise KeyboardInterrupt
-        return None
-
-    monkeypatch.setattr(bootstrap_command.asyncio, "run", interrupted_then_clean)
-    assert bootstrap_command.main(["--actor-profile-id", str(actor_id), "--execute"]) == 1
-    assert json.loads(capsys.readouterr().out) == {"result_code": "interrupted"}
-
-    calls = 0
-
-    def failed_before_and_during_cleanup(coroutine):
-        nonlocal calls
-        calls += 1
-        coroutine.close()
-        raise RuntimeError(f"failure-{calls}")
-
-    monkeypatch.setattr(bootstrap_command.asyncio, "run", failed_before_and_during_cleanup)
-    assert bootstrap_command.main(["--actor-profile-id", str(actor_id), "--execute"]) == 1
-    assert json.loads(capsys.readouterr().out) == {"result_code": "infrastructure_failure"}
 
 
 async def test_admin_bootstrap_replay_and_cross_revoke_are_concurrency_safe(
