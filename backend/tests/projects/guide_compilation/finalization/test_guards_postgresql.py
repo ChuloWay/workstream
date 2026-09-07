@@ -129,7 +129,7 @@ async def test_missing_receipt_proof_detects_removed_guard(clean_postgres_databa
         async with factory() as session:
             assert await session.scalar(
                 text(
-                    "select tgenabled from pg_trigger where tgrelid='project_setup_runs'::regclass "
+                    "select tgenabled::text from pg_trigger where tgrelid='project_setup_runs'::regclass "
                     "and tgname='finalization_atomic_custody'"
                 )
             ) == "O"
