@@ -87,6 +87,15 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/projects/test_diagnostic_read_rejections.py",
             "tests/projects/test_execution_fence_binding.py",
             "tests/projects/test_execution_fence_lifetime.py",
+            "tests/projects/sufficiency_mutations/test_authority.py",
+            "tests/projects/sufficiency_mutations/test_lineage.py",
+            "tests/projects/sufficiency_mutations/test_dispatch.py",
+            "tests/projects/sufficiency_mutations/test_report_create.py",
+            "tests/projects/sufficiency_mutations/test_acknowledgement.py",
+            "tests/projects/sufficiency_mutations/test_acknowledgement_postgresql.py",
+            "tests/projects/sufficiency_mutations/test_replay.py",
+            "tests/projects/sufficiency_mutations/test_replay_repository.py",
+            "tests/projects/sufficiency_mutations/test_public_routes.py",
             "tests/projects/test_retired_submission_derivation_route.py",
             "tests/test_projects.py",
         }
@@ -389,6 +398,33 @@ def test_project_read_coverage_gate_selects_relocated_proof() -> None:
         "--cov=app.modules.projects.authorization_reads", "--cov-branch",
         "--cov-report=term-missing", "--cov-fail-under=90",
     ]
+
+
+def test_sufficiency_coverage_gate_selects_complete_mutation_family() -> None:
+    """Without a provisioned test database, select only the controlled-port family."""
+    source = (runner.ROOT.parent / ".github/workflows/backend.yml").read_text()
+    step = source.split("      - name: Guide sufficiency mutation per-file coverage\n", 1)[1].split("      - name:", 1)[0]
+    command = step.split("        run: |\n", 1)[1]
+    assert shlex.split(command.replace("\\\n", " ")) == [
+        "set", "-euo", "pipefail", "coverage", "run", "--append", "-m", "pytest", "-q",
+        "-p", "pytest_asyncio.plugin",
+        "tests/test_projects.py::test_verified_worker_composes_fresh_exact_setup_service_authority",
+        "tests/test_projects.py::test_setup_service_adoption_requires_exact_report_and_source_provenance",
+        "tests/projects/sufficiency_mutations/test_authority.py",
+        "tests/projects/sufficiency_mutations/test_lineage.py",
+        "tests/projects/sufficiency_mutations/test_dispatch.py",
+        "tests/projects/sufficiency_mutations/test_report_create.py",
+        "tests/projects/sufficiency_mutations/test_acknowledgement.py",
+        "tests/projects/sufficiency_mutations/test_replay.py",
+        "tests/projects/sufficiency_mutations/test_replay_repository.py",
+        "tests/projects/sufficiency_mutations/test_public_routes.py",
+        "for", "source", "in", "app/modules/projects/sufficiency_mutation_repository.py",
+        "app/modules/projects/sufficiency_mutation_service.py", "do", "coverage", "report",
+        "--include=${source}", "--precision=2", "--fail-under=90", "done",
+    ]
+    database_module = "tests/projects/sufficiency_mutations/test_acknowledgement_postgresql.py"
+    assert database_module not in shlex.split(command.replace("\\\n", " "))
+    assert database_module in catalogue.PROJECT_MODULES
 
 
 @pytest.mark.parametrize(

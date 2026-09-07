@@ -12,10 +12,11 @@
 - PROJECT read slice: [06 — exact policy-read proof](WS-QUAL-003-06.md).
 - PROJECT diagnostic slice: [07 — independent diagnostic-read proof](WS-QUAL-003-07.md).
 - PROJECT fence slice: [08 — deterministic mutation execution-fence proof](WS-QUAL-003-08.md).
-- Next usable boundary after 08: continue PROJECT mutation behavior
-  audit and cohesive test-body extraction, then AUTH.
+- PROJECT sufficiency family: [09 — mutation composition and replay proof](WS-QUAL-003-09.md).
+- Next usable boundary after 09: remaining PROJECT submission-policy mutation
+  family, then AUTH's recorded concurrency diagnosis before decomposition.
   The full suite audit remains open.
-- Preserve: production semantics, public boundaries, real database/isolation/
+- Preserve: intended production semantics, public boundaries, real database/isolation/
   concurrency proof, current coverage floors, full hosted execution, human merge.
 - Product work: POL-04A2 remains planned; this initiative does not implement it.
 
@@ -51,6 +52,10 @@ fixture, actual production call, discriminating assertion and side effects.
 Classify it as keep, consolidate, remove with named surviving proof, strengthen,
 or missing proof to add. No deletion is justified by file size, similar names,
 identical AST bodies alone, coverage percentage or a desired test-count target.
+Audit the implementation alongside its tests. Confirmed defects require a
+bounded production correction and a regression that rejects the pre-fix behavior;
+test growth alone is not progress. Prefer realistic fixtures, strict failure
+ports and proof at the actual transaction boundary over branch-count exercises.
 
 Use the existing behavior-ownership catalogue and behavior contracts when they
 already map a changed proof. Reconcile references to deleted/renamed tests in
@@ -107,8 +112,14 @@ No fixed reduction percentage or same-day completion claim overrides safety.
   identity/signed-key and cleanup-order proof for sufficiency and submission
   policy execution. Actual task cancellation is exercised through mock
   connection ports; physical PostgreSQL contention/crash release remains a
-  separate boundary. The remaining mixed mutation guard/replay tests still
-  require cohesive extraction and behavior audit.
+  separate boundary.
+- PROJECT slice 09 replaces the six mixed controlled-port sufficiency mutation
+  tests as one family: report creation, acknowledgement, dispatch, authority,
+  lineage, replay and public concealment. Fresh negative controls cover missing
+  guards and exact PREP facts. Its paired audit removes redundant/impossible
+  cases, repairs missing report-generation validation during acknowledgement,
+  and adds real late-conflict rollback proof for report, replay and AUTH effects.
+  Submission-policy mutation tests and other PROJECT families remain unaudited.
 - Before routine AUTH decomposition, diagnose the intermittent three-admin
   suspension race in `test_actor_profile_lifecycle_real_postgres_concurrency`.
   Main run `34032455068` returned `[500, 200]` rather than `[200, 200]`; unchanged
