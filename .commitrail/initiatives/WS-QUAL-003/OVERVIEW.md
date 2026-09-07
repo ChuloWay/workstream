@@ -18,9 +18,11 @@
 - PROJECT submission-policy family: [10 — manual mutation and replay proof](WS-QUAL-003-10.md).
 - Replay correction: [11 — realistic conflicts and retained-case rationale](WS-QUAL-003-11.md).
   Its reconciliation supersedes the affected historical test mappings in 09/10.
-- AUTH replay slice: [12 — exact historical projection decision proof](WS-QUAL-003-12.md).
-- Next usable boundary after 12: remaining AUTH monolith/actor-resolution audit
-  and decomposition. The shared concurrency-observer repair is included in 11
+- AUTH cleanup: [12 — projection proof and staged AUTH audit](WS-QUAL-003-12.md).
+  The human expanded this change to use reviewed commit checkpoints in one PR;
+  projection proof is its first stage, not its completion boundary.
+- Next usable boundary within 12: map the AUTH monolith/actor-resolution audit
+  and decomposition stages. The shared concurrency-observer repair is included in 11
   by human authorization; the full suite audit remains open.
 - Preserve: intended production semantics, public boundaries, real database/isolation/
   concurrency proof, current coverage floors, full hosted execution, human merge.

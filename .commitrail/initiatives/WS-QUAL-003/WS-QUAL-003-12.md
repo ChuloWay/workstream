@@ -1,14 +1,60 @@
-# WS-QUAL-003-12 — Exact historical projection decision proof
+# WS-QUAL-003-12 — Staged AUTH test audit and decomposition
 
 - Initiative: WS-QUAL-003
-- Durable disposition: Complete
-- Intended merge outcome: meaningful projection replay evidence and smaller shared test setup, without changing product authority or blocking product implementation.
+- Durable disposition: Planned
+- Intended merge outcome: complete the selected projection, actor-resolution and AUTH test-family audit and decomposition through reviewed commit checkpoints, without changing product authority or blocking product implementation.
 
 ## Intent
 
 Continue the human-authorized behavior-first test audit. A missing decision is
 not evidence that an existing but mismatched decision is rejected. Preserve
 valuable protection, justify each retained case, and avoid a count-driven purge.
+
+## Human-authorized staged expansion
+
+The human rejected ending this change at the projection-only slice and asked
+for one larger AUTH cleanup PR with reviewable commit checkpoints. Preserve the
+projection work below as stage A; do not create another PR for each fixture,
+test family or correction. Completion now means finishing the broader selected
+AUTH cleanup, not merely the original replay proof.
+
+The stage sequence is:
+
+1. Preserve the implemented projection replay proof and its retained-case map.
+2. Inventory the actor-resolution and related AUTH monolith families, their
+   shared helpers and consumers. Record every selected case's disposition and
+   exact extraction destinations before changing it. Inspect product overlap.
+3. Repair the deterministic first-access race proof: both requests must pass
+   the initial miss, the contender must wait for the identity lock, and both
+   must resolve the same persisted winner. This is hosted PostgreSQL proof,
+   not two coroutines or a mocked lock presented as concurrency evidence.
+4. Audit and decompose the selected oversized AUTH families into owner-scoped
+   test/support modules. Remove genuinely redundant or obsolete proof only
+   with named surviving protection; split mixed behaviors and correct real
+   defects rather than making expectations accept them.
+5. Reconcile the accumulated diff, case dispositions, structural-debt changes,
+   selection and current main; run final hosted coverage and affected reviews.
+
+Stages 2–4 are the discovery/implementation sequence, not an assertion that
+their executable file/test maps already exist. The allowed files and acceptance
+table below currently describe stage A only. Extend this same record with the
+specific stage maps after discovery and plan review, before backend edits;
+do not silently treat all AUTH files as allowed. This is scope refinement under
+the human's expansion, not a new permission system or another planning PR.
+
+Each stage ends in a coherent commit or small commit series, focused checks,
+and impact-routed internal review against a frozen checkpoint. The human can
+inspect each checkpoint independently. Do not edit a target while it is being
+reviewed; batch valid fixes and replay affected findings before progressing.
+Routine checkpoint review does not require a separate human merge or PR.
+Commits are review boundaries, not a reason to trigger full CI for every tiny
+edit: run focused local checks and use hosted runs for PostgreSQL stages and
+the final combined head. Preserve checkpoint history while it is under review.
+
+Final approval covers the complete PR, including cross-stage interactions;
+earlier checkpoint results cannot be relabeled as final-head approval. Product
+work remains independent. No forced test-count reduction, weakened CI, altered
+authorization semantics or blanket repository-wide cleanup is authorized here.
 
 ## Baseline behavior
 
@@ -154,7 +200,8 @@ values from the implementation under test.
   observer repair PR378. Integrated base `8c00fb3d` also includes PR376's
   Commitrail contribution-path simplification. Product PR377 owns finalization,
   not this AUTH replay family.
-- Next usable boundary: remaining AUTH monolith/actor-resolution audit and
-  decomposition. This change does not complete those large-file obligations.
+- Next usable boundary within this change: map the actor-resolution and AUTH
+  monolith stages above. The projection slice does not complete those
+  large-file obligations and is no longer the whole intended merge outcome.
 - Remaining risks: PostgreSQL integrity and owner-query isolation are separate
   proof boundaries; most repository tests remain unaudited.
