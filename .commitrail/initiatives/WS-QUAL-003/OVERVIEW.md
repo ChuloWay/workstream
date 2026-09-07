@@ -11,7 +11,8 @@
 - PROJECT setup slice: [05 — detach guide/bundle support](WS-QUAL-003-05.md).
 - PROJECT read slice: [06 — exact policy-read proof](WS-QUAL-003-06.md).
 - PROJECT diagnostic slice: [07 — independent diagnostic-read proof](WS-QUAL-003-07.md).
-- Next usable boundary after 07: continue PROJECT mutation behavior
+- PROJECT fence slice: [08 — deterministic mutation execution-fence proof](WS-QUAL-003-08.md).
+- Next usable boundary after 08: continue PROJECT mutation behavior
   audit and cohesive test-body extraction, then AUTH.
   The full suite audit remains open.
 - Preserve: production semantics, public boundaries, real database/isolation/
@@ -102,6 +103,12 @@ No fixed reduction percentage or same-day completion claim overrides safety.
   with a valid record, so a pre-existing missing target cannot hide a broken
   guide guard. Post-submit lineage and empty collections have independent proof.
   These mocks prove composition/delegation, not PostgreSQL locks or tenant filters.
+- PROJECT slice 08 extracts two fence guards from a mixed test and adds exact
+  identity/signed-key and cleanup-order proof for sufficiency and submission
+  policy execution. Actual task cancellation is exercised through mock
+  connection ports; physical PostgreSQL contention/crash release remains a
+  separate boundary. The remaining mixed mutation guard/replay tests still
+  require cohesive extraction and behavior audit.
 - Before routine AUTH decomposition, diagnose the intermittent three-admin
   suspension race in `test_actor_profile_lifecycle_real_postgres_concurrency`.
   Main run `34032455068` returned `[500, 200]` rather than `[200, 200]`; unchanged

@@ -1,7 +1,7 @@
 # WS-QUAL-003-08 — Deterministic mutation execution-fence proof
 
 - Initiative: WS-QUAL-003
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Isolate and strengthen execution-fence delegation and
   cleanup proof without changing production or claiming mocked database locks.
 
@@ -83,6 +83,26 @@ Independent controls must pass; temporary omitted unlock, truthy-acquisition,
 wrong signed-key and wrong digest-field mutants must fail at assertions, not
 setup errors. Unrelated definitions and retained mixed-test statements must
 remain AST-identical except the named removed checks and unused parameter.
+
+## Review findings and measured proof
+
+Plan review traced both real service implementations and confirmed feasible
+independent controls for every proposed case. The standard mock harness only
+records calls/events and returns configured values; test assertions define the
+expected identity, SQL arguments and cleanup order.
+
+The original mixed test passes. The two new modules, retained mixed test and
+catalogue tests pass 55 cases. The 28 new expanded cases add deterministic proof;
+no whole test node or real database case is removed. The monolith shrinks by 35
+lines; remaining mixed-test statements and all unrelated monolith definitions
+are AST-identical. New modules are 76 and 113 lines with a 64-line support file.
+
+Out-of-tree probes start from passing controls and inject wrong signed-key
+conversion, substituted actor identity, truthy acquisition acceptance and missing
+unlock delegation. Each defect fails a named assertion for both service variants.
+No mutant is committed. Actual task cancellation inside the protected body
+proves unlock/connection-exit attempts before the same cancellation escapes;
+this is not proof of physical database cleanup or cancellation during unlock.
 
 ## Reconciliation
 

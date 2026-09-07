@@ -7291,9 +7291,7 @@ async def test_manual_sufficiency_report_exact_replay_reauthorizes_and_mismatch_
     assert created.json()["agent_version"] is None
 
 
-async def test_sufficiency_mutation_fail_closed_internal_guards(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_sufficiency_mutation_fail_closed_internal_guards() -> None:
     """Exercise replay, lineage, and authority guards without provider side effects."""
 
     module = sufficiency_mutation_service_module
@@ -7358,39 +7356,6 @@ async def test_sufficiency_mutation_fail_closed_internal_guards(
         is None
     )
     assert denying.denied is True
-    service._session = SimpleNamespace(bind=object())
-    with pytest.raises(RuntimeError, match="requires an async database engine"):
-        async with service._execution_fence(
-            resolved.profile.id,
-            ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
-            uuid4(),
-        ):
-            pass
-
-    class Connection:
-        async def scalar(self, *_: object, **__: object) -> bool:
-            return False
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_: object) -> None:
-            return None
-
-    class Engine:
-        def connect(self) -> Connection:
-            return Connection()
-
-    monkeypatch.setattr(module, "AsyncEngine", Engine)
-    service._session = SimpleNamespace(bind=Engine())
-    with pytest.raises(module.GuideSufficiencyMutationConflict, match="idempotency_pending"):
-        async with service._execution_fence(
-            resolved.profile.id,
-            ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
-            uuid4(),
-        ):
-            pass
-
     async def fixed_lineage(*_: object, **__: object):
         return lineage
 
