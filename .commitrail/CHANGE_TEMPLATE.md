@@ -1,5 +1,9 @@
 # <Change ID> — <Outcome>
 
+<!-- Standalone: .commitrail/changes/<lowercase-kebab-slug>.md, Initiative: None.
+     Existing initiative: keep its change-ID filename and parent initiative.
+     An initiative overview/index row is required only for initiative records. -->
+
 - Initiative: `<initiative ID or None>`
 - Durable disposition: `Planned | Complete | Stopped | Superseded`
 - Intended merge outcome: `<one sentence>`
