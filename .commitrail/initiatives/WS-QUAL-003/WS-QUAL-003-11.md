@@ -1,8 +1,8 @@
 # WS-QUAL-003-11 — Replay proof consistency
 
 - Initiative: WS-QUAL-003
-- Durable disposition: Planned
-- Intended merge outcome: realistic replay lookup proof and explicit retained-case rationale, without pausing independent product implementation.
+- Durable disposition: Complete
+- Intended merge outcome: realistic replay lookup proof, explicit retained-case rationale and fresh AUTH concurrency observation, without pausing independent product implementation.
 
 ## Intent
 
@@ -82,6 +82,12 @@ cleanup only. They do not claim PostgreSQL execution. All new modules stay under
 shrink by removing duplicated harness code; their remaining decomposition is
 not claimed complete. If evidence instead identifies a product defect, document
 and review its exact repair scope before changing production.
+
+The implemented PostgreSQL counterexample reproduces the cached observer miss
+and verifies fresh observation while the exact waiter remains blocked. Original
+profile/link lifecycle behavior is preserved outside the extracted harness,
+including all 31/73 assertion ASTs. This establishes the observer defect and its
+repair, not retrospective certainty about the historical HTTP 500 exception.
 
 ## Design and decisions
 
