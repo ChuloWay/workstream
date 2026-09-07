@@ -286,7 +286,7 @@ class SubmissionArtifactPolicyCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source_snapshot_id: UUID
-    policy_version: str = Field(max_length=50)
+    policy_version: str = Field(min_length=1, max_length=50)
     policy_body: SubmissionArtifactPolicyInput
     change_summary: str | None = Field(default=None, max_length=2000)
 
