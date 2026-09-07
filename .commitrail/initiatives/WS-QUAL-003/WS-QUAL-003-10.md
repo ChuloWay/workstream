@@ -2,14 +2,16 @@
 
 - Initiative: WS-QUAL-003
 - Durable disposition: Complete
-- Intended outcome: replace the mixed controlled-port manual submission-policy
+- Intended merge outcome: replace the mixed controlled-port manual submission-policy
   test family with small tests that discriminate each retained behavior.
 
-## Intent and scope
+## Intent
 
 Audit production orchestration and its tests together. Preserve real PostgreSQL
 rollback, exact reservation contention and concurrent replacement proof. This
 change does not implement POL-04A2 or activate another product capability.
+
+## Bounded change
 
 Allowed files:
 
@@ -39,7 +41,7 @@ scope added here; migrations, public interfaces, activation, grants, agent/worke
 implementation, other test families, fixture-global changes, coverage weakening,
 local full-suite/PostgreSQL execution, and deletion of real database tests.
 
-## Design and acceptance-to-proof mapping
+## Design
 
 Use fresh valid rows per independently failing case and standard mock ports,
 not a second fake authorization or replay implementation. Production resource
@@ -47,6 +49,8 @@ builders cannot serve as their own expected-fact oracle. Repository query
 assertions must inspect exact predicates and bound values, not column names in
 the SELECT projection. Mocked queries prove composition only, not PostgreSQL
 isolation, uniqueness, row locks, handle binding or transaction rollback.
+
+## Acceptance criteria
 
 | Behavior | Required proof |
 | --- | --- |
@@ -68,12 +72,14 @@ Remove repetitive orchestration only, not independent failure boundaries. A
 source-count or case-count reduction is not acceptance evidence. Preserve the
 AST of every retained monolith definition.
 
-## Risk, review and verification
+## Risk and review routing
 
 L1: authorization-adjacent proof and CI selection custody. Focused plan
 feasibility review precedes implementation. Final reviewers cover QA/test delta,
 security, CI integrity, and reuse of fixture/query conventions; documentation
 review is limited to this record and overview. No unrelated reviewer fanout.
+
+## Evidence
 
 Local: original controlled-port nodes, then the new controlled-port modules and
 catalogue tests; Ruff; structural inventory/validation; Commitrail; stale scans;
