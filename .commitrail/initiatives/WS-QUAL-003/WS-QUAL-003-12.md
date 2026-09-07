@@ -223,7 +223,11 @@ Additional allowed files:
   `backend/tests/authentication/__init__.py`, `support.py`, `fixtures.py`,
   `conftest.py`, `concurrency_support.py`, and
   `backend/tests/actors/support.py`, `fixtures.py`, `conftest.py`,
-  `first_access_support.py`. Support modules contain setup or coordination,
+  `first_access_support.py`, and `__init__.py`. The actor package marker is a
+  reviewed fixture-scope correction: without it, pytest loads its `conftest.py`
+  as the root module and breaks existing database-reset collection. Do not
+  change database-reset behavior to accommodate the extraction.
+  Support modules contain setup or coordination,
   not hidden product assertions that replace the test's primary behavior.
 - Existing `backend/tests/auth_concurrency_support.py`: only if the first-access
   proof needs a bounded extension of the real observer; otherwise reuse unchanged.
