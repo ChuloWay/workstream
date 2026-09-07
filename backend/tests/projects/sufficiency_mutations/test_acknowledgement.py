@@ -13,7 +13,9 @@ from projects.sufficiency_mutations.commands import invoke
 from projects.sufficiency_mutations.fixtures import case as case
 
 
-async def test_acknowledgement_stages_exact_provenance(case):
+@pytest.mark.parametrize("scope,scope_type", [(rows.PROJECT, "project"), (None, "system")])
+async def test_acknowledgement_stages_exact_provenance(case, scope, scope_type):
+    case.decision.matched_scope_project_id = scope
     outcome = await invoke(case, "ack")
     report = case.report
     assert outcome.replayed is False
@@ -33,7 +35,7 @@ async def test_acknowledgement_stages_exact_provenance(case):
         report.warning_acknowledgement_scope_type,
         report.warning_acknowledgement_scope_project_id,
     ) == (
-        "project",
+        scope_type,
         str(rows.PROJECT),
     )
     assert (

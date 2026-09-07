@@ -65,9 +65,11 @@ async def test_prepare_forwards_exact_unsupported_denial(case):
         AuthorizationDenialCode.PERMISSION_NOT_GRANTED
     )
     case.prepared.prepare.side_effect = failure
-    assert (
-        await case.service._prepare(case.prepared, action, caller, rows.PROJECT, resource) is None
-    )
+    denial = RuntimeError("authorization denied")
+    case.prepared.deny_unsupported.side_effect = denial
+    with pytest.raises(RuntimeError) as observed:
+        await case.service._prepare(case.prepared, action, caller, rows.PROJECT, resource)
+    assert observed.value is denial
     case.prepared.deny_unsupported.assert_awaited_once_with(action, caller, resource, failure)
 
 

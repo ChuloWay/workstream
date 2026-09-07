@@ -14,7 +14,9 @@ from projects.sufficiency_mutations.commands import invoke
 from projects.sufficiency_mutations.fixtures import case as case
 
 
-async def test_create_stages_human_report(case):
+@pytest.mark.parametrize("scope,scope_type", [(rows.PROJECT, "project"), (None, "system")])
+async def test_create_stages_human_report(case, scope, scope_type):
+    case.decision.matched_scope_project_id = scope
     outcome = await invoke(case, "create")
     report = case.projects.add_guide_sufficiency_report.await_args.args[0]
     assert (outcome.created, outcome.replayed) == (True, False)
@@ -39,7 +41,7 @@ async def test_create_stages_human_report(case):
     )
     assert report.created_by_admin_role_grant_id == rows.GRANT
     assert (report.creation_scope_type, report.creation_scope_project_id) == (
-        "project",
+        scope_type,
         str(rows.PROJECT),
     )
     assert report.creation_action_id == "project.guide_sufficiency_report.create"

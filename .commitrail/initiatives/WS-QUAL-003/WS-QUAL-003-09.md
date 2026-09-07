@@ -78,13 +78,14 @@ lines, with a 75-line target; helpers stay below100 lines.
 | --- | --- |
 | Human wrong kind, missing grant, foreign project; valid project/system decisions | `test_human_authority_requires_matching_grant`, `test_human_authority_accepts_covered_scope` |
 | Fixed-service wrong kind/grant; valid fixed decision | `test_setup_authority_requires_fixed_service`, `test_setup_authority_accepts_fixed_decision` |
-| Unsupported preparation forwards exact denial; supported handle passes through | `test_prepare_forwards_exact_unsupported_denial`, `test_prepare_returns_handle` |
+| Unsupported preparation forwards exact denial and propagates the NoReturn port's exception unchanged; supported handle passes through | `test_prepare_forwards_exact_unsupported_denial`, `test_prepare_returns_handle` |
 | Missing material and absent required setup stop before provider/consume | `test_agent_requires_material`, `test_agent_requires_setup_lineage` |
 | Retired public service helper remains absent | `test_legacy_run_agent_entry_is_absent` |
 | Missing/foreign guide, non-draft guide, absent/replaced snapshot, setup mismatch, required setup absent | `test_lineage_rejects_invalid_context` |
 | Fresh locked/unlocked lineage control and exact owner selectors | `test_lineage_resolves_exact_context` |
 | Setup custody rejects wrong run/generation, missing row, stale status/step/task; fresh control | `test_setup_custody_rejects_stale_context`, `test_setup_custody_resolves_current_context` |
-| Manual dispatch stages stable response and dispatch intent | `test_dispatch_stages_exact_intent` |
+| Manual dispatch stages stable response and a previously absent task ID; already-queued intent is not mutated | `test_dispatch_stages_exact_intent`, `test_dispatch_preserves_already_queued_intent` |
+| Authoritative report blocks dispatch only for the matching setup run/generation | `test_dispatch_rejects_unusable_setup`, `test_dispatch_ignores_unrelated_report` |
 | Queue progress does not invalidate committed replay | `test_dispatch_replay_survives_queue_progress` |
 | Missing setup lineage/row, completed work, missing material/task identity, stale task ID reject before consume | `test_dispatch_rejects_unusable_setup` |
 | Create stages exact human report provenance and stable replay completion | `test_create_stages_human_report` |
@@ -136,20 +137,28 @@ impact-routed reviews; batch valid findings before replay and hosted rerun.
 
 ## Reconciliation
 
-The six former mixed controlled-port tests are replaced by 37 named tests in
+The six former mixed controlled-port tests are replaced by 39 named tests in
 eight behavior modules. Their 971 lines leave the monolith; the replacement
-family and three passive support modules total 1,205 lines. This is deliberately
+family and three passive support modules total 1,264 lines. This is deliberately
 not a net source-count reduction: independent negative controls and missing
 PREP, continuation and route proof replace compact but masked multi-behavior
-tests. The largest new module is 246 lines; the longest new test is 73 lines.
+tests. The largest new module is 248 lines; the longest new test is 73 lines.
 All retained monolith definitions, including PostgreSQL tests, remain
 AST-identical. No real database case or coverage floor is removed.
 
 The original six tests passed before replacement. New family and catalogue
-checks pass 141 cases. Out-of-tree probes begin from passing controls and detect
+checks pass 154 cases. Out-of-tree probes begin from passing controls and detect
 missing-grant acceptance, ignored foreign-guide lineage, omitted replay
 reauthorization, duplicate replay product effect, omitted consumption, and
 bypassed public service rejection at assertions, not setup failures.
+
+QA's escaped mutants exposed three additional proof gaps: a returning fake for
+the NoReturn denial port, project-only creation/acknowledgement provenance and
+unobserved authoritative-report dispatch rejection. The corrected cases prove
+exception identity propagation, both system/project provenance, each independent
+completed-output/terminal guard, matching versus unrelated reports and assignment
+of a previously absent task ID. Five additional defects now fail at assertions;
+none modifies production code or stands in for hosted PostgreSQL evidence.
 
 Plan review corrected the stale focused coverage selector, missing `replayed`
 reservation rejection, setup-linked acknowledgement coverage and explicit PREP
