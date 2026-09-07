@@ -47,8 +47,11 @@ Allowed:
   `backend/tests/test_ci_lane_catalogue.py`: exact full-module PROJECT ownership
   and token-level coverage-command regression.
 - `.github/workflows/backend.yml`: only replace the sufficiency coverage step's
-  obsolete selectors with its two exact retained test nodes and all new family
-  test modules; preserve both production coverage targets and the 90% floor.
+  obsolete selectors with its two exact retained test nodes and the eight new
+  controlled-port test modules; preserve both production targets and the 90% floor.
+  The PostgreSQL module executes through the canonical database-backed PROJECT
+  lane, not this supplemental command, which has no provisioned Workstream test
+  database or `WORKSTREAM_TEST_DATABASE_URL` despite the job's raw PostgreSQL service.
 - `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`: canonical smaller inventory;
   remove obsolete function entries without adding debt or exceptions.
 
@@ -148,8 +151,11 @@ runs only in hosted CI. Ruff, canonical debt inventory/validation,
 Commitrail, Markdown links, stale scans and diff checks must pass. Hosted CI owns
 the full suite, PostgreSQL tests, manifest reconciliation and coverage floors.
 The workflow regression must assert exact pytest selector tokens: the retained
-worker-composition and setup-service-adoption nodes plus every replacement test
-module, with no obsolete `-k` expression. It must retain both per-file coverage
+worker-composition and setup-service-adoption nodes plus all eight controlled-port
+modules, with no obsolete `-k` expression. It must reject PostgreSQL selection
+in that supplement without a provisioned test database while proving canonical
+PROJECT membership.
+It must retain both per-file coverage
 targets and the existing 90% threshold.
 
 Run passing controls plus temporary discriminating defects for wrong authority,
@@ -216,8 +222,12 @@ No fake rollback or swallowed denial is accepted as proof.
 Plan review corrected the stale focused coverage selector, missing `replayed`
 reservation rejection, setup-linked acknowledgement coverage and explicit PREP
 fact mapping. Structural inventory removes three oversized function entries and
-adds none. The workflow selects the two retained nodes plus all replacement
-modules; its targets and threshold remain unchanged. This disposition records
+adds none. The supplemental workflow selects the two retained nodes plus eight
+controlled-port modules; the real PostgreSQL case runs in the full canonical
+PROJECT lane and contributes to combined coverage. Its accidental duplicate
+selection in the supplement without a provisioned test database is removed, not skipped or supplied a
+fake database. Both production targets and the threshold remain unchanged.
+This disposition records
 the intended merged audit boundary, not transient CI or approval state.
 
 - Current source: main `9b6750fb`, merged fence slice08.

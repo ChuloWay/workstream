@@ -401,7 +401,7 @@ def test_project_read_coverage_gate_selects_relocated_proof() -> None:
 
 
 def test_sufficiency_coverage_gate_selects_complete_mutation_family() -> None:
-    """Relocation cannot silently exclude the replacement family from coverage."""
+    """Without a provisioned test database, select only the controlled-port family."""
     source = (runner.ROOT.parent / ".github/workflows/backend.yml").read_text()
     step = source.split("      - name: Guide sufficiency mutation per-file coverage\n", 1)[1].split("      - name:", 1)[0]
     command = step.split("        run: |\n", 1)[1]
@@ -415,7 +415,6 @@ def test_sufficiency_coverage_gate_selects_complete_mutation_family() -> None:
         "tests/projects/sufficiency_mutations/test_dispatch.py",
         "tests/projects/sufficiency_mutations/test_report_create.py",
         "tests/projects/sufficiency_mutations/test_acknowledgement.py",
-        "tests/projects/sufficiency_mutations/test_acknowledgement_postgresql.py",
         "tests/projects/sufficiency_mutations/test_replay.py",
         "tests/projects/sufficiency_mutations/test_replay_repository.py",
         "tests/projects/sufficiency_mutations/test_public_routes.py",
@@ -423,6 +422,9 @@ def test_sufficiency_coverage_gate_selects_complete_mutation_family() -> None:
         "app/modules/projects/sufficiency_mutation_service.py", "do", "coverage", "report",
         "--include=${source}", "--precision=2", "--fail-under=90", "done",
     ]
+    database_module = "tests/projects/sufficiency_mutations/test_acknowledgement_postgresql.py"
+    assert database_module not in shlex.split(command.replace("\\\n", " "))
+    assert database_module in catalogue.PROJECT_MODULES
 
 
 @pytest.mark.parametrize(
