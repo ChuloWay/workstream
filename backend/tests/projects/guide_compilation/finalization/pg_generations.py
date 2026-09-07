@@ -3,7 +3,7 @@
 from datetime import timedelta
 from uuid import uuid4
 
-from sqlalchemy import select, text
+from sqlalchemy import null, select, text
 
 from app.interfaces.artifact_operations import GuideSufficiencyMaterialRequest
 from app.interfaces.project_agents import VerifiedGuideMaterialSnapshot
@@ -50,6 +50,8 @@ async def second_generation(factory, values):
             setup_generation=2,
             created_at=created,
             updated_at=created,
+            # ORM JSON None becomes JSON null; a pristine setup requires SQL NULL.
+            post_submit_derivation_summary=null(),
             celery_task_id=pre_submit_setup_task_id(setup_id, 2),
         )
         await session.execute(text("alter table project_setup_runs enable trigger user"))
@@ -57,6 +59,11 @@ async def second_generation(factory, values):
             str(values["project"]), str(values["guide"]), "v1"
         )
         assert latest.id == setup_id and latest.setup_generation == 2
+        assert await session.scalar(
+            select(ProjectSetupRun.post_submit_derivation_summary.is_(None)).where(
+                ProjectSetupRun.id == setup_id
+            )
+        )
         original_binding = await session.scalar(select(GuideSourceArtifactBinding))
         original_classification = await session.scalar(select(GuideSourceFormatClassification))
         original_attempt = await session.scalar(select(GuideSourceExtractionAttempt))
