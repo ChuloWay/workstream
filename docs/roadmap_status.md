@@ -142,9 +142,11 @@ Only open pull requests describe transient work. Use the repository's
 [open pull-request view](https://github.com/Flow-Research/workstream/pulls) to
 see whether any item below is already under review.
 
-This is dependency order, not a global execution queue. Hidden foundations
-and independent test-proof repairs can proceed in parallel; production
-activation still waits for its exact owner-proven prerequisites.
+Product implementation is underway on hidden unified-guide setup finalization,
+alongside the AUTH test-proof audit and decomposition. These are parallel
+workstreams, not a pause awaiting completion of the full quality audit.
+The sequence below describes product dependencies; production activation still
+requires its exact owner-proven prerequisites.
 
 The next dependency-safe product sequence is:
 
@@ -199,8 +201,8 @@ Remaining work includes AUTH historical-evidence and actor-resolution proof,
 oversized AUTH/test-module decomposition, and the remaining TASK, CHECKER,
 ART, CON, REV, and tooling audit. The audit requires behavioral proof, not only
 file splitting or coverage percentages. Real PostgreSQL, concurrency, storage,
-and full hosted coverage checks remain required. Independent product work can
-proceed alongside the audit with coordinated file ownership.
+and full hosted coverage checks remain required. Product implementation is
+already progressing alongside this audit with separate file ownership.
 
 Commitrail's contribution-path and reviewer-routing improvements are delivered.
 They support this work; they do not complete a product capability or create a
