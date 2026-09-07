@@ -35,12 +35,11 @@ The stage sequence is:
 5. Reconcile the accumulated diff, case dispositions, structural-debt changes,
    selection and current main; run final hosted coverage and affected reviews.
 
-Stages 2–4 are the discovery/implementation sequence, not an assertion that
-their executable file/test maps already exist. The allowed files and acceptance
-table below currently describe stage A only. Extend this same record with the
-specific stage maps after discovery and plan review, before backend edits;
-do not silently treat all AUTH files as allowed. This is scope refinement under
-the human's expansion, not a new permission system or another planning PR.
+The first allowed-files and acceptance tables describe stage A. The concrete
+stages B–D section below adds the discovered file/test map for stages 2–4;
+backend edits require its plan review first. Neither section silently permits
+all AUTH files. This is scope refinement under the human's expansion, not a new
+permission system or another planning PR.
 
 Each stage ends in a coherent commit or small commit series, focused checks,
 and impact-routed internal review against a frozen checkpoint. The human can
@@ -79,7 +78,7 @@ these tests do not execute SQL or establish real transaction isolation.
   These are also touched by product PR377; preserve both registrations if its
   merge changes main. Do not edit the product worktree.
 
-### Not allowed
+### Not allowed (stage A; later additions are bounded below)
 
 Production code, public interfaces, action activation, migrations, database
 reset changes, structural-debt exceptions, workflows, timeouts, thresholds,
@@ -194,7 +193,252 @@ in for an immutable comparison. Successful replay checks each adapter's
 explicit action/permission/resource shape, rather than deriving all expected
 values from the implementation under test.
 
-## Reconciliation
+## Concrete stages B–D: authentication and actor-resolution proof
+
+This extension makes stages 2–4 concrete under the existing human-authorized
+single-PR expansion. It does not claim the backend changes below are implemented.
+The reviewed starting source is `ca86fb38e8d9d4fb4dafc9cd0256fa0aa6ed6de6`.
+
+### Selected boundary and additional allowed files
+
+Audit all 34 named tests in `backend/tests/test_actors.py`, the 51 selected
+authentication tests listed below from `backend/tests/test_auth.py`, and the
+shared controlled AUTH runtime helpers currently housed in
+`backend/tests/test_authorization.py`. Do not audit or rewrite the unrelated
+grant/bootstrap/admin lifecycle tests remaining in either AUTH monolith.
+
+Additional allowed files:
+
+- `backend/tests/test_actors.py` (remove after all selected proof is mapped).
+- `backend/tests/test_auth.py` (selected cases and shared helper imports only).
+- `backend/tests/test_authorization.py` (helper extraction/imports only).
+- `backend/tests/test_artifact_authorization.py` and
+  `backend/tests/test_submission_preparation_authorization.py` (replace their
+  imports of test-bearing AUTH monolith helpers; test bodies unchanged).
+- `backend/tests/authorization/runtime_support.py` for the five existing
+  controlled runtime helpers; retain sentinel/default behavior, do not build
+  another evaluator or imply real SQL/session custody.
+- The exact new test modules in the two destination tables below; additionally
+  `backend/tests/authentication/__init__.py`, `support.py`, `fixtures.py`,
+  `conftest.py`, `concurrency_support.py`, and
+  `backend/tests/actors/support.py`, `fixtures.py`, `conftest.py`,
+  `first_access_support.py`. Support modules contain setup or coordination,
+  not hidden product assertions that replace the test's primary behavior.
+- Existing `backend/tests/auth_concurrency_support.py`: only if the first-access
+  proof needs a bounded extension of the real observer; otherwise reuse unchanged.
+- `backend/scripts/test_structure_boundary.py` and
+  `backend/tests/architecture/test_test_structure_boundary.py`: explicitly
+  include the authentication/actor test directories in existing structural and
+  assertion-map enforcement. Extraction must not escape checks merely because
+  a filename no longer contains "auth" or imports AUTH directly.
+- `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`: reconcile shrinking/deleted
+  selected entries and shifted unchanged spans from actual inventory only.
+  No new debt, raised limits, or same-size rewritten exceptions.
+- `.ci/auth-boundaries/assertion-maps/WS-QUAL-003-12.json`: exact ancestor,
+  per-assertion hashes and final surviving node mapping through the existing
+  validator. No new mapping engine or duplicate proof framework.
+- The already-allowed lane catalogue and catalogue test: register all extracted
+  test modules in their existing shared lanes; remove the deleted monolith
+  registration only when all its cases have destinations.
+
+All production code, routes, database reset behavior, migrations, timeouts,
+coverage floors, workflow policy and product implementation remain prohibited.
+This includes changing production AUTH merely to improve test coverage.
+A demonstrated runtime defect requires a precise reviewed correction to this
+record before a repair; the human has authorized defect repair, not arbitrary
+scope expansion. No files in the product worktree are touched.
+
+### Behavior decisions and proof requirements
+
+Preserve real RSA signatures, issuer/audience/time validation, bounded network
+clients and credential isolation. Fixtures remain owner-local: cache cleanup
+applies to the same authentication families, database fixtures remain opt-in,
+and existing actor eligibility tests do not acquire new autouse DB setup.
+A moved helper must preserve module-scoped RSA fixture behavior and path
+resolution; compute repository paths from the new location deliberately.
+
+The old JWKS lock-wait test delays HTTP without holding the refresh lock. Keep
+that useful behavior as `test_jwks_http_request_is_inside_total_deadline`; add
+`test_jwks_lock_wait_is_inside_total_deadline` that holds the actual lock,
+expects the typed key-resolution timeout and observes zero HTTP requests.
+An outer safety timeout must not count as the expected application exception.
+
+The same-kid and distinct-kid single-flight tests currently use gather with a
+synchronous transport. Replace that incidental schedule with a held async
+refresh and observed acquisition of the real refresh lock by the contender.
+Both return the expected unknown-key denial and only one refresh occurs.
+The distinct-kid case separately exercises generation reuse. Probe that removing
+the outer resolution deadline and bypassing refresh exclusion respectively
+break these named tests; use out-of-tree process-local probes, not production
+edits or a committed mutation framework.
+
+The actor first-access race must use two independent database sessions and
+backend PIDs. Both initial lookups return real misses before either provisioning
+transaction is released. The winner holds the actual identity advisory lock;
+the contender is observed blocked on that exact backend (not merely any Lock
+wait). Release the winner only after that observation. Assert the loser's
+post-lock lookup returns the same stored profile/link and follows touch, with
+exactly one profile, one link and one creation-event pair. Cleanup awaits or
+cancels tasks on failure so no locks leak. The existing
+`test_concurrent_first_access_leaves_one_profile_link_and_event_pair` becomes
+this deterministic proof; PostgreSQL execution is hosted-only.
+
+Keep revocation/update and legacy-activation concurrency proofs with real
+transactions. The controlled authorization-lock test gains one-fact-at-a-time
+profile/link owner, issuer, subject and kind substitution with exact selector
+arguments; do not call this direct-SQL or database locking proof.
+Split the mixed existing-actor/legacy negative bucket. Its duplicate service
+early rejection may map to `test_unknown_service_creates_nothing`; suspended,
+revoked, malformed stored profile and unknown-legacy cases retain distinct
+survivors. Historical compatibility behavior is not obsolete just because its
+name says legacy: it remains protected while current runtime consumers exist.
+
+Every selected test keeps its parameters and assertions unless the concrete
+disposition below specifies a split/strengthening or a stronger named survivor.
+Final assertion maps must explain each old assertion, including redundant
+assertions, and point to actual final test nodes. A pure move is intermediate
+decomposition evidence, not a completed semantic audit. New modules stay below
+500 lines, tests at most 120, helpers at most 100. Remaining untouched debt is
+reported honestly, not hidden by moving it.
+
+### Authentication case destinations
+
+Sources are `backend/tests/test_auth.py`; destinations are relative to
+`backend/tests/authentication/`. An unchanged name means preserve the existing
+named behavior and its parameter matrix; split cases get final node-level
+assertion mappings before the checkpoint is accepted.
+
+| Source test | Destination | Disposition |
+| --- | --- | --- |
+| `test_local_hmac_fixture_uses_final_claim_shape` | `test_local_verifiers.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_flow_auth_rejects_subject_above_persisted_identity_bound` | `test_local_verifiers.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_flow_auth_rejects_subject_whitespace_before_persistence` | `test_local_verifiers.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_local_hmac_fixture_is_impossible_in_production` | `test_local_verifiers.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_asymmetric_token_returns_minimal_canonical_contract` | `test_token_contract.py` | Split canonical output from token-free JWKS transport proof. |
+| `test_untrusted_or_remote_key_headers_fail_before_jwks` | `test_token_contract.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_missing_kid_fails_before_jwks` | `test_token_contract.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_jwks_cache_hit_avoids_second_network_request` | `test_jwks_cache.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_verifier_metrics_enforce_closed_labels_without_identity_values` | `test_jwks_cache.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_unknown_kid_refreshes_once_then_uses_bounded_negative_cache` | `test_jwks_cache.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_unknown_kid_refresh_is_single_flight` | `test_jwks_concurrency.py` | Strengthen: hold real refresh and observe actual contending lock acquisition. |
+| `test_distinct_unknown_kids_share_one_refresh_generation` | `test_jwks_concurrency.py` | Strengthen: distinct-kid overlap must reuse the winner generation. |
+| `test_jwks_lock_wait_is_inside_total_deadline` | `test_jwks_concurrency.py` | Rename existing HTTP timeout honestly; add actual held-lock deadline proof. |
+| `test_rotation_clears_matching_negative_kid` | `test_jwks_cache.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_negative_kid_cache_is_ttl_and_size_bounded` | `test_jwks_cache.py` | Split eviction and expiry into separately failing behaviors. |
+| `test_expired_jwks_cache_refreshes_during_longer_unknown_kid_cooldown` | `test_jwks_cache.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_refresh_failure_cooldown_preserves_valid_cached_key_hits` | `test_jwks_cache.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_verified_token_claim_failures_are_closed` | `test_token_contract.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_missing_mandatory_claims_fail_closed` | `test_token_contract.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_malformed_tokens_fail_without_network` | `test_token_contract.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_flow_verifier_rejects_ambiguous_clients_and_malformed_claim_collections` | `test_input_contracts.py` | Split client ambiguity, audience, scopes and key strength; replace UUID truthiness with identity relation proof. |
+| `test_token_size_limits_fail_before_network` | `test_token_contract.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_temporal_claims_honor_configured_skew` | `test_token_contract.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_service_and_agent_tokens_receive_no_legacy_authority` | `test_subject_authority.py` | Split canonical token shape, agent route denial and service-scope denial; redundant direct denial requires named route survivor. |
+| `test_jwks_unavailability_is_typed_and_redacted` | `test_jwks_boundaries.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_invalid_jwks_documents_fail_closed` | `test_jwks_boundaries.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_weak_rsa_signing_key_is_rejected` | `test_jwks_boundaries.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_incompatible_jwk_metadata_is_rejected` | `test_jwks_boundaries.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_malformed_and_excessive_jwks_fail_closed` | `test_jwks_boundaries.py` | Separate invalid JSON from excessive key count. |
+| `test_jwks_redirect_does_not_receive_or_forward_bearer` | `test_jwks_boundaries.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_oversized_jwks_response_fails_before_json_buffering` | `test_jwks_boundaries.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_required_introspection_is_separate_bound_and_no_redirect` | `test_introspection.py` | Split successful credential isolation from redirect rejection. |
+| `test_jwks_and_introspection_use_distinct_owned_client_factories` | `test_introspection.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_required_introspection_fails_closed_on_inactive_or_mismatch` | `test_introspection.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_required_introspection_rejects_missing_identity_fields` | `test_introspection.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_introspection_response_failures_are_redacted` | `test_introspection.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_introspection_transport_error_drops_credential_bearing_exception` | `test_introspection.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_introspection_total_timeout_fails_closed` | `test_introspection.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_missing_bearer_token_is_rejected` | `test_admission.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_invalid_bearer_token_is_rejected` | `test_admission.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_invalid_production_verifier_configuration_is_service_unavailable` | `test_admission.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_actor_id_uses_subject_and_issuer_not_email` | `test_development_contract.py` | Strengthen issuer and subject distinctions; retain email invariance. |
+| `test_dev_auth_requires_explicit_development_environment` | `test_development_contract.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_dev_auth_allows_only_development_environments` | `test_development_contract.py` | Replace object truthiness with successful configured verification. |
+| `test_dev_auth_requires_explicit_identity_fields` | `test_development_contract.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_dev_auth_rejects_whitespace_only_identity_anchors` | `test_development_contract.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_dev_auth_rejects_surrounding_identity_anchor_whitespace` | `test_development_contract.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_dev_auth_rejects_issuer_above_persisted_utf8_bound` | `test_development_contract.py` | Separate dev, local-HMAC and production-Flow configuration rejection. |
+| `test_flow_auth_verifier_boundary_rejects_unconfigured_verification` | `test_development_contract.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_flow_role_normalization_ignores_non_string_values` | `test_development_contract.py` | Retain and audit the named invariant; preserve independent parameters. |
+| `test_dev_role_normalization_uses_bounded_compatibility_contract` | `test_development_contract.py` | Retain and audit the named invariant; preserve independent parameters. |
+
+### Actor case destinations
+
+Sources are `backend/tests/test_actors.py`; destinations are relative to
+`backend/tests/actors/`. Existing candidate-query pagination, status filters,
+API denial side effects and PostgreSQL event/rollback assertions remain
+required; a smaller file does not itself justify removing any of them.
+
+| Source test | Destination | Disposition |
+| --- | --- | --- |
+| `test_candidate_exists_query_is_backed_by_one_link_per_profile_constraint` | `test_repository_contract.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_contributor_candidate_query_filters_and_paginates_without_gaps` | `test_repository_contract.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_actor_admin_response_requires_exact_service_identity_pair` | `test_admin_views.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_service_admission_rejects_malformed_stored_identity_without_writes` | `test_resolution_service.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_actor_admin_reads_are_bounded_and_reuse_exact_repository_lookups` | `test_admin_views.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_service_identity_lock_has_a_distinct_domain_without_changing_external_keys` | `test_repository_contract.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_actor_resolution_fails_closed_on_profile_or_subject_kind_drift` | `test_resolution_service.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_actor_authorization_lock_rejects_disappearance_and_identity_drift` | `test_resolution_service.py` | Strengthen exact selectors and one-field identity-drift matrix. |
+| `test_active_human_write_actor_revalidates_exact_profile_then_link` | `test_resolution_service.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_actor_timestamp_touch_fails_closed_before_writes_on_missing_rows` | `test_repository_contract.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_first_human_access_atomically_creates_profile_link_and_events` | `test_first_access_postgresql.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_concurrent_first_access_leaves_one_profile_link_and_event_pair` | `test_first_access_postgresql.py` | Strengthen actual dual-miss, exact-lock-wait and winner-reuse proof. |
+| `test_repeated_verified_access_reuses_actor_and_advances_database_timestamps` | `test_first_access_postgresql.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_first_access_rolls_back_profile_link_and_first_audit_on_second_audit_failure` | `test_first_access_postgresql.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_unsupported_subject_kinds_create_nothing` | `test_resolution_service.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_unknown_service_creates_nothing` | `test_resolution_service.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_actors_me_returns_contributor_without_token_role_authority` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_patch_actors_me_updates_only_display_fields` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_patch_actors_me_maps_database_failure_to_retryable_unavailable` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_actor_self_evidence_failure_is_retryable_and_rolls_back_touch` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_missing_bearer_has_no_actor_self_decision_evidence` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_suspended_profile_is_readable_but_not_mutable` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_revoked_identity_link_is_denied_by_actor_api` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_deactivated_actor_is_denied_by_actor_self_api` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_nonhuman_actor_self_api_denials_create_nothing` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_revocation_wins_synchronized_actor_update_recheck` | `test_self_api.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_actor_api_accepts_verifier_identity_bounds` | `test_identity_bounds_and_rate_controls.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_verified_identity_rejects_values_above_persisted_provenance_bound` | `test_identity_bounds_and_rate_controls.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_first_access_rate_limit_denies_without_actor_write` | `test_identity_bounds_and_rate_controls.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_first_access_rate_control_unavailable_fails_closed` | `test_identity_bounds_and_rate_controls.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_legacy_activation_writes_only_compatibility_metadata` | `test_legacy_eligibility_postgresql.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_repeated_legacy_activation_updates_one_row_and_audits_only_changes` | `test_legacy_eligibility_postgresql.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_concurrent_legacy_activation_serializes_payloads_and_actual_audits` | `test_legacy_eligibility_postgresql.py` | Retain and audit named behavior; preserve existing real/controlled custody. |
+| `test_existing_actor_and_legacy_negative_states_fail_closed` | `test_legacy_eligibility_postgresql.py` | Split resolution negatives into test_resolution_service.py and legacy negatives here; remove duplicate service rejection only with named survivor. |
+
+### Checkpoint acceptance and execution custody
+
+| Independent outcome | Named proof or comparison | Custody |
+| --- | --- | --- |
+| Original tests have no unmapped lost assertions | Existing `validate_assertion_maps` plus QA old/new source review | Static exact-ancestor mapping; semantic reviewer checks survival |
+| Moved files remain enforced | New `test_actor_and_authentication_tests_remain_in_structure_scope` | Negative-structure fixture for both directories without AUTH imports |
+| No new debt is accepted | Existing `test_repository_structural_debt_equals_the_frozen_ledger` and trusted-ledger validation | Actual current source inventory |
+| No helper consumer imports a test-bearing monolith | AST inspection of the three consumers and support imports | Negative structure; unchanged consumer test bodies |
+| Each selected authentication behavior survives or improves | Named table cases and their final mapped split nodes | Focused real verifier tests locally; no live network |
+| Key-resolution deadline includes lock wait | `test_jwks_lock_wait_is_inside_total_deadline` | Real asyncio lock with no HTTP access; deadline-removal probe |
+| Refresh single-flight is genuine | Existing two single-flight names, strengthened | Observed real lock contention and held async transport; exclusion-removal probe |
+| First-access race produces one persisted identity | Existing first-access race name, strengthened | Hosted PostgreSQL, independent PIDs, both misses, exact blocker |
+| Revocation and legacy concurrent mutation protections survive | Existing named actor race tests in destination table | Hosted PostgreSQL; no mock downgrade |
+| Lane discovery includes all moved proof | Existing lane catalogue/discovery tests and hosted final manifest | Exact source/destination node reconciliation, no skips/deselections |
+| Coverage protection remains | Hosted Backend global gate and changed-subsystem gates | Full hosted suite only; no local full coverage |
+
+Local focused commands from `backend/`: `.venv/bin/pytest -q
+tests/authentication/`, the controlled actor nodes explicitly identified during
+implementation, `tests/test_ci_lane_catalogue.py`, and
+`tests/architecture/test_test_structure_boundary.py`. Root Markdown links,
+stale wording, Commitrail and diff checks remain required. Run Ruff only on
+changed Python files. Collect-only can inventory PostgreSQL families but is
+never reported as their execution. GitHub owns all actor persistence/race,
+unchanged helper-consumer integration and full coverage evidence.
+
+Before backend edits, plan review checks this concrete map and fixture
+feasibility. Checkpoints then route QA/test-delta for preservation and behavior
+quality, security/reuse for verifier and lock custody, and CI-integrity/docs for
+selection, debt and honest remaining-scope reporting. Architecture review is
+needed only if inspection finds a changed runtime/public boundary; none is
+planned. Reuse existing focused reviewers; no blanket nine-agent fanout.
+
+## Source reconciliation
 
 - Source reconciliation: discovery used main `369903ae`, including merged
   observer repair PR378. Integrated base `8c00fb3d` also includes PR376's
