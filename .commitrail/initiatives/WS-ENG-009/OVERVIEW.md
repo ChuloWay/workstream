@@ -7,6 +7,8 @@
   historical bulk remains in Git history; process integrations use Commitrail.
 - Delivered follow-up: scoped model/reviewer composition and Commitrail
   efficiency improvements in [WS-ENG-009-02](WS-ENG-009-02.md).
+- Contribution paths: standalone records and the documented editorial path
+  are aligned in [WS-ENG-009-03](WS-ENG-009-03.md).
 - Next boundary: apply the improved loop to the planned POL-04A2 implementation.
   Scoped instruction exercises are not a completed whole-product stress test.
 - Governing record: [`WS-ENG-009-01.md`](WS-ENG-009-01.md)

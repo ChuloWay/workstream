@@ -3,7 +3,8 @@
 - Disposition: Planned
 - Intent: audit every current test, remove redundant or meaningless proof,
   replace weak assertions, add missing critical behavior, and dismantle oversized
-  test files before resuming product implementation.
+  test files while independently bounded product implementation proceeds with
+  explicit file ownership and coordination on shared tests and CI registration.
 - First bounded change: [01 — first proof cleanup](WS-QUAL-003-01.md).
 - PROJECT slice: [02 — readiness and retired-route proof](WS-QUAL-003-02.md).
 - PROJECT custody slice: [03 — fixtures and locked-context transactions](WS-QUAL-003-03.md).
@@ -83,7 +84,9 @@ assertions only when their own surviving proof is identified.
 7. Reconcile the complete hosted node manifest against reviewed dispositions,
    remaining oversized-file inventory, behavior coverage and measured CI costs.
 
-One PR at a time. Do not claim completion while any baseline case lacks a
+Sequence this audit's PRs one at a time; this does not pause separate product
+work. Reconcile shared-file changes before integration. Do not claim completion
+while any baseline case lacks a
 disposition or while removed protection lacks an equivalent or stronger proof.
 No fixed reduction percentage or same-day completion claim overrides safety.
 

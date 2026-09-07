@@ -36,11 +36,11 @@ RECORD_REQUIRED_FILES = {
     ".github/pull_request_template.md",
     "AGENTS.md",
     "CONTRIBUTING.md",
-    "README.md",
 }
 RECORD_PATH = re.compile(
-    r"^\.commitrail/initiatives/(?P<initiative>[A-Z]+-[A-Z]+-[0-9]+)/"
-    r"(?P<record>[A-Z]+-[A-Z]+-[0-9]+-[A-Z0-9]+)\.md$"
+    r"^\.commitrail/(?:initiatives/(?P<initiative>[A-Z]+-[A-Z]+-[0-9]+)/"
+    r"(?P<record>[A-Z]+-[A-Z]+-[0-9]+-[A-Z0-9]+)"
+    r"|changes/(?P<standalone>[a-z0-9]+(?:-[a-z0-9]+)*))\.md$"
 )
 REQUIRED_HEADINGS = (
     "## Intent",
@@ -379,15 +379,18 @@ def validate(
         raise CommitrailError("COMMITRAIL_LEGACY_PATH: " + ", ".join(legacy[:3]))
 
     changed = set(paths)
+    for path in sorted(changed):
+        if path.startswith(".commitrail/changes/") and not RECORD_PATH.fullmatch(path):
+            raise CommitrailError(f"COMMITRAIL_RECORD_PATH_INVALID: {path}")
     implementation = any(
         path in RECORD_REQUIRED_FILES or path.startswith(RECORD_REQUIRED_PREFIXES)
         for path in changed
     )
     records = sorted(path for path in changed if RECORD_PATH.fullmatch(path))
-    if implementation and len(records) != 1:
-        raise CommitrailError("COMMITRAIL_CHANGE_RECORD_REQUIRED")
     if len(records) > 1:
         raise CommitrailError("COMMITRAIL_MULTIPLE_CHANGE_RECORDS")
+    if implementation and not records:
+        raise CommitrailError("COMMITRAIL_CHANGE_RECORD_REQUIRED")
 
     index_path = ".commitrail/INDEX.md"
     index = _read(root, index_path)
@@ -440,6 +443,8 @@ def validate(
         if TRANSIENT_DECLARATION.search(record_structure):
             raise CommitrailError(f"COMMITRAIL_TRANSIENT_STATE: {record_path}")
         initiative = match.group("initiative")
+        if initiative is None:
+            continue
         if not match.group("record").startswith(f"{initiative}-"):
             raise CommitrailError(f"COMMITRAIL_RECORD_OWNER_MISMATCH: {record_path}")
         overview = f".commitrail/initiatives/{initiative}/OVERVIEW.md"
