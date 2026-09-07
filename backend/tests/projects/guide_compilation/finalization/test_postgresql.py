@@ -161,3 +161,35 @@ async def test_finalization_audit_resource_vocabulary_matches_database(clean_pos
                 )
             )
         assert resource in definition
+
+
+@pytest.mark.parametrize("owner", ["guide", "policy"])
+async def test_preloaded_product_rows_are_refreshed_before_authority_consumption(
+    clean_postgres_database, owner
+):
+    from sqlalchemy import select
+    from app.modules.projects.models import ProjectGuide, SubmissionArtifactPolicy
+
+    async with database_case(clean_postgres_database) as (values, factory, command):
+        async with factory() as session, session.begin():
+            model = ProjectGuide if owner == "guide" else SubmissionArtifactPolicy
+            cached = await session.scalar(select(model))
+            table = model.__tablename__
+            field = "status" if owner == "guide" else "lifecycle_status"
+            target = "active" if owner == "guide" else "approved"
+            assert getattr(cached, field) == "draft"
+            # A deliberately changed stored view leaves SQLAlchemy's identity map stale.
+            await session.execute(text(f"alter table {table} disable trigger user"))
+            await session.execute(
+                text(f"update {table} set {field}=:value where id=:id"),
+                {"value": target, "id": cached.id},
+            )
+            await session.execute(text(f"alter table {table} enable trigger user"))
+            assert getattr(cached, field) == "draft"
+            authority = DatabaseAuthorization(session, values)
+            with pytest.raises(
+                ProjectGuideSetupFinalizationError, match="source_state_unavailable"
+            ):
+                await GuideCompilationFinalizationService(session, authority).finalize(command)
+            assert authority.events == ["prepare", "close"]
+            await session.rollback()

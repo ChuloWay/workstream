@@ -137,12 +137,14 @@ class GuideCompilationRepository:
         guide = await projects.lock_project_guide(str(command.guide_id))
         if guide is None or guide.project_id != str(command.project_id):
             raise GuideCompilationIntegrityError("finalization guide unavailable")
+        await self._session.refresh(guide)
         snapshot = await projects.lock_latest_guide_source_snapshot(
             str(command.project_id), guide.id, guide.version)
         setup = await projects.lock_latest_project_setup_run(
             str(command.project_id), guide.id, guide.version)
         if setup is None or snapshot is None:
             raise GuideCompilationIntegrityError("finalization setup unavailable")
+        await self._session.refresh(snapshot)
         # Re-fetch the latest setup so a waiting session never uses a cached pre-state.
         await self._session.refresh(setup)
         compilation = await self._session.scalar(select(ProjectGuideCompilation).where(
@@ -162,6 +164,9 @@ class GuideCompilationRepository:
             report_op.report_id or "", str(command.project_id), guide.id, guide.version
         )) if report_op else None
         policy = (await projects.lock_submission_artifact_policy(policy_op.policy_id or "")) if policy_op else None
+        for output in (report, policy):
+            if output is not None:
+                await self._session.refresh(output)
         return LockedFinalization(attempt, request, guide, snapshot, setup, compilation,
             current is not None and current.id == command.compilation_id, operations, report, policy)
 
