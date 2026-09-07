@@ -9,29 +9,6 @@ Implementation claims require merged code, migrations, tests, and review
 evidence. A plan or open pull request is not implemented behavior. Open pull
 requests are the transient view of work currently under review.
 
-## Share With The Team
-
-**Workstream v0.1 is being built; the complete production lifecycle is not yet
-release-ready.** The backend foundations are substantial, but connecting them
-into the secured end-to-end path is still required.
-
-Share this [roadmap link](https://github.com/Flow-Research/workstream/blob/main/docs/roadmap_status.md).
-It is the team's capability ledger, not a delivery-date promise or a copy of
-the PR queue.
-
-| Team question | Current answer | Where to follow |
-| --- | --- | --- |
-| What is built? | Identity and authorization foundations; guide-source custody; hidden unified compilation and projections; verified artifact preparation and Submission binding; hidden contribution-policy and review persistence foundations. Hidden does not mean publicly activated. | [Lifecycle scoreboard](#end-to-end-lifecycle-scoreboard) and [completed work](#what-has-been-completed) |
-| What product boundary comes next? | Hidden unified-guide setup finalization, then its exact AUTH gate and live compilation cutover. Policy approval/binding, task readiness, and post-submit integration follow their dependencies. | [Open PRs](https://github.com/Flow-Research/workstream/pulls) and [dependency order](#current-work-and-immediate-order) |
-| What quality work remains? | Behavior-first test audit, exact replay and transaction proof, removal of redundant tests, and decomposition of oversized modules. Completed slices do not mean the whole suite is audited. | [Quality work](#engineering-quality-alongside-product-work) |
-| What remains for release? | Complete guide/policy lineage, claim-to-Submission integration, durable post-submit admission, live review/revision, atomic contribution and conditional compensation facts, fulfillment/recovery, stable UI surfaces, and pilot proof. | [Release gates](#remaining-release-gates) |
-| How can someone help? | Read the contribution guide, check open work for overlap, and take a bounded dependency-ready change. Separate product and quality work may proceed concurrently with explicit file ownership. | [Contributing](../CONTRIBUTING.md), [all open PRs](https://github.com/Flow-Research/workstream/pulls), and [initiative ownership](../.commitrail/INDEX.md) |
-
-The linked PR views show current activity directly from GitHub. A planned
-boundary is not a claim that someone is implementing it, and an open PR is not
-merged capability. No release percentage is inferred from test counts or the
-number of completed engineering changes.
-
 ## Product Goal
 
 Workstream turns governed work into trusted `ContributionRecord` facts:
@@ -220,17 +197,10 @@ not a claim that every test or subsystem is fully audited.
 
 Remaining work includes AUTH historical-evidence and actor-resolution proof,
 oversized AUTH/test-module decomposition, and the remaining TASK, CHECKER,
-ART, CON, REV, and tooling audit. Review each test's actual behavior and
-failure detection; file splitting and coverage percentages alone do not prove
-correctness. Preserve real PostgreSQL, concurrency, storage, and full hosted
-coverage checks.
-
-Follow [open test work](https://github.com/Flow-Research/workstream/pulls?q=is%3Apr+is%3Aopen+test+in%3Atitle)
-and [merged test repairs](https://github.com/Flow-Research/workstream/pulls?q=is%3Apr+is%3Amerged+test+in%3Atitle).
-Title-filtered views are shortcuts, not exhaustive inventories; use
-[all open PRs](https://github.com/Flow-Research/workstream/pulls) for overlap
-checks. Product work need not wait for the entire quality initiative; coordinate
-shared-file ownership and integrate relevant merged repairs.
+ART, CON, REV, and tooling audit. The audit requires behavioral proof, not only
+file splitting or coverage percentages. Real PostgreSQL, concurrency, storage,
+and full hosted coverage checks remain required. Independent product work can
+proceed alongside the audit with coordinated file ownership.
 
 Commitrail's contribution-path and reviewer-routing improvements are delivered.
 They support this work; they do not complete a product capability or create a

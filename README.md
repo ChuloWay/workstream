@@ -140,8 +140,7 @@ contracts for the surface it consumes.
 
 The release bar is a verified end-to-end v0.1 lifecycle, not the completion of
 an old timeboxed plan. See the [v0.1 Roadmap And Capability Status](docs/roadmap_status.md)
-for the [team briefing](docs/roadmap_status.md#share-with-the-team), lifecycle
-scoreboard, current product and quality work links, and complete release gates;
+for the lifecycle scoreboard, current critical path, and complete release gates;
 reading internal engineering records is not required to understand product
 progress.
 
