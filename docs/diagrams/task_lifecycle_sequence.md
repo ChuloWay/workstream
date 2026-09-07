@@ -70,11 +70,12 @@ sequenceDiagram
   Auth-->>API: Verified external identity
   API->>Authorization: require(submission.create, candidates, ownership/resource/lifecycle guards)
   Authorization-->>API: Allowed with matched submitter grant
+  Note over API,Artifacts: Artifact preparation includes locked pre-submission intake checks; blocking failure returns feedback before Submission creation
   API->>Artifacts: Finalize verified artifact bindings
   API->>DB: Create immutable submission version
   API->>DB: Lock submission version and audit submitter-owned finalization
 
-  API->>Checks: Enqueue automated checks through Celery
+  API->>Checks: Enqueue post-submission work evaluation through Celery
   Checks->>Artifacts: Read exact authorized artifacts
   Checks->>DB: Persist checker run and results
   Checks->>DB: Keep task EVALUATION_PENDING while pre-review gate runs

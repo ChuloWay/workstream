@@ -5,7 +5,7 @@
 Source-agnostic governed contribution infrastructure for coordinating,
 verifying, and recording work performed by humans, AI agents, or both.
 Workstream binds project-defined tasks, locked rules, immutable submission
-artifacts, deterministic checks, and authorized Reviews into trusted
+artifacts, policy-governed checks, and authorized Reviews into trusted
 `ContributionRecord` facts. Source applications and downstream economic or
 reporting systems may consume those facts but do not control Workstream's
 identity, authorization, submission, review, or contribution truth. Flow
@@ -284,7 +284,19 @@ supply canonical hashes, manifests, provider references, or content IDs.
 
 ## Checker
 
-An automated rule that validates a task or submission before human review.
+A policy-bound automated check or evaluator. Pre-submission checks assess
+package fitness and intake quality before Submission creation; post-submission
+checks evaluate the immutable work against locked task/project requirements
+and produce durable evidence for review eligibility. They are not the same
+phase and their evidence is not interchangeable. Neither makes an authorized
+Review decision.
+
+Checker stage does not determine whether the implementation is deterministic.
+Deterministic rules and supported model-based evaluators are different execution
+methods; a recorded model judgment is not a promise of an identical rerun.
+Only supported registered implementations execute. Setup agents propose policy
+bindings, not runtime judgments on submitted work; their existence does not
+mean a model-based submission evaluator is live.
 
 ## Checker Policy
 

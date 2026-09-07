@@ -4,9 +4,15 @@
 
 Workstream is the governed lifecycle core between systems that request work and
 systems that consume its outcome. It coordinates projects, tasks, immutable
-submissions, deterministic checks, authorized Reviews, revisions, and immutable
+submissions, policy-governed checks, authorized Reviews, revisions, and immutable
 `ContributionRecord` facts. Compensation and future reputation consume those
 facts without controlling lifecycle truth.
+
+Pre-submission checks govern artifact intake before Submission creation;
+post-submission checks evaluate immutable work and establish review eligibility.
+They have separate policies and evidence boundaries. Deterministic policy
+compilation does not imply every evaluator is deterministic; see the
+[checker framework](architecture_checker_framework.md) for execution boundaries.
 
 The product contract is source-agnostic. Flow Identity is the current v0.1
 external authentication adapter; manual, Markdown, and CSV intake are the

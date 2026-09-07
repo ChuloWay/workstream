@@ -7,7 +7,7 @@ Accepted for v0.1.
 ## Decision
 
 Workstream will first build the governed contribution core: project-defined
-work, immutable submissions, deterministic checks, authorized review, revision,
+work, immutable submissions, policy-governed checks, authorized review, revision,
 and trusted contribution records. It will not begin with marketplace discovery,
 an execution workspace, external source adapters, or blockchain settlement.
 
@@ -18,8 +18,9 @@ Across task evaluation and contribution projects, the repeated pattern is:
 ```text
 Project Guide
 -> Task
+-> Pre-Submission Intake Checks
 -> Submission
--> Platform Checker
+-> Post-Submission Work Evaluation
 -> Human Review
 -> Needs Revision / Accepted / Rejected
 -> Contribution Record
