@@ -155,9 +155,10 @@ Only open pull requests describe transient work. Use the repository's
 [open pull-request view](https://github.com/Flow-Research/workstream/pulls) to
 see whether any item below is already under review.
 
-Product implementation is underway on hidden unified-guide setup finalization,
-alongside the AUTH test-proof audit and decomposition. These are parallel
-workstreams, not a pause awaiting completion of the full quality audit.
+Hidden unified-guide setup finalization is complete. The next product boundary
+is AUTH-12B2, which activates its exact authorization gate. That work can
+proceed alongside the ongoing AUTH test-proof audit and decomposition, without
+waiting for completion of the full quality audit.
 The sequence below describes product dependencies; production activation still
 requires its exact owner-proven prerequisites.
 

@@ -63,13 +63,82 @@ async def sql_transition(session, command, row, *, extra="", changes=None):
     )
 
 
-@pytest.mark.parametrize("project", [False, True])
+async def assert_deferred_missing_receipt(session, command, row):
+    """Reach deferred custody with a complete transition and omit only its receipt."""
+    await sql_transition(session, command, row)
+    stored = (
+        await session.execute(
+            text(
+                "select status,output_sufficiency_report_id,output_submission_artifact_policy_id,"
+                "finished_at from project_setup_runs where id=:id"
+            ),
+            {"id": str(command.setup_run_id)},
+        )
+    ).one()
+    assert tuple(stored[:3]) == (
+        row.setup_outcome, row.sufficiency_report_id, row.artifact_policy_id
+    )
+    assert stored.finished_at == await session.scalar(text("select transaction_timestamp()"))
+    assert not await session.scalar(
+        text("select exists(select 1 from project_guide_setup_finalizations where setup_run_id=:id)"),
+        {"id": str(command.setup_run_id)},
+    )
+    # The UPDATE and its immediate guards have already succeeded. Only this
+    # deferred assertion is shared with the guard-removal mutation probe.
+    with pytest.raises(DBAPIError, match="setup finalization receipt missing"):
+        await session.execute(text("set constraints finalization_atomic_custody immediate"))
+
+
+@pytest.mark.parametrize("classification", ["guide_blocked", "draft_ready", "draft_ready_with_warnings"])
 async def test_direct_setup_finalization_without_receipt_is_rejected(
-    clean_postgres_database, project
+    clean_postgres_database, classification
 ):
-    async with database_case(clean_postgres_database, project=project) as (_, factory, command):
+    async with database_case(clean_postgres_database, classification=classification) as (
+        values, factory, command
+    ):
         before = await stored_state(factory, command)
-        with pytest.raises(DBAPIError):
+        async with factory() as session, session.begin():
+            try:
+                row, _ = await pending_receipt(session, values, command)
+                await assert_deferred_missing_receipt(session, command, row)
+            finally:
+                await session.rollback()
+        assert await stored_state(factory, command) == before
+
+
+@pytest.mark.parametrize("classification", ["guide_blocked", "draft_ready", "draft_ready_with_warnings"])
+async def test_missing_receipt_proof_detects_removed_guard(clean_postgres_database, classification):
+    async with database_case(clean_postgres_database, classification=classification) as (
+        values, factory, command
+    ):
+        before = await stored_state(factory, command)
+        async with factory() as session, session.begin():
+            try:
+                await session.execute(
+                    text("alter table project_setup_runs disable trigger finalization_atomic_custody")
+                )
+                row, _ = await pending_receipt(session, values, command)
+                # Run the exact same proof against the mutant: it must fail to
+                # observe the deferred error, rather than pass on an earlier guard.
+                with pytest.raises(pytest.fail.Exception, match="DID NOT RAISE"):
+                    await assert_deferred_missing_receipt(session, command, row)
+            finally:
+                # Restore both trigger DDL and the intentionally invalid product write.
+                await session.rollback()
+        assert await stored_state(factory, command) == before
+        async with factory() as session:
+            assert await session.scalar(
+                text(
+                    "select tgenabled from pg_trigger where tgrelid='project_setup_runs'::regclass "
+                    "and tgname='finalization_atomic_custody'"
+                )
+            ) == "O"
+
+
+async def test_compilation_without_outputs_cannot_finalize(clean_postgres_database):
+    async with database_case(clean_postgres_database, project=False) as (_, factory, command):
+        before = await stored_state(factory, command)
+        with pytest.raises(DBAPIError, match="invalid finalization setup transition"):
             async with factory() as session, session.begin():
                 await session.execute(
                     text(
