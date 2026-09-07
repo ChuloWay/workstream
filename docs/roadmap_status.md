@@ -5,6 +5,12 @@ This is the public, human-readable source for what Workstream can do on
 next, and what remains before v0.1 is ready. It uses capability milestones,
 not calendar promises.
 
+**v0.1 is Workstream's first usable release: the minimum complete product, not
+an expansion beyond an already-working MVP.** Individual backend foundations
+are implemented, but Workstream is not yet usable through its complete governed
+work lifecycle. The remaining v0.1 release requirements establish that baseline;
+they are not optional enhancements to a finished product.
+
 Implementation claims require merged code, migrations, tests, and review
 evidence. A plan or open pull request is not implemented behavior. Open pull
 requests are the transient view of work currently under review.
@@ -26,6 +32,13 @@ Project Guide
 ```
 
 The v0.1 release bar is one secured, observable, recoverable end-to-end path.
+Authorization, locked project rules, exact artifact identity, attributable
+review, and durable contribution facts are necessary for that path to be
+trustworthy. Integration and failure-recovery proof are part of making it
+function correctly, not a later quality upgrade. This does not require every
+future feature, an exhaustive cleanup of the codebase, or proof of unlimited
+scale before first use; the release gates below define the bounded requirement.
+
 Marketplace expansion, blockchain settlement, external source adapters,
 automated routing, agent workspaces, and runtime reputation projection remain
 outside v0.1.
