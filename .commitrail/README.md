@@ -33,7 +33,8 @@ approval, and merge.
 | Exceptional risk | Add only evidence or decisions needed to control that risk |
 
 Use a lowercase kebab-case standalone filename, for example
-`changes/fix-guide-validation.md`. Standalone records need no initiative overview
+`changes/fix-guide-validation.md` and declare `- Initiative: None` exactly once.
+Standalone records need no initiative overview
 or index row. Changes belonging to an existing initiative keep its record layout.
 Exactly one change record is used per implementation PR across both layouts.
 

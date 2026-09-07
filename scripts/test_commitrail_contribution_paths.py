@@ -77,6 +77,31 @@ class ContributionPathTests(unittest.TestCase):
             with self.subTest(paths=paths):
                 self.validate(paths)
 
+    def test_standalone_requires_one_live_explicit_no_initiative(self) -> None:
+        for owner in (
+            "",
+            "- Initiative: WS-EXAMPLE-001\n",
+            "<!-- - Initiative: None -->\n",
+            "- Initiative: None\n- Initiative: WS-EXAMPLE-001\n",
+            "- Initiative: None\n- Initiative: None\n",
+        ):
+            with self.subTest(owner=owner):
+                self.write(
+                    self.standalone,
+                    self.record().replace("- Initiative: None\n", owner),
+                )
+                with self.assertRaisesRegex(
+                    gate.CommitrailError, "STANDALONE_INITIATIVE_INVALID"
+                ):
+                    self.validate([self.standalone])
+
+    def test_standalone_accepts_inline_code_no_initiative(self) -> None:
+        self.write(
+            self.standalone,
+            self.record().replace("Initiative: None", "Initiative: `None`"),
+        )
+        self.validate([self.standalone])
+
     def test_readme_does_not_exempt_implementation_or_process_controls(self) -> None:
         for path in (
             "backend/app/example.py",

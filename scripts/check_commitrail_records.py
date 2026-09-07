@@ -444,6 +444,9 @@ def validate(
             raise CommitrailError(f"COMMITRAIL_TRANSIENT_STATE: {record_path}")
         initiative = match.group("initiative")
         if initiative is None:
+            owners = re.findall(r"^- Initiative:[ \t]*(.*)$", record_structure, re.MULTILINE)
+            if len(owners) != 1 or owners[0].strip() not in {"None", "`None`"}:
+                raise CommitrailError(f"COMMITRAIL_STANDALONE_INITIATIVE_INVALID: {record_path}")
             continue
         if not match.group("record").startswith(f"{initiative}-"):
             raise CommitrailError(f"COMMITRAIL_RECORD_OWNER_MISMATCH: {record_path}")
