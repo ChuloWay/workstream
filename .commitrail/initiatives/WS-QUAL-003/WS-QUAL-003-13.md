@@ -56,6 +56,10 @@ These are observed proof weaknesses, not established production defects.
 - New `backend/tests/authorization/admin_access/` package with `__init__.py`,
   `conftest.py`, `support.py`, `fixtures.py`, `fault_support.py`,
   `concurrency_support.py`, `read_support.py` and the test files below.
+  `test_grant_reads_postgresql.py` and `test_grant_validation_postgresql.py`
+  separate grant query/scoping and request validation from actor disclosure and
+  mutation recovery. This implementation scope refinement keeps each owner file
+  below 500 lines without removing any selected behavior or adding runtime scope.
   Split support further only by a named behavior and record the scope correction
   before implementation; no arbitrary helper framework.
 - `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json` and new assertion map
@@ -259,5 +263,26 @@ explicit sibling exports. The new owner directory is explicitly scanned and
 registered in existing lanes. All eighteen tests still in the monolith retain
 AST-identical bodies at this checkpoint. Mixed fixture collection succeeds;
 that is not PostgreSQL execution. The three selected large API/concurrency
-functions and their 188 original assertion spans still require the subsequent
+functions and their 188 original assertion spans were reserved for the subsequent
 implementation checkpoint and hosted proof in this same PR.
+
+The second checkpoint supplies that API/PostgreSQL split and maps all 203
+original assertion spans before removing the eight selected source functions.
+The fifteen unselected test bodies remain AST-identical. The signed journey is
+retained; grant query and request validation get separate named files to keep
+actor disclosure, grant recovery, and malformed-input proof independently readable.
+No production code is changed.
+
+Actual transaction snapshots replace rollback counts: failure probes flush and
+read staged product/evidence in the owning session before raising, then tests
+compare fresh-session state. Concurrency harnesses retain real owner calls and
+observe exact independent waiter/blocker PIDs. Read transitions use fresh rows
+with triggers enabled, eliminating lifecycle reset bypasses. Test names describe
+these required observations, not a claim that hosted execution has already passed.
+
+The old aggregate event counts are decomposed into exact operation-scoped success,
+denial and linked invalidation assertions; the map names the sibling survivors.
+CLI privacy and empty-stderr proof remain unchanged from the first checkpoint.
+All new PostgreSQL modules are explicitly registered in existing hosted lanes.
+This checkpoint still requires hosted PostgreSQL results, fault/lock probes,
+and affected exact-head reviews before the PR can be reported ready.

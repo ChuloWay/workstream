@@ -5,3 +5,7 @@ from tests.authentication.fixtures import (
     clear_settings_cache as clear_settings_cache,
     rsa_signing_material as rsa_signing_material,
 )
+from tests.authorization.admin_access.fixtures import (
+    signed_access as signed_access,
+    admin_access as admin_access,
+)
