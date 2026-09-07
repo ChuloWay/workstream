@@ -1,7 +1,7 @@
 # WS-QUAL-003-11 — Replay proof consistency
 
 - Initiative: WS-QUAL-003
-- Durable disposition: Complete
+- Durable disposition: Planned
 - Intended merge outcome: realistic replay lookup proof and explicit retained-case rationale, without pausing independent product implementation.
 
 ## Intent
@@ -113,7 +113,7 @@ because persisted action and grant provenance differ. Reject count-driven prunin
   distinguish pending, committed and changed request digest without row insertion.
 - Each retained submission-policy test has a rationale; parameter matrices name
   their distinct branches or deliberate interactions, without claiming all guards.
-- Changed modules remain below 500 lines and tests below 120 lines.
+- Changed repository-test modules remain below 500 lines and tests below 120 lines.
 - New AUTH modules obey those limits; the existing AUTH monolith shrinks with
   all lifecycle assertions preserved (not a claim it is already below 500).
 - `test_observer_detects_waiter_after_initial_miss` supplies real PostgreSQL
@@ -141,6 +141,13 @@ checks. Out-of-tree targeted mutations must distinguish missing operation lookup
 and missing fallback. Hosted Backend owns full-suite PostgreSQL execution,
 canonical node inventory, global coverage and unchanged per-file 90% floors.
 Exact-head results belong in the PR, not as transient status in this record.
+AUTH expansion evidence: local controlled tests in
+`tests/test_auth_concurrency_observer.py`, `tests/test_ci_lane_catalogue.py`,
+and canonical `scripts.test_structure_boundary validate`; hosted
+`test_observer_detects_waiter_after_initial_miss` and unchanged assertions in
+`test_actor_profile_lifecycle_real_postgres_concurrency` and
+`test_actor_identity_link_lifecycle_real_postgres_concurrency`. Compare the
+original/final lifecycle assertion ASTs; do not infer parity from passing status.
 
 ## Review findings
 
