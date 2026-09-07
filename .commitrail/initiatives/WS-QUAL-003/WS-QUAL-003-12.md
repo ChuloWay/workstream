@@ -1,8 +1,11 @@
 # WS-QUAL-003-12 — Staged AUTH test audit and decomposition
 
 - Initiative: WS-QUAL-003
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: complete the selected projection, actor-resolution and AUTH test-family audit and decomposition through reviewed commit checkpoints, without changing product authority or blocking product implementation.
+
+Disposition records the intended merged outcome, not transient PR readiness.
+Exact-head checks, reviewer freshness and human approval remain in the PR.
 
 ## Intent
 
@@ -510,8 +513,9 @@ late-waiter/fresh-snapshot regression retains its normal polling behavior.
   observer repair PR378. Integrated base `8c00fb3d` also includes PR376's
   Commitrail contribution-path simplification. Product PR377 owns finalization,
   not this AUTH replay family.
-- Next usable boundary within this change: reconcile the complete selected
-  implementation, execute hosted PostgreSQL/coverage proof and replay affected
-  internal reviews. The projection checkpoint alone is not the intended merge outcome.
+- Next audit boundary after this change: the remaining AUTH lifecycle families
+  in the monoliths need their own behavior inventory and bounded plan. Do not
+  repeat this selected actor/authentication audit or infer that all AUTH tests
+  are repaired. Product work continues independently.
 - Remaining risks: PostgreSQL integrity and owner-query isolation are separate
   proof boundaries; most repository tests remain unaudited.

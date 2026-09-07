@@ -21,9 +21,9 @@
 - AUTH cleanup: [12 — projection proof and staged AUTH audit](WS-QUAL-003-12.md).
   The human expanded this change to use reviewed commit checkpoints in one PR;
   projection proof is its first stage, not its completion boundary.
-- Next usable boundary within 12: verify and review its selected authentication
-  and actor-resolution implementation checkpoint. The shared concurrency-observer repair is included in 11
-  by human authorization; the full suite audit remains open.
+- After 12's intended merge outcome: inventory the remaining AUTH lifecycle
+  families before further decomposition; do not repeat the selected actor and
+  authentication proof audit. The full suite audit remains open.
 - Preserve: intended production semantics, public boundaries, real database/isolation/
   concurrency proof, current coverage floors, full hosted execution, human merge.
 - Product work: POL-04A2 remains planned; this initiative does not implement it.
@@ -116,9 +116,10 @@ No fixed reduction percentage or same-day completion claim overrides safety.
   stored-fact substitutions through the real replay matcher, and adds the
   artifact-policy positive. These controlled audit-port substitutions prove
   service matching, not database corruption or PostgreSQL isolation. The
-  same change also selects all 34 actor-registry tests and 51 authentication
-  tests for decomposition and proof repair. Their exact map and checkpoint
-  limitations live in record 12; remaining AUTH lifecycle families are unaudited.
+  same change audits all 34 actor-registry tests and 51 authentication tests,
+  removes the actor monolith, repairs real lock/rotation/rollback evidence and
+  maps every original assertion. Its exact limits live in record 12; remaining
+  AUTH lifecycle families are unaudited.
 - PROJECT slice 07 replaces the remaining mixed diagnostic composer tests with
   exact facts/digests and owner selectors. Each invalid-parent case now starts
   with a valid record, so a pre-existing missing target cannot hide a broken
