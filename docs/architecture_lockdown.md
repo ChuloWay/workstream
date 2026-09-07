@@ -67,7 +67,9 @@ Project guide
 -> task queue
 -> pre-submit checker policy
 -> submission packet
--> automated checks
+-> pre-submission intake checks
+-> immutable Submission
+-> post-submission work evaluation
 -> pre-review gate
 -> human review
 -> revision replay

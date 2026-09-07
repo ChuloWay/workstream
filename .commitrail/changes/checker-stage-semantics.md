@@ -17,7 +17,7 @@ Allowed files: this record, `README.md`, `AGENTS.md`,
 `docs/product_brief.md`, `docs/glossary.md`,
 `docs/architecture_system_architecture.md`, `docs/architecture_lockdown.md`,
 `docs/architecture_checker_framework.md`, `docs/decision_0001_core_scope.md`,
-`docs/roadmap_status.md`, `docs/product_principles.md`,
+`docs/roadmap_status.md`, `docs/product_principles.md`, `docs/spec_review_lifecycle.md`,
 `docs/diagrams/task_lifecycle_sequence.md`, and the architecture brief's
 `workstream_architecture_brief.md`, generated PDF, `task_lifecycle_sequence.puml`,
 and generated `images/task_lifecycle_sequence.png` under
