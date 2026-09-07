@@ -16,6 +16,7 @@
 - PROJECT sufficiency family: [09 — mutation composition and replay proof](WS-QUAL-003-09.md).
 - PROJECT submission-policy family: [10 — manual mutation and replay proof](WS-QUAL-003-10.md).
 - Replay correction: [11 — realistic conflicts and retained-case rationale](WS-QUAL-003-11.md).
+  Its reconciliation supersedes the affected historical test mappings in 09/10.
 - Next usable boundary after 11: AUTH's recorded concurrency diagnosis before decomposition.
   The full suite audit remains open.
 - Preserve: intended production semantics, public boundaries, real database/isolation/

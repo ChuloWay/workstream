@@ -126,7 +126,7 @@ lines, with a 75-line target; helpers stay below100 lines.
 | New reservation pending/mismatch/replayed dispositions prevent protected mutation for each command | `test_mutation_requires_claimed_reservation` |
 | Exact report and acknowledgement replay returns stored response after reauthorization, without another product effect | `test_mutation_recovers_committed_response` |
 | Each existing mismatch/pending/resource-digest case rejects independently for create/ack/dispatch | `test_replay_rejects_changed_identity`, `test_replay_rejects_pending_record`, `test_replay_rejects_changed_resource_digest` |
-| Existing conflict classification and failed completion | `test_reservation_classifies_existing_conflict`, `test_reservation_rejects_changed_request`, `test_missing_completion_is_integrity_error`; [11](WS-QUAL-003-11.md) replaces unsupported disappearance simulations |
+| Disappeared reservation after both insert outcomes and failed completion | `test_reservation_disappearance_is_integrity_error`, `test_missing_completion_is_integrity_error` |
 | SQL-port valid controls reach return, without claiming database proof | `test_reservation_returns_claimed_row`, `test_completion_accepts_returned_row` |
 | Fixed service rejected on create/dispatch/ack public endpoints before actor resolution/product lookup | `test_public_mutation_conceals_service` |
 

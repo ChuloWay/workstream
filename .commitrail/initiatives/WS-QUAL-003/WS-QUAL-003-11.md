@@ -20,7 +20,8 @@ after an insert or conflict without a supported deletion/transaction boundary.
 
 ### Allowed
 
-- This record, `OVERVIEW.md`, and records `WS-QUAL-003-09.md` and `WS-QUAL-003-10.md`.
+- This record and `OVERVIEW.md`. Completed records 09/10 retain historical
+  evidence; their affected test mappings are superseded below.
 - `backend/tests/projects/submission_policy_mutations/test_repository.py`.
 - A rationale table in this record covering the existing submission-policy family.
 - `backend/tests/projects/sufficiency_mutations/test_replay_repository.py`.
@@ -140,6 +141,15 @@ The new controls test repository code through a controlled SQL port, not actual
 uniqueness or transaction recovery. Production guards are preserved but those
 unsupported fault branches intentionally lose incidental statement coverage.
 Hosted coverage must still satisfy the unchanged floors; no exclusion is added.
+
+Historical mapping reconciliation: record 09's
+`test_reservation_disappearance_is_integrity_error` is removed, replaced by
+`test_reservation_classifies_existing_conflict` and
+`test_reservation_rejects_changed_request` for supported behavior, not equivalent
+fault injection. Record 10's `test_reservation_rejects_changed_namespace_facts`
+is renamed `test_reservation_rejects_changed_operation_facts`; all three cases
+remain, now using exact-operation lookup. The new namespace-only test separately
+covers fallback. This record supersedes those specific historical mappings.
 
 These tables justify current retained behaviors, not exhaustive guard coverage:
 `_replay_values` has additional independent context operands; aggregate lineage
