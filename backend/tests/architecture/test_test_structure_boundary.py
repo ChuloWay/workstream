@@ -55,6 +55,17 @@ def test_pol03a_skip_or_xfail_is_detected(tmp_path: Path) -> None:
     assert structure.weak_python(path)
 
 
+@pytest.mark.parametrize("owner", ["actors", "authentication"])
+def test_actor_and_authentication_tests_remain_in_structure_scope(
+    tmp_path: Path, owner: str
+) -> None:
+    """Owner-local paths cannot escape enforcement by dropping an AUTH import."""
+    path = tmp_path / "backend/tests" / owner / "test_disabled.py"
+    _write(path, "import pytest\npytestmark = pytest.mark.skip\n")
+    assert path in structure.scoped_test_paths(tmp_path)
+    assert structure.weak_python(path)
+
+
 def test_inventory_records_one_oversized_production_function(tmp_path: Path) -> None:
     """A production callable beyond its hard limit enters the debt inventory."""
     body = "\n".join(f"    value_{index} = {index}" for index in range(101))
@@ -302,9 +313,7 @@ def test_old_assertion_inventory_binds_exact_span_and_hash() -> None:
     ("span", "digest"),
     (([3, 3], "0" * 64), ([2, 2], "0" * 64)),
 )
-def test_old_assertion_mapping_rejects_a_bogus_span_or_hash(
-    span: list[int], digest: str
-) -> None:
+def test_old_assertion_mapping_rejects_a_bogus_span_or_hash(span: list[int], digest: str) -> None:
     """A cosmetic map cannot claim proof bytes absent from trusted source."""
     actual = structure.hashlib.sha256(b"    assert True\n").hexdigest()
     mapping = {
