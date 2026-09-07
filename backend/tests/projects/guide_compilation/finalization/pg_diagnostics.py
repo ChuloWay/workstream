@@ -1,10 +1,11 @@
 """Report the installed lineage predicate behind an unexpected fixture failure."""
 
-from dataclasses import asdict
 import json
 import re
 
 from sqlalchemy import text
+
+from app.modules.authorization.api import setup_finalization_fact_values
 
 
 async def lineage_mismatches(factory, facts):
@@ -17,7 +18,7 @@ async def lineage_mismatches(factory, facts):
             "then raise exception 'finalization compilation lineage mismatch'", 1
         )[0]
         predicates = re.split(r"\s+or\s+", "c.id is null" + condition.rstrip())
-        payload = asdict(facts)
+        payload = setup_finalization_fact_values(facts)
         payload["id"] = payload.pop("finalization_id")
         query = "select " + ",".join(
             f"({predicate}) as predicate_{index}" for index, predicate in enumerate(predicates)
