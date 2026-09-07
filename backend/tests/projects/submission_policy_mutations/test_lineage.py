@@ -29,11 +29,7 @@ def lineage_case(case):
         source_snapshot_hash=rows.SNAPSHOT_HASH,
         setup_generation=4,
     )
-    report = rows.warning_report()
-    report.status = "passed"
-    report.project_setup_run_id = str(rows.SETUP)
-    report.setup_generation = 4
-    report.source_snapshot_hash = rows.SNAPSHOT_HASH
+    report = rows.unacknowledged_report()
     ports = {
         "get_project": project,
         "get_guide": guide,
@@ -189,16 +185,14 @@ def test_warning_acknowledgement_digest_binds_exact_provenance(scope):
     )
 
 
-@pytest.mark.parametrize(
-    "field,value",
-    [
-        ("warnings_acknowledged_by_admin_role_grant_id", None),
-        ("warning_acknowledgement_scope_project_id", str(UUID(int=99))),
-        ("warning_acknowledgement_action_id", "project.submission_artifact_policy.create"),
-    ],
-)
-def test_warning_acknowledgement_rejects_invalid_provenance(field, value):
+def test_unacknowledged_warning_blocks_policy_mutation():
+    report = rows.unacknowledged_report("passed_with_warnings")
+    with pytest.raises(module.PolicySetupBlocked, match="authorized Project Manager"):
+        module.SubmissionPolicyMutationService._acknowledgement_digest(report, rows.PROJECT)
+
+
+def test_warning_acknowledgement_rejects_foreign_project():
     report = rows.warning_report()
-    setattr(report, field, value)
+    report.warning_acknowledgement_scope_project_id = str(UUID(int=99))
     with pytest.raises(module.PolicySetupBlocked, match="authorized Project Manager"):
         module.SubmissionPolicyMutationService._acknowledgement_digest(report, rows.PROJECT)

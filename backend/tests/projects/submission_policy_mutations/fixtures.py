@@ -131,7 +131,13 @@ async def capture_replay(case, command):
         committed_at=rows.NOW,
     )
     committed = case.projects.add_submission_artifact_policy.await_args.args[0]
-    case.projects.get_submission_artifact_policy.return_value = committed
+    stored = {case.predecessor.id: case.predecessor, committed.id: committed}
+
+    async def select_policy(policy_id):
+        assert policy_id in stored, f"unexpected policy selector: {policy_id}"
+        return stored[policy_id]
+
+    case.projects.get_submission_artifact_policy.side_effect = select_policy
     case.replay.find_by_operation.return_value = record
     for port in (case.projects, case.replay, case.prepared):
         for value in vars(port).values():

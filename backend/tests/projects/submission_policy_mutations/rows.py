@@ -104,3 +104,21 @@ def warning_report():
         warning_acknowledgement_decision_event_id=str(UUID(int=20)),
         warnings_acknowledged_at=NOW,
     )
+
+
+def unacknowledged_report(status="passed"):
+    return SimpleNamespace(
+        id=str(REPORT),
+        status=status,
+        project_setup_run_id=str(SETUP),
+        setup_generation=4,
+        source_snapshot_hash=SNAPSHOT_HASH,
+        warnings_acknowledged_by_actor_profile_id=None,
+        warnings_acknowledged_via_identity_link_id=None,
+        warnings_acknowledged_by_admin_role_grant_id=None,
+        warning_acknowledgement_scope_type=None,
+        warning_acknowledgement_scope_project_id=None,
+        warning_acknowledgement_action_id=None,
+        warning_acknowledgement_decision_event_id=None,
+        warnings_acknowledged_at=None,
+    )

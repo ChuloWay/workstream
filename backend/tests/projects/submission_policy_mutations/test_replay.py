@@ -1,6 +1,7 @@
 """Stored replay classification at real service ports, not database recovery proof."""
 
 from uuid import UUID
+from unittest.mock import call
 
 import pytest
 
@@ -22,6 +23,10 @@ async def test_committed_replay_returns_original_without_mutation(case, command)
     replayed = await invoke(case, command)
     assert replayed.replayed is True
     assert replayed.response == original.response
+    expected_lookups = [call(original.response.id)]
+    if command == "update":
+        expected_lookups.insert(0, call(str(rows.POLICY)))
+    assert case.projects.get_submission_artifact_policy.await_args_list == expected_lookups
     case.prepared.prepare.assert_not_awaited()
     case.prepared.consume.assert_not_awaited()
     case.replay.reserve.assert_not_awaited()
@@ -75,7 +80,6 @@ async def test_pending_replay_never_returns_success(case, command):
     _, record = await capture_replay(case, command)
     record.status = "pending"
     record.response_json = record.committed_policy_id = record.committed_at = None
-    case.projects.get_submission_artifact_policy.return_value = case.predecessor
     with pytest.raises(module.SubmissionPolicyMutationConflict, match="idempotency_pending"):
         await invoke(case, command)
     case.replay.reserve.assert_not_awaited()

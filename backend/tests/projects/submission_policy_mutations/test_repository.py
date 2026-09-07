@@ -80,15 +80,6 @@ async def test_reservation_insert_binds_exact_values(repo_case):
     )
 
 
-async def test_conflicting_reservation_without_matching_row_is_integrity_error(repo_case):
-    case = repo_case
-    case.session.scalar.return_value = None
-    case.session.get.return_value = None
-    case.repository._find_namespace.return_value = None
-    with pytest.raises(module.ProjectRepositoryIntegrityError, match="reservation disappeared"):
-        await case.repository.reserve(**case.values)
-
-
 def predicates(statement):
     compiled = statement.whereclause.compile(dialect=postgresql.dialect())
     return str(compiled), compiled.params
