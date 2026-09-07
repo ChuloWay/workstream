@@ -3,7 +3,8 @@
 - Disposition: Planned
 - Intent: audit every current test, remove redundant or meaningless proof,
   replace weak assertions, add missing critical behavior, and dismantle oversized
-  test files before resuming product implementation.
+  test files. Bounded product implementation may proceed concurrently in a
+  separate branch or worktree; every remaining audit obligation still applies.
 - First bounded change: [01 — first proof cleanup](WS-QUAL-003-01.md).
 - PROJECT slice: [02 — readiness and retired-route proof](WS-QUAL-003-02.md).
 - PROJECT custody slice: [03 — fixtures and locked-context transactions](WS-QUAL-003-03.md).
@@ -14,7 +15,8 @@
 - PROJECT fence slice: [08 — deterministic mutation execution-fence proof](WS-QUAL-003-08.md).
 - PROJECT sufficiency family: [09 — mutation composition and replay proof](WS-QUAL-003-09.md).
 - PROJECT submission-policy family: [10 — manual mutation and replay proof](WS-QUAL-003-10.md).
-- Next usable boundary after 10: AUTH's recorded concurrency diagnosis before decomposition.
+- Replay correction: [11 — realistic conflicts and retained-case rationale](WS-QUAL-003-11.md).
+- Next usable boundary after 11: AUTH's recorded concurrency diagnosis before decomposition.
   The full suite audit remains open.
 - Preserve: intended production semantics, public boundaries, real database/isolation/
   concurrency proof, current coverage floors, full hosted execution, human merge.
@@ -83,7 +85,7 @@ assertions only when their own surviving proof is identified.
 7. Reconcile the complete hosted node manifest against reviewed dispositions,
    remaining oversized-file inventory, behavior coverage and measured CI costs.
 
-One PR at a time. Do not claim completion while any baseline case lacks a
+One audit PR at a time. Do not claim completion while any baseline case lacks a
 disposition or while removed protection lacks an equivalent or stronger proof.
 No fixed reduction percentage or same-day completion claim overrides safety.
 

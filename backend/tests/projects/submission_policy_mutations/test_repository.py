@@ -2,7 +2,7 @@
 
 from dataclasses import asdict
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, call
 from uuid import UUID
 
 import pytest
@@ -34,8 +34,13 @@ def repo_case():
         scalar=AsyncMock(return_value=None), get=AsyncMock(return_value=record)
     )
     repository = SubmissionPolicyMutationReplayRepository(session)
-    repository.find_by_operation = AsyncMock(return_value=None)
-    repository._find_namespace = AsyncMock(return_value=record)
+    async def find_operation(operation_id):
+        return record if operation_id == record.operation_id else None
+
+    repository.find_by_operation = AsyncMock(side_effect=find_operation)
+    repository._find_namespace = AsyncMock(
+        side_effect=AssertionError("exact operation must not use namespace fallback")
+    )
     return SimpleNamespace(session=session, repository=repository, record=record, values=values)
 
 
@@ -48,6 +53,9 @@ async def test_reservation_classifies_existing_exact_row(repo_case, status, expe
         case.record.committed_policy_id = str(rows.POLICY)
         case.record.committed_at = rows.NOW
     assert await case.repository.reserve(**case.values) == (expected, case.record)
+    case.repository.find_by_operation.assert_awaited_once_with(case.record.operation_id)
+    case.repository._find_namespace.assert_not_awaited()
+    case.session.get.assert_not_awaited()
 
 
 @pytest.mark.parametrize(
@@ -58,15 +66,46 @@ async def test_reservation_classifies_existing_exact_row(repo_case, status, expe
         ("action_id", "project.submission_artifact_policy.update"),
     ],
 )
-async def test_reservation_rejects_changed_namespace_facts(repo_case, field, value):
+async def test_reservation_rejects_changed_operation_facts(repo_case, field, value):
     values = {**repo_case.values, field: value}
     assert await repo_case.repository.reserve(**values) == ("mismatch", repo_case.record)
+    repo_case.repository.find_by_operation.assert_awaited_once_with(values["operation_id"])
+    repo_case.repository._find_namespace.assert_not_awaited()
+    repo_case.session.get.assert_not_awaited()
+
+
+async def test_reservation_rejects_different_operation_in_human_namespace(repo_case):
+    case = repo_case
+    values = {**case.values, "operation_id": UUID(int=99)}
+    selectors = {
+        name: values[name]
+        for name in (
+            "actor_profile_id", "idempotency_key", "service_identity", "setup_run_id",
+            "setup_generation", "setup_task_id", "correlation_id", "action_id",
+        )
+    }
+
+    async def find_namespace(**actual):
+        assert actual == selectors
+        return case.record
+
+    case.repository._find_namespace.side_effect = find_namespace
+    lookups = MagicMock()
+    lookups.attach_mock(case.repository.find_by_operation, "operation")
+    lookups.attach_mock(case.repository._find_namespace, "namespace")
+    assert await case.repository.reserve(**values) == ("mismatch", case.record)
+    assert lookups.mock_calls == [
+        call.operation(values["operation_id"]), call.namespace(**selectors)
+    ]
+    case.session.get.assert_not_awaited()
 
 
 async def test_reservation_insert_binds_exact_values(repo_case):
     case = repo_case
     case.session.scalar.return_value = rows.OPERATION
     assert await case.repository.reserve(**case.values) == ("claimed", case.record)
+    case.repository.find_by_operation.assert_not_awaited()
+    case.repository._find_namespace.assert_not_awaited()
     case.session.get.assert_awaited_once_with(
         module.SubmissionPolicyMutationIdempotencyRecord, rows.OPERATION
     )
