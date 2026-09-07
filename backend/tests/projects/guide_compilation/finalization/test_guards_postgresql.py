@@ -342,8 +342,8 @@ async def test_receipt_actor_identity_link_must_belong_to_actor(clean_postgres_d
             )
             await session.execute(
                 text(
-                    "insert into actor_identity_links(id,actor_profile_id,issuer,subject,subject_kind,status,linked_by) "
-                    "values(:link,:actor,'https://identity.flowresearch.tech',:actor,'human','active','test')"
+                    "insert into actor_identity_links(id,actor_profile_id,issuer,subject,subject_kind,status,linked_by,last_verified_at) "
+                    "values(:link,:actor,'https://identity.flowresearch.tech',:actor,'human','active','test',transaction_timestamp())"
                 ),
                 {"link": link, "actor": actor},
             )

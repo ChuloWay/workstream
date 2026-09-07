@@ -336,8 +336,8 @@ def _receipt_guard() -> None:
          or evidence.project_id is distinct from new.project_id
          or evidence.resource_type is distinct from 'project_guide_setup_finalization'
          or evidence.resource_id is distinct from new.id::text
-         or evidence.request_id is distinct from new.operation_id::text
-         or evidence.correlation_id is distinct from new.correlation_id::text
+         or evidence.request_id is distinct from new.operation_id
+         or evidence.correlation_id is distinct from new.correlation_id
          or not exists(select 1 from actor_profiles actor join actor_identity_links link
               on link.actor_profile_id=actor.id where actor.id=new.actor_profile_id
                 and link.id=new.identity_link_id and actor.actor_kind='service'

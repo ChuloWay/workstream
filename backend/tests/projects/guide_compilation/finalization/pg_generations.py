@@ -1,5 +1,6 @@
 """A second real setup/material generation for cross-generation custody probes."""
 
+from datetime import timedelta
 from uuid import uuid4
 
 from sqlalchemy import select, text
@@ -15,6 +16,7 @@ from app.modules.artifacts.models import (
     GuideSourceExtractionAttempt,
     GuideSourceExtractionUsage,
 )
+from app.modules.projects.repository import ProjectRepository
 from app.modules.projects.models import ProjectSetupRun, ProjectGuide, GuideSourceSnapshot
 from app.modules.projects.service import build_verified_guide_sufficiency_material
 from app.modules.projects.api.setup_identity import pre_submit_setup_task_id
@@ -38,15 +40,23 @@ async def second_generation(factory, values):
     async with factory() as session, session.begin():
         await session.execute(text("alter table project_setup_runs disable trigger user"))
         setup_id = str(values["setup_2"])
+        source = await session.get(ProjectSetupRun, str(values["setup_1"]))
+        created = source.created_at + timedelta(microseconds=1)
         await clone_row(
             session,
             ProjectSetupRun,
             values["setup_1"],
             id=setup_id,
             setup_generation=2,
+            created_at=created,
+            updated_at=created,
             celery_task_id=pre_submit_setup_task_id(setup_id, 2),
         )
         await session.execute(text("alter table project_setup_runs enable trigger user"))
+        latest = await ProjectRepository(session).lock_latest_project_setup_run(
+            str(values["project"]), str(values["guide"]), "v1"
+        )
+        assert latest.id == setup_id and latest.setup_generation == 2
         original_binding = await session.scalar(select(GuideSourceArtifactBinding))
         original_classification = await session.scalar(select(GuideSourceFormatClassification))
         original_attempt = await session.scalar(select(GuideSourceExtractionAttempt))

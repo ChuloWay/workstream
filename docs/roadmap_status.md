@@ -185,8 +185,7 @@ The next dependency-safe product sequence is:
 ## Critical Dependency Map
 
 ```text
-Hidden unified compilation and projections (complete)
-  -> setup finalization
+Hidden unified compilation, projections and setup finalization (complete)
   -> AUTH finalization gate
   -> live unified compilation cutover
   -> Project Manager approval + effective pre-submit policy

@@ -179,9 +179,10 @@ async def test_preloaded_product_rows_are_refreshed_before_authority_consumption
             model = ProjectGuide if owner == "guide" else SubmissionArtifactPolicy
             cached = await session.scalar(select(model))
             table = model.__tablename__
-            field = "status" if owner == "guide" else "lifecycle_status"
-            target = "active" if owner == "guide" else "approved"
-            assert getattr(cached, field) == "draft"
+            field = "version" if owner == "guide" else "lifecycle_status"
+            target = "stale-cache-probe" if owner == "guide" else "superseded"
+            original_value = getattr(cached, field)
+            assert original_value != target
             # A deliberately changed stored view leaves SQLAlchemy's identity map stale.
             await session.execute(text(f"alter table {table} disable trigger user"))
             await session.execute(
@@ -189,7 +190,7 @@ async def test_preloaded_product_rows_are_refreshed_before_authority_consumption
                 {"value": target, "id": cached.id},
             )
             await session.execute(text(f"alter table {table} enable trigger user"))
-            assert getattr(cached, field) == "draft"
+            assert getattr(cached, field) == original_value
             authority = DatabaseAuthorization(session, values)
             with pytest.raises(
                 ProjectGuideSetupFinalizationError, match="source_state_unavailable"

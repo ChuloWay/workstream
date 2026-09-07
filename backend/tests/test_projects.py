@@ -5289,7 +5289,7 @@ async def test_project_setup_worker_unexpected_error_does_not_leak_raw_exception
             current_step="queued",
             created_by="test-project-manager",
         )
-        setup_run.celery_task_id = project_setup_worker_module.project_setup_identity.pre_submit_setup_task_id(
+        setup_run.celery_task_id = project_setup_identity.pre_submit_setup_task_id(
             setup_run.id,
             setup_run.setup_generation,
         )
@@ -6235,7 +6235,7 @@ async def test_project_setup_worker_persists_sanitized_domain_failure(
             current_step="queued",
             created_by="test-project-manager",
         )
-        setup_run.celery_task_id = project_setup_worker_module.project_setup_identity.pre_submit_setup_task_id(
+        setup_run.celery_task_id = project_setup_identity.pre_submit_setup_task_id(
             setup_run.id,
             setup_run.setup_generation,
         )

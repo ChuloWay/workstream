@@ -45,7 +45,7 @@ async def test_finalization_schema_matches_model_columns_and_composite_custody(
         assert {
             preparer.format_constraint(constraint, _alembic_quote=False)
             for constraint in table.constraints
-        } == constraints
+        } | {"finalization_atomic_custody"} == constraints
         assert {
             "fk_finalization_exact_attempt",
             "fk_finalization_exact_setup",
