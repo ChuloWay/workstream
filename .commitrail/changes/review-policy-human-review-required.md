@@ -41,7 +41,10 @@ selectors are immutable; no automated acceptance participant exists.
 
 Add non-null `human_review_required` and persisted `semantics_format` to
 ReviewPolicy. Migration backfills true and `v1` with column defaults (no row
-updates or digest rewrites); subsequent database/ORM creation defaults to `v2`.
+updates or digest rewrites); subsequent database/ORM format defaults to `v2`. Drop the temporary boolean
+server default after backfill; API/ORM creation defaults true, while direct SQL
+must supply a non-null boolean. Downgrade refuses any v2 policy history; a
+legacy-only downgrade may drop the new columns without losing semantics.
 A constraint restricts formats and requires v1 to have true. Existing immutable
 row triggers protect both columns. v1 hashing excludes the setting and retains
 its exact domain/bytes; v2 hashes the explicit strict boolean in a v2 domain.
@@ -50,8 +53,12 @@ No timestamp, boolean-value inference, trial hashing or completeness backfill.
 Input defaults true but retains Pydantic field-presence information. Creation
 uses true when omitted. Supersession inherits the exact predecessor value on
 omission before preparing the final digest; explicit boolean overrides only the
-new version. Request identity preserves omitted versus explicit input, with
-replay checked before current-selector lookup. Final PREP/consume binds the
+new version. Request identity hashes all existing defaulted semantics and excludes only
+omitted `human_review_required`, preserving legacy request bytes. Committed
+replay is checked before any guide, current-selector or predecessor lookup.
+For a new supersession, load the exact If-Match predecessor ID and verify
+project, guide version, generation and hash before inheriting its boolean;
+then compute the v2 digest. Final PREP/consume binds the
 resolved digest and existing selector; the locked selector is rechecked before
 writing. Reads include the setting and persisted format; legacy stored replay
 responses interpret the absent setting as true/v1 without changing hashes.
