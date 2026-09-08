@@ -1,9 +1,10 @@
 # Chunk Contract: WS-AUTH-001-12B2 - Exact Setup Finalization Authority
 
-Status: Planned.
-Risk: L1 authorization and immutable audit custody.
+- Initiative: `WS-AUTH-001`
+- Durable disposition: Planned
+- Intended merge outcome: Authorize exact hidden setup finalization and make POL-04B the next usable boundary.
 
-## Intent and current boundary
+## Intent
 
 POL-04A2 and AUTH-12J are complete. POL owns hidden atomic finalization and
 its database constraints; AUTH owns the preceding component projection
@@ -15,7 +16,9 @@ A caller must prove current service authority for exactly the finalization
 whose locked facts become an immutable receipt. Production worker routing
 remains outside this chunk: POL-04B owns the later live one-call cutover.
 
-## Allowed files
+## Bounded change
+
+### Allowed files
 
 - This change record, AUTH `OVERVIEW.md`, `.commitrail/INDEX.md`, POL overview,
   `docs/spec_authorization_service.md`, and `docs/roadmap_status.md` for the
@@ -38,7 +41,7 @@ remains outside this chunk: POL-04B owns the later live one-call cutover.
   `.github/workflows/backend.yml`, and affected exact ownership/boundary records
   only for additive registration and coverage enforcement.
 
-## Prohibited changes
+### Prohibited changes
 
 No HTTP or Celery call-graph cutover, worker edits, provider calls, new
 projection execution, policy/compiler behavior, human authority, service
@@ -78,11 +81,11 @@ No thresholds, selection requirements, or existing assertions are weakened.
    live POL wiring and the unavailable default unchanged. Update current docs
    only after implementation and proof establish the new hidden capability.
 
-## Acceptance and proof matrix
+## Acceptance criteria
 
 | Boundary | Required proof and custody |
 |---|---|
-| Exact service availability | All-pairs service/action denial and human denial for the active action; planned downstream actions remain unavailable |
+| Exact service availability | Every service identity against finalization and human denial for the active action; planned downstream actions remain unavailable |
 | Facts and preparation | Every locator, actor/link, operation/correlation, project/guide/source, setup generation, compilation identity, classification and output digest is bound; scalar mutations fail with valid controls |
 | Handle lifetime | Consume/replay at most once; close, copy/pickle, session swap, nested or replaced root, commit and rollback invalidate; no provider I/O or serialized transport |
 | Concrete new finalization | All three result classifications succeed with real service identity, real projection authority, exact allow event and immutable receipt in one PostgreSQL transaction |
@@ -113,7 +116,7 @@ PostgreSQL modules live in `backend/tests/projects/guide_compilation/finalizatio
 
 | Planned symbol | Variants and compatible custody |
 |---|---|
-| `test_catalogue.py::test_finalization_action_service_matrix` | Every service identity x action permission; only setup service + finalization action succeeds; pure catalogue and real PREP/kernel service execution |
+| `test_catalogue.py::test_finalization_action_service_matrix` | Every service identity against finalization action/permission: only PROJECT_SETUP succeeds. PROJECT_SETUP action/permission substitutions retain existing valid projection pairs and deny invalid/mismatched pairs; exact catalogue assertion and real PREP/kernel service execution |
 | `test_catalogue.py::test_human_and_direct_kernel_finalization_denied` | Human project manager/admin and fixed-service direct-kernel calls deny for exact and legacy resources; pure service |
 | `test_resource_context.py::test_each_finalization_fact_is_bound` | Exhaustive field inventory below, each with a valid baseline; pure validated-resource and adapter/PREP consumption |
 | `test_resource_context.py::test_preparation_locator_and_principal_are_bound` | Project, operation, correlation, actor, link, request and scope substitution; exact public locator -> prepared binding -> consume; pure service |
@@ -153,7 +156,9 @@ Unbound preflight facts are supplied only after POL obtains its serialization
 locks; prove their exact digest appears in allow evidence and that changing a
 fact invalidates historical replay, rather than claiming preflight knew them.
 
-## Verification and reviewers
+## Risk and review routing
+
+Risk: L1 authorization and immutable audit custody.
 
 Use focused local tests and lint; hosted CI owns PostgreSQL, independent-session
 races, full-suite reconciliation and coverage because this workstation is
@@ -168,6 +173,10 @@ for capability updates. Lead owns shared checks and freezes a clean exact target
 
 Human review focus: only exact finalization ledger authority becomes available;
 POL still owns product state and the future live cutover. The user owns merge.
+
+## Evidence
+
+The test matrix above defines planned proof; no runtime execution is claimed.
 
 ## Durable outcome
 
