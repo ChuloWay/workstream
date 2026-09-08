@@ -677,8 +677,8 @@ output, and material custody. It is not admitted through the public HTTP route,
 and it never receives a fabricated human grant. The baseline seeds no profile,
 link, AdminRoleGrant, or ProjectRoleGrant. An Access Administrator may use the existing controlled
 service-actor provisioning route only when the deployment supplies the exact
-issuer and opaque subject; that actor still has no executable setup action
-until each owning activation chunk merges.
+issuer and opaque subject. Provisioning alone grants no executable setup action;
+each action becomes executable only after its own activation chunk merges.
 
 AUTH-12J adds request-local adapters for the two deterministic projections
 created from an already persisted unified compilation result. Each adapter
