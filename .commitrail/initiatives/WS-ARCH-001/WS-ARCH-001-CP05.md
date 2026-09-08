@@ -100,20 +100,27 @@ no ambient context or new transport exposure.
 
 Hosted PostgreSQL rejected valid CP05 decisions because the existing closed
 `ck_audit_events_authority_privacy_bounds` resource list omits `contribution_policy`.
-The initial no-migration assumption was wrong. Extend only this resource list
+The initial no-migration assumption was wrong. The next hosted run also exposed missing exact action/permission pairs in
+`ck_audit_events_authorization_action_evidence`. Extend only these two constraints
 in `0012_contribution_policy_audit_resource`, after `0011_review_policy_human_review`.
 Follow the existing 0010 constraint-amendment pattern: inspect the exact installed
-constraint, require a unique known anchor, insert only the literal resource token,
-and retain every other clause. Downgrade takes the table lock and refuses while
-any policy-resource audit evidence exists; otherwise remove only the token.
+constraints, require the exact known anchor cardinalities, insert only the literal
+resource token and five exact policy-action/`compensation.policy.manage` pairs
+in each of the two existing action-evidence branches, and retain every other clause.
+The permission/reason/denial registry already contains the permission and remains
+unchanged. Add the exact resource to the shared context-digest classification;
+the five action classifications already require its digest. Downgrade takes the table lock and refuses while
+any policy-resource or policy-action audit evidence exists; otherwise remove only
+the inserted token and exact clauses.
 No audit data is deleted, no constraint is disabled, and no baseline is rewritten.
 
 Additional allowed files: the single new Alembic revision; exact current-head
 registrations and hosted-observed schema fingerprint in existing migration/reset
 tests and isolation runner; current behavior-contract test reference; focused
 migration/privacy tests in the CP05 test directory. Verify exact old/new constraint
-parity, normal policy persistence, rejection of unknown resource values and private
-extra event facts, downgrade refusal with retained evidence and clean roundtrip.
+parity for both constraints and unchanged permission registry, normal five-action
+policy persistence, rejection of unknown resources/actions, wrong permissions and
+private extra event facts, downgrade refusal with retained evidence and clean roundtrip.
 Use the existing schema-contract marker for complete downgrade/re-upgrade tests.
 Architecture/security review the amendment before implementation; hosted CI owns
 migration and direct-SQL execution. All guards and equality gates remain intact.
