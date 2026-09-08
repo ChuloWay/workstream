@@ -18,6 +18,16 @@ from .postgresql_support import world, snapshot
 PRIOR = "0011_review_policy_human_review"
 OWN = "0012_contribution_policy_audit_resource"
 TOKEN = ", ('contribution_policy'::character varying)::text"
+CONSTRAINTS = (
+    "ck_audit_events_authority_privacy_bounds",
+    "ck_audit_events_authorization_action_evidence",
+    "ck_audit_events_authority_registries",
+)
+ACTION_FRAGMENTS = tuple(
+    " OR (((action_id)::text = 'contribution.policy." + operation
+    + "'::text) AND ((permission_id)::text = 'compensation.policy.manage'::text))"
+    for operation in ("read", "create_draft", "update_draft", "publish", "retire")
+)
 
 
 async def schema_value(statement):
@@ -27,10 +37,13 @@ async def schema_value(statement):
 
 
 async def definition():
-    """Read the actual PostgreSQL check expression, including every privacy clause."""
-    return await schema_value(
-        "select pg_get_constraintdef(oid) from pg_constraint where conrelid='audit_events'::regclass and conname='ck_audit_events_authority_privacy_bounds'"
-    )
+    """Read both amended checks and the untouched permission/reason registry."""
+    return {
+        name: await schema_value(
+            "select pg_get_constraintdef(oid) from pg_constraint "
+            "where conrelid='audit_events'::regclass and conname='" + name + "'"
+        ) for name in CONSTRAINTS
+    }
 
 
 async def migrate(direction, revision, migration_lock):
@@ -48,11 +61,18 @@ async def test_audit_resource_migration_roundtrip_preserves_every_other_clause(
 ):
     await migrate("downgrade", PRIOR, migration_lock)
     before = await definition()
-    assert TOKEN not in before
+    assert TOKEN not in before[CONSTRAINTS[0]]
     await migrate("upgrade", OWN, migration_lock)
     after = await definition()
-    assert after.count(TOKEN) == 1
-    assert after.replace(TOKEN, "", 1) == before
+    assert after[CONSTRAINTS[0]].count(TOKEN) == 1
+    assert after[CONSTRAINTS[0]].replace(TOKEN, "", 1) == before[CONSTRAINTS[0]]
+    actions = after[CONSTRAINTS[1]]
+    for fragment in ACTION_FRAGMENTS:
+        assert fragment not in before[CONSTRAINTS[1]]
+        assert actions.count(fragment) == 2
+        actions = actions.replace(fragment, "")
+    assert actions == before[CONSTRAINTS[1]]
+    assert after[CONSTRAINTS[2]] == before[CONSTRAINTS[2]]
     await migrate("downgrade", PRIOR, migration_lock)
     assert await definition() == before
     await migrate("upgrade", OWN, migration_lock)
@@ -62,11 +82,29 @@ async def test_audit_resource_migration_roundtrip_preserves_every_other_clause(
 
 @pytest.mark.asyncio
 @pytest.mark.postgres_schema_contract
+@pytest.mark.parametrize("retained_shape", ("both", "action_only", "resource_only"))
 async def test_audit_resource_downgrade_preserves_retained_policy_evidence(
-    admin_access, migration_lock
+    admin_access, migration_lock, retained_shape
 ):
     target = await world(admin_access)
-    await target.execute("create_draft", target.request("create_draft"))
+    if retained_shape == "both":
+        await target.execute("create_draft", target.request("create_draft"))
+    else:
+        async with db_session.get_session_factory()() as session:
+            event = await session.scalar(select(AuditEvent).where(
+                AuditEvent.event_type == "SensitiveAuthorizationAllowed"
+            ).limit(1))
+        identity = await clone_decision(event, {
+            "resource_type": "project" if retained_shape == "action_only" else "contribution_policy",
+            "action_id": "contribution.policy.read" if retained_shape == "action_only" else "project.read",
+            "permission_id": "compensation.policy.manage" if retained_shape == "action_only" else "project.read",
+            "project_id": str(target.project),
+            "after_facts": {"allowed": True, "resource_context_digest": "sha256:" + "a" * 64},
+        })
+        async with db_session.get_session_factory()() as session:
+            retained = await session.get(AuditEvent, identity)
+            assert (retained.resource_type == "contribution_policy") is (retained_shape == "resource_only")
+            assert retained.action_id.startswith("contribution.policy.") is (retained_shape == "action_only")
     before, constraint = await snapshot(target.project), await definition()
     with pytest.raises(RuntimeError, match="ContributionPolicy audit history prevents downgrade"):
         await migrate("downgrade", PRIOR, migration_lock)
@@ -95,6 +133,10 @@ async def clone_decision(event, changes):
     (
         ("resource", "ck_audit_events_authority_privacy_bounds"),
         ("private_fact", "ck_audit_events_fact_bounds"),
+        ("digest", "ck_audit_events_fact_bounds"),
+        ("unknown_action", "ck_audit_events_authorization_action_evidence"),
+        ("wrong_permission", "ck_audit_events_authorization_action_evidence"),
+        ("wrong_action", "ck_audit_events_authorization_action_evidence"),
     ),
 )
 async def test_policy_audit_sql_retains_resource_and_private_fact_guards(
@@ -112,11 +154,14 @@ async def test_policy_audit_sql_retains_resource_and_private_fact_guards(
     control = await clone_decision(event, {})
     async with db_session.get_session_factory()() as session:
         assert (await session.get(AuditEvent, control)).resource_type == "contribution_policy"
-    changes = (
-        {"resource_type": "unregistered_policy_resource"}
-        if tamper == "resource"
-        else {"after_facts": {**event.after_facts, "private_material": "must-not-persist"}}
-    )
+    changes = {
+        "resource": {"resource_type": "unregistered_policy_resource"},
+        "private_fact": {"after_facts": {**event.after_facts, "private_material": "must-not-persist"}},
+        "digest": {"after_facts": {**event.after_facts, "resource_context_digest": "bad"}},
+        "unknown_action": {"action_id": "contribution.policy.unregistered"},
+        "wrong_permission": {"permission_id": "project.read"},
+        "wrong_action": {"action_id": "project.read"},
+    }[tamper]
     before = await snapshot(target.project)
     with pytest.raises(DBAPIError, match=constraint):
         await clone_decision(event, changes)
@@ -156,3 +201,32 @@ def test_audit_resource_migration_rejects_ambiguous_constraint_shape(monkeypatch
         == "lock table audit_events in access exclusive mode"
     )
     ddl.assert_not_called()
+
+
+@pytest.mark.parametrize("shape", ("valid", "missing_anchor", "extra_anchor", "partial_pair", "unexpected_pair"))
+def test_action_constraint_amendment_preserves_exact_existing_branches(shape):
+    """Exercise the installed-baseline expression without running a database locally."""
+    import importlib.util
+
+    root = Path(__file__).resolve().parents[3]
+    spec = importlib.util.spec_from_file_location(
+        "cp05_action_migration", root / "alembic/versions/0012_contribution_policy_audit_resource.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    baseline = (root / "alembic/baseline/v01_schema.sql").read_text()
+    original = baseline.split("CONSTRAINT ck_audit_events_authorization_action_evidence ", 1)[1].split("\n", 1)[0].removesuffix(",")
+    if shape == "valid":
+        amended = module._action_evidence(original, add=True)
+        for fragment in ACTION_FRAGMENTS:
+            assert amended.count(fragment) == 2
+        assert module._action_evidence(amended, add=False) == original
+        return
+    malformed = {
+        "missing_anchor": original.replace(module._ACTION_ANCHOR, "true", 1),
+        "extra_anchor": original + module._ACTION_ANCHOR,
+        "partial_pair": original + module._ACTION_PAIRS[0],
+        "unexpected_pair": original + "'contribution.policy.read'",
+    }[shape]
+    with pytest.raises(RuntimeError, match="audit action constraint shape changed"):
+        module._action_evidence(malformed, add=True)

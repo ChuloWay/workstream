@@ -506,8 +506,8 @@ now activates exactly those five actions through explicit human Finance Authorit
 composition (system or exact project). Mutations require transaction-bound PREP;
 reads and committed replay check current authority. Default CON composition
 still denies access and no policy HTTP route is added. Migration `0012_contribution_policy_audit_resource`
-adds only the exact policy resource token to the existing database audit privacy
-constraint. Downgrade refuses while policy audit history exists. CP01C
+adds the exact policy resource token and five existing action/permission pairs
+to the two closed database audit constraints, preserving their other clauses. Downgrade refuses while policy audit history exists. CP01C
 corrects only the unavailable binding fact shapes before CP02: binding identity
 and CON's unchanged `instrument_type` are explicit on create, unit is absent,
 and suspend/resume include the exact lifecycle version. AUTH does not translate

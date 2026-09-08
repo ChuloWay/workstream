@@ -289,8 +289,8 @@ Finance Authority with system or exact-project scope is eligible. The explicit
 CON adapter uses serialized reads and transaction-bound PREP for mutations;
 committed replay requires fresh read authority. Registration custody remains
 CP01B. No permission, service membership or policy HTTP route is added. Migration `0012_contribution_policy_audit_resource`
-adds only the exact policy resource token to the existing database audit privacy
-constraint. Downgrade refuses while policy audit history exists.
+adds the exact policy resource token and five existing action/permission pairs
+to the two closed database audit constraints, preserving their other clauses. Downgrade refuses while policy audit history exists.
 AUTH-10A added five project-role read/manage rows;
 AUTH-10B owns and activates the three reads, while AUTH-10C owns and activates
 the two reason-bound, idempotent project-role mutations. AUTH-11A adds eleven

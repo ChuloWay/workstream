@@ -19,6 +19,7 @@ CONTEXT_DIGEST_RESOURCE_TYPES = (
     "project_guide_sufficiency_projection",
     "project_submission_artifact_policy_projection",
     "project_guide_setup_finalization",
+    "contribution_policy",
 )
 
 

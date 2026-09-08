@@ -833,7 +833,8 @@ to one actor, operation, and timestamp. The behavior remains route-unreachable
 and deny-default unless the CP05 AUTH adapter is explicitly supplied. CP05
 activates the five policy actions using serialized read authorization and exact
 transaction-bound PREP. Committed replay checks current read authority. Migration `0012` admits only
-the policy resource token in the existing closed audit constraint; it does not
+the policy resource token and five exact action/permission pairs in the existing
+closed audit constraints; it does not
 change the event shape or policy lifecycle.
 
 | ActionId | PermissionId | Principal / target | Protocol | Feature owner |
