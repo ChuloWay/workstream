@@ -11,6 +11,7 @@ from app.modules.authorization.domain.guide_compilation import (
 from app.modules.authorization.domain.guide_compilation_projections import (
     ProjectGuideProjectionResourceContext,
 )
+from app.modules.authorization.domain.project_setup_finalization import ProjectSetupFinalizationResourceContext
 from app.modules.authorization.runtime import (
     AuthorizationResourceContext,
     PreparedAuthorityScope,
@@ -24,6 +25,7 @@ _PROJECT_SETUP_ACTIONS = frozenset(
         ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
         ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE,
         ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
+        ActionId.PROJECT_SETUP_RUN_UPDATE,
     }
 )
 
@@ -43,6 +45,11 @@ def project_setup_resource_matches(
     project_id: UUID | None,
 ) -> bool | None:
     """Validate setup-service facts, or return None for non-setup actions."""
+    if action_id is ActionId.PROJECT_SETUP_RUN_UPDATE:
+        return (
+            isinstance(resource, ProjectSetupFinalizationResourceContext)
+            and resource.scope_project_id == project_id
+        )
     if action_id is ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN:
         if isinstance(resource, ProjectGuideProjectionResourceContext):
             return (

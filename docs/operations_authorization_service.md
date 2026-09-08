@@ -494,8 +494,8 @@ v0.1 baseline.
 The REV transfer adds no migration. The ART transfer does not grant Operator
 authority; its `OPERATOR` suffix denotes only future activation custody, and
 verification retry remains independently gated from read/status actions.
-Catalogue totals are 73 PermissionIds, 111 ActionIds, 61 active actions, and
-50 planned actions. CP01A added four initially unavailable adapter-binding actions under
+Catalogue totals are 73 PermissionIds, 111 ActionIds, 62 active actions, and
+49 planned actions. CP01A added four initially unavailable adapter-binding actions under
 `WS-ARCH-001-CP01A` custody; it adds no evaluator, identity, grant, service
 matrix row, route, or activation. CP01B adds five unavailable
 `contribution.policy.*` actions with the same non-activation guarantees. CP01C
@@ -668,16 +668,17 @@ Historically, AUTH-12B extended the registry to an eighth identity,
 `project.post_submit_checker_policy.derive`, and `project.setup_run.update`.
 AUTH-12E activates `project.guide_sufficiency.run`, AUTH-12F3 activates
 `project.submission_artifact_policy.derive`, and AUTH-12I activates
-`project.guide_compilation.execute`; the remaining two memberships remain
-planned and unavailable. Each active action can be resolved
+`project.guide_compilation.execute`. AUTH-12B2 activates `project.setup_run.update`
+only for the exact finalization resource; post-submit derivation remains planned
+and unavailable. Each active action can be resolved
 for this fixed service only by an internal command carrying exact setup-run,
 expected-step, task/correlation, project, guide, snapshot, generation, stale
 output, and material custody. It is not admitted through the public HTTP route,
 and it never receives a fabricated human grant. The baseline seeds no profile,
 link, AdminRoleGrant, or ProjectRoleGrant. An Access Administrator may use the existing controlled
 service-actor provisioning route only when the deployment supplies the exact
-issuer and opaque subject; that actor still has no executable setup action
-until each owning activation chunk merges.
+issuer and opaque subject. Provisioning alone grants no executable setup action;
+each action becomes executable only after its own activation chunk merges.
 
 AUTH-12J adds request-local adapters for the two deterministic projections
 created from an already persisted unified compilation result. Each adapter

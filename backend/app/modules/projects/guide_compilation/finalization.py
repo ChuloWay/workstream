@@ -1,4 +1,4 @@
-"""Hidden atomic setup closure, with unavailable production authorization."""
+"""Hidden atomic setup closure with explicitly supplied authorization."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ from .repository import GuideCompilationIntegrityError, GuideCompilationReposito
 
 
 class _UnavailableAuthorization:
-    """No live adapter exists until the separate AUTH-12B2 activation."""
+    """Default callers remain unavailable until the separate POL-04B live cutover."""
 
     @asynccontextmanager
     async def prepare_setup_finalization(self, _locator):
@@ -90,12 +90,12 @@ class GuideCompilationFinalizationService:
 
     async def _finalize(self, command) -> ProjectGuideSetupFinalizationReceipt:
         """Close PREP before touching product state, including every replay path."""
-        finalization_id, operation_id, _ = setup_finalization_identity(
+        finalization_id, operation_id, correlation_id = setup_finalization_identity(
             command.setup_run_id, command.setup_generation, command.compilation_id
         )
         attempt_id = await self._repository.finalization_attempt_id(command)
         locator = ProjectSetupFinalizationLocator(
-            project_id=command.project_id, operation_id=operation_id
+            project_id=command.project_id, operation_id=operation_id, correlation_id=correlation_id
         )
         replay = None
         async with self._authorization.prepare_setup_finalization(locator) as capability:

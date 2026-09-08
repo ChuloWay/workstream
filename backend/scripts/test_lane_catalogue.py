@@ -19,6 +19,13 @@ class TestLane:
 
 
 SHARED_FOUNDATION_MODULES = (
+    "tests/authorization/setup_finalization/test_adapter.py",
+    "tests/authorization/setup_finalization/test_catalogue.py",
+    "tests/authorization/setup_finalization/test_prepared.py",
+    "tests/authorization/setup_finalization/test_replay.py",
+    "tests/authorization/setup_finalization/test_resource_context.py",
+    "tests/authorization/setup_finalization/test_structure.py",
+
     "tests/test_actor_legacy_classification.py",
     "tests/test_agent_runtime.py",
     "tests/test_api_contract_e2e.py",
@@ -168,6 +175,9 @@ SHARED_FOUNDATION_MODULES = (
 )
 
 PROJECT_MODULES = (
+    "tests/projects/guide_compilation/finalization/test_authorization_concurrency_postgresql.py",
+    "tests/projects/guide_compilation/finalization/test_authorization_postgresql.py",
+
     "tests/projects/test_active_guide_repository.py",
     "tests/projects/guide_compilation/finalization/test_concurrency_postgresql.py",
     "tests/projects/guide_compilation/finalization/test_contracts.py",

@@ -281,7 +281,9 @@ PROJECTS/ACTORS eligibility adapters; it adds no service-matrix membership and
 is complete while keeping all four binding actions unavailable. CP03B
 then installs the exact read/PREP adapter for an authenticated human Finance
 Authority covering the exact project and activates only those four actions,
-producing the current 111-row catalogue with 61 active and 50 planned actions.
+producing 111 rows with 61 active and 50 planned actions. AUTH-12B2 then
+activates exact setup finalization, yielding the current 62 active and 49 planned
+actions without adding a row.
 AUTH-10A added five project-role read/manage rows;
 AUTH-10B owns and activates the three reads, while AUTH-10C owns and activates
 the two reason-bound, idempotent project-role mutations. AUTH-11A adds eleven
@@ -604,8 +606,9 @@ than a separate generation counter.
 `workstream.project.setup` was the eighth fixed identity when AUTH-12B merged;
 02C expands the current registry to fourteen identities. AUTH-12E activates
 `project.guide_sufficiency.run`, AUTH-12F3 activates policy derivation, and
-AUTH-12I activates exact unified compilation execution; the remaining two
-project-setup actions and all six REV rows remain planned and unavailable.
+AUTH-12I activates exact unified compilation execution. AUTH-12B2 activates
+exact setup finalization; only `project.post_submit_checker_policy.derive`
+remains planned among project-setup actions. All six REV rows remain unavailable.
 Registration makes the
 identity selectable by the existing controlled provisioning route but creates
 no ActorProfile, ActorIdentityLink, role, grant, or executable authority by
@@ -1166,7 +1169,7 @@ execution task, calls no provider, and does not make the hidden POL workflow liv
 | `project.post_submit_checker_policy.approve` | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
 | `project.post_submit_checker_policy.correction.request` | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
 | `project.post_submit_checker_policy.derive` | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
-| `project.setup_run.update` | `project.guide.manage` | `WS-AUTH-001-12B2` |
+| `project.setup_run.update` (active) | `project.guide.manage` | `WS-AUTH-001-12B2` |
 | `project.guide.activate` | `project.guide.manage` | `WS-AUTH-001-12H` |
 
 The v0.1 baseline preserves historical sufficiency
@@ -1184,9 +1187,14 @@ POL-04A2 provides the hidden finalization service and dependency-free AUTH
 contracts; its default authorization port remains unavailable. The
 `project_guide_setup_finalization` audit resource binds the immutable receipt
 to exact final facts, actor, identity link, project scope, and stored decision.
-AUTH-12B2 supplies the concrete current-service and prepared-capability adapter
-over this boundary and complete AUTH-12J projection authority, and precedes
-POL-04B live setup cutover. AUTH-12F4 and AUTH-12G are later approval and deterministic
+AUTH-12B2 supplies the explicit concrete adapter over this boundary. Only fixed
+`workstream.project.setup` may consume `project.setup_run.update` against the
+exact finalization resource; human, direct-kernel and legacy setup resources
+deny. Preparation binds actual actor/link, project, operation and correlation
+custody. Fresh replay rechecks current lifecycle authority and the exact stored
+allow envelope and digest, including a null denial code, without another allow
+event. POL retains transaction and immutable receipt ownership. The default
+port remains unavailable until POL-04B wires the live setup path. AUTH-12F4 and AUTH-12G are later approval and deterministic
 post-submit-policy gates; neither is a prerequisite for setup finalization.
 
 The 12F1 foundation binds each future submission-policy handle to the exact

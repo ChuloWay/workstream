@@ -28,8 +28,8 @@
   The full suite audit remains open.
 - Preserve: intended production semantics, public boundaries, real database/isolation/
   concurrency proof, current coverage floors, full hosted execution, human merge.
-- Product work: POL-04A2 hidden finalization is delivered; its next AUTH-12B2
-  activation boundary proceeds independently. This initiative implements neither.
+- Product work: POL-04A2 hidden finalization and AUTH-12B2 exact authority are
+  delivered; POL-04B live cutover proceeds independently of this audit.
 
 ## Baseline and honest audit coverage
 

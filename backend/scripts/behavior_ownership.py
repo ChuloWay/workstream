@@ -225,6 +225,14 @@ AUTH_12J_TARGETS = frozenset(
         "backend/app/modules/authorization/prepared_projection_replay.py",
     }
 )
+AUTH_12B2_TARGETS = frozenset(
+    {
+        "backend/app/modules/authorization/domain/audit_targets.py",
+        "backend/app/modules/authorization/domain/project_setup_finalization.py",
+        "backend/app/modules/authorization/domain/resource_digest.py",
+        "backend/app/modules/authorization/project_setup_finalization.py",
+    }
+)
 V01_BASELINE_REMOVED_TARGETS = frozenset(
     {
         "backend/app/modules/actors/service_identity_migration.py",
@@ -396,6 +404,7 @@ def _validate_additive_partition_transition(
         | POL_04A3_PARTITION_TARGETS
         | AUTH_12I_TARGETS
         | AUTH_12J_TARGETS
+        | AUTH_12B2_TARGETS
         | ARCH_02F_SUBMISSION_COMPOSITION_TARGETS
         | ARCH_02G_AUTH_PREPARATION_TARGETS
         | ARCH_02H_AUTH_CONSUMPTION_TARGETS
@@ -700,6 +709,7 @@ def validate_catalogue(
         | POL_04A_CALLABLE_TARGETS
         | POL_04A2_CALLABLE_TARGETS
         | POL_04A3_CALLABLE_TARGETS
+        | AUTH_12B2_TARGETS
     ):
         raise BehaviorOwnershipError("unresolved_auth_boundary_foundation")
     return {

@@ -698,8 +698,9 @@ setup rewrites. Legacy-only setup generations retain their existing lifecycle.
 
 Exact replay uses the stored pre-finalization source digest and verifies the
 closed setup outputs and timestamp before returning the stored receipt. It
-creates no new evidence or projection. Production finalization authority remains
-unavailable until AUTH-12B2; HTTP and Celery composition belongs to POL-04B.
+creates no new evidence or projection. AUTH-12B2 supplies the explicit concrete
+finalization adapter with current service and exact historical authority checks.
+The default port remains unavailable; HTTP and Celery composition belongs to POL-04B.
 Finalization grants no approval, activation, post-submit, or task-readiness
 behavior. Later live post-submit integration requires separately reviewed
 custody because this finalized setup row is immutable.
