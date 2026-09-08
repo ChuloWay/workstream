@@ -56,7 +56,8 @@ proof. No adjudication setting or behavior is included.
    packet-membership contract.
 2. Continue hidden claim/revision behavior against canonical `allow_review`,
    copying the Submission policy version without a current-policy lookup.
-3. After TASK's early 04E1 source schema/public port, implement the REV-04B shared source/FinalAcceptance persistence foundation,
+3. After TASK's early 04E1A source schema/public port, implement the REV-04B
+   shared source/FinalAcceptance persistence foundation,
    then CON-03C/CON-07 persistence and submitter participation. This foundation
    can precede human runtime: ARCH-04E uses it for false/pass acceptance without
    live queues, leases or decisions. Pull the existing REV-12A/CON shared

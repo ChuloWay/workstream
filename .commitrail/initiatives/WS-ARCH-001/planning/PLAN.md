@@ -38,9 +38,9 @@ checker-remediation boundary before public Submission cutover.
 | AUTH-OUTBOX-01 | Merged shared outbox persistence and AUTH service/PREP foundations | Planned dispatcher identity/action/matrix and unavailable typed authority contract |
 | CON-02B | AUTH-OUTBOX-01 | Shared hidden dispatcher/claim fencing, typed handlers and recovery |
 | AUTH-OUTBOX-02 | CON-02B exact hidden manifest | Exact dispatcher mechanics only; no feature authority |
-| ARCH-04E1 source foundation | ARCH-04C | TASK routing-manifest schema/public facts and accepted-effects port, no handlers or REV dependency |
-| ARCH-04E1 handlers | Source foundation, CON-02B hidden contract; shared REV-04B + CON-03C/07 + early existing REV-12A/CON fence for false | TASK hidden handlers; consume one shared acceptance operation on false/pass |
-| ARCH-04E2 | ARCH-04E1 | AUTH exact TASK routing authority |
+| ARCH-04E1A | ARCH-04C | TASK routing-manifest schema/public facts and accepted-effects port, no handlers or REV dependency |
+| ARCH-04E1B | ARCH-04E1A, CON-02B hidden contract; shared REV-04B + CON-03C/07 + REV-12A shared fence foundation for false | TASK hidden handlers; consume one shared acceptance operation on false/pass |
+| ARCH-04E2 | ARCH-04E1B | AUTH exact TASK routing authority |
 | ARCH-04E3 | ARCH-04E2, ARCH-04D, AUTH-OUTBOX-02; shared acceptance proof for false | TASK live dispatch/routing composition: true to allow_review, false/pass to shared acceptance when proven |
 | ARCH-04E | ARCH-04E3 | Completed coordination boundary consumed by downstream REV |
 | ARCH-04F (later public-cutover prerequisite) | ARCH-04E | CHECKER failure facts and TASK/ART remediation resubmission, not REV |
@@ -65,7 +65,7 @@ new permission requirement.
 Current supporting contracts are [ARCH-04B2](chunks/WS-ARCH-001-04B-art-post-submit-materialization.md#arch-04b2--separate-art-output-custody-child),
 [AUTH-OUTBOX-01/02](../../WS-AUTH-001/planning/PLAN.md#ws-auth-001-outbox-01--unavailable-dispatcher-contract),
 [CON-02B](../../WS-CON-001/OVERVIEW.md#con-02b-current-dispatcher-contract), and
-[ARCH-04E1/04E2/04E3](chunks/WS-ARCH-001-04E-canonical-allow-review.md#current-bounded-sequence).
+[ARCH-04E1A/04E1B/04E2/04E3](chunks/WS-ARCH-001-04E-canonical-allow-review.md#current-bounded-sequence).
 Each numbered section is a current bounded design, expanded into its own change
 record on implementation; the parent is not a multi-owner implementation PR.
 

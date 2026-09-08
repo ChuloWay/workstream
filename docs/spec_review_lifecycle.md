@@ -541,18 +541,19 @@ the same outcome; a changed envelope under the same identity denies.
 
 Extract foundations from existing owner work, not a new initiative:
 
-1. ARCH-04E1's TASK manifest persistence/public scalar facts and narrow accepted
+1. ARCH-04E1A's TASK manifest persistence/public scalar facts and narrow accepted
    effects port follow CHECKERS-04C facts, without routing handlers or REV FKs.
    One manifest stores the locked `human_review_required` branch; it is not
    restricted to human admission. This schema precedes the REV source FK.
 2. REV-04B shared source/FinalAcceptance persistence follows that schema, then
    CON-03C contribution/award persistence and CON-07 submitter participation.
    A Review FK target may require a table, not live claim or review endpoints.
-3. Pull the existing REV-12A controller/fence persistence, mutation-fence port
-   and CON obligation-ordinal hooks forward as the shared acceptance foundation.
+3. Pull the existing [REV-12A shared fence foundation](#rev-12a-shared-fence-foundation)
+   (controller/fence persistence, mutation-fence port
+   and CON obligation-ordinal hooks) forward before shared acceptance.
    They depend on owner persistence, not human queues/decisions/drain projections.
    Later operator/drain work extends these same rows and ports; no second fence.
-4. The shared operation consumes those foundations. ARCH-04E1's hidden routing
+4. The shared operation consumes those foundations. ARCH-04E1B's hidden routing
    handler then invokes it, ARCH-04E2 activates the exact proven AUTH manifest, and
    ARCH-04E3 proves live composition. PROJECTS enables false only after that
    proof and ARCH-04F's usable checker-remediation path.
@@ -930,6 +931,8 @@ authority.
 
 ## Joint Release Control
 
+### REV-12A shared fence foundation
+
 REV-12A is a non-executable split record. Its shared persistence/fence/CON
 ordinal foundation is pulled forward before either acceptance trigger as
 specified in the [shared implementation order](#implementation-order-and-required-proof).
@@ -940,6 +943,14 @@ PostgreSQL advisory-lock fences, mandatory typed fence ports, and bounded drain
 observations across review mutations, task submissions, queue admission,
 authority-loss replacement, CON fulfillment-obligation writers, dispatch, and
 callbacks.
+
+This named foundation includes only canonical controller/phase/generation
+persistence, the caller-session mutation fence and CON root-ordinal allocation
+hooks, with independent-session writer-versus-cutoff proof. It has no dependency
+on review queues, leases, decisions or projection observation adapters. The
+later REV-12A operator/drain integration reuses it. Both acceptance callers
+require a valid authorized lifecycle generation; no bootstrap bypass or second
+availability flag is introduced.
 
 Activation and shutdown are generation-bound and crash resumable. Shutdown
 fences new admission, drains admitted commands and leases, captures the

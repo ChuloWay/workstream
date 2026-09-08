@@ -1,6 +1,6 @@
 # Chunk Contract: WS-ARCH-001-04E Canonical Allow-Review Manifest
 
-Disposition: Planned. Coordination contract with three owner-sized boundaries
+Disposition: Planned. Coordination contract with owner-sized boundaries
 below, not one mixed implementation PR. Risk: L1. Outcome: the hidden admission-backed
 Submission automatically dispatches post-submit checking and exposes one
 durable current routing fact; an exact `allow_review` manifest becomes the REV
@@ -24,7 +24,7 @@ false uses the same shared FinalAcceptance/CON operation as human accept, not
 enqueue human review or treat `allow_review` as acceptance authority. The
 current TASK children do not implement REV/CON internals: consume the
 [canonical shared participants and authority contract](../../../../../docs/spec_review_lifecycle.md#finalacceptance).
-First deliver 04E1's TASK manifest schema/public facts and narrow accepted-effects
+First deliver 04E1A's TASK manifest schema/public facts and narrow accepted-effects
 port after 04C, without REV dependency or handlers. REV-04B can then reference
 that schema. Shared REV-04B/CON-03C/07 and the early existing REV-12A/CON fence
 foundation are hard dependencies of false handler composition, not of this
@@ -38,14 +38,18 @@ false. Before its acceptance participant is implemented and activated, false
 has no live success route; an unexpected false attempt fails closed without
 creating human admission, acceptance or contribution effects.
 
-1. **ARCH-04E1 — hidden TASK handlers and manifest.** After 04C public facts and
-   CON-02B's handler/claim contract, TASK implements unavailable request/event
+1. **ARCH-04E1A — TASK source foundation.** After 04C, publish the routing
+   manifest persistence/public facts and narrow accepted-effects port described
+   above. No handler, REV source FK or acceptance operation dependency.
+2. **ARCH-04E1B — hidden TASK handlers.** After 04E1A and
+   CON-02B's handler/claim contract (plus shared acceptance foundations for
+   false), TASK implements unavailable request/event
    production for its own evaluation-request event and the TASK consumer of
    04C's already-defined final-result notification, exact public facts, currentness protocol
    and transaction proof described below. No live worker or action activation.
    Initial request reservation is a bounded atomic consequence of the existing
    exact `submission.create` command, not an authority token sent to the worker.
-2. **ARCH-04E2 — AUTH routing activation.** After 04E1 hidden proof, AUTH
+3. **ARCH-04E2 — AUTH routing activation.** After 04E1B hidden proof, AUTH
    registers and activates proposed fixed identity
    `workstream.task.post_submit_router` with sole action/permission
    `task.post_submit.route`. Its context binds committed completion event/claim,
@@ -60,10 +64,10 @@ creating human admission, acceptance or contribution effects.
    checker, ART, dispatcher, human review or generic contribution actions.
    Derived submitter/award writes occur only through the shared participant,
    exactly as they do inside human `review.decision`.
-3. **ARCH-04E3 — live composition and end-to-end proof.** After 04E2, 04D and
+4. **ARCH-04E3 — live composition and end-to-end proof.** After 04E2, 04D and
    AUTH-OUTBOX-02, wire the proven handlers and canonical Submission route to
    the existing shared dispatcher. TASK owns this narrow live integration and
-   legacy-call reachability cutover, not another implementation of 04E1.
+   legacy-call reachability cutover, not another implementation of 04E1B.
 
 If the shared acceptance foundation lands later than true routing, keep false
 activation unavailable and integrate it into this same handler after the named
