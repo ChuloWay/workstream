@@ -20,23 +20,23 @@ post-task requirement. Historical split parents 05/06 are not extra PRs.
 | `WS-POL-003-04A2` | Complete hidden immutable setup-ledger finalization with closed outcomes and no live route. | Merged 04A3 |
 | `WS-AUTH-001-12J` | Complete exact fixed-service authority for the two compilation-derived projection ports. | Merged 04A3 |
 | `WS-AUTH-001-12B2` | Complete exact setup-finalization authority (PR #384). | Complete POL-04A2 + AUTH-12J |
-| `WS-POL-003-04B` | Planned explicit-PM-request live cutover through the hidden projection/finalization chain; remove every legacy inference call from live reachability. | Merged 04A3 + 04A2 + AUTH-12J + AUTH-12B2 |
-| `WS-POL-003-05A` | Hidden approval/effective/pre-submit projection behavior over the complete immutable result. | 04B |
-| `WS-AUTH-001-12F4` | Activate exact PM approval authority and PREP composition for the hidden 05A manifest. | 05A |
+| `WS-POL-003-04B` | Planned explicit-PM-request live cutover through the hidden projection/finalization chain; remove every legacy inference call from live reachability. | Merged 04A3 + 04A2 + AUTH-12J + AUTH-12B2 + ARCH-04A catalogue/schema |
+| `WS-POL-003-05A` | Hidden complete review package, setup-wide correction and approval/effective/pre-submit behavior. | 04B |
+| `WS-AUTH-001-12F4` | Activate exact review-package read, PM correction/approval and PREP composition for the hidden 05A manifest. | 05A |
 | `WS-POL-003-05B` | Live PM approval and trusted effective/pre-submit projection cutover. | 05A + AUTH-12F4 |
 | `WS-POL-003-06A` | Hidden deterministic post-submit projection and separate approval behavior; zero model calls. | 05B |
 | `WS-AUTH-001-12G` | Activate exact fixed-service projection plus PM approval/correction authority for the hidden 06A manifest. | 06A |
 | `WS-POL-003-06B` | Live deterministic post-submit projection/approval cutover with zero additional inference. | 06A + AUTH-12G |
 | `WS-POL-003-07` | One typed facade over existing ART pre and CHECKER post contracts; no post-result persistence. | 06B + ARCH-04A registered capability proof + merged ART-04B1-04B3 |
 | `WS-AUTH-001-12H` | Activate guide publication only over the complete approved current-generation unified chain. CP08, WS-ARCH-001-03A/03B/03C, and CP09 remain downstream. | POL-07 + corrected AUTH-12B2 + CP05 active ContributionPolicy behavior + CP06 validation + CP07 ProjectGuide binding |
-| `WS-POL-003-08` | Visibility, generation-safe correction, physical legacy inference/parallel-route cleanup, and activation compatibility proof. | Planned after 07 + AUTH-12H + canonical WS-ARCH-001-04E manifest; not a prerequisite for 03A |
+| `WS-POL-003-08` | Supplementary visibility and physical legacy cleanup; essential review/correction already belongs to 05A/05B and 06A/06B. | Planned after 07 + AUTH-12H + canonical WS-ARCH-001-04E manifest; not a prerequisite for 03A |
 
 ## Merged ART admission foundation
 
 ART-04B3, XINT-06A, ART-04C1/04C2 and replacement WS-ARCH-001-02A-02H are
 merged. The hidden admission-backed Submission transaction is authorized;
 historical XINT-05A/05B and ART-05A/05B are non-executable. The remaining path
-to canonical `allow_review` is coordinated by WS-ARCH-001 PLAN2 and does not
+to canonical `allow_review` is coordinated by the current WS-ARCH-001 dependency contract and does not
 run in parallel with a second Submission path.
 
 Once a unified guide generation is active, ART admission must bind only that

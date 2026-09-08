@@ -1,16 +1,18 @@
 # Activation Custody: WS-AUTH-001
 
-The final v0.1 ART catalogue reconciliation, PREP extension, and activation
-waves are superseded prospectively by
-`../WS-XINT-002-art-auth-end-to-end/`. The counts immediately below are the
-trusted pre-reconciliation entry evidence; at its merge, WS-XINT-002-01
-replaced them with the then-live 71/78/22/56 catalogue recorded in the ART
-custody section without changing runtime availability. Subsequent AUTH chunks
-have advanced the current catalogue to 71/96/43/53.
-The pre-reconciliation baseline is trusted `main` commit
-`2fb322bd2249a5fe9d3fa706dc63f033074e38ce`: 76 PermissionIds, 81 ActionIds,
-22 active actions, and 59 planned actions. Older counts below are explicitly
-historical snapshots at their named commits, not the WS-XINT-002 entry state.
+For current work, start with the
+[AUTH overview](../../.commitrail/initiatives/WS-AUTH-001/OVERVIEW.md) and
+[cross-owner dependency contract](../../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract).
+This document explains activation custody; historical sequences below do not
+restart completed work or create another contribution-permission system.
+The canonical [authorization specification](../spec_authorization_service.md)
+and typed runtime catalogue define the registered facts and availability.
+After CP03B and AUTH-12B2, the catalogue has 73 PermissionIds, 111 ActionIds,
+62 active actions and 49 planned actions. Verify the then-current registry
+when implementing rather than treating an older count as a future gate.
+
+Historical entry evidence is preserved in the
+[original custody record](../../.commitrail/initiatives/WS-AUTH-001/pre-cutover/ACTIVATION_CUSTODY.md).
 
 ## Authority
 
@@ -26,7 +28,7 @@ This plan applies the merged `WS-XINT-001` handoffs to AUTH. It distinguishes:
 Feature chunks never change availability. AUTH never invents feature facts or
 performs feature lifecycle mutations.
 
-## Catalogue baselines
+## Historical catalogue baselines
 
 Trusted entry `main` after PR #140 contains 74 PermissionIds and 57 ActionIds:
 nine active and 48 planned. AUTH-09A adds zero permissions and eight planned
@@ -50,6 +52,13 @@ mappings, and availability must remain identical.
 | `WS-XINT-002-06B` | Planned: `artifact.post_submit.checker_input.materialize`, `artifact.checker_output.write`, `artifact.checker_output.binding.create` |
 | `WS-XINT-002-07A` | Planned: `artifact.review_packet.materialize` only |
 | Future REV-owned activation, not approved for v0.1 | Planned/unavailable: `artifact.review_evidence.binding.create` |
+
+The table retains historical planning-custody labels, not a literal mapping
+of every typed runtime `ActionOwner`. XINT-06B groups runtime
+`WS-AUTH-001-ART-06A` post-submit materialization and
+`WS-AUTH-001-ART-06B` output write/binding. ARCH-04D is their current replacement
+activation boundary after ARCH-04B/04C; the typed catalogue is unchanged by
+this planning reconciliation. Do not implement an additional XINT-06B lane.
 
 Runtime owner `WS-XINT-002-07` retains catalogue custody. The only approved
 v0.1 availability transition is 07A packet materialization. Evidence binding
@@ -108,10 +117,10 @@ REV runtime owner values remain registered for those actions until their exact
 activation waves replace them. It changes no mapping or availability and
 adds no migration. All 19 actions remain planned and unavailable; these AUTH
 custodian labels grant no reviewer, Operator, or service authority. The four
-approved lifecycle actions remain planned and unavailable, and PREP remains separately
-human-gated.
+approved lifecycle actions remain planned and unavailable. The shared PREP
+foundation is already complete; its existence grants no lifecycle authority.
 
-The front-loaded readiness waves are:
+The completed front-loaded readiness waves are:
 
 | XINT-003 wave | AUTH-only result |
 |---|---|
@@ -136,7 +145,7 @@ Evidence-upload actions remain future-intent-required and unavailable; they are
 not activated by 04 or 07. XINT-002-owned ART actions and shared submission
 actions are excluded.
 
-## Front-loaded additive registration
+## Completed front-loaded additive registration
 
 The following values are registered planned runtime actions, not active
 authority:
@@ -145,9 +154,9 @@ authority:
 |---|---|---|
 | `WS-XINT-003-02C` | `WS-XINT-003-08A` / `WS-XINT-003-08B` | `review.revision_context.repair` -> `project.task.manage`; `review.revision_context.legacy_close` -> `operations.reconcile.run`; `review.revision_obligation.close` -> `project.task.manage`; `review.lifecycle.activation.manage` -> `operations.reconcile.run` |
 
-`WS-XINT-003-02C` is the executable availability-neutral AUTH readiness chunk:
-it registers these four actions and the exact fixed-service identities/matrix
-before REV lifecycle implementation. `WS-XINT-003-02D` then publishes the
+`WS-XINT-003-02C` delivered availability-neutral AUTH readiness:
+it registered these four actions and the exact fixed-service identities/matrix
+before REV lifecycle implementation. `WS-XINT-003-02D` then published the
 closed identifier/digest-based PREP/read contracts. Neither chunk loads or
 implements REV lifecycle state, and the real kernel continues to deny every
 unavailable action. REV later supplies canonical facts, guards, loaders,
@@ -155,7 +164,7 @@ composers, transaction revalidation, and hidden behavior; matching XINT waves
 activate only after that integrated proof.
 
 Registration requires typed plus PostgreSQL audit mapping parity. The migration
-number is allocated from trusted `main` when 02C starts. The registration migration
+number was allocated from trusted `main` when 02C started. The registration migration
 takes a writer-blocking downgrade lock and refuses without mutation when any
 decision, audit, idempotency, or linked evidence references an added ActionId.
 Its proof includes populated refusal, empty safe downgrade, re-upgrade, and
@@ -168,9 +177,9 @@ and unavailable. It may remain named in the closed
 `workstream.artifact.binding` static matrix, but 07A does not activate or extend
 it. Any activation requires a separate approved REV-owned intent.
 
-## Prepared mutation prerequisite
+## Completed prepared mutation prerequisite
 
-`WS-AUTH-001-PREP` adds a session-bound, action-bound, opaque, single-use,
+`WS-AUTH-001-PREP` delivered a session-bound, action-bound, opaque, single-use,
 nonserializable prepared authority handle:
 
 ```text
@@ -243,7 +252,7 @@ authorization decisions and evidence records, exact lock order, and one
 transaction owner. Human authority cannot be silently converted into service
 authority.
 
-## Sequencing
+## Historical sequencing — not the remaining work queue
 
 ```text
 WS-AUTH-001-XINT planning reconciliation
@@ -262,7 +271,12 @@ WS-XINT-002 sequence: complete registration, prepared feature boundaries,
 fixed internal services, guide, submission, checker, review artifact access, and
 end-to-end conformance. AUTH-14 and AUTH-15 are not alternate activation paths.
 
-Only one WS-AUTH implementation chunk is active at a time. ART, REV, and CON
-may build hidden behavior in their own worktrees while real actions remain
-planned, but each merged AUTH activation must converge from current trusted
-`main` and pass its own human checkpoint.
+## Current sequencing and concurrency
+
+Use the linked current cross-owner plan for remaining activation boundaries.
+Distinct initiatives may proceed concurrently in separate branches/worktrees.
+Serialize or rebase overlapping catalogue, matrix, composition and migration
+edits; do not impose a global single-active AUTH chunk rule. Hidden feature
+behavior stays unavailable until its exact activation is implemented and
+verified. Each PR uses the normal evidence, review and human merge workflow;
+planning records do not introduce an additional administrator checkpoint.

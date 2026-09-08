@@ -1757,7 +1757,10 @@ databases, and no artifact bytes in PostgreSQL. It is not downgradable.
 The pre-submit checker materializer is a mandatory part of preparation, so its
 fixed-service AUTH activation must merge after hidden ART-04B1-04B3 and before
 contributor preparation is activated. Post-submit materialization and checker
-output actions remain a later activation after ART-06A/06B. This ordering
+output actions remain planned: ARCH-04B owns exact ART materialization,
+ARCH-04C owns CHECKERS result custody, and ARCH-04D owns their exact activation.
+ARCH-04E separately owns TASK routing. Historical ART-06A/06B labels do not
+open duplicate implementation lanes. This ordering
 prevents a live contributor route whose mandatory checker read is unavailable.
 
 ART later supplies an exact, authorized reviewer-packet byte capability, while

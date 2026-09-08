@@ -403,6 +403,17 @@ history, and receipts. It is not eligibility or settlement truth.
 
 ## FinalAcceptance Boundary
 
+Planned amendment: the [project-controlled acceptance direction](../.commitrail/changes/pre-review-plan-reconciliation.md#accepted-direction-project-controlled-acceptance-mode)
+requires an explicitly authorized automated source alongside the human source
+specified below. This source contract is not yet reconciled or implemented.
+Do not synthesize a Review to satisfy `source_review_id`, loosen source checks
+by merely making it nullable, or create a reviewer contribution for automated
+execution. CON must validate the exact authorized acceptance source and locked
+contribution terms in the same atomic participant used for the submitter's
+accepted contribution and applicable compensation effects. Raw checker results
+remain insufficient. The existing human-only schema remains authoritative for
+its branch until the replacement source contract is reviewed.
+
 `FinalAcceptance` is a REV-owned immutable internal fact:
 
 ```text
@@ -855,8 +866,8 @@ AUTH must approve an exact ServiceIdentity/ActionId/static-row design or an
 explicitly closed dual-principal evaluator. Discovery candidate strings are
 not canonical catalogue identifiers and MUST NOT be registered by CON.
 
-`task.claim` currently has a stable PermissionId but no ActionId. CON-05A and
-task-owned readiness/inheritance composition must merge before AUTH registers
+`task.claim` currently has a stable PermissionId but no ActionId. CP08 lineage
+and ARCH-03B task-owned readiness/inheritance composition must merge before AUTH registers
 or activates that future action. `review.claim` and `review.decision` remain
 planned until the inherited task-policy lineage, CON-07, and complete REV
 composition merge. AUTH must transfer the complete
@@ -988,19 +999,28 @@ economic terms, and every semantic consumer are retired.
 
 The clean cut is mandatory and split:
 
-1. `WS-CON-001-05A` introduces assignment freezing, removes all semantic
-   consumers of the legacy model, migrates or deterministically rebuilds only
-   the explicitly classified pre-production data, and proves zero fallback.
-2. `WS-CON-001-05B` proves zero remaining consumers and physically removes the
-   dead schema with reviewed upgrade and downgrade behavior.
+1. CP06/CP07 provide CON validation and PROJECTS hidden activation/binding;
+   AUTH-12H activates that exact complete command. CP08 supplies TASK lineage
+   fields, and ARCH-03B writes readiness/claim/Submission locks before ARCH-03C
+   activation. Each replacement consumer removes its legacy semantic dependency
+   when its own canonical path is installed; no fallback becomes an authority.
+2. CP09 coordinates physical removal only after all consumers, including
+   CHECKERS and public ARCH-02I, are replaced and retained history remains
+   recoverable. It is not an upstream activation or `allow_review` dependency.
+   Historical CON-05A/05B are superseded implementation groupings, not parallel
+   lanes. The [current dependency contract](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
+   records the owner-sized replacements.
 
 No alias, dual read, dual write, automatic conversion, compatibility response,
 or historical executable fallback may remain. Until those chunks merge, old
 runtime-oriented chunk specifications describe current implementation only and
 are subordinate to this target contract.
 
-The human-owned legacy-row classification MUST be recorded before CON-05A
-starts. Ambiguous rows cause the migration to fail closed.
+Any migration affecting retained legacy rows requires an explicit verified
+inventory and human-owned disposition before changing or deleting that data.
+Ambiguous rows fail closed; do not infer current policy for historical work or
+fabricate a backfill to permit deletion. Fresh-install parity is not proof of
+retained-history preservation.
 
 ## Human And AUTH Gates
 
@@ -1011,7 +1031,8 @@ answers:
    delivery recovery, and CON audit read/export before CON-10A/10B or related
    AUTH registration starts.
 2. The human must classify all pre-production legacy economic rows for
-   deterministic rebuild or explicit migration before CON-05A/05B.
+   deterministic rebuild or explicit migration before a replacement migration
+   or CP09 cleanup changes those rows.
 3. The human and AUTH must approve exact fixed-service identity, action, static
    row, context, and evaluator contracts for dispatcher mechanics, outbound
    delivery, reconciliation, projection rebuild, and callback execution before
@@ -1025,6 +1046,12 @@ No dependent chunk may treat an unresolved gate as an implicit default.
 
 The core dependency order is a partial order. Persistence and flush-only
 transaction participants do not wait for generic dispatch:
+
+The historical CON-numbered sequence below preserves the broader REV/CON
+interleaving. Its pre-review CON-05A/05B labels are replaced by CP06/CP07,
+CP08/ARCH-03B/03C and later CP09 as specified above. Current shared-dispatch
+delivery also precedes live task invalidation and ARCH-04E routing; it does
+not wait for contribution/award persistence or REV decisions.
 
 ```text
 CON-01 -> CON-02A

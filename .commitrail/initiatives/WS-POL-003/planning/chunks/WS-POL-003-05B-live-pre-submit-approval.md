@@ -30,5 +30,11 @@ authority, legacy 12F3-only approval, or partial effective state.
 
 ## Verification and review
 
+Live read-before-approve and setup-wide correction use POL-05A's exact hidden
+projection/commands and AUTH-12F4's separate actions. Bind an exact compilation
+selector, never approve by an unverified latest diagnostic response. Expose
+these before first approval; later POL-08 owns supplementary visibility and
+physical cleanup, not the ability to inspect or correct the proposal.
+
 PostgreSQL approval races, replay/revocation/stale facts, default isolation,
-zero-call proof, hosted coverage, and all L1 tracks.
+zero-call proof, hosted coverage, and impact-routed architecture, security, QA and product/operations reviews, plus tracks affected by the actual diff.

@@ -1,5 +1,14 @@
 # Chunk 3 Project And Guide Foundation Spec
 
+This retains the original foundation implementation and legacy response/migration
+shapes; it is not the current remaining-work plan. For the replacement unified
+path, use the [current dependency contract](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract),
+[checker architecture](architecture_checker_framework.md) and
+[contribution specification](spec_contribution_compensation.md).
+In particular, historical PaymentPolicy and separate-inference requirements
+do not govern the new activation command. Historical migration names below
+must not be allocated again against the current baseline.
+
 ## Scope
 
 Build the Workstream v0.1 project and guide foundation.
@@ -185,7 +194,10 @@ same approval path. Guide activation fails unless the compiled project
 pre-submit checker policy exists.
 
 Guide activation is unavailable until AUTH-12H installs its prepared mutation
-boundary. The historical activation bundle will contain:
+boundary. The following retained legacy response shape is not the replacement
+activation contract. CP07 owns the complete hidden unified command/response,
+including guide-bound ContributionPolicy and no required PaymentPolicy row;
+AUTH-12H activates that command. The legacy shape contains:
 
 - `guide_source_snapshot`
 - `guide_sufficiency_report`

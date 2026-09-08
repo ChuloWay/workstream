@@ -305,8 +305,9 @@ Pre-submit results do not create durable `CheckerRun` records, do not move a
 task to `review_pending`, and do not return review decision values: `accept`,
 `needs_revision`, or `reject`.
 
-The `SubmissionArtifactPolicyDerivationAgent` produces the artifact-intake
-contract. It does not produce unrestricted checker code. Workstream's trusted
+The unified `ProjectGuideCompilationAgent` proposes the artifact-intake
+contract alongside sufficiency and both checker-stage bindings in one result.
+It does not produce unrestricted checker code. Workstream's trusted
 checker compiler builds and validates the project checker specification during
 setup, then persists deterministic project-level checker logic using approved
 primitives such as:
@@ -335,23 +336,22 @@ pass, and a locked code hash.
 
 Pre-submit checks are authoritative for intake. Post-submit checker runs are authoritative for review readiness.
 
-## Post-Submit Derivation
+## Post-Submit Policy Projection
 
-Post-submit policy setup resumes after an authorized covered Project Manager
-approves the derived `SubmissionArtifactPolicy`. That approval
-creates the effective project submission artifact policy and compiled project
-`PreSubmitCheckerPolicy`; only then does Workstream run
-`PostSubmitCheckerPolicyDerivationAgent`.
+The unified compilation already contains the post-submit proposal before the
+Project Manager approves the artifact/pre-submit chain. Approval creates the
+effective intake policy and compiled pre-submit policy; a separate operation
+then deterministically projects the same result's post-submit component. It
+does not resume finalized setup or invoke `PostSubmitCheckerPolicyDerivationAgent`.
 
-The post-submit derivation agent receives bounded guide-source material,
-sufficiency summary, effective policy summary, pre-submit checker summary, and
-the registered post-submit checker catalog. It may request only registered
-checker names and must tie project-specific requests to bounded evidence refs.
-If the guide implies a required checker that is not registered, setup records
-`post_submit_setup_blocked` with a safe unsupported-checker summary instead of
-inventing a checker or letting activation proceed.
+Bindings select only implemented definitions/configurations from the exact
+CHECKERS-owned catalogue snapshot and trace to the guide's requirement inventory.
+All pre/post capability gaps block under the current compilation schema.
+Ordinary warnings may be acknowledged; unsupported automation cannot be silently
+reclassified as human review. Explicit approved `human_review` requirements
+remain valid and do not claim automated semantic coverage.
 
-The agent output is a constrained spec. Workstream's trusted compiler owns the
+The unified output is a constrained proposal. Workstream's trusted compiler owns the
 canonical `PostSubmitCheckerPolicy.policy_body`, hash, default checker list,
 and execution order. Runtime checker execution loads the locked compiled
 policy; it does not call the setup derivation agent to judge a contributor
@@ -433,9 +433,10 @@ Draft packet
 -> execute locked PostSubmitCheckerPolicy execution_checkers
 -> store CheckerResult records
 -> calculate blocking status
--> if no blocking failures remain: store readiness proof on CheckerRun and move to REVIEW_PENDING
--> if contributor-fixable blocking failures exist: route to user-facing needs_revision with outcome_source = auto_checker
--> if locked task setup is incomplete or unsafe: route to internal task_setup_blocked
+-> commit final CheckerRun result/recommendation, required verified output bindings and completion event
+-> TASK consumes the current result: publish allow_review manifest/current pointer and review_pending atomically when eligible
+-> TASK's later checker-remediation boundary projects contributor-fixable failures as needs_revision with outcome_source = auto_checker
+-> project/setup faults remain internal task_setup_blocked, never contributor blame
 -> if checker infrastructure fails: keep in checker retry handling
 ```
 
@@ -443,11 +444,17 @@ The checker run must bind to one immutable submission version. If the contributo
 
 `evaluation_pending` is the persisted state while post-submit checker execution
 or infrastructure retry is active. After checker results, immutable output/log
-artifact bindings, and completion facts commit atomically, the checker subsystem
-preserves the routes above: passing work moves to `review_pending`, while
+artifact bindings, and completion facts commit atomically, the TASK-owned
+handler performs the routes above through its own transaction and authority:
+passing work moves to `review_pending`, while
 contributor-fixable blocking failures may move to `needs_revision` with
 `outcome_source = auto_checker`. Artifact-storage cutover changes how exact
 bytes and checker outputs are persisted; it does not redesign these routes.
+
+ARCH-04C owns CHECKERS result/currentness and its completion event, not TASK
+mutations. ARCH-04E owns the current `allow_review` manifest and TASK transition;
+ARCH-04F owns contributor-readable non-allow remediation before public cutover.
+The legacy direct CHECKERS-to-TASK mutation is not a second canonical path.
 
 `review_pending` marks readiness for the separately owned WS-REV lifecycle.
 WS-REV alone creates `ReviewPacketManifest`, review queues, reviewer leases,
@@ -461,6 +468,13 @@ checker run remains failed as an infrastructure failure and the task does not
 move to human review. A retry requires Operator
 `operations.checker.retry`, a reason, a new attempt/supersession record, and
 append-only audit evidence.
+
+This terminal retry is distinct from transport redelivery or recovery of an
+unfinished provider call. In-flight recovery retains its logical attempt and
+provider idempotency identity; it cannot turn a terminal failed run back into
+an unfinished one. A new authorized terminal retry preserves prior evidence
+and supersedes it through the coordinated currentness protocol, never by
+replaying an old success or bypassing the Operator boundary.
 
 If a checker finds missing locked guide or policy context, missing acceptance
 criteria, or another task setup defect that is not contributor-fixable, the run uses
@@ -481,7 +495,8 @@ The checker run records:
 - warning count
 - completion timestamp
 
-After ART-06 cutover, this gives reviewers proof that they are reviewing the
+After ARCH-04B materialization, ARCH-04C result custody, ARCH-04D activation and
+ARCH-04E routing integration, this gives reviewers proof that they are reviewing the
 same immutable binding and manifest that passed automated checks; legacy
 caller-owned manifest fields are not authority.
 
@@ -545,7 +560,7 @@ Track:
 - checks that reviewers repeatedly ignore
 - checks that predict rejection
 
-Checker quality is reviewed weekly during the first month. A repeated reviewer finding becomes one of:
+Checker quality is reviewed using recorded outcomes. A repeated reviewer finding becomes one of:
 
 - a new checker
 - a stronger project guide rule

@@ -2,6 +2,13 @@
 
 Status: proposed non-executable skeleton after CP06. Risk: L1.
 
+Preserve the ReviewPolicy setting change's activation guard:
+`human_review_required=false` may exist in draft, but activation must fail
+until the authorized automated FinalAcceptance/CON path is proven and
+available. Validate the exact guide-bound policy, never silently change it
+to true. True does not depend on automated acceptance. This is the same
+requirement as the existing activation path, not a second policy mechanism.
+
 PROJECTS builds hidden, deny-by-default guide-activation behavior to call the CON public
 validation capability and persist the returned exact version as non-null
 `ProjectGuide.contribution_policy_version_id`. PROJECTS owns the guide write and
@@ -16,8 +23,11 @@ claim. It does not activate a route or action. AUTH-12H later supplies exact
 CON validation is a dependency, not a callback into PROJECTS activation.
 
 The PROJECTS hidden activation command owns the replacement readiness guard:
-ContributionPolicy must be same-project, published, complete for submitter and
-reviewer, binding-valid and explicitly selected; no latest-version inference.
+ContributionPolicy must be same-project and active, with the explicit expected
+version equal to its current published selector, complete for submitter and
+reviewer and binding-valid. CON validates this under lock; PROJECTS never
+silently substitutes a newer version. This validation is for a new guide
+binding, not revalidation of already frozen work against current policy.
 Review/revision policy IDs, `policy_generation`, hashes and guide generation must also be
 complete and consistent. CP07 replaces the legacy PaymentPolicy requirement
 for this new path before AUTH-12H activates it; CP09 only removes unreachable

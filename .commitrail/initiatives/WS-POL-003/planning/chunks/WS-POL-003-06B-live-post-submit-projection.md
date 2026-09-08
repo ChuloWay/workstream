@@ -34,4 +34,4 @@ checkers, legacy post-submit agent method, or partial activation.
 ## Verification and review
 
 PostgreSQL atomicity/races, all-pairs authorization, zero-call reachability,
-hosted coverage, and all L1 tracks.
+hosted coverage, and impact-routed architecture, security, QA and product/operations reviews, plus tracks affected by the actual diff.

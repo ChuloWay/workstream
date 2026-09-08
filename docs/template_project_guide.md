@@ -38,6 +38,14 @@ Tasks must attach a locked guide version. Later guide edits do not silently chan
 
 Define what accepted work means for this project.
 
+Planned ReviewPolicy setting: `human_review_required: true` (default). False may
+be configured in draft; guide activation requires supported post-submission
+checks providing the required acceptance evidence and an available, proven
+automated acceptance path. This is
+guide-bound policy configuration, not permission granted by writing this
+template. False produces no reviewer contribution; adjudication is not part
+of this v0.1 setting.
+
 Accepted work must be specific, auditable, and aligned with this guide. Avoid broad statements like "good quality" unless they are backed by concrete criteria.
 
 Define what unacceptable work means for this project, including copied work, generic generated output, unverifiable evidence, missing source attribution, and unsafe handling of confidential data.
@@ -107,6 +115,8 @@ This section is a human-readable summary. The enforcement source is the approved
 Every active guide version must have:
 
 - GuideSourceSnapshot:
+- ProjectGuideCompilation and exact result/component/catalogue lineage:
+- Immutable setup finalization reference:
 - GuideSufficiencyReport:
 - SubmissionArtifactPolicy:
 - EffectiveProjectSubmissionArtifactPolicy hash:
@@ -114,7 +124,12 @@ Every active guide version must have:
 - PostSubmitCheckerPolicy:
 - ReviewPolicy:
 - RevisionPolicy:
-- ContributionPolicy and active published version:
+- ContributionPolicy and exact guide-bound published version:
+
+At new activation, validate the expected version against the active policy's
+current published selector. After binding, later policy publication does not
+replace this guide/attempt lineage. Approval and correction records link to the
+finalized compilation; they never rewrite its receipt.
 
 ContributionPolicyVersion is the source of truth for exact
 `accepted_submission` and `completed_review` compensated/unpaid rules and any

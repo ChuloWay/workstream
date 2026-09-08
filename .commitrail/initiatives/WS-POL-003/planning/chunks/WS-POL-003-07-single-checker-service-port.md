@@ -23,6 +23,12 @@ later supplies its canonical current-result persistence implementation.
 Artifact-flow callers never
 select or call individual platform/project checkers.
 
+The composition root injects these owner ports. ART and CHECKERS do not import
+a concrete POL facade. The post-submit event handler orchestrates material
+acquisition and invokes the phase facade; its injected CHECKERS executor does
+not call that facade recursively. Existing pre-submit evidence returns
+unchanged from ART, not a second result reconstructed by the wrapper.
+
 ## Allowed files
 
 Checker interfaces/service/composition, project policy plan adapters, typed ART
@@ -39,15 +45,17 @@ plugins, arbitrary code/network execution, or prepared handles in payloads.
 
 - The service exposes exactly one pre and one post command and no generic
   `run_checker(name, ...)` product boundary.
-- Pre composes mandatory ART platform entries with exact task-locked project
-  pre-submit entries through ART-04B1-04B3 and evaluates them once against one
-  sealed scratch generation.
-- Post composes durable defaults with exact task-locked project post-submit
-  entries and evaluates them against one verified stored/bound content lineage.
+- Pre delegates the already-compiled effective ART plan to its existing executor
+  once against one sealed scratch generation; it neither recompiles nor
+  recomposes platform/project entries.
+- Post delegates the exact stamped compiled policy to CHECKERS against one
+  verified stored/bound content lineage. Its plan hash is the canonical locked
+  `PostSubmitCheckerPolicy.policy_hash`; no current-catalogue reselection occurs.
 - Both commands bind exact project/task/assignment, guide/policy, artifact,
   compilation/result/component/catalogue hashes, manifest, generation,
   attempt, action, service identity, and transaction
-  facts; stale/replay/cross-phase/cross-resource calls fail closed.
+  facts; internally stale, mismatched replay, cross-phase and cross-resource
+  calls fail closed. Exact valid replay reuses the canonical result.
 - The port requires a deterministic attempt identity. Bounded retry/repair may
   call the command again for that same logical attempt, but replay returns the
   existing canonical result without rerunning completed members. This is an

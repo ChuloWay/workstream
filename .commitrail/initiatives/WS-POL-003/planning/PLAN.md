@@ -8,6 +8,13 @@ guide source, capability-catalogue snapshot, and setup generation. A durable
 attempt identity and provider idempotency key enforce that cardinality across
 dispatch, timeout, reconciliation, and retry.
 
+This is the intended safety contract, not existing provider-recovery proof.
+The current adapter neither receives the persisted provider key nor exposes
+retrieve/resume. An uncertain outcome must therefore remain blocked without
+another call; typed same-operation recovery requires explicit adapter support
+and verification before it can be advertised. Never infer provider idempotency
+from a local database UUID.
+
 The invocation proposes:
 
 1. guide sufficiency and findings;
@@ -99,7 +106,7 @@ manifest exist, a bounded XINT/AUTH amendment must register and activate:
   run/generation, operation, request digest, and idempotency identity;
 - `project.guide_compilation.execute`: fixed `workstream.project.setup`
   authority bound to exact canonical input hash, source and phase-owned
-  capability snapshot hashes, setup run/generation, instruction/agent version,
+capability snapshot hashes, setup run/generation, instruction/agent version,
   prior compilation when superseding, session/root transaction, and result.
 
 Execute has two fresh authorization points around external I/O: fail-closed
@@ -277,7 +284,9 @@ text.
 
 Every persisted operator-readable model field passes centralized bounded safe
 text validation/redaction. Rejection is atomic: unsafe or structurally invalid
-output produces retryable/blocked setup evidence and no policy projection.
+output terminally consumes that attempt, records bounded blocked evidence and
+produces no policy projection. Transport uncertainty is a different outcome;
+it is not permission to retry invalid accepted output.
 
 ## Trusted validation
 

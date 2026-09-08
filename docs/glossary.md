@@ -197,12 +197,14 @@ sufficiency report for the same snapshot.
 
 ## Project Setup Run
 
-A non-authoritative orchestration ledger for automatic project setup. It records
-queue status, current setup step, Celery task id, bounded errors, and output
-record ids for guide sufficiency, submission artifact policy derivation, and
-post-submit checker setup continuation. The actual policy truth remains in the
-source snapshot, sufficiency report, submission artifact policy, effective
-project policy, pre-submit checker policy, and post-submit checker policy rows.
+A setup execution ledger that does not replace canonical policy truth. The
+unified path records queue/attempt diagnostics and exact compilation/projection
+references, then finalizes the run and its receipt immutably. Later approval,
+post-policy projection and correction have separate operation provenance; they
+do not resume or update that finalized run. Policy truth remains in the source
+snapshot, sufficiency report and versioned artifact, effective, pre-submit and
+post-submit policy rows. Legacy multi-agent continuation fields are not the
+design for the unified path.
 
 ## Submission Artifact Policy
 
@@ -309,13 +311,16 @@ The judgment layer where a reviewer accepts, rejects, or requests revision.
 ## ReviewQueueEntry
 
 The planned durable admission record connecting one exact finalized Submission
-and successful current CheckerRun to server-selected human-review routing.
+and successful current CheckerRun, through the TASK-owned canonical
+`allow_review` manifest, to server-selected human-review routing. The manifest
+is a currentness/lineage handoff, not review authority or a review decision.
 
 ## ReviewLease
 
 The planned permanent identity of one reviewer claim attempt. It binds the
 canonical human reviewer, queue entry, exact Submission packet, lease timing,
-and ContributionPolicyVersion inherited from the task lock.
+and ContributionPolicyVersion copied from the immutable Submission attempt
+stamp, transitively inherited from Task/Assignment without current-policy lookup.
 
 ## Review
 

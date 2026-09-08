@@ -514,10 +514,16 @@ is not a permission alias.
 | `WS-XINT-002-07A` | `artifact.review_packet.materialize` only |
 | Future REV-owned activation, not approved for v0.1 | `artifact.review_evidence.binding.create` remains planned/unavailable |
 
-The table records the executable registry custodian. WS-ARCH-001-02G and 02H
-replace the superseded implementation chunks and may activate only their named
-action after the required hidden evidence exists; they do not rename the
-registry custodian. No planning-only change may promote or reassign an action.
+The table retains planning-custody labels; these are not uniformly the typed
+runtime `ActionOwner` values or the current implementation boundaries.
+In particular, the XINT-06B grouping corresponds to runtime
+`WS-AUTH-001-ART-06A` for post-submit materialization and
+`WS-AUTH-001-ART-06B` for checker-output write/binding. The current replacement
+activation contract is ARCH-04D, after ARCH-04B/04C hidden behavior; it does
+not reopen XINT-06B as a parallel implementation lane. Likewise ARCH-02G/02H
+are replacement implementation boundaries, not automatic registry renames.
+Read exact runtime ownership from the typed catalogue. No planning-only
+change may promote or reassign an action.
 
 The approved v0.1 review flow has a reviewer decision plus note/findings bound
 to the reviewed Submission. It does not include a reviewer-uploaded artifact.
@@ -643,6 +649,43 @@ inherits a human grant or role.
 
 Adding a permission requires a specification/ADR update and human approval.
 Routers cannot invent identifiers or evaluate grant unions.
+
+### Proposed Pre-Review Service Authority
+
+The following is a proposed specification amendment for human design review,
+not registered or active authority. Current catalogue counts above exclude
+these additions. The named implementation boundaries must register typed
+parity, prove hidden behavior and activate only their exact manifests; a
+planning document does not grant a service permission.
+
+| Proposed ActionId / PermissionId | Sole fixed identity | Exact target and guards | Current activation custodian |
+|---|---|---|---|
+| `outbox.dispatch` | `workstream.outbox.dispatcher` | Event/claim generation/lease and exact phase; fresh authority for claim, invoke and finalize; no feature authority | AUTH-OUTBOX-01 registration, CON-02B hidden mechanics, AUTH-OUTBOX-02 activation |
+| `task.assignment.authority_reconcile` | `workstream.task.assignment_reconciler` | Committed exact AUTH invalidation event, project/actor/grant-or-link, active pre-submit assignment; no wrong-role or submitted-history mutation | ARCH-03B hidden handler, ARCH-03C activation |
+| `checker.post_submit.execute` | `workstream.checker.post_submit` | Immutable Submission/request/generation, locked compiled policy, attempt and admitted service; exact pre-I/O authority | ARCH-04C hidden behavior, ARCH-04D activation |
+| `checker.post_submit.finalize` | `workstream.checker.post_submit` | Exact execution request/fence, accepted result digest and required verified output bindings; fresh post-I/O authority and atomic evidence | ARCH-04C hidden behavior, ARCH-04D activation |
+| `task.post_submit.route` | `workstream.task.post_submit_router` | Committed completion event/claim, exact current CHECKER result/fence, immutable Submission and TASK pre-review state; no review decision | ARCH-04E1 hidden handler, ARCH-04E2 activation, ARCH-04E3 live composition |
+
+Each action maps to the identically named permission in this table and only
+its singleton fixed-service row. Humans, dispatchers and unrelated services
+cannot borrow another row. Existing ART materializer/output identities retain
+their separate permissions and allow evidence. No prepared handle crosses a
+commit, I/O, lease wait or message boundary.
+
+Proposed human task actions and existing permission mappings are enumerated in
+the [ARCH-03C manifest](../.commitrail/initiatives/WS-ARCH-001/planning/chunks/WS-ARCH-001-03C-auth-task-readiness.md#proposed-exact-surfaceaction-manifest).
+In particular, `task.start` uses existing `task.claim` entitlement plus exact
+own-assignment guards; Operator recovery remains the distinct
+`operations.task.start_override` permission with a system-scoped human grant.
+Separate management/operational/audit projections preserve their respective
+permissions rather than switching one action's mapping based on token roles.
+No human role's allowed permission set is broadened by those proposed actions.
+
+The [AUTH-12F4 contract](../.commitrail/initiatives/WS-AUTH-001/planning/chunks/WS-AUTH-001-12F4-submission-policy-approval.md)
+also proposes exact complete-compilation review-package read and correction
+actions under existing diagnostic/request permissions. Their bounded resource
+facts require separate review; old status-only diagnostic authority is not
+automatically sufficient to expose a complete proposal.
 
 ### Action And Resource Registration
 

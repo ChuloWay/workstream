@@ -1,8 +1,7 @@
 # WS-ART-001 — Immutable artifact storage
 
-Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
-[`CHUNK_MAP.md`](pre-cutover/CHUNK_MAP.md), and
-[`planning/chunk contracts`](pre-cutover/chunks/).
+Current pre-review work follows the [cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
+and the [capability ledger](../../../docs/roadmap_status.md).
 
 - Disposition: Planned
 - Intent: preserve exact artifact identity, verified bytes, provider-neutral
@@ -40,3 +39,11 @@ must prove exact approved lineage at preparation, consumption and binding.
    cutover.
 3. Perform ARCH-02I only after those replacement paths exist; historical
    ART-05/06 and XINT-05 designs remain non-executable.
+
+## Preserved history
+
+Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
+[`CHUNK_MAP.md`](pre-cutover/CHUNK_MAP.md), and
+[`planning/chunk contracts`](pre-cutover/chunks/).
+These verbatim records preserve completed work and original proposals; where
+pending sequencing conflicts, the current dependency contract above governs.

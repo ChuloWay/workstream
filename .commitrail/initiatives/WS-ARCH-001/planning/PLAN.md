@@ -11,7 +11,7 @@ checker-remediation boundary before public Submission cutover.
 
 | Boundary | Hard predecessors | Sole output owner |
 |---|---|---|
-| POL-04B | Merged POL-04A/04A3/04A2, AUTH-12I/12J/12B2 | PROJECTS live unified setup wiring, no new compiler/finalizer |
+| POL-04B | Merged POL-04A/04A3/04A2, AUTH-12I/12J/12B2, ARCH-04A catalogue/schema foundation | PROJECTS live unified setup wiring, no new compiler/finalizer |
 | CP05 | Merged CP04A/CP04B | AUTH exact policy-action activation |
 | CP06 | CP05 | CON selected-version validation facts |
 | CP07 | CP06 | PROJECTS hidden activation/binding command and replacement readiness guard |
@@ -27,15 +27,23 @@ checker-remediation boundary before public Submission cutover.
 | CP08 | CP07 | TASK-owned policy-lineage fields and public facts, no readiness commands |
 | ARCH-03A | AUTH-12H, CP08 | PROJECTS current active-generation public facts |
 | ARCH-03B | ARCH-03A, CP08 | TASK readiness/claim/assignment/Submission command lineage |
-| ARCH-03C | ARCH-03B | AUTH exact task/assignment activation and integrated readiness proof |
+| ARCH-03C | ARCH-03B, AUTH-OUTBOX-02 | AUTH exact task/assignment activation and integrated readiness proof |
 | CP09 (later cleanup coordination) | All legacy consumers replaced, including CHECKER and public 02I path | Physical economic deletion; not on the allow_review critical path |
 | ARCH-04B | ARCH-04A, POL-07, ARCH-03C, merged ARCH-02H | ART exact stored Submission materialization |
-| ARCH-04C | ARCH-04A, ARCH-04B, POL-07 | CHECKERS durable execution/result/currentness and worker recovery |
+| ARCH-04B2 | ARCH-04A and merged ART admission/verification/binding foundations | ART bounded checker output/log ingestion and verified binding, no routing |
+| ARCH-04C | ARCH-04A, ARCH-04B, ARCH-04B2, POL-07 | CHECKERS durable execution/result/currentness and worker recovery |
 | ARCH-04D | ARCH-04B, ARCH-04C | AUTH post-submit materialization/result activation |
-| ARCH-04E | ARCH-04D | TASK dispatch and canonical current routing manifest |
+| AUTH-OUTBOX-01 | Merged shared outbox persistence and AUTH service/PREP foundations | Planned dispatcher identity/action/matrix and unavailable typed authority contract |
+| CON-02B | AUTH-OUTBOX-01 | Shared hidden dispatcher/claim fencing, typed handlers and recovery |
+| AUTH-OUTBOX-02 | CON-02B exact hidden manifest | Exact dispatcher mechanics only; no feature authority |
+| ARCH-04E1 | ARCH-04C, CON-02B hidden contract | TASK hidden event/routing handlers and manifest |
+| ARCH-04E2 | ARCH-04E1 | AUTH exact TASK routing authority |
+| ARCH-04E3 | ARCH-04E2, ARCH-04D, AUTH-OUTBOX-02 | TASK live dispatch/routing composition and end-to-end allow_review |
+| ARCH-04E | ARCH-04E3 | Completed coordination boundary consumed by downstream REV |
 | ARCH-04F (later public-cutover prerequisite) | ARCH-04E | CHECKER failure facts and TASK/ART remediation resubmission, not REV |
 
-POL-04B, CP05 and ARCH-04A have independent prerequisites. Their owners may
+CP05 and ARCH-04A have independent prerequisites. POL-04B consumes the corrected
+ARCH-04A catalogue/schema before producing approval-eligible generations. Owners may
 work concurrently if allowed paths do not overlap; shared catalogue/schema
 changes must be serialized or rebased, not implemented twice. CP08 can proceed
 after CP07 while policy setup finishes; it does not activate claims. Subsequent
@@ -43,10 +51,50 @@ PR-sized contracts name exact files, public types, current migration head and
 runnable proof before implementation; they refine this design, not create a
 new permission requirement.
 
+### Supporting foundations required by automatic routing
+
+Current supporting contracts are [ARCH-04B2](chunks/WS-ARCH-001-04B-art-post-submit-materialization.md#arch-04b2--separate-art-output-custody-child),
+[AUTH-OUTBOX-01/02](../../WS-AUTH-001/planning/PLAN.md#ws-auth-001-outbox-01--unavailable-dispatcher-contract),
+[CON-02B](../../WS-CON-001/OVERVIEW.md#con-02b-current-dispatcher-contract), and
+[ARCH-04E1/04E2/04E3](chunks/WS-ARCH-001-04E-canonical-allow-review.md#current-bounded-sequence).
+Each numbered section is a current bounded design, expanded into its own change
+record on implementation; the parent is not a multi-owner implementation PR.
+
+An outbox row is not a running dispatcher. The existing shared module supplies
+append/flush and idempotency, but delivery is still CON-02B work. Reuse that
+existing boundary: AUTH first supplies planned dispatcher metadata and typed
+authority; CON-02B builds hidden claim/invoke/finalize mechanics; AUTH then
+activates that exact manifest. None depends on ContributionRecord, fulfillment
+or REV implementation. TASK must not implement an alternative outbox worker.
+Registration and activation are distinct product-authority changes, not
+extra planning/administrator approval ceremonies.
+
+04E integrates two explicitly registered typed event handlers: TASK evaluation
+request to CHECKERS execution, and CHECKERS final-result notification to TASK
+routing. Each handler validates the committed outbox claim and obtains its own
+feature authority; dispatcher credentials never authorize artifact reads,
+checker finalization or task transitions. The implementation contract must
+name those feature action/resource manifests, not infer authority from the
+event type. Lost delivery/redelivery cannot create a new logical evaluation.
+
+ART checker-output storage is also missing, not implicit in CHECKERS result
+persistence. An ART-owned child of 04B supplies bounded generated-output/log
+ingestion, generic quota admission attributed to the fixed service, independent
+reread verification and exact checker-output binding. Its controlled hidden
+fixtures use 04A public request/run facts, not a future TASK dispatch row or
+private CHECKERS import. 04C composes the resulting verified binding references
+with final-result persistence; 04D activates the exact ART write/binding and
+CHECKERS completion surfaces. External byte I/O occurs before the final caller
+transaction; binding publication and final result become visible atomically.
+Failed storage never becomes contributor blame or an `allow_review` result.
+No second artifact store, quota ledger or historical ART-06B implementation
+lane is introduced.
+
 Required capability support is a real prerequisite, not an optimistic label.
 The current structural post-submit catalogue is not proof of substantive work
-evaluation. ARCH-04A owns the missing registered capability/conformance work
-for the bounded release use case. If a new capability changes the catalogue,
+evaluation for a requirement claiming that coverage. ARCH-04A owns the missing registered capability/conformance work
+for each selected automated capability. Explicitly approved `human_review`
+requirements remain valid; unsupported automation is never silently reassigned. If a new capability changes the catalogue,
 an old setup generation cannot adopt it in place: compile and approve a new
 generation from that exact snapshot. Unknown required checks block the affected
 guide; they never become permissive fallback checks.
@@ -61,8 +109,10 @@ guide; they never become permissive fallback checks.
 - CHECKERS owns registered work evaluation, durable attempts/results and
   currentness. POL-07 owns only facade composition. TASK projects the current
   recommendation, not a second checker decision.
-- CON validates the explicitly chosen immutable policy; PROJECTS binds it on
-  activation. CP08 owns TASK lineage schema, ARCH-03B writes it. Neither CON
+- CON validates that the explicit expected policy version matches the active
+  aggregate's current published selector under lock; PROJECTS binds it on
+  activation. Existing work retains its frozen version. CP08 owns TASK lineage
+  schema, ARCH-03B writes it. Neither CON
   nor AUTH calls back into PROJECTS activation.
 - ARCH-04B/04D/04F replace historical ART-06A, XINT-06B/AUTH-14 and XINT-05C
   respectively; those old plans do not open parallel implementation lanes.
@@ -74,8 +124,8 @@ owner fixtures; do not seed future live authority to make a fixture pass.
 In particular: activate a guide without a Task/CheckerRun/legacy PaymentPolicy;
 deny missing review/revision configuration and required checker gaps; keep
 finalization byte-for-byte unchanged across approval/correction/replay; reject
-a structurally valid but substantively failing artifact through the selected
-work evaluator; preserve mandatory defaults; reject cross-generation intake
+a structurally valid but substantively failing artifact through any evaluator
+claiming substantive coverage; preserve mandatory defaults; reject cross-generation intake
 evidence reused as post-submit evidence. AUTH denial before I/O means no read;
 late revocation after I/O means no final current result/routing, not impossible
 retroactive removal of an already-authorized read. Prove crash/retry identity,
@@ -102,7 +152,7 @@ claims require their real custody, not unit substitutes.
 | ARCH-04A/POL-07 | `test_registered_evaluator_rejects_invalid_work`, `test_checker_facade_delegates_once` | Actual registered evaluator fixtures and typed composition; presence-only mutant must fail |
 | CP06/CP07/AUTH-12H | `test_activate_without_legacy_payment_or_task`, `test_activation_requires_exact_selected_policy`, `test_activation_rejects_missing_review_revision_config` | PostgreSQL atomic command plus full response serialization; foreign/retired/incomplete new binding denies |
 | CP08/ARCH-03A/03B/03C | `test_ready_preserves_screening_policy_lock`, `test_claim_copies_policy_without_current_lookup` | PostgreSQL and actual AUTH/owner composition; later publication leaves existing attempt unchanged |
-| ARCH-04B/04C/04D | `test_exact_post_materialization_denies_before_io`, `test_late_revocation_cannot_publish_result`, `test_checker_retry_reuses_attempt` | Local/MinIO, real worker/provider contract, PostgreSQL races; independent sessions and staged/final state |
+| ARCH-04B/04C/04D | `test_exact_post_materialization_denies_before_io`, `test_late_revocation_cannot_publish_result`, `test_unfinished_checker_recovery_reuses_attempt`, `test_terminal_retry_requires_operator_and_new_attempt` | Local/MinIO, real worker/provider contract, PostgreSQL races; independent sessions and staged/final state |
 | ARCH-04E | `test_submission_to_current_allow_review`, `test_superseded_run_cannot_route`, `test_duplicate_dispatch_has_one_manifest` | Real DB/worker/storage path, exact authority-event references; no REV row or product accept decision |
 
 Owner-local schema names and migrations are chosen from the then-current

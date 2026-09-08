@@ -1,6 +1,7 @@
 # Chunk Contract: WS-POL-003-04B - Live Unified Setup Cutover
 
-Disposition: Planned. Dependencies: complete 04A/04A3/04A2 and AUTH-12I/12J/12B2. Risk: L1.
+Disposition: Planned. Dependencies: complete 04A/04A3/04A2 and AUTH-12I/12J/12B2,
+plus ARCH-04A's canonical post-catalogue/schema foundation. Risk: L1.
 
 ## Goal
 
@@ -34,6 +35,21 @@ compatibility routing, or a second provider attempt/key.
   completion receipt. Automatic ingestion continuation is not added here.
 - Remove legacy model calls from live reachability in this PR. Later physical
   deletion does not permit fallback execution in the interim.
+- Consume the CHECKERS-owned public catalogue snapshot, not PROJECTS private
+  registry imports or copied constants. Existing sparse-catalogue results are
+  never enriched in place to make them approval-eligible.
+- Update the PROJECTS input projection/validation adapter to consume that
+  versioned public contract, including supported typed binding parameters;
+  do not keep the old blanket parameter rejection while advertising new
+  capability schemas. Reuse canonical validators and prove parity without
+  rebuilding the completed attempt/finalization state machine.
+- A database `provider_idempotency_key` alone does not prove provider recovery:
+  the current adapter does not accept that key or expose retrieval/resume.
+  Unknown provider outcomes remain blocked and cannot trigger another call
+  under a fresh key. Claim recovery only after a typed ADR-0014 capability
+  demonstrably recovers that same provider operation. This cutover must expose
+  the blocked outcome honestly and never promise automatic recovery that the
+  provider contract cannot supply.
 
 ## Verification and review
 

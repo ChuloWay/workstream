@@ -25,7 +25,7 @@ Project Guide
 -> artifact preparation and pre-submission intake checks
 -> immutable Submission
 -> post-submission evaluation against locked requirements
--> authorized Review
+-> policy-governed acceptance: authorized human Review or automated decision
 -> controlled Revision when required
 -> Contribution Records
 -> conditional Compensation Awards and Fulfillment
@@ -34,17 +34,39 @@ Project Guide
 
 The v0.1 release bar is one secured, observable, recoverable end-to-end path.
 Authorization, locked project rules, exact artifact identity, attributable
-review, and durable contribution facts are necessary for that path to be
+policy-governed acceptance decisions, and durable contribution facts are necessary for that path to be
 trustworthy. Integration and failure-recovery proof are part of making it
 function correctly, not a later quality upgrade. This does not require every
 future feature, an exhaustive cleanup of the codebase, or proof of unlimited
 scale before first use; the release gates below define the bounded requirement.
+Attributable human Review is required when the locked project mode requires it;
+automated acceptance records its own authorized decision and evidence instead.
 
 Marketplace expansion, blockchain settlement, external source adapters,
 automated routing, agent workspaces, and runtime reputation projection remain
 outside v0.1.
 
 ## Status Vocabulary
+
+The automated-acceptance branch is a newly clarified **planned** v0.1
+requirement, not a live capability. The next policy change adds one existing
+ReviewPolicy setting: `human_review_required: bool = true`. True requires human
+review after required checks pass; false leads to authorized FinalAcceptance
+and submitter contribution without a reviewer contribution. It requires explicit locked project policy,
+supported acceptance evidence, distinct service decision provenance and shared
+atomic contribution effects; checker success alone is not acceptance. Its
+cross-owner contract reconciliation is tracked in the
+[existing planning record](../.commitrail/changes/pre-review-plan-reconciliation.md#accepted-direction-project-controlled-acceptance-mode).
+The human-review branch retains canonical `allow_review`. Existing milestone
+contracts describing only that branch must be reconciled before automated
+acceptance implementation begins.
+
+Implement the setting before remaining live guide/task routing, preserving
+old policy hashes and locks. Enabling false follows shared final-acceptance,
+CON and exact AUTH integration proof, not live human-review infrastructure.
+This allows an automated end-to-end milestone first; human review/revision
+still belongs to the complete v0.1 release. See the
+[product-builder handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
 
 | Status | Meaning |
 | --- | --- |
@@ -354,15 +376,25 @@ above. The main
 remaining trace sequence is:
 
 - Unified guide: `POL-04B -> POL-05A -> AUTH-12F4 -> POL-05B -> POL-06A
-  -> AUTH-12G -> POL-06B -> POL-07 -> AUTH-12H`. Independent `ARCH-04A`
-  contract/registered-capability proof is also required before `POL-07`.
+  -> AUTH-12G -> POL-06B -> POL-07 -> AUTH-12H`. `ARCH-04A` catalogue/schema
+  reconciliation precedes approval-eligible `POL-04B` generations, and actual
+  selected-capability conformance precedes `POL-07`/activation. POL-05 includes
+  complete proposal visibility and setup-wide correction before approval.
 - Contribution lineage: `CP05 -> CP06 -> CP07`. Hidden `CP07` is another
   prerequisite of `AUTH-12H`, not a second live activation. `CP08` supplies
   lineage fields after `CP07`; `ARCH-03A` follows both `AUTH-12H` and `CP08`,
   then `ARCH-03B -> ARCH-03C`. `CP09` physical cleanup waits for all remaining
   legacy consumers to be replaced; it is outside the `allow_review` critical path.
+  Live assignment invalidation also requires shared dispatch and its exact
+  service authority; current authority is still checked on every request.
 - Post-submit admission: after `POL-07` and `ARCH-03C`, `ARCH-04B -> 04C ->
   04D -> 04E` supplies materialization, durable results, authority and routing.
+  An ART-owned output/log custody child precedes `04C` final completion.
+  Automatic `04E` delivery also needs the shared `CON-02B` dispatcher and its
+  exact AUTH registration/activation; existing outbox persistence alone does
+  not deliver events. These foundations do not require REV or fulfillment.
+  `04E` is hidden TASK handler `04E1`, exact AUTH activation `04E2`, then live
+  integration `04E3`; a dispatcher cannot authorize TASK or CHECKERS mutations.
   Later `04F` owns contributor-correctable remediation and admission-backed
   resubmission before public cutover; it does not block `allow_review` or
   replace human review/revision.

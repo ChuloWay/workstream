@@ -25,9 +25,39 @@ physical columns remain until CP09 proves all other consumers are gone.
 
 Allowed: `backend/app/modules/tasks/api/**`, the smallest TASKS-owned
 claim/assignment/service extraction, focused TASK tests, composition adapters,
+`backend/app/modules/tasks/router.py` for deny-only route declarations,
 boundary ledgers and initiative evidence/status. Not allowed: project-policy
 evaluation, checker planning, artifact custody, AUTH decisions, legacy
 eligibility fallback, public route cutover or revision semantics.
+
+Declare the missing ready queue and replacement task surfaces against hidden
+owner commands; ARCH-03C owns their exact activation and live route switch.
+Do not leave an unowned route step between public ports and user-visible
+behavior. The queue must filter project/visibility before counts and cursors.
+Own the distinct management, operational and audit locked-context projections
+and their field contracts, plus management task detail/work-context/submission
+requirements reads. 03C supplies their separate action/permission declarations;
+also own the management/operational queue and covered Audit task-evidence
+projections enumerated there. Scope filtering precedes counts, cursors and
+serialization; operational status never includes contributor-private detail.
+For every one of these surfaces,
+no projection selects a permission using a token role or leaks another
+principal's fields. Preserve authorized PM reads when replacing old routes.
+
+Preserve pre-submit authority invalidation: exact submitter-grant revocation
+or actor/link suspension/deactivation closes claimed/in-progress assignments
+as `authority_revoked`, returns the task to READY, clears `assigned_to` and
+retains history. The operation verifies exact cause event, actor, grant/link,
+project and role, is idempotent, and does not restore work on reactivation.
+Another eligible submitter may then claim normally. Wrong-role events and
+already-submitted/evaluation/review history cannot be rewritten. Downstream
+needs-revision obligations and manager reassignment remain REV-owned work;
+there is no new direct manager assignment feature here.
+
+Build this as a hidden TASK-owned event handler with exact fixed-service
+authority supplied by 03C, using the shared outbox's committed claim contract.
+03C must wire AUTH invalidation events durably in their originating transaction;
+a response hint such as `auth13_assignment` is not a delivered reconciliation.
 
 Reuse and extend `TaskSubmissionContextPort`, `TaskSubmissionContextFacts`, and
 `SubmissionCreationCommand`. Do not introduce parallel assignment,
@@ -37,13 +67,14 @@ reviewed current-main delta proves the existing public type cannot carry it.
 Before implementation, replace this skeleton with a current-main contract that
 enumerates exact files, commands, migration head and reviewers.
 
-Acceptance: task readiness fails before claimability when the active guide has
+Acceptance: acquiring the task's lock fails when the then-active guide has
 no same-project published, complete, binding-valid immutable
 ContributionPolicyVersion; a newer publication alone cannot mutate an existing
 task or assignment. The later human-revision contract is the only controlled
 same-Task/TaskAssignment rebase boundary. Concurrent claims have one
 winner; inactive/replaced assignment,
-wrong contributor, stale project generation and invalid predecessor deny;
+wrong contributor, internally inconsistent locked generation and invalid
+predecessor deny; a newer current guide does not stale-deny a frozen task;
 the assignment version must equal the task lock and any missing, cross-project,
 stale, or changed lineage denies before assignment creation; claim performs no
 policy selection and later publication cannot mutate either current-attempt

@@ -28,7 +28,10 @@ phase command. Include the exact AUTH remediation context before exposing
 this path. Full replacement bytes must pass intake again and carry the same
 locked assignment policy lineage; checker remediation is not a human revision
 rebase. Prove the old Submission/result immutable and the new result current.
-Infrastructure retries reuse the original logical attempt; project/setup
+Transport recovery of an unfinished attempt reuses its identity. Retrying a
+terminal infrastructure failure requires an authorized Operator request and a
+new superseding generation through the coordinated currentness participant;
+it cannot resurrect a completed failed attempt. Project/setup
 faults go to the authorized manager/operator. Neither creates contributor
 remediation or negative contribution facts. No public 02I cutover occurs here.
 
