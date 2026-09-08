@@ -1,7 +1,7 @@
 # WS-ARCH-001-CP05 — Exact ContributionPolicy authorization activation
 
 - Initiative: WS-ARCH-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: The five existing ContributionPolicy actions use exact Finance Authority and transaction-bound authorization through the existing CON public ports.
 
 ## Intent
@@ -10,7 +10,7 @@ Continue after the delivered ReviewPolicy setting by activating the existing
 ContributionPolicy operations under their canonical permissions. This unblocks
 CP06 selected-policy validation without enabling guide activation or payment.
 
-## Current behavior
+## Entry behavior
 
 Main `dab12dcb` includes PR #386. CP04 draft/publication/retirement behavior and
 immutable operation custody already exist in CONTRIBUTIONS. The five
@@ -26,8 +26,14 @@ adapter composition pattern. Only Finance Authority holds the existing
 
 - AUTH `catalogue.py`, `kernel.py`, `prepared.py`, `runtime.py`; new focused
   `domain/contribution_policies.py`, `domain/prepared_contribution_policies.py`,
-  `contribution_policy_authorization.py`, existing `domain/audit_targets.py`; public `api/contribution_policies.py`
+  `contribution_policy_authorization.py`, existing `domain/audit_targets.py`;
+  `domain/action_groups.py` and `domain/audit.py` for unchanged shared action
+  classifications and the exact decision resource vocabulary extracted from
+  kernel/runtime to reduce touched structural debt; public `api/contribution_policies.py`
   and exports for the exact mutation-authority port/facts.
+- `app/modules/audit/schemas.py`: admit only the exact `contribution_policy`
+  resource token in the existing closed audit vocabulary; no privacy/schema
+  bypass, new event shape or migration.
 - `app/adapters/auth/contribution_policies.py` and AUTH composition exports;
   existing `app/adapters/contributions/__init__.py` only if explicit composition
   needs a bounded adjustment. Keep cross-owner imports on public APIs.
@@ -131,24 +137,24 @@ Run module/AUTH/test-boundary validators, Commitrail, Markdown links and stale
 wording scans. No local spreadsheet exports are present. Final PR records exact
 commands, hashes, hosted totals and impact-routed review closure.
 
-### Atomic future proof matrix
+### Regression proof matrix
 
-All test names below are planned implementation tests, not claims of executed
-proof. The five-action matrix expands each action independently for system and
+The tests below cover the implementation contract; exact execution results
+belong in the PR trust bundle. The five-action matrix expands each action independently for system and
 exact-project Finance Authority. Unit controls use the real kernel/PREP with
 bounded repository doubles; PostgreSQL controls use production repositories and
 explicit public adapter composition in independent caller transactions.
 
-| Future named test | Boundary and custody | Discriminating assertion |
+| Named test | Boundary and custody | Discriminating assertion |
 |---|---|---|
-| `test_each_policy_action_allows_exact_finance_scope_and_audit` | AUTH kernel/PREP plus real PostgreSQL composition; five actions x two grant scopes | Exact action, human actor/profile/link, matched grant/scope, resource digest, request/correlation and null denial code; no unrelated action activated |
-| `test_each_policy_action_denies_foreign_or_unprivileged_principal` | Real AUTH composition; each action x foreign grant, other roles, inactive actor/link | Concealed failure and no CON mutation; valid Finance control on the same resource |
-| `test_policy_actions_deny_every_service_and_direct_kernel_bypass` | Kernel and public adapter unit matrix; fixed service identities | No service matrix membership or permission bypass; direct mutation require cannot replace PREP |
+| `test_each_policy_action_allows_exact_finance_scope_and_audit` and `test_each_policy_action_executes_with_exact_finance_scope_and_audit` | AUTH kernel/PREP plus real PostgreSQL composition; five actions x two grant scopes | Exact action, human actor/profile, matched grant/scope, resource digest, request/correlation and null denial code (identity-link custody is retained by PREP, not a new audit field); no unrelated action activated |
+| `test_each_policy_action_denies_foreign_or_unprivileged_principal` and `test_real_policy_authority_rejects_other_roles_and_foreign_grants` | Real AUTH composition; each action x foreign grant, other roles, inactive actor/link | Concealed failure and no CON mutation; valid Finance control on the same resource |
+| `test_policy_actions_deny_every_service` and `test_policy_mutation_cannot_bypass_prep` | Kernel and public adapter unit matrix; fixed service identities | No service matrix membership or permission bypass; direct mutation require cannot replace PREP |
 | `test_policy_prepared_handle_binds_every_fact` | Real PREP unit tests, one field changed at a time, four action-specific resources | Changed actor/link/action/operation/request/project/policy/version/status/graph/bindings, handle/session/transaction or reuse denies; unchanged control consumes once |
-| `test_policy_revocation_first_denies_mutation_and_replay` | PostgreSQL with production actor/link/grant lifecycle services; fresh read auth | Committed revocation wins before prepare; fresh mutation and exact committed replay deny without new CON effects |
-| `test_policy_prepare_first_serializes_lifecycle_revocation` | PostgreSQL independent sessions, production lifecycle service and held PREP locks | Revocation waits while valid policy mutation commits, then commits; subsequent use denies; no invented revocation under held locks |
+| `test_policy_revocation_obeys_real_prepare_lock_order[revocation-*]` | PostgreSQL with production actor/link/grant lifecycle services; fresh read auth | Committed revocation wins before prepare; fresh mutation and exact committed replay deny without new CON effects |
+| `test_policy_revocation_obeys_real_prepare_lock_order[policy-*]` | PostgreSQL independent sessions, production lifecycle service and held PREP locks | Revocation waits while valid policy mutation commits, then commits; subsequent use denies; no invented revocation under held locks |
 | `test_policy_failure_rolls_back_product_and_authority_evidence` | Real CON/AUTH, four mutation actions (create/update/publish/retire) x injected post-consume failure; inspect a fresh session | Exact pre-state unchanged for policy/version/rules; no operation-specific lifecycle/transition custody or AUTH decision/audit effects survive rollback |
-| `test_real_authority_preserves_cp04_publication_guards` | Real AUTH with existing CP04 product fixtures and PostgreSQL owner ports | Valid Finance control reaches invalid quantity, incomplete graph and inactive/foreign binding failures; no earlier auth guard hides them |
+| `test_product_guards.py`: quantity, complete graph, foreign binding and inactive binding publication guards | Real AUTH with existing CP04 product fixtures and PostgreSQL owner ports | Valid Finance control reaches invalid quantity, incomplete graph and inactive/foreign binding failures; no earlier auth guard hides them |
 | `test_concurrent_policy_publication_and_retirement_are_serialized` | Independent PostgreSQL sessions: same-draft publish/publish and next-draft publish/current-version retire; each has valid serial controls through CON locks and real AUTH | Exactly permitted lifecycle winner, immutable lineage and one operation effect; conflicting replay denies |
 
 Use deterministic lock-observer barriers and bounded timeouts, not sleeps as
@@ -164,6 +170,12 @@ caller transaction, so concurrent revocation has ordered winners rather than
 changing an already locked grant invisibly at consume. The named proof matrix
 separates fact substitution from that concurrency contract and ties each claim
 to a valid control, exact audit envelope and actual persistence boundary.
+Implementation admits the missing `contribution_policy` token in the existing
+closed audit vocabulary. Shared action classifications and the decision resource
+type moved into focused AUTH domain modules; their existing memberships remain
+unchanged except for the five policy actions. Touched frozen structural debt
+shrinks without new entries or relaxed limits.
+
 Architecture review added the existing audit-target helper to the allowed scope
 and exact evidence contract; no parallel audit routing is introduced.
 Lock order remains operation advisory -> CON project/product/graph/binding ->

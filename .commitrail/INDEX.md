@@ -6,10 +6,10 @@ for current product capability.
 
 | Initiative | Durable disposition | Next usable boundary |
 |---|---|---|
-| [WS-ARCH-001](initiatives/WS-ARCH-001/OVERVIEW.md) | Planned | CP05 activation and independent ARCH-04A capability proof under the reconciled pre-review dependencies |
+| [WS-ARCH-001](initiatives/WS-ARCH-001/OVERVIEW.md) | Planned | CP06 selected-policy validation and independent ARCH-04A capability proof under the reconciled pre-review dependencies |
 | [WS-ART-001](initiatives/WS-ART-001/OVERVIEW.md) | Planned | Exact post-submit materialization after guide/checker contracts |
-| [WS-AUTH-001](initiatives/WS-AUTH-001/OVERVIEW.md) | Planned | CP05 and unavailable shared-dispatcher contracts; POL-04B consumes completed finalization authority after catalogue reconciliation |
-| [WS-CON-001](initiatives/WS-CON-001/OVERVIEW.md) | Planned | Prepare CP05, then guide-activation validation and persistence |
+| [WS-AUTH-001](initiatives/WS-AUTH-001/OVERVIEW.md) | Planned | Unavailable shared-dispatcher contracts after delivered CP05; POL-04B consumes completed finalization authority after catalogue reconciliation |
+| [WS-CON-001](initiatives/WS-CON-001/OVERVIEW.md) | Planned | CP06 selected-policy validation, then guide-activation persistence |
 | [WS-AUTH-003](initiatives/WS-AUTH-003/OVERVIEW.md) | Planned | Repair touched capabilities through `authorization.api` |
 | [WS-POL-003](initiatives/WS-POL-003/OVERVIEW.md) | Planned | ReviewPolicy setting delivered; ARCH-04A catalogue/schema reconciliation before POL-04B live cutover |
 | [WS-REV-001](initiatives/WS-REV-001/OVERVIEW.md) | Planned | Continue dependency-gated hidden review behavior |

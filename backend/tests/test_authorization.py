@@ -2175,10 +2175,9 @@ def test_closed_permission_and_action_catalogue_is_exact_and_non_executable() ->
         ActionOwner.XINT_003_08B: 1,
     }
     assert all(not owner.value.startswith("WS-REV-") for owner in ActionOwner)
-    availability_counts = Counter(definition.availability for definition in ACTION_DEFINITIONS)
-    assert availability_counts == {
-        ActionAvailability.ACTIVE: 62,
-        ActionAvailability.PLANNED: 49,
+    assert Counter(definition.availability for definition in ACTION_DEFINITIONS) == {
+        ActionAvailability.ACTIVE: 67,
+        ActionAvailability.PLANNED: 44,
     }
     assert resolve_executable_action(ActionId.ACTOR_PROFILE_READ_SELF).permission_id is PermissionId.ACTOR_PROFILE_READ_SELF
     with pytest.raises(ValueError, match="not active"):
@@ -2817,7 +2816,7 @@ def test_art_custody_documentation_matches_the_independent_activation_fixture() 
     assert "does not grant Operator" in operations
     assert "verification retry remains independently gated" in operations
     assert (
-            "73 PermissionIds, 111 ActionIds, 62 active actions, and\n49 planned actions" in operations
+            "73 PermissionIds, 111 ActionIds, 67 active actions, and\n44 planned actions" in operations
     )
 
 

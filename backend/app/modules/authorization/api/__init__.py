@@ -11,6 +11,8 @@ from .adapter_bindings import (
     adapter_binding_resource_digest,
 )
 from .contribution_policies import (
+    ContributionPolicyAuthorizationPort,
+    ContributionPolicyMutationAuthorityFacts,
     ContributionPolicyCreateDraftFacts,
     ContributionPolicyPublishFacts,
     ContributionPolicyReadFacts,
@@ -99,6 +101,8 @@ __all__ = (
     "AuthorizationDenied",
     "AuthorizationPort",
     "AuthorizationUnavailable",
+    "ContributionPolicyAuthorizationPort",
+    "ContributionPolicyMutationAuthorityFacts",
     "ContributionPolicyCreateDraftFacts",
     "ContributionPolicyPublishFacts",
     "ContributionPolicyReadFacts",
