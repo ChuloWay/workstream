@@ -59,7 +59,8 @@ No thresholds, selection requirements, or existing assertions are weakened.
    UUIDs cannot be reconstructed from the locator's current operation alone.
    Do not substitute the operation ID as the audit correlation: migration 0010
    requires exact receipt/audit correlation equality.
-2. Define frozen, closed preparation and final resource contexts. Recompose the
+2. Define frozen, closed preparation and final resource contexts with typed
+   immutable public facts, never a mutable nested facts dictionary. Recompose the
    complete public finalization facts and canonical digests; validate exact
    deterministic receipt/operation/correlation identity, classification/output
    shape, actor/link identity, and locator agreement. The final resource is
@@ -70,12 +71,14 @@ No thresholds, selection requirements, or existing assertions are weakened.
 3. Reuse `fixed_service_prepared_authorization`, its canonical service identity
    admission, authority row locks, opaque single-use handle and caller-owned
    root transaction. Add one exact finalization binding to shared PREP and one
-   exact service-resource guard. Human and unrelated-service paths deny, even
+   exact service-resource guard. Compare prepared actor/link, operation/correlation,
+   scope and idempotency to actual private PREP custody, not merely two matching
+   caller-owned preparation/resource values. Human and unrelated-service paths deny, even
    with broad project grants. Do not alter existing projection semantics.
 4. Implement `PreparedSetupFinalization` with consume and replay paths. New
    consumption writes the existing canonical allow evidence and returns every
    field of the public authority receipt. Replay requires freshly prepared
-   current authority and exact stored decision identity/envelope/digest; it
+   current authority and exact stored decision identity/envelope/digest, including `denial_code is NULL`; it
    creates no second allow event and consumes/closes its handle once.
 5. Export the explicit adapter factory through `app/adapters/auth/__init__.py`. Keep
    live POL wiring and the unavailable default unchanged. Update current docs
@@ -102,7 +105,8 @@ concrete adapter explicitly in the same caller session instead of using the
 old strict finalization test port. Revocation tests target the persisted setup
 service actor/link through the production lifecycle services and retain separate
 successful non-revoked controls for actor and link cases. Seed authorized admin
-prerequisites; do not replace the lifecycle path with raw SQL status updates.
+prerequisites and traverse production authorization before lifecycle completion;
+do not synthesize an allowed lifecycle decision; do not replace the lifecycle path with raw SQL status updates.
 Negative database cases retain valid controls and compare durable state after
 rollback. Unit doubles claim only contract/ordering behavior. PostgreSQL tests
 own storage, revocation and independent-session serialization claims. Each
@@ -119,21 +123,21 @@ PostgreSQL modules live in `backend/tests/projects/guide_compilation/finalizatio
 | `test_catalogue.py::test_finalization_action_service_matrix` | Every service identity against finalization action/permission: only PROJECT_SETUP succeeds. PROJECT_SETUP action/permission substitutions retain existing valid projection pairs and deny invalid/mismatched pairs; exact catalogue assertion and real PREP/kernel service execution |
 | `test_catalogue.py::test_human_and_direct_kernel_finalization_denied` | Human project manager/admin and fixed-service direct-kernel calls deny for exact and legacy resources; pure service |
 | `test_resource_context.py::test_each_finalization_fact_is_bound` | Exhaustive field inventory below, each with a valid baseline; pure validated-resource and adapter/PREP consumption |
-| `test_resource_context.py::test_preparation_locator_and_principal_are_bound` | Project, operation, correlation, actor, link, request and scope substitution; exact public locator -> prepared binding -> consume; pure service |
+| `test_resource_context.py::test_preparation_locator_and_principal_are_bound` | Project, operation, correlation, actor, link, request, scope and idempotency substitution; compare to actual private PREP custody, including consistently forged prepare/resource pairs with a real-custody valid control; pure service |
 | `test_resource_context.py::test_deterministic_finalization_identity_is_exact` | Receipt, operation and correlation independently forged; source seed control preserved; pure contract |
 | `test_resource_context.py::test_policy_tuple_and_transition_shape` | Three valid classifications; partial nullable tuples and conflicting classification/outcome reject; pure contract |
 | `test_prepared.py::test_exact_resource_kinds_cannot_be_substituted` | Legacy setup context and projection contexts cannot consume finalization; finalization context cannot consume projection/other action; pure PREP/kernel |
 | `test_prepared.py::test_handle_lifetime_is_bound` | Consume then consume/replay; replay then consume/replay; closed context; different session/root; nested, committed, rolled-back, inactive/replaced transaction; pure service, backed by PG cases below |
 | `test_adapter.py::test_prepared_finalization_is_process_local` | Copy, deepcopy, pickle and arbitrary handle replacement deny; pure contract |
 | `test_adapter.py::test_prepare_consume_and_close_fail_closed` | Prepare/consume/evidence/exit exceptions keep public denial mapping and close once; caller exceptions are not remapped; pure service |
-| `test_replay.py::test_historical_decision_envelope_is_exact` | Missing/wrong decision and one-at-a-time event domain/type/actor-ref/actor/action/permission/project/resource/request/correlation/allow/digest substitutions; pure replay, not storage custody |
+| `test_replay.py::test_historical_decision_envelope_is_exact` | Missing/wrong decision and one-at-a-time event domain/type/actor-ref/actor/action/permission/project/resource/request/correlation/denial-code/allow/digest substitutions; pure replay, not storage custody |
 | `test_authorization_postgresql.py::test_concrete_finalization_is_atomic` | guide_blocked, draft_ready, draft_ready_with_warnings; real compilation + AUTH12J projections + concrete adapter + receipt + exact audit row in caller transaction |
 | `test_authorization_postgresql.py::test_concrete_replay_is_exact` | Unchanged receipt/result and event counts with current valid authority; real PostgreSQL |
 | `test_authorization_postgresql.py::test_revoked_service_denies_new_and_replay` | Actor suspension/deactivation and link revocation through production lifecycle services; both new finalization and stored-receipt replay; valid non-revoked controls |
 | `test_authorization_postgresql.py::test_finalization_failure_rolls_back_all_effects` | Evidence insertion failure, invalid returned authority receipt, close failure and caller rollback; durable setup/receipt/allow-event comparisons with actual PG writes before failure where relevant |
 | `test_authorization_postgresql.py::test_stored_replay_decision_substitution_denied` | Stored foreign/missing/mismatched decision fixture reaches replay validation; explicitly bounded transactional tampering where append-only constraints prohibit a naturally persisted invalid row |
 | `test_authorization_concurrency_postgresql.py::test_finalization_and_revocation_serialize` | Actor and link lifecycle x revocation-first/finalization-first; distinct sessions/PIDs, named lock waiter and exact blocker, retained valid controls and cleanup of tasks |
-| `test_structure.py::test_finalization_authority_has_no_live_reachability` | Factory explicit, default denial retained, no HTTP/Celery/provider reference; structural and default-service tests, not live execution proof |
+| `test_structure.py::test_finalization_authority_has_no_live_reachability` | Factory explicit, default denial retained, no HTTP/Celery/provider reference; syntax-aware structure with injected factory-import/call counterexample and default-service tests, not live execution proof |
 | Existing catalogue and hosted evidence tests | Exact new module registration, all canonical nodes complete once, aggregate and new-owner coverage floors unchanged |
 
 The exhaustive fact-mutation inventory is every field of
