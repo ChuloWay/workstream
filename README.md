@@ -36,8 +36,10 @@ The current submission contract normally receives one outer ZIP containing the
 complete work. Workstream computes canonical content identity, stores the bytes
 through its artifact boundary, verifies stored content before trusted use, and
 runs configured checks against the submitted package and its bounded recursive
-contents. Contributors, checkers, reviewers, and downstream projections are
-therefore tied to the same immutable submission lineage.
+contents. After Submission creation, the contributor's submitted work,
+post-submission checkers, reviewers, and downstream projections are tied to the
+same immutable Submission lineage. Before creation, intake evidence refers to
+the prepared artifact and locked intake context, not an existing Submission.
 
 Pre-submission and post-submission checking are different stages:
 
