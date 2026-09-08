@@ -29,6 +29,8 @@ from app.modules.projects.policy_lineage import (
     ReviewPolicySemantics,
     RevisionPolicySemantics,
     policy_digest,
+    require_complete_policy,
+    validate_review_mode,
 )
 from app.modules.projects.policy_mutation_replay_repository import (
     PolicyMutationReplayRepository,
@@ -177,10 +179,28 @@ class ProjectPolicyMutationService:
             raise PolicyMutationConflict("idempotency_mismatch")
         if record.status != "committed" or record.response_json is None:
             raise PolicyMutationConflict("idempotency_pending")
+        return PolicyMutationOutcome(self._response(record, response_type), True)
+
+    @staticmethod
+    def _response(record, response_type):
+        """Verify replay semantics before interpreting absent legacy fields."""
         response = response_type.model_validate(record.response_json)
         if response.policy_hash != record.policy_hash:
             raise RuntimeError("committed policy replay lost digest custody")
-        return PolicyMutationOutcome(response, True)
+        if isinstance(response, ReviewPolicyResponse):
+            try:
+                require_complete_policy(
+                    kind="review",
+                    status=response.semantics_status,
+                    policy_hash=response.policy_hash,
+                    review_semantics_format=response.semantics_format,
+                    semantic_values={
+                        name: getattr(response, name) for name in ReviewPolicySemantics.model_fields
+                    },
+                )
+            except ValueError as exc:
+                raise RuntimeError("committed policy replay lost semantics custody") from exc
+        return response
 
     async def replace_review_policy(
         self,
@@ -204,6 +224,7 @@ class ProjectPolicyMutationService:
             guide_id,
             semantics,
             ReviewPolicyResponse,
+            inherit_review_mode="human_review_required" not in payload.model_fields_set,
         )
 
     async def replace_revision_policy(
@@ -241,6 +262,8 @@ class ProjectPolicyMutationService:
         guide_id: UUID,
         semantics: ReviewPolicySemantics | RevisionPolicySemantics,
         response_type,
+        *,
+        inherit_review_mode: bool = False,
     ) -> PolicyMutationOutcome:
         """Execute the shared exact policy mutation transaction."""
         expected_selector = self._if_match_value(if_match)
@@ -251,7 +274,8 @@ class ProjectPolicyMutationService:
         )
         policy_id, operation_id = uuid4(), uuid4()
         semantic_values = semantics.model_dump(mode="json")
-        final_digest = policy_digest(kind, semantics)
+        if inherit_review_mode:
+            semantic_values.pop("human_review_required")
         predecessor_id = expected_selector[0] if expected_selector is not None else None
         predecessor_generation = expected_selector[1] if expected_selector is not None else None
         predecessor_digest = expected_selector[2] if expected_selector is not None else None
@@ -282,6 +306,22 @@ class ProjectPolicyMutationService:
         snapshot_selector = self._guide_selector(kind, guide_snapshot)
         if snapshot_selector != expected_selector:
             raise PolicyMutationConflict("policy_precondition_failed")
+        if inherit_review_mode and expected_selector is not None:
+            predecessor = await self._projects.get_review_policy_by_id(str(predecessor_id))
+            if (
+                predecessor is None
+                or predecessor.project_id != str(project_id)
+                or predecessor.guide_version != guide_snapshot.version
+                or (UUID(predecessor.id), predecessor.policy_generation, predecessor.policy_hash)
+                != expected_selector
+            ):
+                raise PolicyMutationConflict("policy_precondition_failed")
+            validate_review_mode(predecessor.human_review_required, predecessor.semantics_format)
+            semantics = ReviewPolicySemantics.model_validate(
+                {**semantic_values, "human_review_required": predecessor.human_review_required}
+            )
+        semantic_values = semantics.model_dump(mode="json")
+        final_digest = policy_digest(kind, semantics)
         resource = self._resource(
             kind=kind,
             policy_id=policy_id,
@@ -315,7 +355,7 @@ class ProjectPolicyMutationService:
                 raise PolicyMutationConflict("idempotency_mismatch")
             if disposition == "pending" or replay.response_json is None:
                 raise PolicyMutationConflict("idempotency_pending")
-            return PolicyMutationOutcome(response_type.model_validate(replay.response_json), True)
+            return PolicyMutationOutcome(self._response(replay, response_type), True)
         caller = PreparedAuthorizationInput(
             idempotency_key=key,
             request_value={
@@ -402,6 +442,8 @@ class ProjectPolicyMutationService:
             "authorization_decision_event_id": str(decision.decision_id),
             **semantic_values,
         }
+        if kind == "review":
+            common["semantics_format"] = "v2"
         policy = ReviewPolicy(**common) if kind == "review" else RevisionPolicy(**common)
         if kind == "review":
             await self._projects.add_review_policy_version(policy, guide)

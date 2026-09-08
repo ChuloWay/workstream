@@ -23,6 +23,9 @@ so later approvals cannot reuse legacy same-row setup writes.
 
 ## Bounded change
 
+The following was the original planning-only scope. The delivered policy-setting
+implementation scope is recorded in the follow-through section below.
+
 ### Allowed
 
 - This combined change record.
@@ -63,8 +66,9 @@ new policy entity, workflow engine, or second policy-selection system. After
 required post-submit checks pass, `true` routes to human review; `false` routes
 to authorized FinalAcceptance and the submitter ContributionRecord, without a
 reviewer contribution. Both paths retain the complete locked guide and
-contribution-policy context. This is the intended schema, not an implemented
-field. No missing/legacy field implies automated acceptance or makes an
+contribution-policy context. The [policy setting is delivered](pre-review-plan-reconciliation.md#delivered-policy-setting-implementation);
+automated acceptance execution remains unavailable, and configured `false`
+cannot activate a guide. No missing/legacy field implies automated acceptance or makes an
 otherwise incomplete policy valid. No setting can change for an existing
 attempt through a current-policy lookup. Adjudication remains outside v0.1;
 do not add its switch or execution path in this work.
@@ -101,15 +105,17 @@ unsupported human requirements, absent required outputs, and atomic rollback.
 The existing human-only contracts remain implementation authority until their
 explicit replacement is reconciled; this amendment does not activate a bypass.
 
-### Product-builder handoff: implement the setting next
+<a id="product-builder-handoff-implement-the-setting-next"></a>
 
-The next bounded product change should add the boolean to the existing policy
-surface, before remaining live guide/task routing work. Start with PROJECTS
-`models.py`, `schemas.py`, `policy_lineage.py` and its current policy writer/read
-projection in `service.py`; resolve exact migration and focused test paths
-against the builder's current head in the implementation record. This is
-existing guide-bound review-policy configuration, not a new POL compiler or
-permission surface. Preserve the existing exact mutation authorization.
+### Product-builder handoff: setting delivered
+
+The [bounded implementation](pre-review-plan-reconciliation.md#delivered-policy-setting-implementation) delivers
+this handoff: the existing guide-bound ReviewPolicy has the strict boolean,
+persistence, read projection, versioned hashes, migration and activation guard.
+The original acceptance criteria below remain the preserved handoff contract.
+Current work advances to the remaining boundaries in Reconciliation; this
+setting adds no POL compiler or permission surface and preserves exact mutation
+authorization.
 
 Acceptance criteria for that change:
 
@@ -263,10 +269,140 @@ never be guessed to permit deletion.
 ## Reconciliation
 
 - Current-source reconciliation: PR #384 completes AUTH-12B2; main `fb4553cc`.
-- Next product-builder boundary: the existing ReviewPolicy boolean described
-  in the handoff above. CP05 policy activation and ARCH-04A catalogue/schema
-  work retain their independent prerequisites; POL-04B consumes that corrected
+- Delivered product-builder boundary: the existing ReviewPolicy boolean in the
+  preserved handoff above; automated acceptance remains unavailable.
+- Next usable boundaries: CP05 policy activation and ARCH-04A catalogue/schema
+  reconciliation retain their independent prerequisites; POL-04B consumes that corrected
   catalogue plus completed finalization authority. Shared dispatch is an
   explicit independent foundation, not implicit delivery from outbox storage.
 - Remaining risks: required unsupported evaluator capabilities must be
   implemented and registered before the affected guide can activate.
+
+## Delivered policy-setting implementation
+
+- Implementation disposition: Complete
+- Delivered outcome: Strict `human_review_required`, default true, on the existing immutable ReviewPolicy; automated acceptance remains unavailable.
+
+This follow-through implements the preserved planning handoff above. Its bounded
+implementation scope and evidence contract are retained here as the single
+combined change record; the earlier planning-only scope remains historical.
+
+### Intent
+
+Implement the [merged product-builder handoff](pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
+
+### Current behavior
+
+PROJECTS owns immutable policy creation/supersession through
+`policy_mutation_service.py`; exact AUTH actions and selectors already govern it.
+`policy_lineage.py` hashes review semantics in the v1 domain. `ProjectService`
+validates those semantics before guide activation. Policies and downstream
+selectors are immutable; no automated acceptance participant exists.
+
+### Bounded change
+
+#### Allowed
+
+- PROJECTS `models.py`, `schemas.py`, `policy_lineage.py`,
+  `policy_mutation_service.py`, and activation/read projection in `service.py`.
+- Add migration `backend/alembic/versions/0011_review_policy_human_review.py`;
+  update the exact current-head registry in `backend/alembic/env.py` and the
+  canonical PostgreSQL schema fingerprint in `backend/tests/conftest.py`.
+- Focused policy/activation/migration tests and necessary existing fixture updates;
+  register new modules in the existing lane catalogue and refresh exact structural
+  debt fingerprints when changed owners require it. Preserve all gates.
+- This record, current policy specifications/roadmap/templates and the adopted
+  CP07/AUTH-12H activation contracts and REV overview where needed to state delivered configuration
+  versus deferred automated execution. No protected historical archive edits.
+
+#### Not allowed
+
+- New policy entities, permissions, checker execution, synthetic review/lease,
+  automated acceptance/CON activation, adjudication or frontend changes.
+- Rewriting historical digests, completing incomplete historical policies,
+  changing locked attempts through a current-policy lookup, weakening checks.
+
+### Design and decisions
+
+Add non-null `human_review_required` and persisted `semantics_format` to
+ReviewPolicy. Migration backfills true and `v1` with column defaults (no row
+updates or digest rewrites); subsequent database/ORM format defaults to `v2`. Drop the temporary boolean
+server default after backfill; API/ORM creation defaults true, while direct SQL
+must supply a non-null boolean. Downgrade refuses any v2 policy history; a
+legacy-only downgrade may drop the new columns without losing semantics.
+A constraint restricts formats and requires v1 to have true. Existing immutable
+row triggers protect both columns. v1 hashing excludes the setting and retains
+its exact domain/bytes; v2 hashes the explicit strict boolean in a v2 domain.
+No timestamp, boolean-value inference, trial hashing or completeness backfill.
+
+Input defaults true but retains Pydantic field-presence information. Creation
+uses true when omitted. Supersession inherits the exact predecessor value on
+omission before preparing the final digest; explicit boolean overrides only the
+new version. Request identity hashes all existing defaulted semantics and excludes only
+omitted `human_review_required`, preserving legacy request bytes. Committed
+replay is checked before any guide, current-selector or predecessor lookup.
+For a new supersession, load the exact If-Match predecessor ID and verify
+project, guide version, generation and hash before inheriting its boolean;
+then compute the v2 digest. Final PREP/consume binds the
+resolved digest and existing selector; the locked selector is rechecked under lock before PREP consume or
+writing. Reads include the setting and persisted format; legacy stored replay
+responses interpret the absent setting as true/v1 without changing hashes.
+
+The current activation validator validates exact format-aware semantics and
+explicitly rejects false with an unavailable automated-acceptance error. Future
+CP07/AUTH-12H must preserve that same guard until REV/CON execution exists.
+
+### Acceptance criteria
+
+- Creation/read round-trip defaults true; true/false are accepted, strings,
+  numbers and null rejected; omission is distinguishable from explicit true.
+- Omitted supersession preserves false; explicit true/false affects new version
+  only; replay stays exact after later selector changes; unauthorized and
+  cross-project mutations retain existing denial and no writes.
+- v1 complete and incomplete history keeps original hashes and selectors; v1
+  cannot represent false. v2 true/false differ and bind the setting. Invalid
+  format, missing v2 boolean and altered digests fail closed.
+- PostgreSQL upgrade preserves old hashes and locks, persists both formats,
+  enforces constraints and immutable history, and does not invent completeness.
+- A valid true activation control reaches current activation; changing only
+  the mode to validly hashed false yields the specific unsupported-path error.
+  Future owner contracts explicitly retain the guard without new execution.
+
+### Risk and review routing
+
+- Risk class: L1
+- Required reviewers: architecture, security, product_ops, documentation, QA,
+  test_delta; CI integrity only if gate/registration owners change.
+- Human review focus: safe default, omission/replay semantics, explicit hash
+  versioning, preserved locked history and unavailable automated activation.
+- Plan review: focused architecture/security feasibility before implementation.
+
+### Evidence
+
+Use focused local tests and guard-removal probes; hosted CI owns PostgreSQL,
+full suite and coverage. New materially changed behavior must achieve 90%
+coverage; existing global floors remain unchanged. Run lint, structural checks,
+Commitrail validation, Markdown links and stale wording scans. No local exports
+are currently present. Exact results belong in the PR trust summary.
+
+### Review findings
+
+Plan review clarified exact omission/replay ordering and non-destructive
+migration rollback. The existing adopted WS-XINT-003-02B response-recovery
+contract remains unchanged; this setting adds no authority to replay or mutate.
+Generic historical reauthorization wording does not replace that exact contract.
+Replay validates the returned review semantics against the stored digest before
+interpreting absent legacy fields. Both initial lookup and reservation-conflict
+recovery reject a v2 false response stripped of its mode and format, while
+genuine field-absent v1 response recovery remains valid.
+Migration integration also requires advancing the exact Alembic head registry
+and reviewed test-schema fingerprint; both equality checks remain enforced.
+
+### Reconciliation
+
+- Current-source reconciliation: main `3bb3a23d` includes AUTH-12B2 and merged
+  planning handoff PR #385; no open PR overlaps were found at discovery.
+- Next usable boundary: existing POL/ARCH/TASK/REV/CON owner plans; this change
+  starts no subsequent chunk and enables no automated acceptance runtime.
+- Remaining risks: automated activation remains unavailable pending its exact
+  acceptance/contribution authority and atomicity proofs.

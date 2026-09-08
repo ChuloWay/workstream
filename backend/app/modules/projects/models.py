@@ -642,6 +642,10 @@ class ReviewPolicy(Base):
 
     __tablename__ = "review_policies"
     __table_args__ = (
+        CheckConstraint(
+            "semantics_format in ('v1','v2') and (semantics_format <> 'v1' or human_review_required)",
+            name="review_policy_semantics_format",
+        ),
         ForeignKeyConstraint(
             ["project_id", "guide_version"],
             ["project_guides.project_id", "project_guides.version"],
@@ -690,6 +694,10 @@ class ReviewPolicy(Base):
     guide_version: Mapped[str] = mapped_column(String(50), nullable=False)
     policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
     policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
+    human_review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    semantics_format: Mapped[str] = mapped_column(
+        String(2), nullable=False, default="v2", server_default="v2"
+    )
     semantics_status: Mapped[str] = mapped_column(String(24), nullable=False)
     supersedes_policy_id: Mapped[str | None] = mapped_column(ForeignKey("review_policies.id"))
     predecessor_policy_hash: Mapped[str | None] = mapped_column(String(71))

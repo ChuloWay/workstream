@@ -49,8 +49,8 @@ outside v0.1.
 ## Status Vocabulary
 
 The automated-acceptance branch is a newly clarified **planned** v0.1
-requirement, not a live capability. The next policy change adds one existing
-ReviewPolicy setting: `human_review_required: bool = true`. True requires human
+requirement, not a live capability. The existing versioned ReviewPolicy now
+persists the setting: `human_review_required: bool = true`. True requires human
 review after required checks pass; false leads to authorized FinalAcceptance
 and submitter contribution without a reviewer contribution. It requires explicit locked project policy,
 supported acceptance evidence, distinct service decision provenance and shared
@@ -61,8 +61,10 @@ The human-review branch retains canonical `allow_review`. Existing milestone
 contracts describing only that branch must be reconciled before automated
 acceptance implementation begins.
 
-Implement the setting before remaining live guide/task routing, preserving
-old policy hashes and locks. Enabling false follows shared final-acceptance,
+The setting is configurable through the existing authorized policy writer;
+creation defaults true and omitted replacements inherit the predecessor.
+Versioned hashing preserves old policy hashes and locks. False remains blocked
+by the current activation service. See the [implementation record](../.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation). Enabling false follows shared final-acceptance,
 CON and exact AUTH integration proof, not live human-review infrastructure.
 This allows an automated end-to-end milestone first; human review/revision
 still belongs to the complete v0.1 release. See the

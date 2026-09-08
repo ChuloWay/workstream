@@ -59,7 +59,7 @@ GitHub permissions and branch protection govern repository authority. That
 repository process is separate from every product lifecycle below.
 
 The canonical v0.1 scope remains narrower. The sequence below describes the
-human-review branch. The accepted planned amendment uses one existing
+human-review branch. Project configuration uses one existing
 ReviewPolicy boolean, `human_review_required`, default true. False permits
 authorized automated FinalAcceptance and submitter contribution after required
 post-submit checks pass, without human admission, a synthetic Review or a

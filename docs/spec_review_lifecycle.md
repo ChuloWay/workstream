@@ -62,7 +62,9 @@ and submitter contribution, without a reviewer contribution. No separate mode
 enum, policy entity or adjudication setting is introduced. The contract below still specifies the
 human branch; it must not be used to imply that human review is universally
 required by the intended v0.1 product. The [current reconciliation record](../.commitrail/changes/pre-review-plan-reconciliation.md#accepted-direction-project-controlled-acceptance-mode)
-tracks the outstanding schema, authority, lifecycle and contribution changes.
+tracks the outstanding authority, lifecycle and contribution changes. The
+[policy setting](../.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
+is persisted and versioned; false activation remains unavailable.
 Automated acceptance is not implemented or enabled by this note. In particular,
 `allow_review` retains its human-admission meaning, and a checker pass alone
 does not authorize FinalAcceptance. No synthetic human Review or ReviewLease

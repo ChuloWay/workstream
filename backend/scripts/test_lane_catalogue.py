@@ -170,6 +170,11 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_outbox.py",
     "tests/test_policy_identity_lineage.py",
     "tests/test_project_policy_mutations.py",
+    "tests/projects/review_policy/test_semantics.py",
+    "tests/projects/review_policy/test_mutation.py",
+    "tests/projects/review_policy/test_activation.py",
+    "tests/projects/review_policy/test_postgresql.py",
+    "tests/projects/review_policy/test_migration.py",
     "tests/projects/test_compensation_binding_eligibility.py",
     "tests/test_review_authorization_contracts.py",
 )

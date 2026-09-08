@@ -342,6 +342,7 @@ async def test_verified_reports_allow_same_snapshot_across_setup_generations(
         await engine.dispose()
 
 
+@pytest.mark.postgres_schema_contract
 def test_empty_projection_migration_downgrades_and_reupgrades(
     isolated_database_env: str,
     migration_lock,
@@ -362,7 +363,7 @@ def test_empty_projection_migration_downgrades_and_reupgrades(
     with migration_lock():
         command.upgrade(_config(), "head")
     assert asyncio.run(_version(clean_postgres_database)) == (
-        "0010_project_guide_setup_finalization"
+        "0011_review_policy_human_review"
     )
 
 def test_populated_projection_migration_refuses_downgrade(
@@ -377,5 +378,5 @@ def test_populated_projection_migration_refuses_downgrade(
     ):
         command.downgrade(_config(), "0008_guide_compilation_authorized_persistence")
     assert asyncio.run(_version(clean_postgres_database)) == (
-        "0010_project_guide_setup_finalization"
+        "0011_review_policy_human_review"
     )

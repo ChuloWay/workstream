@@ -66,7 +66,7 @@ remaining setup/activation work:
 - guide version marked active
 - each task locks the guide snapshot, effective project submission artifact policy hash, and pre-submit checker bundle hash before entering `READY`
 
-The planned existing ReviewPolicy setting `human_review_required` defaults
+The existing versioned ReviewPolicy setting `human_review_required` defaults
 true. False may be configured in draft, but guide activation requires the
 authorized automated FinalAcceptance/CON path and adequate configured checks;
 it does not require a human reviewer pool, lease or decision endpoint.

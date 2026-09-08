@@ -12,9 +12,9 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Completed boundary: hidden execution, deterministic projections, and immutable setup finalization.
 - Intent: compile one locked guide and its policies into authoritative,
   versioned project behavior without circular subsystem authority.
-- Next usable boundary: add the existing ReviewPolicy boolean per the product
-  handoff below. ARCH-04A public catalogue/schema remains a prerequisite before
+- Next usable boundary: ARCH-04A public catalogue/schema reconciliation before
   POL-04B produces approval-eligible live generations using completed AUTH-12B2.
+  The existing ReviewPolicy boolean is delivered; automated acceptance remains unavailable.
 - Governing sources: project-guide specifications, authorization and
   contribution-policy specifications, code, migrations, and tests.
 - Preserve: trusted policy compilation, explicit ownership, atomic persistence,
@@ -32,13 +32,13 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 
 ## Remaining v0.1 sequence
 
-Next product-builder policy change: add `human_review_required: bool = true`
-to the existing guide-bound ReviewPolicy input, persistence, read projection
-and immutable semantics/hash. This is not a new policy or compiler lane.
-Follow the [bounded handoff](../../changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next)
-for legacy lineage, tests and activation guards. Configured `false` must not
-activate a guide until the automated FinalAcceptance/CON path is proven and
-available; `true` retains the human-review path. Adjudication is not included.
+The existing guide-bound ReviewPolicy now persists and exposes strict
+`human_review_required`, default `true`, in its immutable semantics/hash.
+See the [delivered implementation](../../changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
+and preserved [bounded handoff](../../changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
+Configured `false` remains available in draft but cannot activate a guide until
+the authorized automated FinalAcceptance/CON path is proven and available.
+Existing tasks retain their locked rules; adjudication is not included.
 
 1. After ARCH-04A catalogue/schema reconciliation, POL-04B live explicit-manager
    cutover with every legacy inference call removed from reachability.

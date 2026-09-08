@@ -218,11 +218,11 @@
     },
     {
       "capability": "unassigned_legacy_auth",
-      "content_sha256": "3482eae7d037ca1953dd5324e57cc16a42effad54e0c30eceb6d93e7f79f3167",
-      "end_line": 1713,
+      "content_sha256": "5461231d84d6a59b6e81bc63393a4c64e65f90e0b92ccea1859fa619bbaec760",
+      "end_line": 1709,
       "hard_limit": 1200,
       "kind": "test_file",
-      "observed_lines": 1713,
+      "observed_lines": 1709,
       "path": "backend/tests/test_default_pre_submit_execution.py",
       "qualified_symbol": null,
       "removal_chunk": "WS-AUTH-003-CLOSE",
@@ -686,15 +686,15 @@
     },
     {
       "capability": "unassigned_legacy_auth",
-      "content_sha256": "b74ba975652c973dab113217666628da52ec815b418204de2e679e38917d0e94",
-      "end_line": 1127,
+      "content_sha256": "cf6867c586d1d0672479ae9858f13ad22297d1fc2f7639f334b24838f8414169",
+      "end_line": 1123,
       "hard_limit": 120,
       "kind": "test_function",
-      "observed_lines": 698,
+      "observed_lines": 692,
       "path": "backend/tests/test_default_pre_submit_execution.py",
       "qualified_symbol": "test_effective_evidence_workflow_persists_once_and_replays_exactly",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 430
+      "start_line": 432
     },
     {
       "capability": "unassigned_legacy_auth",
@@ -735,14 +735,14 @@
     {
       "capability": "unassigned_legacy_auth",
       "content_sha256": "26170dfbd986d2930d7f89357d59cdd17ae50b2ac1b936a3966e24225312e895",
-      "end_line": 666,
+      "end_line": 671,
       "hard_limit": 120,
       "kind": "test_function",
       "observed_lines": 132,
       "path": "backend/tests/test_project_policy_mutations.py",
       "qualified_symbol": "test_policy_router_dependencies_errors_and_transaction_outcomes",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 535
+      "start_line": 540
     },
     {
       "capability": "unassigned_legacy_auth",

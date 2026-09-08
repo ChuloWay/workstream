@@ -38,7 +38,7 @@ Tasks must attach a locked guide version. Later guide edits do not silently chan
 
 Define what accepted work means for this project.
 
-Planned ReviewPolicy setting: `human_review_required: true` (default). False may
+ReviewPolicy setting: `human_review_required: true` (default). False may
 be configured in draft; guide activation requires supported post-submission
 checks providing the required acceptance evidence and an available, proven
 automated acceptance path. This is

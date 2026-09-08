@@ -8,10 +8,10 @@ This folder contains the shareable Workstream architecture brief.
 
 The brief uses the C4-PlantUML diagrams from `docs/diagrams/` and packages them into a single PDF for team review.
 
-The checked-in PDF and lifecycle images predate the planned
+The checked-in PDF and lifecycle images predate the versioned
 `human_review_required` setting. They describe the human branch, not the full
 amended acceptance scope. Use the Markdown source and current roadmap for that
-direction; this planning change does not claim regenerated binary exports.
+direction; the policy-setting change does not regenerate binary exports.
 
 ## Render
 
