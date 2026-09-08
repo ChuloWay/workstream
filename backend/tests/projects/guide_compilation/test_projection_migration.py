@@ -359,6 +359,11 @@ def test_empty_projection_migration_downgrades_and_reupgrades(
         "0009_guide_compilation_projections"
     )
 
+    with migration_lock():
+        command.upgrade(_config(), "head")
+    assert asyncio.run(_version(clean_postgres_database)) == (
+        "0010_project_guide_setup_finalization"
+    )
 
 def test_populated_projection_migration_refuses_downgrade(
     isolated_database_env: str,
@@ -372,5 +377,5 @@ def test_populated_projection_migration_refuses_downgrade(
     ):
         command.downgrade(_config(), "0008_guide_compilation_authorized_persistence")
     assert asyncio.run(_version(clean_postgres_database)) == (
-        "0009_guide_compilation_projections"
+        "0010_project_guide_setup_finalization"
     )

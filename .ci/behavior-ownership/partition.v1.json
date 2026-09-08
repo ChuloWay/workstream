@@ -390,6 +390,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/api/project_setup_finalization.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/artifact_project_authority.py"
     },
     {
@@ -690,6 +694,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/setup_identity.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/projects/authorization_reads.py"
     },
     {
@@ -719,6 +727,18 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/projects/guide_compilation/contracts.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/custody_payloads.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/finalization.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/finalization_payloads.py"
     },
     {
       "group": "lifecycle",
@@ -993,7 +1013,7 @@
       "target": "backend/scripts/week2_api_e2e.py"
     }
   ],
-  "authority_digest": "9c2e78c44a6052a132beb7be381b3acfd71d8ebdf39386ba09dfdcb919d17842",
+  "authority_digest": "5c09586178caa84e1109c8953206fad7200722afc6aa8af781fb93a8a0ffd016",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

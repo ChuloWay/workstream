@@ -54,6 +54,16 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         modules_by_lane["project_lifecycle_a"]
         == modules_by_lane["project_lifecycle_b"]
         == {
+            "tests/projects/test_active_guide_repository.py",
+            "tests/projects/guide_compilation/finalization/test_concurrency_postgresql.py",
+            "tests/projects/guide_compilation/finalization/test_contracts.py",
+            "tests/projects/guide_compilation/finalization/test_guards_postgresql.py",
+            "tests/projects/guide_compilation/finalization/test_lineage.py",
+            "tests/projects/guide_compilation/finalization/test_migration_postgresql.py",
+            "tests/projects/guide_compilation/finalization/test_postgresql.py",
+            "tests/projects/guide_compilation/finalization/test_replay.py",
+            "tests/projects/guide_compilation/finalization/test_service.py",
+            "tests/projects/guide_compilation/finalization/test_structure.py",
             "tests/projects/guide_compilation/test_authorized_concurrency_postgresql.py",
             "tests/projects/guide_compilation/test_authorized_execution_service.py",
             "tests/projects/guide_compilation/test_authorized_recovery_postgresql.py",
@@ -495,3 +505,12 @@ def test_catalogue_partition_addition_is_bounded(addition: str, allowed: bool) -
     else:
         with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
             ownership._validate_additive_partition_transition(current, trusted)
+
+
+def test_finalization_tests_are_all_in_project_lanes():
+    from scripts.test_lane_catalogue import PROJECT_MODULES
+    root = Path(__file__).resolve().parent
+    expected = {str(path.relative_to(root.parent)) for path in
+                (root / "projects/guide_compilation/finalization").glob("test_*.py")}
+    assert expected
+    assert expected <= set(PROJECT_MODULES)

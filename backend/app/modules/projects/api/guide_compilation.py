@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal, Protocol
+from typing import Annotated, Literal, Protocol
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ProjectGuideCompilationExecutionClassification(StrEnum):
@@ -63,7 +63,58 @@ class ProjectGuideCompilationExecutionPort(Protocol):
     ) -> ProjectGuideCompilationExecutionResult: ...
 
 
+class ProjectGuideSetupFinalizationCommand(BaseModel):
+    """Exact current generation selected by an internal caller."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    project_id: UUID
+    guide_id: UUID
+    setup_run_id: UUID
+    setup_generation: Annotated[int, Field(gt=0)]
+    compilation_id: UUID
+
+
+class ProjectGuideSetupFinalizationReceipt(BaseModel):
+    """Bounded immutable finalization custody, without raw compilation or AUTH handle."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    finalization_id: UUID
+    operation_id: UUID
+    project_id: UUID
+    guide_id: UUID
+    setup_run_id: UUID
+    setup_generation: int
+    result_classification: Literal["guide_blocked", "draft_ready", "draft_ready_with_warnings"]
+    setup_outcome: Literal["sufficiency_blocked", "policy_draft_ready"]
+    sufficiency_report_id: UUID
+    artifact_policy_id: UUID | None
+    authorization_decision_event_id: UUID
+
+
+class ProjectGuideSetupFinalizationError(RuntimeError):
+    """Concealed failure; callers must roll back the current root transaction."""
+
+    def __init__(self, code: Literal[
+        "source_state_unavailable", "service_authority_denied", "storage_unavailable"
+    ]) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+class ProjectGuideSetupFinalizationPort(Protocol):
+    """Finalize existing compilation/projection custody inside the caller transaction."""
+
+    async def finalize(
+        self, command: ProjectGuideSetupFinalizationCommand
+    ) -> ProjectGuideSetupFinalizationReceipt: ...
+
+
 __all__ = (
+    "ProjectGuideSetupFinalizationCommand",
+    "ProjectGuideSetupFinalizationReceipt",
+    "ProjectGuideSetupFinalizationError",
+    "ProjectGuideSetupFinalizationPort",
+
     "ProjectGuideCompilationExecutionClassification",
     "ProjectGuideCompilationExecutionCommand",
     "ProjectGuideCompilationExecutionError",

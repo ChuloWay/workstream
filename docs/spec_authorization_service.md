@@ -1180,9 +1180,13 @@ the zero-activation PREP/replay/provenance foundation; 12F2 owns explicitly
 manual Project Manager drafts; 12F3 owns automatic fixed
 `workstream.project.setup` derivation and removes public inline derivation; and
 12F4 owns Project Manager approval plus the atomic effective/pre-submit chain.
-AUTH-12B2 depends only on complete POL-04A2 hidden setup finalization plus
-complete AUTH-12J projection authority, and precedes POL-04B live setup
-cutover. AUTH-12F4 and AUTH-12G are later approval and deterministic
+POL-04A2 provides the hidden finalization service and dependency-free AUTH
+contracts; its default authorization port remains unavailable. The
+`project_guide_setup_finalization` audit resource binds the immutable receipt
+to exact final facts, actor, identity link, project scope, and stored decision.
+AUTH-12B2 supplies the concrete current-service and prepared-capability adapter
+over this boundary and complete AUTH-12J projection authority, and precedes
+POL-04B live setup cutover. AUTH-12F4 and AUTH-12G are later approval and deterministic
 post-submit-policy gates; neither is a prerequisite for setup finalization.
 
 The 12F1 foundation binds each future submission-policy handle to the exact

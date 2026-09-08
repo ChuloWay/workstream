@@ -27,7 +27,7 @@ from app.modules.projects.sufficiency_mutation_service import GuideSufficiencyMu
 from app.modules.projects.submission_policy_mutation_service import (
     SubmissionPolicyMutationService,
 )
-from app.modules.projects.setup_queue import pre_submit_setup_task_id
+from app.modules.projects.api import pre_submit_setup_task_id
 from app.schemas.auth import ActorContext
 from app.workers.async_runner import run_async_task
 from app.workers.celery_app import celery_app

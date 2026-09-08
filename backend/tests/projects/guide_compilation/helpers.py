@@ -51,7 +51,7 @@ from app.modules.projects.guide_compilation.contracts import (
 from app.modules.projects.post_submit_policy import (
     project_guide_post_submission_capabilities,
 )
-from app.modules.projects.setup_queue import pre_submit_setup_task_id
+from app.modules.projects.api.setup_identity import pre_submit_setup_task_id
 
 SHA256 = "sha256:" + "a" * 64
 SOURCE_ITEM_ID = UUID("11111111-1111-1111-1111-111111111111")

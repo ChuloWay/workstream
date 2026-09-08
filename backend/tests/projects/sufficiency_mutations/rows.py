@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from uuid import UUID
 
 from app.modules.projects.models import GuideSufficiencyReport
-from app.modules.projects.setup_queue import pre_submit_setup_task_id
+from app.modules.projects.api.setup_identity import pre_submit_setup_task_id
 
 PROJECT, GUIDE, SNAPSHOT, SETUP, REPORT, ACTOR, LINK, GRANT, KEY = (
     UUID(int=value) for value in range(1, 10)

@@ -404,6 +404,10 @@ class ProjectGuideComponentProjectionOperation(Base):
 
     __tablename__ = "project_guide_component_projection_operations"
     __table_args__ = (
+        UniqueConstraint(
+            "operation_id", "compilation_id", "setup_run_id", "setup_generation",
+            name="uq_projection_operation_finalization_lineage",
+        ),
         ForeignKeyConstraint(
             ["attempt_id", "project_id", "guide_id", "source_snapshot_id", "setup_run_id", "setup_generation"],
             [
@@ -535,4 +539,121 @@ class ProjectGuideComponentProjectionOperation(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class ProjectGuideSetupFinalization(Base):
+    """Append-only binding of an accepted compilation and its exact setup outputs."""
+
+    __tablename__ = "project_guide_setup_finalizations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["compilation_id", "attempt_id"],
+            ["project_guide_compilations.id", "project_guide_compilations.attempt_id"],
+            name="fk_finalization_compilation_attempt",
+        ),
+        ForeignKeyConstraint(
+            ["attempt_id", "project_id", "guide_id", "source_snapshot_id",
+             "setup_run_id", "setup_generation"],
+            ["project_guide_compilation_attempts." + name for name in
+             ("id", "project_id", "guide_id", "source_snapshot_id", "setup_run_id", "setup_generation")],
+            name="fk_finalization_exact_attempt",
+        ),
+        ForeignKeyConstraint(
+            ["setup_run_id", "project_id", "guide_id", "source_snapshot_id", "setup_generation"],
+            ["project_setup_runs." + name for name in
+             ("id", "project_id", "guide_id", "source_snapshot_id", "setup_generation")],
+            name="fk_finalization_exact_setup",
+        ),
+        ForeignKeyConstraint(
+            ["sufficiency_operation_id", "compilation_id", "setup_run_id", "setup_generation"],
+            ["project_guide_component_projection_operations." + name for name in
+             ("operation_id", "compilation_id", "setup_run_id", "setup_generation")],
+            name="fk_finalization_sufficiency_lineage",
+        ),
+        ForeignKeyConstraint(
+            ["artifact_policy_operation_id", "compilation_id", "setup_run_id", "setup_generation"],
+            ["project_guide_component_projection_operations." + name for name in
+             ("operation_id", "compilation_id", "setup_run_id", "setup_generation")],
+            name="fk_finalization_policy_lineage",
+        ),
+        ForeignKeyConstraint(
+            ["identity_link_id", "actor_profile_id"],
+            ["actor_identity_links.id", "actor_identity_links.actor_profile_id"],
+            name="fk_finalization_actor_link",
+        ),
+        UniqueConstraint("setup_run_id", "setup_generation", name="uq_finalization_setup_generation"),
+        UniqueConstraint("compilation_id", name="uq_finalization_compilation"),
+        UniqueConstraint("operation_id", name="uq_finalization_operation"),
+        UniqueConstraint("authorization_decision_event_id", name="uq_finalization_decision"),
+        CheckConstraint(
+            "(result_classification='guide_blocked' and setup_outcome='sufficiency_blocked' "
+            "and artifact_policy_operation_id is null and artifact_policy_id is null "
+            "and artifact_policy_output_digest is null) or "
+            "(result_classification in ('draft_ready','draft_ready_with_warnings') "
+            "and setup_outcome='policy_draft_ready' and artifact_policy_operation_id is not null "
+            "and artifact_policy_id is not null and artifact_policy_output_digest is not null)",
+            name="ck_finalization_projection_shape",
+        ),
+        CheckConstraint(
+            "setup_generation > 0 and service_identity='workstream.project.setup' "
+            "and action_id='project.setup_run.update' and permission_id='project.guide.manage' "
+            "and scope_type='project' and scope_project_id=project_id",
+            name="ck_finalization_authority",
+        ),
+        CheckConstraint(
+            " and ".join(name + _HASH_CHECK for name in (
+                "source_snapshot_hash", "source_state_digest", "canonical_input_hash",
+                "result_hash", "sufficiency_output_digest", "facts_digest", "authority_resource_digest"
+            )) + " and (artifact_policy_output_digest is null or artifact_policy_output_digest "
+            + _HASH_CHECK + ")",
+            name="ck_finalization_hashes",
+        ),
+        CheckConstraint(_component_hashes_check("component_hashes"), name="ck_finalization_components"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    operation_id: Mapped[UUID] = mapped_column(Uuid())
+    correlation_id: Mapped[UUID] = mapped_column(Uuid())
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"))
+    guide_id: Mapped[str] = mapped_column(ForeignKey("project_guides.id"))
+    guide_version: Mapped[str] = mapped_column(String(50))
+    source_snapshot_id: Mapped[str] = mapped_column(String(36))
+    source_snapshot_hash: Mapped[str] = mapped_column(String(71))
+    setup_run_id: Mapped[str] = mapped_column(String(36))
+    setup_generation: Mapped[int] = mapped_column(BigInteger)
+    celery_task_id: Mapped[str] = mapped_column(String(155))
+    source_state_digest: Mapped[str] = mapped_column(String(71))
+    attempt_id: Mapped[UUID] = mapped_column(Uuid())
+    request_operation_id: Mapped[UUID] = mapped_column(
+        Uuid(), ForeignKey("project_guide_compilation_request_operations.operation_id")
+    )
+    provider_idempotency_key: Mapped[UUID] = mapped_column(Uuid())
+    compilation_id: Mapped[UUID] = mapped_column(Uuid())
+    canonical_input_hash: Mapped[str] = mapped_column(String(71))
+    result_hash: Mapped[str] = mapped_column(String(71))
+    result_schema_version: Mapped[str] = mapped_column(String(100))
+    compilation_agent_name: Mapped[str] = mapped_column(String(100))
+    compilation_agent_version: Mapped[str] = mapped_column(String(100))
+    component_hashes: Mapped[dict] = mapped_column(JSON)
+    sufficiency_operation_id: Mapped[UUID] = mapped_column(Uuid())
+    sufficiency_report_id: Mapped[str] = mapped_column(ForeignKey("guide_sufficiency_reports.id"))
+    sufficiency_output_digest: Mapped[str] = mapped_column(String(71))
+    artifact_policy_operation_id: Mapped[UUID | None] = mapped_column(Uuid())
+    artifact_policy_id: Mapped[str | None] = mapped_column(ForeignKey("submission_artifact_policies.id"))
+    artifact_policy_output_digest: Mapped[str | None] = mapped_column(String(71))
+    result_classification: Mapped[str] = mapped_column(String(40))
+    setup_outcome: Mapped[str] = mapped_column(String(40))
+    facts_digest: Mapped[str] = mapped_column(String(71))
+    authority_resource_digest: Mapped[str] = mapped_column(String(71))
+    authorization_decision_event_id: Mapped[str] = mapped_column(ForeignKey("audit_events.id"))
+    actor_profile_id: Mapped[str] = mapped_column(ForeignKey("actor_profiles.id"))
+    identity_link_id: Mapped[str] = mapped_column(String(36))
+    service_identity: Mapped[str] = mapped_column(String(160))
+    action_id: Mapped[str] = mapped_column(String(160))
+    permission_id: Mapped[str] = mapped_column(String(120))
+    scope_type: Mapped[str] = mapped_column(String(16))
+    scope_project_id: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.transaction_timestamp()
     )

@@ -664,12 +664,6 @@
     {
       "source_file": "backend/app/workers/project_setup.py",
       "target_module": "projects",
-      "imported_private_path": "app.modules.projects.setup_queue",
-      "repair_owner": "WS-ARCH-001-03"
-    },
-    {
-      "source_file": "backend/app/workers/project_setup.py",
-      "target_module": "projects",
       "imported_private_path": "app.modules.projects.submission_policy_mutation_service",
       "repair_owner": "WS-ARCH-001-03"
     },

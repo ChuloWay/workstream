@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID, uuid4
 
-from sqlalchemy import exists, or_, select, update
+from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +24,9 @@ from app.modules.authorization.api import (
 )
 from app.modules.projects.models import GuideSourceSnapshot, ProjectGuide, ProjectSetupRun
 
+from app.modules.projects.repository import ProjectRepository
+from .finalization_payloads import LockedFinalization, diagnostic_step
+
 from .contracts import (
     CompilationAttemptIdentity,
     CompilationRecoveryClassification,
@@ -31,6 +34,8 @@ from .contracts import (
     validate_accepted_compilation_result,
 )
 from .models import (
+    ProjectGuideComponentProjectionOperation,
+    ProjectGuideSetupFinalization,
     ProjectGuideCompilation,
     ProjectGuideCompilationAttempt,
     ProjectGuideCompilationRequestOperation,
@@ -99,6 +104,89 @@ class GuideCompilationRepository:
     def __init__(self, session: AsyncSession) -> None:
         """Bind repository operations to the caller-owned transaction."""
         self._session = session
+
+    async def finalization_attempt_id(self, command) -> UUID:
+        """Resolve an exact scoped compilation without taking product locks."""
+        attempt_id = await self._session.scalar(select(ProjectGuideCompilation.attempt_id).where(
+            ProjectGuideCompilation.id == command.compilation_id,
+            ProjectGuideCompilation.project_id == str(command.project_id),
+            ProjectGuideCompilation.guide_id == str(command.guide_id),
+            ProjectGuideCompilation.setup_run_id == str(command.setup_run_id),
+            ProjectGuideCompilation.setup_generation == command.setup_generation,
+        ))
+        if attempt_id is None:
+            raise GuideCompilationIntegrityError("finalization source unavailable")
+        return attempt_id
+
+    async def finalization_receipts(self, command, operation_id):
+        """Re-query both operation and generation custody under the setup lock."""
+        rows = await self._session.scalars(select(ProjectGuideSetupFinalization).where(or_(
+            ProjectGuideSetupFinalization.operation_id == operation_id,
+            (ProjectGuideSetupFinalization.setup_run_id == str(command.setup_run_id))
+            & (ProjectGuideSetupFinalization.setup_generation == command.setup_generation),
+        )).with_for_update().execution_options(populate_existing=True))
+        return tuple(rows)
+
+    async def lock_finalization(self, command, attempt_id) -> LockedFinalization:
+        """Follow the projection lock order and refresh all read-before-lock objects."""
+        attempt = await self._session.scalar(select(ProjectGuideCompilationAttempt).where(
+            ProjectGuideCompilationAttempt.id == attempt_id
+        ).with_for_update().execution_options(populate_existing=True))
+        request = await self.request_operation_for_attempt(attempt_id, lock=True)
+        projects = ProjectRepository(self._session)
+        guide = await projects.lock_project_guide(str(command.guide_id))
+        if guide is None or guide.project_id != str(command.project_id):
+            raise GuideCompilationIntegrityError("finalization guide unavailable")
+        await self._session.refresh(guide)
+        snapshot = await projects.lock_latest_guide_source_snapshot(
+            str(command.project_id), guide.id, guide.version)
+        setup = await projects.lock_latest_project_setup_run(
+            str(command.project_id), guide.id, guide.version)
+        if setup is None or snapshot is None:
+            raise GuideCompilationIntegrityError("finalization setup unavailable")
+        await self._session.refresh(snapshot)
+        # Re-fetch the latest setup so a waiting session never uses a cached pre-state.
+        await self._session.refresh(setup)
+        compilation = await self._session.scalar(select(ProjectGuideCompilation).where(
+            ProjectGuideCompilation.id == command.compilation_id
+        ).with_for_update().execution_options(populate_existing=True))
+        current = await self.current_compilation(command.project_id, command.guide_id, lock=True)
+        operations = tuple(await self._session.scalars(
+            select(ProjectGuideComponentProjectionOperation).where(
+                ProjectGuideComponentProjectionOperation.setup_run_id == str(command.setup_run_id),
+                ProjectGuideComponentProjectionOperation.setup_generation == command.setup_generation,
+            ).order_by(ProjectGuideComponentProjectionOperation.component)
+            .with_for_update().execution_options(populate_existing=True)
+        ))
+        report_op = next((op for op in operations if op.component == "guide_sufficiency"), None)
+        policy_op = next((op for op in operations if op.component == "submission_artifact_policy"), None)
+        report = (await projects.lock_guide_sufficiency_report(
+            report_op.report_id or "", str(command.project_id), guide.id, guide.version
+        )) if report_op else None
+        policy = (await projects.lock_submission_artifact_policy(policy_op.policy_id or "")) if policy_op else None
+        for output in (report, policy):
+            if output is not None:
+                await self._session.refresh(output)
+        return LockedFinalization(attempt, request, guide, snapshot, setup, compilation,
+            current is not None and current.id == command.compilation_id, operations, report, policy)
+
+    async def persist_finalization(self, row, setup) -> None:
+        """Insert custody then close the setup using the database transaction clock."""
+        self._session.add(row)
+        await self._session.flush()
+        await self._session.execute(update(ProjectSetupRun).where(
+            ProjectSetupRun.id == setup.id,
+            ProjectSetupRun.setup_generation == setup.setup_generation,
+        ).values(
+            status=row.setup_outcome,
+            current_step=diagnostic_step(row.setup_outcome),
+            output_sufficiency_report_id=row.sufficiency_report_id,
+            output_submission_artifact_policy_id=row.artifact_policy_id,
+            finished_at=func.transaction_timestamp(),
+            updated_at=setup.updated_at,
+        ).execution_options(synchronize_session=False))
+        await self._session.flush()
+        await self._session.refresh(setup)
 
     async def matching_request_operation(
         self,
