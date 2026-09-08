@@ -76,6 +76,13 @@ conditional compensation facts atomically before v0.1 can be released.
 Both stages enforce quality, but answer different questions and produce
 different outcomes. They are not one combined checker phase.
 
+The phase is distinct from the execution method. Intake primitives and policy
+compilation can be deterministic without making every task evaluator
+deterministic. Post-submit work evaluation may use deterministic rules or a
+supported model/agent-based quality judge; recording its inputs and result does
+not promise identical judgments on rerun. Such an evaluator needs an explicit
+implementation and policy binding and is not claimed live here.
+
 | Stage | Purpose and examples | Policy and execution boundary | Outcome |
 | --- | --- | --- | --- |
 | Pre-submission intake checks | Is this package acceptable to submit? Check completeness, required/forbidden files, evidence integrity, and configured intake-quality rules. | The locked `PreSubmitCheckerPolicy` and effective artifact policy drive the pre-submission catalogue during continuous artifact preparation, before a Submission exists. | Blocking failures return correction feedback and prevent Submission creation. Passing intake does not prove the task is accepted or ready for review. |
