@@ -78,6 +78,11 @@ binds the exact committed claim, immutable Submission, current checker
 run/generation/result and outputs, locked false ReviewPolicy, assignment and
 contribution-policy lineage, and intended derived effects. Consume fresh
 transaction-bound authority; checker/dispatcher allows cannot substitute.
+Acceptance must satisfy the canonical false-readiness contract above, including
+rejection of any applicable approved `human_review` requirement disposition.
+CP07/12H enforce ARCH-04F remediation availability and valid scoped controller
+generation as activation prerequisites, not additional route-resource facts;
+runtime still consumes the shared lifecycle fence required by that contract.
 True permits human admission only. Activation of the false consequence waits
 for the hidden REV/CON/TASK atomicity and terminal-currentness proofs; the
 service never receives human `review.decision` or generic contribution access.

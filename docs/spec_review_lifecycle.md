@@ -589,6 +589,8 @@ Proposed test homes are `backend/tests/test_shared_final_acceptance.py` (REV),
 `backend/tests/contributions/test_shared_acceptance.py` (CON), and the existing
 `backend/tests/projects/test_activation_readiness.py` for PROJECTS. Run each through
 `cd backend && uv run pytest <test-file> -k <test-name>` with real PostgreSQL;
+`<test-file>` is relative to `backend` (for example,
+`tests/test_shared_final_acceptance.py`, not `backend/tests/test_shared_final_acceptance.py`);
 the full unchanged hosted suite/coverage remains required for implementation.
 These are future files/tests. Implementation records resolve exact paths
 against then-current main and retain the behavior/proof obligations, not invent

@@ -1982,8 +1982,11 @@ direction, reason, and change summary.
 
 The [shared acceptance contract](spec_review_lifecycle.md#finalacceptance)
 defines both sources for this planned REV-owned fact. One schema and atomic
-operation serve human accept and required-check success with the locked false
-policy. No separate automated decision entity or synthetic Review is introduced.
+operation serve human accept and authorized `task.post_submit.route` with the
+exact current successful routing manifest, locked `human_review_required=false`
+policy and originating AUTH decision event. Required-check success or raw checker
+output alone cannot create FinalAcceptance. No separate automated decision entity
+or synthetic Review is introduced.
 
 Fields:
 

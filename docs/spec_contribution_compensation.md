@@ -39,11 +39,16 @@ human Review
 For accepted submitter work the sequence is:
 
 ```text
-Authorized Review(accept), or required-check success under locked false policy
+Authorized Review(accept), or authorized task.post_submit.route under locked false policy
 -> REV-owned FinalAcceptance
 -> accepted_submission ContributionRecord
 -> applicable CompensationAward
 ```
+
+The false branch requires the exact current successful routing manifest, locked
+`human_review_required=false` policy and originating AUTH decision event under
+the [shared acceptance contract](spec_review_lifecycle.md#finalacceptance).
+Required-check success or raw checker output alone cannot create FinalAcceptance.
 
 The boundary MUST preserve four distinct facts:
 
