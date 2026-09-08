@@ -2,10 +2,19 @@
 
 ## Status
 
+These flows describe the target v0.1 behavior, not a list of active endpoints.
+Use the [capability ledger](roadmap_status.md) for delivered and remaining work.
 The review and revision portions are the planned v0.1 contract and remain
 unavailable until their owning REV chunks, exact AUTH activation, and REV-13
 joint release complete. Earlier project/task/submission/checker behavior keeps
 its separately recorded implementation status.
+
+The detailed review flow below describes `human_review_required=true`, the
+default in the planned existing ReviewPolicy setting. False is a separately
+planned post-check TASK handoff to authorized FinalAcceptance and CON, without
+human queues, leases, Reviews or reviewer contributions. Required checks and
+exact immutable evidence still apply. The [policy-setting handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next)
+does not claim that automated runtime/source contracts are already complete.
 
 The first user flows prove that Workstream can run real work from intake to acceptance. These flows come before any advanced routing or settlement.
 
@@ -14,26 +23,35 @@ The first user flows prove that Workstream can run real work from intake to acce
 1. A system-scoped Project Manager creates the project.
 2. Project owner provides open-ended guide material and business terms.
 3. An authorized covered Project Manager adds the guide.
-4. Workstream enqueues the Celery project setup pipeline for the immutable guide-source snapshot.
-5. The pipeline runs `ProjectGuideSufficiencyAgent`.
+4. The covered Project Manager explicitly requests unified compilation of the
+   immutable guide-source snapshot; Workstream queues its authorized async
+   execution. Automatic ingestion continuation is not part of this cutover.
+5. One unified compilation assesses sufficiency and proposes artifact,
+   pre-submission and post-submission policy components from the exact guide
+   and catalogue snapshots.
 6. Blocking sufficiency gaps stop the setup pipeline and create clarification requests for the project owner.
 7. An authorized covered Project Manager acknowledges non-blocking sufficiency warnings.
-8. The pipeline runs `SubmissionArtifactPolicyDerivationAgent` only after sufficiency is not blocked.
+8. Workstream finalizes the exact compilation and its permitted projections.
+   The finalized setup run and receipt remain immutable; no second derivation
+   agent runs to fill the post-submit component.
 9. An authorized covered Project Manager reviews and approves the derived submission artifact policy.
 10. Workstream persists the effective project submission artifact policy hash.
 11. Workstream compiles, persists, and locks the project `PreSubmitCheckerPolicy`.
-12. Workstream derives and compiles the project post-submit checker policy.
+12. A separate operation deterministically projects and compiles the post-submit
+    component from that same unified result; it does not execute a checker.
 13. An authorized covered Project Manager approves the current compiled
     post-submit checker policy.
 14. If correction is requested instead, Workstream supersedes and retains the
     unapproved compiled output, preserves its policy hash/body plus bounded
-    actor/reason/time and redacted derivation metadata, passes bounded correction
-    feedback to post-submit derivation, and requeues setup continuation. An
+    actor/reason/time and redacted derivation metadata. Correction has separate
+    operation provenance; new model output requires a new unified compilation
+    generation with bounded feedback for a known terminal result, never
+    resuming the finalized run or restarting an uncertain provider operation. An
     unchanged replacement fails closed, and activation remains blocked.
 15. An authorized covered Project Manager enables review policy.
 16. An authorized covered Project Manager enables revision policy.
-17. The owning Finance Authority publishes the active
-    ContributionPolicyVersion with explicit submitter and reviewer
+17. The owning Finance Authority publishes the ContributionPolicy version
+    selected by the active policy, with explicit submitter and reviewer
     compensated/unpaid rules.
 18. Project becomes active.
 
@@ -45,8 +63,8 @@ Acceptance:
   artifact policy hash, project pre-submit checker bundle hash, an approved
   current compiled project post-submit checker policy with matching guide,
   source snapshot, effective project policy, and pre-submit checker provenance,
-  review policy, revision policy, and an independently published active
-  `ContributionPolicyVersion` containing exactly one explicit
+  review policy, revision policy, and the current published version of the active
+  `ContributionPolicy` containing exactly one explicit
   compensated/unpaid rule for each of `accepted_submission` and
   `completed_review`.
 - Guide-policy activation and contribution-policy publication are independently
@@ -54,8 +72,12 @@ Acceptance:
   exact published version. Task readiness locks it; `TaskAssignment` copies the
   task lock, Submission stamps the attempt version, and `ReviewLease` copies
   the Submission stamp without policy selection.
-- Normal setup starts from guide/source capture. Project Managers do not
-  manually trigger sufficiency or derivation in the happy path.
+- Normal setup starts from guide/source capture and one authorized compilation
+  request, not separate requests for sufficiency and each policy derivation.
+- All pre/post capability-gap dispositions block projection/approval/activation.
+  Explicit approved `human_review` requirements remain valid, but unsupported
+  automation is never silently relabelled. An uncertain provider outcome stays
+  blocked without a fresh call until same-operation recovery is supported.
 - Submission artifact policy is Workstream-derived and approved by an
   authorized covered Project Manager; project owners do not author or approve
   the machine policy schema directly.
@@ -116,7 +138,7 @@ Acceptance:
    `CheckerResult` lineage and no Review or reviewer contribution.
 5. Setup or provenance defects keep the Task `evaluation_pending` on the
    internal `task_setup_blocked` repair route.
-6. Only a durable, final, current `CheckerRun` outcome of `allow_review` admits
+6. For locked `human_review_required=true`, only a durable, final, current `CheckerRun` outcome of `allow_review` admits
    the exact immutable Submission with verified binding facts and moves the
    Task to `REVIEW_PENDING`.
 
@@ -128,6 +150,9 @@ Acceptance:
 - Every checker result is timestamped.
 
 ## Flow 5: Reviewer Reviews Submission
+
+This flow and its downstream human-review/revision effects apply only to the
+human-required branch, not a project with locked false.
 
 1. Reviewer current work returns an active lease, one server-selected offer, or none.
 2. Reviewer claims the offer and receives the exact ReviewPacketManifest.

@@ -8,7 +8,7 @@ Every project has:
 
 - active guide
 - queue owner
-- reviewer owner
+- reviewer owner when human review is required
 - guide source snapshot
 - guide sufficiency report
 - submission artifact policy
@@ -18,12 +18,14 @@ Every project has:
 - review policy
 - revision policy
 - contribution policy and published versions
-- review guard
+- review guard when human review is required
 - lessons learned log
 
 ## Project Setup Checklist
 
-Before releasing tasks:
+Target v0.1 checklist before releasing tasks. The
+[capability ledger](roadmap_status.md) distinguishes delivered behavior from
+remaining setup/activation work:
 
 - project name and slug exist
 - project guide imported
@@ -31,36 +33,45 @@ Before releasing tasks:
 - project owner setup material captured
 - latest project setup run visible through covered Project Manager or authorized
   Operator/Audit projection
-- active published ContributionPolicyVersion configured
+- active ContributionPolicy configured with its current published version
 - explicit `accepted_submission` and `completed_review` rules configured as
   compensated or unpaid
 - allowed task types listed
 - task source, description, acceptance, and rejection fields listed
 - guide sufficiency report passed or warnings acknowledged by an authorized
   covered Project Manager
-- this rollout activates only governed manual submission artifact policy
-  create/update for an authorized covered Project Manager; Workstream derivation
-  and Project Manager approval remain planned later actions. Manual updates
-  append a successor and never edit agent output or an existing draft body in
-  place
+- complete unified proposal is available for Project Manager review and
+  artifact/pre-submit approval; manual provenance cannot impersonate or edit
+  agent-derived output
 - effective project submission artifact policy hash persisted
 - generated project pre-submit checker policy is created from the effective project submission artifact policy
 - project pre-submit checker bundle hash persisted
-- post-submit checker derivation runs after submission artifact policy approval
-- generated project post-submit checker policy compiled, or unsupported checker gaps resolved
+- post-submit policy is projected from the same unified compilation after
+  upstream approval; it triggers no second guide inference or work evaluation
+- generated project post-submit checker policy compiled and all pre/post
+  capability-gap dispositions resolved; explicit approved human-review
+  requirements are valid non-gap classifications, not an automatic fallback
 - compiled project post-submit checker policy attached with source/effective/pre-submit provenance
 - current compiled project post-submit checker policy approved by an authorized
   covered Project Manager; a correction request supersedes and retains the
-  unapproved policy, then returns the blocked setup state to correction-aware
-  regeneration
+  unapproved policy through a separate operation, with a new compilation
+  generation when new model output is required
 - review policy attached
 - revision policy attached
-- active published, complete, binding-valid ContributionPolicyVersion bound to
-  the guide before activation
-- reviewer pool assigned
-- review guard created from the project guide
+- exact expected published, complete, binding-valid ContributionPolicyVersion
+  validated against the active policy selector and bound atomically at guide
+  activation
+- reviewer pool assigned when locked `human_review_required=true`
+- review guard created from the project guide when human review is required
 - guide version marked active
 - each task locks the guide snapshot, effective project submission artifact policy hash, and pre-submit checker bundle hash before entering `READY`
+
+The planned existing ReviewPolicy setting `human_review_required` defaults
+true. False may be configured in draft, but guide activation requires the
+authorized automated FinalAcceptance/CON path and adequate configured checks;
+it does not require a human reviewer pool, lease or decision endpoint.
+Unsupported false activation is rejected rather than silently switched to
+true. See the [implementation handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
 
 The guide source snapshot freezes guide/source material only. While the guide is
 still draft, an authorized covered Project Manager may attach or update review
@@ -169,20 +180,31 @@ send `"<id>.<generation>.<policy_hash_without_sha256_prefix>"`. An authorized Pr
 Manager may attach review and revision policies in either order while the guide
 is draft; activation remains blocked until both are complete.
 
-`ProjectSetupRun` is only a setup ledger. Policy truth remains in the guide
-source snapshot, sufficiency report, submission artifact policy, effective
-project policy, compiled project pre-submit checker policy rows, and compiled
-project post-submit checker policy rows. Post-submit setup states include
-`running_post_submit_derivation_agent`, `post_submit_setup_blocked`, and
-`post_submit_policy_compiled`.
+The intended unified flow uses one compilation result for sufficiency and
+artifact/pre-submit/post-submit proposals. Once finalized, its `ProjectSetupRun`,
+receipt, timestamps and output references are immutable. Approval cannot resume
+that run, rewrite its result or invoke a second post-submit derivation agent.
+Policy truth remains in the canonical versioned policy rows, not the setup
+ledger. POL-04B owns live unified wiring; POL-05A/05B and POL-06A/06B own separate
+append-only approval/projection/correction operations linked to that receipt.
+The approval/post-policy actions remain unavailable until their exact
+AUTH-12F4/12G activation; this is the target operator flow, not a claim that
+those commands are already live.
 
-When project setup autostart is enabled and the latest setup run matches the
-approved source snapshot and submission artifact policy, approving the derived
-`SubmissionArtifactPolicy` through the approval endpoint is the human setup
-action that moves a run from `policy_draft_ready` into automatic post-submit
-checker derivation. That approval creates the effective project policy and
-compiled project pre-submit checker bundle before Workstream continues into
-post-submit setup.
+An authorized Project Manager reviews the complete bounded proposal before
+approval. Effective intake combines mandatory platform defaults with approved
+project rules using the canonical ART compiler. Post-submit policy is a
+separate deterministic projection of the same unified result; no evaluator
+runs during setup or approval.
+
+The planned exact-compilation review-package surface uses
+`project.guide_compilation.review_package.read` (AUTH-12F4), including covered
+Operator/Audit diagnostic readers with no approval power. The separate planned
+`project.guide_compilation.correction.request` permits only the covered Project
+Manager to correct the exact known terminal result. These are new object-scoped
+contracts, not capabilities already provided by status-only setup reads.
+POL-05B exposes them before approval; AUTH-12G/POL-06B separately provide the
+exact post-policy draft read before post-policy approval.
 
 The post-submit checker setup read returns only bounded operator summaries:
 setup status, compiled checker names/severities, sufficiency status/counts,
@@ -192,10 +214,16 @@ paths, replayable refs, exact source hashes, or compiled policy body internals.
 When an authorized covered Project Manager requests correction, Workstream
 supersedes and retains the unapproved compiled output, preserves its policy
 hash/body plus bounded actor/reason/time and redacted derivation metadata,
-supplies bounded correction feedback to the next derivation run, and requeues
-setup continuation from post-submit derivation. Activation remains blocked. An
+links a separate correction operation to that provenance. If correction needs
+new model output for a known terminal result, it creates a new unified compilation/setup generation with
+bounded feedback; it never reopens a finalized run. Activation remains blocked. An
 unchanged replacement fails closed; a changed replacement must be approved
 separately through the approval endpoint.
+
+Timeout or unknown provider acceptance is not a correctable finalized result.
+It remains blocked without another call until the adapter supports verified
+retrieval/resume/idempotent recovery of that same operation. A stored local
+idempotency UUID does not establish provider support.
 
 ## v0.1 Quality Gates
 
@@ -205,15 +233,16 @@ A project cannot become active unless guide, immutable guide-source snapshot,
 passed or acknowledged guide sufficiency report, approved submission artifact
 policy, persisted effective project submission artifact policy hash, project
 pre-submit checker bundle hash, approved project post-submit checker policy,
-review policy, revision policy, and an independently published active
-`ContributionPolicyVersion` with exactly one explicit compensated/unpaid rule
+review policy, revision policy, and the current published version of the active
+`ContributionPolicy`, with exactly one explicit compensated/unpaid rule
 for each of `accepted_submission` and `completed_review` are present. Guide
 policy activation and contribution-policy publication remain independently governed,
 but project activation requires both. Compiled
 post-submit setup output carries exact source/effective/pre-submit provenance,
 but activation remains blocked until the current compiled policy is approved
 through the server-owned approval endpoint. A correction request supersedes the
-unapproved output and requeues correction-aware regeneration; it does not
+unapproved output and requires separately recorded correction and reapproval;
+it does not
 satisfy activation. A task cannot enter `READY` until it also locks the guide
 source snapshot id/hash, effective project submission artifact policy hash,
 project pre-submit checker bundle hash, and approved provenance-matched project

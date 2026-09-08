@@ -5,7 +5,7 @@
 Source-agnostic governed contribution infrastructure for coordinating,
 verifying, and recording work performed by humans, AI agents, or both.
 Workstream binds project-defined tasks, locked rules, immutable submission
-artifacts, policy-governed checks, and authorized Reviews into trusted
+artifacts, policy-governed checks, and authorized acceptance into trusted
 `ContributionRecord` facts. Source applications and downstream economic or
 reporting systems may consume those facts but do not control Workstream's
 identity, authorization, submission, review, or contribution truth. Flow
@@ -197,12 +197,14 @@ sufficiency report for the same snapshot.
 
 ## Project Setup Run
 
-A non-authoritative orchestration ledger for automatic project setup. It records
-queue status, current setup step, Celery task id, bounded errors, and output
-record ids for guide sufficiency, submission artifact policy derivation, and
-post-submit checker setup continuation. The actual policy truth remains in the
-source snapshot, sufficiency report, submission artifact policy, effective
-project policy, pre-submit checker policy, and post-submit checker policy rows.
+A setup execution ledger that does not replace canonical policy truth. The
+unified path records queue/attempt diagnostics and exact compilation/projection
+references, then finalizes the run and its receipt immutably. Later approval,
+post-policy projection and correction have separate operation provenance; they
+do not resume or update that finalized run. Policy truth remains in the source
+snapshot, sufficiency report and versioned artifact, effective, pre-submit and
+post-submit policy rows. Legacy multi-agent continuation fields are not the
+design for the unified path.
 
 ## Submission Artifact Policy
 
@@ -309,13 +311,16 @@ The judgment layer where a reviewer accepts, rejects, or requests revision.
 ## ReviewQueueEntry
 
 The planned durable admission record connecting one exact finalized Submission
-and successful current CheckerRun to server-selected human-review routing.
+and successful current CheckerRun, through the TASK-owned canonical
+`allow_review` manifest, to server-selected human-review routing. The manifest
+is a currentness/lineage handoff, not review authority or a review decision.
 
 ## ReviewLease
 
 The planned permanent identity of one reviewer claim attempt. It binds the
 canonical human reviewer, queue entry, exact Submission packet, lease timing,
-and ContributionPolicyVersion inherited from the task lock.
+and ContributionPolicyVersion copied from the immutable Submission attempt
+stamp, transitively inherited from Task/Assignment without current-policy lookup.
 
 ## Review
 
@@ -353,10 +358,9 @@ context without rewriting prior work.
 
 ## FinalAcceptance
 
-The internal immutable accept-only fact linking one task, versioned Submission,
-source Review, accepted submitter, recording reviewer, time, and ReviewPolicy.
-It has no manual API or separate action and is the sole source of the submitter
-`accepted_submission` ContributionRecord.
+The internal immutable accept-only fact and sole source of a submitter's
+`accepted_submission` ContributionRecord. See [Final Acceptance](#final-acceptance)
+for human and planned automated source boundaries.
 
 ## Revision Replay
 
@@ -434,13 +438,20 @@ the contribution record; reputation projections remain deferred.
 
 ## Final Acceptance
 
-The immutable REV-owned internal fact created only as a lifecycle consequence
+On the human-review branch, the immutable REV-owned internal fact created only as a lifecycle consequence
 of `Review(accept)`. It binds one project, task, existing versioned Submission,
 source Review, accepted submitter, recording reviewer, acceptance time, and
 locked ReviewPolicy. There is no public/manual create API or separate
 authorization action. `needs_revision` and `reject` create none. In v0.1 it is
 unique per task, source Review, and Submission and is the sole source of an
 `accepted_submission` ContributionRecord.
+
+Planned amendment: the existing ReviewPolicy boolean `human_review_required`
+defaults true. False uses a separately authorized automated acceptance source,
+not a Review, ReviewLease, human actor or reviewer contribution. The exact
+source constraints and shared CON participant must be reconciled before that
+branch is enabled; checker success alone remains insufficient authority.
+See the [policy-setting handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
 
 ## Human Owner
 

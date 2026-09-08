@@ -6,12 +6,12 @@ for current product capability.
 
 | Initiative | Durable disposition | Next usable boundary |
 |---|---|---|
-| [WS-ARCH-001](initiatives/WS-ARCH-001/OVERVIEW.md) | Planned | Prepare CP05 activation against current specifications |
+| [WS-ARCH-001](initiatives/WS-ARCH-001/OVERVIEW.md) | Planned | CP05 activation and independent ARCH-04A capability proof under the reconciled pre-review dependencies |
 | [WS-ART-001](initiatives/WS-ART-001/OVERVIEW.md) | Planned | Exact post-submit materialization after guide/checker contracts |
-| [WS-AUTH-001](initiatives/WS-AUTH-001/OVERVIEW.md) | Planned | POL-04B live cutover over complete exact finalization authority |
+| [WS-AUTH-001](initiatives/WS-AUTH-001/OVERVIEW.md) | Planned | CP05 and unavailable shared-dispatcher contracts; POL-04B consumes completed finalization authority after catalogue reconciliation |
 | [WS-CON-001](initiatives/WS-CON-001/OVERVIEW.md) | Planned | Prepare CP05, then guide-activation validation and persistence |
 | [WS-AUTH-003](initiatives/WS-AUTH-003/OVERVIEW.md) | Planned | Repair touched capabilities through `authorization.api` |
-| [WS-POL-003](initiatives/WS-POL-003/OVERVIEW.md) | Planned | POL-04B live cutover over complete exact AUTH-12B2 finalization authority |
+| [WS-POL-003](initiatives/WS-POL-003/OVERVIEW.md) | Planned | Existing ReviewPolicy boolean per the product-builder handoff; retain ARCH-04A catalogue/schema before POL-04B live cutover |
 | [WS-REV-001](initiatives/WS-REV-001/OVERVIEW.md) | Planned | Continue dependency-gated hidden review behavior |
 | [WS-QUAL-002](initiatives/WS-QUAL-002/OVERVIEW.md) | Planned | Populate subsystem ownership before changed-line mutation work |
 | [WS-QUAL-003](initiatives/WS-QUAL-003/OVERVIEW.md) | Planned | Audit and prune test proof, add missing safety cases, decompose oversized test modules |

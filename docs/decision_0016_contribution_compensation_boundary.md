@@ -62,7 +62,9 @@ award retain the prior lease version; the next Submission and ReviewLease use
 the rebased version. Prior contributions and awards are never rewritten.
 
 The retired guide-bound economic-policy aggregate and all semantic and physical
-consumers are removed through CON-05A/05B. No alias, fallback, dual read/write,
+consumers are removed through the owner-sized CP06-CP09/ARCH replacements
+identified in the current contribution specification. CON-05A/05B are the
+historical grouping, not a second implementation lane. No alias, fallback, dual read/write,
 or implicit unpaid behavior survives.
 
 ### Transaction ownership

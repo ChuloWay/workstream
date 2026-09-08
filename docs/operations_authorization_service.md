@@ -212,9 +212,12 @@ compatibility identifier. That temporary,
 enumerated intake route writes only `LegacyWorkflowEligibility` and cannot
 create a grant or change a canonical profile. Its direct compatibility
 consumers are assigned-submitter claim, assigned-submitter start, and submission
-intake. Operator start override does not use the bridge. AUTH-13 removes the
-claim and start consumers; AUTH-14 removes the final submission consumer,
-compatibility route, and adapter.
+intake. Operator start override does not use the bridge. Current
+ARCH-03B/03C remove the replacement task claim/start consumers and activate
+their exact authority. Canonical admission-backed Submission already has its
+own hidden path; ARCH-02I removes legacy public reachability after its full
+prerequisites, and CP09 removes dead economic schema only after zero consumers.
+Historical broad AUTH-13/14 are not additional implementation lanes.
 
 ## Contributor Attribution Runtime Guard
 

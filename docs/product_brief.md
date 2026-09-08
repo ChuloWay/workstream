@@ -9,7 +9,7 @@ Workstream
 Workstream is governed contribution infrastructure for coordinating,
 verifying, and recording work performed by humans, AI agents, or both. It turns
 project-defined tasks, immutable submissions, policy-governed checks, and
-authorized review into trusted `ContributionRecord` facts that applications,
+policy-governed acceptance into trusted `ContributionRecord` facts that applications,
 organizations, and economic systems can consume.
 
 ## Durable Outcome
@@ -18,9 +18,9 @@ Workstream establishes an attributable statement about governed work:
 
 > This authorized actor completed this task under this locked version of the
 > project rules, submitted this exact artifact, passed these checks, received
-> this authorized review, and achieved this recorded outcome.
+> the authorized decision required by the project policy, and achieved this recorded outcome.
 
-Every valid Review creates the reviewer's immutable `completed_review`
+On the human-review branch, every valid Review creates the reviewer's immutable `completed_review`
 `ContributionRecord`. An `accept` decision additionally creates
 `FinalAcceptance` and the submitter's immutable `accepted_submission`
 `ContributionRecord`. Compensation, points, reputation, reporting, datasets,
@@ -46,7 +46,7 @@ Across serious task projects, the surface language changes but the lifecycle is 
 
 ```text
 Guide -> Task -> Pre-Submission Intake -> Submission -> Post-Submission Evaluation
--> Review -> Revision/Decision
+-> Policy-Governed Decision (Human Review When Required) -> Revision/Acceptance
 -> Contribution -> Conditional Compensation Award -> Fulfillment
 ```
 
@@ -56,7 +56,12 @@ Pre-submission intake assesses package fitness before a Submission exists.
 Post-submission evaluation assesses the immutable work against locked project
 requirements and produces review-eligibility evidence. Evaluation can use
 deterministic rules or supported model-based checkers; the stage does not
-promise deterministic judgments. Neither stage replaces authorized Review.
+promise deterministic judgments. Neither stage replaces required human Review
+or independently authorizes acceptance. Planned `human_review_required: true`
+in the existing locked ReviewPolicy may be set false for authorized automated
+acceptance, without reviewer contribution. This is not live behavior; the
+[bounded handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next)
+precedes activation of the shared acceptance/CON path.
 See the [checker framework](architecture_checker_framework.md) and
 [current capability ledger](roadmap_status.md) for supported boundaries.
 

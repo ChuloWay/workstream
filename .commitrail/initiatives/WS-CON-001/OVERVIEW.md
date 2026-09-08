@@ -1,12 +1,12 @@
 # WS-CON-001 — Contribution and conditional compensation
 
-Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
-[`CHUNK_MAP.md`](pre-cutover/CHUNK_MAP.md), and
-[`planning/chunk contracts`](pre-cutover/chunks/).
+Current pre-review work follows the [cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
+and the [capability ledger](../../../docs/roadmap_status.md).
 
 - Disposition: Planned
 - Completed boundary: hidden policy behavior.
-- Intent: turn accepted work into immutable ContributionRecords and optional
+- Intent: record completed authorized reviews and accepted submissions as
+  immutable ContributionRecords and optional
   project-policy-driven compensation awards without coupling lifecycle truth to
   an economic provider.
 - Next usable boundary: prepare CP05 activation, then guide-activation
@@ -28,11 +28,60 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 
 ## Remaining v0.1 sequence
 
+Use the [current cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
+for the existing CP05-CP09 work; CON does not create a second policy/binding lane.
+
 1. CP05 activates only the merged hidden policy behavior.
-2. CP06 validates the frozen policy; CP07 binds it to ProjectGuide; CP08 locks
-   it through TaskAssignment and Submission; CP09 removes the replaced legacy
-   economic path after replacement activation.
+2. CP06 validates the expected version against the active policy's current
+   published selector for new guide activation, without reselecting existing
+   frozen work; CP07 builds hidden PROJECTS
+   activation/binding, and AUTH-12H activates it. CP08 supplies lineage fields;
+   ARCH-03B locks/copies them through TaskAssignment and Submission. CP09 removes the replaced legacy
+   economic path only after all consumers are replaced, including CHECKERS and
+   public Submission cutover; it does not block canonical `allow_review`.
 3. Add ContributionRecord/CompensationAward persistence after stable REV FK
    targets, then the atomic REV/CON decision participant before live decisions.
-4. Add dispatcher, fulfillment, reconciliation, and product reads only after
+   Reconcile both acceptance sources now: the locked ReviewPolicy boolean
+   `human_review_required` defaults true; false permits authorized automated
+   acceptance without a Review or reviewer contribution. Both use the same
+   FinalAcceptance/submitter-contribution participant and applicable awards.
+   Automated acceptance must not require live human-review infrastructure;
+   see the [product-builder handoff](../../changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
+4. Shared dispatcher CON-02B is pulled forward before canonical task authority
+   invalidation and post-submit routing, independently of ContributionRecord/
+   award persistence. AUTH-OUTBOX-01 supplies its unavailable contract and
+   AUTH-OUTBOX-02 activates its proven mechanics. Add fulfillment,
+   reconciliation and product reads only after
    their exact AUTH service identities and actions exist.
+
+## CON-02B current dispatcher contract
+
+Disposition: Planned. Risk: L1. Consume
+[AUTH OUTBOX-01/02](../WS-AUTH-001/planning/PLAN.md#ws-auth-001-outbox-01--unavailable-dispatcher-contract).
+Shared outbox owns hidden claim/lease fencing, typed handler registry,
+invoke/finalize, bounded retry/dead-letter/replay and drain observation. Reuse
+the existing outbox rows and caller-session append service; do not implement
+contribution, compensation, checker, TASK or provider behavior here.
+Allowed files are the shared outbox module, its composition/worker registration,
+bounded configuration and focused tests/docs. Each handler receives immutable
+event/claim facts, validates the committed claim through a public port and
+returns a typed outcome without mutating outbox rows. Commit claim before
+handler invocation; hold no row lock across handler/provider I/O.
+
+Prove independent-session lease expiry, stale-worker fencing, crash before and
+after invoke/finalize, redelivery, exact replay, retention and non-false-zero
+drain observation. Dispatcher identity cannot execute any feature action and
+registration refuses handlers without their own authority manifest. Production
+stays unavailable until AUTH-OUTBOX-02. Focused architecture/security/QA and
+changed workflow/test reviewers inspect these proofs, using real PostgreSQL/
+Redis and unchanged hosted coverage. The original detailed dispatcher record
+remains in the archive; its old directory paths and relative sequencing do
+not override this current contract.
+
+## Preserved history
+
+Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
+[`CHUNK_MAP.md`](pre-cutover/CHUNK_MAP.md), and
+[`planning/chunk contracts`](pre-cutover/chunks/).
+These verbatim records preserve completed work and original proposals; where
+pending sequencing conflicts, the current dependency contract above governs.

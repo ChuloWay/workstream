@@ -348,6 +348,14 @@ that policy context unless an explicit audited rebase occurs.
 
 ## ProjectSetupRun
 
+The field and status inventory below includes retained legacy multi-agent
+setup diagnostics, not instructions to implement those continuations again.
+The unified path uses the compilation/projection/finalization contracts below:
+after its finalization receipt exists, the run and its output references are
+immutable. Later approval, post-policy projection and correction own separate
+operation provenance. New model output requires a new compilation generation,
+not reopening a finalized `policy_draft_ready` row.
+
 Fields:
 
 - `id`
@@ -1094,6 +1102,17 @@ feedback cannot influence a later setup context.
 
 ## ReviewPolicy
 
+Planned schema amendment: `human_review_required: bool = true` belongs in this
+existing immutable guide-bound policy, including its versioned semantics/hash.
+True routes successful post-submit work to human review; false permits the
+authorized automated acceptance path without reviewer contribution. The
+[acceptance-mode reconciliation](../.commitrail/changes/pre-review-plan-reconciliation.md#accepted-direction-project-controlled-acceptance-mode)
+must define its versioned schema/hash and migration behavior before use; the
+field list below does not yet implement it. Missing legacy configuration never
+enables automated acceptance or repairs incomplete policy semantics. Preserve
+historical hashes and locks; false cannot activate before its runtime path is
+available. Do not add an acceptance-mode enum or another policy entity.
+
 Fields:
 
 - `id`
@@ -1386,8 +1405,11 @@ id/generation/hash identities, acceptance criteria, derived display summaries,
 and skill tags. Contributors submit against the task id; they do not restate
 policy identities.
 
-`locked_contribution_policy_version_id` equals the active guide's bound version
-when the task first enters `ready`. Ordinary claim never changes it. Human
+`locked_contribution_policy_version_id` is copied from the then-active guide
+when the Task first acquires its complete context lock, before `ready`
+(the existing transition acquires it at screening). Later readiness checks
+validate that frozen tuple, not equality to a newer active guide or global
+policy selector. Ordinary claim never changes it. Human
 `needs_revision` complete-context preparation is the only boundary that may
 atomically rebase this field on the continuing Task for the next attempt, with
 prior/next lineage recorded before contributor access.
@@ -1586,11 +1608,11 @@ Fields:
 - `locked_revision_policy_id`
 - `locked_revision_policy_generation`
 - `locked_revision_policy_hash`
-- `artifact_binding_id` (target after ART-06)
-- `submission_bundle_manifest_id` (target after ART-06)
-- `package_hash` (legacy until ART-06 cutover)
-- `artifact_hash_manifest` (legacy until ART-06 cutover)
-- `artifact_manifest_hash` (legacy until ART-06 cutover)
+- `artifact_binding_id` (target after ARCH-04B/04C custody)
+- `submission_bundle_manifest_id` (target after ARCH-04B/04C custody)
+- `package_hash` (legacy; replacement custody in ARCH-04B/04C)
+- `artifact_hash_manifest` (legacy; replacement custody in ARCH-04B/04C)
+- `artifact_manifest_hash` (legacy; replacement custody in ARCH-04B/04C)
 - `summary`
 
 Status:
@@ -1718,12 +1740,23 @@ If added later, the readiness certificate records the exact checker run and
 server-generated manifest/binding identity that allowed a submission to enter
 human review.
 
-For v0.1, the current `CheckerRun` is the readiness proof. If any submitted artifact changes, a new submission version and checker run are required.
+For v0.1, the final current `CheckerRun` is the checker proof. Planned ARCH-04E
+adds the TASK-owned immutable routing manifest that binds that result, exact
+Submission/binding/policy/authority lineage and evaluation generation, plus a
+separate current routing pointer. TASK publishes manifest, pointer and
+`review_pending` atomically after consuming CHECKERS facts. This is the canonical
+handoff to REV, not an optional signed ReadinessCertificate or a replacement
+authorization system. Its implementation remains planned. Any submitted
+artifact change requires a new Submission and checker run.
 
 ## ReviewQueueEntry And ReviewLease
 
 `ReviewQueueEntry` immutably anchors one exact finalized Submission/version,
 Task, project, and its current successful `allow_review` CheckerRun. The 03A1
+foundation does not yet implement the later ARCH-04E routing-manifest input;
+live admission must consume that exact TASK handoff while retaining these
+immutable CheckerRun/binding anchors. This adoption is an upstream dependency,
+not activation of REV behavior. The 03A1
 foundation persists only `pending` and `closed` queue state plus open/preferred
 routing metadata; it exposes no route, selection behavior, or lease shape.
 PostgreSQL validates the cross-owner lineage and checker admissibility when the
@@ -1742,8 +1775,9 @@ offer, or none; it never exposes the full backlog.
 
 `ReviewLease` is the permanent identity of one claim attempt. It stores the
 canonical human reviewer ActorProfile ID, queue/Submission lineage, database
-lease times, disposition, and the ContributionPolicyVersion inherited from the
-task lock during claim. PostgreSQL enforces one active lease per reviewer and
+lease times, disposition, and the ContributionPolicyVersion copied from the
+immutable Submission attempt stamp during claim, transitively inherited from
+Task/Assignment without current-policy lookup. PostgreSQL enforces one active lease per reviewer and
 queue entry. The queue's deferred `active_lease_id` relationship must agree
 with the single active lease at transaction commit, allowing later claim and
 close commands to stage both sides atomically without exposing behavior in the
@@ -1934,6 +1968,13 @@ ContributionPolicyVersion—identity, activation sequence where applicable,
 direction, reason, and change summary.
 
 ## FinalAcceptance
+
+The field/source contract below describes the human-review branch. The planned
+[acceptance-mode amendment](../.commitrail/changes/pre-review-plan-reconciliation.md#accepted-direction-project-controlled-acceptance-mode)
+requires a distinct, constrained automated decision source without a fabricated
+Review or human identity. Exact source exclusivity, authority/evidence lineage,
+uniqueness, transaction participation and CON validation must be reconciled
+before changing this schema; nullable `source_review_id` alone is not sufficient.
 
 Fields:
 

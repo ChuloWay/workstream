@@ -53,7 +53,22 @@ root-level version namespace do not create an alias.
 
 ## v0.1 Boundary
 
-The shipping path is:
+### Planned acceptance-mode amendment
+
+The accepted product direction uses `human_review_required: bool = true` in
+the existing guide-bound ReviewPolicy. After required post-submit checks pass,
+true requires human review; false proceeds through authorized FinalAcceptance
+and submitter contribution, without a reviewer contribution. No separate mode
+enum, policy entity or adjudication setting is introduced. The contract below still specifies the
+human branch; it must not be used to imply that human review is universally
+required by the intended v0.1 product. The [current reconciliation record](../.commitrail/changes/pre-review-plan-reconciliation.md#accepted-direction-project-controlled-acceptance-mode)
+tracks the outstanding schema, authority, lifecycle and contribution changes.
+Automated acceptance is not implemented or enabled by this note. In particular,
+`allow_review` retains its human-admission meaning, and a checker pass alone
+does not authorize FinalAcceptance. No synthetic human Review or ReviewLease
+may be used to fit automated acceptance into the existing human-only contract.
+
+The human-review shipping branch is:
 
 ```text
 Project Guide -> Task -> Pre-Submission Intake -> Immutable Submission
@@ -250,12 +265,18 @@ earlier Submission and ReviewLease lineage remains immutable.
 
 Only a durable, final, current post-submit CheckerRun outcome of `allow_review`
 may admit the exact immutable Submission to human review. Admission records the
-exact CheckerRun ID and verified binding facts. A retry, supersession, or
+exact CheckerRun ID and verified binding facts through the TASK-owned canonical
+`allow_review` routing manifest delivered by ARCH-04E. The manifest binds the
+current evaluation generation/result and immutable Submission; it does not
+replace CHECKERS truth or grant review authority. REV validates the current
+TASK handoff through its public port before recording admission. A retry, supersession, or
 different Submission cannot silently replace that anchor.
 
-Checker routing is not human judgment. A final needs-revision CheckerRun moves
-the Task to contributor-readable `needs_revision` in the existing checker
-transaction while retaining the Task's locked context. It creates no Review,
+Checker routing is not human judgment. A final needs-remediation CHECKER result
+is consumed by the TASK-owned ARCH-04F handler, which moves the Task to
+contributor-readable `needs_revision` in its own authorized transaction while
+retaining the Task's locked context. CHECKERS does not mutate TASK directly.
+This creates no Review,
 ReviewFinding, RevisionContextPreparation, reviewer contribution, or synthetic
 human actor, consumes no human revision round/deadline, and does not use D6
 closure. Checker remediation follows that exact CheckerRun lineage and must pass

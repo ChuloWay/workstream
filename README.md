@@ -3,15 +3,15 @@
 Workstream is governed contribution infrastructure for coordinating, verifying,
 and recording work performed by humans, AI agents, or both. It transforms
 project-defined tasks, immutable submissions, policy-governed checks, and
-authorized review into trusted `ContributionRecord` facts that applications,
+policy-governed acceptance into trusted `ContributionRecord` facts that applications,
 organizations, and economic systems can consume.
 
 Workstream governs the work lifecycle; it does not need to own the system that
 requested the work, the tools used to complete it, the identity provider, or
 the consequence applied afterward. A project defines the rules, an authorized
 contributor performs the work, Workstream binds the exact submitted artifact to
-those rules and its verification evidence, and an authorized reviewer records
-the outcome. The resulting immutable contribution lineage establishes who did
+those rules and its verification evidence, and records the authorized outcome
+under the project's locked acceptance rules. The resulting immutable contribution lineage establishes who did
 what, under which rules, using which artifact, and with what verified result.
 
 ## End-To-End Lifecycle
@@ -25,7 +25,7 @@ Project Guide
 -> Artifact Preparation And Pre-Submission Intake Checks
 -> Immutable Submission
 -> Post-Submission Work Evaluation
--> Authorized Review
+-> Policy-Governed Acceptance (Human Review When Required)
 -> Accept / Needs Revision / Reject
 -> Revision And Resubmission When Required
 -> Immutable ContributionRecords
@@ -52,7 +52,15 @@ Pre-submission and post-submission checking are different stages:
   review eligibility, not final acceptance. Task-specific evaluation may use
   deterministic rules or, when supported and registered, model/agent-based
   evaluators such as a quality judge. These are not the setup agent that
-  proposes checker policies, nor a substitute for authorized Review.
+  proposes checker policies. Raw checker results are not acceptance authority;
+  when human review is required they do not replace that Review.
+
+Planned v0.1 project setting: `human_review_required` defaults to `true` in the
+existing locked ReviewPolicy. After required post-submit checks pass, true
+requires human review; false uses an authorized automated FinalAcceptance and
+submitter ContributionRecord, with no reviewer contribution. This branch is
+not live yet: the [policy-setting handoff](.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next)
+comes first, then shared acceptance/CON integration. Adjudication is excluded.
 
 The stage describes the purpose and lifecycle boundary, not a promise that all
 checks are deterministic. Deterministic compilation and policy routing do not
@@ -61,7 +69,7 @@ the [roadmap](docs/roadmap_status.md#pre-submission-and-post-submission-checking
 distinguishes existing foundations from remaining integration and does not
 claim a live agent judge.
 
-Every valid Review creates a reviewer `completed_review`
+On the human-review branch, every valid Review creates a reviewer `completed_review`
 `ContributionRecord`. An `accept` decision also creates `FinalAcceptance` and a
 submitter `accepted_submission` `ContributionRecord`. These records cannot be
 created or edited directly by a person or downstream adapter. Together they are

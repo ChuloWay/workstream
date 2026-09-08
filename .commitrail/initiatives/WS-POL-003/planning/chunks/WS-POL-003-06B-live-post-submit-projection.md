@@ -1,0 +1,37 @@
+# Chunk Contract: WS-POL-003-06B - Live Post-Submit Projection
+
+Status: Proposed after 06A and AUTH-12G; inactive. Risk: L1.
+
+## Goal
+
+Expose deterministic fixed-service projection plus separate PM
+approval/correction under the exact AUTH adapters, with zero additional model
+calls.
+
+## Allowed files
+
+Project post-submit service/repository/router, AUTH adapter consumption,
+canonical compiler integration, focused tests, specifications, and POL docs.
+
+## Not allowed
+
+Guide/model invocation, checker execution, ART behavior, caller-selected
+checkers, legacy post-submit agent method, or partial activation.
+
+## Acceptance
+
+- Projection, approval, and correction each consume their own exact fresh PREP
+  and commit product/replay/evidence atomically.
+- Every path binds compilation/result/post component and current upstream
+  approval hashes; stale or mixed generation denies.
+- Continuation, replay, correction, and recovery prove zero provider/model
+  calls and no reachable legacy post-submit inference.
+- Reuse 06A's separate downstream operations and immutable provenance. A
+  stale finalized setup cannot be reopened; a newly supported capability needs
+  a new catalogue-bound compilation generation and approval, not relabeling of
+  the old result. Setup projection never executes submitted work.
+
+## Verification and review
+
+PostgreSQL atomicity/races, all-pairs authorization, zero-call reachability,
+hosted coverage, and impact-routed architecture, security, QA and product/operations reviews, plus tracks affected by the actual diff.
