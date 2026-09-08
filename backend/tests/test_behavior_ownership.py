@@ -1652,3 +1652,22 @@ def test_finalization_partition_additions_are_exact_and_cannot_authorize_neighbo
         ownership._validate_additive_partition_transition(
             _partition(sorted(expected | {"backend/app/modules/projects/guide_compilation/live_finalization.py"})), trusted
         )
+
+
+def test_partition_accepts_only_exact_cp05_authorization_targets() -> None:
+    """CP05 registers five named targets without admitting another AUTH owner."""
+    expected = frozenset({
+        "backend/app/adapters/auth/contribution_policies.py",
+        "backend/app/modules/authorization/contribution_policy_authorization.py",
+        "backend/app/modules/authorization/domain/action_groups.py",
+        "backend/app/modules/authorization/domain/contribution_policies.py",
+        "backend/app/modules/authorization/domain/prepared_contribution_policies.py",
+    })
+    assert ownership.ARCH_CP05_POLICY_AUTH_TARGETS == expected
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(_partition(sorted({retained, *expected})), trusted)
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted({retained, *expected, "backend/app/modules/authorization/extra.py"})), trusted
+        )

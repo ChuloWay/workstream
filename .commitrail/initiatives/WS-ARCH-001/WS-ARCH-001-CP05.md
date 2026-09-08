@@ -37,10 +37,14 @@ adapter composition pattern. Only Finance Authority holds the existing
 - `app/adapters/auth/contribution_policies.py` and AUTH composition exports;
   existing `app/adapters/contributions/__init__.py` only if explicit composition
   needs a bounded adjustment. Keep cross-owner imports on public APIs.
+- `app/modules/contributions/api/policies.py`: correct only deny-default
+  docstrings to distinguish absent explicit composition from action availability.
 - Focused `tests/authorization/contribution_policies/` and CON integration tests,
   existing registration/parity expectations and shared fixture reuse. Existing
   CP04 tests remain authoritative for product validation/publication behavior.
 - Exact AUTH/module ledgers and test-lane registration/debt refresh if required;
+  `scripts/behavior_ownership.py` and its canonical partition admit only the five
+  new CP05 executable targets through the existing additive registration rule;
   no new structural debt or relaxed thresholds.
 - This record, ARCH/CON/AUTH overviews and index, roadmap and current AUTH/CON
   specifications/operations/custody docs for the five action availability delta.

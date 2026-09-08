@@ -17,6 +17,10 @@
       "target": "backend/app/adapters/auth/adapter_bindings.py"
     },
     {
+      "group": "lifecycle",
+      "target": "backend/app/adapters/auth/contribution_policies.py"
+    },
+    {
       "group": "shared",
       "target": "backend/app/adapters/auth/dev.py"
     },
@@ -402,6 +406,14 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/contribution_policy_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/action_groups.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/domain/adapter_bindings.py"
     },
     {
@@ -411,6 +423,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/audit_targets.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/contribution_policies.py"
     },
     {
       "group": "auth",
@@ -427,6 +443,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/prepared_compilation.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/prepared_contribution_policies.py"
     },
     {
       "group": "auth",
@@ -1029,7 +1049,7 @@
       "target": "backend/scripts/week2_api_e2e.py"
     }
   ],
-  "authority_digest": "9eec1215bf49e3eb0808f620ed4d3393125353badbdf12a17d5e11af16add453",
+  "authority_digest": "f0877997b1b14e920329089ef9bfbcdda727d5a7bd8ab4d589be9605620541a9",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
