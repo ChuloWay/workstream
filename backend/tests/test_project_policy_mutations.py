@@ -320,10 +320,12 @@ async def test_service_handles_every_reservation_disposition(disposition: str) -
                 "policy_generation": facts["policy_generation"],
                 "policy_hash": facts["policy_hash"],
                 "supersedes_policy_id": first.response.id,
+                "review_lease_duration_seconds": 9000,
             }
         )
         return disposition, SimpleNamespace(
             status="committed" if disposition == "replayed" else "pending",
+            policy_hash=facts["policy_hash"],
             response_json=response.model_dump(mode="json") if disposition == "replayed" else None,
         )
 

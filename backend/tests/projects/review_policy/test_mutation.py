@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
+from app.core.hashing import canonical_json_hash
 from app.modules.projects.policy_mutation_service import (
     NO_CURRENT_POLICY_ETAG,
     PolicyMutationConflict,
@@ -88,6 +89,20 @@ async def test_legacy_response_recovery_defaults_true_and_retains_v1_hash():
     key = uuid4()
     result = await _write(case, _payload(), key)
     record = next(iter(case[3].records.values()))
+    legacy_request_digest = canonical_json_hash(
+        {
+            "domain": "workstream.policy_mutation.idempotency.v1",
+            "method": "PUT",
+            "action_id": "project.review_policy.update",
+            "project_id": str(case[5]),
+            "guide_id": str(case[6]),
+            "policy_kind": "review",
+            "if_match": NO_CURRENT_POLICY_ETAG,
+            "semantics": _payload().model_dump(mode="json", exclude={"human_review_required"}),
+            "idempotency_key": str(key),
+        }
+    )
+    assert record.request_digest == legacy_request_digest
     # Model historical stored replay JSON, whose omitted request shape is unchanged.
     old = result.response.model_dump(
         mode="json", exclude={"human_review_required", "semantics_format"}
@@ -145,3 +160,36 @@ async def test_omission_rejects_foreign_or_stale_predecessor_before_authority(fi
         await _write(case, _payload(), etag=etag)
     assert len(case[2].consumed) == 1
     assert case[3].completed == 1
+
+
+@pytest.mark.parametrize("race", [False, True])
+async def test_v2_replay_cannot_hide_both_fields_and_become_legacy_true(race):
+    case = _subject()
+    key = uuid4()
+    await _write(case, _payload(False), key)
+    record = next(iter(case[3].records.values()))
+    original = deepcopy(record.response_json)
+    record.response_json = {
+        k: v for k, v in original.items() if k not in {"human_review_required", "semantics_format"}
+    }
+    if race:
+        # Reach the reservation-conflict replay branch with the same stored result.
+        async def missing(*_):
+            return None
+
+        async def committed(**_):
+            return "committed", record
+
+        case[3].find = missing
+        case[3].reserve = committed
+        guide = case[4].guide
+        guide.selected_review_policy_id = guide.selected_review_policy_generation = (
+            guide.selected_review_policy_hash
+        ) = None
+    with pytest.raises(RuntimeError, match="^committed policy replay lost semantics custody$"):
+        await _write(case, _payload(False), key, NO_CURRENT_POLICY_ETAG)
+    assert len(case[2].consumed) == 1
+    assert case[3].completed == 1
+    record.response_json = original
+    recovered = await _write(case, _payload(False), key, NO_CURRENT_POLICY_ETAG)
+    assert recovered.replayed and recovered.response.human_review_required is False

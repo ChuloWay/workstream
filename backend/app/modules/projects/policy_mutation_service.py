@@ -29,6 +29,7 @@ from app.modules.projects.policy_lineage import (
     ReviewPolicySemantics,
     RevisionPolicySemantics,
     policy_digest,
+    require_complete_policy,
     validate_review_mode,
 )
 from app.modules.projects.policy_mutation_replay_repository import (
@@ -178,10 +179,28 @@ class ProjectPolicyMutationService:
             raise PolicyMutationConflict("idempotency_mismatch")
         if record.status != "committed" or record.response_json is None:
             raise PolicyMutationConflict("idempotency_pending")
+        return PolicyMutationOutcome(self._response(record, response_type), True)
+
+    @staticmethod
+    def _response(record, response_type):
+        """Verify replay semantics before interpreting absent legacy fields."""
         response = response_type.model_validate(record.response_json)
         if response.policy_hash != record.policy_hash:
             raise RuntimeError("committed policy replay lost digest custody")
-        return PolicyMutationOutcome(response, True)
+        if isinstance(response, ReviewPolicyResponse):
+            try:
+                require_complete_policy(
+                    kind="review",
+                    status=response.semantics_status,
+                    policy_hash=response.policy_hash,
+                    review_semantics_format=response.semantics_format,
+                    semantic_values={
+                        name: getattr(response, name) for name in ReviewPolicySemantics.model_fields
+                    },
+                )
+            except ValueError as exc:
+                raise RuntimeError("committed policy replay lost semantics custody") from exc
+        return response
 
     async def replace_review_policy(
         self,
@@ -336,7 +355,7 @@ class ProjectPolicyMutationService:
                 raise PolicyMutationConflict("idempotency_mismatch")
             if disposition == "pending" or replay.response_json is None:
                 raise PolicyMutationConflict("idempotency_pending")
-            return PolicyMutationOutcome(response_type.model_validate(replay.response_json), True)
+            return PolicyMutationOutcome(self._response(replay, response_type), True)
         caller = PreparedAuthorizationInput(
             idempotency_key=key,
             request_value={

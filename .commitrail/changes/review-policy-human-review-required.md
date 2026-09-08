@@ -22,7 +22,9 @@ selectors are immutable; no automated acceptance participant exists.
 
 - PROJECTS `models.py`, `schemas.py`, `policy_lineage.py`,
   `policy_mutation_service.py`, and activation/read projection in `service.py`.
-- Add migration `backend/alembic/versions/0011_review_policy_human_review.py`.
+- Add migration `backend/alembic/versions/0011_review_policy_human_review.py`;
+  update the exact current-head registry in `backend/alembic/env.py` and the
+  canonical PostgreSQL schema fingerprint in `backend/tests/conftest.py`.
 - Focused policy/activation/migration tests and necessary existing fixture updates;
   register new modules in the existing lane catalogue and refresh exact structural
   debt fingerprints when changed owners require it. Preserve all gates.
@@ -106,6 +108,12 @@ Plan review clarified exact omission/replay ordering and non-destructive
 migration rollback. The existing adopted WS-XINT-003-02B response-recovery
 contract remains unchanged; this setting adds no authority to replay or mutate.
 Generic historical reauthorization wording does not replace that exact contract.
+Replay validates the returned review semantics against the stored digest before
+interpreting absent legacy fields. Both initial lookup and reservation-conflict
+recovery reject a v2 false response stripped of its mode and format, while
+genuine field-absent v1 response recovery remains valid.
+Migration integration also requires advancing the exact Alembic head registry
+and reviewed test-schema fingerprint; both equality checks remain enforced.
 
 ## Reconciliation
 

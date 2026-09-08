@@ -735,14 +735,14 @@
     {
       "capability": "unassigned_legacy_auth",
       "content_sha256": "26170dfbd986d2930d7f89357d59cdd17ae50b2ac1b936a3966e24225312e895",
-      "end_line": 669,
+      "end_line": 671,
       "hard_limit": 120,
       "kind": "test_function",
       "observed_lines": 132,
       "path": "backend/tests/test_project_policy_mutations.py",
       "qualified_symbol": "test_policy_router_dependencies_errors_and_transaction_outcomes",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 538
+      "start_line": 540
     },
     {
       "capability": "unassigned_legacy_auth",
