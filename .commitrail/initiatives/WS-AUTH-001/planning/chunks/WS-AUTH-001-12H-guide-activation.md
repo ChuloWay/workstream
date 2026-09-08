@@ -17,8 +17,11 @@ FinalAcceptance/CON path is proven and available. An AUTH allow is not a
 substitute for that capability check. True follows the human branch without
 depending on automated acceptance; never silently coerce false to true.
 False additionally requires zero applicable approved `human_review` requirement
-dispositions and available shared acceptance, ARCH-04D/04E service composition
-and a valid scoped controller generation. AUTH consumes CP07's exact facts;
+dispositions and available shared acceptance, ARCH-04D/04E service composition,
+usable ARCH-04F checker remediation and a valid scoped controller generation.
+AUTH consumes CP07's exact facts for the complete
+[canonical false-readiness contract](../../../../../docs/spec_review_lifecycle.md#finalacceptance),
+not an independent partial allowlist;
 it does not infer fulfillment of human judgment from passing executable checks.
 
 Activate only `project.guide.activate` over one complete approved
@@ -64,7 +67,7 @@ chain compatibility, or issuer-role fallback.
   Submission or CheckerRun is needed to activate a guide. For true, ARCH-04C
   persistence and ARCH-04D runtime activation are not prerequisites. False
   stays unavailable until the installed shared acceptance/controller and
-  ARCH-04D/04E composition are proven; extend the same command/action when those
+  ARCH-04D/04E composition and ARCH-04F remediation are proven; extend the same command/action when those
   prerequisites land, not a second activation mechanism. Requiring a completed execution here creates
   a cycle because that execution first needs a task under the active guide.
 - Consume CP07's single hidden PROJECTS activation command and replacement
@@ -85,6 +88,7 @@ AUTH all-pairs, POL-07 sole-port and activation integration, migration round tri
 coverage, and impact-routed architecture/security/product/QA review plus
 affected migration, test and documentation tracks. Human focus: complete
 unified lineage only.
-Include false plus approved `human_review`, missing shared capability/controller,
+Include false plus approved `human_review`, missing shared capability/controller
+or missing ARCH-04F remediation,
 and valid installed-capability-without-task/run controls. Denials leave no guide
 activation or partial contribution-policy binding.
