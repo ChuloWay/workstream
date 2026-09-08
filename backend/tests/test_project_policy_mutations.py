@@ -79,6 +79,9 @@ class _Repository:
     async def get_guide(self, _guide_id):
         return self.guide
 
+    async def get_review_policy_by_id(self, policy_id):
+        return self.review if self.review is not None and self.review.id == policy_id else None
+
     async def lock_review_policy(self, _project_id, _guide_version):
         return self.review
 

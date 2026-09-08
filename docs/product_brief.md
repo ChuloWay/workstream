@@ -57,11 +57,11 @@ Post-submission evaluation assesses the immutable work against locked project
 requirements and produces review-eligibility evidence. Evaluation can use
 deterministic rules or supported model-based checkers; the stage does not
 promise deterministic judgments. Neither stage replaces required human Review
-or independently authorizes acceptance. Planned `human_review_required: true`
+or independently authorizes acceptance. The versioned `human_review_required: true`
 in the existing locked ReviewPolicy may be set false for authorized automated
 acceptance, without reviewer contribution. This is not live behavior; the
 [bounded handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next)
-precedes activation of the shared acceptance/CON path.
+now provides configuration; activation of the shared acceptance/CON path remains pending.
 See the [checker framework](architecture_checker_framework.md) and
 [current capability ledger](roadmap_status.md) for supported boundaries.
 

@@ -60,6 +60,8 @@ def _post_submit_policy(
 def _review_and_revision_policies() -> tuple[SimpleNamespace, SimpleNamespace]:
     """Supply complete review/revision facts without executing either lifecycle."""
     review = SimpleNamespace(
+        human_review_required=True,
+        semantics_format="v2",
         semantics_status="complete",
         policy_hash=f"sha256:{'c' * 64}",
         review_preference_window_seconds=60,

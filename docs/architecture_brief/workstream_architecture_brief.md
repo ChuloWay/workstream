@@ -28,11 +28,11 @@ decision an attributable Review and reviewer contribution, and every accepted
 task an immutable FinalAcceptance before the submitter contribution.
 
 The following sequence and existing lifecycle diagrams depict the human-review
-branch. Planned `human_review_required` defaults true in the existing locked
+branch. The versioned `human_review_required` defaults true in the existing locked
 ReviewPolicy; false uses an authorized automated acceptance source and shared
 CON participant without a reviewer contribution. That runtime remains pending,
 not enabled by checker success alone. The [product-builder handoff](../../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next)
-owns the next setting change; this source supersedes the older human-only PDF
+describes the delivered setting; this source supersedes the older human-only PDF
 snapshot for that amendment.
 
 v0.1 is focused on proving the internal lifecycle:

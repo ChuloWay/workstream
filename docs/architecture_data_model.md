@@ -1102,16 +1102,25 @@ feedback cannot influence a later setup context.
 
 ## ReviewPolicy
 
-Planned schema amendment: `human_review_required: bool = true` belongs in this
-existing immutable guide-bound policy, including its versioned semantics/hash.
-True routes successful post-submit work to human review; false permits the
-authorized automated acceptance path without reviewer contribution. The
-[acceptance-mode reconciliation](../.commitrail/changes/pre-review-plan-reconciliation.md#accepted-direction-project-controlled-acceptance-mode)
-must define its versioned schema/hash and migration behavior before use; the
-field list below does not yet implement it. Missing legacy configuration never
-enables automated acceptance or repairs incomplete policy semantics. Preserve
-historical hashes and locks; false cannot activate before its runtime path is
-available. Do not add an acceptance-mode enum or another policy entity.
+`human_review_required: bool = true` is persisted in the existing immutable
+guide-bound policy. Creation defaults true; updates that omit it inherit the
+exact predecessor's value. Only JSON booleans are accepted. False is configurable
+in draft, but guide activation rejects it until automated FinalAcceptance/CON
+execution is available. No new policy entity or acceptance-mode enum is added.
+
+`semantics_format` pins the hash representation to the immutable version.
+Existing rows are backfilled with `v1` and true without changing their stored
+hash, completeness status or downstream selectors. v1 retains its original
+`workstream.review_policy.v1` hash input, which excludes the new field; it cannot
+represent false. New rows use `v2`, whose `workstream.review_policy.v2` digest
+includes the explicit boolean. Neither format repairs incomplete semantics.
+The migration's boolean backfill default is removed afterward; API/ORM creation
+defaults true, and direct SQL must provide a non-null boolean. Downgrade refuses
+any v2 history, including true, because removing the format would lose meaning.
+
+The [implementation record](../.commitrail/changes/review-policy-human-review-required.md)
+binds the configuration proof. Automated routing and final acceptance remain
+separate work; existing attempts retain their exact locked policy versions.
 
 Fields:
 
@@ -1120,6 +1129,8 @@ Fields:
 - `guide_version`
 - `policy_generation`
 - `policy_hash`
+- `human_review_required`: strict boolean, creation default `true`
+- `semantics_format`: `v1 | v2`, immutable hash representation
 - `semantics_status`: `complete | legacy_incomplete`
 - `supersedes_policy_id`
 - `review_preference_window_seconds`

@@ -446,7 +446,7 @@ authorization action. `needs_revision` and `reject` create none. In v0.1 it is
 unique per task, source Review, and Submission and is the sole source of an
 `accepted_submission` ContributionRecord.
 
-Planned amendment: the existing ReviewPolicy boolean `human_review_required`
+The existing ReviewPolicy boolean `human_review_required`
 defaults true. False uses a separately authorized automated acceptance source,
 not a Review, ReviewLease, human actor or reviewer contribution. The exact
 source constraints and shared CON participant must be reconciled before that

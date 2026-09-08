@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.modules.projects.models import ReviewPolicy
+
 import asyncio
 from io import BytesIO
 from dataclasses import replace
@@ -581,17 +583,11 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                 ),
                 params,
             )
-            await connection.execute(
-                text(
-                    "insert into review_policies "
-                    "(id,project_id,guide_version,policy_generation,policy_hash,"
-                    "semantics_status,requires_second_review,allowed_decisions,"
-                    "minimum_finding_fields) values "
-                    "(:review_policy,:project,'1',1,:review_policy_hash,"
-                    "'legacy_incomplete',false,'[]'::json,'[]'::json)"
-                ),
-                params,
-            )
+            await connection.execute(ReviewPolicy.__table__.insert().values(
+                id=params["review_policy"], project_id=params["project"], guide_version="1",
+                policy_generation=1, policy_hash=params["review_policy_hash"],
+                semantics_status="legacy_incomplete", semantics_format="v1",
+            ))
             await connection.execute(
                 text(
                     "with inserted_revision as (insert into revision_policies "

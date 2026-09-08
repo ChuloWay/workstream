@@ -3672,9 +3672,11 @@ class ProjectService:
         try:
             require_complete_policy(
                 kind="review",
+                review_semantics_format=review_policy.semantics_format,
                 status=review_policy.semantics_status,
                 policy_hash=review_policy.policy_hash,
                 semantic_values={
+                    "human_review_required": review_policy.human_review_required,
                     "review_preference_window_seconds": (
                         review_policy.review_preference_window_seconds
                     ),
@@ -3705,6 +3707,8 @@ class ProjectService:
             raise GuideActivationBlocked(
                 "review and revision policy semantics are incomplete"
             ) from exc
+        if not review_policy.human_review_required:
+            raise GuideActivationBlocked("automated acceptance is unavailable")
         if not set(review_policy.allowed_decisions).issubset(ALLOWED_REVIEW_DECISIONS):
             raise GuideActivationBlocked("review policy contains invalid decisions")
         if (

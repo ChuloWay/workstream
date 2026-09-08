@@ -1,7 +1,7 @@
 # Review policy human-review requirement
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Existing immutable ReviewPolicy versions persist and expose strict `human_review_required`, default true, without activating automated acceptance or changing locked history.
 
 ## Intent
@@ -27,7 +27,7 @@ selectors are immutable; no automated acceptance participant exists.
   register new modules in the existing lane catalogue and refresh exact structural
   debt fingerprints when changed owners require it. Preserve all gates.
 - This record, current policy specifications/roadmap/templates and the adopted
-  CP07/AUTH-12H activation contracts where needed to state delivered configuration
+  CP07/AUTH-12H activation contracts and REV overview where needed to state delivered configuration
   versus deferred automated execution. No protected historical archive edits.
 
 ### Not allowed
@@ -99,6 +99,13 @@ full suite and coverage. New materially changed behavior must achieve 90%
 coverage; existing global floors remain unchanged. Run lint, structural checks,
 Commitrail validation, Markdown links and stale wording scans. No local exports
 are currently present. Exact results belong in the PR trust summary.
+
+## Review findings
+
+Plan review clarified exact omission/replay ordering and non-destructive
+migration rollback. The existing adopted WS-XINT-003-02B response-recovery
+contract remains unchanged; this setting adds no authority to replay or mutate.
+Generic historical reauthorization wording does not replace that exact contract.
 
 ## Reconciliation
 

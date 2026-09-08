@@ -45,9 +45,9 @@ The human branch below continues to use `allow_review`; it is not an automatic
 acceptance signal. This amendment must be reconciled before treating the
 remaining sequence as implementation-ready.
 
-Implement the [policy-setting handoff](../../changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next)
-next; then extend shared acceptance persistence and the CON participant for
-both sources before enabling false. The automated branch must not depend on
+The [versioned policy setting](../../changes/review-policy-human-review-required.md)
+is available for draft configuration. Extend shared acceptance persistence and
+the CON participant for both sources before enabling false. The automated branch must not depend on
 live human queues, ReviewLeases or decision endpoints. Human lifecycle work
 remains required for v0.1, but need not delay the first automated end-to-end
 proof. No adjudication setting or behavior is included.

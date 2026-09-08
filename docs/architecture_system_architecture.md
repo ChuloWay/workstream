@@ -14,7 +14,7 @@ They have separate policies and evidence boundaries. Deterministic policy
 compilation does not imply every evaluator is deterministic; see the
 [checker framework](architecture_checker_framework.md) for execution boundaries.
 
-The review components and diagrams below describe the human branch. The planned
+The review components and diagrams below describe the human branch. The versioned
 existing ReviewPolicy boolean `human_review_required` defaults true; false
 permits separately authorized automated FinalAcceptance and submitter
 contribution, with no human queue/lease/Review or reviewer contribution. This

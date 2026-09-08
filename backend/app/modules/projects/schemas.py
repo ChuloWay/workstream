@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 
 class ReviewPolicyInput(BaseModel):
@@ -15,6 +15,7 @@ class ReviewPolicyInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    human_review_required: StrictBool = True
     review_preference_window_seconds: int = Field(gt=0)
     review_lease_duration_seconds: int = Field(gt=0)
     max_active_review_leases_per_reviewer: Literal[1] = 1
@@ -614,6 +615,8 @@ class ReviewPolicyResponse(BaseModel):
     guide_version: str
     policy_generation: int
     policy_hash: str | None
+    human_review_required: StrictBool = True
+    semantics_format: Literal["v1", "v2"] = "v1"
     semantics_status: Literal["complete", "legacy_incomplete"]
     supersedes_policy_id: str | None
     review_preference_window_seconds: int | None
@@ -626,6 +629,25 @@ class ReviewPolicyResponse(BaseModel):
     allowed_decisions: list[str]
     minimum_finding_fields: list[str]
     created_at: datetime
+
+    @model_validator(mode="before")
+    @classmethod
+    def require_explicit_current_mode(cls, value: Any) -> Any:
+        """Only legacy stored responses may omit the versioned setting."""
+        if (
+            isinstance(value, dict)
+            and value.get("semantics_format") == "v2"
+            and "human_review_required" not in value
+        ):
+            raise ValueError("v2 review policy requires explicit human_review_required")
+        return value
+
+    @model_validator(mode="after")
+    def validate_legacy_mode(self) -> ReviewPolicyResponse:
+        """Legacy response recovery cannot imply automated acceptance."""
+        if self.semantics_format == "v1" and not self.human_review_required:
+            raise ValueError("legacy review policy requires human review")
+        return self
 
 
 class RevisionPolicyResponse(BaseModel):

@@ -1166,6 +1166,17 @@ only the corresponding draft-guide selector in the same transaction. The two
 policies may be attached in either order. Never repair an active guide by
 changing these selectors: active and superseded guide selections remain frozen.
 
+`human_review_required` accepts only JSON booleans. Creation defaults true;
+omitted replacements preserve the exact predecessor's value. Every new version
+uses `semantics_format=v2` and hashes the explicit setting. Existing v1 rows
+retain their hashes and mean true; incomplete history remains incomplete.
+False may be saved in draft, but the current guide activation service explicitly
+rejects it until automated acceptance and contribution execution is available.
+An exact committed retry recovers the original response under the adopted
+WS-XINT-003-02B actor/request contract; it does not reselect today's policy or
+perform another mutation. An omitted setting differs from an explicit true in
+request identity, preventing a changed retry from resetting false.
+
 The v0.1 baseline includes nullable historical provenance columns and the
 `policy_mutation_idempotency_records` custody ledger. Historical
 `legacy_incomplete` rows remain grandfathered and are not attributed. Downgrade

@@ -10,7 +10,7 @@ joint release complete. Earlier project/task/submission/checker behavior keeps
 its separately recorded implementation status.
 
 The detailed review flow below describes `human_review_required=true`, the
-default in the planned existing ReviewPolicy setting. False is a separately
+default in the existing versioned ReviewPolicy setting. False is a separately
 planned post-check TASK handoff to authorized FinalAcceptance and CON, without
 human queues, leases, Reviews or reviewer contributions. Required checks and
 exact immutable evidence still apply. The [policy-setting handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next)

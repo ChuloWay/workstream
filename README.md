@@ -55,12 +55,13 @@ Pre-submission and post-submission checking are different stages:
   proposes checker policies. Raw checker results are not acceptance authority;
   when human review is required they do not replace that Review.
 
-Planned v0.1 project setting: `human_review_required` defaults to `true` in the
+The v0.1 project setting `human_review_required` defaults to `true` in the
 existing locked ReviewPolicy. After required post-submit checks pass, true
 requires human review; false uses an authorized automated FinalAcceptance and
 submitter ContributionRecord, with no reviewer contribution. This branch is
-not live yet: the [policy-setting handoff](.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next)
-comes first, then shared acceptance/CON integration. Adjudication is excluded.
+not live yet: the [policy setting](.commitrail/changes/review-policy-human-review-required.md)
+is implemented for configuration; shared acceptance/CON integration remains
+pending. Adjudication is excluded.
 
 The stage describes the purpose and lifecycle boundary, not a promise that all
 checks are deterministic. Deterministic compilation and policy routing do not
