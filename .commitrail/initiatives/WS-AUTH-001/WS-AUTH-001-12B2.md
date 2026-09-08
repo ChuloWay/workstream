@@ -22,7 +22,10 @@ remains outside this chunk: POL-04B owns the later live one-call cutover.
 
 - This change record, AUTH `OVERVIEW.md`, `.commitrail/INDEX.md`, POL overview,
   `docs/spec_authorization_service.md`, and `docs/roadmap_status.md` for the
-  resulting capability and next boundary.
+  resulting capability and next boundary. Reconcile the same current facts in
+  `docs/operations_authorization_service.md`,
+  `docs/engineering/authorization_activation_custody.md`,
+  `docs/architecture_data_model.md`, and the QUAL overview product-boundary sentence.
 - `backend/app/modules/authorization/project_setup_finalization.py` and
   `domain/project_setup_finalization.py` (new purpose-specific adapter and
   exact resource/preparation/replay rules).
@@ -123,13 +126,14 @@ rollback. Unit doubles claim only contract/ordering behavior. PostgreSQL tests
 own storage, revocation and independent-session serialization claims. Each
 critical assertion has a discriminating mutation or concrete counterexample.
 
-### Planned test symbols and assertion ownership
+### Implemented test symbols and assertion ownership
 
-The symbols below are future implementation tests, not executed evidence.
+The symbols below map implemented assertions to their proof boundaries; the PR
+records their execution results and exact target.
 AUTH unit modules live in `backend/tests/authorization/setup_finalization/`;
 PostgreSQL modules live in `backend/tests/projects/guide_compilation/finalization/`.
 
-| Planned symbol | Variants and compatible custody |
+| Implemented symbol | Variants and compatible custody |
 |---|---|
 | `test_catalogue.py::test_finalization_action_service_matrix` | Every service identity against finalization action/permission: only PROJECT_SETUP succeeds. PROJECT_SETUP action/permission substitutions retain existing valid projection pairs and deny invalid/mismatched pairs; exact catalogue assertion and real PREP/kernel service execution |
 | `test_catalogue.py::test_human_and_direct_kernel_finalization_denied` | Human project manager/admin and fixed-service direct-kernel calls deny for exact and legacy resources; pure service |

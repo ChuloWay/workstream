@@ -281,7 +281,9 @@ PROJECTS/ACTORS eligibility adapters; it adds no service-matrix membership and
 is complete while keeping all four binding actions unavailable. CP03B
 then installs the exact read/PREP adapter for an authenticated human Finance
 Authority covering the exact project and activates only those four actions,
-producing the current 111-row catalogue with 61 active and 50 planned actions.
+producing 111 rows with 61 active and 50 planned actions. AUTH-12B2 then
+activates exact setup finalization, yielding the current 62 active and 49 planned
+actions without adding a row.
 AUTH-10A added five project-role read/manage rows;
 AUTH-10B owns and activates the three reads, while AUTH-10C owns and activates
 the two reason-bound, idempotent project-role mutations. AUTH-11A adds eleven
@@ -604,8 +606,9 @@ than a separate generation counter.
 `workstream.project.setup` was the eighth fixed identity when AUTH-12B merged;
 02C expands the current registry to fourteen identities. AUTH-12E activates
 `project.guide_sufficiency.run`, AUTH-12F3 activates policy derivation, and
-AUTH-12I activates exact unified compilation execution; the remaining two
-project-setup actions and all six REV rows remain planned and unavailable.
+AUTH-12I activates exact unified compilation execution. AUTH-12B2 activates
+exact setup finalization; only `project.post_submit_checker_policy.derive`
+remains planned among project-setup actions. All six REV rows remain unavailable.
 Registration makes the
 identity selectable by the existing controlled provisioning route but creates
 no ActorProfile, ActorIdentityLink, role, grant, or executable authority by
@@ -1166,7 +1169,7 @@ execution task, calls no provider, and does not make the hidden POL workflow liv
 | `project.post_submit_checker_policy.approve` | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
 | `project.post_submit_checker_policy.correction.request` | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
 | `project.post_submit_checker_policy.derive` | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
-| `project.setup_run.update` | `project.guide.manage` | `WS-AUTH-001-12B2` |
+| `project.setup_run.update` (active) | `project.guide.manage` | `WS-AUTH-001-12B2` |
 | `project.guide.activate` | `project.guide.manage` | `WS-AUTH-001-12H` |
 
 The v0.1 baseline preserves historical sufficiency
