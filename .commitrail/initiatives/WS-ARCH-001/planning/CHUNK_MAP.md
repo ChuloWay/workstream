@@ -6,7 +6,7 @@ work accounting. Foundations through 02H and CP04B are complete; none restart.
 
 | Boundary | Owner outcome | Risk | Current dependency |
 |---|---|---|---|
-| `WS-ARCH-001-02I` | Admission-only public API/dispatch cutover and complete legacy removal | L1 | Deferred after 02H plus split 03/04/05 remediation, revision, checker-output and REV admission prerequisites |
+| `WS-ARCH-001-02I` | Admission-only public API/dispatch cutover and removal of legacy route reachability; physical economic cleanup remains CP09 after zero consumers | L1 | Deferred after 02H plus split 03/04/05 remediation, revision, checker-output and REV admission prerequisites |
 | `WS-ARCH-001-CP05` | AUTH exact ContributionPolicy activation | L1 | Proposed skeleton after CP04 evidence |
 | `WS-ARCH-001-CP06` | CON guide-activation/revision policy-validation port | L1 | Proposed skeleton after CP05 |
 | `WS-ARCH-001-CP07` | PROJECT hidden activation/binding and replacement readiness guard | L1 | Planned after CP06; AUTH-12H later supplies live activation authority |

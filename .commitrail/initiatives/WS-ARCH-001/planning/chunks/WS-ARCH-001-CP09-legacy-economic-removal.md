@@ -18,6 +18,18 @@ baseline and fresh-install parity directly through the repository's bounded
 schema workflow. Do not preserve aliases, dual reads/writes, compatibility
 columns, historical backfills, or guessed conversion behavior.
 
+Zero live consumers is necessary but not sufficient for deletion. Inventory
+retained setup values and operation/evidence facts before dropping storage.
+For any retained legacy rows, map each required historical fact to an existing
+immutable receipt, separate operation record or explicitly retained archive,
+and prove it remains readable/recoverable after the proposed deletion. Never
+fabricate a receipt or rewrite old authority to make that mapping pass.
+Fresh-install baseline work assumes no deployed-history conversion. If real
+retained data lacks a proven preservation mapping, physical deletion stops
+until a separately bounded preservation/migration decision exists; the
+no-backfill rule does not authorize data loss. Neither that later decision nor
+CP09 blocks the pre-review path.
+
 The chunk must be split further if current-main discovery shows removal crosses
 more than one safely reviewable product boundary.
 

@@ -16,9 +16,14 @@ new authorization protocol, human checker authority, generic artifact reads,
 REV actions, TASK transition ownership or serialized prepared handles.
 
 Acceptance: service, action, resource digest, session, transaction, approved
-generation, Submission/binding and checker identities are exact; every stale,
-cross-resource, replay, copied-handle or revoked case denies before side
-effects; evidence commits atomically. Verify catalogue/database parity,
+generation, Submission/binding and checker identities are exact. Stale,
+cross-resource, mismatched replay, copied-handle or revoked requests detected
+before I/O deny before protected side effects. Fresh validation after I/O
+suppresses final-current result and routing writes if authority or lineage
+changed; it cannot undo earlier authorized reads/evaluator calls. Exact valid
+replay returns the same stored identity with no duplicate effects; it never
+borrows an earlier allow in place of current authority. Evidence commits
+atomically with its protected write. Verify catalogue/database parity,
 PostgreSQL races, boundary validators, Ruff and hosted coverage. Required
 reviews: authorization architecture, security, product/ops, QA, senior, CI and
 test delta.

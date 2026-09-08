@@ -221,7 +221,7 @@ The next dependency-safe product sequence is:
    run or live REV implementation—their dependency runs in the other direction.
    The new activation command replaces legacy economic readiness guards;
    physical deletion waits until all old consumers are gone, including checker
-   and public Submission cutover. It is not a prerequisite for `allow_review`.
+   and public Submission cutover. Physical deletion is not a prerequisite for `allow_review`.
 5. **Make tasks claimable from that generation.** TASK locks the complete guide
    and policy context before `READY`. Claim copies it to TaskAssignment; it
    performs no ContributionPolicy selection. Submission later copies the

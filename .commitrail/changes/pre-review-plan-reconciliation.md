@@ -97,6 +97,12 @@ zero consumers. A leftover XINT label now explicitly names ARCH-04D as its
 replacement. Preserved history was restored unchanged when archive validation
 identified that corrections belong in current records.
 
+External review further clarified public route cutover versus physical deletion,
+pre-I/O denial versus post-I/O result suppression, and separate TASK dispatch,
+outbox, CHECKER attempt and routing uniqueness. CP09 also requires recoverable
+retained history, not merely zero live consumers; unsupported conversion must
+never be guessed to permit deletion.
+
 ## Reconciliation
 
 - Current-source reconciliation: PR #384 completes AUTH-12B2; main `fb4553cc`.

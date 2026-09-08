@@ -19,6 +19,31 @@ and operation/correlation identities. Do not reuse one action's receipt for
 another or treat a routing projection as authorization. Final emission
 rechecks run/currentness and locked lineage in the TASK-owned transaction.
 
+## Distinct idempotency and uniqueness custody
+
+Define the canonical input envelope from the locked project/task/assignment,
+immutable Submission version, admission/binding/content identity, digest/size,
+guide/policy/catalogue lineage and compiled post-plan hash below. Hash it using
+the existing canonical hashing convention; matching a key with a different
+envelope is a conflict, never a replay. No caller supplies trusted hashes.
+
+| Identity | Deterministic key and database uniqueness owner |
+|---|---|
+| Dispatch | TASKS owns a unique `(project_id, submission_id, post_plan_hash, evaluation_request_generation)` reservation. Initial submission uses the initial server-owned generation; retry never increments it. A genuinely new authorized evaluation requires a new generation allocated under the TASK lock, not a timeout fallback. No new public reevaluation command is introduced here. |
+| Outbox delivery | TASKS owns one domain event identity derived from the dispatch reservation plus event kind; use the existing shared outbox unique-event contract. Delivery retries retain that identity and dispatch reference. |
+| Checker attempt | CHECKERS/04C owns one unique `(dispatch_id, phase)` attempt bound to the exact envelope. Its canonical attempt ID is derived from that key; provider/member retry identities derive from this same attempt, never from a delivery timestamp. |
+| Routing manifest | TASKS owns one immutable manifest per `(submission_id, checker_run_id, final_result_hash)` and one current routing pointer per Submission. Replays reuse the manifest; replacement changes only the current pointer after CHECKERS currentness and locked-lineage validation in the caller transaction. |
+
+The initial dispatch reservation and outbox event commit atomically. Unique
+conflict losers roll back the failed statement/savepoint, lock/read the winning
+row and compare its envelope; an exact match reuses it, otherwise deny. Never
+publish a message before commit or duplicate the CHECKERS attempt in TASKS.
+Final routing locks the Submission/current pointer and consumes CHECKERS public
+current-result facts under the same transaction/serialization contract, so a
+concurrent supersession cannot publish an obsolete result as current. The
+implementation must prove independent-session winners/losers and crash recovery
+at each of these four uniqueness boundaries, including outbox redelivery.
+
 Acceptance: one end-to-end test proves approved guide -> authorized assignment
 -> verified admission -> immutable Submission/binding -> final current checker
 result -> `allow_review`. The manifest explicitly binds the task in its exact
