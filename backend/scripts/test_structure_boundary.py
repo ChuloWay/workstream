@@ -147,7 +147,12 @@ def scoped_test_paths(root: Path) -> list[Path]:
         path = root / value
         if value.startswith("backend/tests/") and path.is_file():
             result.add(path)
-    for directory in (POL_03A_TEST_ROOT, "backend/tests/actors", "backend/tests/authentication"):
+    for directory in (
+        POL_03A_TEST_ROOT,
+        "backend/tests/actors",
+        "backend/tests/authentication",
+        "backend/tests/authorization/admin_access",
+    ):
         selected = root / directory
         if selected.is_dir():
             result.update(selected.rglob("*.py"))
