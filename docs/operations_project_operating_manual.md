@@ -8,7 +8,7 @@ Every project has:
 
 - active guide
 - queue owner
-- reviewer owner
+- reviewer owner when human review is required
 - guide source snapshot
 - guide sufficiency report
 - submission artifact policy
@@ -18,7 +18,7 @@ Every project has:
 - review policy
 - revision policy
 - contribution policy and published versions
-- review guard
+- review guard when human review is required
 - lessons learned log
 
 ## Project Setup Checklist
@@ -61,10 +61,17 @@ remaining setup/activation work:
 - exact expected published, complete, binding-valid ContributionPolicyVersion
   validated against the active policy selector and bound atomically at guide
   activation
-- reviewer pool assigned
-- review guard created from the project guide
+- reviewer pool assigned when locked `human_review_required=true`
+- review guard created from the project guide when human review is required
 - guide version marked active
 - each task locks the guide snapshot, effective project submission artifact policy hash, and pre-submit checker bundle hash before entering `READY`
+
+The planned existing ReviewPolicy setting `human_review_required` defaults
+true. False may be configured in draft, but guide activation requires the
+authorized automated FinalAcceptance/CON path and adequate configured checks;
+it does not require a human reviewer pool, lease or decision endpoint.
+Unsupported false activation is rejected rather than silently switched to
+true. See the [implementation handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
 
 The guide source snapshot freezes guide/source material only. While the guide is
 still draft, an authorized covered Project Manager may attach or update review

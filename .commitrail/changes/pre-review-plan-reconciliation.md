@@ -238,6 +238,14 @@ neither this record nor local reviewer feedback registers or activates them.
 The human approved publication of this reconciled planning change; product
 implementation remains a separate bounded change owned by the product builder.
 
+The acceptance-setting amendment also scopes higher-level definitions and
+human-only lifecycle examples explicitly: README, architecture lockdown,
+glossary, product brief, operating flows and architecture sources must not
+make human review universal. Existing binary architecture exports remain
+labeled human-branch snapshots rather than claimed current full-scope exports.
+Provider-uncertainty proof is blocked/no-second-call until real recovery exists;
+delivery/in-flight recovery must not be confused with a new terminal retry.
+
 Dependency and ownership defects are repaired in current pending plans;
 exact-head review results belong to this PR's summary. The review also
 identified still-live legacy PaymentPolicy response/checker consumers: CP07

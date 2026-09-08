@@ -56,11 +56,11 @@ plugins, arbitrary code/network execution, or prepared handles in payloads.
   attempt, action, service identity, and transaction
   facts; internally stale, mismatched replay, cross-phase and cross-resource
   calls fail closed. Exact valid replay reuses the canonical result.
-- The port requires a deterministic attempt identity. Bounded retry/repair may
+- The port requires a deterministic attempt identity. Unfinished transport/worker recovery may
   call the command again for that same logical attempt, but replay returns the
   existing canonical result without rerunning completed members. This is an
   executor contract, not a claim that 07 installs durable post-submit storage.
-  A genuinely
+  An authorized terminal retry or genuinely
   new evaluation requires a new attempt identity; this chunk does not alter or
   claim the external call sites.
 - ART's existing attempt/result/evidence repository is the only pre writer.

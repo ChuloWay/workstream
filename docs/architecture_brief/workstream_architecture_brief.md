@@ -7,7 +7,7 @@
 <p class="subtitle">Governed contribution infrastructure for human and AI work</p>
 
 Workstream turns project-defined tasks, immutable submissions, policy-governed
-checks, and authorized review into trusted `ContributionRecord` facts. It
+checks, and policy-governed acceptance into trusted `ContributionRecord` facts. It
 records who completed what, under which locked rules, using which exact
 artifact, and with what verified outcome.
 
@@ -27,6 +27,14 @@ context, every Submission immutable artifact lineage, every valid human
 decision an attributable Review and reviewer contribution, and every accepted
 task an immutable FinalAcceptance before the submitter contribution.
 
+The following sequence and existing lifecycle diagrams depict the human-review
+branch. Planned `human_review_required` defaults true in the existing locked
+ReviewPolicy; false uses an authorized automated acceptance source and shared
+CON participant without a reviewer contribution. That runtime remains pending,
+not enabled by checker success alone. The [product-builder handoff](../../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next)
+owns the next setting change; this source supersedes the older human-only PDF
+snapshot for that amendment.
+
 v0.1 is focused on proving the internal lifecycle:
 
 ```text
@@ -40,7 +48,8 @@ Pre-submission intake checks package fitness, completeness, integrity, and
 configured intake quality before Submission creation. Post-submission evaluation
 checks the immutable work against locked task/project requirements and produces
 durable review-eligibility evidence. Passing intake is not proof of task success;
-neither stage replaces authorized Review.
+neither stage replaces required human Review or independently authorizes
+acceptance on the planned automated branch.
 
 The stages are not a blanket guarantee of deterministic execution. Deterministic
 rules and supported model/agent evaluators are distinct methods; deterministic

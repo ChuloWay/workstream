@@ -58,7 +58,15 @@ change, evidence, review, a pull request, and an explicit human merge decision.
 GitHub permissions and branch protection govern repository authority. That
 repository process is separate from every product lifecycle below.
 
-The canonical v0.1 scope remains narrower:
+The canonical v0.1 scope remains narrower. The sequence below describes the
+human-review branch. The accepted planned amendment uses one existing
+ReviewPolicy boolean, `human_review_required`, default true. False permits
+authorized automated FinalAcceptance and submitter contribution after required
+post-submit checks pass, without human admission, a synthetic Review or a
+reviewer contribution. Its source/authority/CON runtime contracts remain
+pending; see the [bounded handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
+This amendment does not enable raw checker results to create acceptance or
+change the existing human branch's implementation contract.
 
 ```text
 Project guide
@@ -239,8 +247,9 @@ In v0.1, this is enforced through:
 - contributor attestation
 - immutable submission versions
 - checker results bound to artifact hashes
-- human review before acceptance
-- immutable Review, finding, response, and resolution history
+- human review before acceptance when the locked policy requires it; the
+  planned false branch requires separately authorized acceptance evidence
+- immutable Review, finding, response, and resolution history on the human branch
 
 An explicit owner-agent execution workspace is later work.
 
@@ -297,13 +306,17 @@ ART boundary chunk must move those exact consumers to this public surface.
 
 ### Contribution Records
 
-Every valid recorded human Review creates an immutable reviewer
+On the human branch, every valid recorded human Review creates an immutable reviewer
 `completed_review` contribution record, regardless of whether the decision is
 `accept`, `needs_revision`, or `reject`. REV creates one immutable
 FinalAcceptance only for `accept`; that fact, not direct inspection of
 `Review.decision`, sources one submitter `accepted_submission` contribution
 record. `needs_revision`, `reject`, and automated checker outcomes create no
-FinalAcceptance or submitter contribution.
+FinalAcceptance or submitter contribution by themselves. On the planned false
+branch, an authorized automated decision creates FinalAcceptance and the
+submitter contribution through the shared atomic participant, never a reviewer
+contribution. This requires reconciled source and authority contracts before
+activation; it is not a checker-owned write or a fabricated human Review.
 
 Contribution records are separate from compensation status. Each record freezes
 its exact review, submission, actor, policy, and artifact-hash lineage.

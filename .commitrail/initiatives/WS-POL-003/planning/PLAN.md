@@ -399,14 +399,17 @@ of these states is contributor failure or negative contribution evidence.
 - Postgres migration, append-only supersession, concurrent idempotency, and
   rollback tests.
 - Single-logical-attempt lifecycle tests covering concurrent dispatch,
-  timeout-after-provider-acceptance recovery under the same idempotency key,
+  timeout-after-provider-acceptance blocking with no second provider call;
+  same-operation recovery proof applies only if a typed provider capability
+  actually supports retrieval/idempotent resume. Also cover
   accepted-result reuse, terminal invalid/unsafe output, and zero-call
   post-submit continuation.
 - Stale source/catalogue/setup/policy invalidation tests.
 - Task-lock and activation-chain regression tests.
 - OpenAPI/import/reachability tests proving standalone precheck is absent,
   no caller can select checkers, artifact-facing composition has one command per
-  phase, and repair converges on the same attempt identity.
+  phase, and unfinished recovery converges on the same attempt identity;
+  authorized terminal retry uses a new superseding attempt.
 - Hosted CI full suite/coverage; changed backend subsystems remain at least 90
   percent and repository floor remains at least 78 percent.
 

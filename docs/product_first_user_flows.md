@@ -9,6 +9,13 @@ unavailable until their owning REV chunks, exact AUTH activation, and REV-13
 joint release complete. Earlier project/task/submission/checker behavior keeps
 its separately recorded implementation status.
 
+The detailed review flow below describes `human_review_required=true`, the
+default in the planned existing ReviewPolicy setting. False is a separately
+planned post-check TASK handoff to authorized FinalAcceptance and CON, without
+human queues, leases, Reviews or reviewer contributions. Required checks and
+exact immutable evidence still apply. The [policy-setting handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next)
+does not claim that automated runtime/source contracts are already complete.
+
 The first user flows prove that Workstream can run real work from intake to acceptance. These flows come before any advanced routing or settlement.
 
 ## Flow 1: Project Manager Creates A Project
@@ -131,7 +138,7 @@ Acceptance:
    `CheckerResult` lineage and no Review or reviewer contribution.
 5. Setup or provenance defects keep the Task `evaluation_pending` on the
    internal `task_setup_blocked` repair route.
-6. Only a durable, final, current `CheckerRun` outcome of `allow_review` admits
+6. For locked `human_review_required=true`, only a durable, final, current `CheckerRun` outcome of `allow_review` admits
    the exact immutable Submission with verified binding facts and moves the
    Task to `REVIEW_PENDING`.
 
@@ -143,6 +150,9 @@ Acceptance:
 - Every checker result is timestamped.
 
 ## Flow 5: Reviewer Reviews Submission
+
+This flow and its downstream human-review/revision effects apply only to the
+human-required branch, not a project with locked false.
 
 1. Reviewer current work returns an active lease, one server-selected offer, or none.
 2. Reviewer claims the offer and receives the exact ReviewPacketManifest.
