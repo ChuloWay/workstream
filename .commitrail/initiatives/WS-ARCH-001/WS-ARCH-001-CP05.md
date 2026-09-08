@@ -26,7 +26,7 @@ adapter composition pattern. Only Finance Authority holds the existing
 
 - AUTH `catalogue.py`, `kernel.py`, `prepared.py`, `runtime.py`; new focused
   `domain/contribution_policies.py`, `domain/prepared_contribution_policies.py`,
-  `contribution_policy_authorization.py`; public `api/contribution_policies.py`
+  `contribution_policy_authorization.py`, existing `domain/audit_targets.py`; public `api/contribution_policies.py`
   and exports for the exact mutation-authority port/facts.
 - `app/adapters/auth/contribution_policies.py` and AUTH composition exports;
   existing `app/adapters/contributions/__init__.py` only if explicit composition
@@ -64,7 +64,10 @@ unavailable. Scope and permission come from canonical AUTH repositories/policy,
 never inference from a role label or caller-supplied grant.
 
 Use action-specific strict frozen resource contexts, canonical public resource
-digests, and exact kernel registrations. Read authorization is serialized with
+digests, and exact kernel registrations. Register the exact policy resource
+classes with `project_authority_audit_target()` in `domain/audit_targets.py` and
+include their actions in existing decision context-digest evidence; do not copy
+audit-target routing into the kernel. Read authorization is serialized with
 current actor/link/grant locks. Four mutations prepare/consume/close through the
 existing transaction-local PREP owner; bind actor, action, operation/request,
 project, policy/version IDs, expected state, and publication graph/bindings.
@@ -85,10 +88,14 @@ no ambient context or new transport exposure.
   database parity, service matrix and unrelated planned denial are unchanged.
 - Each action allows system/exact-project Finance Authority through real kernel
   composition and conceals unauthorized or foreign targets; other roles and
-  services deny. Actor/link/grant revocation and substitution fail at consume.
+  services deny. Revocation committed before prepare denies; actor/link/handle
+  and fact substitution at consume denies. PREP-first transactions retain their
+  locked authority until commit; concurrent revocation waits, then takes effect.
+  Exact replay after committed revocation denies through current read authority.
 - Strict public facts and resources bind every action-specific field; mutated
   operation, digest, project, policy, version, state and publication graph/binding
-  facts cannot reuse a handle. Read cannot issue mutation authority.
+  facts cannot reuse a handle. Read cannot issue mutation authority; its optional version selector binds both
+  absent and exact-version cases and rejects project/policy/version substitution.
 - Existing CON behavior executes through real AUTH/PREP and public adapters:
   draft creation/update, compensated and unpaid publication, retirement and exact
   replay. Invalid quantities, incomplete graph and inactive/foreign bindings still
@@ -120,6 +127,44 @@ controls with the real AUTH adapter so earlier guards cannot hide the target.
 Run module/AUTH/test-boundary validators, Commitrail, Markdown links and stale
 wording scans. No local spreadsheet exports are present. Final PR records exact
 commands, hashes, hosted totals and impact-routed review closure.
+
+### Atomic future proof matrix
+
+All test names below are planned implementation tests, not claims of executed
+proof. The five-action matrix expands each action independently for system and
+exact-project Finance Authority. Unit controls use the real kernel/PREP with
+bounded repository doubles; PostgreSQL controls use production repositories and
+explicit public adapter composition in independent caller transactions.
+
+| Future named test | Boundary and custody | Discriminating assertion |
+|---|---|---|
+| `test_each_policy_action_allows_exact_finance_scope_and_audit` | AUTH kernel/PREP plus real PostgreSQL composition; five actions x two grant scopes | Exact action, human actor/profile/link, matched grant/scope, resource digest, request/correlation and null denial code; no unrelated action activated |
+| `test_each_policy_action_denies_foreign_or_unprivileged_principal` | Real AUTH composition; each action x foreign grant, other roles, inactive actor/link | Concealed failure and no CON mutation; valid Finance control on the same resource |
+| `test_policy_actions_deny_every_service_and_direct_kernel_bypass` | Kernel and public adapter unit matrix; fixed service identities | No service matrix membership or permission bypass; direct mutation require cannot replace PREP |
+| `test_policy_prepared_handle_binds_every_fact` | Real PREP unit tests, one field changed at a time, four action-specific resources | Changed actor/link/action/operation/request/project/policy/version/status/graph/bindings, handle/session/transaction or reuse denies; unchanged control consumes once |
+| `test_policy_revocation_first_denies_mutation_and_replay` | PostgreSQL with production actor/link/grant lifecycle services; fresh read auth | Committed revocation wins before prepare; fresh mutation and exact committed replay deny without new CON effects |
+| `test_policy_prepare_first_serializes_lifecycle_revocation` | PostgreSQL independent sessions, production lifecycle service and held PREP locks | Revocation waits while valid policy mutation commits, then commits; subsequent use denies; no invented revocation under held locks |
+| `test_policy_failure_rolls_back_product_and_authority_evidence` | Real CON/AUTH in caller transaction, injected post-consume failure; inspect a fresh session | No policy/version/rules/operation/lifecycle/transition rows or AUTH decision/audit effects survive rollback |
+| `test_real_authority_preserves_cp04_publication_guards` | Real AUTH with existing CP04 product fixtures and PostgreSQL owner ports | Valid Finance control reaches invalid quantity, incomplete graph and inactive/foreign binding failures; no earlier auth guard hides them |
+| `test_concurrent_policy_publication_and_retirement_are_serialized` | Independent PostgreSQL sessions through CON locks and real AUTH | Exactly permitted lifecycle winner, immutable lineage and one operation effect; conflicting replay denies |
+
+Use deterministic lock-observer barriers and bounded timeouts, not sleeps as
+proof of blocking. `AdminRoleGrantService`, `ActorLifecycleService` and `IdentityLinkLifecycleService`
+own production revocation proofs;
+raw SQL is only for explicitly named direct-SQL custody tests. Runtime evidence
+must bind the final clean commit and actual executed node IDs.
+
+## Review findings
+
+Plan review corrected the revocation model: PREP retains row locks through the
+caller transaction, so concurrent revocation has ordered winners rather than
+changing an already locked grant invisibly at consume. The named proof matrix
+separates fact substitution from that concurrency contract and ties each claim
+to a valid control, exact audit envelope and actual persistence boundary.
+Architecture review added the existing audit-target helper to the allowed scope
+and exact evidence contract; no parallel audit routing is introduced.
+Lock order remains operation advisory -> CON project/product/graph/binding ->
+AUTH control/actor/link/grant, with no reverse AUTH dependency on CON.
 
 ## Reconciliation
 
