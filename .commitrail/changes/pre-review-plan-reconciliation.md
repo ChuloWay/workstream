@@ -63,8 +63,9 @@ new policy entity, workflow engine, or second policy-selection system. After
 required post-submit checks pass, `true` routes to human review; `false` routes
 to authorized FinalAcceptance and the submitter ContributionRecord, without a
 reviewer contribution. Both paths retain the complete locked guide and
-contribution-policy context. This is the intended schema, not an implemented
-field. No missing/legacy field implies automated acceptance or makes an
+contribution-policy context. The [policy setting is delivered](review-policy-human-review-required.md);
+automated acceptance execution remains unavailable, and configured `false`
+cannot activate a guide. No missing/legacy field implies automated acceptance or makes an
 otherwise incomplete policy valid. No setting can change for an existing
 attempt through a current-policy lookup. Adjudication remains outside v0.1;
 do not add its switch or execution path in this work.
@@ -101,15 +102,17 @@ unsupported human requirements, absent required outputs, and atomic rollback.
 The existing human-only contracts remain implementation authority until their
 explicit replacement is reconciled; this amendment does not activate a bypass.
 
-### Product-builder handoff: implement the setting next
+<a id="product-builder-handoff-implement-the-setting-next"></a>
 
-The next bounded product change should add the boolean to the existing policy
-surface, before remaining live guide/task routing work. Start with PROJECTS
-`models.py`, `schemas.py`, `policy_lineage.py` and its current policy writer/read
-projection in `service.py`; resolve exact migration and focused test paths
-against the builder's current head in the implementation record. This is
-existing guide-bound review-policy configuration, not a new POL compiler or
-permission surface. Preserve the existing exact mutation authorization.
+### Product-builder handoff: setting delivered
+
+The [bounded implementation](review-policy-human-review-required.md) delivers
+this handoff: the existing guide-bound ReviewPolicy has the strict boolean,
+persistence, read projection, versioned hashes, migration and activation guard.
+The original acceptance criteria below remain the preserved handoff contract.
+Current work advances to the remaining boundaries in Reconciliation; this
+setting adds no POL compiler or permission surface and preserves exact mutation
+authorization.
 
 Acceptance criteria for that change:
 
@@ -263,9 +266,10 @@ never be guessed to permit deletion.
 ## Reconciliation
 
 - Current-source reconciliation: PR #384 completes AUTH-12B2; main `fb4553cc`.
-- Next product-builder boundary: the existing ReviewPolicy boolean described
-  in the handoff above. CP05 policy activation and ARCH-04A catalogue/schema
-  work retain their independent prerequisites; POL-04B consumes that corrected
+- Delivered product-builder boundary: the existing ReviewPolicy boolean in the
+  preserved handoff above; automated acceptance remains unavailable.
+- Next usable boundaries: CP05 policy activation and ARCH-04A catalogue/schema
+  reconciliation retain their independent prerequisites; POL-04B consumes that corrected
   catalogue plus completed finalization authority. Shared dispatch is an
   explicit independent foundation, not implicit delivery from outbox storage.
 - Remaining risks: required unsupported evaluator capabilities must be
