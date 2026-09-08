@@ -59,7 +59,7 @@ replay is checked before any guide, current-selector or predecessor lookup.
 For a new supersession, load the exact If-Match predecessor ID and verify
 project, guide version, generation and hash before inheriting its boolean;
 then compute the v2 digest. Final PREP/consume binds the
-resolved digest and existing selector; the locked selector is rechecked before
+resolved digest and existing selector; the locked selector is rechecked under lock before PREP consume or
 writing. Reads include the setting and persisted format; legacy stored replay
 responses interpret the absent setting as true/v1 without changing hashes.
 
