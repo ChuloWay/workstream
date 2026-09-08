@@ -8,6 +8,7 @@ from sqlalchemy import select
 from app.db import session as db_session
 from app.modules.contributions.api import ContributionPolicyConflict, ContributionPolicyUnavailable
 from app.modules.tasks.models import AuditEvent
+from app.modules.authorization.models import AdminRoleGrant
 from .postgresql_support import world, snapshot
 
 
@@ -15,7 +16,7 @@ from .postgresql_support import world, snapshot
 @pytest.mark.parametrize("scope", ("system", "project"))
 @pytest.mark.parametrize("compensated", (False, True))
 async def test_each_policy_action_executes_with_exact_finance_scope_and_audit(
-    admin_access, scope, compensated
+    admin_access, scope, compensated, policy_decisions
 ):
     target = await world(admin_access, scope)
     prior = None
@@ -39,7 +40,19 @@ async def test_each_policy_action_executes_with_exact_finance_scope_and_audit(
         "contribution.policy." + op
         for op in ("read", "create_draft", "update_draft", "publish", "retire")
     }
+    async with db_session.get_session_factory()() as session:
+        matched_grant = await session.get(AdminRoleGrant, target.grant)
+        assert matched_grant.scope_type == scope
+        assert matched_grant.scope_project_id == (
+            str(target.project) if scope == "project" else None
+        )
+    assert set(policy_decisions) == {event.id for event in events}
     for event in events:
+        decision, expected_digest = policy_decisions[event.id]
+        assert decision.matched_scope_project_id == target.project
+        assert str(decision.matched_grant_id) == target.grant
+        assert decision.resource_context_digest == expected_digest
+        assert event.project_id == str(target.project)
         assert event.matched_grant_id == target.grant
         assert event.actor_id == str(target.context.actor_profile_id)
         assert event.actor_ref_kind == "actor_profile"
@@ -49,7 +62,7 @@ async def test_each_policy_action_executes_with_exact_finance_scope_and_audit(
         assert event.resource_type == "contribution_policy"
         assert event.resource_id == str(prior.contribution_policy_id)
         assert event.after_facts["allowed"] is True
-        assert event.after_facts["resource_context_digest"].startswith("sha256:")
+        assert event.after_facts["resource_context_digest"] == expected_digest
 
 
 @pytest.mark.asyncio

@@ -505,7 +505,9 @@ matrix row, route, or activation. CP01B registered five initially unavailable
 now activates exactly those five actions through explicit human Finance Authority
 composition (system or exact project). Mutations require transaction-bound PREP;
 reads and committed replay check current authority. Default CON composition
-still denies access and no policy HTTP route is added. CP01C
+still denies access and no policy HTTP route is added. Migration `0012_contribution_policy_audit_resource`
+adds only the exact policy resource token to the existing database audit privacy
+constraint. Downgrade refuses while policy audit history exists. CP01C
 corrects only the unavailable binding fact shapes before CP02: binding identity
 and CON's unchanged `instrument_type` are explicit on create, unit is absent,
 and suspend/resume include the exact lifecycle version. AUTH does not translate

@@ -119,7 +119,7 @@ def test_setup_existing_active_pairs_and_downstream_plans_are_preserved():
 
 
 def test_exact_active_action_inventory():
-    """Preserve the complete closed catalogue while activating only finalization."""
+    """Preserve finalization and the complete catalogue after CP05 activation."""
     from app.modules.authorization.catalogue import ACTION_DEFINITIONS
 
     assert {
@@ -189,4 +189,9 @@ def test_exact_active_action_inventory():
         ActionId.COMPENSATION_ADAPTER_BINDING_CREATE,
         ActionId.COMPENSATION_ADAPTER_BINDING_SUSPEND,
         ActionId.COMPENSATION_ADAPTER_BINDING_RESUME,
+        ActionId.CONTRIBUTION_POLICY_READ,
+        ActionId.CONTRIBUTION_POLICY_CREATE_DRAFT,
+        ActionId.CONTRIBUTION_POLICY_UPDATE_DRAFT,
+        ActionId.CONTRIBUTION_POLICY_PUBLISH,
+        ActionId.CONTRIBUTION_POLICY_RETIRE,
     }

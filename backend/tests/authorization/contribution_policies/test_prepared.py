@@ -1,6 +1,7 @@
 """Prepared policy authority rejects one-field substitutions and direct bypass."""
 
 from dataclasses import replace
+from contextlib import nullcontext
 from uuid import uuid4
 
 import pytest
@@ -174,4 +175,76 @@ async def test_policy_handle_rejects_identity_link_context_substitution():
         await auth.consume_mutation(handle, facts)
     auth._authorization._context = context
     assert await auth.consume_mutation(handle, facts) == context.actor_profile_id
+    auth.close_mutation(handle)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "operation,field,value",
+    (
+        ("create_draft", "expected_policy_status", "draft"),
+        ("create_draft", "expected_version_status", "draft"),
+        ("update_draft", "expected_policy_status", "draft"),
+        ("update_draft", "expected_version_status", "published"),
+        ("publish", "expected_policy_status", "draft"),
+        ("publish", "expected_version_status", "published"),
+        ("retire", "expected_policy_status", "draft"),
+        ("retire", "expected_version_status", "draft"),
+    ),
+)
+async def test_policy_handle_binds_each_action_lifecycle_state(operation, field, value):
+    project = uuid4()
+    auth, context, _, _ = adapter(project)
+    facts = mutation(context.actor_profile_id, project, operation)
+    action, resource = auth._mutation_context(facts)
+    handle = await auth.prepare_mutation(facts)
+    changed = resource.model_copy(update={field: value})
+    assert type(getattr(changed, field)) is str
+    assert getattr(changed, field) != getattr(resource, field)
+    warning = (
+        pytest.warns(UserWarning, match="Pydantic serializer warnings")
+        if (operation == "create_draft" and field == "expected_version_status")
+        else nullcontext()
+    )
+    with warning:
+        with pytest.raises(
+            PreparedAuthorizationHandleInvalid, match="invalid prepared authorization handle"
+        ):
+            await auth._prepared.consume(
+                handle,
+                action,
+                PreparedAuthorizationInput(
+                    idempotency_key=facts.operation_id,
+                    request_value=resource.model_dump(mode="json"),
+                ),
+                changed,
+            )
+    assert await auth.consume_mutation(handle, facts) == context.actor_profile_id
+    auth.close_mutation(handle)
+
+
+@pytest.mark.asyncio
+async def test_policy_handle_rejects_self_consistent_sibling_action():
+    project = uuid4()
+    auth, context, _, _ = adapter(project)
+    update = mutation(context.actor_profile_id, project, "update_draft")
+    publish = mutation(context.actor_profile_id, project, "publish")
+    publish = replace(
+        publish,
+        operation_id=update.operation_id,
+        contribution_policy_id=update.contribution_policy_id,
+        contribution_policy_version_id=update.contribution_policy_version_id,
+        resource_facts=replace(
+            publish.resource_facts,
+            contribution_policy_id=update.contribution_policy_id,
+            contribution_policy_version_id=update.contribution_policy_version_id,
+        ),
+    )
+    assert publish.request_digest == update.request_digest
+    handle = await auth.prepare_mutation(update)
+    with pytest.raises(
+        PreparedAuthorizationInvalid, match="prepared contribution-policy authority is invalid"
+    ):
+        await auth.consume_mutation(handle, publish)
+    assert await auth.consume_mutation(handle, update) == context.actor_profile_id
     auth.close_mutation(handle)

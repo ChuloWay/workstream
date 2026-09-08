@@ -1,10 +1,9 @@
 """Production grants cannot confer policy authority through unrelated roles."""
 
 import pytest
-from uuid import UUID
 
 from app.modules.contributions.api import ContributionPolicyConflict, ContributionPolicyUnavailable
-from tests.test_contributions import _seed_project
+from .foreign_fixtures import foreign_project
 from .postgresql_support import world, snapshot
 
 
@@ -26,12 +25,12 @@ async def test_real_policy_authority_rejects_other_roles_and_foreign_grants(
     request = target.request(operation, prior)
     assert (await admin_access.signed.revoke(admin_access.admin, target.grant)).status_code == 200
     if principal == "foreign_finance":
-        other_project, *_ = await _seed_project()
+        other_project, _ = await foreign_project(target)
         await admin_access.signed.grant(
             admin_access.admin,
             admin_access.target,
             role="finance_authority",
-            project_id=UUID(other_project),
+            project_id=other_project,
         )
     else:
         await admin_access.signed.grant(admin_access.admin, admin_access.target, role=principal)

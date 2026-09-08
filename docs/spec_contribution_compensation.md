@@ -832,7 +832,9 @@ version. Database-owned transition custody binds every affected row and event
 to one actor, operation, and timestamp. The behavior remains route-unreachable
 and deny-default unless the CP05 AUTH adapter is explicitly supplied. CP05
 activates the five policy actions using serialized read authorization and exact
-transaction-bound PREP. Committed replay checks current read authority.
+transaction-bound PREP. Committed replay checks current read authority. Migration `0012` admits only
+the policy resource token in the existing closed audit constraint; it does not
+change the event shape or policy lifecycle.
 
 | ActionId | PermissionId | Principal / target | Protocol | Feature owner |
 |---|---|---|---:|---|
