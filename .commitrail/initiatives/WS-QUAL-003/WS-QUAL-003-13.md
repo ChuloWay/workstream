@@ -1,7 +1,7 @@
 # WS-QUAL-003-13 — Admin access lifecycle proof audit
 
 - Initiative: WS-QUAL-003
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Eight mixed bootstrap/admin-access tests become
   bounded behavior proofs with a retained signed-token API journey and exact
   PostgreSQL concurrency/rollback custody.
@@ -49,6 +49,9 @@ These are observed proof weaknesses, not established production defects.
 ### Allowed
 
 - This record and `WS-QUAL-003/OVERVIEW.md` for durable audit disposition.
+- `docs/roadmap_status.md`: reconcile the selected audit's intended merged
+  outcome and remaining scope under the updated main roadmap rule. This
+  documentation-only scope correction does not expand the product change.
 - `backend/tests/test_auth.py`: remove only the eight named tests below, move
   its exact `auth_database_env` fixture to shared non-test support, re-import
   it for unchanged consumers, and remove only demonstrably dead imports.
@@ -144,7 +147,8 @@ Destination paths below are relative to `tests/authorization/admin_access/`.
 
 ## Acceptance criteria
 
-Every row is a future proof requirement, not an executed result. All database,
+Every row defines the proof obligation; execution custody belongs to the PR.
+All database,
 API and concurrency tests below run in hosted CI only; command tests are local.
 Parameter cases must remain independently identifiable in final assertion map.
 
@@ -285,8 +289,8 @@ The old aggregate event counts are decomposed into exact operation-scoped succes
 denial and linked invalidation assertions; the map names the sibling survivors.
 CLI privacy and empty-stderr proof remain unchanged from the first checkpoint.
 All new PostgreSQL modules are explicitly registered in existing hosted lanes.
-This checkpoint still requires hosted PostgreSQL results, fault/lock probes,
-and affected exact-head reviews before the PR can be reported ready.
+Readiness requires hosted PostgreSQL results, fault/lock probes, and affected
+exact-head reviews; the PR records their current execution custody.
 
 The hosted negative-control test mutates the real control-lock method only in
 test memory and requires the unchanged bootstrap race proof to reject it at
@@ -300,3 +304,12 @@ injection now captures the real grant service's session and fails only its
 commit. The unchanged staged-state assertions rejected the earlier hook because
 issue had staged no grant and revoke still showed active state. This supplies
 an executed early-failure counterexample rather than a mock-only rollback claim.
+
+Review corrections make exact recovery assert the persisted grant target, role,
+scope and granting actor, not just a successful response and generic event.
+The assertion map explicitly names the access-administrator parameter as the
+typed issuance/invalidation survivor; setup alone does not own that evidence.
+Current main's independent product registrations, schema fixtures and ledger
+changes are preserved. The selected audit is complete as the intended merge
+outcome; the remaining service-actor and profile/link families are not audited
+by this record. No runtime defect or production correction is claimed here.

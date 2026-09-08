@@ -21,12 +21,15 @@
 - AUTH cleanup: [12 — projection proof and staged AUTH audit](WS-QUAL-003-12.md).
   The human expanded this change to use reviewed commit checkpoints in one PR;
   projection proof is its first stage, not its completion boundary.
-- After 12's intended merge outcome: inventory the remaining AUTH lifecycle
-  families before further decomposition; do not repeat the selected actor and
-  authentication proof audit. The full suite audit remains open.
+- AUTH admin-access slice: [13 — lifecycle proof audit](WS-QUAL-003-13.md).
+- After 13's intended merge outcome: inventory the remaining service-actor
+  provisioning and profile/link lifecycle families, then remaining AUTH owners.
+  Do not repeat the selected actor, authentication or admin-access audit.
+  The full suite audit remains open.
 - Preserve: intended production semantics, public boundaries, real database/isolation/
   concurrency proof, current coverage floors, full hosted execution, human merge.
-- Product work: POL-04A2 remains planned; this initiative does not implement it.
+- Product work: POL-04A2 hidden finalization is delivered; its next AUTH-12B2
+  activation boundary proceeds independently. This initiative implements neither.
 
 ## Baseline and honest audit coverage
 
@@ -119,7 +122,15 @@ No fixed reduction percentage or same-day completion claim overrides safety.
   same change audits all 34 actor-registry tests and 51 authentication tests,
   removes the actor monolith, repairs real lock/rotation/rollback evidence and
   maps every original assertion. Its exact limits live in record 12; remaining
-  AUTH lifecycle families are unaudited.
+  AUTH lifecycle families beyond the selected slices are unaudited.
+- AUTH slice 13 audits eight mixed bootstrap/admin-access tests and preserves
+  all 203 original assertion spans in named survivors. It retains the real
+  signed-token API journey, replaces arrival-only races with exact database
+  blocker proof, and checks actual staged state before injected commit failure.
+  A missing-owner-lock negative control calibrates the race proof. Fresh read
+  cases keep database triggers enabled instead of resetting shared lifecycle
+  rows. Three oversized functions are removed without moving them into helpers;
+  the remaining fifteen monolith test bodies are unchanged.
 - PROJECT slice 07 replaces the remaining mixed diagnostic composer tests with
   exact facts/digests and owner selectors. Each invalid-parent case now starts
   with a valid record, so a pre-existing missing target cannot hide a broken

@@ -243,7 +243,10 @@ not a claim that every test or subsystem is fully audited.
 
 The selected AUTH projection replay, actor-resolution, and authentication audit
 and decomposition are also delivered, including stronger first-access race
-proof. That does not complete the remaining AUTH lifecycle families or the full
+proof. The selected bootstrap/admin-access audit also retains signed API
+composition, strengthens exact PostgreSQL lock and staged rollback proof, and
+maps the replaced mixed assertions to bounded owner tests. That does not complete
+the remaining service-actor, profile/link and other AUTH families or the full
 suite audit. Remaining work includes those AUTH families and the TASK, CHECKER,
 ART, CON, REV, and tooling audit. The audit requires behavioral proof, not only
 file splitting or coverage percentages. Real PostgreSQL, concurrency, storage,

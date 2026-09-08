@@ -56,6 +56,16 @@ async def test_grant_mutation_exact_replay_has_one_effect(
     assert after_actor.last_seen_at > before_actor.last_seen_at
     assert after_actor.last_verified_at > before_actor.last_verified_at
     after = await authority_snapshot()
+    stored_grant = next(
+        row
+        for row in after["admin_role_grants"]
+        if str(row["id"]) == first.json()["resource_id"]
+    )
+    assert stored_grant["target_actor_profile_id"] == str(access.target.id)
+    assert stored_grant["role"] == role
+    assert stored_grant["scope_type"] == ("project" if project_scoped else "system")
+    assert stored_grant["scope_project_id"] == (str(project) if project is not None else None)
+    assert stored_grant["granted_by_actor_profile_id"] == str(access.admin.id)
     records = [
         r for r in after["authority_idempotency_records"] if str(r["idempotency_key"]) == key
     ]
