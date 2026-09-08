@@ -149,6 +149,17 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         runner.ADMIN_RUNNER_MODULE,
     } == modules_by_lane["schema_contracts"]
     assert {
+        "tests/authorization/admin_access/test_bootstrap_cli.py",
+        "tests/authorization/admin_access/test_api_journey.py",
+        "tests/authorization/admin_access/test_bootstrap_postgresql.py",
+        "tests/authorization/admin_access/test_admin_reads_postgresql.py",
+        "tests/authorization/admin_access/test_grant_api_postgresql.py",
+        "tests/authorization/admin_access/test_grant_reads_postgresql.py",
+        "tests/authorization/admin_access/test_grant_validation_postgresql.py",
+        "tests/authorization/admin_access/test_failure_atomicity_postgresql.py",
+        "tests/authorization/admin_access/test_grant_concurrency_postgresql.py",
+        "tests/authorization/admin_access/test_timestamp_concurrency_postgresql.py",
+        "tests/authorization/admin_access/test_read_concurrency_postgresql.py",
         "tests/actors/test_first_access_postgresql.py",
         "tests/authorization/guide_compilation_projections/test_replay_evidence.py",
         "tests/test_auth_concurrency_observer.py",
