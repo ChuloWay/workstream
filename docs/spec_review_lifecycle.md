@@ -493,8 +493,9 @@ finalization allow cannot substitute for routing authority.
 PostgreSQL enforces the closed discriminator and complete exclusive source
 shape, unique task/Submission acceptance, unique non-null source Review or
 routing manifest, same-chain project/task/Submission/submitter/policy/source
-integrity, and immutability. Human sources must reference an accept Review and
-its reviewer; checker sources must reference the successful manifest governed
+integrity, and immutability. Human sources must reference an accept Review,
+its reviewer, the exact `review.decision` allow for that Review/reviewer/request
+and locked true policy; checker sources must reference the successful manifest governed
 by the same locked false policy. FKs plus owner-controlled constraint/trigger
 proof must reject direct-SQL crossed sources, not merely nullable fields.
 AUTH admission and currentness remain transaction-time checks, not authority
@@ -574,7 +575,7 @@ Future implementation tests (not executed by this planning change):
 
 | Owner / future test | Required discriminating proof |
 |---|---|
-| REV `test_final_acceptance_source_constraints` | Direct SQL rejects both/neither source, unknown discriminator, wrong project/policy, non-accept Review and true-policy checker source; rejects reviewer/recorded_by mismatch, manifest service/AUTH-event mismatch, wrong submitter vs Submission/Assignment, and crossed same-project/policy manifest; valid sources persist |
+| REV `test_final_acceptance_source_constraints` | Direct SQL rejects both/neither source, unknown discriminator, wrong project/policy, non-accept Review, false-policy Review source and true-policy checker source; rejects reviewer/recorded_by mismatch, human event not the exact review.decision allow for that Review/reviewer/request, manifest service/AUTH-event mismatch, wrong submitter vs Submission/Assignment, and crossed same-project/policy manifest; valid sources persist |
 | TASK `test_post_submit_false_uses_shared_acceptance` | Real composition with true/false locked controls, same FinalAcceptance/CON participant, and no Review/lease/reviewer contribution on false; passing checks plus an approved human_review disposition denies with zero effects |
 | TASK `test_acceptance_races_supersession_and_redelivery` | Independent sessions in both orders; one terminal acceptance and no stale run, duplicate award or invalidated accepted history |
 | AUTH `test_post_submit_route_acceptance_custody` | Wrong service/action/resource, unavailable authority, copied event and wrong transaction deny before product effects |

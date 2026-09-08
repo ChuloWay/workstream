@@ -50,6 +50,9 @@ creating human admission, acceptance or contribution effects.
    Initial request reservation is a bounded atomic consequence of the existing
    exact `submission.create` command, not an authority token sent to the worker.
 3. **ARCH-04E2 — AUTH routing activation.** After 04E1B hidden proof, AUTH
+   also consumes scoped XINT-003-08B lifecycle-control activation for the false
+   consequence; true routing and the early source schema do not depend on it.
+   AUTH
    registers and activates proposed fixed identity
    `workstream.task.post_submit_router` with sole action/permission
    `task.post_submit.route`. Its context binds committed completion event/claim,
@@ -77,7 +80,9 @@ evaluator and parity/activation proof under the same ActionId; a handler-only
 change cannot silently widen its permitted effects.
 Enabling false requires both successful end-to-end acceptance and ARCH-04F's
 usable failure/remediation path, exact AUTH authority and PROJECTS readiness
-proof. Human review/revision activation is not a dependency of this branch.
+proof, plus a valid authorized generation through the existing controller's
+scoped XINT-003-08B activation. Human review/revision activation is not a
+dependency of this branch.
 
 Each child uses a separate implementation record/PR at start with exact files
 and relevant reviewers. The graph does not require live routing to authorize

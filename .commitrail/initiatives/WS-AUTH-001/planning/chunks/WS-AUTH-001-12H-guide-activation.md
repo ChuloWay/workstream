@@ -16,6 +16,10 @@ Preserve CP07's guard for the locked ReviewPolicy boolean:
 FinalAcceptance/CON path is proven and available. An AUTH allow is not a
 substitute for that capability check. True follows the human branch without
 depending on automated acceptance; never silently coerce false to true.
+False additionally requires zero applicable approved `human_review` requirement
+dispositions and available shared acceptance, ARCH-04D/04E service composition
+and a valid scoped controller generation. AUTH consumes CP07's exact facts;
+it does not infer fulfillment of human judgment from passing executable checks.
 
 Activate only `project.guide.activate` over one complete approved
 current-generation unified compilation chain.
@@ -57,8 +61,11 @@ chain compatibility, or issuer-role fallback.
   retained history preserved.
 - ARCH-04A proves the selected registered evaluator implementations and POL-07
   proves compatible typed phase composition/configuration. No actual Task,
-  Submission, CheckerRun, ARCH-04C persistence or ARCH-04D runtime activation
-  is needed to activate a guide. Requiring a completed execution here creates
+  Submission or CheckerRun is needed to activate a guide. For true, ARCH-04C
+  persistence and ARCH-04D runtime activation are not prerequisites. False
+  stays unavailable until the installed shared acceptance/controller and
+  ARCH-04D/04E composition are proven; extend the same command/action when those
+  prerequisites land, not a second activation mechanism. Requiring a completed execution here creates
   a cycle because that execution first needs a task under the active guide.
 - Consume CP07's single hidden PROJECTS activation command and replacement
   readiness guard; AUTH does not implement policy selection, validation or
@@ -78,3 +85,6 @@ AUTH all-pairs, POL-07 sole-port and activation integration, migration round tri
 coverage, and impact-routed architecture/security/product/QA review plus
 affected migration, test and documentation tracks. Human focus: complete
 unified lineage only.
+Include false plus approved `human_review`, missing shared capability/controller,
+and valid installed-capability-without-task/run controls. Denials leave no guide
+activation or partial contribution-policy binding.

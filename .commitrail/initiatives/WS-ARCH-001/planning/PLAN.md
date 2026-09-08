@@ -40,12 +40,14 @@ checker-remediation boundary before public Submission cutover.
 | AUTH-OUTBOX-02 | CON-02B exact hidden manifest | Exact dispatcher mechanics only; no feature authority |
 | ARCH-04E1A | ARCH-04C | TASK routing-manifest schema/public facts and accepted-effects port, no handlers or REV dependency |
 | ARCH-04E1B | ARCH-04E1A, CON-02B hidden contract; shared REV-04B + CON-03C/07 + REV-12A shared fence foundation for false | TASK hidden handlers; consume one shared acceptance operation on false/pass |
-| ARCH-04E2 | ARCH-04E1B | AUTH exact TASK routing authority |
+| Scoped XINT-003-08B controller activation | Early existing REV-12A foundation and hidden shared acceptance/writer/observation proof | Existing Operator lifecycle-control action for the bounded shared manifest, not human runtime |
+| ARCH-04E2 | ARCH-04E1B; scoped XINT-003-08B controller activation for false | AUTH exact TASK routing authority |
 | ARCH-04E3 | ARCH-04E2, ARCH-04D, AUTH-OUTBOX-02; shared acceptance proof for false | TASK live dispatch/routing composition: true to allow_review, false/pass to shared acceptance when proven |
 | ARCH-04E | ARCH-04E3 | Completed coordination boundary consumed by downstream REV |
 | ARCH-04F (later public-cutover prerequisite) | ARCH-04E | CHECKER failure facts and TASK/ART remediation resubmission, not REV |
 
-False guide activation additionally requires shared acceptance, exact AUTH and
+False guide activation additionally requires shared acceptance, exact AUTH,
+a valid generation through scoped XINT-003-08B controller activation and
 the usable ARCH-04F failure route. The true routing foundation may ship first
 with false still unavailable; neither route invents a new acceptance subsystem.
 Shared REV acceptance persistence/CON participation can precede live human
