@@ -54,12 +54,12 @@ persists the setting: `human_review_required: bool = true`. True requires human
 review after required checks pass; false leads to authorized FinalAcceptance
 and submitter contribution without a reviewer contribution. It requires explicit locked project policy,
 supported acceptance evidence, distinct service decision provenance and shared
-atomic contribution effects; checker success alone is not acceptance. Its
-cross-owner contract reconciliation is tracked in the
-[existing planning record](../.commitrail/changes/pre-review-plan-reconciliation.md#accepted-direction-project-controlled-acceptance-mode).
-The human-review branch retains canonical `allow_review`. Existing milestone
-contracts describing only that branch must be reconciled before automated
-acceptance implementation begins.
+atomic contribution effects; checker success alone is not acceptance. The
+[canonical shared acceptance contract](spec_review_lifecycle.md#finalacceptance)
+defines one FinalAcceptance/submitter-contribution operation with two triggers,
+not a separate automated acceptance system. The human branch retains canonical
+`allow_review`. Shared REV source persistence and CON participation precede
+ARCH-04E false/pass integration; human queues/leases are not its prerequisites.
 
 The setting is configurable through the existing authorized policy writer;
 creation defaults true and omitted replacements inherit the predecessor.
@@ -110,7 +110,7 @@ implementation and policy binding and is not claimed live here.
 | Stage | Purpose and examples | Policy and execution boundary | Outcome |
 | --- | --- | --- | --- |
 | Pre-submission intake checks | Is this package acceptable to submit? Check completeness, required/forbidden files, evidence integrity, and configured intake-quality rules. | The locked `PreSubmitCheckerPolicy` and effective artifact policy drive the pre-submission catalogue during continuous artifact preparation, before a Submission exists. | Blocking failures return correction feedback and prevent Submission creation. Passing intake does not prove the task is accepted or ready for review. |
-| Post-submission evaluation | Does the submitted work meet the configured task/project checks? Evaluate the exact stored work and evidence under the locked requirements. | The Submission-stamped `PostSubmitCheckerPolicy` drives the durable checker registry after immutable Submission creation. Only supported, registered checks execute. | Persist a durable current result; blocking failures prevent review admission. Eligible results produce `allow_review`, not final acceptance. |
+| Post-submission evaluation | Does the submitted work meet the configured task/project checks? Evaluate the exact stored work and evidence under the locked requirements. | The Submission-stamped `PostSubmitCheckerPolicy` drives the durable checker registry after immutable Submission creation. Only supported, registered checks execute. | Persist current evidence. Required success routes by the locked ReviewPolicy: true produces human `allow_review`; false invokes shared acceptance under TASK authority. CHECKERS never writes acceptance itself. Both routes remain planned. |
 
 The unified guide agent proposes both sets of policy bindings in one setup
 result. Trusted compilation, validation, and the governing approval path turn

@@ -20,7 +20,7 @@ work accounting. Foundations through 02H and CP04B are complete; none restart.
 | [WS-ARCH-001-04B2](chunks/WS-ARCH-001-04B-art-post-submit-materialization.md#arch-04b2--separate-art-output-custody-child) | ART generated-output/log custody and verified binding | L1 | 04A public request/run facts plus merged ART foundations; no CHECKERS private lookup |
 | [WS-ARCH-001-04C](chunks/WS-ARCH-001-04C-checker-current-result.md) | CHECKER hidden durable current output and supersession behavior | L1 | Planned after 04A/04B/04B2; production remains deny-only |
 | [WS-ARCH-001-04D](chunks/WS-ARCH-001-04D-auth-post-submit-activation.md) | AUTH exact fixed-service post-submit activation (replaces XINT-06B) | L1 | Planned after 04B/04C evidence |
-| [WS-ARCH-001-04E](chunks/WS-ARCH-001-04E-canonical-allow-review.md) | TASK automatic dispatch/current routing integration and canonical `allow_review` manifest | L1 | Coordination: hidden 04E1 -> AUTH 04E2 -> live 04E3, also requiring 04D and AUTH-OUTBOX-02 |
+| [WS-ARCH-001-04E](chunks/WS-ARCH-001-04E-canonical-allow-review.md) | TASK current routing: true to canonical `allow_review`, false/pass to shared acceptance | L1 | Hidden 04E1 -> AUTH 04E2 -> live 04E3, plus 04D/OUTBOX-02; false additionally consumes shared REV-04B/CON-03C/07 proof; activation also requires 04F remediation |
 | [WS-ARCH-001-04F](chunks/WS-ARCH-001-04F-checker-remediation.md) | Contributor-correctable checker failures and same-lineage admission-backed replacement Submission | L1 | Planned after 04E; replaces XINT-05C, required before public 02I, not before REV begins from `allow_review` |
 
 CP09, 04E and 04F are coordination parents, not permission for multi-owner PRs.

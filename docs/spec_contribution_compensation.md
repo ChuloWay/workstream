@@ -39,7 +39,7 @@ human Review
 For accepted submitter work the sequence is:
 
 ```text
-Review(accept)
+Authorized Review(accept), or required-check success under locked false policy
 -> REV-owned FinalAcceptance
 -> accepted_submission ContributionRecord
 -> applicable CompensationAward
@@ -83,7 +83,7 @@ All public API paths use `/api/v1`. No alternate public prefix is introduced.
 | Authentication tokens | External Flow Identity Issuer plus AUTH verifier | Workstream verifies external tokens and does not own login, passwords, or primary sessions. |
 | Authorization | AUTH | AUTH owns identifiers, mappings, grants, typed contexts, prepared handles, evaluators, evidence, activation custody, and availability. |
 | Task assignment | Task subsystem | Task owns TaskAssignment creation, status, and task-claim composition. |
-| Human review | REV | REV owns queues, leases, Review/finding/resolution state, FinalAcceptance, task effects, decision orchestration, and the only commit. |
+| Human review and acceptance | REV | REV owns queues, leases, Review/finding/resolution state and shared FinalAcceptance persistence. Human decision composition owns its commit; TASK post-result composition owns the false-branch commit. Both reuse the same acceptance sequence through public flush-only participants. |
 | Contribution policy and recognition | CON | CON owns policy aggregates, freeze capabilities, ContributionRecord, CompensationAward, and CON reads. |
 | Shared outbox mechanics | Shared outbox | The dispatcher owns claim, retry, dead-letter, replay, and finalization, but no feature authority. |
 | Artifact bytes and bindings | ART | ART owns artifact persistence and capabilities; it is absent from the core Review-to-Contribution transaction. |
@@ -300,7 +300,9 @@ contributor_id = submitter ActorProfile.id
 
 PostgreSQL MUST enforce mutually exclusive and complete source shapes, one
 `completed_review` per Review, and one `accepted_submission` per
-FinalAcceptance. Automated checker outcomes create neither contribution type.
+FinalAcceptance. Raw checker outcomes create neither contribution type;
+authorized false-policy acceptance creates the submitter record through the
+same FinalAcceptance source, never a reviewer record.
 
 ### CompensationAward
 
@@ -403,56 +405,21 @@ history, and receipts. It is not eligibility or settlement truth.
 
 ## FinalAcceptance Boundary
 
-Planned amendment: the [project-controlled acceptance direction](../.commitrail/changes/pre-review-plan-reconciliation.md#accepted-direction-project-controlled-acceptance-mode)
-requires an explicitly authorized automated source alongside the human source
-specified below. This source contract is not yet reconciled or implemented.
-Do not synthesize a Review to satisfy `source_review_id`, loosen source checks
-by merely making it nullable, or create a reviewer contribution for automated
-execution. CON must validate the exact authorized acceptance source and locked
-contribution terms in the same atomic participant used for the submitter's
-accepted contribution and applicable compensation effects. Raw checker results
-remain insufficient. The existing human-only schema remains authoritative for
-its branch until the replacement source contract is reviewed.
-
-`FinalAcceptance` is a REV-owned immutable internal fact:
-
-```text
-id
-project_id
-task_id
-submission_id
-source_review_id
-accepted_submitter_id
-accepted_at
-recorded_by
-policy_context_ref
-```
-
-The existing immutable `Submission` row, together with `version` and
-`supersedes_submission_id`, is the version identity. No `SubmissionVersion`
-table or `submission_version_id` alias is introduced.
-
-REV MUST create FinalAcceptance only inside an authorized `Review(accept)`
-transaction and MUST enforce:
-
-```text
-UNIQUE(task_id)
-UNIQUE(source_review_id)
-UNIQUE(submission_id)
-```
-
-REV also owns the composite same-chain constraints across project, task,
-Submission, Review, accepted submitter, reviewer, and immutable ReviewPolicy.
-`policy_context_ref` points to that exact ReviewPolicy; it is not a
-ContributionPolicy reference. `recorded_by` identifies the reviewer actor.
-
-There is no public or manual create API and no independent authorization
-action. `needs_revision` and `reject` create no FinalAcceptance. V0.1 has no
-reopen, replacement acceptance, appeal, or adjudication path.
+The [REV shared acceptance contract](spec_review_lifecycle.md#finalacceptance)
+owns the single FinalAcceptance schema, exclusive human/checker-policy source
+shapes, same-chain constraints, actor/authority provenance, currentness and
+transaction sequence. Both triggers use the same CON submitter operation; no
+new contribution type, synthetic Review or automatic reviewer award is added.
+This is planned runtime behavior, not enabled false-policy activation.
 
 CON MUST create `accepted_submission` only from the supplied locked
 FinalAcceptance and exact TaskAssignment. It MUST NOT infer submitter acceptance
 by reading `Review.decision`.
+CON validates the acceptance's constrained source and originating AUTH event
+against its supplied locked facts, including the exact assignment/Submission
+ContributionPolicyVersion and stabilized artifact hash. It evaluates only the
+submitter rule for that operation. False-policy acceptance has no reviewer
+operation even though the policy contains both actor rules.
 
 ## Policy Freezing
 
@@ -577,7 +544,7 @@ and flushes.
 
 ### Decision branches
 
-Accept:
+Accept (the shared sequence also used by authorized false-policy routing):
 
 ```text
 REV appends FinalAcceptance
@@ -618,7 +585,7 @@ Reject MUST NOT change an actor grant, another task, or another assignment.
 
 ### Submitter operation
 
-The submitter operation exists only after the accept branch has created
+The submitter operation exists only after the shared acceptance operation has created
 FinalAcceptance and applied accepted Task and completed TaskAssignment effects.
 
 Its typed input contains only locked:
@@ -642,8 +609,10 @@ or outbox staging rolls back Review, FinalAcceptance when applicable, task and
 assignment effects, contributions, awards, authorization evidence, audit, and
 outbox rows.
 
-Canonical Review creation MUST NOT be enabled before this mandatory participant
-and shared staging behavior are installed.
+Canonical Review creation and false-policy acceptance MUST NOT be enabled
+before their mandatory participants and shared staging behavior are installed.
+On false, the same rollback guarantee covers TASK routing and acceptance with
+no Review or reviewer operation; external delivery remains after commit.
 
 ## Artifact Lineage
 
@@ -941,6 +910,11 @@ FinalAcceptance, ContributionRecord, CompensationAward, or receipt truth.
 REV-12A owns the only `JointLifecycleReleaseControl` and
 `JointLifecycleMutationFence`. CON MUST NOT create a second controller, phase,
 generation, or availability writer.
+Its persistence/mutation-fence and CON ordinal hooks are pulled forward as the
+[shared acceptance foundation](spec_review_lifecycle.md#implementation-order-and-required-proof)
+before either trigger can create obligations. Later REV-12A drain/operator
+work extends this same controller; it is not a prerequisite on live human
+review for the false branch.
 
 Every creation, requeue, successor, retry-root, and repair path that can admit a
 fulfillment obligation MUST:
@@ -1046,6 +1020,15 @@ No dependent chunk may treat an unresolved gate as an implicit default.
 
 The core dependency order is a partial order. Persistence and flush-only
 transaction participants do not wait for generic dispatch:
+
+The [shared acceptance order](spec_review_lifecycle.md#implementation-order-and-required-proof)
+governs the false branch: extract the existing REV-04B acceptance/source schema
+foundation, then CON-03C and CON-07 submitter participation, then ARCH-04E/AUTH
+routing composition and false guide activation. A stable Review FK target is
+not live ReviewLease/queue/decision behavior. The shared lifecycle/obligation
+fence is required for either trigger; human runtime and fulfillment endpoints
+are not prerequisites for accepting without a reviewer. The older interleaving
+below describes the human branch, not a second acceptance implementation.
 
 The historical CON-numbered sequence below preserves the broader REV/CON
 interleaving. Its pre-review CON-05A/05B labels are replaced by CP06/CP07,

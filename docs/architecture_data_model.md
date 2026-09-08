@@ -1980,12 +1980,10 @@ direction, reason, and change summary.
 
 ## FinalAcceptance
 
-The field/source contract below describes the human-review branch. The planned
-[acceptance-mode amendment](../.commitrail/changes/pre-review-plan-reconciliation.md#accepted-direction-project-controlled-acceptance-mode)
-requires a distinct, constrained automated decision source without a fabricated
-Review or human identity. Exact source exclusivity, authority/evidence lineage,
-uniqueness, transaction participation and CON validation must be reconciled
-before changing this schema; nullable `source_review_id` alone is not sufficient.
+The [shared acceptance contract](spec_review_lifecycle.md#finalacceptance)
+defines both sources for this planned REV-owned fact. One schema and atomic
+operation serve human accept and required-check success with the locked false
+policy. No separate automated decision entity or synthetic Review is introduced.
 
 Fields:
 
@@ -1994,6 +1992,9 @@ Fields:
 - `task_id`
 - `submission_id`
 - `source_review_id`
+- `acceptance_source`: `human_review | task_post_submit_route`
+- `source_routing_manifest_id`
+- `authorization_decision_event_id`
 - `accepted_submitter_id`
 - `accepted_at`
 - `recorded_by`
@@ -2001,17 +2002,17 @@ Fields:
 
 Purpose:
 
-This immutable REV-owned internal fact is created only inside the authorized
-`Review(accept)` transaction. Existing `Submission` is already the version
+This immutable REV-owned internal fact is created inside either authorized
+trigger's shared acceptance transaction. Existing `Submission` is already the version
 identity, so the stored FK is `submission_id`; no SubmissionVersion entity or
-`submission_version_id` alias is introduced. `recorded_by` is the canonical
-human reviewer `ActorProfile.id` on the source Review and ReviewLease.
+`submission_version_id` alias is introduced. `recorded_by` is the originating
+AUTH actor: the actual reviewer or the admitted fixed TASK routing service.
 `policy_context_ref` is a foreign key to the exact immutable `ReviewPolicy.id`
 whose project and guide version match the reviewed Submission context.
 
-PostgreSQL enforces `UNIQUE(task_id)`, `UNIQUE(source_review_id)`, and
-`UNIQUE(submission_id)` plus same-project/task/Submission/Review/submitter/
-reviewer/policy lineage. There is no public/manual create API and no separate
+PostgreSQL enforces `UNIQUE(task_id)`, `UNIQUE(submission_id)` and uniqueness
+of each non-null source, closed/exclusive source shapes, plus the canonical
+same-chain and immutable source constraints. There is no public/manual create API and no separate
 authorization action. `needs_revision` and `reject` create none. Accept/reject
 are terminal in v0.1; no adjudication or replacement-acceptance path exists.
 Reviewer-quality sampling is a non-mutating audit and never delays or changes

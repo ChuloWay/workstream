@@ -53,22 +53,21 @@ root-level version namespace do not create an alias.
 
 ## v0.1 Boundary
 
-### Planned acceptance-mode amendment
+### Planned shared acceptance
 
 The accepted product direction uses `human_review_required: bool = true` in
 the existing guide-bound ReviewPolicy. After required post-submit checks pass,
 true requires human review; false proceeds through authorized FinalAcceptance
 and submitter contribution, without a reviewer contribution. No separate mode
-enum, policy entity or adjudication setting is introduced. The contract below still specifies the
-human branch; it must not be used to imply that human review is universally
-required by the intended v0.1 product. The [current reconciliation record](../.commitrail/changes/pre-review-plan-reconciliation.md#accepted-direction-project-controlled-acceptance-mode)
-tracks the outstanding authority, lifecycle and contribution changes. The
+enum, policy entity or adjudication setting is introduced. The
+[shared acceptance contract](#finalacceptance) below defines both triggers;
+queue, lease and human-decision sections apply only to the human branch. The
 [policy setting](../.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
 is persisted and versioned; false activation remains unavailable.
 Automated acceptance is not implemented or enabled by this note. In particular,
 `allow_review` retains its human-admission meaning, and a checker pass alone
 does not authorize FinalAcceptance. No synthetic human Review or ReviewLease
-may be used to fit automated acceptance into the existing human-only contract.
+may be used for the false branch.
 
 The human-review shipping branch is:
 
@@ -438,9 +437,23 @@ effects, FinalAcceptance, contributions, awards, audit, and outbox together.
 
 ## FinalAcceptance
 
-`FinalAcceptance` is an internal immutable REV fact created only as the
-lifecycle consequence of an already-authorized `Review(accept)` transaction.
-It has no public/manual creation API and no separate authorization action.
+`FinalAcceptance` is one internal immutable REV fact, created by one shared
+acceptance operation. There is no public/manual creation API, independent
+materialization action, second decision entity or automated acceptance engine.
+This is a target implementation contract; neither branch is enabled by this
+document.
+
+| Trigger | Required source | Result |
+|---|---|---|
+| Human `accept` | Authorized `review.decision`, actual Review/ReviewLease, locked `human_review_required=true` and valid admission | Shared acceptance plus the actual Review's reviewer contribution |
+| Required post-submit checks pass | Authorized `task.post_submit.route`, exact current routing manifest and locked `human_review_required=false` | Same shared acceptance; no Review, lease or reviewer contribution |
+
+Both produce Task `accepted`, TaskAssignment `completed`, FinalAcceptance,
+one submitter `accepted_submission` and applicable frozen-policy awards in
+one transaction with authorization evidence, audit and outbox. No post-commit
+job repairs missing canonical contributions. Human `needs_revision` or
+`reject`, failed checks, unsupported requirements and infrastructure errors
+cannot invoke this operation.
 
 Required lineage is:
 
@@ -450,6 +463,9 @@ project_id
 task_id
 submission_id
 source_review_id
+acceptance_source
+source_routing_manifest_id
+authorization_decision_event_id
 accepted_submitter_id
 accepted_at
 recorded_by
@@ -458,13 +474,116 @@ policy_context_ref
 
 `submission_id` is the existing versioned Submission identity.
 `accepted_submitter_id` is the canonical human ActorProfile on the Submission
-and TaskAssignment. `recorded_by` is the canonical human ActorProfile on the
-Review and ReviewLease. `policy_context_ref` identifies the immutable
+and TaskAssignment. `recorded_by` identifies the canonical AUTH actor of the
+originating allow: the reviewer for human acceptance, the admitted fixed TASK
+routing service for checker-policy acceptance; never a fabricated human.
+`policy_context_ref` identifies the immutable
 ReviewPolicy governing that Submission.
 
-PostgreSQL enforces unique task, source Review, and Submission acceptance plus
-same-chain project/task/submission/reviewer/submitter/policy integrity and
-immutability. v0.1 has no reopen or replacement path.
+`acceptance_source` is provenance, not a configurable policy or workflow mode:
+`human_review` requires `source_review_id` and forbids
+`source_routing_manifest_id`; `task_post_submit_route` requires
+`source_routing_manifest_id` and forbids `source_review_id`. The existing TASK
+manifest identifies the exact Submission, run, request/generation, final-result
+hash, output bindings and persisted authority-event references. Do not create
+an AutomatedDecision table or copy checker results into REV. The AUTH event
+reference binds the exact source, operation, actor and resource; a checker
+finalization allow cannot substitute for routing authority.
+
+PostgreSQL enforces the closed discriminator and complete exclusive source
+shape, unique task/Submission acceptance, unique non-null source Review or
+routing manifest, same-chain project/task/Submission/submitter/policy/source
+integrity, and immutability. Human sources must reference an accept Review and
+its reviewer; checker sources must reference the successful manifest governed
+by the same locked false policy. FKs plus owner-controlled constraint/trigger
+proof must reject direct-SQL crossed sources, not merely nullable fields.
+AUTH admission and currentness remain transaction-time checks, not authority
+inferred from a FK. v0.1 has no reopen or replacement acceptance.
+
+### Shared transaction and dependency direction
+
+The application composition root injects public caller-session ports into one
+REV-owned `SharedFinalAcceptanceOperation`. Both callers invoke that same public
+operation, not copied sequences. It appends the REV acceptance fact, invokes
+TASK's accepted/completed-effects port, invokes CON's existing submitter
+participant and stages shared audit/outbox effects. CON validates the fact and
+exact assignment before appending the contribution and conditional awards.
+All participants flush only. The initiating command owns the single commit: human decision
+composition also stages the actual Review and reviewer contribution; TASK
+post-result composition instead stages the routing manifest. Neither owner
+imports the other's private service or implements a competing orchestrator.
+REV's acceptance operation consumes locked typed source facts supplied by
+composition and TASK's narrow effects port; it does not call back into TASK
+routing. CON consumes acceptance
+and assignment facts and never calls the originating command. This prevents a
+TASK routing -> REV decision -> TASK routing dependency cycle.
+
+The false branch reuses `workstream.task.post_submit_router` and the proposed
+`task.post_submit.route` contract; its allowed derived effects explicitly
+include this shared acceptance sequence only for the false/pass case. This
+does not grant `review.decision`, a generic CON write, checker execution or
+dispatcher authority. AUTH owns registration, exact resource/PREP validation
+and activation; missing or unavailable authority fails closed.
+
+Acquire the shared lifecycle/obligation fence before owner state locks, then
+lock TASK Submission/current routing state before the CHECKERS currentness
+fence using existing ARCH-04E order. Revalidate the exact locked guide,
+ReviewPolicy, contribution-policy/assignment lineage, complete successful
+required-check evidence and all required output bindings before staging
+acceptance. Never read the project's newest policy to choose the branch.
+After acceptance, reject a new evaluation generation, resubmission or policy
+rebase for that task. Racing acceptance, supersession and retries serialize:
+an earlier supersession rejects old evidence; an earlier acceptance prevents
+supersession from invalidating terminal truth. Exact duplicate delivery returns
+the same outcome; a changed envelope under the same identity denies.
+
+### Implementation order and required proof
+
+Extract foundations from existing owner work, not a new initiative:
+
+1. ARCH-04E1's TASK manifest persistence/public scalar facts and narrow accepted
+   effects port follow CHECKERS-04C facts, without routing handlers or REV FKs.
+   One manifest stores the locked `human_review_required` branch; it is not
+   restricted to human admission. This schema precedes the REV source FK.
+2. REV-04B shared source/FinalAcceptance persistence follows that schema, then
+   CON-03C contribution/award persistence and CON-07 submitter participation.
+   A Review FK target may require a table, not live claim or review endpoints.
+3. Pull the existing REV-12A controller/fence persistence, mutation-fence port
+   and CON obligation-ordinal hooks forward as the shared acceptance foundation.
+   They depend on owner persistence, not human queues/decisions/drain projections.
+   Later operator/drain work extends these same rows and ports; no second fence.
+4. The shared operation consumes those foundations. ARCH-04E1's hidden routing
+   handler then invokes it, ARCH-04E2 activates the exact proven AUTH manifest, and
+   ARCH-04E3 proves live composition. PROJECTS enables false only after that
+   proof and ARCH-04F's usable checker-remediation path.
+
+These are dependency slices of existing work, expanded into bounded records
+when implemented, not an extra planning-approval loop. Do not make the early
+manifest schema depend on its later handler or the early shared fence depend
+on live human review. Human runtime later adds its decision/lease proof and
+reuses the same operation. Fulfillment/read endpoints remain downstream.
+
+Future implementation tests (not executed by this planning change):
+
+| Owner / future test | Required discriminating proof |
+|---|---|
+| REV `test_final_acceptance_source_constraints` | Direct SQL rejects both/neither source, unknown discriminator, wrong project/policy, non-accept Review and true-policy checker source; valid sources persist |
+| TASK `test_post_submit_false_uses_shared_acceptance` | Real composition with true/false locked controls, same FinalAcceptance/CON participant, and no Review/lease/reviewer contribution on false |
+| TASK `test_acceptance_races_supersession_and_redelivery` | Independent sessions in both orders; one terminal acceptance and no stale run, duplicate award or invalidated accepted history |
+| AUTH `test_post_submit_route_acceptance_custody` | Wrong service/action/resource, unavailable authority, copied event and wrong transaction deny before product effects |
+| CON `test_shared_acceptance_atomic_rollback` | Fail after staged task/acceptance/contribution/award/audit/outbox writes; every row/effect rolls back in both branches; valid control commits once |
+| PROJECTS `test_false_activation_requires_supported_acceptance` | Unsupported human requirement, missing required output contract or unavailable shared composition blocks activation; supported complete configuration activates only after runtime proof |
+
+Proposed test homes are `backend/tests/test_shared_final_acceptance.py` (REV),
+`backend/tests/test_task_post_submit_routing.py` (TASK),
+`backend/tests/authorization/test_post_submit_route.py` (AUTH),
+`backend/tests/contributions/test_shared_acceptance.py` (CON), and the existing
+project activation test module for PROJECTS. Run each through
+`cd backend && uv run pytest <test-file> -k <test-name>` with real PostgreSQL;
+the full unchanged hosted suite/coverage remains required for implementation.
+These are future files/tests. Implementation records resolve exact paths
+against then-current main and retain the behavior/proof obligations, not invent
+another acceptance architecture.
 
 ## Contribution And Compensation Boundary
 
@@ -811,8 +930,11 @@ authority.
 
 ## Joint Release Control
 
-REV-12A is a non-executable split record. REV-12A1 through REV-12A4 collectively
-add one hidden PostgreSQL-canonical `JointLifecycleReleaseControl`. It uses
+REV-12A is a non-executable split record. Its shared persistence/fence/CON
+ordinal foundation is pulled forward before either acceptance trigger as
+specified in the [shared implementation order](#implementation-order-and-required-proof).
+REV-12A1 through REV-12A4 later extend, rather than recreate, that one
+PostgreSQL-canonical `JointLifecycleReleaseControl`. It uses
 compare-and-set phase history,
 PostgreSQL advisory-lock fences, mandatory typed fence ports, and bounded drain
 observations across review mutations, task submissions, queue admission,

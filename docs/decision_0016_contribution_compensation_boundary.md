@@ -38,6 +38,12 @@ Review. `FinalAcceptance` is the sole source for one submitter
 `accepted_submission` ContributionRecord. `needs_revision` and `reject` create
 no FinalAcceptance and no submitter contribution.
 
+The accepted locked `human_review_required=false` policy uses the same shared
+acceptance operation after required checks pass under exact TASK routing
+authority. It creates no Review, ReviewLease or reviewer contribution. The
+[current shared contract](spec_review_lifecycle.md#finalacceptance) owns source
+provenance and constraints; this extends the human trigger, not the record types.
+
 Existing `Submission` is already the version identity. FinalAcceptance stores
 `submission_id`, not a new `SubmissionVersion` entity or alias. It also stores
 canonical `recorded_by` and `policy_context_ref` fields owned by REV. It has no
@@ -69,8 +75,11 @@ or implicit unpaid behavior survives.
 
 ### Transaction ownership
 
-REV owns Review, FinalAcceptance, task and assignment effects, audit/outbox
-staging, and the only commit. One mandatory CON participant exposes two ordered
+REV owns Review and FinalAcceptance; the initiating command composition owns
+the single commit and stages task/assignment effects through TASK participants.
+Human decision and TASK post-result composition reuse the same acceptance
+sequence with no private cross-owner imports or callback cycle. One mandatory
+CON participant exposes two ordered
 flush-only operations:
 
 1. reviewer contribution and award evaluation before the decision branch;
@@ -80,6 +89,8 @@ flush-only operations:
 There is no omnibus nullable input, no no-op production participant, and no
 post-commit repair for canonical contribution creation. A CON failure rolls
 back the complete review decision.
+The false branch calls only the submitter operation; the same rollback covers
+routing, acceptance, task effects, contributions, awards, audit and outbox.
 
 ### Authorization
 
@@ -93,6 +104,9 @@ FinalAcceptance and derived contribution/award rows inside `review.decision`
 receive no additional materialization actions. Independent reads,
 administration, outbox mechanics, callbacks, and operations use exact
 AUTH-owned actions and principals.
+The planned `task.post_submit.route` authority similarly covers only the
+guarded false/pass acceptance consequence, not a human review decision or
+generic contribution write. Both triggers require their own fresh AUTH allow.
 
 The global independent `adjudicator` grant from ADR 0015 remains untouched but
 creates no adjudication dependency or capability in this v0.1 lifecycle.
@@ -122,6 +136,11 @@ admitted.
 
 All CON routes remain hidden until their behavior, exact AUTH activation, and
 joint release proof pass.
+The false acceptance milestone proves its exact TASK/shared-acceptance manifest
+using that same controller and fence. It exposes no human review or CON
+fulfillment/read endpoint and does not wait for those later surfaces. Shared
+fence persistence/ordinal participation is pulled forward; later REV release
+work extends the same mechanism rather than introducing a competing gate.
 
 ## Consequences
 

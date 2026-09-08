@@ -20,16 +20,21 @@ ReviewPolicy boolean schema and immutable lineage behavior specified in the
 [product-builder handoff](../../../../changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
 Read `human_review_required` from the Submission's locked ReviewPolicy, never
 the current project policy. Successful checks with true emit human admission;
-false must use the separately authorized shared FinalAcceptance/CON path, not
+false uses the same shared FinalAcceptance/CON operation as human accept, not
 enqueue human review or treat `allow_review` as acceptance authority. The
-current TASK children do not implement REV/CON internals: reconcile their
-typed participant and exact authority dependencies before wiring this branch.
+current TASK children do not implement REV/CON internals: consume the
+[canonical shared participants and authority contract](../../../../../docs/spec_review_lifecycle.md#finalacceptance).
+First deliver 04E1's TASK manifest schema/public facts and narrow accepted-effects
+port after 04C, without REV dependency or handlers. REV-04B can then reference
+that schema. Shared REV-04B/CON-03C/07 and the early existing REV-12A/CON fence
+foundation are hard dependencies of false handler composition, not of this
+early schema or true admission. This breaks the source-FK dependency cycle.
 False guide activation stays unavailable until that path is proven. Avoid
 making automated acceptance depend on live human queues or leases.
 
 The existing success-manifest, `review_pending` transition and corresponding
 tests below describe only `human_review_required=true`. They must not run for
-false. Before its acceptance participant is reconciled and activated, false
+false. Before its acceptance participant is implemented and activated, false
 has no live success route; an unexpected false attempt fails closed without
 creating human admission, acceptance or contribution effects.
 
@@ -45,13 +50,30 @@ creating human admission, acceptance or contribution effects.
    `workstream.task.post_submit_router` with sole action/permission
    `task.post_submit.route`. Its context binds committed completion event/claim,
    immutable Submission, request/generation, exact CHECKERS result/fence and
-   TASK pre-review state. Allow only AUTH adapters/catalogue/parity/composition
+   TASK pre-review state, locked ReviewPolicy and chosen derived effects.
+   Bind exact Task/Assignment, equal assignment/Submission contribution-policy
+   version, stabilized artifact hash, manifest identity, allocated acceptance
+   identity, actor, project, request/idempotency and transaction as well.
+   False/pass includes the shared acceptance consequence after its hidden
+   proof; true permits only human admission. Allow only AUTH adapters/catalogue/parity/composition
    and focused proof; no TASK state-machine implementation. It cannot execute
-   checker, ART, dispatcher, human review or contribution actions.
+   checker, ART, dispatcher, human review or generic contribution actions.
+   Derived submitter/award writes occur only through the shared participant,
+   exactly as they do inside human `review.decision`.
 3. **ARCH-04E3 — live composition and end-to-end proof.** After 04E2, 04D and
    AUTH-OUTBOX-02, wire the proven handlers and canonical Submission route to
    the existing shared dispatcher. TASK owns this narrow live integration and
    legacy-call reachability cutover, not another implementation of 04E1.
+
+If the shared acceptance foundation lands later than true routing, keep false
+activation unavailable and integrate it into this same handler after the named
+predecessors; do not add another dispatcher, success event or acceptance engine.
+If true routing is already active, false requires exact successor AUTH resource,
+evaluator and parity/activation proof under the same ActionId; a handler-only
+change cannot silently widen its permitted effects.
+Enabling false requires both successful end-to-end acceptance and ARCH-04F's
+usable failure/remediation path, exact AUTH authority and PROJECTS readiness
+proof. Human review/revision activation is not a dependency of this branch.
 
 Each child uses a separate implementation record/PR at start with exact files
 and relevant reviewers. The graph does not require live routing to authorize
@@ -100,7 +122,7 @@ envelope is a conflict, never a replay. No caller supplies trusted hashes.
 | Dispatch | TASKS owns a unique `(project_id, submission_id, post_plan_hash, evaluation_request_generation)` reservation. Initial submission uses the initial server-owned generation; delivery replay or unfinished recovery never increments it. An authorized terminal retry or genuinely new evaluation requires a new generation allocated under the TASK lock, not a timeout fallback. No new public reevaluation command is introduced here. |
 | Outbox delivery | TASKS owns one domain event identity derived from the dispatch reservation plus event kind; use the existing shared outbox unique-event contract. Delivery retries retain that identity and dispatch reference. |
 | Checker attempt | CHECKERS/04C owns one unique `(evaluation_request_id, phase)` attempt bound to 04A's exact envelope. TASK persists/delivers that same request identity; it does not define a new CHECKERS key here. Provider/member recovery identities derive from this attempt, never from a delivery timestamp. |
-| Routing manifest | TASKS owns one immutable manifest per `(submission_id, checker_run_id, final_result_hash)` and one current routing pointer per Submission. Replays reuse the manifest; replacement changes only the current pointer after CHECKERS currentness and locked-lineage validation in the caller transaction. |
+| Routing manifest | TASKS owns one immutable manifest per `(submission_id, checker_run_id, final_result_hash)` and one current routing pointer per Submission. It stamps the locked `human_review_required` value: true is human admission; false/pass is the shared acceptance source, not a second manifest type. Replays reuse it; only nonterminal work may replace the current pointer after CHECKERS currentness and locked-lineage validation. |
 
 Use one lock order: TASK Submission/current routing pointer, then CHECKERS
 currentness fence through its public caller-session participant. A new
@@ -120,6 +142,11 @@ notification alone is not the routing result. Unique
 conflict losers roll back the failed statement/savepoint, lock/read the winning
 row and compare its envelope; an exact match reuses it, otherwise deny. Never
 publish a message before commit or duplicate the CHECKERS attempt in TASKS.
+That transition is the true branch only. On false/pass, the same transaction
+stages the manifest and shared acceptance effects instead of `review_pending`.
+After acceptance, new evaluation generations or remediation must deny rather
+than invalidating accepted history. The races below apply to nonterminal work;
+acceptance-versus-supersession obeys the shared acceptance contract.
 Final routing locks the Submission/current pointer and consumes CHECKERS public
 current-result facts under the same transaction/serialization contract, so a
 concurrent supersession cannot publish an obsolete result as current. If
@@ -173,8 +200,11 @@ Required reviews: architecture, authorization security, product/ops, QA,
 senior, reuse, CI, docs and test delta. Human focus: whether this exact merged
 manifest is sufficient to let REV-05A begin.
 
-Final checker outcomes other than `allow_review` remain hidden and fail closed
-for routing in 04E. Before public 02I, a separate executable child must install
+The checker success recommendation `allow_review` remains evidence, not a
+permission or instruction to enqueue a human. Only the locked true branch
+publishes human admission; false consumes that successful evidence through the
+shared operation. Other checker outcomes fail closed for success routing.
+Before public 02I or enabling false, ARCH-04F must install
 contributor-readable checker-remediation lineage for final needs-revision
 checker results without creating Review, ReviewFinding, or
 RevisionContextPreparation records.

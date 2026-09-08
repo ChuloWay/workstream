@@ -315,8 +315,9 @@ record. `needs_revision`, `reject`, and automated checker outcomes create no
 FinalAcceptance or submitter contribution by themselves. On the planned false
 branch, an authorized automated decision creates FinalAcceptance and the
 submitter contribution through the shared atomic participant, never a reviewer
-contribution. This requires reconciled source and authority contracts before
-activation; it is not a checker-owned write or a fabricated human Review.
+contribution. The [shared acceptance contract](spec_review_lifecycle.md#finalacceptance)
+defines both triggers and their source/authority constraints. Runtime proof is
+required before activation; it is not a checker-owned write or fabricated Review.
 
 Contribution records are separate from compensation status. Each record freezes
 its exact review, submission, actor, policy, and artifact-hash lineage.

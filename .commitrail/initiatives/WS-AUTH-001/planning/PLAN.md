@@ -67,3 +67,17 @@ Both boundaries require focused architecture/security/QA review and affected
 CI/docs review. Human focus: a dispatcher can deliver a request but cannot
 authorize its product effect. These current contracts replace no product
 owner and create no new planning-permission gate.
+
+## TASK post-submit acceptance custody
+
+ARCH-04E2 owns the proposed `task.post_submit.route` contract for the fixed
+`workstream.task.post_submit_router`. Its false/pass consequence reuses the
+[shared acceptance sequence](../../../../docs/spec_review_lifecycle.md#finalacceptance),
+not a new FinalAcceptance or CON materialization action. The typed resource
+binds the exact committed claim, immutable Submission, current checker
+run/generation/result and outputs, locked false ReviewPolicy, assignment and
+contribution-policy lineage, and intended derived effects. Consume fresh
+transaction-bound authority; checker/dispatcher allows cannot substitute.
+True permits human admission only. Activation of the false consequence waits
+for the hidden REV/CON/TASK atomicity and terminal-currentness proofs; the
+service never receives human `review.decision` or generic contribution access.

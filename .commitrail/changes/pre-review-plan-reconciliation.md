@@ -57,8 +57,9 @@ implementation scope is recorded in the follow-through section below.
 The human clarified that v0.1 must support projects requiring human review and
 projects permitting automated acceptance. This extends the earlier planning
 boundary: reconcile downstream acceptance/revision/CON contracts, but do not
-implement those subsystems in this change. The planning audit is not complete
-for this amendment until those consumers are reconciled and reviewed.
+implement those subsystems in this change. The subsequent
+[shared acceptance reconciliation](shared-final-acceptance-plan.md) makes the
+two-trigger owner contract explicit in the canonical specifications.
 
 Use one boolean in the existing guide-bound ReviewPolicy:
 `human_review_required`, default `true`. Do not add an `acceptance_mode` enum,
@@ -77,11 +78,11 @@ do not add its switch or execution path in this work.
   approved acceptance conditions that supported post-submit capabilities can
   establish. An unresolved human-review requirement prevents automated-mode
   activation; capability gaps cannot be acknowledged away.
-- REV owns the shared FinalAcceptance lifecycle and an explicit automated
-  decision participant; TASK owns routing and task transitions, AUTH the exact
+- REV owns the shared FinalAcceptance participant for both triggers;
+  TASK owns routing and task transitions, AUTH the exact
   service authority, ART output custody, and CON contribution effects.
 - The human branch continues through canonical `allow_review`, ReviewLease and
-  Review. The automated branch must consume a separately specified TASK handoff
+  Review. The false branch consumes the existing TASK routing manifest
   bound to the same immutable submission/current checker evidence, never
   reinterpret `allow_review` or insert a synthetic human Review/ReviewLease.
 - Both branches use one atomic final-acceptance/submitter-ContributionRecord/
@@ -95,15 +96,12 @@ do not add its switch or execution path in this work.
   Both reference the exact attempt; automated acceptance must retain the same
   inspectable evidence that a human reviewer would need.
 
-Required follow-through before automated-acceptance runtime implementation
-(not before the policy-setting change below): reconcile FinalAcceptance source
-shape and database constraints, CON source validation and compensation terms,
-TASK branch/currentness/replay, AUTH action custody, guide activation and policy
-schema/hash lineage, and revision limits/recovery. Specify tests for stale or
-mixed evidence, cross-project denial, duplicate completion, mode substitution,
-unsupported human requirements, absent required outputs, and atomic rollback.
-The existing human-only contracts remain implementation authority until their
-explicit replacement is reconciled; this amendment does not activate a bypass.
+The [canonical shared acceptance contract](../../docs/spec_review_lifecycle.md#finalacceptance)
+now defines source shape/constraints, caller transaction ownership, authority,
+dependency direction and required negative proofs. Implement those foundations
+through existing REV/CON work, then consume them in ARCH-04E. False remains
+unavailable until that runtime proof and exact AUTH/PROJECTS integration land.
+No new acceptance architecture or planning-only approval cycle is required.
 
 <a id="product-builder-handoff-implement-the-setting-next"></a>
 
@@ -154,7 +152,7 @@ Acceptance criteria for that change:
 
 Then extend the existing TASK post-check routing and REV/CON final-acceptance
 work, not a parallel lifecycle: current successful evidence plus locked `true`
-admits human review; locked `false` invokes the separately authorized shared
+admits human review; locked `false` invokes the same shared
 acceptance participant. Its implementation must prove source exclusivity,
 atomic task/acceptance/contribution/conditional-award effects, replay safety,
 and no reviewer record. Live `false` activation follows that proof, without
