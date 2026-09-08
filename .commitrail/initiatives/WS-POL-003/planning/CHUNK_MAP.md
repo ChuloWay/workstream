@@ -29,7 +29,13 @@ post-task requirement. Historical split parents 05/06 are not extra PRs.
 | `WS-POL-003-06B` | Live deterministic post-submit projection/approval cutover with zero additional inference. | 06A + AUTH-12G |
 | `WS-POL-003-07` | One typed facade over existing ART pre and CHECKER post contracts; no post-result persistence. | 06B + ARCH-04A registered capability proof + merged ART-04B1-04B3 |
 | `WS-AUTH-001-12H` | Activate guide publication only over the complete approved current-generation unified chain. CP08, WS-ARCH-001-03A/03B/03C, and CP09 remain downstream. | POL-07 + corrected AUTH-12B2 + CP05 active ContributionPolicy behavior + CP06 validation + CP07 ProjectGuide binding |
-| `WS-POL-003-08` | Supplementary visibility and physical legacy cleanup; essential review/correction already belongs to 05A/05B and 06A/06B. | Planned after 07 + AUTH-12H + canonical WS-ARCH-001-04E manifest; not a prerequisite for 03A |
+| `WS-POL-003-08` | Supplementary visibility and physical legacy cleanup; essential review/correction already belongs to 05A/05B and 06A/06B. | Planned after 07 + AUTH-12H + canonical WS-ARCH-001-04E manifest; physical cleanup additionally requires CP09's retained-history inventory, mapping and readability/recoverability proof for affected setup values and operation/evidence facts; not a prerequisite for 03A |
+
+The 04E manifest proves canonical routing, not legacy-history preservation.
+POL-08 must reuse CP09's preservation proof for the data it removes before
+physical cleanup. This is not a dependency on completing unrelated CP09
+deletions; retained history must remain readable/recoverable and must never be
+guessed or silently discarded.
 
 ## Merged ART admission foundation
 

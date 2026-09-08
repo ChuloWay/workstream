@@ -1076,8 +1076,9 @@ not a prerequisite for CON-02C, CON-03A, or CON-03B.
 Cross-initiative interleaving is mandatory:
 
 ```text
-CON-05A guide-activation validation/persistence contract
-  -> PROJECT guide binding -> TASK readiness lock -> assignment inheritance
+CP06 exact ContributionPolicy activation validation
+  -> CP07 hidden PROJECT guide binding -> AUTH-12H exact activation
+  -> ARCH-03B/03C TASK readiness lock and assignment inheritance
 
 CON-03B ContributionPolicyVersion persistence
   -> REV-03 ReviewLease foreign key
