@@ -1,7 +1,7 @@
 # Chunk Contract: WS-AUTH-001-12B2 - Exact Setup Finalization Authority
 
 - Initiative: `WS-AUTH-001`
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Authorize exact hidden setup finalization and make POL-04B the next usable boundary.
 
 ## Intent
@@ -43,7 +43,8 @@ remains outside this chunk: POL-04B owns the later live one-call cutover.
 - `backend/tests/authorization/setup_finalization/` (new bounded proof modules),
   `backend/tests/projects/guide_compilation/finalization/` (locator updates and
   real-adapter PostgreSQL integration), existing exact authorization catalogue
-  assertions and architecture tests affected by the new action availability.
+  assertions, `backend/tests/test_audit.py` exact allowed-action inventory, and
+  architecture tests affected by the new action availability.
 - `backend/scripts/test_lane_catalogue.py`, `backend/tests/test_ci_lane_catalogue.py`,
   `.github/workflows/backend.yml`, and affected exact ownership/boundary records
   only for additive registration and coverage enforcement. Register the four new
@@ -140,12 +141,12 @@ PostgreSQL modules live in `backend/tests/projects/guide_compilation/finalizatio
 | `test_prepared.py::test_handle_lifetime_is_bound` | Consume then consume/replay; replay then consume/replay; closed context; different session/root; nested, committed, rolled-back, inactive/replaced transaction; pure service, backed by PG cases below |
 | `test_adapter.py::test_prepared_finalization_is_process_local` | Copy, deepcopy, pickle and arbitrary handle replacement deny; pure contract |
 | `test_adapter.py::test_prepare_consume_and_close_fail_closed` | Prepare/consume/evidence/exit exceptions keep public denial mapping and close once; caller exceptions are not remapped; pure service |
-| `test_replay.py::test_historical_decision_envelope_is_exact` | Missing/wrong decision and one-at-a-time event domain/type/actor-ref/actor/action/permission/project/resource/request/correlation/denial-code/allow/digest substitutions; pure replay, not storage custody |
+| `test_replay.py::test_historical_decision_envelope_is_exact` and `test_replay_rejects_noncanonical_after_facts` | Missing/wrong decision and one-at-a-time event domain/type/actor-ref/actor/action/permission/project/resource/request/correlation/denial-code/allow/digest substitutions, extra keys and integer allow values; pure replay, not storage custody |
 | `test_authorization_postgresql.py::test_concrete_finalization_is_atomic` | guide_blocked, draft_ready, draft_ready_with_warnings; real compilation + AUTH12J projections + concrete adapter + receipt + exact audit row in caller transaction |
 | `test_authorization_postgresql.py::test_concrete_replay_is_exact` | Unchanged receipt/result and event counts with current valid authority; real PostgreSQL |
 | `test_authorization_postgresql.py::test_revoked_service_denies_new_and_replay` | Actor suspension/deactivation and link revocation through production lifecycle services; both new finalization and stored-receipt replay; valid non-revoked controls |
 | `test_authorization_postgresql.py::test_finalization_failure_rolls_back_all_effects` | Evidence insertion failure, invalid returned authority receipt, close failure and caller rollback; durable setup/receipt/allow-event comparisons with actual PG writes before failure where relevant |
-| `test_authorization_postgresql.py::test_stored_replay_decision_substitution_denied` | Stored foreign/mismatched decision reaches replay using rollback-only USER-trigger bypass with FK enforcement intact; missing history is exercised at the concrete AUTH adapter with real PostgreSQL lookup and fresh preparation, because the receipt FK prohibits a missing persisted reference |
+| `test_authorization_postgresql.py::test_stored_replay_decision_substitution_denied` | Stored foreign/mismatched decision reaches replay using rollback-only USER-trigger bypass with FK enforcement intact; `test_missing_history_denies_at_concrete_auth_boundary` exercises real PostgreSQL lookup and fresh preparation, because the receipt FK prohibits a missing persisted reference |
 | `test_authorization_concurrency_postgresql.py::test_finalization_and_revocation_serialize` | Actor and link lifecycle x revocation-first/finalization-first; distinct sessions/PIDs, named lock waiter and exact blocker, retained valid controls and cleanup of tasks |
 | `test_structure.py::test_finalization_authority_has_no_live_reachability` | Factory explicit, default denial retained, no HTTP/Celery/provider reference; syntax-aware structure with injected factory-import/call counterexample and default-service tests, not live execution proof |
 | Existing catalogue and hosted evidence tests | Exact new module registration, all canonical nodes complete once, aggregate and new-owner coverage floors unchanged |
@@ -177,7 +178,8 @@ Risk: L1 authorization and immutable audit custody.
 Use focused local tests and lint; hosted CI owns PostgreSQL, independent-session
 races, full-suite reconciliation and coverage because this workstation is
 resource constrained. New test modules stay below 500 lines with bounded helpers.
-Future implementation test paths above are planned and do not claim execution.
+The named tests describe implemented proof boundaries; exact execution results
+and target freshness belong in the PR.
 
 Before implementation, run architecture/security and QA/product plan review,
 including correlation feasibility, exact resource dispatch and fixture reachability.
@@ -203,10 +205,17 @@ exceeds 500 lines. Shared oversized owners shrink under the existing structural
 policy. The full 18-assertion catalogue map preserves all prior assertions;
 only the complete active-action assertion moves to a bounded domain test.
 
+Implementation review tightened historical replay to exactly two canonical
+after-facts keys, preserved Boolean identity, and corrected the PostgreSQL
+missing-history proof to respect the receipt foreign key. New AUTH owners have
+exact additive ownership registration and per-file coverage enforcement.
+
 Runtime checks and exact target/CI/reviewer results belong in the PR trust
 summary; the named test matrix above specifies required proof.
 
 ## Durable outcome
 
-Planned. On successful delivery, mark this boundary Complete and point to
-POL-04B as the next usable boundary. Do not start POL-04B automatically.
+Complete. Exact hidden setup finalization authority is available through the
+explicit adapter, including current-service lifecycle checks and exact receipt
+replay. POL-04B is the next usable boundary for live wiring. Its implementation
+requires a separate bounded change; it does not start automatically.

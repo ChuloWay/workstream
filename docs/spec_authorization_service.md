@@ -1184,9 +1184,14 @@ POL-04A2 provides the hidden finalization service and dependency-free AUTH
 contracts; its default authorization port remains unavailable. The
 `project_guide_setup_finalization` audit resource binds the immutable receipt
 to exact final facts, actor, identity link, project scope, and stored decision.
-AUTH-12B2 supplies the concrete current-service and prepared-capability adapter
-over this boundary and complete AUTH-12J projection authority, and precedes
-POL-04B live setup cutover. AUTH-12F4 and AUTH-12G are later approval and deterministic
+AUTH-12B2 supplies the explicit concrete adapter over this boundary. Only fixed
+`workstream.project.setup` may consume `project.setup_run.update` against the
+exact finalization resource; human, direct-kernel and legacy setup resources
+deny. Preparation binds actual actor/link, project, operation and correlation
+custody. Fresh replay rechecks current lifecycle authority and the exact stored
+allow envelope and digest, including a null denial code, without another allow
+event. POL retains transaction and immutable receipt ownership. The default
+port remains unavailable until POL-04B wires the live setup path. AUTH-12F4 and AUTH-12G are later approval and deterministic
 post-submit-policy gates; neither is a prerequisite for setup finalization.
 
 The 12F1 foundation binds each future submission-policy handle to the exact

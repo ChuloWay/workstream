@@ -8,10 +8,10 @@ for current product capability.
 |---|---|---|
 | [WS-ARCH-001](initiatives/WS-ARCH-001/OVERVIEW.md) | Planned | Prepare CP05 activation against current specifications |
 | [WS-ART-001](initiatives/WS-ART-001/OVERVIEW.md) | Planned | Exact post-submit materialization after guide/checker contracts |
-| [WS-AUTH-001](initiatives/WS-AUTH-001/OVERVIEW.md) | Planned | Implement 12B2 exact authority over hidden POL-04A2 finalization |
+| [WS-AUTH-001](initiatives/WS-AUTH-001/OVERVIEW.md) | Planned | POL-04B live cutover over complete exact finalization authority |
 | [WS-CON-001](initiatives/WS-CON-001/OVERVIEW.md) | Planned | Prepare CP05, then guide-activation validation and persistence |
 | [WS-AUTH-003](initiatives/WS-AUTH-003/OVERVIEW.md) | Planned | Repair touched capabilities through `authorization.api` |
-| [WS-POL-003](initiatives/WS-POL-003/OVERVIEW.md) | Planned | Activate exact AUTH-12B2 finalization authority before POL-04B live cutover |
+| [WS-POL-003](initiatives/WS-POL-003/OVERVIEW.md) | Planned | POL-04B live cutover over complete exact AUTH-12B2 finalization authority |
 | [WS-REV-001](initiatives/WS-REV-001/OVERVIEW.md) | Planned | Continue dependency-gated hidden review behavior |
 | [WS-QUAL-002](initiatives/WS-QUAL-002/OVERVIEW.md) | Planned | Populate subsystem ownership before changed-line mutation work |
 | [WS-QUAL-003](initiatives/WS-QUAL-003/OVERVIEW.md) | Planned | Audit and prune test proof, add missing safety cases, decompose oversized test modules |

@@ -108,7 +108,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls | Final end-to-end operational and conformance proof |
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
 | Project Guide source custody | **Live foundation** | Project Manager ingestion; immutable snapshots; verified binding and reads; PDF, DOCX, PPTX, XLSX and image handling; bounded extraction | Complete the unified-generation cutover and later remove remaining legacy inference paths |
-| Unified Project Guide compilation | **Hidden and proven** | One immutable model attempt; persisted complete result; crash/recovery custody; deterministic sufficiency and submission-artifact-policy projections; immutable atomic setup finalization; exact AUTH request/execute/projection adapters | Activate finalization authority, cut live execution over, add approval and deterministic post-submit projection, expose one checker-service port |
+| Unified Project Guide compilation | **Hidden and proven** | One immutable model attempt; persisted complete result; crash/recovery custody; deterministic sufficiency and submission-artifact-policy projections; immutable atomic setup finalization; exact AUTH request/execute/projection/finalization adapters | Cut live execution over, add approval and deterministic post-submit projection, expose one checker-service port |
 | Contribution policy administration | **Hidden and proven** | Finance Authority adapter-binding lifecycle; ContributionPolicy read/create/update/publish/retire behavior; immutable operation and event history | Activate the five policy actions, expose validation, bind one published complete version to the active guide generation |
 | Task readiness and claim | **Foundation plus planned replacement** | Task records, lifecycle guards, assignments, locked work context, public owner facts | A task must inherit the guide-bound ContributionPolicyVersion before `READY`; claim copies the prepared task context into TaskAssignment without a current-policy lookup; activate exact task authority |
 | Contributor artifact preparation | **Hidden and proven** | One outer ZIP; bounded scratch inspection; canonical manifest; platform and project prechecks; unchanged-work rejection; durable put intent; verification; capacity-charged ready admission | Connect only the active unified guide/checker lineage and complete the later public admission-only cutover |
@@ -187,8 +187,9 @@ Only open pull requests describe transient work. Use the repository's
 [open pull-request view](https://github.com/Flow-Research/workstream/pulls) to
 see whether any item below is already under review.
 
-Hidden unified-guide setup finalization is complete. The next product boundary
-is AUTH-12B2, which activates its exact authorization gate. That work can
+Hidden unified-guide setup finalization and its exact authorization gate are
+complete. The next product boundary is POL-04B, which connects the unified
+compilation and finalization path to live setup execution. That work can
 proceed alongside the ongoing AUTH test-proof audit and decomposition, without
 waiting for completion of the full quality audit.
 The sequence below describes product dependencies; production activation still
@@ -196,9 +197,9 @@ requires its exact owner-proven prerequisites.
 
 The next dependency-safe product sequence is:
 
-1. **Connect the unified-guide generation.** Activate the exact AUTH gate for
-   hidden atomic setup finalization, followed by the live unified
-   compilation cutover. This completes one stored setup result without
+1. **Connect the unified-guide generation.** Cut live execution over to the
+   complete unified compilation, projection, and authorized atomic finalization
+   path. This completes one stored setup result without
    reviving the three legacy inference calls.
 2. **Complete guide policy approval.** Project Manager approval consumes the
    already-produced unified result; it does not run another agent. Persist the
@@ -335,7 +336,7 @@ reader does not need internal engineering records to understand the roadmap
 above. The main
 remaining trace sequence is:
 
-- Unified guide: `AUTH-12B2 -> POL-04B -> POL-05A -> AUTH-12F4
+- Unified guide: `POL-04B -> POL-05A -> AUTH-12F4
   -> POL-05B -> POL-06A -> AUTH-12G -> POL-06B -> POL-07 -> AUTH-12H`.
 - Contribution lineage: `CP05 -> CP06 -> CP07 -> CP08 -> ARCH-03A -> ARCH-03B
   -> ARCH-03C -> CP09`.
