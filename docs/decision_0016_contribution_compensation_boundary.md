@@ -138,7 +138,10 @@ All CON routes remain hidden until their behavior, exact AUTH activation, and
 joint release proof pass.
 The false acceptance milestone proves its exact TASK/shared-acceptance manifest
 using that same controller and fence. It exposes no human review or CON
-fulfillment/read endpoint and does not wait for those later surfaces. Shared
+fulfillment/read endpoint and does not wait for those later surfaces. The
+existing Operator lifecycle-control command receives scoped same-action
+activation with real writer/observation/drain proof before admitting work;
+it is shared infrastructure, not a reviewer or CON product endpoint. Shared
 fence persistence/ordinal participation is pulled forward; later REV release
 work extends the same mechanism rather than introducing a competing gate.
 

@@ -52,7 +52,7 @@ Task
       ReviewFinding
       ReviewEvidenceArtifact
       FindingResolution
-      FinalAcceptance (accept only)
+    FinalAcceptance (one accepting Review or authorized TASK routing source)
     RevisionContextPreparation
     SubmissionFindingResponse
   ContributionRecord
@@ -2222,15 +2222,16 @@ them, together with their closed primary-entity pairing and contract tests.
   registered scoped permission and cannot bypass missing task policy context
 - a submission must belong to a task
 - a review must belong to a submission
-- an accepted task must have exactly one FinalAcceptance linked to its accepting
-  Review and versioned Submission
+- an accepted task must have exactly one FinalAcceptance linked to its versioned
+  Submission and exactly one accepting source: human accept Review or authorized
+  locked-false TASK routing manifest
 - every valid recorded human review must create one reviewer `completed_review`
   contribution
 - an accepted task must additionally create one submitter
   `accepted_submission` contribution sourced from FinalAcceptance
 - `needs_revision` and `reject` must not create FinalAcceptance or a submitter
   contribution
-- FinalAcceptance is unique per task, source Review, and Submission and has no
+- FinalAcceptance is unique per task, Submission and each non-null source and has no
   independent creation API/action
 - v0.1 has no adjudication state/action/queue/lease/decision/contribution or
   readiness dependency

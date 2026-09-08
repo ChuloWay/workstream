@@ -530,7 +530,11 @@ lock TASK Submission/current routing state before the CHECKERS currentness
 fence using existing ARCH-04E order. Revalidate the exact locked guide,
 ReviewPolicy, contribution-policy/assignment lineage, complete successful
 required-check evidence and all required output bindings before staging
-acceptance. Never read the project's newest policy to choose the branch.
+acceptance. For false, the exact approved requirement inventory must contain
+zero applicable `human_review` dispositions, both at guide activation and
+again at acceptance. Such a disposition is not a failed executable check and
+cannot be silently relabeled `supported_post_submit` or ignored because all
+executable checks passed. Never read the project's newest policy to choose the branch.
 After acceptance, reject a new evaluation generation, resubmission or policy
 rebase for that task. Racing acceptance, supersession and retries serialize:
 an earlier supersession rejects old evidence; an earlier acceptance prevents
@@ -554,8 +558,10 @@ Extract foundations from existing owner work, not a new initiative:
    They depend on owner persistence, not human queues/decisions/drain projections.
    Later operator/drain work extends these same rows and ports; no second fence.
 4. The shared operation consumes those foundations. ARCH-04E1B's hidden routing
-   handler then invokes it, ARCH-04E2 activates the exact proven AUTH manifest, and
-   ARCH-04E3 proves live composition. PROJECTS enables false only after that
+   handler then invokes it. The existing lifecycle-control command receives
+   scoped AUTH activation for the proven shared manifest as specified below;
+   ARCH-04E2 activates routing and ARCH-04E3 proves live composition.
+   PROJECTS enables false only after that
    proof and ARCH-04F's usable checker-remediation path.
 
 These are dependency slices of existing work, expanded into bounded records
@@ -568,18 +574,19 @@ Future implementation tests (not executed by this planning change):
 
 | Owner / future test | Required discriminating proof |
 |---|---|
-| REV `test_final_acceptance_source_constraints` | Direct SQL rejects both/neither source, unknown discriminator, wrong project/policy, non-accept Review and true-policy checker source; valid sources persist |
-| TASK `test_post_submit_false_uses_shared_acceptance` | Real composition with true/false locked controls, same FinalAcceptance/CON participant, and no Review/lease/reviewer contribution on false |
+| REV `test_final_acceptance_source_constraints` | Direct SQL rejects both/neither source, unknown discriminator, wrong project/policy, non-accept Review and true-policy checker source; rejects reviewer/recorded_by mismatch, manifest service/AUTH-event mismatch, wrong submitter vs Submission/Assignment, and crossed same-project/policy manifest; valid sources persist |
+| TASK `test_post_submit_false_uses_shared_acceptance` | Real composition with true/false locked controls, same FinalAcceptance/CON participant, and no Review/lease/reviewer contribution on false; passing checks plus an approved human_review disposition denies with zero effects |
 | TASK `test_acceptance_races_supersession_and_redelivery` | Independent sessions in both orders; one terminal acceptance and no stale run, duplicate award or invalidated accepted history |
 | AUTH `test_post_submit_route_acceptance_custody` | Wrong service/action/resource, unavailable authority, copied event and wrong transaction deny before product effects |
+| REV/AUTH `test_shared_acceptance_lifecycle_activation_and_drain` | Same registered Operator command establishes a generation through legal adjacent transitions; real enabled-writer observations, cutoff races, restart and safe stop; fabricated zero observations, unlisted writer or human-surface exposure denies |
 | CON `test_shared_acceptance_atomic_rollback` | Fail after staged task/acceptance/contribution/award/audit/outbox writes; every row/effect rolls back in both branches; valid control commits once |
-| PROJECTS `test_false_activation_requires_supported_acceptance` | Unsupported human requirement, missing required output contract or unavailable shared composition blocks activation; supported complete configuration activates only after runtime proof |
+| PROJECTS `test_false_activation_requires_supported_acceptance` | An approved human_review requirement disposition, missing required output contract or unavailable shared composition blocks activation; no silent reclassification; supported complete configuration activates only after runtime proof |
 
 Proposed test homes are `backend/tests/test_shared_final_acceptance.py` (REV),
 `backend/tests/test_task_post_submit_routing.py` (TASK),
 `backend/tests/authorization/test_post_submit_route.py` (AUTH),
 `backend/tests/contributions/test_shared_acceptance.py` (CON), and the existing
-project activation test module for PROJECTS. Run each through
+`backend/tests/projects/test_activation_readiness.py` for PROJECTS. Run each through
 `cd backend && uv run pytest <test-file> -k <test-name>` with real PostgreSQL;
 the full unchanged hosted suite/coverage remains required for implementation.
 These are future files/tests. Implementation records resolve exact paths
@@ -952,6 +959,32 @@ later REV-12A operator/drain integration reuses it. Both acceptance callers
 require a valid authorized lifecycle generation; no bootstrap bypass or second
 availability flag is introduced.
 
+### Scoped activation before human-review runtime
+
+The existing registered Operator action `review.lifecycle.activation.manage`
+and its `ReviewLifecycleActivationContract` establish the first usable
+generation through the same legal adjacent transitions. Pull the corresponding
+REV-12A transition/recovery slice and AUTH XINT-003-08B activation forward after
+hidden shared-acceptance proof, rather than waiting for human review endpoints.
+The resource still binds singleton, expected generation, phases, operation,
+reviewed manifest and observation digests, deadline and reason. No SQL bootstrap,
+new action, permissive default generation or second availability flag is allowed.
+
+This scoped manifest covers every enabled TASK admission/routing and shared
+acceptance/CON obligation writer, including legacy-reachability removal. Its
+real observation ports, ordinal fencing, crash recovery and safe drain/stop
+proof must pass before it can admit work. Unlisted writers, fabricated zero
+counts and unsupported transitions deny. Human queues/leases/decisions and
+unreleased CON product/fulfillment surfaces must be proven unreachable; their
+absence is a checked fact, not a fake observation adapter. Required shared
+storage/history observations still run even when a surface is unavailable.
+
+The same authorized Operator command is exposed as shared infrastructure for
+this bounded manifest, not as a reviewer endpoint. Later human/fulfillment
+release adds its observation/custody proofs and a successor manifest/evaluator
+under the same controller and action. This is product deployment control,
+not a new contributor approval step or permission to activate human review.
+
 Activation and shutdown are generation-bound and crash resumable. Shutdown
 fences new admission, drains admitted commands and leases, captures the
 immutable fulfillment-obligation cutoff after prior writers drain, permits only
@@ -960,9 +993,10 @@ phase unchanged for forward retry. No background job replays human Operator
 authority or advances a phase. Reactivation requires a newly reviewed manifest.
 
 This controller is product release state, not AUTH action availability. The
-12A1 through 12A4 implementation exposes no public route; AUTH activates the
-exact management action only after all four hidden manifests merge, and REV-13C
-exposes and drills it.
+full human 12A1 through 12A4 implementation expands the shared foundation;
+its full management/drain manifest is activated and drilled by REV-13C only
+after all required hidden behavior merges. It does not revoke the earlier
+bounded shared-infrastructure activation or silently widen that manifest.
 
 ## Error, Concurrency, And Idempotency Rules
 

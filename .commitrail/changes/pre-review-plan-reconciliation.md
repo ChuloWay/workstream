@@ -1,17 +1,21 @@
-# Reconcile delivery plans through allow_review
+# Reconcile pre-review delivery and shared acceptance
 
 - Initiative: None
-- Durable disposition: Planned
-- Intended merge outcome: Existing owner plans describe one acyclic, non-overlapping path from unified guide setup through canonical `allow_review`.
+- Durable disposition: Complete
+- Intended merge outcome: Existing owner plans describe an acyclic path through human admission or shared acceptance, with inspect-and-reuse-first guidance; shared acceptance runtime remains planned.
 
 ## Intent
 
-Finish the planning reconciliation before further product implementation.
+This record preserves the original planning reconciliation and delivered policy
+setting. The current follow-through finalizes the shared acceptance plan and
+AGENTS.md guidance; it does not pause ongoing CP05 or implement product code.
 Keep pre-submission intake separate from post-submission work evaluation;
 preserve platform defaults plus project-specific policy composition. Do not
 restart completed work or add another contribution-permission system.
 
 ## Current behavior
+
+Original pre-review discovery, retained as context for the corrected plan:
 
 AUTH-12B2 is complete in PR #384. Its explicit adapter authorizes hidden
 finalization; live setup composition remains POL-04B. Existing pending plans
@@ -52,13 +56,47 @@ implementation scope is recorded in the follow-through section below.
 
 ## Design and decisions
 
+### Shared final acceptance reconciliation
+
+The current bounded follow-through updates AGENTS.md and existing acceptance,
+authorization, data-model, REV/CON/ARCH handoffs and roadmap/user-flow documents.
+No backend, migration, CI, archive or product-builder worktree change is allowed.
+Risk is L1 planning; focused architecture/security/reuse and product/docs review
+checks feasibility, not unimplemented runtime behavior.
+
+Use one REV-owned shared operation with injected public TASK/CON ports and one
+caller commit. Human accept or authorized locked-false required-check success
+creates the same FinalAcceptance and submitter contribution with applicable
+awards. Only actual human Reviews create reviewer contributions. Source
+provenance is not another acceptance entity, policy, permission or engine.
+The [canonical contract](../../docs/spec_review_lifecycle.md#finalacceptance)
+owns exact source constraints, authority, atomicity and implementation proofs.
+
+Acceptance criteria: both sources preserve locked lineage; false creates no
+Review/lease/reviewer effect; all task/acceptance/CON/audit/outbox effects commit
+together; early source schema and existing fence/control foundations remove
+human-runtime dependency cycles; current owner documents agree and archives
+remain unchanged. AGENTS.md requires inspection/reuse without a permission gate.
+
+Review repairs cover source-FK ordering, same-controller authorized activation,
+remaining human-only invariants, exact approved `human_review` requirement
+denial, shared CON caller custody, contributor flow and persisted attribution
+proof. Reject synthetic Reviews, duplicate engines/fences, eventual contribution
+repair and silent authority widening. Human focus: two triggers, one atomic
+outcome. Runtime remains unavailable until the specified implementation proofs.
+
+Verification: Markdown links, stale wording/review/authorization/artifact scans,
+Commitrail record validation, scoped diff and independent contract review.
+No local sheet exports are present. Product implementation continues through
+existing owner boundaries; this planning completion claims no runtime tests.
+
 ### Accepted direction: project-controlled acceptance mode
 
 The human clarified that v0.1 must support projects requiring human review and
 projects permitting automated acceptance. This extends the earlier planning
 boundary: reconcile downstream acceptance/revision/CON contracts, but do not
 implement those subsystems in this change. The subsequent
-[shared acceptance reconciliation](shared-final-acceptance-plan.md) makes the
+[shared acceptance reconciliation](#shared-final-acceptance-reconciliation) makes the
 two-trigger owner contract explicit in the canonical specifications.
 
 Use one boolean in the existing guide-bound ReviewPolicy:

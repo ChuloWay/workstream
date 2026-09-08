@@ -64,7 +64,7 @@ This specification owns the target contracts for:
 - `ProjectCompensationAdapterBinding`;
 - submitter and reviewer policy-version freezing capabilities;
 - `ContributionRecord` and `CompensationAward`;
-- the mandatory flush-only REV-to-CON decision participant;
+- the mandatory flush-only CON participant used by human decision and shared acceptance;
 - generic transactional outbox and shared lifecycle audit participation;
 - outbound fulfillment, callbacks, immutable receipts, and rebuildable status;
 - contribution, award, and bounded operations reads;
@@ -500,11 +500,13 @@ not ordinary review-claim selection.
 ## Atomic Review-To-Contribution Transaction
 
 One mandatory `ContributionCompensationDecisionParticipant` exposes two
-ordered, operation-specific methods in REV's caller-owned session. A combined
+ordered, operation-specific methods in the initiating command's caller-owned
+session. Human decision composition uses the reviewer method; the shared
+acceptance operation uses the submitter method for either trigger. A combined
 request carrying nullable FinalAcceptance or both actors' source and policy
 facts is prohibited.
 
-Canonical order:
+Human decision order (false routing omits this reviewer operation):
 
 ```text
 AUTH locks and revalidates exact reviewer authority
@@ -604,7 +606,7 @@ stages zero to two awards, returns typed audit/outbox inputs, and flushes.
 ### Atomicity
 
 CON MUST NOT commit, call ART, perform provider I/O, or provide a no-op
-production participant. Any failure in either CON operation or later REV audit
+production participant. Any failure in either CON operation or later shared audit
 or outbox staging rolls back Review, FinalAcceptance when applicable, task and
 assignment effects, contributions, awards, authorization evidence, audit, and
 outbox rows.
@@ -616,8 +618,9 @@ no Review or reviewer operation; external delivery remains after commit.
 
 ## Artifact Lineage
 
-The core transaction makes zero ART capability calls. REV supplies the exact
-server-derived stabilized `Submission.artifact_hash`; CON copies it to the
+The core transaction makes zero ART capability calls. The shared acceptance
+operation (or human reviewer operation) supplies the exact server-derived
+stabilized `Submission.artifact_hash` from the initiating locked context; CON copies it to the
 ContributionRecord without loading bytes, rehashing, verifying, binding, or
 calling a provider.
 
@@ -1022,9 +1025,10 @@ The core dependency order is a partial order. Persistence and flush-only
 transaction participants do not wait for generic dispatch:
 
 The [shared acceptance order](spec_review_lifecycle.md#implementation-order-and-required-proof)
-governs the false branch: extract the existing REV-04B acceptance/source schema
-foundation, then CON-03C and CON-07 submitter participation, then ARCH-04E/AUTH
-routing composition and false guide activation. A stable Review FK target is
+governs the false branch: TASK ARCH-04E1A source schema/public facts precede
+REV-04B acceptance persistence, then CON-03C/07 plus the existing shared fence
+foundation, then the shared operation and ARCH-04E1B/AUTH routing composition.
+False guide activation follows joint proof. A stable Review FK target is
 not live ReviewLease/queue/decision behavior. The shared lifecycle/obligation
 fence is required for either trigger; human runtime and fulfillment endpoints
 are not prerequisites for accepting without a reviewer. The older interleaving
