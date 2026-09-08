@@ -8,9 +8,10 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
 
-from app.core.hashing import canonical_json_hash
-from app.modules.authorization.domain.guide_compilation import ProjectGuideCompilationExecuteResourceContext, ProjectGuideCompilationRequestResourceContext, persisted_result_digest
-from app.modules.authorization.domain.guide_compilation_projections import ProjectGuideProjectionResourceContext, projection_resource_digest
+from app.modules.authorization.domain.guide_compilation import ProjectGuideCompilationExecuteResourceContext, ProjectGuideCompilationRequestResourceContext
+from app.modules.authorization.domain.resource_digest import authorization_resource_digest as authorization_resource_digest
+from app.modules.authorization.domain.project_setup_finalization import ProjectSetupFinalizationResourceContext
+from app.modules.authorization.domain.guide_compilation_projections import ProjectGuideProjectionResourceContext
 from app.modules.authorization.domain.adapter_bindings import AdapterBindingMutationResourceContext, AdapterBindingReadResourceContext
 from app.modules.authorization.domain.project_create import ProjectCreateResourceContext
 from app.modules.actors.service_identities import ServiceIdentity
@@ -1030,7 +1031,7 @@ PROJECT_MUTATION_RESOURCE_BY_ACTION = MappingProxyType(
         ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE: (
             ProjectPostSubmitCheckerPolicyMutationResourceContext
         ),
-        ActionId.PROJECT_SETUP_RUN_UPDATE: ProjectSetupRunMutationResourceContext,
+        ActionId.PROJECT_SETUP_RUN_UPDATE: ProjectSetupFinalizationResourceContext,
         ActionId.PROJECT_GUIDE_ACTIVATE: ProjectGuideActivationResourceContext,
     }
 )
@@ -1487,6 +1488,7 @@ AuthorizationResourceContext = (
     | ProjectGuideCompilationRequestResourceContext
     | ProjectGuideCompilationExecuteResourceContext
     | ProjectGuideProjectionResourceContext
+    | ProjectSetupFinalizationResourceContext
     | ActorAuthorizationContextResourceContext
     | ActorProfileAdminReadResourceContext
     | ActorIdentityLinkAdminReadResourceContext
@@ -1517,14 +1519,6 @@ AuthorizationResourceContext = (
     | SubmissionBundlePreparationResourceContext
     | AdapterBindingReadResourceContext | AdapterBindingMutationResourceContext
 )
-
-
-def authorization_resource_digest(resource: AuthorizationResourceContext) -> str:
-    if isinstance(resource, ProjectGuideProjectionResourceContext):
-        return projection_resource_digest(resource)
-    if exact_digest := persisted_result_digest(resource):
-        return exact_digest
-    return canonical_json_hash({"resource_context": resource.model_dump(mode="json", exclude_none=True)})
 
 
 def authorization_resource_selector_id(resource_type: str, raw_id: str) -> UUID:
@@ -1586,6 +1580,8 @@ class AuthorizationDecision(BaseModel):
         "project_submission_artifact_policy_mutation",
         "project_guide_compilation_request",
         "project_guide_compilation_attempt",
+        "project_guide_setup_finalization",
+        "project_setup_run_mutation",
         "project_guide_sufficiency_projection",
         "project_submission_artifact_policy_projection",
         "actor_identity_link",

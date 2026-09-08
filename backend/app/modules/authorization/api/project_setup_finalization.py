@@ -35,10 +35,11 @@ class ProjectSetupFinalizationLocator:
 
     project_id: UUID
     operation_id: UUID
+    correlation_id: UUID
 
     def __post_init__(self) -> None:
         """Require parsed identities."""
-        if not isinstance(self.project_id, UUID) or not isinstance(self.operation_id, UUID):
+        if not all(isinstance(value, UUID) for value in (self.project_id, self.operation_id, self.correlation_id)):
             raise ValueError("finalization locator IDs must be UUIDs")
 
 

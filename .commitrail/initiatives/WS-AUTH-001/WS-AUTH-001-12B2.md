@@ -28,7 +28,14 @@ remains outside this chunk: POL-04B owns the later live one-call cutover.
   exact resource/preparation/replay rules).
 - `backend/app/modules/authorization/catalogue.py`, `runtime.py`, `kernel.py`,
   `prepared.py`, `domain/prepared_service.py`, and
-  `prepared_projection_replay.py` for narrow shared PREP integration.
+  `prepared_projection_replay.py` for narrow shared PREP integration. The frozen
+  structural-debt rule requires touched owners to shrink: extract canonical
+  resource digest dispatch to `domain/resource_digest.py`, project audit selectors
+  to `domain/audit_targets.py`, and setup preparation parsing to the existing replay
+  helper. Preserve the exact branches and retain all existing callers. Extract
+  the exact active catalogue assertion to the bounded new catalogue test and
+  record its complete old-to-new assertion map; reconcile only affected debt
+  entries in `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`.
 - `backend/app/adapters/auth/__init__.py` for the explicit composition-root factory.
 - `backend/app/modules/authorization/api/project_setup_finalization.py` and
   `backend/app/modules/projects/guide_compilation/finalization.py` only to
@@ -180,7 +187,21 @@ POL still owns product state and the future live cutover. The user owns merge.
 
 ## Evidence
 
-The test matrix above defines planned proof; no runtime execution is claimed.
+Plan review resolved private PREP custody binding, complete denial-free replay
+history, the exhaustive fact inventory, preserved projection action pairs and
+production lifecycle revocation proof. The resulting plan passed architecture,
+security, QA and product/operations feasibility review.
+
+The implementation is one cohesive finalization authorization boundary. Its
+size exceeds the L1 preference because exact fact, historical evidence,
+transaction, revocation and legacy-denial proofs accompany the adapter. Tests
+are parameterized and separated into bounded modules; no new test module
+exceeds 500 lines. Shared oversized owners shrink under the existing structural
+policy. The full 18-assertion catalogue map preserves all prior assertions;
+only the complete active-action assertion moves to a bounded domain test.
+
+Runtime checks and exact target/CI/reviewer results belong in the PR trust
+summary; the named test matrix above specifies required proof.
 
 ## Durable outcome
 

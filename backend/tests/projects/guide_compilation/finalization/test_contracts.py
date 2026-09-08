@@ -128,7 +128,7 @@ def test_component_hash_values_and_order_are_validated():
 
 def test_locator_accepts_only_parsed_ids():
     with pytest.raises(ValueError):
-        ProjectSetupFinalizationLocator(project_id="wrong", operation_id=uuid4())
+        ProjectSetupFinalizationLocator(project_id="wrong", operation_id=uuid4(), correlation_id=uuid4())
 
 
 @pytest.mark.parametrize("operation", [copy, deepcopy, pickle.dumps])

@@ -34,11 +34,11 @@ async def pending_receipt(session, values, command):
     view = await repo.lock_finalization(command, attempt)
     facts = compose_facts(view, require_source_shape(view))
     authority = DatabaseAuthorization(session, values)
-    _, operation, _ = setup_finalization_identity(
+    _, operation, correlation = setup_finalization_identity(
         command.setup_run_id, command.setup_generation, command.compilation_id
     )
     async with authority.prepare_setup_finalization(
-        ProjectSetupFinalizationLocator(project_id=command.project_id, operation_id=operation)
+        ProjectSetupFinalizationLocator(project_id=command.project_id, operation_id=operation, correlation_id=correlation)
     ) as handle:
         receipt = await handle.consume_new(facts)
     return new_row(facts, receipt), view.setup

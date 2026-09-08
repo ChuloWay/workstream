@@ -55,6 +55,8 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         == modules_by_lane["project_lifecycle_b"]
         == {
             "tests/projects/test_active_guide_repository.py",
+            "tests/projects/guide_compilation/finalization/test_authorization_concurrency_postgresql.py",
+            "tests/projects/guide_compilation/finalization/test_authorization_postgresql.py",
             "tests/projects/guide_compilation/finalization/test_concurrency_postgresql.py",
             "tests/projects/guide_compilation/finalization/test_contracts.py",
             "tests/projects/guide_compilation/finalization/test_guards_postgresql.py",
@@ -133,6 +135,14 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     shared_a = modules_by_lane[catalogue.PARTITIONED_SHARED_LANES[0]]
     shared_b = modules_by_lane[catalogue.PARTITIONED_SHARED_LANES[1]]
     assert shared_a == shared_b == set(catalogue.SHARED_FOUNDATION_MODULES)
+    assert {
+        "tests/authorization/setup_finalization/test_adapter.py",
+        "tests/authorization/setup_finalization/test_catalogue.py",
+        "tests/authorization/setup_finalization/test_prepared.py",
+        "tests/authorization/setup_finalization/test_replay.py",
+        "tests/authorization/setup_finalization/test_resource_context.py",
+        "tests/authorization/setup_finalization/test_structure.py",
+    }.issubset(shared_a)
     assert {
         "tests/test_alembic.py",
         "tests/test_database_reset.py",

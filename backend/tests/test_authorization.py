@@ -238,7 +238,6 @@ from app.modules.authorization.runtime import (
     ProjectReviewPolicyMutationResourceContext,
     ProjectRevisionPolicyMutationResourceContext,
     ProjectSetupServiceCustodyContext,
-    ProjectSetupRunMutationResourceContext,
     ProjectSubmissionArtifactPolicyMutationResourceContext,
     SubmissionPolicyCompilationContext,
     ProjectPolicyReadResourceContext,
@@ -2102,64 +2101,6 @@ def test_closed_permission_and_action_catalogue_is_exact_and_non_executable() ->
     assert set(ACTION_BY_ID) == ACTION_IDS
     assert {definition.owner for definition in ACTION_DEFINITIONS} == set(ActionOwner)
     assert {
-        definition.action_id
-        for definition in ACTION_DEFINITIONS
-        if definition.availability is ActionAvailability.ACTIVE
-    } == {
-        ActionId.ACTOR_PROFILE_READ_SELF,
-        ActionId.ACTOR_PROFILE_UPDATE_SELF,
-        ActionId.AUTHORIZATION_PERMISSION_CATALOGUE_READ,
-        ActionId.AUTHORIZATION_ADMIN_ROLE_DEFINITIONS_READ,
-        ActionId.ADMIN_ROLE_GRANT_LIST,
-        ActionId.ACTOR_ADMIN_ROLE_GRANT_HISTORY_READ,
-        ActionId.ADMIN_ROLE_GRANT_ISSUE,
-        ActionId.ADMIN_ROLE_GRANT_REVOKE,
-        ActionId.ADMIN_ROLE_GRANT_BOOTSTRAP,
-        ActionId.ACTOR_PROFILE_READ,
-        ActionId.ACTOR_IDENTITY_LINK_READ,
-        ActionId.ACTOR_SERVICE_PROVISION,
-        ActionId.ACTOR_PROFILE_SUSPEND,
-        ActionId.ACTOR_PROFILE_REACTIVATE,
-        ActionId.ACTOR_PROFILE_DEACTIVATE,
-        ActionId.ACTOR_IDENTITY_LINK_REVOKE,
-        ActionId.ACTOR_IDENTITY_LINK_REACTIVATE,
-        ActionId.PROJECT_CONTRIBUTOR_CANDIDATE_LIST,
-        ActionId.PROJECT_ROLE_GRANT_LIST,
-        ActionId.PROJECT_ROLE_GRANT_READ,
-        ActionId.PROJECT_ROLE_GRANT_ISSUE,
-        ActionId.PROJECT_ROLE_GRANT_REVOKE,
-        ActionId.PROJECT_CREATE,
-        ActionId.PROJECT_GUIDE_CREATE, ActionId.PROJECT_GUIDE_UPDATE,
-        ActionId.PROJECT_GUIDE_SOURCE_SNAPSHOT_CREATE,
-        ActionId.PROJECT_GUIDE_COMPILATION_REQUEST, ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
-        ActionId.PROJECT_REVIEW_POLICY_UPDATE,
-        ActionId.PROJECT_REVISION_POLICY_UPDATE,
-        ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_CREATE,
-        ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
-        ActionId.PROJECT_GUIDE_SUFFICIENCY_WARNINGS_ACKNOWLEDGE,
-        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_CREATE,
-        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE,
-        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_UPDATE,
-        ActionId.PROJECT_READ,
-        ActionId.ACTOR_AUTHORIZATION_CONTEXT_READ,
-        ActionId.PROJECT_SETUP_RUN_READ,
-        ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_LIST,
-        ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_READ,
-        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_LIST,
-        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_READ,
-        ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_SETUP_READ,
-        ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ,
-        ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ,
-        ActionId.PROJECT_ACTIVE_GUIDE_READ,
-        ActionId.ARTIFACT_GUIDE_SOURCE_INGEST,
-        ActionId.ARTIFACT_GUIDE_SOURCE_BINDING_CREATE, ActionId.ARTIFACT_GUIDE_SOURCE_READ,
-        ActionId.ARTIFACT_VERIFICATION_EXECUTE,
-        ActionId.ARTIFACT_PENDING_WORK_SCAN,
-        ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
-        ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE, ActionId.ARTIFACT_SUBMISSION_BUNDLE_PREPARE, ActionId.SUBMISSION_CREATE, ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE,
-        ActionId.COMPENSATION_ADAPTER_BINDING_READ, ActionId.COMPENSATION_ADAPTER_BINDING_CREATE, ActionId.COMPENSATION_ADAPTER_BINDING_SUSPEND, ActionId.COMPENSATION_ADAPTER_BINDING_RESUME,
-    }
-    assert {
         definition.action_id.value: (
             definition.permission_id.value,
             definition.owner.value,
@@ -2236,8 +2177,8 @@ def test_closed_permission_and_action_catalogue_is_exact_and_non_executable() ->
     assert all(not owner.value.startswith("WS-REV-") for owner in ActionOwner)
     availability_counts = Counter(definition.availability for definition in ACTION_DEFINITIONS)
     assert availability_counts == {
-        ActionAvailability.ACTIVE: 61,
-        ActionAvailability.PLANNED: 50,
+        ActionAvailability.ACTIVE: 62,
+        ActionAvailability.PLANNED: 49,
     }
     assert resolve_executable_action(ActionId.ACTOR_PROFILE_READ_SELF).permission_id is PermissionId.ACTOR_PROFILE_READ_SELF
     with pytest.raises(ValueError, match="not active"):
@@ -2482,18 +2423,9 @@ def test_project_mutation_resources_and_prepared_scopes_are_closed() -> None:
             (ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE, "derive"),
         )
     }
-    setup_resource = ProjectSetupRunMutationResourceContext(
-        resource_type="project_setup_run_mutation",
-        resource_id=setup_run_id,
-        scope_project_id=project_id,
-        guide_id=guide_id,
-        setup_run_id=setup_run_id,
-        setup_generation=1,
-        expected_step="guide_sufficiency",
-        task_id=uuid4(),
-        correlation_id=uuid4(),
-        stale_output_digest=DIGEST,
-    )
+    from app.modules.authorization.domain.project_setup_finalization import finalization_resource_context
+    from tests.authorization.setup_finalization.support import finalization_facts
+    setup_resource = finalization_resource_context(finalization_facts(project_id), uuid4(), uuid4())
     activation_resource = ProjectGuideActivationResourceContext(
         resource_type="project_guide_activation",
         resource_id=guide_id,
@@ -2753,7 +2685,7 @@ def test_fixed_service_action_matrix_and_activation_are_exact_and_immutable() ->
         ActionId.PROJECT_SETUP_RUN_UPDATE: (
             PermissionId.PROJECT_GUIDE_MANAGE,
             ActionOwner.AUTH_12B2,
-            ActionAvailability.PLANNED,
+            ActionAvailability.ACTIVE,
         ),
     }
 

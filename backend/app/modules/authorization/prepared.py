@@ -44,10 +44,9 @@ from app.modules.authorization.domain.prepared_adapter_bindings import (
 from app.modules.authorization.domain.prepared_service import project_setup_resource_matches
 from app.modules.authorization.domain.guide_compilation_projections import (
     ProjectGuideProjectionResourceContext,
-    projection_context_matches,
 )
 from app.modules.authorization.prepared_projection_replay import (
-    parse_projection_bindings,
+    parse_setup_bindings, setup_context_matches,
     validate_projection_replay,
 )
 from app.modules.authorization.runtime import (
@@ -211,6 +210,7 @@ class _PreparedAuthorizationBinding:
     adapter_binding_context: dict | None = None
     adapter_binding_resource_digest: str | None = None
     guide_projection_prepare_context: dict | None = None
+    setup_finalization_prepare_context: dict | None = None
 
 
 @dataclass(slots=True)
@@ -530,12 +530,7 @@ class PreparedAuthorizationService:
             final_resource_context,
         ):
             raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle")
-        if not (
-            projection_context_matches(
-                issuance.binding.guide_projection_prepare_context,
-                final_resource_context,
-            )
-        ):
+        if not setup_context_matches(issuance.binding, final_resource_context):
             raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle")
         self._issued[handle] = _CONSUMED
         return await self._authorization._require_prelocked(
@@ -662,7 +657,7 @@ class PreparedAuthorizationService:
         sufficiency: dict[str, object] = {}
         submission_policy_context = submission_policy_resource_digest = None
         exact_artifact_context, exact_artifact_resource_digest, submission_preparation_context, submission_preparation_resource_digest, submission_preparation_final_context, submission_preparation_final_digest = initialize_artifact_bindings()
-        projection_binding, compilation_binding = parse_projection_bindings(action_id, caller_input.request_value)
+        setup_bindings = parse_setup_bindings(action_id, caller_input, scope, self._context)
         if action_id is ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE:
             exact_artifact_context, exact_artifact_resource_digest = parse_materialization_binding(
                 dict(caller_input.request_value), PreparedAuthorizationHandleInvalid
@@ -720,7 +715,7 @@ class PreparedAuthorizationService:
                 )
             ):
                 raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle")
-        if not projection_binding and action_id in {
+        if not setup_bindings.get("guide_projection_prepare_context") and action_id in {
             ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_CREATE,
             ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE,
             ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_UPDATE,
@@ -766,7 +761,7 @@ class PreparedAuthorizationService:
                 raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle")
             submission_policy_context = resource.model_dump(mode="json")
             submission_policy_resource_digest = authorization_resource_digest(resource)
-        if not projection_binding and action_id in {
+        if not setup_bindings.get("guide_projection_prepare_context") and action_id in {
             ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_CREATE,
             ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
             ActionId.PROJECT_GUIDE_SUFFICIENCY_WARNINGS_ACKNOWLEDGE,
@@ -918,9 +913,8 @@ class PreparedAuthorizationService:
                     submission_preparation_final_digest,
                 )
             ),
-            **compilation_binding,
             **parse_prepared_adapter_binding(action_id, caller_input.request_value),
-            **projection_binding,
+            **setup_bindings,
         )
 
     @staticmethod

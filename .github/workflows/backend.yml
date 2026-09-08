@@ -548,6 +548,20 @@ jobs:
             coverage report --include="${source}" --precision=2 --fail-under=90
           done
 
+      - name: AUTH-12B2 finalization authority per-file coverage
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in \
+            app/modules/authorization/project_setup_finalization.py \
+            app/modules/authorization/domain/project_setup_finalization.py \
+            app/modules/authorization/domain/prepared_service.py \
+            app/modules/authorization/prepared_projection_replay.py
+          do
+            coverage report --include="${source}" --precision=2 --fail-under=90
+          done
+
       - name: POL-04A2 finalization branch coverage
         working-directory: backend
         run: |

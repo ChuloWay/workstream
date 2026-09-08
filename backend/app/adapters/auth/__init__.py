@@ -6,6 +6,7 @@ from app.adapters.auth.adapter_bindings import CompensationAdapterBindingAuthori
 from app.modules.authorization.adapter_binding_authorization import (
     AdapterBindingAuthorizationAdapter,
 )
+from app.modules.authorization.project_setup_finalization import SetupFinalizationAuthorization
 from app.modules.authorization.kernel import AuthorizationService
 from app.modules.authorization.prepared import PreparedAuthorizationService
 from app.modules.authorization.repository import AdminAuthorizationRepository
@@ -14,6 +15,11 @@ from app.modules.authorization.guide_compilation_projections import (
     ArtifactPolicyProjectionAuthorization,
     GuideSufficiencyProjectionAuthorization,
 )
+
+
+def setup_finalization_authorization(session: AsyncSession) -> SetupFinalizationAuthorization:
+    """Compose explicit hidden finalization authority in the caller session."""
+    return SetupFinalizationAuthorization(session)
 
 
 def guide_sufficiency_projection_authorization(
@@ -48,4 +54,5 @@ __all__ = (
     "compensation_adapter_binding_authorization",
     "artifact_policy_projection_authorization",
     "guide_sufficiency_projection_authorization",
+    "setup_finalization_authorization",
 )
