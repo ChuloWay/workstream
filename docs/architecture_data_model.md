@@ -1118,7 +1118,7 @@ The migration's boolean backfill default is removed afterward; API/ORM creation
 defaults true, and direct SQL must provide a non-null boolean. Downgrade refuses
 any v2 history, including true, because removing the format would lose meaning.
 
-The [implementation record](../.commitrail/changes/review-policy-human-review-required.md)
+The [implementation record](../.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
 binds the configuration proof. Automated routing and final acceptance remain
 separate work; existing attempts retain their exact locked policy versions.
 

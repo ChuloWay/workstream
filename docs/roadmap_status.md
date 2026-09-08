@@ -64,7 +64,7 @@ acceptance implementation begins.
 The setting is configurable through the existing authorized policy writer;
 creation defaults true and omitted replacements inherit the predecessor.
 Versioned hashing preserves old policy hashes and locks. False remains blocked
-by the current activation service. See the [implementation record](../.commitrail/changes/review-policy-human-review-required.md). Enabling false follows shared final-acceptance,
+by the current activation service. See the [implementation record](../.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation). Enabling false follows shared final-acceptance,
 CON and exact AUTH integration proof, not live human-review infrastructure.
 This allows an automated end-to-end milestone first; human review/revision
 still belongs to the complete v0.1 release. See the

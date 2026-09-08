@@ -45,7 +45,7 @@ The human branch below continues to use `allow_review`; it is not an automatic
 acceptance signal. This amendment must be reconciled before treating the
 remaining sequence as implementation-ready.
 
-The [versioned policy setting](../../changes/review-policy-human-review-required.md)
+The [versioned policy setting](../../changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
 is available for draft configuration. Extend shared acceptance persistence and
 the CON participant for both sources before enabling false. The automated branch must not depend on
 live human queues, ReviewLeases or decision endpoints. Human lifecycle work

@@ -34,7 +34,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 
 The existing guide-bound ReviewPolicy now persists and exposes strict
 `human_review_required`, default `true`, in its immutable semantics/hash.
-See the [delivered implementation](../../changes/review-policy-human-review-required.md)
+See the [delivered implementation](../../changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
 and preserved [bounded handoff](../../changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
 Configured `false` remains available in draft but cannot activate a guide until
 the authorized automated FinalAcceptance/CON path is proven and available.

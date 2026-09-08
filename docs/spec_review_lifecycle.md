@@ -63,7 +63,7 @@ enum, policy entity or adjudication setting is introduced. The contract below st
 human branch; it must not be used to imply that human review is universally
 required by the intended v0.1 product. The [current reconciliation record](../.commitrail/changes/pre-review-plan-reconciliation.md#accepted-direction-project-controlled-acceptance-mode)
 tracks the outstanding authority, lifecycle and contribution changes. The
-[policy setting](../.commitrail/changes/review-policy-human-review-required.md)
+[policy setting](../.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
 is persisted and versioned; false activation remains unavailable.
 Automated acceptance is not implemented or enabled by this note. In particular,
 `allow_review` retains its human-admission meaning, and a checker pass alone

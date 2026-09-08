@@ -59,7 +59,7 @@ The v0.1 project setting `human_review_required` defaults to `true` in the
 existing locked ReviewPolicy. After required post-submit checks pass, true
 requires human review; false uses an authorized automated FinalAcceptance and
 submitter ContributionRecord, with no reviewer contribution. This branch is
-not live yet: the [policy setting](.commitrail/changes/review-policy-human-review-required.md)
+not live yet: the [policy setting](.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
 is implemented for configuration; shared acceptance/CON integration remains
 pending. Adjudication is excluded.
 
