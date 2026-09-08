@@ -92,17 +92,21 @@ async def test_audit_resource_downgrade_preserves_retained_policy_evidence(
     else:
         async with db_session.get_session_factory()() as session:
             event = await session.scalar(select(AuditEvent).where(
-                AuditEvent.event_type == "SensitiveAuthorizationAllowed"
-            ).limit(1))
+                AuditEvent.event_type == "SensitiveAuthorizationAllowed",
+                AuditEvent.action_id == "admin_role_grant.issue",
+            ).order_by(AuditEvent.id).limit(1))
+        assert event is not None and event.resource_type != "contribution_policy"
         identity = await clone_decision(event, {
             "resource_type": "project" if retained_shape == "action_only" else "contribution_policy",
             "action_id": "contribution.policy.read" if retained_shape == "action_only" else "project.read",
             "permission_id": "compensation.policy.manage" if retained_shape == "action_only" else "project.read",
             "project_id": str(target.project),
+            "resource_id": str(target.project),
             "after_facts": {"allowed": True, "resource_context_digest": "sha256:" + "a" * 64},
         })
         async with db_session.get_session_factory()() as session:
             retained = await session.get(AuditEvent, identity)
+            assert retained.project_id == retained.resource_id == str(target.project)
             assert (retained.resource_type == "contribution_policy") is (retained_shape == "resource_only")
             assert retained.action_id.startswith("contribution.policy.") is (retained_shape == "action_only")
     before, constraint = await snapshot(target.project), await definition()
