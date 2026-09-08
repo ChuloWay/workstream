@@ -70,7 +70,7 @@ insert into review_policies (id,project_id,guide_version,policy_generation,polic
 review_preference_window_seconds,review_lease_duration_seconds,max_active_review_leases_per_reviewer,
 self_review_allowed,reject_policy,finding_evidence_requirement,requires_second_review,allowed_decisions,minimum_finding_fields,
 created_by_actor_profile_id,created_via_identity_link_id,created_by_admin_role_grant_id,creation_scope_type,creation_action_id,authorization_decision_event_id)
-select :id,p.id,:version,1,:digest,:status,3600,1800,1,false,'close_task','optional',false,cast(:decisions as json),'[]'::json,
+select :id,p.id,:version,1,:digest,:status,:preference_window,:lease_duration,1,false,'close_task','optional',false,cast(:decisions as json),'[]'::json,
 p.created_by_actor_profile_id,p.created_via_identity_link_id,p.created_by_admin_role_grant_id,'system','project.review_policy.update',p.authorization_decision_event_id
 from projects p where p.id=:project
 """),
@@ -80,6 +80,8 @@ from projects p where p.id=:project
                                 "version": version,
                                 "digest": digest,
                                 "status": status,
+                                "preference_window": values["review_preference_window_seconds"],
+                                "lease_duration": values["review_lease_duration_seconds"],
                                 "decisions": json.dumps(values["allowed_decisions"]),
                             },
                         )

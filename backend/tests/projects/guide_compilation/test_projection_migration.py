@@ -342,6 +342,7 @@ async def test_verified_reports_allow_same_snapshot_across_setup_generations(
         await engine.dispose()
 
 
+@pytest.mark.postgres_schema_contract
 def test_empty_projection_migration_downgrades_and_reupgrades(
     isolated_database_env: str,
     migration_lock,
