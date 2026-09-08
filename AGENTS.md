@@ -6,7 +6,7 @@ infrastructure for work performed by humans, AI agents, or both.
 ## Core Definition
 
 Workstream turns project-defined tasks, immutable submissions, policy-governed
-checks, and authorized review into trusted `ContributionRecord` facts. Those
+checks, and policy-governed acceptance into trusted `ContributionRecord` facts. Those
 facts establish who completed what, under which locked rules, using which exact
 artifact, and with what verified outcome. Applications and economic systems may
 consume the facts; they do not control Workstream lifecycle truth.
@@ -19,12 +19,23 @@ definition or ownership boundary of Workstream.
 - Keep wording consistent with `README.md`, `docs/glossary.md`, and `docs/architecture_lockdown.md`.
 - Keep pre-submission intake quality checks distinct from post-submission work
   evaluation. Intake failures prevent Submission creation; post-submit results
-  govern review eligibility, not acceptance. Do not describe all checking as
+  supply evidence for policy-governed routing, not checker-owned acceptance.
+  The locked ReviewPolicy requires human review by default; when false, passing
+  required checks invokes the same authorized final-acceptance operation used
+  by human `accept`. Never fabricate a Review or reviewer contribution.
+  Do not describe all checking as
   deterministic or confuse setup-agent policy proposals with runtime evaluators.
   Model-based judges require supported registered implementations; do not claim
   them live merely because setup uses an agent.
 - Use the simple engineering loop:
   `Intent -> Plan -> Bounded Change -> Tests -> Review -> PR -> Human Merge`.
+- Inspect existing owners, call paths, policies, contracts and tests before
+  designing a change. Prefer extending the existing operation over adding a
+  parallel subsystem. Different triggers for the same business outcome normally
+  share one operation and transaction, with explicit trigger provenance.
+  Add an abstraction, policy, state or workflow only for a concrete requirement
+  the existing design cannot safely meet; explain that gap in the change record.
+  Simplicity must preserve authorization, locked lineage and atomicity.
 - Keep the engineering loop separate from the Workstream product lifecycle. Workstream product review decisions remain `accept`, `needs_revision`, and `reject`; internal engineering reviewer findings are process evidence, not product decisions.
 - Codex-discoverable repository skills live under `.agents/skills/`.
 - Codex custom reviewer agents live under `.codex/agents/`.

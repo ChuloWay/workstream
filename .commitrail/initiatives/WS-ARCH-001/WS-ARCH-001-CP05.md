@@ -223,8 +223,11 @@ AUTH control/actor/link/grant, with no reverse AUTH dependency on CON.
 
 ## Reconciliation
 
-- Current-source reconciliation: main `dab12dcb`; CP04A/CP04B prerequisites are
-  merged, PR #386 setting is delivered, and there are no open overlapping PRs.
+- Current-source reconciliation: main `bf343992`, including PR #388 shared
+  acceptance contracts. CP05 completes policy authorization; CP06 validation
+  and CP07 guide binding remain. Preserve REV-04B -> CON-03C/CON-07 and the
+  shared REV-12A/CON fence dependencies; dispatcher and acceptance implementation
+  remain separate.
 - Next usable boundary: CP06 selected-version validation; ARCH-04A catalogue and
   evaluator conformance remains independent. Do not start either automatically.
 - Remaining risks: guide activation, automated acceptance and compensation effects

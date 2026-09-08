@@ -13,8 +13,9 @@ The detailed review flow below describes `human_review_required=true`, the
 default in the existing versioned ReviewPolicy setting. False is a separately
 planned post-check TASK handoff to authorized FinalAcceptance and CON, without
 human queues, leases, Reviews or reviewer contributions. Required checks and
-exact immutable evidence still apply. The [policy-setting handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next)
-does not claim that automated runtime/source contracts are already complete.
+exact immutable evidence still apply. The [shared acceptance contract](spec_review_lifecycle.md#finalacceptance)
+defines both triggers; runtime remains unavailable until its implementation
+and exact shared release proof land.
 
 The first user flows prove that Workstream can run real work from intake to acceptance. These flows come before any advanced routing or settlement.
 
@@ -213,6 +214,8 @@ Acceptance:
 
 ## Flow 7: Accepted Work, FinalAcceptance, And Submitter Contribution
 
+Both planned triggers invoke one shared acceptance operation. The human branch:
+
 1. Reviewer accepts task.
 2. The reviewer `completed_review` contribution created after the Review
    remains immutable.
@@ -224,6 +227,20 @@ Acceptance:
    frozen ContributionPolicyVersion are evaluated independently; explicit
    unpaid rules create no awards.
 7. External fulfillment runs after commit; reputation projection is deferred.
+
+When the Submission's locked ReviewPolicy has `human_review_required=false`,
+TASK instead validates current successful required checks, the exact immutable
+ZIP and output references, zero applicable approved `human_review` requirements
+and fresh routing authority. It invokes the same operation directly: Task
+`ACCEPTED`, assignment `completed`, FinalAcceptance, submitter contribution,
+applicable submitter awards, audit and outbox commit together. It never enters
+`REVIEW_PENDING` or creates a Review, ReviewLease, reviewer contribution or
+reviewer award. Checker output remains evidence, not a human decision.
+
+Correctable checker failures follow ARCH-04F under the locked attempt context;
+infrastructure/setup uncertainty never accepts or invents a human revision.
+This false branch is planned, not currently enabled. Fulfillment remains
+post-commit for either trigger and cannot change accepted work.
 
 Acceptance:
 

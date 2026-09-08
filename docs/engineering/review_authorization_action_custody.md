@@ -113,7 +113,7 @@ actions remain reference-only external handoffs.
 | `review.revision_context.repair` | 02C unavailable registration plus merged REV-11B covered-project repair command |
 | `review.revision_obligation.close` | 02C unavailable registration plus merged REV-11B obligation-close command |
 | `review.revision_context.legacy_close` | 02C unavailable registration plus merged REV-11D legacy-close command |
-| `review.lifecycle.activation.manage` | 02C unavailable registration plus merged REV-12A4 lifecycle controller transition/recovery behavior |
+| `review.lifecycle.activation.manage` | Existing 02C/02D registration/resource; scoped shared-acceptance controller transition/recovery and real writer/drain proof for the early manifest; REV-12A4/13C later expand the same controller/action for human lifecycle |
 | `review.reconcile.run` | merged REV-11C invalidation and general reconciliation commands |
 | `review.artifact_reference.reconcile` | merged REV-12P2 artifact-reference command and typed ART repair port |
 | `review.projection.rebuild` | merged REV-12P2 derived-projection command |
@@ -121,3 +121,15 @@ actions remain reference-only external handoffs.
 | `artifact.review_evidence.binding.create` | future only; remains planned/unavailable in v0.1 |
 | `artifact.submission_bundle.prepare` | Future exact WS-ARCH-001-05 replacement after merged REV-09A1-09B human-revision preparation and replay behavior; required before 02I |
 | `submission.create` | Future exact WS-ARCH-001-05 replacement after merged REV-09A1-09B verified, consumable human-revision admission; required before 02I |
+
+### Shared acceptance controller slice
+
+The [scoped activation contract](../spec_review_lifecycle.md#scoped-activation-before-human-review-runtime)
+pulls the existing XINT-003-08B controller-action slice forward after the early
+REV-12A foundation and exact shared writer/observation manifest. It does not
+activate the other 08B actions or human review. Reuse the registered Operator
+permission and `ReviewLifecycleActivationContract`; prove exact generation,
+legal phase adjacency, manifest/observation binding, real cutoff races and
+safe stop before admitting work. Unsupported resources/transitions deny.
+Later REV-12A4/13C work extends the same action only after successor parity and
+activation evidence, not by handler-only widening or an extra controller.

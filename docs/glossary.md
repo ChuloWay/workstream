@@ -447,11 +447,13 @@ unique per task, source Review, and Submission and is the sole source of an
 `accepted_submission` ContributionRecord.
 
 The existing ReviewPolicy boolean `human_review_required`
-defaults true. False uses a separately authorized automated acceptance source,
-not a Review, ReviewLease, human actor or reviewer contribution. The exact
-source constraints and shared CON participant must be reconciled before that
-branch is enabled; checker success alone remains insufficient authority.
-See the [policy-setting handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
+defaults true. False invokes the same acceptance operation through authorized
+TASK routing after required checks pass, without a Review, ReviewLease or
+reviewer contribution. The [canonical shared contract](spec_review_lifecycle.md#finalacceptance)
+defines the exclusive Review/routing-manifest provenance and atomic CON effects.
+The source flag records which trigger was used, not a second acceptance system.
+False runtime activation remains unavailable until implementation proof lands;
+raw checker success is not authority.
 
 ## Human Owner
 

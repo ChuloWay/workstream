@@ -8,6 +8,18 @@ until the authorized automated FinalAcceptance/CON path is proven and
 available. Validate the exact guide-bound policy, never silently change it
 to true. True does not depend on automated acceptance. This is the same
 requirement as the existing activation path, not a second policy mechanism.
+For false, the exact approved requirement inventory must contain zero
+applicable `human_review` dispositions; passing executable checks cannot
+discharge or reclassify one. Readiness requires the available shared acceptance
+operation, ARCH-04D/04E service composition, usable ARCH-04F checker remediation
+and valid scoped controller
+generation described by the [canonical shared contract](../../../../../docs/spec_review_lifecycle.md#finalacceptance).
+Consume that complete false-readiness contract; this summary is not an
+independent allowlist or a second policy validator.
+These are installed capability/authority facts, never a requirement for an
+actual Task, Submission or CheckerRun before activating its guide. Initial CP07
+keeps false unavailable; later same-command integration consumes the proven
+capabilities without changing policy selection or adding an approval system.
 
 PROJECTS builds hidden, deny-by-default guide-activation behavior to call the CON public
 validation capability and persist the returned exact version as non-null
@@ -52,6 +64,11 @@ remain later. Required evidence: valid complete activation candidate, missing
 reviewer rule, foreign/retired/binding-invalid policy, stale generation,
 concurrent retire/activation ordering, and no partial guide binding on denial
 or rollback. Canonical CON validation remains the sole policy-rule validator.
+Prove false activation denies an approved `human_review` disposition and
+missing shared routing/controller or ARCH-04F remediation availability with
+zero guide/binding writes.
+A complete false candidate with proven installed capabilities must not require
+an existing task/run; true retains its independent activation proof.
 
 ## Merge state
 

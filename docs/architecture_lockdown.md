@@ -63,8 +63,9 @@ human-review branch. Project configuration uses one existing
 ReviewPolicy boolean, `human_review_required`, default true. False permits
 authorized automated FinalAcceptance and submitter contribution after required
 post-submit checks pass, without human admission, a synthetic Review or a
-reviewer contribution. Its source/authority/CON runtime contracts remain
-pending; see the [bounded handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
+reviewer contribution. Its source/authority/CON design is defined in the
+[shared acceptance contract](spec_review_lifecycle.md#finalacceptance);
+runtime implementation and activation remain pending.
 This amendment does not enable raw checker results to create acceptance or
 change the existing human branch's implementation contract.
 
@@ -315,8 +316,9 @@ record. `needs_revision`, `reject`, and automated checker outcomes create no
 FinalAcceptance or submitter contribution by themselves. On the planned false
 branch, an authorized automated decision creates FinalAcceptance and the
 submitter contribution through the shared atomic participant, never a reviewer
-contribution. This requires reconciled source and authority contracts before
-activation; it is not a checker-owned write or a fabricated human Review.
+contribution. The [shared acceptance contract](spec_review_lifecycle.md#finalacceptance)
+defines both triggers and their source/authority constraints. Runtime proof is
+required before activation; it is not a checker-owned write or fabricated Review.
 
 Contribution records are separate from compensation status. Each record freezes
 its exact review, submission, actor, policy, and artifact-hash lineage.
@@ -325,7 +327,8 @@ Reputation projection is deferred.
 
 FinalAcceptance is internal and REV-owned. It has no independent API/action,
 uses canonical `Submission.id` because each Submission row is already a
-version, and is unique per task, source Review, and Submission. V0.1 contains
+version, and is unique per task, Submission and each non-null exclusive source
+(accepting Review or authorized TASK routing manifest). V0.1 contains
 no adjudication policy, action, queue, lease, state, decision, contribution
 type, branch, readiness check, or adjudication-initiative dependency.
 
