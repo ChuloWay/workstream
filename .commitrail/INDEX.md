@@ -6,7 +6,7 @@ for current product capability.
 
 | Initiative | Durable disposition | Next usable boundary |
 |---|---|---|
-| [WS-ARCH-001](initiatives/WS-ARCH-001/OVERVIEW.md) | Planned | Prepare CP05 activation against current specifications |
+| [WS-ARCH-001](initiatives/WS-ARCH-001/OVERVIEW.md) | Planned | CP05 activation and independent ARCH-04A capability proof under the reconciled pre-review dependencies |
 | [WS-ART-001](initiatives/WS-ART-001/OVERVIEW.md) | Planned | Exact post-submit materialization after guide/checker contracts |
 | [WS-AUTH-001](initiatives/WS-AUTH-001/OVERVIEW.md) | Planned | POL-04B live cutover over complete exact finalization authority |
 | [WS-CON-001](initiatives/WS-CON-001/OVERVIEW.md) | Planned | Prepare CP05, then guide-activation validation and persistence |

@@ -1,6 +1,8 @@
 # WS-POL-003 — Unified project-guide compilation
 
-Current change record: [POL-04A2 hidden finalization](WS-POL-003-04A2.md).
+Latest completed POL behavior: [POL-04A2 hidden finalization](WS-POL-003-04A2.md).
+Current remaining design: [POL plan](planning/PLAN.md) and the
+[cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract).
 
 Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 [`CHUNK_MAP.md`](pre-cutover/CHUNK_MAP.md), and
@@ -13,7 +15,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Next usable boundary: POL-04B live cutover over complete AUTH-12B2 authority.
 - Governing sources: project-guide specifications, authorization and
   contribution-policy specifications, code, migrations, and tests.
-- Preserve: deterministic compilation, explicit ownership, atomic persistence,
+- Preserve: trusted policy compilation, explicit ownership, atomic persistence,
   no hidden activation, and no concrete adapter leakage.
 
 ## Delivered
@@ -33,5 +35,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 2. POL-05/06 approval and post-submit manifests with AUTH-12F4/12G. Immutable
    finalized setup rows require separately reviewed downstream custody before
    live post-submit integration.
-3. POL-07 canonical checker port, AUTH-12H, and later POL-08 cleanup after the
-   canonical ARCH-04E manifest.
+3. POL-07 facade consumes independent ARCH-04A registered-capability proof;
+   ARCH-04C alone owns durable post-submit persistence. AUTH-12H activates
+   CP07's hidden complete guide command without a Task/CheckerRun dependency.
+   POL-08 physical cleanup follows ARCH-04E, with no legacy live fallback.

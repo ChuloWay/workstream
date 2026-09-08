@@ -28,10 +28,15 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 
 ## Remaining v0.1 sequence
 
+Use the [current cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
+for the existing CP05-CP09 work; CON does not create a second policy/binding lane.
+
 1. CP05 activates only the merged hidden policy behavior.
-2. CP06 validates the frozen policy; CP07 binds it to ProjectGuide; CP08 locks
-   it through TaskAssignment and Submission; CP09 removes the replaced legacy
-   economic path after replacement activation.
+2. CP06 validates the selected frozen policy; CP07 builds hidden PROJECTS
+   activation/binding, and AUTH-12H activates it. CP08 supplies lineage fields;
+   ARCH-03B locks/copies them through TaskAssignment and Submission. CP09 removes the replaced legacy
+   economic path only after all consumers are replaced, including CHECKERS and
+   public Submission cutover; it does not block canonical `allow_review`.
 3. Add ContributionRecord/CompensationAward persistence after stable REV FK
    targets, then the atomic REV/CON decision participant before live decisions.
 4. Add dispatcher, fulfillment, reconciliation, and product reads only after

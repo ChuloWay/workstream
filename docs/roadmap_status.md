@@ -189,9 +189,11 @@ see whether any item below is already under review.
 
 Hidden unified-guide setup finalization and its exact authorization gate are
 complete. The next product boundary is POL-04B, which connects the unified
-compilation and finalization path to live setup execution. That work can
-proceed alongside the ongoing AUTH test-proof audit and decomposition, without
-waiting for completion of the full quality audit.
+compilation and finalization path to live setup execution. The reconciled
+[dependency and ownership plan](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
+also permits independent ContributionPolicy activation and CHECKER capability
+contract work. These can proceed alongside the AUTH test-proof audit without
+waiting for the full quality audit. Plans are not implementation claims.
 The sequence below describes product dependencies; production activation still
 requires its exact owner-proven prerequisites.
 
@@ -203,15 +205,23 @@ The next dependency-safe product sequence is:
    reviving the three legacy inference calls.
 2. **Complete guide policy approval.** Project Manager approval consumes the
    already-produced unified result; it does not run another agent. Persist the
-   effective pre-submit policy and deterministic post-submit policy, activate
-   their narrow AUTH gates, and expose one typed checker-service port.
+   effective pre-submit policy and deterministically compiled post-submit
+   policy, activate their narrow AUTH gates, and expose one typed checker-service
+   facade. Approval/projection records reference immutable setup finalization;
+   they cannot reopen or overwrite it.
 3. **Activate and bind ContributionPolicy.** Activate only the five proven
    hidden policy actions, expose CON validation, and bind one exact published,
    complete, binding-valid ContributionPolicyVersion to the Project Guide.
 4. **Activate the complete guide generation.** AUTH may permit terminal guide
    activation only when compilation, sufficiency, pre-submit policy,
    post-submit policy, review policy, revision policy, and ContributionPolicy
-   all belong to the same approved current generation.
+   all belong to the same approved current generation. First prove that each
+   selected checker has a supported registered implementation and valid
+   configuration. This does not require a Task, Submission, completed checker
+   run or live REV implementation—their dependency runs in the other direction.
+   The new activation command replaces legacy economic readiness guards;
+   physical deletion waits until all old consumers are gone, including checker
+   and public Submission cutover. It is not a prerequisite for `allow_review`.
 5. **Make tasks claimable from that generation.** TASK locks the complete guide
    and policy context before `READY`. Claim copies it to TaskAssignment; it
    performs no ContributionPolicy selection. Submission later copies the
@@ -225,6 +235,13 @@ The next dependency-safe product sequence is:
    Submission, execute the locked post-submit plan, persist one current result,
    activate only its fixed services, and automatically publish an exact
    `allow_review` manifest when no blocking failure exists.
+   CHECKERS owns durable execution/currentness; the shared facade does not
+   create a second result store. Work evaluation may be deterministic or use
+   an explicitly implemented model judge. A structural presence check cannot
+   stand in for a required substantive quality evaluation. Unsupported required
+   evaluators block the affected guide until implemented and included in a new
+   approved catalogue-bound generation. Infrastructure retries and project
+   setup faults are not contributor failures; `allow_review` is not acceptance.
 7. **Start the live REV path.** Complete packet, Review, and FinalAcceptance
    persistence; admit only canonical `allow_review`; claim a bounded lease and
    exact packet using the Submission-stamped ContributionPolicyVersion.
@@ -336,12 +353,19 @@ reader does not need internal engineering records to understand the roadmap
 above. The main
 remaining trace sequence is:
 
-- Unified guide: `POL-04B -> POL-05A -> AUTH-12F4
-  -> POL-05B -> POL-06A -> AUTH-12G -> POL-06B -> POL-07 -> AUTH-12H`.
-- Contribution lineage: `CP05 -> CP06 -> CP07 -> CP08 -> ARCH-03A -> ARCH-03B
-  -> ARCH-03C -> CP09`.
-- Post-submit admission: `ARCH-04A -> 04B -> 04C -> 04D -> 04E`; `04F` is the
-  contributor-remediation prerequisite for the later public Submission cutover.
+- Unified guide: `POL-04B -> POL-05A -> AUTH-12F4 -> POL-05B -> POL-06A
+  -> AUTH-12G -> POL-06B -> POL-07 -> AUTH-12H`. Independent `ARCH-04A`
+  contract/registered-capability proof is also required before `POL-07`.
+- Contribution lineage: `CP05 -> CP06 -> CP07`. Hidden `CP07` is another
+  prerequisite of `AUTH-12H`, not a second live activation. `CP08` supplies
+  lineage fields after `CP07`; `ARCH-03A` follows both `AUTH-12H` and `CP08`,
+  then `ARCH-03B -> ARCH-03C`. `CP09` physical cleanup waits for all remaining
+  legacy consumers to be replaced; it is outside the `allow_review` critical path.
+- Post-submit admission: after `POL-07` and `ARCH-03C`, `ARCH-04B -> 04C ->
+  04D -> 04E` supplies materialization, durable results, authority and routing.
+  Later `04F` owns contributor-correctable remediation and admission-backed
+  resubmission before public cutover; it does not block `allow_review` or
+  replace human review/revision.
 - Review/revision: REV packet/schema foundations may proceed independently,
   but live admission starts after `ARCH-04E`; the first live Review commit also
   requires CON contribution/award persistence and its atomic decision participant.

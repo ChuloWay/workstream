@@ -1,6 +1,7 @@
 # WS-AUTH-001 — Workstream authorization service
 
-Current change: [WS-AUTH-001-12B2](WS-AUTH-001-12B2.md).
+Latest completed change: [WS-AUTH-001-12B2](WS-AUTH-001-12B2.md).
+Current remaining [plan](planning/PLAN.md) and [activation map](planning/CHUNK_MAP.md).
 
 Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 [`CHUNK_MAP.md`](pre-cutover/CHUNK_MAP.md), and
@@ -34,9 +35,14 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 
 ## Remaining v0.1 sequence
 
+Follow the [current cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract).
+Hidden owner behavior precedes exact AUTH authority; neither guide activation
+nor policy selection is authorized by the sufficiency action.
+
 1. POL-04B connects the complete hidden finalization and exact AUTH-12B2 adapter
    to live setup execution.
 2. `12F4`, `12G`, and `12H`: activate stored pre-submit/post-submit and final
    guide behavior only after their owner implementations and CON CP05-CP07.
-3. Reframe `13`-`16` against then-current TASK, checker, cleanup, and
-   conformance behavior; do not execute the obsolete broad `14` design.
+3. ARCH-03B/03C replace broad AUTH-13 and ARCH-04D replaces AUTH-14/XINT-06B.
+   Remaining cleanup/conformance and queue/read work must use its exact owner;
+   do not execute those superseded broad designs.

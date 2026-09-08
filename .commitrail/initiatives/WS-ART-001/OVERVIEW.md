@@ -28,9 +28,15 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 
 ## Remaining v0.1 sequence
 
+Follow the [current cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract).
+ART retains the merged default-plus-project intake compiler/executor; POL-07
+is a facade, not a replacement or second precheck run. New unified generations
+must prove exact approved lineage at preparation, consumption and binding.
+
 1. Implement the ARCH-04 checker/post-submit materialization chain against the
    canonical checker contracts.
-2. Add reviewer/remediation dependencies required by the public Submission
+2. ARCH-04F owns checker-remediation resubmission using existing ART ports;
+   later reviewer-requested revision remains a separate REV boundary. Add those dependencies before public Submission
    cutover.
 3. Perform ARCH-02I only after those replacement paths exist; historical
    ART-05/06 and XINT-05 designs remain non-executable.

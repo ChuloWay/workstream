@@ -14,3 +14,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   migrations, and crossed-boundary tests.
 - Preserve: AUTH owns authority; ART owns artifact facts and mutations; exact
   hidden behavior precedes availability.
+
+For remaining work, the [current dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
+assigns post-submit activation solely to ARCH-04D and checker-remediation
+resubmission to ARCH-04F. XINT-06B/05C are historical predecessor designs, not
+additional PRs. Later reviewer/revision integration is outside this reconciliation.
