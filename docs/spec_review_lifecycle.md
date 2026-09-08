@@ -56,7 +56,8 @@ root-level version namespace do not create an alias.
 The shipping path is:
 
 ```text
-Project Guide -> Task -> Submission -> Checker admission -> Human Review
+Project Guide -> Task -> Pre-Submission Intake -> Immutable Submission
+-> Post-Submission Evaluation -> Checker admission -> Human Review
 -> Revision or FinalAcceptance -> ContributionRecord
 -> conditional CompensationAward -> asynchronous external fulfillment
 ```

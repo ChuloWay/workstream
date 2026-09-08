@@ -6,6 +6,28 @@ The checker framework protects reviewer time and enforces project rules before h
 
 It does not replace reviewers. It blocks structurally broken work and gives reviewers reliable evidence.
 
+## Stage And Execution Method Are Separate
+
+**Pre-submission intake checks** ask whether a prepared package is fit to
+submit, including packaging, completeness, integrity, and configured intake
+quality. They execute before a Submission exists; blocking failures prevent
+its creation. **Post-submission evaluation** asks whether the immutable submitted
+work meets the locked task/project checks. It produces durable results for
+review eligibility, not a final Review decision. Neither stage's evidence can
+stand in for the other.
+
+These stage names do not mean that every checker is deterministic. The current
+intake primitives and trusted policy compilers are deterministic mechanisms.
+Task-specific post-submit evaluation may use deterministic rules or a supported
+model/agent evaluator, such as a quality judge, when its implementation and
+policy binding exist. A deterministic compiled policy does not make a model's
+judgment deterministic. Evidence must remain attributable to the evaluated
+artifact and policy; reproducible inputs do not promise identical judgments.
+
+This describes the distinction, not activation of a runtime agent judge. Only
+supported registered checkers execute. Setup agents propose checker policies;
+they are not called again as an implicit evaluator of contributor work.
+
 ## Checker Result Contract
 
 Every checker returns:
@@ -332,7 +354,9 @@ inventing a checker or letting activation proceed.
 The agent output is a constrained spec. Workstream's trusted compiler owns the
 canonical `PostSubmitCheckerPolicy.policy_body`, hash, default checker list,
 and execution order. Runtime checker execution loads the locked compiled
-policy; it does not call an agent to judge a contributor submission.
+policy; it does not call the setup derivation agent to judge a contributor
+submission. A model-based runtime evaluator would be a separate supported,
+registered checker, not an automatic consequence of this setup flow.
 
 The compiled project `PostSubmitCheckerPolicy` is persisted with exact setup
 provenance: guide id, source snapshot id/hash, effective project policy id/hash,

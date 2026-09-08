@@ -5,7 +5,7 @@ infrastructure for work performed by humans, AI agents, or both.
 
 ## Core Definition
 
-Workstream turns project-defined tasks, immutable submissions, deterministic
+Workstream turns project-defined tasks, immutable submissions, policy-governed
 checks, and authorized review into trusted `ContributionRecord` facts. Those
 facts establish who completed what, under which locked rules, using which exact
 artifact, and with what verified outcome. Applications and economic systems may
@@ -17,6 +17,12 @@ definition or ownership boundary of Workstream.
 ## Working Rules
 
 - Keep wording consistent with `README.md`, `docs/glossary.md`, and `docs/architecture_lockdown.md`.
+- Keep pre-submission intake quality checks distinct from post-submission work
+  evaluation. Intake failures prevent Submission creation; post-submit results
+  govern review eligibility, not acceptance. Do not describe all checking as
+  deterministic or confuse setup-agent policy proposals with runtime evaluators.
+  Model-based judges require supported registered implementations; do not claim
+  them live merely because setup uses an agent.
 - Use the simple engineering loop:
   `Intent -> Plan -> Bounded Change -> Tests -> Review -> PR -> Human Merge`.
 - Keep the engineering loop separate from the Workstream product lifecycle. Workstream product review decisions remain `accept`, `needs_revision`, and `reject`; internal engineering reviewer findings are process evidence, not product decisions.
@@ -50,7 +56,8 @@ definition or ownership boundary of Workstream.
   specifications remain normative. Do not use dates, weeks, or delivery
   windows as implementation authority.
 - For workflow states, persisted tokens, API enum values, roles, and lifecycle names, prefer subsystem- or actor-specific names over vague labels. If the naming has product or security impact and the user is unavailable, run the required internal reviewer tracks before locking it.
-- Keep v0.1 focused on project guide -> task -> submission -> checks -> review
+- Keep v0.1 focused on project guide -> task -> pre-submission intake checks
+  -> submission -> post-submission work evaluation -> review
   -> revision -> contribution records -> conditional compensation
   awards/fulfillment -> contribution evidence for a future reputation
   projection. Runtime reputation projection remains deferred.

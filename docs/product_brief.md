@@ -8,7 +8,7 @@ Workstream
 
 Workstream is governed contribution infrastructure for coordinating,
 verifying, and recording work performed by humans, AI agents, or both. It turns
-project-defined tasks, immutable submissions, deterministic checks, and
+project-defined tasks, immutable submissions, policy-governed checks, and
 authorized review into trusted `ContributionRecord` facts that applications,
 organizations, and economic systems can consume.
 
@@ -45,11 +45,20 @@ This creates wasted effort, delayed payments, repeated mistakes, and low trust.
 Across serious task projects, the surface language changes but the lifecycle is stable:
 
 ```text
-Guide -> Task -> Submission -> Checker -> Review -> Revision/Decision
+Guide -> Task -> Pre-Submission Intake -> Submission -> Post-Submission Evaluation
+-> Review -> Revision/Decision
 -> Contribution -> Conditional Compensation Award -> Fulfillment
 ```
 
 Workstream makes that lifecycle explicit and configurable.
+
+Pre-submission intake assesses package fitness before a Submission exists.
+Post-submission evaluation assesses the immutable work against locked project
+requirements and produces review-eligibility evidence. Evaluation can use
+deterministic rules or supported model-based checkers; the stage does not
+promise deterministic judgments. Neither stage replaces authorized Review.
+See the [checker framework](architecture_checker_framework.md) and
+[current capability ledger](roadmap_status.md) for supported boundaries.
 
 The system is source-agnostic without becoming source-adapter-first. A task
 created manually, imported from Markdown or CSV, or later received from an

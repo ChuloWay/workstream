@@ -50,14 +50,19 @@ Submission without rebasing.
 Projects may differ by domain, language, task format, or review style. The lifecycle remains stable:
 
 ```text
-Guide -> Task -> Submission -> Checker -> Review -> Revision/FinalAcceptance
+Guide -> Task -> Pre-Submission Intake -> Submission -> Post-Submission Evaluation
+-> Review -> Revision/FinalAcceptance
 -> Contribution -> Conditional Compensation Award/Fulfillment
 -> deferred reputation projection
 ```
 
 ## 4. Automated Checks Protect Human Review
 
-Human reviewers do not spend time on submissions that fail basic gates.
+Pre-submission intake protects package fitness before Submission creation.
+Post-submission evaluation assesses the immutable work against its locked
+requirements and protects reviewer time. Neither stage decides final acceptance.
+These stages are not synonyms for deterministic execution: a supported model
+evaluator is distinct from deterministic policy compilation and intake rules.
 
 Critical- and high-severity checker failures block review. Medium and low severity issues are visible to reviewers and can influence decisions.
 
