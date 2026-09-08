@@ -72,10 +72,14 @@ API -> Auth : verify Flow token
 Auth --> API : verified external identity
 API -> Authorization : require submission create + candidate grant\n+ ownership/resource/lifecycle guards
 Authorization --> API : allowed with matched submitter grant
+note over API, Artifacts
+Artifact preparation includes locked pre-submission intake checks.
+Blocking failure returns feedback before Submission creation.
+end note
 API -> Artifacts : finalize verified artifact bindings
 API -> DB : create immutable submission version
 
-API -> Checks : run automated checks async
+API -> Checks : run post-submission work evaluation async
 Checks -> Artifacts : read exact authorized artifacts
 Checks -> DB : persist checker results
 

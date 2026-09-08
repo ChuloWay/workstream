@@ -7,8 +7,16 @@ Last updated: 2026-08-11
 This note locks the Workstream v0.1 architecture around a source-agnostic,
 governed contribution core: project guide discipline, task contracts, human
 accountability for agent-assisted work, immutable artifact custody,
-deterministic checks, authorized review, contribution records, conditional
+policy-governed checks, authorized review, contribution records, conditional
 compensation awards and fulfillment, and future reputation consequences.
+
+Pre-submission intake checks and post-submission work evaluation are distinct
+lifecycle boundaries, not one generic deterministic-check stage. Intake blocks
+Submission creation when required checks fail; post-submit results govern
+review eligibility. Deterministic compilation and routing do not guarantee
+deterministic judgments from a model-based evaluator. The
+[checker framework](architecture_checker_framework.md) retains the supported
+implementation boundary; this distinction activates no new runtime evaluator.
 
 Workstream's durable product output is trusted contribution lineage. External
 sources may request work and downstream systems may apply payment, points,
@@ -59,7 +67,9 @@ Project guide
 -> task queue
 -> pre-submit checker policy
 -> submission packet
--> automated checks
+-> pre-submission intake checks
+-> immutable Submission
+-> post-submission work evaluation
 -> pre-review gate
 -> human review
 -> revision replay

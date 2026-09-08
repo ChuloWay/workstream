@@ -6,7 +6,7 @@
 
 <p class="subtitle">Governed contribution infrastructure for human and AI work</p>
 
-Workstream turns project-defined tasks, immutable submissions, deterministic
+Workstream turns project-defined tasks, immutable submissions, policy-governed
 checks, and authorized review into trusted `ContributionRecord` facts. It
 records who completed what, under which locked rules, using which exact
 artifact, and with what verified outcome.
@@ -30,10 +30,24 @@ task an immutable FinalAcceptance before the submitter contribution.
 v0.1 is focused on proving the internal lifecycle:
 
 ```text
-Project Guide -> Task Queue -> Submission Packet -> Checks -> Review
+Project Guide -> Task Queue -> Pre-Submission Intake -> Immutable Submission
+-> Post-Submission Work Evaluation -> Review
 -> Revision / FinalAcceptance / Rejection -> Contribution Record
 -> Compensation Award / Fulfillment -> deferred reputation projection
 ```
+
+Pre-submission intake checks package fitness, completeness, integrity, and
+configured intake quality before Submission creation. Post-submission evaluation
+checks the immutable work against locked task/project requirements and produces
+durable review-eligibility evidence. Passing intake is not proof of task success;
+neither stage replaces authorized Review.
+
+The stages are not a blanket guarantee of deterministic execution. Deterministic
+rules and supported model/agent evaluators are distinct methods; deterministic
+policy compilation does not guarantee repeatable model judgments. Only supported
+registered implementations execute. The setup agent proposes policies, not
+runtime judgments, and no live agent judge is claimed by this brief. The
+[roadmap](../roadmap_status.md) owns current implementation status.
 
 <div class="callout">
 Current v0.1 is backend-first and internal-loop-first. External source adapters, agent identity writes, task escrow, x402 payment requests, OmniClaw settlement, USDC payouts, public marketplace flows, and automated routing remain adapter boundaries until the internal evaluation loop works with real tasks.

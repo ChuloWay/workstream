@@ -2,7 +2,7 @@
 
 Workstream is governed contribution infrastructure for coordinating, verifying,
 and recording work performed by humans, AI agents, or both. It transforms
-project-defined tasks, immutable submissions, deterministic checks, and
+project-defined tasks, immutable submissions, policy-governed checks, and
 authorized review into trusted `ContributionRecord` facts that applications,
 organizations, and economic systems can consume.
 
@@ -22,8 +22,9 @@ The complete Workstream model is:
 Project Guide
 -> Versioned Policies
 -> Task Assignment Or Claim
--> Immutable Submission Artifact
--> Deterministic Checks
+-> Artifact Preparation And Pre-Submission Intake Checks
+-> Immutable Submission
+-> Post-Submission Work Evaluation
 -> Authorized Review
 -> Accept / Needs Revision / Reject
 -> Revision And Resubmission When Required
@@ -35,8 +36,30 @@ The current submission contract normally receives one outer ZIP containing the
 complete work. Workstream computes canonical content identity, stores the bytes
 through its artifact boundary, verifies stored content before trusted use, and
 runs configured checks against the submitted package and its bounded recursive
-contents. Contributors, checkers, reviewers, and downstream projections are
-therefore tied to the same immutable submission lineage.
+contents. After Submission creation, the contributor's submitted work,
+post-submission checkers, reviewers, and downstream projections are tied to the
+same immutable Submission lineage. Before creation, intake evidence refers to
+the prepared artifact and locked intake context, not an existing Submission.
+
+Pre-submission and post-submission checking are different stages:
+
+- **Pre-submission intake checks** assess whether the prepared package is fit
+  to submit: required outputs, packaging, evidence integrity, and configured
+  intake-quality rules. Blocking failures return feedback before a Submission
+  is created. Passing intake does not establish that the task was done correctly.
+- **Post-submission work evaluation** assesses the immutable submitted work
+  against the locked task/project requirements. Durable results determine
+  review eligibility, not final acceptance. Task-specific evaluation may use
+  deterministic rules or, when supported and registered, model/agent-based
+  evaluators such as a quality judge. These are not the setup agent that
+  proposes checker policies, nor a substitute for authorized Review.
+
+The stage describes the purpose and lifecycle boundary, not a promise that all
+checks are deterministic. Deterministic compilation and policy routing do not
+make model-based judgments reproducible. Only supported implementations run;
+the [roadmap](docs/roadmap_status.md#pre-submission-and-post-submission-checking)
+distinguishes existing foundations from remaining integration and does not
+claim a live agent judge.
 
 Every valid Review creates a reviewer `completed_review`
 `ContributionRecord`. An `accept` decision also creates `FinalAcceptance` and a
@@ -55,9 +78,11 @@ the central durable outcome of Workstream.
 - **Artifacts are immutable and content-addressed.** Workstream derives identity
   from server-computed SHA-256 and byte count, independently verifies stored
   bytes, and binds trusted content facts to that identity.
-- **Checks are attributable and reproducible.** Configured pre-submit and
-  post-submit checkers record results against the exact submission and policy
-  context.
+- **Checks have distinct, attributable evidence.** Pre-submit results refer to
+  the prepared artifact and locked intake context before Submission creation.
+  Post-submit results refer to the immutable Submission and locked evaluation
+  policy. Intake feedback cannot substitute for post-submit review-gate evidence;
+  recording an evaluation does not guarantee an identical judgment on rerun.
 - **Review is authorized and attributable.** A Review records the authorized
   reviewer, exact artifact lineage, locked rules, findings, and one canonical
   decision: `accept`, `needs_revision`, or `reject`.
