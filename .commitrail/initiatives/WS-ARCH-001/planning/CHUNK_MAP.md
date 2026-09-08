@@ -18,7 +18,7 @@ work accounting. Foundations through 02H and CP04B are complete; none restart.
 | `WS-ARCH-001-04A` | CHECKER post-submit contract and registered evaluator conformance | L1 | Planned from merged catalogue/unified contracts; precedes POL-07, no task/guide activation dependency |
 | `WS-ARCH-001-04B` | ART exact verified Submission materialization | L1 | Planned after 04A, POL-07, 03C and merged 02H |
 | `WS-ARCH-001-04C` | CHECKER hidden durable current output and supersession behavior | L1 | Planned skeleton after 04A/04B; production remains deny-only |
-| `WS-ARCH-001-04D` | XINT-06B exact fixed-service post-submit activation | L1 | Planned skeleton after 04B/04C evidence |
+| `WS-ARCH-001-04D` | AUTH exact fixed-service post-submit activation (replaces XINT-06B) | L1 | Planned after 04B/04C evidence |
 | `WS-ARCH-001-04E` | TASK automatic dispatch/current routing integration and canonical `allow_review` manifest | L1 | Planned skeleton after 04D |
 | `WS-ARCH-001-04F` | Contributor-correctable checker failures and same-lineage admission-backed replacement Submission | L1 | Planned after 04E; replaces XINT-05C, required before public 02I, not before REV begins from `allow_review` |
 

@@ -37,7 +37,7 @@ chain compatibility, or issuer-role fallback.
 - Required capability gaps or any blocked/partial/unapproved/mixed-generation
   component deny. Optional gaps require exact PM acknowledgement.
 - Final PREP binds the complete chain plus actor/link/grant, action, operation,
-  request/idempotency, session, and transaction. POL/project code owns product
+  request/idempotency, session, and transaction. The CP07 PROJECTS command owns product
   locks and the one activation commit.
 - The exact CP07 `ProjectGuide.contribution_policy_version_id` binding is
   present, current for the activation lineage, and validated through CP06

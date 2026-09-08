@@ -1,7 +1,7 @@
 # Reconcile delivery plans through allow_review
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Existing owner plans describe one acyclic, non-overlapping path from unified guide setup through canonical `allow_review`.
 
 ## Intent
@@ -83,14 +83,19 @@ consumer; physical deletion does not become an upstream activation dependency.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Dependency order is feasible | Plan review against canonical owners and a topological dependency check | Required before readiness | Future implementation must prove runtime behavior |
-| Navigation and wording agree | Markdown links, stale-wording scans, Commitrail validator, diff check | Required before readiness | Historical files remain historical |
-| No product or gate mutation | Exact changed-path inspection | Required before readiness | No runtime capability is delivered by this PR |
+| Dependency order is feasible | Plan review against canonical owners and a topological dependency check; restored-cycle mutant rejected | Verified as a plan | Future implementation must prove runtime behavior |
+| Navigation and wording agree | Markdown links, stale-wording scans, Commitrail validator, diff check | Verified | Historical files remain historical |
+| No product or gate mutation | Exact changed-path inspection | Verified | No runtime capability is delivered by this PR |
 
 ## Review findings
 
-Dependency and ownership defects are repaired in the existing pending plans;
-exact-head review results belong to this PR's summary.
+Dependency and ownership defects are repaired in current pending plans;
+exact-head review results belong to this PR's summary. The review also
+identified still-live legacy PaymentPolicy response/checker consumers: CP07
+owns complete replacement response semantics, and CP09 deletion waits for
+zero consumers. A leftover XINT label now explicitly names ARCH-04D as its
+replacement. Preserved history was restored unchanged when archive validation
+identified that corrections belong in current records.
 
 ## Reconciliation
 
