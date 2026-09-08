@@ -6,7 +6,9 @@ This section and the corrected pending child contracts are the current
 cross-initiative delivery order. Completed records and review notes preserve
 their original evidence; they do not restart superseded work. The stop point
 of this reconciliation is canonical `allow_review`; downstream REV execution
-is not redesigned here. 04F is documented only to preserve the required later
+is not redesigned here. The [shared acceptance extension](../../../../docs/spec_review_lifecycle.md#finalacceptance)
+adds the locked false/pass outcome to the same routing handler without changing
+the human review/revision design. 04F preserves the required
 checker-remediation boundary before public Submission cutover.
 
 | Boundary | Hard predecessors | Sole output owner |
@@ -36,11 +38,20 @@ checker-remediation boundary before public Submission cutover.
 | AUTH-OUTBOX-01 | Merged shared outbox persistence and AUTH service/PREP foundations | Planned dispatcher identity/action/matrix and unavailable typed authority contract |
 | CON-02B | AUTH-OUTBOX-01 | Shared hidden dispatcher/claim fencing, typed handlers and recovery |
 | AUTH-OUTBOX-02 | CON-02B exact hidden manifest | Exact dispatcher mechanics only; no feature authority |
-| ARCH-04E1 | ARCH-04C, CON-02B hidden contract | TASK hidden event/routing handlers and manifest |
-| ARCH-04E2 | ARCH-04E1 | AUTH exact TASK routing authority |
-| ARCH-04E3 | ARCH-04E2, ARCH-04D, AUTH-OUTBOX-02 | TASK live dispatch/routing composition and end-to-end allow_review |
+| ARCH-04E1A | ARCH-04C | TASK routing-manifest schema/public facts and accepted-effects port, no handlers or REV dependency |
+| ARCH-04E1B | ARCH-04E1A, CON-02B hidden contract; shared REV-04B + CON-03C/07 + REV-12A shared fence foundation for false | TASK hidden handlers; consume one shared acceptance operation on false/pass |
+| Scoped XINT-003-08B controller activation | Early existing REV-12A foundation and hidden shared acceptance/writer/observation proof | Existing Operator lifecycle-control action for the bounded shared manifest, not human runtime |
+| ARCH-04E2 | ARCH-04E1B; scoped XINT-003-08B controller activation for false | AUTH exact TASK routing authority |
+| ARCH-04E3 | ARCH-04E2, ARCH-04D, AUTH-OUTBOX-02; shared acceptance proof for false | TASK live dispatch/routing composition: true to allow_review, false/pass to shared acceptance when proven |
 | ARCH-04E | ARCH-04E3 | Completed coordination boundary consumed by downstream REV |
 | ARCH-04F (later public-cutover prerequisite) | ARCH-04E | CHECKER failure facts and TASK/ART remediation resubmission, not REV |
+
+False guide activation additionally requires shared acceptance, exact AUTH,
+a valid generation through scoped XINT-003-08B controller activation and
+the usable ARCH-04F failure route. The true routing foundation may ship first
+with false still unavailable; neither route invents a new acceptance subsystem.
+Shared REV acceptance persistence/CON participation can precede live human
+queues or decisions, so this extension adds no REV-admission dependency cycle.
 
 CP05 and ARCH-04A have independent prerequisites. POL-04B consumes the corrected
 ARCH-04A catalogue/schema before producing approval-eligible generations. Owners may
@@ -56,7 +67,7 @@ new permission requirement.
 Current supporting contracts are [ARCH-04B2](chunks/WS-ARCH-001-04B-art-post-submit-materialization.md#arch-04b2--separate-art-output-custody-child),
 [AUTH-OUTBOX-01/02](../../WS-AUTH-001/planning/PLAN.md#ws-auth-001-outbox-01--unavailable-dispatcher-contract),
 [CON-02B](../../WS-CON-001/OVERVIEW.md#con-02b-current-dispatcher-contract), and
-[ARCH-04E1/04E2/04E3](chunks/WS-ARCH-001-04E-canonical-allow-review.md#current-bounded-sequence).
+[ARCH-04E1A/04E1B/04E2/04E3](chunks/WS-ARCH-001-04E-canonical-allow-review.md#current-bounded-sequence).
 Each numbered section is a current bounded design, expanded into its own change
 record on implementation; the parent is not a multi-owner implementation PR.
 
@@ -153,7 +164,7 @@ claims require their real custody, not unit substitutes.
 | CP06/CP07/AUTH-12H | `test_activate_without_legacy_payment_or_task`, `test_activation_requires_exact_selected_policy`, `test_activation_rejects_missing_review_revision_config` | PostgreSQL atomic command plus full response serialization; foreign/retired/incomplete new binding denies |
 | CP08/ARCH-03A/03B/03C | `test_ready_preserves_screening_policy_lock`, `test_claim_copies_policy_without_current_lookup` | PostgreSQL and actual AUTH/owner composition; later publication leaves existing attempt unchanged |
 | ARCH-04B/04C/04D | `test_exact_post_materialization_denies_before_io`, `test_late_revocation_cannot_publish_result`, `test_unfinished_checker_recovery_reuses_attempt`, `test_terminal_retry_requires_operator_and_new_attempt` | Local/MinIO, real worker/provider contract, PostgreSQL races; independent sessions and staged/final state |
-| ARCH-04E | `test_submission_to_current_allow_review`, `test_superseded_run_cannot_route`, `test_duplicate_dispatch_has_one_manifest` | Real DB/worker/storage path, exact authority-event references; no REV row or product accept decision |
+| ARCH-04E | `test_submission_to_current_allow_review`, `test_superseded_run_cannot_route`, `test_duplicate_dispatch_has_one_manifest`; false tests in the shared acceptance contract | Real DB/worker/storage path, exact authority-event references; true creates no acceptance, false creates the shared atomic acceptance with no human Review |
 
 Owner-local schema names and migrations are chosen from the then-current
 baseline in the same implementation PR. No migration numbers or future

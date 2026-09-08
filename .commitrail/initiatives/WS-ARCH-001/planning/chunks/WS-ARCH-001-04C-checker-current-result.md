@@ -43,7 +43,7 @@ facts expose the exact request, generation, phase, attempt and final digest.
 CHECKERS owns the typed immutable final-result notification envelope and its
 same-transaction shared-outbox append here: exact project/Submission,
 evaluation request/generation, phase/attempt, final digest/currentness and
-verified binding/allow-event references. 04E1 later consumes that published
+verified binding/allow-event references. 04E1B later consumes that published
 contract; it does not define CHECKERS events after their producer exists.
 
 Do not hold row locks or PREP across evaluator/provider I/O. Persist the

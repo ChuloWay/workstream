@@ -334,7 +334,10 @@ sandboxed execution, no network, no shell, no secrets, no database access,
 covered Project Manager approval of the exact code hash after those checks
 pass, and a locked code hash.
 
-Pre-submit checks are authoritative for intake. Post-submit checker runs are authoritative for review readiness.
+Pre-submit checks are authoritative for intake. Post-submit runs supply the
+current evaluation evidence for TASK's locked-policy routing, not acceptance
+authority. TASK admits human review on true or invokes shared acceptance on
+false after the required evidence and authority checks.
 
 ## Post-Submit Policy Projection
 
@@ -350,6 +353,9 @@ All pre/post capability gaps block under the current compilation schema.
 Ordinary warnings may be acknowledged; unsupported automation cannot be silently
 reclassified as human review. Explicit approved `human_review` requirements
 remain valid and do not claim automated semantic coverage.
+They require `human_review_required=true`: false guide activation and final
+acceptance both reject any applicable approved `human_review` disposition.
+Passing every executable check cannot discharge that separate requirement.
 
 The unified output is a constrained proposal. Workstream's trusted compiler owns the
 canonical `PostSubmitCheckerPolicy.policy_body`, hash, default checker list,

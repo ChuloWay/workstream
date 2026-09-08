@@ -2,6 +2,12 @@
 
 ## Task States
 
+These are target v0.1 states, not a claim of live route availability. The locked
+ReviewPolicy selects the success route: true requires human review; false
+uses the [same shared acceptance operation](spec_review_lifecycle.md#finalacceptance)
+after required post-submit checks pass. False activation remains unavailable
+until its shared acceptance/CON/AUTH proof lands.
+
 ```text
 DRAFT
 SCREENING
@@ -132,7 +138,7 @@ Workstream assigns the immutable submission version server-side. The contributor
 
 Automated checks are running inside the pre-review gate.
 
-`pre_review_gate` is a checker phase and audit label, not a separate v0.1 task status. The persisted task remains `evaluation_pending` until checker routing moves it to `review_pending`, `needs_revision`, or the internal `task_setup_blocked` repair route.
+`pre_review_gate` is a checker phase and audit label, not a separate v0.1 task status. The persisted task remains `evaluation_pending` until authorized routing moves it to `review_pending`, `needs_revision`, the internal `task_setup_blocked` repair route, or `accepted` through the shared acceptance operation for successful required checks under the locked `human_review_required=false` policy.
 
 ### REVIEW_PENDING
 
@@ -192,26 +198,31 @@ The submission is accepted.
 
 Required before entering:
 
-- accepted review decision
+- authorized human accept when the locked ReviewPolicy requires human review,
+  otherwise authorized TASK routing of exact current required-check success
 - no unresolved blocking checker failure under the locked post-submit checker policy
 - evidence present
-- reviewer cited evidence supporting acceptance
-- no unresolved blocking prior ReviewFinding
+- reviewer cited evidence and no unresolved blocking prior ReviewFinding on
+  the human branch; no unresolved requirement for human judgment on false
 - applicable submitter compensation evaluated from the TaskAssignment-frozen
   contribution policy
 
 Required side effects:
 
-- reviewer `completed_review` contribution created with the Review
-- immutable FinalAcceptance created from the accepting Review and bound to the
-  existing versioned Submission, task, submitter, recording reviewer, and locked
-  ReviewPolicy
+- reviewer `completed_review` contribution only when an actual Review exists
+- one immutable FinalAcceptance with exclusive human Review or TASK routing
+  manifest provenance, exact versioned Submission, task, submitter, originating
+  AUTH actor/event and locked ReviewPolicy
 - submitter `accepted_submission` contribution created from FinalAcceptance,
   the exact TaskAssignment, frozen policy lineage, and artifact hash; it is not
   inferred directly from Review.decision
 - applicable awards created independently from the reviewer and submitter
   contribution records
 - reputation projection remains deferred
+
+Task `accepted`, assignment `completed`, acceptance, submitter contribution,
+applicable awards, audit and outbox commit atomically for either trigger. False
+creates no Review/ReviewLease or reviewer award and never enters REVIEW_PENDING.
 
 ### REJECTED
 
@@ -251,6 +262,7 @@ EVALUATION_PENDING -> REVIEW_PENDING
 EVALUATION_PENDING -> NEEDS_REVISION
 REVIEW_PENDING -> EVALUATION_PENDING
 REVIEW_PENDING -> ACCEPTED
+EVALUATION_PENDING -> ACCEPTED (locked false policy and authorized shared acceptance)
 REVIEW_PENDING -> NEEDS_REVISION
 REVIEW_PENDING -> REJECTED
 NEEDS_REVISION -> SUBMITTED
@@ -272,7 +284,9 @@ No administrative or recovery grant authorizes these transitions:
 - `REVIEW_PENDING -> ACCEPTED` without review decision
 - `REVIEW_PENDING -> ACCEPTED` without Review, FinalAcceptance, and both required contribution-source checks
 - `NEEDS_REVISION -> ACCEPTED` directly; a replacement Submission must pass
-  checker admission and receive a later accepting Review
+  checking and its locked policy's acceptance route
+- `EVALUATION_PENDING -> ACCEPTED` with true policy, stale/incomplete check
+  evidence, unavailable authority or missing shared acceptance/contribution effects
 - `SUBMITTED -> ACCEPTED` directly
 - `SUBMITTED -> NEEDS_REVISION` directly without the persisted
   `EVALUATION_PENDING` CheckerRun outcome

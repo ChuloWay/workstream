@@ -39,14 +39,17 @@ for the existing CP05-CP09 work; CON does not create a second policy/binding lan
    ARCH-03B locks/copies them through TaskAssignment and Submission. CP09 removes the replaced legacy
    economic path only after all consumers are replaced, including CHECKERS and
    public Submission cutover; it does not block canonical `allow_review`.
-3. Add ContributionRecord/CompensationAward persistence after stable REV FK
-   targets, then the atomic REV/CON decision participant before live decisions.
-   Reconcile both acceptance sources now: the locked ReviewPolicy boolean
+3. Add CON-03C ContributionRecord/CompensationAward persistence after the
+   REV-04B shared source/FinalAcceptance FK foundation, then the CON-07 atomic
+   submitter participant. These shared pieces do not require live human
+   decision/queue/lease behavior. The locked ReviewPolicy boolean
    `human_review_required` defaults true; false permits authorized automated
    acceptance without a Review or reviewer contribution. Both use the same
    FinalAcceptance/submitter-contribution participant and applicable awards.
+   The existing shared REV-12A/CON fence/ordinal foundation precedes this
+   operation; later drain and fulfillment surfaces do not block it.
    Automated acceptance must not require live human-review infrastructure;
-   see the [product-builder handoff](../../changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
+   see the [canonical source, authority and transaction contract](../../../docs/spec_review_lifecycle.md#finalacceptance).
 4. Shared dispatcher CON-02B is pulled forward before canonical task authority
    invalidation and post-submit routing, independently of ContributionRecord/
    award persistence. AUTH-OUTBOX-01 supplies its unavailable contract and

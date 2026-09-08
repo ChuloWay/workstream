@@ -8,8 +8,9 @@ of review/revision behavior. The downstream owner contracts remain separate.
 - Completed boundary: queue admission and ReviewLease persistence through 03A2.
 - Intent: ensure the authorized reviewer evaluates the exact verified artifact
   under the locked policy version and produces attributable outcomes.
-- Next usable boundary: continue hidden behavior behind exact AUTH, ART, and CON
-  prerequisites; live claim requires the canonical review action gate.
+- Next usable boundary: prepare shared acceptance/source and existing fence
+  foundations under the canonical order; human hidden behavior may continue
+  independently behind exact AUTH, ART and CON prerequisites.
 - Governing sources: `docs/spec_review_lifecycle.md`,
   `docs/engineering/review_authorization_action_custody.md`, code, migrations,
   and tests.
@@ -30,20 +31,19 @@ of review/revision behavior. The downstream owner contracts remain separate.
 Use `human_review_required: bool = true` in the existing locked guide-bound
 ReviewPolicy: after required post-submit checks pass, true requires human
 review and false proceeds to authorized FinalAcceptance without reviewer
-contribution. No mode enum or additional policy is needed. Reconcile the existing
-human-only contracts before implementing final acceptance; do not build a
-separate workflow engine. The detailed direction and outstanding consumer
-contracts are in the [current reconciliation record](../../changes/pre-review-plan-reconciliation.md#accepted-direction-project-controlled-acceptance-mode).
+contribution. No mode enum or additional policy is needed. The
+[canonical shared acceptance contract](../../../docs/spec_review_lifecycle.md#finalacceptance)
+defines both triggers, exclusive provenance, constraints, authority and one
+atomic operation. Do not build a separate workflow engine.
 
 REV owns shared final-acceptance semantics for both paths. The automated path
 must have explicit AUTH service authority and exact TASK/CHECKERS evidence,
 without a fabricated Review, ReviewLease, human actor, or reviewer contribution.
-CON must support that distinct acceptance provenance using the same atomic
+CON validates that acceptance provenance using the same atomic
 submitter-contribution and applicable compensation participant. These changes
-are planned, not supported by the current human-only persistence contract.
+are planned runtime work, not delivered behavior.
 The human branch below continues to use `allow_review`; it is not an automatic
-acceptance signal. This amendment must be reconciled before treating the
-remaining sequence as implementation-ready.
+acceptance signal.
 
 The [versioned policy setting](../../changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
 is available for draft configuration. Extend shared acceptance persistence and
@@ -56,9 +56,15 @@ proof. No adjudication setting or behavior is included.
    packet-membership contract.
 2. Continue hidden claim/revision behavior against canonical `allow_review`,
    copying the Submission policy version without a current-policy lookup.
-3. Implement Review and FinalAcceptance persistence plus the CON atomic
-   participant; every final decision creates the reviewer record, and accept
-   additionally creates the submitter record.
+3. After TASK's early 04E1A source schema/public port, implement the REV-04B
+   shared source/FinalAcceptance persistence foundation,
+   then CON-03C/CON-07 persistence and submitter participation. This foundation
+   can precede human runtime: ARCH-04E uses it for false/pass acceptance without
+   live queues, leases or decisions. Pull the existing REV-12A/CON shared
+   obligation-fence foundation forward before either trigger; later drain and
+   operator work extends the same controller, not another fence.
+   Human decision composition later adds Review/reviewer participation and
+   invokes that same acceptance sequence on accept, not a second implementation.
 4. Activate public claim/decision behavior only after exact AUTH/ART/CON gates.
 
 ## Preserved history

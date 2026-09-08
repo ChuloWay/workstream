@@ -54,12 +54,12 @@ persists the setting: `human_review_required: bool = true`. True requires human
 review after required checks pass; false leads to authorized FinalAcceptance
 and submitter contribution without a reviewer contribution. It requires explicit locked project policy,
 supported acceptance evidence, distinct service decision provenance and shared
-atomic contribution effects; checker success alone is not acceptance. Its
-cross-owner contract reconciliation is tracked in the
-[existing planning record](../.commitrail/changes/pre-review-plan-reconciliation.md#accepted-direction-project-controlled-acceptance-mode).
-The human-review branch retains canonical `allow_review`. Existing milestone
-contracts describing only that branch must be reconciled before automated
-acceptance implementation begins.
+atomic contribution effects; checker success alone is not acceptance. The
+[canonical shared acceptance contract](spec_review_lifecycle.md#finalacceptance)
+defines one FinalAcceptance/submitter-contribution operation with two triggers,
+not a separate automated acceptance system. The human branch retains canonical
+`allow_review`. Shared REV source persistence and CON participation precede
+ARCH-04E false/pass integration; human queues/leases are not its prerequisites.
 
 The setting is configurable through the existing authorized policy writer;
 creation defaults true and omitted replacements inherit the predecessor.
@@ -110,7 +110,7 @@ implementation and policy binding and is not claimed live here.
 | Stage | Purpose and examples | Policy and execution boundary | Outcome |
 | --- | --- | --- | --- |
 | Pre-submission intake checks | Is this package acceptable to submit? Check completeness, required/forbidden files, evidence integrity, and configured intake-quality rules. | The locked `PreSubmitCheckerPolicy` and effective artifact policy drive the pre-submission catalogue during continuous artifact preparation, before a Submission exists. | Blocking failures return correction feedback and prevent Submission creation. Passing intake does not prove the task is accepted or ready for review. |
-| Post-submission evaluation | Does the submitted work meet the configured task/project checks? Evaluate the exact stored work and evidence under the locked requirements. | The Submission-stamped `PostSubmitCheckerPolicy` drives the durable checker registry after immutable Submission creation. Only supported, registered checks execute. | Persist a durable current result; blocking failures prevent review admission. Eligible results produce `allow_review`, not final acceptance. |
+| Post-submission evaluation | Does the submitted work meet the configured task/project checks? Evaluate the exact stored work and evidence under the locked requirements. | The Submission-stamped `PostSubmitCheckerPolicy` drives the durable checker registry after immutable Submission creation. Only supported, registered checks execute. | Persist current evidence. Required success routes by the locked ReviewPolicy: true produces human `allow_review`; false invokes shared acceptance under TASK authority. CHECKERS never writes acceptance itself. Both routes remain planned. |
 
 The unified guide agent proposes both sets of policy bindings in one setup
 result. Trusted compilation, validation, and the governing approval path turn
@@ -120,7 +120,9 @@ judge would require its own supported checker implementation and policy binding;
 it is not implied to be live by the unified setup agent or the roadmap.
 
 Authorized reviewers still own `accept`, `needs_revision`, and `reject`.
-Neither checker stage can substitute for that decision. Pre-submission feedback
+Only an actual human Review stores those decisions; neither checker stage
+impersonates one. With locked false policy, TASK invokes the shared acceptance
+operation without a Review. Pre-submission feedback
 cannot be reused as post-submission review-gate evidence. See the
 [checker architecture](architecture_checker_framework.md) and
 [pre-submit versus durable contract](spec_chunk_8_submission_artifact_policy_checkers.md#pre-submit-versus-durable-runs).
@@ -141,7 +143,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Post-submission evaluation and `allow_review` | **Planned; immediate integration milestone** | Separate durable checker contracts and registry/runner foundations, existing pre-review behavior, artifact materialization foundations | Publish one CHECKER post-submit API; evaluate the exact Submission against its locked policy; persist one durable current superseding result; activate fixed services; automatically dispatch it and publish the canonical `allow_review` manifest |
 | Review queue and lease | **Hidden persistence foundation** | Queue/admission idempotency and ReviewLease/preference persistence; complete unavailable REV action/principal catalogue and typed AUTH contracts | Packet-membership contract and manifest; Review schema; canonical admission from `allow_review`; claim/lease/packet authority; lease copies the Submission-stamped policy version with no CON lookup |
 | Review decision and revision | **Planned** | Review/revision policy identities and mutation authority; approved same-task revision-rebase semantics | Immutable findings and decisions; `accept`, `needs_revision`, and `reject`; complete-context revision preparation; finding responses; replacement contributor rules; replay and recovery |
-| Contribution and compensation truth | **Schema foundations plus hidden policy behavior** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings; hidden policy administration | Persist ContributionRecord and CompensationAward; atomically create one reviewer record for every final review and, on accept only, FinalAcceptance plus the submitter record; evaluate frozen rules into zero, one, or two awards |
+| Contribution and compensation truth | **Schema foundations plus hidden policy behavior** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings; hidden policy administration | Persist ContributionRecord/CompensationAward and one shared FinalAcceptance/submitter operation for human accept or authorized false/pass routing. Only actual Reviews create reviewer records. Evaluate frozen actor rules into zero, one or two awards |
 | Fulfillment, reconciliation, and audit | **Planned** | Shared audit foundations and provider-neutral adapter convention | Outbox/dispatcher authority, conditional award fulfillment, callbacks, idempotent recovery, reconciliation, bounded operational reads, and release controls |
 | Frontend and pilot | **Planned after stable backend contracts** | React + Vite + TypeScript stack decision | Implement only stable backed surfaces, run the real internal pilot, repair findings, and complete release drills |
 
@@ -255,10 +257,10 @@ The next dependency-safe product sequence is:
    correction feedback on blocking failures, and publishes ready admission only
    after the required preparation/custody checks. TASK then consumes that
    admission to create the immutable Submission with the same assignment lineage.
-6. **Produce canonical `allow_review`.** Materialize the exact immutable
+6. **Produce current post-submit evidence and policy-governed routing.** Materialize the exact immutable
    Submission, execute the locked post-submit plan, persist one current result,
    activate only its fixed services, and automatically publish an exact
-   `allow_review` manifest when no blocking failure exists.
+   human `allow_review` manifest on true when no blocking failure exists.
    CHECKERS owns durable execution/currentness; the shared facade does not
    create a second result store. Work evaluation may be deterministic or use
    an explicitly implemented model judge. A structural presence check cannot
@@ -266,13 +268,21 @@ The next dependency-safe product sequence is:
    evaluators block the affected guide until implemented and included in a new
    approved catalogue-bound generation. Infrastructure retries and project
    setup faults are not contributor failures; `allow_review` is not acceptance.
+   **For the first false-policy acceptance path:** publish TASK 04E1A source
+   facts before REV-04B's source FK; complete CON-03C/07 and the existing shared
+   fence/controller slice, then wire one shared acceptance operation through
+   04E1B/04E2/04E3. Prove real scoped activation/drain and 04F remediation before
+   enabling false. This milestone creates the submitter contribution and
+   applicable awards without live human queues/leases/decisions; it neither
+   invents a reviewer nor removes the later human branch from v0.1.
 7. **Start the live REV path.** Complete packet, Review, and FinalAcceptance
    persistence; admit only canonical `allow_review`; claim a bounded lease and
    exact packet using the Submission-stamped ContributionPolicyVersion.
-8. **Make review decisions economically complete.** Before the first live
-   Review commit, persist ContributionRecord/CompensationAward and install the
-   atomic CON participant. Every final decision records reviewer work; accept
-   additionally records accepted submitter work.
+8. **Make human review decisions economically complete.** Before the first live
+   Review commit, add the reviewer CON operation and reuse the shared acceptance
+   operation already needed by the false branch. Every final decision records
+   reviewer work; accept additionally records accepted submitter work. Do not
+   duplicate the common persistence or submitter participant.
 9. **Complete revision and operations.** Preserve old attempts immutably;
    rebase a continuing TaskAssignment only at the controlled human-revision
    boundary when the complete governed context changed. Finish recovery,
@@ -354,7 +364,9 @@ v0.1 is not ready until all of the following are true:
 - TASK consumes that admission to create the immutable Submission with exact
   assignment/policy lineage. Pre-submit feedback is not post-submit proof.
 - The immutable Submission automatically reaches exactly one current
-  post-submit result and an exact `allow_review` manifest when eligible.
+  post-submit result. Locked true produces human `allow_review` when eligible;
+  locked false with supported requirements invokes the shared atomic acceptance
+  operation with no human Review/lease/reviewer contribution.
 - A reviewer can claim only that admitted version, access only its bounded
   packet, and record one immutable final decision.
 - `needs_revision` safely continues or rebases the same assignment while

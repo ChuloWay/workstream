@@ -48,7 +48,15 @@ Canonical checker routing recommendation values are:
 - checker_retry
 - task_setup_blocked
 
-`allow_review` must not be stored as `accept`. It only means the automated checker found no blocking issue and the packet may proceed to human review. Only a human review decision can store `accept`.
+`allow_review` must not be stored as `accept`. It is checker evidence of no
+blocking issue, not a product decision or permission. TASK reads the exact
+Submission-locked ReviewPolicy: true permits human admission; false invokes
+the [same shared acceptance operation](spec_review_lifecycle.md#finalacceptance)
+under its own exact authority after validating all required evidence. Only an
+actual human Review stores an `accept` review decision. The false branch
+creates FinalAcceptance and the submitter contribution without any Review,
+ReviewLease or reviewer contribution. CHECKERS still cannot accept or reject
+work, and this planned branch remains unavailable until its runtime proof lands.
 
 `task_setup_blocked` must not be stored as `needs_revision`. It means the task's
 locked contract or policy context is incomplete, stale, or unsafe to review. An

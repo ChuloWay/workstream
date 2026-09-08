@@ -16,6 +16,14 @@ of review/revision behavior. The downstream owner contracts remain separate.
 - Preserve: unavailable-by-default actions, exact service principals, fresh
   authority inside transactions, and feature-owned row locks/final facts.
 
+The existing XINT-003-08B `review.lifecycle.activation.manage` slice may precede
+human runtime for the [scoped shared-acceptance manifest](../../../docs/spec_review_lifecycle.md#scoped-activation-before-human-review-runtime).
+It requires the early REV-12A foundation, real enabled-writer observation/drain
+proof and exact same-action AUTH activation. It exposes only the existing
+Operator control command for that manifest; it does not activate other 08B
+actions, reviewer endpoints or a second controller. Later human integration
+extends the same approved manifest and action under its own proof.
+
 ## Preserved history
 
 Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
