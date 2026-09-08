@@ -2817,7 +2817,7 @@ def test_art_custody_documentation_matches_the_independent_activation_fixture() 
     assert "does not grant Operator" in operations
     assert "verification retry remains independently gated" in operations
     assert (
-            "73 PermissionIds, 111 ActionIds, 61 active actions, and\n50 planned actions" in operations
+            "73 PermissionIds, 111 ActionIds, 62 active actions, and\n49 planned actions" in operations
     )
 
 
