@@ -556,6 +556,8 @@ jobs:
           for source in \
             app/modules/authorization/project_setup_finalization.py \
             app/modules/authorization/domain/project_setup_finalization.py \
+            app/modules/authorization/domain/resource_digest.py \
+            app/modules/authorization/domain/audit_targets.py \
             app/modules/authorization/domain/prepared_service.py \
             app/modules/authorization/prepared_projection_replay.py
           do

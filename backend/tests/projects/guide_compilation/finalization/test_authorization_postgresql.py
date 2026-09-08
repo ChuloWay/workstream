@@ -8,7 +8,9 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.modules.audit.service import AuditService
 from app.modules.authorization.api import (
+    AuthorizationDenied,
     PreparedAuthorizationInvalid,
+    ProjectSetupFinalizationLocator,
     setup_finalization_authority_digest,
 )
 from app.modules.projects.api import ProjectGuideSetupFinalizationError
@@ -139,7 +141,7 @@ async def test_finalization_failure_rolls_back_all_effects(
         assert (await stored_state(factory, command))[2] == 1
 
 
-@pytest.mark.parametrize("substitution", ["missing", "foreign", "digest"])
+@pytest.mark.parametrize("substitution", ["foreign", "digest"])
 async def test_stored_replay_decision_substitution_denied(clean_postgres_database, substitution):
     async with database_case(clean_postgres_database) as (_, factory, command):
         await concrete_finalize(factory, command)
@@ -149,22 +151,17 @@ async def test_stored_replay_decision_substitution_denied(clean_postgres_databas
                 # Bounded rollback-only fixture corruption reaches AUTH replay
                 # despite append-only production constraints. Never commit it.
                 decision = str(before[1]["authorization_decision_event_id"])
-                if substitution in {"missing", "foreign"}:
-                    replacement = (
-                        str(uuid4())
-                        if substitution == "missing"
-                        else await session.scalar(
-                            text(
-                                "select id from audit_events where event_type='SensitiveAuthorizationAllowed' "
-                                "and action_id='project.guide_sufficiency.run' limit 1"
-                            )
+                if substitution == "foreign":
+                    replacement = await session.scalar(
+                        text(
+                            "select id from audit_events where event_type='SensitiveAuthorizationAllowed' "
+                            "and action_id='project.guide_sufficiency.run' limit 1"
                         )
                     )
                     assert replacement is not None and replacement != decision
-                    # Disable exactly this receipt table's guards, including its
-                    # immediate FK, solely to construct an impossible replay input.
+                    # Keep FK enforcement; bypass only immutability inside rollback.
                     await session.execute(
-                        text("alter table project_guide_setup_finalizations disable trigger all")
+                        text("alter table project_guide_setup_finalizations disable trigger user")
                     )
                     await session.execute(
                         text(
@@ -174,7 +171,7 @@ async def test_stored_replay_decision_substitution_denied(clean_postgres_databas
                         {"replacement": replacement, "id": before[1]["id"]},
                     )
                     await session.execute(
-                        text("alter table project_guide_setup_finalizations enable trigger all")
+                        text("alter table project_guide_setup_finalizations enable trigger user")
                     )
                 else:
                     await session.execute(text("alter table audit_events disable trigger user"))
@@ -192,3 +189,26 @@ async def test_stored_replay_decision_substitution_denied(clean_postgres_databas
                 ).finalize(command)
         assert await stored_state(factory, command) == before
         await concrete_finalize(factory, command)
+
+
+async def test_missing_history_denies_at_concrete_auth_boundary(clean_postgres_database):
+    """A missing decision cannot persist through the receipt FK; probe AUTH lookup directly."""
+    async with database_case(clean_postgres_database) as (_, factory, command):
+        async with factory() as session, session.begin():
+            authority = ObservedAuthorization(session)
+            await GuideCompilationFinalizationService(session, authority).finalize(command)
+        before = await stored_state(factory, command)
+        facts = authority.facts
+        locator = ProjectSetupFinalizationLocator(
+            project_id=facts.project_id,
+            operation_id=facts.operation_id,
+            correlation_id=facts.correlation_id,
+        )
+        async with factory() as session, session.begin():
+            adapter = ObservedAuthorization(session).delegate
+            async with adapter.prepare_setup_finalization(locator) as prepared:
+                await prepared.validate_replay(facts, authority.receipt.decision_event_id)
+            async with adapter.prepare_setup_finalization(locator) as prepared:
+                with pytest.raises(AuthorizationDenied, match="finalization authority denied"):
+                    await prepared.validate_replay(facts, uuid4())
+        assert await stored_state(factory, command) == before

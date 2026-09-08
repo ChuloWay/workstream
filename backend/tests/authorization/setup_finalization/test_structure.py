@@ -77,3 +77,27 @@ def test_authorization_owner_has_no_product_storage_or_provider_imports():
             "project_submission_artifact_policy",
         }
     )
+
+
+def test_finalization_partition_additions_are_exact_and_fail_closed():
+    """Register four exact owners without granting arbitrary partition additions."""
+    from scripts import behavior_ownership as ownership
+    from tests.test_behavior_ownership import _partition
+
+    expected = {
+        "backend/app/modules/authorization/domain/audit_targets.py",
+        "backend/app/modules/authorization/domain/project_setup_finalization.py",
+        "backend/app/modules/authorization/domain/resource_digest.py",
+        "backend/app/modules/authorization/project_setup_finalization.py",
+    }
+    assert ownership.AUTH_12B2_TARGETS == expected
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *expected})), trusted
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted({retained, *expected, "backend/app/modules/authorization/extra.py"})),
+            trusted,
+        )

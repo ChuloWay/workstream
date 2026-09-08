@@ -184,6 +184,7 @@ def finalization_replay_event_matches(
     after = getattr(event, "after_facts", None)
     return (
         isinstance(after, dict)
+        and set(after) == {"allowed", "resource_context_digest"}
         and after.get("allowed") is True
         and (after.get("resource_context_digest") == finalization_resource_digest(resource))
     )

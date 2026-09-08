@@ -46,7 +46,10 @@ remains outside this chunk: POL-04B owns the later live one-call cutover.
   assertions and architecture tests affected by the new action availability.
 - `backend/scripts/test_lane_catalogue.py`, `backend/tests/test_ci_lane_catalogue.py`,
   `.github/workflows/backend.yml`, and affected exact ownership/boundary records
-  only for additive registration and coverage enforcement.
+  only for additive registration and coverage enforcement. Register the four new
+  AUTH targets through the existing exact additive partition mechanism in
+  `backend/scripts/behavior_ownership.py` and `.ci/behavior-ownership/partition.v1.json`;
+  preserve every protected assignment and reject undeclared targets.
 
 ### Prohibited changes
 
@@ -142,7 +145,7 @@ PostgreSQL modules live in `backend/tests/projects/guide_compilation/finalizatio
 | `test_authorization_postgresql.py::test_concrete_replay_is_exact` | Unchanged receipt/result and event counts with current valid authority; real PostgreSQL |
 | `test_authorization_postgresql.py::test_revoked_service_denies_new_and_replay` | Actor suspension/deactivation and link revocation through production lifecycle services; both new finalization and stored-receipt replay; valid non-revoked controls |
 | `test_authorization_postgresql.py::test_finalization_failure_rolls_back_all_effects` | Evidence insertion failure, invalid returned authority receipt, close failure and caller rollback; durable setup/receipt/allow-event comparisons with actual PG writes before failure where relevant |
-| `test_authorization_postgresql.py::test_stored_replay_decision_substitution_denied` | Stored foreign/missing/mismatched decision fixture reaches replay validation; explicitly bounded transactional tampering where append-only constraints prohibit a naturally persisted invalid row |
+| `test_authorization_postgresql.py::test_stored_replay_decision_substitution_denied` | Stored foreign/mismatched decision reaches replay using rollback-only USER-trigger bypass with FK enforcement intact; missing history is exercised at the concrete AUTH adapter with real PostgreSQL lookup and fresh preparation, because the receipt FK prohibits a missing persisted reference |
 | `test_authorization_concurrency_postgresql.py::test_finalization_and_revocation_serialize` | Actor and link lifecycle x revocation-first/finalization-first; distinct sessions/PIDs, named lock waiter and exact blocker, retained valid controls and cleanup of tasks |
 | `test_structure.py::test_finalization_authority_has_no_live_reachability` | Factory explicit, default denial retained, no HTTP/Celery/provider reference; syntax-aware structure with injected factory-import/call counterexample and default-service tests, not live execution proof |
 | Existing catalogue and hosted evidence tests | Exact new module registration, all canonical nodes complete once, aggregate and new-owner coverage floors unchanged |

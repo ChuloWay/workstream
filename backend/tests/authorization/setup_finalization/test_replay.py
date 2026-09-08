@@ -43,6 +43,24 @@ async def test_historical_decision_envelope_is_exact(monkeypatch, field, value):
     assert case.closed == case.services
 
 
+@pytest.mark.parametrize("mutation", ["extra_key", "integer_allowed"])
+async def test_replay_rejects_noncanonical_after_facts(monkeypatch, mutation):
+    case = Case(monkeypatch)
+    async with case.prepare() as prepared:
+        receipt = await prepared.consume_new(case.facts)
+    async with case.prepare() as prepared:
+        await prepared.validate_replay(case.facts, receipt.decision_event_id)
+    event = await case.evidence.get_authority_event(receipt.decision_event_id)
+    altered = dict(event.after_facts)
+    altered.update({"unexpected": "tampered"} if mutation == "extra_key" else {"allowed": 1})
+    case.event_changes["after_facts"] = altered
+    async with case.prepare() as prepared:
+        with pytest.raises(AuthorizationDenied, match="finalization authority denied"):
+            await prepared.validate_replay(case.facts, receipt.decision_event_id)
+    assert len(case.evidence.events) == 1
+    assert case.closed == case.services
+
+
 async def test_missing_historical_decision_denies(monkeypatch):
     case = Case(monkeypatch)
     async with case.prepare() as prepared:
