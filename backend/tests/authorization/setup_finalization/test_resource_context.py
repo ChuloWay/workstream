@@ -86,6 +86,62 @@ async def test_policy_tuple_and_transition_shape(monkeypatch, classification):
     assert case.fixed_calls == [(case.facts.operation_id, case.facts.correlation_id)]
 
 
+@pytest.mark.parametrize("classification", ["draft_ready", "draft_ready_with_warnings"])
+@pytest.mark.parametrize(
+    "field",
+    ["artifact_policy_id", "artifact_policy_operation_id", "artifact_policy_output_digest"],
+)
+def test_ready_finalization_rejects_each_missing_policy_field(monkeypatch, classification, field):
+    case = Case(monkeypatch, classification)
+    assert case.resource().facts == case.facts
+    assert getattr(case.facts, field) is not None
+    # All other facts, including the two remaining policy fields, stay valid.
+    with pytest.raises(
+        ValueError, match="^finalization classification and projection shape disagree$"
+    ):
+        replace(case.facts, **{field: None})
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("artifact_policy_id", uuid4()),
+        ("artifact_policy_operation_id", uuid4()),
+        ("artifact_policy_output_digest", DIGEST),
+    ],
+)
+def test_blocked_finalization_rejects_each_populated_policy_field(monkeypatch, field, value):
+    case = Case(monkeypatch, "guide_blocked")
+    assert case.resource().facts == case.facts
+    assert getattr(case.facts, field) is None
+    # The replacement is a valid UUID/digest; only its presence violates the shape.
+    with pytest.raises(
+        ValueError, match="^finalization classification and projection shape disagree$"
+    ):
+        replace(case.facts, **{field: value})
+
+
+@pytest.mark.parametrize(
+    "classification,outcome",
+    [
+        ("draft_ready", "sufficiency_blocked"),
+        ("draft_ready_with_warnings", "sufficiency_blocked"),
+        ("guide_blocked", "policy_draft_ready"),
+    ],
+)
+def test_finalization_rejects_conflicting_classification_outcome(
+    monkeypatch, classification, outcome
+):
+    case = Case(monkeypatch, classification)
+    assert case.resource().facts == case.facts
+    assert case.facts.setup_outcome != outcome
+    # Retain the complete policy tuple required by the original classification.
+    with pytest.raises(
+        ValueError, match="^finalization classification and projection shape disagree$"
+    ):
+        replace(case.facts, setup_outcome=outcome)
+
+
 @pytest.mark.parametrize("field", ["finalization_id", "operation_id", "correlation_id"])
 def test_deterministic_finalization_identity_is_exact(monkeypatch, field):
     case = Case(monkeypatch)
