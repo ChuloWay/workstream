@@ -64,7 +64,10 @@ unavailable. Scope and permission come from canonical AUTH repositories/policy,
 never inference from a role label or caller-supplied grant.
 
 Use action-specific strict frozen resource contexts, canonical public resource
-digests, and exact kernel registrations. Register the exact policy resource
+digests, and exact kernel registrations. CP05 requires exact action-to-resource
+class equality rather than relying on the existing broad `isinstance` check;
+`test_policy_actions_reject_sibling_resource_classes` proves swapped sibling
+action/resource pairs deny while each exact pair succeeds. Register the exact policy resource
 classes with `project_authority_audit_target()` in `domain/audit_targets.py` and
 include their actions in existing decision context-digest evidence; do not copy
 audit-target routing into the kernel. Read authorization is serialized with
