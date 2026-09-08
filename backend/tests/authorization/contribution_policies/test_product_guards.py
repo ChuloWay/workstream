@@ -88,6 +88,7 @@ async def test_real_authority_preserves_cp04_inactive_binding_publication_guard(
         # Seed a suspended binding through CP04's lifecycle fixture authority.
         # Only policy authorization is under test; its real AUTH adapter is unchanged.
         auth = HistoricalBindingAuthorization()
+        auth.bind_session(session)
         await AdapterBindingService(session, mutation_authorization=auth).suspend(
             AdapterBindingSuspendRequest(
                 operation_id=uuid4(),
