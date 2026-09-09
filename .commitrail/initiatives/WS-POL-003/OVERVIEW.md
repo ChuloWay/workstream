@@ -12,7 +12,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Completed boundary: hidden execution, deterministic projections, and immutable setup finalization.
 - Intent: compile one locked guide and its policies into authoritative,
   versioned project behavior without circular subsystem authority.
-- Next usable boundary: POL-04B consumes the [consolidated catalogue](../WS-ARCH-001/WS-ARCH-001-04A.md)
+- Next usable boundary: [POL-04B1](WS-POL-003-04B1.md) adds automatic request custody; POL-04B then consumes the [consolidated catalogue](../WS-ARCH-001/WS-ARCH-001-04A.md)
   and connects unified setup with completed AUTH-12B2.
   Earlier development schemas require no backward-compatibility paths.
   The existing ReviewPolicy boolean is delivered; automated acceptance remains unavailable.
@@ -41,8 +41,11 @@ Configured `false` remains available in draft but cannot activate a guide until
 the authorized automated FinalAcceptance/CON path is proven and available.
 Existing tasks retain their locked rules; adjudication is not included.
 
-1. Using completed ARCH-04A catalogue/schema contracts, POL-04B live explicit-manager
-   cutover with superseded inference implementations physically deleted.
+1. POL-04B1 supplies automatic request authority; using completed ARCH-04A
+   contracts, POL-04B connects automatic initial compilation with independently
+   configurable runtime/model/instructions and deletes superseded inference paths.
+   The result stops at findings and draft pre/post proposals, without approval.
+   Manager correction/manual rerun in a new generation belongs to POL-05.
 2. POL-05/06 complete proposal visibility, setup-wide correction, approval and
    post-submit manifests with AUTH-12F4/12G. Immutable
    finalized setup rows require separately reviewed downstream custody before
