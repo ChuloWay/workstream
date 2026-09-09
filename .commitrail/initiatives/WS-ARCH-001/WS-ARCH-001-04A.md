@@ -4,7 +4,7 @@
 - Durable disposition: Planned
 - Intended merge outcome: CHECKERS exposes its versioned post-submit catalogue and immutable phase contracts, with conformance evidence for its registered structural implementations; live unified setup remains POL-04B.
 
-## Intent and delivery position
+## Intent
 
 Finish the unified Project Guide path using the adopted dependency contract.
 The guide agent must receive an accurate description of supported post-submit
