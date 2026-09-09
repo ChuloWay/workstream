@@ -88,6 +88,37 @@ class AuthorityDrill:
                 process.kill()
                 await process.wait()
 
+    async def owner_guards(self, label, count, target=None, *, mutants=False):
+        target = target or self.admin
+        variants = ("none", "grant", "profile", "link") if mutants else ("none",)
+        for variant in variants:
+            before = await self.snapshot(audit=True)
+            env = {key: self.env[key] for key in ("WORKSTREAM_DATABASE_URL", "WORKSTREAM_ENVIRONMENT", "PYTHONPATH")}
+            process = await asyncio.create_subprocess_exec(sys.executable, "scripts/admin_guard_probe.py",
+                "--isolation-metadata", str(self.drill.isolation_metadata),
+                "--actor-id", self.actors[target], "--grant-id", self.grants[target],
+                "--expected-count", str(count), "--mutant", variant,
+                cwd=ROOT, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            try:
+                output, _ = await asyncio.wait_for(process.communicate(), 35)
+            finally:
+                if process.returncode is None:
+                    process.kill()
+                    await process.wait()
+            result = json.loads(output)
+            self.proof(label + "_" + variant + "_rollback", before == await self.snapshot(audit=True))
+            expected_failures = {"none": [], "grant": ["grant_revoke"],
+                "profile": ["profile_deactivate", "profile_suspend"], "link": ["link_revoke"]}[variant]
+            self.drill.report.setdefault("owner_guard_probes", []).append({"state": label, **result})
+            self.proof(label + "_" + variant + "_exact_result",
+                process.returncode == (0 if variant == "none" else 2)
+                and result.get("effective_count") == count
+                and result.get("failed_checks") == expected_failures
+                and set(result.get("checks", {})) == {"grant_revoke", "profile_suspend", "profile_deactivate", "link_revoke"})
+            if variant == "none":
+                for name, value in result["checks"].items():
+                    self.proof(label + "_" + name, value == ("last_access_administrator" if count == 1 else None))
+
     async def call(self, name, method, route, actor=None, **kwargs):
         return await self.drill.call(name, method, route,
                                     token=self.tokens.get(actor), **kwargs)
@@ -150,7 +181,22 @@ class AuthorityDrill:
         code, body = await self.command(self.actors["outsider"], "--execute")
         self.proof("bootstrap_later_conflict", code == 3 and body["grant_id"] == grant_id)
         self.proof("bootstrap_later_no_authority_change", before == await self.snapshot())
+        await self.owner_guards("initial_single_admin", 1, mutants=True)
         await self.issue("second_access_admin", self.admin, self.second, "access_administrator")
+        await self.owner_guards("two_active_admins", 2)
+        await self.call("suspend_second_admin", "POST", PROFILE + "/suspend", self.admin,
+            path=f'/api/v1/actors/{self.actors[self.second]}/suspend', payload=REASON)
+        await self.owner_guards("second_admin_suspended", 1)
+        await self.call("restore_second_admin", "POST", PROFILE + "/reactivate", self.admin,
+            path=f'/api/v1/actors/{self.actors[self.second]}/reactivate', payload=REASON)
+        await self.owner_guards("second_admin_reactivated", 2)
+        second_link = await self.call("second_admin_link", "GET", LINKS, self.admin,
+            path=f'/api/v1/actors/{self.actors[self.second]}/identity-links')
+        for action, count in (("revoke", 1), ("reactivate", 2)):
+            await self.call("second_admin_link_" + action, "POST",
+                "/api/v1/actor-identity-links/{identity_link_id}/" + action, self.admin,
+                path=f'/api/v1/actor-identity-links/{second_link["identity_link_id"]}/{action}', payload=REASON)
+            await self.owner_guards("second_admin_link_" + action, count)
         await self.issue("system_manager", self.admin, "manager_system", "project_manager")
         for label in ("a", "b"):
             body = await self.call("project_" + label, "POST", "/api/v1/projects", "manager_system",
@@ -356,7 +402,8 @@ class AuthorityDrill:
         await self.deny("last_admin_own_link_revoke", "POST", "/api/v1/actor-identity-links/{identity_link_id}/revoke",
             survivor, path=f'/api/v1/actor-identity-links/{link["identity_link_id"]}/revoke',
             payload=REASON, code="resource_guard_denied")
-        self.drill.report["limitations"].append("Self-removal denied by earlier self guards; count-based last-admin guard not directly reached")
+        await self.owner_guards("after_cross_revoke", 1, target=survivor)
+        self.drill.report["limitations"].append("HTTP self-removal uses self guards; count guards separately executed with real stored facts in rollback-only owner probes")
 
 
 async def scenario(drill, issuer, env):

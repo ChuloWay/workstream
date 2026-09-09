@@ -688,7 +688,7 @@ async def service_actor_cases(drill, issuer, admin, outsider):
             values={"error.code": "identity_link_revoked" if action == "revoke" else "permission_not_granted"})
 
 
-async def isolation(metadata_path):
+async def isolation(metadata_path, *, require_empty=True):
     """Read-only preflight; never use a shared or populated database."""
     metadata = json.loads(metadata_path.read_text())
     url = os.environ.get("WORKSTREAM_DATABASE_URL", "")
@@ -708,7 +708,8 @@ async def isolation(metadata_path):
     try:
         row = await connection.fetchrow("select current_database() as db, current_user as role, "
                                         "(select count(*) from actor_profiles) as actors")
-        if row["db"] != metadata["database_name"] or row["role"] != metadata["database_role"] or row["actors"]:
+        if (row["db"] != metadata["database_name"] or row["role"] != metadata["database_role"]
+                or (require_empty and row["actors"])):
             raise ProbeFailure("fresh_owned_database_required")
     finally:
         await connection.close()
@@ -757,6 +758,7 @@ async def run(args, report, *, scenario=None):
                 raise ProbeFailure("server_startup_timeout")
             document = (await client.get("/openapi.json")).json()
             drill = Drill(client, document, report)
+            drill.isolation_metadata = args.isolation_metadata
             await drill.call("health", "GET", "/api/v1/health")
             if scenario is not None:
                 await scenario(drill, issuer, env)

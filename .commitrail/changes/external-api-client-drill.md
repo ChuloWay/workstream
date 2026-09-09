@@ -13,8 +13,10 @@ external-client lifecycle readiness.
 
 ## Bounded change
 
-Allowed: `backend/scripts/external_api_drill.py`, its focused tests under
-`scripts/test_external_api_drill.py`, this record, the usage document and the
+Allowed: `backend/scripts/external_api_drill.py`, `backend/scripts/admin_api_drill.py`,
+`backend/scripts/admin_guard_probe.py`, focused tests under
+`scripts/test_external_api_drill.py` and `scripts/test_admin_api_drill.py`,
+this record, the usage document and the
 human-requested `docs/engineering/external-api-drill-findings.md` repair handoff.
 Generated raw evidence stays outside Git. Reuse the existing
 isolated-database runner and administrator bootstrap, not the old API drill.

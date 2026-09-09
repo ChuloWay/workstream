@@ -47,8 +47,15 @@ HTTP. The original no-product-SQL-write/no-disabled-guard rules still apply.
 HTTP endpoints. Cross-admin concurrent HTTP responses are checked there together
 with their persisted outcome rather than counted as ordinary HTTP cases.
 Concurrent calls demonstrate observed outcomes, not forced database lock overlap.
-Self-removal denials do not prove direct execution of the later count-based
-last-administrator guard. Missing groups remain incomplete, never certified.
+Self-removal HTTP denials exercise the self guards. Separately,
+`admin_guard_probe.py` executes the actual grant/profile/link count guards under
+the canonical control lock using stored rows established through HTTP/bootstrap.
+Every probe rolls back and checks unchanged state. One/two effective admins,
+suspended/revoked-link backup admins, restorations and post-revocation states
+are compared. Separate ephemeral child-process mutations change `<= 1` to `< 1`
+and must fail the exact affected checks; no product source file or API process
+is changed. These are owner/transaction probes, not extra HTTP capabilities.
+Missing groups remain incomplete, never certified.
 
 Run its helper checks with
 `backend/.venv/bin/python -m unittest scripts.test_admin_api_drill scripts.test_external_api_drill`.

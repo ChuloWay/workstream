@@ -12,9 +12,27 @@ sys.path.insert(0, str(DIRECTORY))
 SPEC = importlib.util.spec_from_file_location("admin_api_drill", DIRECTORY / "admin_api_drill.py")
 module = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(module)
+guard_probe = __import__("admin_guard_probe")
+
+
+def count_boundary(count):
+    return count <= 1
+
+
+def ambiguous_boundary(count):
+    return count <= 1 or count <= 1
 
 
 class EvidenceTests(unittest.IsolatedAsyncioTestCase):
+    def test_guard_mutant_changes_only_one_boundary_without_changing_original(self):
+        mutant = guard_probe.boundary_mutant(count_boundary)
+        self.assertTrue(count_boundary(1))
+        self.assertFalse(mutant(1))
+        self.assertTrue(mutant(0))
+        self.assertFalse(mutant(2))
+        with self.assertRaisesRegex(ValueError, "mutation_target_not_unique"):
+            guard_probe.boundary_mutant(ambiguous_boundary)
+
     def test_roster_has_twenty_distinct_actors(self):
         self.assertEqual(len(module.ROSTER), 20)
         self.assertEqual(len(set(module.ROSTER)), 20)
