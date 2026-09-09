@@ -183,11 +183,51 @@ These are harness repairs, not additional product defects for the other agent:
   alone is not claimed as proof of current state.
 - Request pacing retains the server's existing mutation limits.
 
+## New finding: API-DRILL-006 — valid qualification exceeds internal admission limit
+
+**Unrepaired product defect; do not certify the full grant-input contract.**
+The extended drill at `cf5e4633` against unchanged product main `c681b51f`
+observed HTTP **500**, `error.code=internal_error`, for both submitter and
+reviewer grants with valid populated qualification fields.
+
+- Route: `POST /api/v1/projects/{project_id}/role-grants`.
+- Setup: active system Project Manager; separate active, linked human target;
+  HTTP-created draft project; no existing active exact-role grant; valid fresh
+  UUID `Idempotency-Key` and reason `Exact project contribution role`.
+- Qualification: each skills/reputation snapshot is `available`, with null
+  `unavailable_reason` and twenty references: one 120-character `x` token plus
+  nineteen short `skill:<n>` or `rep:<n>` tokens. Supply twenty distinct canonical
+  UUID strings in `prior_project_work_refs`. External expertise contains one
+  120-character `x` token plus nineteen `expertise:<n>` tokens (`n` from 0 to 18).
+- Every field passes `ProjectRoleGrantIssueBody`; lists are at the advertised
+  twenty-item limit and tokens at or below 120 characters. Canonical request
+  serialization is 2,250 bytes for this recipe.
+- `parse_authority_request` in `authorization/schemas.py` rejects canonical
+  requests above 2,048 bytes with `TypeError("invalid authority mutation request")`.
+  `ProjectRoleGrantMutationService.reserve` reaches this check before completing
+  the grant. A direct schema/admission probe reproduces the rejection without a
+  database; the real HTTP cases reproduce the external 500.
+- Required repair: reconcile the public qualification contract with bounded
+  canonical admission, preserving closed input validation, authorization,
+  idempotency, snapshots and audit atomicity. Do not blindly raise a shared
+  authority limit or lower a drill expectation to accept 500.
+- Retest: `qualification_combined_limits_submitter` and
+  `qualification_combined_limits_reviewer` must return 201, read back every
+  supplied reference and revoke normally. Keep independent smaller positive,
+  replay and lifecycle controls; malformed cases must still reject without any
+  new grant history. Add focused product-level regression and safe-bound tests.
+
+This finding does not invalidate the smaller successful grant scenarios or the
+five repairs above. It does prevent advertising all permitted qualification
+inputs as working. Raw runs stay outside Git; their failure must remain visible
+until a product repair passes the unchanged expectation.
+
 ## Retest and handoff criteria
 
 Use the [new external-client drill](external-api-drill.md), not the older seeded
-API drill. Keep the failures above red until product repairs actually satisfy
-them. Run the applicable full hosted tests and coverage for the repair; this
+API drill. Keep unresolved failures red until product repairs actually satisfy
+them; preserve the passing regressions for repaired defects. Run the applicable
+full hosted tests and coverage for the repair; this
 drill supplements those tests rather than replacing them.
 
 After the repair merges, run against that exact main head with a fresh isolated

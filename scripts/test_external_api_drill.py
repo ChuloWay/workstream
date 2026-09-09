@@ -208,6 +208,36 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
                 await probe.call("defective", "GET", "/items", values={"items": [{"enabled": False}]})
             self.assertEqual(report["cases"][-1]["asserted_fields"], [])
             self.assertEqual(operation["field_cases"]["response.200.items[].enabled"], ["proof"])
+            with self.assertRaisesRegex(drill.ProbeFailure, "invalid_request_field_annotation"):
+                await probe.call("misindexed", "GET", "/items", fields=("response.200.count",))
+            self.assertNotIn("response.200.count", operation["request_cases"])
+            self.assertEqual(report["cases"][-1]["asserted_fields"], [])
+
+    async def test_qualification_denial_detects_a_forbidden_revoked_history_row(self):
+        mutated = False
+        route = "/api/v1/projects/{project_id}/role-grants"
+        def handler(request):
+            nonlocal mutated
+            status = 200
+            if request.url.path == "/api/v1/actors/me":
+                body = {"actor_profile_id": "target"}
+            elif request.method == "POST":
+                mutated = True
+                status, body = 422, {"error": {"code": "validation_error"}}
+            else:
+                body = {"items": [{"id": "rogue", "status": "revoked"}]
+                        if mutated and request.url.params.get("status") != "active" else [],
+                        "next_cursor": None}
+            return httpx.Response(status, json=body, headers={name: request.headers[name]
+                for name in ("X-Request-ID", "X-Correlation-ID")})
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://127.0.0.1") as client:
+            report = {}
+            probe = drill.Drill(client, {"paths": {"/api/v1/actors/me": {"get": {}},
+                                                route: {"get": {}, "post": {}}}}, report)
+            with self.assertRaisesRegex(drill.ProbeFailure, "response_value_mismatch"):
+                await drill.project_role_cases(probe, None, None, {"id": "project"}, "manager")
+            self.assertEqual(report["cases"][-1]["name"], "qualification_unchanged_missing_skills_snapshot")
+            self.assertEqual(report["cases"][-1]["result"], "failed")
 
     async def test_pagination_detects_missing_duplicate_foreign_and_nonterminating_pages(self):
         good = [{"items": [{"id": "a", "role": "submitter"}], "next_cursor": "next"},

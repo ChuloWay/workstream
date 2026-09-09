@@ -309,6 +309,9 @@ class Drill:
         self.results.append(row)
         operation["cases"].append(name)
         try:
+            if any(not isinstance(field, str) or not field.startswith(("body.", "query.", "path.", "header."))
+                   for field in fields):
+                raise ProbeFailure("invalid_request_field_annotation")
             # Respect the default 30/minute mutation budget without changing server guards.
             if method in {"POST", "PUT", "PATCH", "DELETE"} and token:
                 times = self.mutations.setdefault(token, [])
@@ -393,16 +396,16 @@ async def profile_cases(drill, issuer, token):
         for label, value in (("text", "example"), ("limit", "x" * limit), ("null", None)):
             await drill.call(f"{field}_{label}", "PATCH", route, token=token,
                              payload={field: value}, values={field: value},
-                             fields=(f"body.{field}", f"response.200.{field}"))
+                             fields=(f"body.{field}",))
             await drill.call(f"{field}_{label}_readback", "GET", route, token=token,
-                             values={field: value}, fields=(f"response.200.{field}",))
+                             values={field: value})
         for label, value in (("too_long", "x" * (limit + 1)), ("blank", "  "), ("empty", ""),
                              ("type", {"unexpected": True}), ("number", 1), ("bool", True),
                              ("array", [])):
             await drill.call(f"{field}_{label}", "PATCH", route, token=token,
                              payload={field: value}, expected=422, fields=(f"body.{field}",))
             await drill.call(f"{field}_{label}_unchanged", "GET", route, token=token,
-                             values={field: None}, fields=(f"response.200.{field}",))
+                             values={field: None})
     await drill.call("empty_profile_patch", "PATCH", route, token=token, payload={}, expected=422)
     await drill.call("unknown_profile_field", "PATCH", route, token=token,
                      payload={"admin_roles": ["access_administrator"]}, expected=422)
@@ -714,7 +717,7 @@ async def project_role_cases(drill, manager, contributor, project, manager_id):
     }
     recovery_key = {"Idempotency-Key": str(uuid4())}
     await drill.call("qualification_empty_baseline", "GET", route,
-        path=path + "?status=active", token=manager, values={"items": [], "next_cursor": None})
+        path=path, token=manager, values={"items": [], "next_cursor": None})
     for name, invalid in qualification_invalids(qualification):
         try:
             await drill.call("qualification_" + name, "POST", route, path=path, token=manager,
@@ -724,7 +727,32 @@ async def project_role_cases(drill, manager, contributor, project, manager_id):
         except ProbeFailure:
             pass
         await drill.call("qualification_unchanged_" + name, "GET", route,
-            path=path + "?status=active", token=manager, values={"items": [], "next_cursor": None})
+            path=path, token=manager, values={"items": [], "next_cursor": None})
+    for role in ("submitter", "reviewer"):
+        try:
+            boundary = await drill.call("qualification_combined_limits_" + role, "POST", route,
+                path=path, token=manager, headers={"Idempotency-Key": str(uuid4())},
+                payload={"target_actor_profile_id": actor["actor_profile_id"], "role": role,
+                         "qualification": qualification, "reason": "Exact project contribution role"},
+                expected=201, values={"role": role, "status": "active", "version": 1},
+                checks={"id": uuid_value})
+        except ProbeFailure:
+            continue
+        await drill.call("qualification_limits_readback_" + role, "GET", route + "/{grant_id}",
+            path=path + "/" + boundary["id"], token=manager,
+            values={"qualification_snapshot." + field: value for field, value in qualification.items()})
+        await drill.call("qualification_limits_revoke_" + role, "POST", route + "/{grant_id}/revoke",
+            path=path + "/" + boundary["id"] + "/revoke", token=manager,
+            payload={"reason": "End combined-boundary probe"}, values={"status": "revoked", "version": 2})
+    # Preserve independent small positive/replay/lifecycle controls even if a
+    # combined maximum exposes a product defect. Never lower its expected 201.
+    qualification = {
+        "skills_snapshot": {"availability": "available", "reference_ids": ["skill:drill"],
+                            "unavailable_reason": None},
+        "reputation_snapshot": {"availability": "unavailable", "reference_ids": [],
+                                "unavailable_reason": "no_record"},
+        "prior_project_work_refs": [], "external_expertise_refs": ["expertise:drill"],
+    }
     for role in ("submitter", "reviewer"):
         body = {"target_actor_profile_id": actor["actor_profile_id"], "role": role,
                 "qualification": qualification, "reason": "Exact project contribution role"}

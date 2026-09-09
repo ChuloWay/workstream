@@ -388,7 +388,7 @@ class AuthorityDrill:
             checks={"items": lambda rows: page_matches(rows, scoped_rows, set(), 50, "grant_id")})
         await self.deny("admin_cursor_no_foreign_authority", "GET", GRANTS, "audit_a",
             path=GRANTS + "?" + urlencode(dict(scope_type="project",
-                scope_project_id=self.projects["b"], cursor=admin_cursor)), code="permission_not_granted")
+                scope_project_id=self.projects["b"], cursor=admin_cursor)), code="scope_not_authorized")
         history = PROFILE + "/admin-role-grants"
         await page_cases(self.drill, "admin_target_history", history,
             f'/api/v1/actors/{self.actors["grant_target"]}/admin-role-grants', self.tokens[self.admin],

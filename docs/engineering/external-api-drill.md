@@ -117,8 +117,11 @@ cursor reuse checks selector isolation rather than requiring signature rejection
 Nested qualification probes exercise required fields, container types, available
 versus unavailable consistency, opaque references, UUID input and collection/
 token bounds. Denials are followed by unchanged active-grant readback, and the
-same rejected idempotency key must admit a subsequent valid grant. Positive
-readback includes populated reference collections at their exact bounds.
+same rejected idempotency key must admit a subsequent valid grant. Combined-bound
+controls require successful readback of populated references at their exact limits.
+They currently expose [API-DRILL-006](external-api-drill-findings.md#new-finding-api-drill-006--valid-qualification-exceeds-internal-admission-limit),
+not passing boundary evidence; expected 201 and the nonzero drill exit remain
+unchanged until repaired. Independent smaller grant controls continue afterward.
 
 ## MCP handoff boundary
 

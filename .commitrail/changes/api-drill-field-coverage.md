@@ -4,7 +4,7 @@
 - Durable disposition: Planned
 - Intended merge outcome: Extend client-side authorization and project-role field proof and document the remaining MCP handoff boundary.
 
-## Intent and design
+## Intent
 
 The merged repair passes both existing real-HTTP drills. Successful calls are
 not complete API contracts: list cursors, filter combinations and nested
@@ -13,7 +13,7 @@ isolated runner and HTTP client; do not add another framework or infer proof
 from OpenAPI presence. Record exact nested equality assertions and successful
 request-provenance checks without claiming unexecuted field combinations.
 
-## Bounded scope
+## Bounded change
 
 Allowed: `backend/scripts/external_api_drill.py`,
 `backend/scripts/admin_api_drill.py`, `scripts/test_external_api_drill.py`,
@@ -26,7 +26,7 @@ SQL writes, disabled guards, production credentials, CI/coverage changes, MCP
 implementation, and product-builder files. Newly discovered product defects are
 reported with reproductions, not silently accepted or repaired in this scope.
 
-## Plan and acceptance
+## Acceptance criteria
 
 1. Inspect pagination/filter owners and qualification schemas; place scenarios
    where HTTP-created fixtures have the necessary live authority and rows.
@@ -43,13 +43,15 @@ reported with reproductions, not silently accepted or repaired in this scope.
    focused review and hosted checks. Reconcile documentation with actual proof;
    do not advertise complete field certification or untested product flows.
 
-## Risk, review and verification
+## Risk and review routing
 
 Risk: L1, authorization evidence integrity; production behavior is unchanged.
 Plan feasibility review precedes implementation. Focused security review covers
 cursor/resource substitution, unchanged-state proof and secret handling. QA and
 test-delta review cover falsifiable assertions; documentation review covers
 MCP claims. Related tracks may share a bounded reviewer assignment.
+
+## Evidence
 
 Commands: `backend/.venv/bin/python -m unittest scripts.test_external_api_drill
 scripts.test_admin_api_drill`; the two isolated commands in
@@ -61,3 +63,20 @@ Full hosted Backend tests and coverage remain authoritative; no full local suite
 Human review focus: distinguish verified client behaviors, missing field probes,
 and unavailable flows. Bootstrap remains operator setup, not an MCP endpoint.
 No new human design decision is required within these boundaries.
+
+## Review findings
+
+Plan review distinguished unsigned administrative position cursors from signed
+project query cursors. Internal review found that active-only readback could
+miss a forbidden revoked row; qualification denials now read unfiltered history.
+It also found old response annotations flowing into the newly separated request
+index; those call sites are corrected and invalid annotation prefixes fail closed.
+
+## Product finding
+
+The combined qualification-bound control exposed API-DRILL-006: public validation
+accepts inputs whose canonical request exceeds the internal 2,048-byte admission
+limit, producing 500 rather than a successful valid grant. Expected 201 remains
+unchanged and failure remains in the report. Independent smaller positive/replay/
+revocation cases continue. Product repair is outside this harness change; the
+findings document owns its reproduction and required follow-up proof.
