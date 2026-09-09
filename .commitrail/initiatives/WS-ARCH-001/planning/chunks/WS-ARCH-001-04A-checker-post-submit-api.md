@@ -1,6 +1,10 @@
 # Chunk Contract: WS-ARCH-001-04A CHECKER Post-Submit API
 
-Disposition: Planned. Dependencies: merged CHECKER catalogue and unified
+Current bounded implementation record: [WS-ARCH-001-04A](../../WS-ARCH-001-04A.md).
+This adopted design remains normative; the record fixes current files, supported
+capabilities, proof and delivery priority for this implemented boundary.
+
+Disposition: Complete. Dependencies: merged CHECKER catalogue and unified
 compilation contracts; no POL-07, AUTH-12H, task activation or live run prerequisite.
 Risk: L1.
 Outcome: CHECKERS owns the single post-submit API and phase-command contract
@@ -108,9 +112,9 @@ for canonical hashes and real registered capability conformance (no completed
 product run prerequisite), boundary validators, Ruff and hosted coverage. Required
 reviews: architecture, security, product/ops, QA, senior and reuse.
 
-Before implementation, replace this skeleton with a current-main contract that
-enumerates exact files, commands, migration head and reviewers.
+The linked current-main record enumerates implementation files, commands,
+migration head and reviewers. It records the implemented boundary and remaining downstream work.
 
 ## Merge state
 
-- Outcome on merge: `planned`
+- Outcome on merge: `complete`

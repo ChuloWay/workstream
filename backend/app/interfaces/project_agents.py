@@ -22,6 +22,9 @@ from pydantic import (
     model_validator,
 )
 
+from app.modules.checkers.api import PostSubmitCatalogue, PostSubmitDefinition
+
+
 MAXIMUM_VERIFIED_GUIDE_AGENT_MATERIAL_BYTES = 12 * 1024 * 1024
 MAXIMUM_PROJECT_GUIDE_COMPILATION_PROMPT_BYTES = 16 * 1024 * 1024
 MAXIMUM_COMPILATION_FINDINGS = 100
@@ -154,6 +157,10 @@ class PostSubmissionCapabilityProjection(BaseModel):
     schema_version: Literal["post_submission_checker_capability_projection.v1"]
     manifest_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     definitions: tuple[PostSubmissionCapabilityDefinition, ...]
+
+
+class PostSubmissionCapabilityProjectionV2(PostSubmitCatalogue):
+    """Agent-facing v2 projection using CHECKERS canonical fields and validators."""
 
 
 class RepresentativeTaskPolicyContext(BaseModel):
@@ -447,7 +454,10 @@ class ProjectGuideCompilationContext(BaseModel):
     agent_identity: str = Field(max_length=100)
     agent_version: str = Field(max_length=100)
     pre_submission_capabilities: PreSubmissionCapabilityProjection
-    post_submission_capabilities: PostSubmissionCapabilityProjection
+    post_submission_capabilities: Annotated[
+        PostSubmissionCapabilityProjection | PostSubmissionCapabilityProjectionV2,
+        Field(discriminator="schema_version"),
+    ]
     representative_task: RepresentativeTaskPolicyContext | None = None
 
 
@@ -540,9 +550,14 @@ def validate_project_guide_compilation_result(
         definition.stable_id: definition
         for definition in context.pre_submission_capabilities.definitions
     }
+    post_capabilities = context.post_submission_capabilities
+    if isinstance(post_capabilities, PostSubmissionCapabilityProjectionV2):
+        post_capabilities = PostSubmissionCapabilityProjectionV2.model_validate(post_capabilities)
+        if any(item.platform_default and item.state != "enabled" for item in post_capabilities.definitions):
+            raise ValueError("post-submit capability projection is unavailable")
     post_definitions = {
         definition.capability_id: definition
-        for definition in context.post_submission_capabilities.definitions
+        for definition in post_capabilities.definitions
     }
     _validate_platform_coverage(result.requirements, pre_definitions, post_definitions)
     _validate_evidence_lineage(context, result)
@@ -591,7 +606,7 @@ def _validate_status_consistency(result: ProjectGuideCompilationResult) -> None:
 def _validate_platform_coverage(
     requirements: tuple[AtomicGuideRequirement, ...],
     pre_definitions: dict[str, PreSubmissionCapabilityDefinition],
-    post_definitions: dict[str, PostSubmissionCapabilityDefinition],
+    post_definitions: dict[str, PostSubmissionCapabilityDefinition | PostSubmitDefinition],
 ) -> None:
     """Resolve platform coverage only against eligible phase-owner truth."""
     for requirement in requirements:
@@ -617,6 +632,7 @@ def _validate_platform_coverage(
             valid = (
                 post_definition is not None
                 and post_definition.capability_version == coverage.capability_version
+                and (not isinstance(post_definition, PostSubmitDefinition) or post_definition.state == "enabled")
                 and post_definition.platform_default
                 and not post_definition.selectable
             )
@@ -655,7 +671,7 @@ def _validate_evidence_lineage(
 def _validate_bindings(
     bindings: tuple[CapabilityBindingProposal, ...],
     requirements: dict[str, AtomicGuideRequirement],
-    definitions: dict[str, PreSubmissionCapabilityDefinition | PostSubmissionCapabilityDefinition],
+    definitions: dict[str, PreSubmissionCapabilityDefinition | PostSubmissionCapabilityDefinition | PostSubmitDefinition],
     expected_stage: Literal["pre_submit", "post_submit"],
 ) -> set[str]:
     """Validate exact stage, version, selectability, and parameter ownership."""
@@ -688,6 +704,8 @@ def _validate_bindings(
             allowed_fields = set(definition.policy_fields)
             if any(parameter.name not in allowed_fields for parameter in binding.parameters):
                 raise ValueError("pre-submit capability parameters are invalid")
+        elif isinstance(definition, PostSubmitDefinition):
+            definition.validate_configuration({item.name: item.value for item in binding.parameters})
         elif binding.parameters:
             raise ValueError("post-submit capability parameters are not supported")
         seen_requirements.add(binding.requirement_id)

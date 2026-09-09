@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
+from uuid import UUID
+
+from app.modules.checkers.api import CompiledPostSubmitPolicyV2, PostSubmitCatalogue
 
 from app.core.hashing import canonical_json_hash
 from app.interfaces.project_agents import (
@@ -473,3 +476,63 @@ def _duplicates(values: list[str]) -> set[str]:
             duplicates.add(value)
         seen.add(value)
     return duplicates
+
+
+def compile_post_submit_policy_v2(
+    *, project_id: UUID, guide_version: str, catalogue: PostSubmitCatalogue,
+    required_checkers: tuple[str, ...] = (), warning_checkers: tuple[str, ...] = (),
+    blocking_severities: tuple[str, ...] = ("critical", "high"),
+) -> CompiledPostSubmitPolicyV2:
+    """Compile a dormant explicit v2 body; never change the historical default."""
+    from app.modules.checkers.api import (
+        CompiledPostSubmitPolicyV2, EmptyPostSubmitConfiguration,
+        PostSubmitCatalogue, PostSubmitPolicyEntry,
+    )
+
+    catalogue = PostSubmitCatalogue.model_validate(catalogue)
+    requested = required_checkers + warning_checkers
+    if len(set(requested)) != len(requested):
+        raise PostSubmitCheckerCompilerError("post-submit project entries repeat")
+    selectable = {item.capability_id for item in catalogue.definitions if item.selectable}
+    if not set(requested).issubset(selectable):
+        raise PostSubmitCheckerCompilerError("post-submit project selection is unavailable")
+    entries = []
+    for definition in catalogue.definitions:
+        name = definition.capability_id
+        if definition.platform_default or name in requested:
+            configuration = definition.validate_configuration(EmptyPostSubmitConfiguration())
+            classification = ("platform_default" if definition.platform_default
+                              else "project_required" if name in required_checkers else "project_warning")
+            entries.append(PostSubmitPolicyEntry(
+                checker_id=name, definition_version=definition.capability_version,
+                implementation_version=definition.implementation_version,
+                classification=classification, configuration=configuration,
+            ))
+    result = CompiledPostSubmitPolicyV2(
+        project_id=project_id, guide_version=guide_version,
+        catalogue_manifest_sha256=catalogue.manifest_sha256,
+        entries=tuple(entries), blocking_severities=blocking_severities,
+    )
+    result.validate_catalogue(catalogue)
+    return result
+
+
+def parse_post_submit_policy_v2(*, body: dict, policy_hash: str, catalogue: PostSubmitCatalogue) -> CompiledPostSubmitPolicyV2:
+    """Parse only the explicit new body, checking its hash and exact supplied snapshot."""
+    from app.modules.checkers.api import CompiledPostSubmitPolicyV2
+    import json
+
+    result = CompiledPostSubmitPolicyV2.model_validate_json(json.dumps(body))
+    if result.policy_hash != policy_hash:
+        raise PostSubmitCheckerCompilerError("post-submit policy hash mismatch")
+    result.validate_catalogue(catalogue)
+    return result
+
+
+def project_guide_post_submission_capabilities_v2(catalogue: PostSubmitCatalogue):
+    """Project canonical CHECKERS metadata in one direction, without copied rules."""
+    from app.interfaces.project_agents import PostSubmissionCapabilityProjectionV2
+    from app.modules.checkers.api import PostSubmitCatalogue
+
+    catalogue = PostSubmitCatalogue.model_validate(catalogue)
+    return PostSubmissionCapabilityProjectionV2.model_validate(catalogue.model_dump())

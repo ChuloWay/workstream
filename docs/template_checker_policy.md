@@ -47,7 +47,7 @@ Task setup checks:
 
 ## Compiler Contract
 
-Workstream compiles this project policy into the canonical
+The currently active v1 compiler compiles this project policy into the canonical
 `PostSubmitCheckerPolicy` body. The compiler always includes Workstream default
 durable checkers in `default_checkers` and `execution_checkers`. Default-only
 projects leave project-specific `required_checkers` and `warning_checkers`
@@ -57,6 +57,11 @@ Project-specific `required_checkers` may add a registered checker or tighten a
 default checker's routing. `warning_checkers` must not weaken a default
 checker. Unknown checker names, duplicate classifications, conflicting
 required/warning classifications, and default-checker list drift fail closed.
+
+The hidden v2 compiler has a separate contract: all eight defaults are mandatory
+and nonselectable, the low-quality default retains its advisory warning, and
+only `check_acceptance_criteria_present` is selectable. This v1 template does
+not configure that dormant compiler.
 
 ## Pre-Submit Boundary
 
