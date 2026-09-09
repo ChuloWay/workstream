@@ -1,0 +1,347 @@
+"""Twenty-actor real HTTP authority drill; only bootstrap uses a local command."""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import json
+from pathlib import Path
+import sys
+from uuid import uuid4
+
+import asyncpg
+
+from external_api_drill import ROOT, ProbeFailure, main, uuid_value
+
+ROSTER = (
+    "bootstrap_a", "bootstrap_b", "manager_system", "manager_a", "manager_b",
+    "operator", "finance_system", "finance_a", "audit_system", "audit_a",
+    "submitter_a", "reviewer_a", "submitter_b", "reviewer_b", "dual_a",
+    "outsider", "suspend_target", "deactivate_target", "link_target", "grant_target",
+)
+ROLES = ("access_administrator", "operator", "project_manager", "finance_authority", "audit_authority")
+GRANTS = "/api/v1/admin-role-grants"
+PROFILE = "/api/v1/actors/{actor_profile_id}"
+LINKS = PROFILE + "/identity-links"
+PROJECT = "/api/v1/projects/{project_id}"
+REASON = {"reason": "Isolated twenty-actor authority drill"}
+
+
+def grant_body(actor_id, role="operator", project_id=None):
+    return dict(target_actor_profile_id=actor_id, role=role,
+                scope_type="project" if project_id else "system", scope_project_id=project_id,
+                **REASON)
+
+
+def one_winner(outcomes):
+    """No fixed winner and no false success if both calls win or both lose."""
+    return sorted(outcomes) == [0, 3]
+
+
+class AuthorityDrill:
+    def __init__(self, drill, issuer, env):
+        self.drill, self.issuer, self.env = drill, issuer, env
+        self.actors, self.tokens, self.grants, self.projects = {}, {}, {}, {}
+        self.admin = self.second = None
+
+    def proof(self, name, condition):
+        row = {"name": name, "operation": "local_evidence", "result": "success" if condition else "failed"}
+        self.drill.results.append(row)
+        if not condition:
+            raise ProbeFailure(name)
+        print("evidence passed:", name, flush=True)
+
+    async def snapshot(self, *, audit=False):
+        connection = await asyncpg.connect(self.env["WORKSTREAM_DATABASE_URL"].replace(
+            "postgresql+asyncpg:", "postgresql:", 1))
+        try:
+            async with connection.transaction(readonly=True, isolation="repeatable_read"):
+                result = {}
+                for table in ("authority_control", "admin_role_grants", "authority_idempotency_records",
+                              "project_role_grants", "project_role_qualification_snapshots", "projects", "project_guides"):
+                    result[table] = await connection.fetchval(
+                        f"SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY id), '[]')::text FROM {table} t")
+                result["actors"] = await connection.fetchval(
+                    "SELECT coalesce(jsonb_agg(jsonb_build_array(id,status) ORDER BY id),'[]')::text FROM actor_profiles")
+                result["links"] = await connection.fetchval(
+                    "SELECT coalesce(jsonb_agg(jsonb_build_array(id,status) ORDER BY id),'[]')::text FROM actor_identity_links")
+                if audit:
+                    result["audit"] = await connection.fetchval(
+                        "SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY id),'[]')::text FROM audit_events t")
+                return result
+        finally:
+            await connection.close()
+
+    async def command(self, actor_id, mode):
+        process = await asyncio.create_subprocess_exec(sys.executable,
+            "scripts/bootstrap_access_administrator.py", "--actor-profile-id", actor_id, mode,
+            cwd=ROOT, env=self.env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        try:
+            output, _ = await asyncio.wait_for(process.communicate(), 40)
+            return process.returncode, json.loads(output)
+        finally:
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+
+    async def call(self, name, method, route, actor=None, **kwargs):
+        return await self.drill.call(name, method, route,
+                                    token=self.tokens.get(actor), **kwargs)
+
+    async def deny(self, name, method, route, actor, *, expected=403, code=None, **kwargs):
+        before = await self.snapshot()
+        error = None
+        try:
+            await self.call(name, method, route, actor, expected=expected,
+                            values={"error.code": code} if code else {}, **kwargs)
+        except ProbeFailure as exc:
+            error = exc
+        self.proof(name + "_no_authority_change", before == await self.snapshot())
+        if error:
+            raise error
+
+    async def issue(self, name, caller, target, role, project=None):
+        body = grant_body(self.actors[target], role, project)
+        result = await self.call(name, "POST", GRANTS, caller, payload=body, expected=201,
+            values={"resource_type": "admin_role_grant", "version": 1, "http_status": 201},
+            checks={"resource_id": uuid_value})
+        self.grants[target] = result["resource_id"]
+        return result
+
+    async def bootstrap(self):
+        for label in ROSTER:
+            self.tokens[label] = self.issuer.issue("admin-drill-" + label)
+            body = await self.call("profile_" + label, "GET", "/api/v1/actors/me", label,
+                values={"actor_kind": "human", "status": "active", "admin_roles": [],
+                        "project_role_grants": []}, checks={"actor_profile_id": uuid_value})
+            self.actors[label] = body["actor_profile_id"]
+        self.proof("twenty_distinct_profiles", len(set(self.actors.values())) == 20)
+        self.drill.report["actor_roster"] = [{"label": label, "actor_profile_id": actor}
+                                             for label, actor in self.actors.items()]
+        before = await self.snapshot(audit=True)
+        code, body = await self.command(str(uuid4()), "--execute")
+        self.proof("bootstrap_missing_target", code == 2 and body["result_code"] == "target_ineligible")
+        self.proof("bootstrap_invalid_unchanged", before == await self.snapshot(audit=True))
+        code, body = await self.command(self.actors["bootstrap_a"], "--dry-run")
+        self.proof("bootstrap_dry_run_eligible", code == 0 and body["would_change"] is True)
+        self.proof("bootstrap_dry_run_unchanged", before == await self.snapshot(audit=True))
+        for label in ("bootstrap_a", "bootstrap_b"):
+            await self.deny("before_bootstrap_" + label, "GET", "/api/v1/authorization/permissions",
+                            label, code="permission_not_granted")
+        results = await asyncio.gather(*(self.command(self.actors[label], "--execute")
+                                        for label in ("bootstrap_a", "bootstrap_b")))
+        self.proof("bootstrap_concurrent_one_winner", one_winner([r[0] for r in results]))
+        win = next(i for i, r in enumerate(results) if r[0] == 0)
+        self.admin, self.second = (("bootstrap_a", "bootstrap_b") if win == 0 else ("bootstrap_b", "bootstrap_a"))
+        grant_id = results[win][1]["grant_id"]
+        self.grants[self.admin] = grant_id
+        self.proof("bootstrap_loser_binds_winner", results[1-win][1]["grant_id"] == grant_id)
+        state = await self.snapshot(audit=True)
+        grants, control, events = (json.loads(state[k]) for k in ("admin_role_grants", "authority_control", "audit"))
+        self.proof("bootstrap_atomic_state", len(grants) == 1 and grants[0]["role"] == "access_administrator"
+                   and grants[0]["target_actor_profile_id"] == self.actors[self.admin]
+                   and control[0]["bootstrap_completed"] is True and control[0]["bootstrap_grant_id"] == grant_id
+                   and sum(e["event_type"] == "InitialAccessAdministratorBootstrapped" for e in events) == 1)
+        before = await self.snapshot()
+        code, body = await self.command(self.actors["outsider"], "--execute")
+        self.proof("bootstrap_later_conflict", code == 3 and body["grant_id"] == grant_id)
+        self.proof("bootstrap_later_no_authority_change", before == await self.snapshot())
+        await self.issue("second_access_admin", self.admin, self.second, "access_administrator")
+        await self.issue("system_manager", self.admin, "manager_system", "project_manager")
+        for label in ("a", "b"):
+            body = await self.call("project_" + label, "POST", "/api/v1/projects", "manager_system",
+                payload={"name": "Authority project " + label, "slug": "authority-" + uuid4().hex},
+                expected=201, checks={"id": uuid_value})
+            self.projects[label] = body["id"]
+        for label, role, scope in (("manager_a", "project_manager", "a"),
+                ("manager_b", "project_manager", "b"), ("operator", "operator", None),
+                ("finance_system", "finance_authority", None), ("finance_a", "finance_authority", "a"),
+                ("audit_system", "audit_authority", None), ("audit_a", "audit_authority", "a")):
+            await self.issue("grant_" + label, self.admin, label, role, self.projects.get(scope))
+
+    async def role_matrix(self):
+        for label in ROSTER:
+            allowed = label in (self.admin, self.second, "audit_system")
+            route = "/api/v1/authorization/admin-role-definitions"
+            if allowed:
+                body = await self.call("role_definitions_" + label, "GET", route, label, values={"total": 5})
+                self.proof("closed_role_list_" + label, {r["role"] for r in body["items"]} == set(ROLES))
+                for row in body["items"]:
+                    expected = {"system"} if row["role"] in ROLES[:2] else {"system", "project"}
+                    self.proof("role_scopes_" + label + "_" + row["role"], set(row["allowed_scopes"]) == expected)
+            else:
+                await self.deny("role_definitions_" + label, "GET", route, label, code="permission_not_granted")
+        for label in ("operator", "manager_system", "manager_a", "finance_system", "finance_a",
+                      "audit_system", "audit_a", "outsider"):
+            await self.deny("cannot_issue_admin_" + label, "POST", GRANTS, label,
+                            payload=grant_body(self.actors["grant_target"]), code="permission_not_granted")
+        for label in (self.admin, "operator", "manager_system", "manager_a", "manager_b",
+                      "finance_system", "finance_a", "audit_system", "audit_a", "outsider"):
+            for project in ("a", "b"):
+                allowed = label in ("operator", "manager_system", "finance_system", "audit_system") or (
+                    label in ("manager_a", "finance_a", "audit_a") and project == "a") or (
+                    label == "manager_b" and project == "b")
+                kwargs = dict(path=f'/api/v1/projects/{self.projects[project]}')
+                if allowed:
+                    await self.call("project_read_" + label + project, "GET", PROJECT, label,
+                                    values={"id": self.projects[project]}, **kwargs)
+                else:
+                    await self.deny("project_read_" + label + project, "GET", PROJECT, label, expected=404, **kwargs)
+        for label in (self.admin, "operator", "manager_a", "finance_system", "audit_system", "outsider"):
+            await self.deny("cannot_create_project_" + label, "POST", "/api/v1/projects", label,
+                payload={"name": "Forbidden creation", "slug": "denied-" + uuid4().hex}, expected=403)
+        forged = "forged_claims"
+        self.tokens[forged] = self.issuer.issue("admin-drill-outsider", roles=["admin", "access_administrator"])
+        await self.deny("token_claims_cannot_grant_authority", "GET", "/api/v1/authorization/permissions",
+                        forged, code="permission_not_granted")
+
+    async def grant_edges(self):
+        for role in ROLES:
+            await self.deny("self_grant_" + role, "POST", GRANTS, self.admin,
+                payload=grant_body(self.actors[self.admin], role), code="self_grant_forbidden")
+        await self.deny("self_admin_revoke", "POST", GRANTS + "/{grant_id}/revoke", self.admin,
+            path=GRANTS + "/" + self.grants[self.admin] + "/revoke", payload=REASON,
+            code="self_role_revoke_forbidden")
+        body = grant_body(self.actors["grant_target"])
+        invalids = [("missing_" + field, {k:v for k,v in body.items() if k != field})
+                    for field in ("target_actor_profile_id", "role", "scope_type", "reason")]
+        invalids += [("null_" + field, body | {field: None})
+                     for field in ("target_actor_profile_id", "role", "scope_type", "reason")]
+        invalids += [("unknown_role", body | {"role": "owner"}), ("unknown_scope", body | {"scope_type": "all"}),
+                     ("extra", body | {"admin": True}), ("blank_reason", body | {"reason": " "}),
+                     ("invalid_actor", body | {"target_actor_profile_id": "bad"})]
+        for name, invalid in invalids:
+            await self.deny("grant_" + name, "POST", GRANTS, self.admin, payload=invalid, expected=422)
+        for role in ROLES[:2]:
+            await self.deny("system_only_" + role, "POST", GRANTS, self.admin,
+                payload=grant_body(self.actors["grant_target"], role, self.projects["a"]), expected=422)
+        await self.deny("missing_scope_project", "POST", GRANTS, self.admin,
+            payload=body | {"role": "project_manager", "scope_type": "project"}, expected=400)
+        key = {"Idempotency-Key": str(uuid4())}
+        result = await self.call("grant_exact", "POST", GRANTS, self.admin, payload=body, headers=key, expected=201)
+        before = await self.snapshot(audit=True)
+        await self.call("grant_exact_replay", "POST", GRANTS, self.admin, payload=body,
+                        headers=key, expected=201, values=result)
+        # Replay may record decision evidence; authority itself must not change.
+        self.proof("grant_replay_no_duplicate", {k:v for k,v in before.items() if k != "audit"} == await self.snapshot())
+        await self.deny("grant_key_mismatch", "POST", GRANTS, self.admin,
+            payload=body | {"reason": "Different reason"}, headers=key, expected=409, code="idempotency_mismatch")
+        await self.deny("grant_duplicate", "POST", GRANTS, self.admin, payload=body, expected=409)
+        self.grants["grant_target"] = result["resource_id"]
+        for label in (self.admin, "audit_system"):
+            history = PROFILE + "/admin-role-grants"
+            read = await self.call("grant_history_" + label, "GET", history, label,
+                path=f'/api/v1/actors/{self.actors["grant_target"]}/admin-role-grants?scope_type=system&status=all')
+            rows = read["items"]
+            self.proof("grant_history_exact_" + label, len(rows) == 1 and rows[0]["grant_id"] == result["resource_id"]
+                       and rows[0]["role"] == "operator" and rows[0]["status"] == "active"
+                       and rows[0]["granted_by_ref"] == self.actors[self.admin])
+
+    async def contributor_roles(self):
+        qualification = {"skills_snapshot": {"availability": "unavailable", "reference_ids": [],
+                         "unavailable_reason": "No external evidence in isolated drill"},
+            "reputation_snapshot": {"availability": "unavailable", "reference_ids": [],
+                         "unavailable_reason": "No reputation record"},
+            "prior_project_work_refs": [], "external_expertise_refs": []}
+        for label, role, project in (("submitter_a", "submitter", "a"), ("reviewer_a", "reviewer", "a"),
+                ("submitter_b", "submitter", "b"), ("reviewer_b", "reviewer", "b"),
+                ("dual_a", "submitter", "a"), ("dual_a", "reviewer", "a")):
+            route = PROJECT + "/role-grants"
+            await self.call("project_grant_" + label + role, "POST", route, "manager_" + project,
+                path=f'/api/v1/projects/{self.projects[project]}/role-grants', expected=201,
+                payload=dict(target_actor_profile_id=self.actors[label], role=role, qualification=qualification, **REASON),
+                values={"actor_profile_id": self.actors[label], "project_id": self.projects[project],
+                        "role": role, "status": "active"})
+        for label in ("submitter_a", "reviewer_a", "submitter_b", "reviewer_b", "dual_a"):
+            own = "b" if label.endswith("b") else "a"
+            for project in ("a", "b"):
+                await self.call("contributor_read_" + label + project, "GET", PROJECT, label,
+                    path=f'/api/v1/projects/{self.projects[project]}', expected=200 if project == own else 404)
+            await self.deny("contributor_no_admin_grant_" + label, "POST", GRANTS, label,
+                payload=grant_body(self.actors["grant_target"]), code="permission_not_granted")
+            expected_roles = ["reviewer", "submitter"] if label == "dual_a" else [label.split("_")[0]]
+            await self.call("contributor_context_" + label, "GET", "/api/v1/actors/me/authorization-context", label,
+                path=f'/api/v1/actors/me/authorization-context?project_id={self.projects[own]}',
+                values={"admin_roles": [], "project_roles": expected_roles})
+
+    async def lifecycle(self):
+        for label, action, state in (("suspend_target", "suspend", "suspended"),
+                                    ("deactivate_target", "deactivate", "deactivated")):
+            await self.issue("lifecycle_grant_" + label, self.admin, label, "audit_authority")
+            await self.call("before_lifecycle_" + label, "GET", "/api/v1/authorization/permissions", label)
+            await self.call("lifecycle_" + action, "POST", PROFILE + "/" + action, self.admin,
+                path=f'/api/v1/actors/{self.actors[label]}/{action}', payload=REASON)
+            await self.call("lifecycle_read_" + label, "GET", PROFILE, self.admin,
+                path=f'/api/v1/actors/{self.actors[label]}', values={"status": state})
+            await self.deny("inactive_catalogue_" + label, "GET", "/api/v1/authorization/permissions", label,
+                            code="actor_" + state)
+        await self.call("reactivate_suspended", "POST", PROFILE + "/reactivate", self.admin,
+            path=f'/api/v1/actors/{self.actors["suspend_target"]}/reactivate', payload=REASON)
+        await self.call("reactivated_catalogue", "GET", "/api/v1/authorization/permissions", "suspend_target")
+        await self.deny("terminal_deactivated", "POST", PROFILE + "/reactivate", self.admin,
+            path=f'/api/v1/actors/{self.actors["deactivate_target"]}/reactivate', payload=REASON,
+            expected=409, code="actor_deactivated_terminal")
+        await self.issue("link_target_grant", self.admin, "link_target", "audit_authority")
+        link = await self.call("link_target_read", "GET", LINKS, self.admin,
+            path=f'/api/v1/actors/{self.actors["link_target"]}/identity-links', values={"status": "active"})
+        for action, state in (("revoke", "revoked"), ("reactivate", "active")):
+            await self.call("human_link_" + action, "POST", "/api/v1/actor-identity-links/{identity_link_id}/" + action,
+                self.admin, path=f'/api/v1/actor-identity-links/{link["identity_link_id"]}/{action}', payload=REASON)
+            await self.call("human_link_read_" + action, "GET", LINKS, self.admin,
+                path=f'/api/v1/actors/{self.actors["link_target"]}/identity-links', values={"status": state})
+            if action == "revoke":
+                await self.deny("revoked_link_catalogue", "GET", "/api/v1/authorization/permissions", "link_target")
+            else:
+                await self.call("reactivated_link_catalogue", "GET", "/api/v1/authorization/permissions", "link_target")
+
+    async def last_admin(self):
+        # Actual simultaneous HTTP requests; no claim of forced database lock overlap.
+        print("Waiting for a fresh mutation-rate window before cross-admin calls", flush=True)
+        await asyncio.sleep(61)
+        async def revoke(caller, target):
+            headers = {"Authorization": "Bearer " + self.tokens[caller], "Idempotency-Key": str(uuid4()),
+                       "X-Request-ID": str(uuid4()), "X-Correlation-ID": str(uuid4())}
+            response = await self.drill.client.post(GRANTS + "/" + self.grants[target] + "/revoke",
+                                                    json=REASON, headers=headers)
+            return caller, target, response
+        results = await asyncio.gather(revoke(self.admin, self.second), revoke(self.second, self.admin))
+        self.proof("cross_admin_one_revocation", sorted(r[2].status_code for r in results) == [200, 403])
+        survivor, loser, response = next(r for r in results if r[2].status_code == 200)
+        self.proof("cross_admin_revoked_exact_target", response.json()["resource_id"] == self.grants[loser])
+        self.proof("cross_admin_loser_current_authority", next(r[2] for r in results if r[2].status_code == 403)
+                   .json()["error"]["code"] == "permission_not_granted")
+        state = await self.snapshot()
+        active = [r for r in json.loads(state["admin_role_grants"]) if r["role"] == "access_administrator"
+                  and r["status"] == "active"]
+        self.proof("one_active_admin_remains", len(active) == 1 and active[0]["target_actor_profile_id"] == self.actors[survivor])
+        await self.call("survivor_still_authorized", "GET", "/api/v1/authorization/permissions", survivor)
+        await self.deny("loser_no_longer_authorized", "GET", "/api/v1/authorization/permissions", loser,
+                        code="permission_not_granted")
+        await self.deny("last_admin_self_revoke", "POST", GRANTS + "/{grant_id}/revoke", survivor,
+            path=GRANTS + "/" + self.grants[survivor] + "/revoke", payload=REASON, code="self_role_revoke_forbidden")
+        for action in ("suspend", "deactivate"):
+            await self.deny("last_admin_self_" + action, "POST", PROFILE + "/" + action, survivor,
+                path=f'/api/v1/actors/{self.actors[survivor]}/{action}', payload=REASON, code="resource_guard_denied")
+        link = await self.call("last_admin_link", "GET", LINKS, survivor,
+            path=f'/api/v1/actors/{self.actors[survivor]}/identity-links')
+        await self.deny("last_admin_own_link_revoke", "POST", "/api/v1/actor-identity-links/{identity_link_id}/revoke",
+            survivor, path=f'/api/v1/actor-identity-links/{link["identity_link_id"]}/revoke',
+            payload=REASON, code="resource_guard_denied")
+        self.drill.report["limitations"].append("Self-removal denied by earlier self guards; count-based last-admin guard not directly reached")
+
+
+async def scenario(drill, issuer, env):
+    drill.report["scenario"] = "twenty_actor_authority"
+    drill.report["scenario_sha256"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    audit = AuthorityDrill(drill, issuer, env)
+    await audit.bootstrap()
+    for name in ("role_matrix", "grant_edges", "contributor_roles", "lifecycle", "last_admin"):
+        try:
+            await getattr(audit, name)()
+        except ProbeFailure:
+            drill.report.setdefault("incomplete_groups", []).append(name)
+    drill.report["setup"].append("Twenty HTTP human profiles; actual local bootstrap CLI; all later grants via HTTP")
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(scenario=scenario))

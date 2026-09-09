@@ -36,6 +36,21 @@ backend/.venv/bin/python -m unittest scripts.test_external_api_drill
 
 ## Interpret evidence
 
+The separate `backend/scripts/admin_api_drill.py` entry point reuses this runner
+for twenty HTTP-created human profiles, bootstrap and administrative authority.
+Run the same isolated command above with `scripts/admin_api_drill.py` in place
+of `scripts/external_api_drill.py` and allow a 900-second timeout for rate pacing.
+It performs actual local bootstrap CLI calls and read-only isolated-database
+snapshots to check forbidden authority/state changes. All later mutations use
+HTTP. The original no-product-SQL-write/no-disabled-guard rules still apply.
+`local_evidence` cases are CLI/state assertions, not additional HTTP endpoints.
+Concurrent calls demonstrate observed outcomes, not forced database lock overlap.
+Self-removal denials do not prove direct execution of the later count-based
+last-administrator guard. Missing groups remain incomplete, never certified.
+
+Run its helper checks with
+`backend/.venv/bin/python -m unittest scripts.test_admin_api_drill scripts.test_external_api_drill`.
+
 The OpenAPI manifest inventories nested request/response fields. Each operation
 records its executed cases, asserted fields and uncovered fields. These are
 partial behavioral observations, not exhaustive schema certification:

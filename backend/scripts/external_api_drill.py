@@ -715,7 +715,7 @@ async def isolation(metadata_path):
     return url, sha
 
 
-async def run(args, report):
+async def run(args, report, *, scenario=None):
     url, sha = await isolation(args.isolation_metadata)
     if (ROOT / ".env").exists():
         raise ProbeFailure("ambient_backend_env_file_forbidden")
@@ -758,6 +758,9 @@ async def run(args, report):
             document = (await client.get("/openapi.json")).json()
             drill = Drill(client, document, report)
             await drill.call("health", "GET", "/api/v1/health")
+            if scenario is not None:
+                await scenario(drill, issuer, env)
+                return
             admin, manager, outsider = (issuer.issue(name) for name in ("admin", "manager", "outsider"))
             admin_id = await profile_cases(drill, issuer, admin)
             bootstrap = subprocess.run([sys.executable, "scripts/bootstrap_access_administrator.py",
@@ -779,7 +782,7 @@ async def run(args, report):
             process.wait(timeout=10)
 
 
-def main():
+def main(*, scenario=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--isolation-metadata", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
@@ -790,7 +793,10 @@ def main():
     descriptor = os.open(args.report, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(descriptor, "w") as output:
         try:
-            asyncio.run(run(args, report))
+            if scenario is None:
+                asyncio.run(run(args, report))
+            else:
+                asyncio.run(run(args, report, scenario=scenario))
             report["result"] = ("failed" if any(row["result"] == "failed" for row in report["cases"])
                                 else "completed_partial_coverage")
         except Exception as exc:
