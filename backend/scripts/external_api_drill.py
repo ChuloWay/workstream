@@ -64,6 +64,25 @@ def stop_server(process, *, preserving_failure):
                 raise ProbeFailure("server_cleanup_timeout") from None
 
 
+async def wait_for_server(client, process, *, timeout_seconds=90):
+    """Bound local startup by elapsed time; slow imports are not API failures."""
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise ProbeFailure("server_startup_failed")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        try:
+            response = await asyncio.wait_for(client.get("/api/v1/health"), remaining)
+            if response.status_code == 200:
+                return
+        except (httpx.ConnectError, httpx.TimeoutException, asyncio.TimeoutError):
+            pass
+        await asyncio.sleep(min(0.2, max(0, deadline - time.monotonic())))
+    raise ProbeFailure("server_startup_timeout")
+
+
 class TokenIssuer:
     """Ephemeral local issuer; no authority grants and no production credentials."""
 
@@ -774,18 +793,7 @@ async def run(args, report, *, scenario=None):
     try:
         async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{port}", trust_env=False,
                                      follow_redirects=False, timeout=20) as client:
-            for _ in range(100):
-                if process.poll() is not None:
-                    raise ProbeFailure("server_startup_failed")
-                try:
-                    response = await client.get("/api/v1/health")
-                    if response.status_code == 200:
-                        break
-                except httpx.ConnectError:
-                    pass
-                await asyncio.sleep(0.2)
-            else:
-                raise ProbeFailure("server_startup_timeout")
+            await wait_for_server(client, process)
             document = openapi_document(await client.get("/openapi.json"))
             drill = Drill(client, document, report)
             drill.isolation_metadata = args.isolation_metadata

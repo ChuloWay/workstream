@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 
@@ -31,6 +31,38 @@ class ContractTests(unittest.TestCase):
                 drill.openapi_document(response)
         document = {"openapi": "3.1.0", "paths": {}}
         self.assertEqual(drill.openapi_document(httpx.Response(200, json=document)), document)
+
+    def test_startup_accepts_eventual_health_without_ignoring_failures(self):
+        client = SimpleNamespace(get=AsyncMock(side_effect=[
+            httpx.ConnectError("not listening"), httpx.Response(503), httpx.Response(200)]))
+        process = Mock()
+        process.poll.return_value = None
+        with patch.object(drill.asyncio, "sleep", new_callable=AsyncMock):
+            drill.asyncio.run(drill.wait_for_server(client, process))
+        self.assertEqual(client.get.await_count, 3)
+        self.assertEqual(process.poll.call_count, 3)
+
+    def test_startup_deadline_and_exited_server_remain_failures(self):
+        client = SimpleNamespace(get=AsyncMock(return_value=httpx.Response(200)))
+        process = Mock()
+        process.poll.return_value = 1
+        with self.assertRaisesRegex(drill.ProbeFailure, "^server_startup_failed$"):
+            drill.asyncio.run(drill.wait_for_server(client, process))
+        client.get.assert_not_awaited()
+        process.poll.return_value = None
+        with self.assertRaisesRegex(drill.ProbeFailure, "^server_startup_timeout$"):
+            drill.asyncio.run(drill.wait_for_server(client, process, timeout_seconds=0))
+        client.get.assert_not_awaited()
+
+    def test_hanging_health_request_cannot_escape_deadline(self):
+        async def hang(*args):
+            await drill.asyncio.sleep(10)
+        client = SimpleNamespace(get=AsyncMock(side_effect=hang))
+        process = Mock()
+        process.poll.return_value = None
+        with self.assertRaisesRegex(drill.ProbeFailure, "^server_startup_timeout$"):
+            drill.asyncio.run(drill.wait_for_server(client, process, timeout_seconds=0.01))
+        client.get.assert_awaited_once()
 
     def test_cleanup_timeout_preserves_original_failure_and_rejects_success(self):
         for preserving_failure in (True, False):

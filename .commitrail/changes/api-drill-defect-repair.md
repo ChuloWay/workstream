@@ -48,8 +48,6 @@ Allowed files and responsibility:
   `docs/engineering/external-api-drill.md`,
   `docs/engineering/external-api-drill-findings.md`: transferred harness and
   provenance-preserving verification documentation.
-- `.commitrail/changes/external-api-client-drill.md`: preserve historical drill
-  intent and evidence while identifying this PR as the integrated delivery.
 - Current role descriptions in `docs/spec_authorization_service.md`,
   `docs/glossary.md`, `docs/architecture_lockdown.md`,
   `docs/roles_permissions.md`, `docs/operations_roles_permissions.md`,
@@ -158,8 +156,72 @@ exact-head checks, and external findings are recorded in the PR.
 
 ## Reconciliation
 
-Current source is main `fa49529b` (PR #391); no open PRs at start. The product
+Original source is main `fa49529b` (PR #391); no open PRs at that initial inspection. The product
 builder worktree is separate and clean at inspection. Additive migration avoids
 rewriting its baseline. Roadmap role exposure will be reconciled in this PR.
 Next usable boundary: human merge, then orchestrator reruns exact-main HTTP drill
 and extends remaining field coverage. No next implementation chunk is started.
+
+The human subsequently authorized the orchestrator to take over PR #392 and
+integrate the administrator drill with these repairs. This is the single combined
+change record; the separate local drill record is consolidated here, not another
+permission or delivery step. Preserve the repair's OpenAPI discovery and bounded
+cleanup hardening when extending its shared runner. Current target and execution
+results belong in the PR, not a claim that historical runs used the latest head.
+
+## Integrated drill scope and historical evidence
+
+The drill exists to establish observed external-client behavior for an MCP
+proposal, not to certify routes from schema existence or seeded internal fixtures.
+It uses a synthetic local Flow-compatible issuer with the real verifier, fresh
+owned PostgreSQL databases, twenty HTTP-created profiles and the existing local
+bootstrap CLI. All later mutations use HTTP. Artifact storage and automatic setup
+execution remain disabled: deployed Flow, S3, model execution, unified setup and
+end-to-end acceptance are outside this proof. Never use production credentials,
+an existing database, hidden routes, product SQL writes, or disabled guards.
+
+The shared harness inventories every discovered OpenAPI operation and nested
+field, distinguishes successful calls, denials, failures and untested operations,
+retains failures across later successes, checks response types and state readback,
+and keeps reports create-once outside Git without tokens or raw response bodies.
+Scenario callback reuse avoids a second server/credential/database lifecycle.
+
+Bootstrap proof covers invalid targets, unchanged dry-run, concurrent one-winner
+execution, atomic grant/control/audit state and later conflicts. Administrator
+proof covers five role definitions and scopes, self-grant/revoke, project scope,
+idempotency/replay, lifecycle changes and concurrent cross-admin revocation.
+Submitter/reviewer grants include cross-project denials and no administrative
+privilege. Catalogue membership never claims unavailable finance/task operations.
+
+Rollback-only owner subprocesses load actual stored actors/links/grants under the
+canonical control lock and exercise grant revocation, profile suspension,
+deactivation and identity-link revocation count guards. One/two-admin states,
+backup suspension/link revocation, restoration and final cross-revocation are
+distinct assertions. In separate ephemeral subprocesses, exactly one `<= 1`
+comparison is changed to `< 1` for each owner; each must fail its exact checks.
+No source file or live API process is mutated. Pre/post authority and audit
+snapshots must match. These checks are not additional HTTP operations.
+
+Historical execution `8969ae5d93168e8529ee584de66095c65322dd8f` recorded twenty
+profiles and 352 checks with no unexpected failures or incomplete groups, seven
+stored authority configurations, and three detected off-by-one mutants. The
+profile mutant failed both suspension and deactivation. Owned database/role
+cleanup completed. This evidence predates the integrated repair and is not
+relabeled as proof for its head. The original external drill findings and their
+separate historical provenance remain in the linked findings document.
+
+Verification commands (repository root unless noted):
+
+```sh
+backend/.venv/bin/python -m unittest scripts.test_admin_api_drill scripts.test_external_api_drill
+PYTHONPATH=backend:backend/tests backend/.venv/bin/python -m pytest backend/tests/test_behavior_ownership.py backend/tests/test_ci_lane_catalogue.py -q
+python3 scripts/check_commitrail_records.py --base-ref origin/main
+python3 scripts/check_markdown_links.py
+python3 scripts/check_stale_workstream_wording.py
+```
+
+Run both entry points through the [isolated drill commands](../../docs/engineering/external-api-drill.md)
+with distinct report/metadata paths and fresh databases. Inspect exact target,
+clean worktree, source hashes, result, failure groups and cleanup separately.
+Hosted Backend remains the full-suite/coverage authority. A completed bounded
+drill does not complete the remaining all-field audit or MCP capability handoff.

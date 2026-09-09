@@ -27,6 +27,9 @@ must be outside the repository. The child server rejects an ambient backend
 `.env` file, binds only loopback, and receives fresh test-only HMAC secrets.
 No production Flow credentials, external model calls or storage providers are
 used. The caller is responsible for stopping its disposable PostgreSQL server.
+Local server readiness has a bounded 90-second monotonic deadline to accommodate
+slow imports under machine load. Process exit or failure to become healthy still
+fails the drill; a slow or unsuccessful startup is not API execution evidence.
 
 Run helper tests from the repository root:
 
