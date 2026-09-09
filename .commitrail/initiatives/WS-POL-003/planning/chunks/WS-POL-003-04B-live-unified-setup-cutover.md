@@ -245,3 +245,23 @@ One PROJECTS-owned coordinator reads its own exact persisted attempt/result and
 finalization to branch blocked versus draft-ready. The worker only composes and
 calls it. No private ORM/result read is added to Celery and no new public receipt
 field exists solely for the branch.
+
+### Live provisioning guard reconciliation
+
+The first real automatic-worker test exposes a pre-cutover SQL assumption:
+`guard_project_guide_compilation_insert` requires the literal issuer
+`workstream-internal` and subject `workstream.project.setup`. The controlled
+service-provisioning API instead binds the configured verifier issuer and an
+operator-supplied opaque subject. AUTH resolves that exact stored active link;
+its fixture-only issuer must not become another provisioning implementation.
+
+Within this cutover migration, replace those two literal checks with the existing
+exact provisioned actor/link custody: keep the compilation's exact actor and
+identity-link IDs, their relationship, active service kind/status, fixed
+`workstream.project.setup` profile identity, and exact consumed execution event,
+action, permission, resource and digest. Do not add an alternative issuer list,
+change provisioning, rewrite retained evidence, or broaden service membership.
+Prove a controlled-provisioning link can persist; wrong actor/link, revocation,
+wrong service and forged/mismatched authorization evidence still reject.
+This repair requires focused security/architecture review in addition to the
+cutover's implementation reviews.
