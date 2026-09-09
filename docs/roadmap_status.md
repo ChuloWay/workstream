@@ -215,12 +215,15 @@ Only open pull requests describe transient work. Use the repository's
 see whether any item below is already under review.
 
 Hidden unified-guide setup finalization and its exact authorization gate are
-complete. The next product boundary is POL-04B, which connects the unified
-compilation and finalization path to live setup execution. The reconciled
+complete. The next selected work is ARCH-04A catalogue/schema and registered
+capability proof, followed by POL-04B connecting the unified compilation and
+finalization path to live setup execution. The reconciled
 [dependency and ownership plan](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
-also permits independent selected-policy validation after completed CP05 and CHECKER capability
-contract work. These can proceed alongside the AUTH test-proof audit without
-waiting for the full quality audit. Plans are not implementation claims.
+permits selected-policy validation independently after completed CP05. The
+selected delivery order finishes unified setup, separate pre/post approval and
+the POL-07 facade before returning to CP06/CP07 and AUTH-12H guide activation.
+This priority adds no dependency on CP06 to live setup. Plans are not
+implementation claims.
 The sequence below describes product dependencies; production activation still
 requires its exact owner-proven prerequisites.
 

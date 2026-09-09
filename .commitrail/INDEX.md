@@ -6,7 +6,7 @@ for current product capability.
 
 | Initiative | Durable disposition | Next usable boundary |
 |---|---|---|
-| [WS-ARCH-001](initiatives/WS-ARCH-001/OVERVIEW.md) | Planned | CP06 selected-policy validation and independent ARCH-04A capability proof under the reconciled pre-review dependencies |
+| [WS-ARCH-001](initiatives/WS-ARCH-001/OVERVIEW.md) | Planned | ARCH-04A catalogue/capability proof, then unified setup through POL-07; CP06/CP07 and AUTH-12H connect guide activation afterward |
 | [WS-ART-001](initiatives/WS-ART-001/OVERVIEW.md) | Planned | Exact post-submit materialization after guide/checker contracts |
 | [WS-AUTH-001](initiatives/WS-AUTH-001/OVERVIEW.md) | Planned | Unavailable shared-dispatcher contracts after delivered CP05; POL-04B consumes completed finalization authority after catalogue reconciliation |
 | [WS-CON-001](initiatives/WS-CON-001/OVERVIEW.md) | Planned | CP06 selected-policy validation, then guide-activation persistence |

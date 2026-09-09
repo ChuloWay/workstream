@@ -12,8 +12,10 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Intent: keep product modules behind explicit ports and composition roots.
 - Current boundary: hidden ContributionPolicy behavior has durable custody and exact
   Finance Authority; public exposure remains separate.
-- Next usable boundary: CP06 selected-policy validation; independent ARCH-04A checker
-  contract/capability proof precedes POL-07 and guide activation.
+- Next usable boundary: [ARCH-04A](WS-ARCH-001-04A.md) checker catalogue/schema
+  and capability proof, then POL-04B live unified setup and the adopted POL
+  approval/facade sequence. Return to independent CP06/CP07 after POL-07, then
+  connect guide activation through AUTH-12H.
 - Governing sources: `docs/architecture_lockdown.md`, accepted ADRs, code, and
   architecture tests.
 - Preserve: no concrete-adapter imports in product services and no duplicate
