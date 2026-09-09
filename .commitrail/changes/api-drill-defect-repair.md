@@ -28,6 +28,8 @@ Allowed files and responsibility:
 - `backend/scripts/test_lane_catalogue.py`,
   `backend/tests/test_ci_lane_catalogue.py`: enroll the new test modules in
   existing hosted lanes without changing selection or coverage policy.
+- `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`: refresh exact existing debt
+  fingerprints/spans after shrinking touched legacy tests; no new exceptions.
 - `backend/tests/test_projects.py`, `backend/tests/test_authorization.py`,
   `backend/tests/test_api_drill_repairs.py`,
   `backend/tests/migrations/test_project_role_scope.py`, `backend/tests/conftest.py`:
@@ -116,7 +118,10 @@ Plan review passed with low risks and required explicit OpenAPI assertions and
 retained-history refusal proof. Migration verification exposed PostgreSQL's
 parsed constraint spelling and SQLAlchemy's name-prefix convention; the repair
 uses checked transformations of installed definitions and exact constraint names.
-It retains the already-narrow generic audit fact allowlist. Current review,
+It retains the already-narrow generic audit fact allowlist. CI review found
+stale structure-ledger entries and legacy-test growth; new rejection assertions
+were moved to the focused regression module, touched legacy tests shrank without
+losing assertions, and existing debt fingerprints were refreshed. Current review,
 exact-head checks, and external findings are recorded in the PR.
 
 

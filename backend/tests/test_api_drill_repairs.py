@@ -4,11 +4,14 @@ from uuid import uuid4
 
 from httpx import AsyncClient
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import func, select
 
 from app.core.config import get_settings
 from app.db import session as db_session
 from app.main import create_app
+from app.modules.audit.schemas import ActorReferenceKind, AuthorityAuditEventInput, AuthorityEventType
+from app.modules.authorization.catalogue import PermissionId
 from app.modules.authorization.models import ProjectRoleGrant
 from app.modules.projects.models import (
     GuideMutationIdempotencyRecord,
@@ -27,6 +30,7 @@ from projects.guide_fixtures import complete_guide_payload, create_guide, create
 def test_api_drill_request_limits_are_exposed_in_openapi() -> None:
     schemas = create_app().openapi()["components"]["schemas"]
 
+    assert schemas["ProjectRole"]["enum"] == ["submitter", "reviewer"]
     project = schemas["ProjectCreate"]["properties"]
     guide_create = schemas["ProjectGuideCreate"]["properties"]
     guide_update_schema = schemas["ProjectGuideUpdate"]
@@ -310,3 +314,42 @@ async def test_unsupported_adjudicator_role_is_rejected_without_grant(
             )
         )
         assert grant is not None
+
+
+
+def test_adjudicator_invalidation_audit_facts_are_rejected() -> None:
+    """Unsupported role facts cannot enter the typed authority audit contract."""
+    project_id, event_id = uuid4(), uuid4()
+    projection = {
+        "role": "reviewer", "scope_type": "project", "scope_id": str(project_id),
+        "future_obligation": "rev_reviewer_obligation",
+    }
+    event = AuthorityAuditEventInput(
+        event_id=event_id,
+        event_type=AuthorityEventType.AUTHORITY_INVALIDATION_REQUESTED,
+        entity_type="authority_invalidation",
+        entity_id=str(event_id),
+        actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
+        actor_ref=str(uuid4()),
+        request_id=uuid4(),
+        correlation_id=uuid4(),
+        permission_id=PermissionId.PROJECT_ROLE_GRANT_MANAGE,
+        project_id=str(project_id),
+        resource_type="actor_profile",
+        resource_id=str(uuid4()),
+        target_ref_kind="project_role_grant",
+        target_ref_id=str(uuid4()),
+        reason="authority_state_changed",
+        idempotency_reference=uuid4(),
+        invalidation_cause_event_id=uuid4(),
+        invalidation_target_kind="actor_profile",
+        invalidation_target_ref=str(uuid4()),
+        before_facts={"effective": True, **projection},
+        after_facts={"effective": False, **projection},
+    )
+    unsupported = projection | {"role": "adjudicator", "future_obligation": "none"}
+    with pytest.raises(ValidationError):
+        AuthorityAuditEventInput.model_validate(event.model_dump() | {
+            "before_facts": {"effective": True, **unsupported},
+            "after_facts": {"effective": False, **unsupported},
+        })

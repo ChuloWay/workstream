@@ -284,10 +284,7 @@ def test_project_role_issue_advisory_key_contract_is_frozen_and_separated() -> N
     actor = UUID("00000000-0000-0000-0000-000000000001")
     project = UUID("00000000-0000-0000-0000-000000000002")
     assert project_role_issue_lock_key(actor, project, "submitter") == -7801444014257588548
-    values = {
-        project_role_issue_lock_key(actor, project, role)
-        for role in ("submitter", "reviewer")
-    }
+    values = {project_role_issue_lock_key(actor, project, role) for role in ProjectRole}
     assert len(values) == 2
     assert all(-(2**63) <= value < 2**63 for value in values)
     assert project_role_issue_lock_key(actor, project, "submitter") != project_role_issue_lock_key(
@@ -355,9 +352,6 @@ def test_project_role_public_reason_and_qualification_contract_is_strict() -> No
     assert ProjectRoleGrantRevokeBody.model_validate({"reason": "Bounded removal"}).reason == (
         "Bounded removal"
     )
-    assert tuple(ProjectRole) == (ProjectRole.SUBMITTER, ProjectRole.REVIEWER)
-    with pytest.raises(ValidationError):
-        ProjectRoleGrantIssueBody.model_validate(payload | {"role": "adjudicator"})
     for reason in (" padded", "padded ", "control\x00", "é" * 251):
         with pytest.raises(ValidationError):
             ProjectRoleGrantIssueBody.model_validate(payload | {"reason": reason})
@@ -410,26 +404,6 @@ def test_project_role_invalidation_projection_is_closed_per_role() -> None:
             after_facts={"effective": False, **projection},
         )
         assert event.after_facts["future_obligation"] == obligation
-    with pytest.raises(ValidationError):
-        AuthorityAuditEventInput.model_validate(
-            event.model_dump()
-            | {
-                "before_facts": {
-                    "effective": True,
-                    "role": "adjudicator",
-                    "scope_type": "project",
-                    "scope_id": str(project_id),
-                    "future_obligation": "none",
-                },
-                "after_facts": {
-                    "effective": False,
-                    "role": "adjudicator",
-                    "scope_type": "project",
-                    "scope_id": str(project_id),
-                    "future_obligation": "none",
-                },
-            }
-        )
     with pytest.raises(ValidationError):
         AuthorityInvalidationContext(
             event_id=uuid4(),
