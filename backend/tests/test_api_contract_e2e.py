@@ -108,7 +108,10 @@ def test_real_api_drill_provisions_exact_guide_artifact_pipeline_services() -> N
     "selected",
     [None, [], ["check_acceptance_criteria_present"], ["check_policy_context_present"]],
 )
-async def test_api_drill_seeds_one_canonical_post_submit_policy(monkeypatch, selected) -> None:
+@pytest.mark.parametrize("severity_floor", [None, ["critical", "high", "medium"]])
+async def test_api_drill_seeds_one_canonical_post_submit_policy(
+    monkeypatch, selected, severity_floor,
+) -> None:
     """The real drill compiler accepts additions but cannot reclassify defaults."""
     from contextlib import asynccontextmanager
     import json
@@ -139,6 +142,8 @@ async def test_api_drill_seeds_one_canonical_post_submit_policy(monkeypatch, sel
             "id": str(uuid4()), "guide_version": "v1", "effective_policy_hash": "sha256:" + "c" * 64,
         },
     )
+    if severity_floor is not None:
+        payload["blocking_severities"] = severity_floor
     if selected is not None:
         payload["required_checkers"] = selected
     if selected == ["check_policy_context_present"]:
@@ -154,7 +159,9 @@ async def test_api_drill_seeds_one_canonical_post_submit_policy(monkeypatch, sel
     policy = session.add.call_args.args[0]
     parsed = CompiledPostSubmitPolicy.model_validate_json(json.dumps(policy.policy_body))
     assert policy.required_checkers == ([] if selected is None else selected)
-    assert isinstance(policy.blocking_severities, list)
+    assert policy.blocking_severities == (
+        ["critical", "high"] if severity_floor is None else severity_floor
+    )
     parsed.validate_sidecars(
         required_checkers=policy.required_checkers, warning_checkers=policy.warning_checkers,
         blocking_severities=policy.blocking_severities,

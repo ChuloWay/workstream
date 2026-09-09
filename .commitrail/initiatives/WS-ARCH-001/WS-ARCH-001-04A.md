@@ -259,3 +259,9 @@ no E2E assertion, database-isolation check or CI step is removed. Its existing
 `backend/tests/test_api_contract_e2e.py` owner covers omitted/empty additions, a
 selectable addition, and rejection of explicit default reclassification before
 any fixture write. The focused regression failed before the fixture correction.
+
+Shared helper caller `backend/scripts/week2_api_e2e.py` expresses its low-quality
+revision scenario through a locked medium-severity floor, not reclassification
+of the mandatory default. Its routing, failed/high result and revision assertions
+remain intact. API-drill fixture proof covers both default and explicit-medium
+floors. No historical script-only compatibility selection remains.

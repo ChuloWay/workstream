@@ -322,6 +322,7 @@ async def create_project_with_guide(
     run_id: str,
     suffix: str,
     required_checkers: list[str] | None = None,
+    blocking_severities: list[str] | None = None,
 ) -> dict:
     """Create a project and activate a complete guide over HTTP.
 
@@ -332,7 +333,8 @@ async def create_project_with_guide(
         manager_issuer: External issuer that admitted the manager subject.
         run_id: Unique test run id.
         suffix: Scenario suffix used in the project slug.
-        required_checkers: Optional checker policy override.
+        required_checkers: Optional selectable project additions.
+        blocking_severities: Optional stricter locked severity floor.
 
     Returns:
         Created project payload.
@@ -365,6 +367,7 @@ async def create_project_with_guide(
         guide["id"],
         run_id,
         post_submit_required_checkers=required_checkers,
+        post_submit_blocking_severities=blocking_severities,
     )
     await request_json(
         client,
@@ -1676,7 +1679,7 @@ async def exercise_week2_api(base_url: str, env: dict[str, str]) -> None:
             flow_issuer,
             run_id,
             "checker-revision",
-            required_checkers=["check_low_quality_generated_artifacts"],
+            blocking_severities=["critical", "high", "medium"],
         )
         checker_revision_task = await create_started_task(
             client,
@@ -1718,7 +1721,7 @@ async def exercise_week2_api(base_url: str, env: dict[str, str]) -> None:
         assert_default_checker_set(checker_revision_v1_run)
         ensure(
             checker_revision_v1_run["routing_recommendation"] == "needs_revision",
-            "required post-submit checker did not route to needs_revision",
+            "locked medium severity did not route to needs_revision",
         )
         ensure(
             checker_revision_v1_run["outcome_source"] == "auto_checker",
@@ -1730,11 +1733,11 @@ async def exercise_week2_api(base_url: str, env: dict[str, str]) -> None:
         )
         ensure(
             checker_revision_v1_result["status"] == "failed",
-            "required low-quality checker did not fail",
+            "blocking low-quality finding did not fail",
         )
         ensure(
             checker_revision_v1_result["blocks_review"] is True,
-            "required low-quality checker did not block review",
+            "blocking low-quality finding did not block review",
         )
         ensure(
             checker_revision_v1_result["worker_message"],
