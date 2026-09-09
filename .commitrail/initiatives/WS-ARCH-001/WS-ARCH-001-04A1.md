@@ -1,4 +1,4 @@
-# ARCH-04A consolidation — One initial v0.1 checker contract
+# WS-ARCH-001-04A1 — One initial v0.1 checker contract
 
 - Initiative: WS-ARCH-001
 - Durable disposition: Complete
@@ -6,15 +6,19 @@
   parser, registry, and projection branches retained or introduced by ARCH-04A;
   use one canonical initial-v0.1 contract throughout its consumers.
 
-## Human intent
+## Intent
 
 Workstream has no released software contract requiring backward compatibility.
-The human explicitly rejects legacy code, fallback behavior, and parallel
-internal v1/v2 implementations. Earlier assumptions that development hashes and
+The human explicitly rejects compatibility layers and parallel old/new
+implementations retained merely to preserve earlier development code. Earlier assumptions that development hashes and
 schemas must remain executable are withdrawn. Obsolete implementations must be
 deleted, not renamed, aliased, or disabled for deferred cleanup.
 
-POL-04B is not the next implementation boundary until this correction is complete.
+This correction is limited to the affected post-submit module and its traced
+consumers. Repository-wide cleanup is parked and is not a prerequisite. Retain
+authorization, locked lineage, atomicity and immutable evidence throughout.
+
+POL-04B follows this already-started bounded correction.
 Its incomplete local changes are saved separately and establish no capability.
 This correction repairs merged ARCH-04A; it does not resume live guide cutover.
 
@@ -29,7 +33,7 @@ This correction repairs merged ARCH-04A; it does not resume live guide cutover.
 - Tests and current documentation explicitly require historical hash and
   implementation preservation. Those requirements contradict the human intent.
 
-## Plan and boundaries
+## Bounded change
 
 1. Trace both compiler outputs and registry entry paths to all actual consumers.
    Identify domain requirements that remain necessary separately from obsolete
@@ -102,8 +106,9 @@ Additional allowed dependent application paths: `checkers/service.py`, `tasks/se
 `projects/service.py` for canonical policy parsing/derived lists and context
 adaptation; `projects/guide_compilation/context.py` and `orchestrator.py` only if
 the single projection type requires annotation correction. This correction adds
-no database columns; policy bodies are JSON. Earlier development data requires
-a clean baseline, not a compatibility reader or migration bridge.
+no database columns; policy bodies are JSON. Retained development data is not deleted or rewritten. Unsupported bodies reject;
+new setup generations use the current contract. Code cleanup grants no data-deletion
+authority and introduces no compatibility reader or migration bridge.
 
 Allowed dependent tests: the nine `tests/checkers/post_submit/test_*.py` modules and their
 `support.py`; `tests/test_checkers.py`, `test_projects.py`, `test_tasks.py`,
@@ -117,7 +122,7 @@ compilation adapter fixtures only where catalogue identity changes. Inspect
 additional callers found by symbol search before editing them; no bulk removal
 of unrelated tests or assertions.
 
-## Acceptance and review
+## Acceptance criteria
 
 - Exactly one supported post-submit catalogue/projection and compiled policy
   representation; every consumer uses it.
@@ -126,6 +131,8 @@ of unrelated tests or assertions.
 - Required context and policy hashes remain validated against exact current facts.
 - No runtime fallback for unsupported input; no weakening of database/AUTH guards.
 - Existing domain policy versioning and pre/post phase separation remain intact.
+
+## Risk and review routing
 
 Risk: L1; architecture/reuse and security plan review precede implementation.
 Implementation reviews: architecture/reuse, security, QA/test delta,
@@ -138,6 +145,8 @@ current context field independently absent/crossed, each sidecar independently
 crossed, obsolete/future context fields rejected as extras, and complete current
 facts without PaymentPolicy passing. Owner lineage/AUTH checks remain authoritative;
 coherent checker values alone grant no authority.
+
+## Evidence
 
 Focused checks run locally. Full PostgreSQL/concurrency/backend coverage remains
 hosted. Run boundary, stale wording and link checks, discriminating invalid-input

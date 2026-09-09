@@ -1,7 +1,7 @@
 # Chunk Contract: WS-POL-003-04B - Live Unified Setup Cutover
 
 Disposition: Planned. Dependencies: complete 04A/04A3/04A2 and AUTH-12I/12J/12B2,
-plus [ARCH-04A consolidation](../../../WS-ARCH-001/WS-ARCH-001-04A-consolidation.md). Risk: L1.
+plus [ARCH-04A consolidation](../../../WS-ARCH-001/WS-ARCH-001-04A1.md). Risk: L1.
 
 ## Goal
 

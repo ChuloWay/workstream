@@ -1,6 +1,6 @@
 # Chunk Contract: WS-ARCH-001-04A CHECKER Post-Submit API
 
-Current bounded implementation record: [ARCH-04A consolidation](../../WS-ARCH-001-04A-consolidation.md).
+Current bounded implementation record: [ARCH-04A consolidation](../../WS-ARCH-001-04A1.md).
 This adopted design remains normative; the record fixes current files, supported
 capabilities, proof and delivery priority for this implemented boundary.
 
@@ -43,7 +43,8 @@ catalogue; it never recompiles or translates unsupported development bodies.
 
 This catalogue/schema foundation precedes POL-04B generations intended for
 approval. Unsupported development generations cannot be replayed through a compatibility
-reader; use the current clean baseline and create a fresh generation. Actual
+reader; retain their evidence and create a fresh generation using the current
+contract. Cleanup grants no data-deletion authority. Actual
 registered evaluator conformance is required before activation, not a claim
 that the current presence-only implementation is substantive evaluation.
 

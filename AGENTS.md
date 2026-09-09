@@ -16,13 +16,22 @@ definition or ownership boundary of Workstream.
 
 ## Working Rules
 
-- Workstream is developing its initial v0.1 baseline. Do not add backward
-  compatibility, legacy implementations, fallback paths, parallel old/new
-  contracts, or internal v1/v2 implementation variants to preserve earlier
-  development work. Replace superseded implementations and update their
-  callers, tests, and documentation together. Remove obsolete code completely.
-  Immutable project policy versions are domain facts, not a reason to retain
-  obsolete software paths. Do not assume development data needs compatibility.
+- Workstream is developing its first, unreleased v0.1. Do not introduce
+  backward-compatibility layers, compatibility aliases, parallel old/new
+  implementations, or “legacy/modern” variants merely to preserve earlier
+  development code. When changing a module, replace the superseded implementation
+  and update its affected callers, tests, schemas and current documentation
+  together. Remove obsolete code and tests that exist only to preserve obsolete
+  behavior; retain or replace tests protecting required behavior. Renaming
+  duplicate implementations is not cleanup.
+
+  Perform this cleanup within the current work’s affected scope, not as a
+  repository-wide prerequisite. Trace shared consumers before deleting shared
+  code; identify any remaining dependency explicitly without adding another
+  compatibility path. Preserve authorization, locked lineage, atomicity and
+  immutable evidence. Business policy/submission versions and required external
+  protocol identifiers are not backward-compatibility implementations. Code
+  cleanup does not authorize deleting retained data.
 - Keep wording consistent with `README.md`, `docs/glossary.md`, and `docs/architecture_lockdown.md`.
 - Keep pre-submission intake quality checks distinct from post-submission work
   evaluation. Intake failures prevent Submission creation; post-submit results

@@ -1011,7 +1011,9 @@ they do not select different software readers.
 
 Initial v0.1 has one supported body, compiler and catalogue. Earlier development
 representations reject; no migration reader, translation or fallback preserves
-them. Use a clean development baseline when the software contract is replaced.
+them. Retained data and immutable evidence are not deleted or rewritten by this
+cleanup. New setup generations use the current contract; any data disposition
+requires separate authorization.
 
 The canonical body contains:
 
