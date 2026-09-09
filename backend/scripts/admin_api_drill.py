@@ -11,7 +11,8 @@ from uuid import uuid4
 
 import asyncpg
 
-from external_api_drill import ROOT, ProbeFailure, main, uuid_value
+from external_api_drill import ROOT, ProbeFailure, main, page_cases, page_matches, uuid_value
+from urllib.parse import urlencode
 
 ROSTER = (
     "bootstrap_a", "bootstrap_b", "manager_system", "manager_a", "manager_b",
@@ -46,6 +47,7 @@ class AuthorityDrill:
     def __init__(self, drill, issuer, env):
         self.drill, self.issuer, self.env = drill, issuer, env
         self.actors, self.tokens, self.grants, self.projects = {}, {}, {}, {}
+        self.admin_rows, self.project_rows = {}, {}
         self.admin = self.second = None
 
     def proof(self, name, condition):
@@ -141,6 +143,9 @@ class AuthorityDrill:
             values={"resource_type": "admin_role_grant", "version": 1, "http_status": 201},
             checks={"resource_id": uuid_value})
         self.grants[target] = result["resource_id"]
+        self.admin_rows[result["resource_id"]] = {
+            "target_actor_profile_id": self.actors[target], "role": role,
+            "scope_type": body["scope_type"], "scope_project_id": project, "status": "active"}
         return result
 
     async def bootstrap(self):
@@ -170,6 +175,9 @@ class AuthorityDrill:
         self.admin, self.second = (("bootstrap_a", "bootstrap_b") if win == 0 else ("bootstrap_b", "bootstrap_a"))
         grant_id = results[win][1]["grant_id"]
         self.grants[self.admin] = grant_id
+        self.admin_rows[grant_id] = {
+            "target_actor_profile_id": self.actors[self.admin], "role": "access_administrator",
+            "scope_type": "system", "scope_project_id": None, "status": "active"}
         self.proof("bootstrap_loser_binds_winner", results[1-win][1]["grant_id"] == grant_id)
         state = await self.snapshot(audit=True)
         grants, control, events = (json.loads(state[k]) for k in ("admin_role_grants", "authority_control", "audit"))
@@ -278,6 +286,9 @@ class AuthorityDrill:
             payload=body | {"reason": "Different reason"}, headers=key, expected=409, code="idempotency_mismatch")
         await self.deny("grant_duplicate", "POST", GRANTS, self.admin, payload=body, expected=409)
         self.grants["grant_target"] = result["resource_id"]
+        self.admin_rows[result["resource_id"]] = {
+            "target_actor_profile_id": self.actors["grant_target"], "role": "operator",
+            "scope_type": "system", "scope_project_id": None, "status": "active"}
         for label in (self.admin, "audit_system"):
             history = PROFILE + "/admin-role-grants"
             read = await self.call("grant_history_" + label, "GET", history, label,
@@ -292,6 +303,7 @@ class AuthorityDrill:
         revoked = await self.call("grant_target_revoke", "POST", route, self.admin,
             path=path, payload=REASON, headers=revoke_key,
             values={"resource_id": result["resource_id"], "version": 2, "http_status": 200})
+        self.admin_rows[result["resource_id"]]["status"] = "revoked"
         before = await self.snapshot()
         await self.call("grant_target_revoke_replay", "POST", route, self.admin,
             path=path, payload=REASON, headers=revoke_key, values=revoked)
@@ -316,11 +328,14 @@ class AuthorityDrill:
                 ("submitter_b", "submitter", "b"), ("reviewer_b", "reviewer", "b"),
                 ("dual_a", "submitter", "a"), ("dual_a", "reviewer", "a")):
             route = PROJECT + "/role-grants"
-            await self.call("project_grant_" + label + role, "POST", route, "manager_" + project,
+            result = await self.call("project_grant_" + label + role, "POST", route, "manager_" + project,
                 path=f'/api/v1/projects/{self.projects[project]}/role-grants', expected=201,
                 payload=dict(target_actor_profile_id=self.actors[label], role=role, qualification=qualification, **REASON),
                 values={"actor_profile_id": self.actors[label], "project_id": self.projects[project],
                         "role": role, "status": "active"})
+            self.project_rows[result["id"]] = {
+                "actor_profile_id": self.actors[label], "project_id": self.projects[project],
+                "role": role, "status": "active"}
         for label in ("submitter_a", "reviewer_a", "submitter_b", "reviewer_b", "dual_a"):
             own = "b" if label.endswith("b") else "a"
             for project in ("a", "b"):
@@ -338,6 +353,89 @@ class AuthorityDrill:
             await self.deny("manager_self_project_grant_" + role, "POST", route, "manager_a",
                 path=path, payload=dict(target_actor_profile_id=self.actors["manager_a"],
                 role=role, qualification=qualification, **REASON), code="self_grant_forbidden")
+
+    async def pagination(self):
+        """Exercise populated pages with expected identities owned by HTTP setup."""
+        admin_cursor = None
+        for scope in (None, "a", "b"):
+            project = self.projects.get(scope)
+            query = {"scope_type": "project" if project else "system"}
+            if project:
+                query["scope_project_id"] = project
+            for status in ("all", "active", "revoked"):
+                rows = {key: row for key, row in self.admin_rows.items()
+                        if row["scope_project_id"] == project
+                        and (status == "all" or row["status"] == status)}
+                cursor = await page_cases(self.drill, f"admin_pages_{scope}_{status}",
+                    GRANTS, GRANTS, self.tokens[self.admin], rows, identity="grant_id",
+                    query=query | {"status": status}, limit=2, total=True)
+                if scope is None and status == "all":
+                    admin_cursor = cursor
+        if not admin_cursor:
+            self.proof("populated_admin_cursor_required", False)
+        for cursor in ("!invalid", "x" * 513):
+            await self.deny("admin_bad_cursor_" + str(len(cursor)), "GET", GRANTS, self.admin,
+                path=GRANTS + "?" + urlencode({"scope_type": "system", "cursor": cursor}),
+                expected=422 if len(cursor) > 512 else 400,
+                fields=("query.cursor",))
+        scoped_rows = {key: row for key, row in self.admin_rows.items()
+                       if row["scope_project_id"] == self.projects["a"]}
+        # Admin cursors are positional, not signed query authority. Filters still apply.
+        await self.call("admin_cursor_cannot_widen_scope", "GET", GRANTS, "audit_a",
+            path=GRANTS + "?" + urlencode(dict(scope_type="project",
+                scope_project_id=self.projects["a"], status="all", cursor=admin_cursor)),
+            values={"total": len(scoped_rows)},
+            checks={"items": lambda rows: page_matches(rows, scoped_rows, set(), 50, "grant_id")})
+        await self.deny("admin_cursor_no_foreign_authority", "GET", GRANTS, "audit_a",
+            path=GRANTS + "?" + urlencode(dict(scope_type="project",
+                scope_project_id=self.projects["b"], cursor=admin_cursor)), code="permission_not_granted")
+        history = PROFILE + "/admin-role-grants"
+        await page_cases(self.drill, "admin_target_history", history,
+            f'/api/v1/actors/{self.actors["grant_target"]}/admin-role-grants', self.tokens[self.admin],
+            {key: row for key, row in self.admin_rows.items()
+             if row["target_actor_profile_id"] == self.actors["grant_target"]}, identity="grant_id",
+            query={"scope_type": "system", "status": "all"}, total=True)
+        route = PROJECT + "/role-grants"
+        path = f'/api/v1/projects/{self.projects["a"]}/role-grants'
+        rows = {key: row for key, row in self.project_rows.items() if row["project_id"] == self.projects["a"]}
+        cursor = await page_cases(self.drill, "project_pages", route, path,
+            self.tokens["manager_a"], rows, identity="id")
+        if not cursor:
+            self.proof("populated_project_cursor_required", False)
+        for role in ("submitter", "reviewer"):
+            await page_cases(self.drill, "project_filtered_" + role, route, path,
+                self.tokens["manager_a"], {key: row for key, row in rows.items() if row["role"] == role},
+                identity="id", query={"role": role, "status": "active"})
+        await page_cases(self.drill, "project_revoked_empty", route, path,
+            self.tokens["manager_a"], {}, identity="id", query={"status": "revoked"})
+        variants = {"malformed": {"cursor": "!invalid"},
+                    "tampered": {"cursor": ("A" if cursor[0] != "A" else "B") + cursor[1:]},
+                    "role": {"role": "submitter"}, "status": {"status": "active"},
+                    "limit": {"limit": 2}}
+        for name, changes in variants.items():
+            await self.deny("project_cursor_" + name, "GET", route, "manager_a",
+                path=path + "?" + urlencode(dict(limit=1, cursor=cursor) | changes),
+                expected=400, code="invalid_cursor", fields=tuple("query." + key for key in changes))
+        await self.deny("project_cursor_foreign_query", "GET", route, "manager_system",
+            path=f'/api/v1/projects/{self.projects["b"]}/role-grants?' + urlencode(dict(limit=1, cursor=cursor)),
+            expected=400, code="invalid_cursor")
+        await self.deny("project_cursor_foreign_authority", "GET", route, "manager_a",
+            path=f'/api/v1/projects/{self.projects["b"]}/role-grants?' + urlencode(dict(limit=1, cursor=cursor)),
+            expected=404)
+        candidate_route = PROJECT + "/contributor-candidates"
+        candidate_path = f'/api/v1/projects/{self.projects["a"]}/contributor-candidates'
+        await page_cases(self.drill, "candidate_pages", candidate_route, candidate_path,
+            self.tokens["manager_a"], {actor: {"display_name": None} for label, actor in self.actors.items()
+                                       if label != "manager_a"}, identity="actor_profile_id", limit=3)
+        await self.deny("cursor_cannot_cross_operation", "GET", candidate_route, "manager_a",
+            path=candidate_path + "?" + urlencode(dict(limit=1, cursor=cursor)),
+            expected=400, code="invalid_cursor")
+        for name, changes in (("zero_limit", {"limit": 0}), ("large_limit", {"limit": 101}),
+                              ("bad_limit", {"limit": "abc"}), ("bad_role", {"role": "adjudicator"}),
+                              ("bad_status", {"status": "all"}), ("long_cursor", {"cursor": "x" * 513})):
+            await self.deny("project_query_" + name, "GET", route, "manager_a",
+                path=path + "?" + urlencode(changes), expected=422,
+                fields=tuple("query." + key for key in changes))
 
     async def lifecycle(self):
         for label, action, state in (("suspend_target", "suspend", "suspended"),
@@ -411,7 +509,7 @@ async def scenario(drill, issuer, env):
     drill.report["scenario_sha256"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     audit = AuthorityDrill(drill, issuer, env)
     await audit.bootstrap()
-    for name in ("role_matrix", "grant_edges", "contributor_roles", "lifecycle", "last_admin"):
+    for name in ("role_matrix", "grant_edges", "contributor_roles", "pagination", "lifecycle", "last_admin"):
         try:
             await getattr(audit, name)()
         except ProbeFailure:

@@ -68,7 +68,20 @@ Run its helper checks with
 `backend/.venv/bin/python -m unittest scripts.test_admin_api_drill scripts.test_external_api_drill`.
 
 The OpenAPI manifest inventories nested request/response fields. Each operation
-records its executed cases, asserted fields and uncovered fields. These are
+records its executed cases and separates four evidence indexes:
+
+- `field_cases`: passed strict-value comparisons and echoed request/correlation
+  headers. Exact comparison of a populated object or array includes its nested
+  values; an empty array never proves item fields.
+- `predicate_cases`: passed explicit predicates, such as timestamp validity or
+  page membership. A predicate is not automatically full value validation.
+- `shape_cases`: passed exact top-level response-key checks, not field values.
+- `request_cases`: scenario annotations describing exercised inputs. These are
+  not independently verified value claims.
+
+`uncovered_fields` lists schema fields without strict-value evidence; consult
+the other indexes and named cases before treating these as missing tests.
+Failed cases do not populate passed evidence indexes. These are
 partial behavioral observations, not exhaustive schema certification:
 
 - `partial_positive`: at least one successful HTTP case, not full readiness.
@@ -94,6 +107,29 @@ lifecycle. The client paces mutations against the default server rate budget;
 it does not disable rate controls. Independent boundary failures are retained
 while other independent probes continue, and any such failure keeps exit status
 nonzero. A stored idempotent replay is not treated as current-state readback.
+
+Field-extension cases traverse populated administrative grant, project-role and
+contributor-candidate pages using identities independently established by HTTP
+setup. They check missing, duplicate and foreign rows, filters, bounded limits
+and cursor misuse. Project cursors are signed and bound to project/action/query;
+administrative cursors are positional markers, not authority. Administrative
+cursor reuse checks selector isolation rather than requiring signature rejection.
+Nested qualification probes exercise required fields, container types, available
+versus unavailable consistency, opaque references, UUID input and collection/
+token bounds. Denials are followed by unchanged active-grant readback, and the
+same rejected idempotency key must admit a subsequent valid grant. Positive
+readback includes populated reference collections at their exact bounds.
+
+## MCP handoff boundary
+
+Prepare the endpoint-and-field handoff from named passing client cases, not the
+OpenAPI route list or aggregate test count. For each selected operation include
+its method/path, caller grant requirements, request fields and headers, response
+fields, observed errors, replay rules and remaining unchecked combinations.
+Keep privileged administration separate from ordinary contributor tools. The
+bootstrap CLI is deployment setup, never an HTTP or MCP capability. These
+drills exercise draft project/guide surfaces; they do not establish the live
+unified setup, submission, checker or acceptance path for an adapter.
 
 This does not prove deployment connectivity, real Flow integration, S3 custody,
 model quality, the unified setup pipeline, or end-to-end acceptance. Storage and

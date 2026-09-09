@@ -2,12 +2,16 @@
 
 ## Purpose and sequence
 
-This is the human-requested handoff of observed defects, not a finished API
-catalogue or an MCP readiness report. Another agent should repair these issues
-together in a bounded change, with coordination around the product builder's
-owned files. Then the orchestrator reruns the real HTTP drill on the merged
-repair and completes the remaining field checks. Only then is the verified
-endpoint-and-field list handed to the MCP adapter agent.
+This preserves the human-requested repair handoff and original reproductions,
+not a finished API catalogue or an MCP readiness report. PR #392 repaired the
+five defects below. Both original drills passed on merged main `c681b51f`, with
+226 external-client cases and 352 administrator checks, without unexpected
+failures. The administrator run included twenty distinct actors and detected
+all three intentional last-admin guard mutants. These counts include negative
+and local evidence cases; they are not endpoint or exhaustive field counts.
+The orchestrator is extending the remaining client field checks before handing
+the verified endpoint-and-field list to the MCP adapter agent. The descriptions
+below remain historical observations, not claims that repaired defects persist.
 
 Human-confirmed v0.1 project roles are **submitter** and **reviewer**.
 Adjudication is deferred. Do not implement adjudicator functionality, widen an
