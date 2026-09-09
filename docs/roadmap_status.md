@@ -189,8 +189,16 @@ cannot be reused as post-submission review-gate evidence. See the
 - The [five API drill defects](engineering/external-api-drill-findings.md) are
   repaired: project name/slug and guide version enforce existing storage limits,
   guide PATCH rejects explicit null content while preserving omission, and
-  unsupported project-role input is rejected before mutation. Full API-field
-  coverage and an exact-main rerun remain necessary before the MCP handoff.
+  unsupported project-role input is rejected before mutation. Both original
+  drills passed again on merged main after that repair. The extended drill adds
+  populated pagination/cursor checks, nested qualification boundary probes and
+  separate value/predicate/shape/request evidence. Remaining field combinations
+  and provider-dependent flows still need client proof before inclusion in the
+  MCP endpoint-and-field handoff; route discovery alone is not readiness.
+  API-DRILL-006 is repaired with a bounded project-role issuance envelope that
+  accommodates the existing public qualification maxima; other authority
+  mutations retain their original limit. Full-max parser/PostgreSQL regressions
+  cover both roles, persistence, replay, conflict and unauthorized rollback.
 - Guide ingestion, guide binding/read, artifact verification/recovery,
   contributor preparation, Submission consumption/binding, unified compilation
   request/execute, and deterministic projection authority are implemented at
