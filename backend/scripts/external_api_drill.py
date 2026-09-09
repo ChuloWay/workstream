@@ -150,10 +150,11 @@ class Drill:
                 if response.headers.get(header) != request_headers[header]:
                     raise ProbeFailure("request_provenance_mismatch")
             row["result"] = "success" if expected < 300 else "expected_denial"
-            operation["status"] = (
-                "partial_positive" if row["result"] == "success"
-                or operation["status"] == "partial_positive" else "denial_only"
-            )
+            if operation["status"] != "failed":
+                operation["status"] = (
+                    "partial_positive" if row["result"] == "success"
+                    or operation["status"] == "partial_positive" else "denial_only"
+                )
             for field in fields:
                 operation["field_cases"].setdefault(field, []).append(name)
             operation["uncovered_fields"] = sorted(

@@ -87,3 +87,17 @@ Run focused unit tests and the new drill through `run_isolated_tests.py` against
 a private temporary PostgreSQL instance. Check links, stale wording, record and
 diff integrity. Full backend tests are unchanged; no blanket product certification.
 The roadmap needs no capability change: this adds verification tooling only.
+
+## Initial evidence and remaining scope
+
+The first committed real-HTTP slice exercised 104 assertions across 23 operations:
+54 successful calls and 50 expected denials. The full 77-operation OpenAPI
+inventory retained 54 operations as untested; field-level completeness is not
+claimed. Both isolated database and role cleanup were verified. The complete
+all-field/API audit remains Planned, not delivered by this first slice.
+
+Focused review found a future false-summary risk: a later passing case could
+overwrite an operation's prior failure. Failure is now sticky, with fail-then-
+success and fail-then-denial regression proof. No existing product tests or
+guards were changed. Unit tests live at the explicitly root-relative
+`scripts/test_external_api_drill.py` and run with the backend virtual environment.

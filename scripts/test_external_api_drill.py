@@ -64,6 +64,21 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(drill.ProbeFailure):
                 await probe.call("false_success", "GET", "/items", expected=200)
             self.assertEqual(report["cases"][-1]["result"], "failed")
+            await probe.call("later_valid_denial", "GET", "/items", expected=403)
+            self.assertEqual(report["operations"]["GET /items"]["status"], "failed")
+
+    async def test_success_cannot_erase_prior_failure(self):
+        def handler(request):
+            return httpx.Response(200, json={"enabled": False}, headers={
+                name: request.headers[name] for name in ("X-Request-ID", "X-Correlation-ID")})
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler),
+                                     base_url="http://127.0.0.1") as client:
+            report = {}
+            probe = drill.Drill(client, {"paths": {"/items": {"get": {}}}}, report)
+            with self.assertRaises(drill.ProbeFailure):
+                await probe.call("bad_body", "GET", "/items", values={"enabled": True})
+            await probe.call("later_success", "GET", "/items", values={"enabled": False})
+            self.assertEqual(report["operations"]["GET /items"]["status"], "failed")
 
     async def test_external_database_rejected_before_connecting(self):
         with tempfile.TemporaryDirectory() as directory:
