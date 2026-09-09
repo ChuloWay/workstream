@@ -846,6 +846,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/source_state.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/projects/guide_compilation/validation.py"
     },
     {
@@ -1093,7 +1097,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "27b0c437f32b3b687843e939a55012078fa8b670b2a3f08791d4fec8b5f720e5",
+  "authority_digest": "21c1ec383ddef818eab5d4b42268d3252f9109be0cbb39df82cafefa01d9c812",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

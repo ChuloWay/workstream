@@ -49,7 +49,19 @@ def test_projection_owner_cannot_invoke_provider():
 def test_only_projects_coordinator_calls_projection_ports_from_live_worker():
     worker = (ROOT / "workers/project_setup.py").read_text()
     coordinator = (ROOT / "modules/projects/guide_compilation/live.py").read_text()
-    assert "LiveGuideCompilationCoordinator(" in worker
+    owner = (ROOT / "adapters/projects/__init__.py").read_text()
+    assert "LiveGuideCompilationCoordinator(" in owner
+    assert "LiveGuideCompilationCoordinator(" not in worker
+    assert "project_guide_compilation_delivery_port(" in worker
+    imports = {
+        node.module or ""
+        for node in ast.walk(ast.parse(worker))
+        if isinstance(node, ast.ImportFrom)
+    }
+    assert all(
+        not name.startswith("app.modules.projects.") or name.startswith("app.modules.projects.api.")
+        for name in imports
+    )
     for method in ["project_guide_sufficiency", "project_submission_artifact_policy"]:
         assert method + "(" in coordinator
         assert method + "(" not in worker

@@ -1195,6 +1195,8 @@ POL-04B1 adds the hidden `project.guide_compilation.request_automatic` action
 under the existing `project.guide_compilation.execute` permission, restricted to
 `workstream.project.setup`. It binds the exact committed source mutation and its
 authorization event to one setup generation. Both human and automatic request
-replays recheck current authority inside the receipt transaction. The live Celery
-cutover remains POL-04B; this request boundary does not run inference or approve
-policies.
+replays recheck current authority inside the receipt transaction. POL-04B
+composes this authority with execution, projections and finalization in the live
+Celery worker. The automatic operation stops at findings or draft proposals;
+POL-05A → AUTH-12F4 → POL-05B owns the remaining manager review and approval.
+Default and public mutation ports remain unavailable.

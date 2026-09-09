@@ -60,6 +60,7 @@ from app.modules.projects.service import (
 )
 from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
 
+from .source_state import is_compilation_source_setup
 from .contracts import AcceptedCompilationResult
 from .custody_payloads import (
     source_state as _source_state,
@@ -505,10 +506,6 @@ def _is_exact_projection_source_state(
     expected_task: str,
 ) -> bool:
     """Return whether locked product rows match the sole source-state shape."""
-    continuation_pair = (
-        setup.continuation_verification_job_id,
-        setup.continuation_started_at,
-    )
     return not (
         guide.project_id != str(seed.project_id)
         or guide.version != seed.guide_version
@@ -524,19 +521,7 @@ def _is_exact_projection_source_state(
         or setup.source_snapshot_id != snapshot.id
         or setup.source_snapshot_hash != snapshot.bundle_hash
         or setup.setup_generation != seed.setup_generation
-        or setup.status != "queued"
-        or setup.current_step != "queued"
-        or setup.celery_task_id != expected_task
-        or (continuation_pair[0] is None) != (continuation_pair[1] is None)
-        or setup.error_code is not None
-        or setup.error_artifact_incident_id is not None
-        or setup.error_summary is not None
-        or setup.post_submit_derivation_summary is not None
-        or setup.started_at is not None
-        or setup.finished_at is not None
-        or setup.output_sufficiency_report_id is not None
-        or setup.output_submission_artifact_policy_id is not None
-        or setup.output_post_submit_checker_policy_id is not None
+        or not is_compilation_source_setup(setup, expected_task)
     )
 
 

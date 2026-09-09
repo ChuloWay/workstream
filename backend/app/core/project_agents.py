@@ -1,14 +1,11 @@
-"""Explicit composition of independently configured guide-agent runtimes."""
+"""Trusted configuration snapshots for guide-agent execution."""
 
 from __future__ import annotations
 
 import hashlib
 
-from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
 from app.core.config import Settings
 from app.core.project_guide_instructions import PROJECT_GUIDE_INSTRUCTIONS
-from app.interfaces.external_services import ExternalServiceAdapterFactory
-from app.interfaces.project_agents import ProjectGuideAgentRuntime
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 
 
@@ -31,12 +28,3 @@ def project_guide_runtime_configuration(settings: Settings) -> ProjectGuideRunti
         timeout_seconds=settings.project_agent_run_timeout_seconds,
         maximum_prompt_bytes=settings.project_agent_max_prompt_bytes,
     )
-
-
-def create_project_guide_runtime(
-    configuration: ProjectGuideRuntimeConfiguration,
-) -> ProjectGuideAgentRuntime:
-    """Construct only the explicitly registered runtime chosen by this attempt."""
-    factory = ExternalServiceAdapterFactory[ProjectGuideAgentRuntime]("project_guide_compilation")
-    factory.register("openai_agents_sdk", lambda: OpenAIAgentSdkProjectGuideRuntime(configuration))
-    return factory.create(configuration.runtime_key)

@@ -10,6 +10,10 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.modules.projects.models import ProjectSetupRun
+from app.modules.projects.guide_compilation.models import (
+    ProjectGuideCompilationAttempt,
+    ProjectGuideSetupFinalization,
+)
 from app.modules.projects.setup_queue import (
     dispatch_stale_before,
     dispatch_project_guide_compilation_after_commit,
@@ -19,8 +23,38 @@ PrepareGeneration = Callable[..., Awaitable[bool]]
 
 
 def _retryable_dispatch_predicate() -> ColumnElement[bool]:
-    """Match stale pending or unclaimed queued work eligible for dispatch."""
+    """Reclaim stale exact deliveries without reviving terminal provider custody."""
+    recoverable = (
+        ~select(ProjectGuideCompilationAttempt.id)
+        .where(
+            ProjectGuideCompilationAttempt.setup_run_id == ProjectSetupRun.id,
+            ProjectGuideCompilationAttempt.setup_generation == ProjectSetupRun.setup_generation,
+            ProjectGuideCompilationAttempt.status.in_(
+                (
+                    "compilation_invalid_terminal",
+                    "compilation_provider_uncertain",
+                )
+            ),
+        )
+        .exists()
+    )
+    unfinished = (
+        ~select(ProjectGuideSetupFinalization.id)
+        .where(
+            ProjectGuideSetupFinalization.setup_run_id == ProjectSetupRun.id,
+            ProjectGuideSetupFinalization.setup_generation == ProjectSetupRun.setup_generation,
+        )
+        .exists()
+    )
     return or_(
+        and_(
+            ProjectSetupRun.status == "queued",
+            ProjectSetupRun.current_step == "queued",
+            ProjectSetupRun.celery_task_id.is_not(None),
+            ProjectSetupRun.updated_at <= dispatch_stale_before(),
+            recoverable,
+            unfinished,
+        ),
         and_(
             ProjectSetupRun.status == "dispatch_pending",
             ProjectSetupRun.updated_at <= dispatch_stale_before(),

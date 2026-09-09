@@ -142,6 +142,9 @@ class ProjectGuideSetupFinalizationPort(Protocol):
 
 
 __all__ = (
+    "ProjectGuideCompilationDelivery",
+    "ProjectGuideCompilationDeliveryError",
+    "ProjectGuideCompilationDeliveryPort",
     "ProjectGuideSetupFinalizationCommand",
     "ProjectGuideSetupFinalizationReceipt",
     "ProjectGuideSetupFinalizationError",

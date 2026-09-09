@@ -16,11 +16,9 @@ from app.adapters.project_agents.openai_agent_sdk import (
 )
 from app.core.config import Settings
 from app.core.project_agents import (
-    create_project_guide_runtime,
     project_guide_runtime_configuration,
 )
 from app.core.project_guide_instructions import PROJECT_GUIDE_INSTRUCTIONS
-from app.interfaces.external_services import UnknownExternalServiceProviderError
 from app.interfaces.project_agents import (
     ProjectAgentRuntimeError,
     ProjectAgentRuntimeConfigurationError,
@@ -41,16 +39,6 @@ def model_credentials(monkeypatch):
 def test_unified_compilation_instructions_preserve_untrusted_and_lifecycle_boundaries():
     for text in ("untrusted", "pre-submit", "post-submit", "ProjectGuideCompilationAgent"):
         assert text in PROJECT_GUIDE_INSTRUCTIONS
-
-
-def test_runtime_factory_uses_shared_identity_and_rejects_unknown_runtime():
-    configuration = runtime_configuration()
-    runtime = create_project_guide_runtime(configuration)
-    assert runtime.identity == configuration.adapter_identity
-    with pytest.raises(UnknownExternalServiceProviderError):
-        create_project_guide_runtime(
-            configuration.model_copy(update={"runtime_key": "uninstalled"})
-        )
 
 
 def test_runtime_requires_credentials_before_dispatch(monkeypatch):

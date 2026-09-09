@@ -1403,8 +1403,10 @@ provider internals.
 
 Guide-source ingestion stores each source item as immutable artifact content.
 `GuideSourceSnapshot` binds its canonical manifest to those content records.
-Sufficiency and policy-derivation agents read through an authorized Workstream
-artifact reader, never direct provider URLs.
+The unified guide compiler reads verified material through an authorized
+Workstream artifact reader, never direct provider URLs. ART readiness triggers
+one automatic Celery compilation of sufficiency and separate pre-submission
+and post-submission draft proposals; it stops at findings or draft review.
 
 The Project Manager guide-source boundary is not the contributor submission
 boundary. Contributor submissions always use one outer ZIP; guide snapshots may

@@ -3,9 +3,9 @@
 from celery.utils.log import get_task_logger
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.adapters.project_agents import create_project_guide_runtime
 from app.core.config import get_settings
 from app.core.project_agents import (
-    create_project_guide_runtime,
     project_guide_runtime_configuration,
 )
 from app.db.session import get_database_url

@@ -35,7 +35,17 @@ from app.modules.projects.guide_compilation.projections import (
     GuideCompilationProjectionService,
 )
 
-from .helpers import seed_database
+from .helpers import (
+    seed_database,
+    context,
+    SOURCE_ITEM_ID,
+    BINDING_ID,
+    CONTENT_ID,
+    EXTRACTION_USAGE_ID,
+    EXTRACTION_ATTEMPT_ID,
+    EXTRACTED_CONTENT_ID,
+    SOURCE_SHA256,
+)
 from .test_hidden_orchestrator_postgresql import (
     _Runtime,
     _authorized_attempt,
@@ -277,6 +287,38 @@ async def test_projects_both_components_once_and_replays_without_new_effects(
                     )
                 )
             ).all()
+            usage = (
+                (
+                    await session.execute(
+                        text("select * from guide_sufficiency_report_source_usages")
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            expected_usage = {
+                "report_id": str(sufficiency.output_id),
+                "item_order": 0,
+                "source_item_id": str(SOURCE_ITEM_ID),
+                "binding_id": str(BINDING_ID),
+                "content_id": str(CONTENT_ID),
+                "extraction_usage_id": str(EXTRACTION_USAGE_ID),
+                "extraction_attempt_id": str(EXTRACTION_ATTEMPT_ID),
+                "extracted_content_id": str(EXTRACTED_CONTENT_ID),
+                "project_setup_run_id": str(values["setup_1"]),
+                "setup_generation": 1,
+                "canonical_output_sha256": SOURCE_SHA256,
+            }
+            assert {key: usage[key] for key in expected_usage} == expected_usage
+            material = context(values).material
+            report = (
+                await session.execute(
+                    text(
+                        "select agent_material_sha256,agent_material_byte_count from guide_sufficiency_reports"
+                    )
+                )
+            ).one()
+            assert report == (material.canonical_payload_sha256, len(material.canonical_payload))
             await session.rollback()
 
         assert counts == (1, 1, 1, 2, 1, 1)

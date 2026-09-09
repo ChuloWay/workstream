@@ -126,7 +126,11 @@ A ready compilation persists separate pre-submission and post-submission
 proposals and stops at a draft. An insufficient guide stops with findings.
 The latest setup diagnostic reflects durable invalid or unresolved provider
 outcomes without rewriting setup evidence. An uncertain attempt is never
-invoked again. Transport failures retry the same task and attempt; accepted
+invoked again. Transport failures retry the same task and attempt. After bounded Celery retries
+exhaust, Beat can reclaim stale queued deliveries with the same deterministic task
+ID. Repair configuration or infrastructure, then allow that continuation to resume;
+it cannot create a new provider attempt. Invalid, uncertain and finalized attempts
+are excluded from reclaim. Accepted
 results resume persistence and projection without another model call.
 
 Project Manager proposal visibility, editing, explicit fresh-generation reruns

@@ -1,6 +1,6 @@
 # WS-POL-003 — Unified project-guide compilation
 
-Latest completed POL behavior: [POL-04B live unified setup](planning/chunks/WS-POL-003-04B-live-unified-setup-cutover.md).
+Latest completed POL behavior: [POL-04B live unified setup](WS-POL-003-04B.md).
 Current remaining design: [POL plan](planning/PLAN.md) and the
 [cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract).
 

@@ -57,8 +57,7 @@ creates a new snapshot and invalidates prior sufficiency reports, derived
 policies, effective policies, checker specs, checker bundles, acknowledgements,
 and approvals for activation.
 Representative task excerpts and task samples are source material for project
-setup agents only. They help the `ProjectGuideSufficiencyAgent` and
-`SubmissionArtifactPolicyDerivationAgent` evaluate whether the project guide is
+the unified guide compiler only. They help its one inference evaluate whether the project guide is
 usable across the project task set; they do not create task-scoped policy or
 task-scoped checker generation.
 A new guide-source snapshot invalidates prior setup records for new activation
@@ -72,37 +71,23 @@ verified ART bindings provide exact byte identity. Query strings, signed URLs,
 credentials, token-bearing references, local paths, and provider locations are
 never durable source-item identity.
 
-`ProjectGuideSufficiencyAgent` evaluates whether the guide is sufficient for
-submitters, reviewers, and Workstream quality control. Blocking guide gaps stop
-activation and create clarification requests back to the project owner. Warnings
-remain visible to authorized covered Project Managers
-and must be acknowledged before activation.
+The unified guide compiler evaluates guide sufficiency and proposes distinct
+pre-submission intake and post-submission evaluation policies in one inference.
+Verified ART readiness automatically queues the exact immutable generation in
+Celery. Blocking gaps produce findings and stop; a sufficient guide produces
+separate draft policy components and stops for Project Manager review.
+Deterministic projection owners persist the permitted report and artifact-policy
+component, and finalization binds their exact outputs in an immutable receipt.
+No later approval or correction starts a second derivation agent.
 
-`SubmissionArtifactPolicyDerivationAgent` derives
-`SubmissionArtifactPolicy` from the guide material after sufficiency
-passes or passes with warnings. The project owner does not approve this
-internal policy. An authorized covered Project Manager
-reviews and approves the derived policy before guide activation, and any
-sufficiency warnings must be acknowledged before approval or activation.
-This setup pipeline is automatic. When Workstream captures a guide-source
-snapshot, it enqueues a Celery project setup job. The job runs
-`ProjectGuideSufficiencyAgent`; a blocked report stops the pipeline and no
-submission artifact policy is created. A passed or passed-with-warnings report
-continues to `SubmissionArtifactPolicyDerivationAgent`, which creates a draft
-policy for human Workstream review.
-Agent-derived policy versioning is server-owned and deterministic from the
-guide source snapshot hash. Provider-returned policy versions are not trusted
-for idempotency and cannot create multiple current policies for the same
-snapshot.
-Persisted agent names and versions are also Workstream-owned provenance, not
-provider-returned audit truth. Manual sufficiency reports can support manual
-policy creation after sufficiency clearance, but the derivation agent requires
-a Workstream-agent sufficiency report for the same immutable snapshot.
-
-The derivation agent does not generate unrestricted executable checker code as
-the default path. It produces a machine-readable artifact-intake contract.
-Workstream's trusted compiler builds and validates the constrained pre-submit
-checker specification using Workstream-approved primitives.
+POL-05A → AUTH-12F4 → POL-05B owns the remaining manager proposal view,
+correction, explicit new-generation rerun and approval. These operations must
+preserve the completed generation and unresolved provider outcomes. Policy
+versions and compiler provenance are Workstream-owned, never provider-returned
+identity. Manual sufficiency reports and manual policies retain their separately
+authorized provenance; they do not impersonate unified compilation evidence.
+The compiler proposes constrained policy data, not executable checker code.
+Trusted CHECKERS compilers validate the registered implementations separately.
 
 `SubmissionArtifactPolicy` is the Workstream-derived,
 covered-Project-Manager-approved machine-readable contract for contributor
@@ -158,7 +143,7 @@ contributor, Project Manager, task, or project-policy toggle.
 - a locked project-required rule cannot be disabled at runtime; changing it
   requires a new approved policy lineage.
 
-`SubmissionArtifactPolicyDerivationAgent` produces the artifact-intake contract
+The unified guide compiler proposes the artifact-intake contract
 at project setup time. Workstream's trusted checker compiler builds and
 validates the constrained checker specification and persists the project-level
 `PreSubmitCheckerPolicy`.
@@ -166,8 +151,7 @@ validates the constrained checker specification and persists the project-level
 Project policies define project-wide artifact intake rules for a guide
 snapshot. The dominant operating model is one project guide, one effective
 project policy, and one project pre-submit checker bundle reused by every task
-under that guide version. `ProjectGuideSufficiencyAgent` is responsible for
-checking that the guide and derived policy cover the project's task set. If the
+under that guide version. The unified compiler assesses that the guide and derived policy cover the project's task set. If the
 guide does not cover the tasks, activation is blocked and the guide is improved
 or the work is split into another project/guide. Workstream does not hide guide
 coverage problems by generating new task-specific policies.

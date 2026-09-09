@@ -236,6 +236,7 @@ POL_04B_PARTITION_TARGETS = frozenset({
     "backend/app/modules/projects/guide_compilation/diagnostics.py",
     "backend/app/modules/projects/guide_compilation/live.py",
     "backend/scripts/guide_compilation_e2e.py",
+        "backend/app/modules/projects/guide_compilation/source_state.py",
 })
 POL_04B_REMOVED_TARGETS = frozenset({"backend/scripts/week2_api_e2e.py"})
 AUTH_12I_TARGETS = frozenset(

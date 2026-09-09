@@ -27,6 +27,8 @@ from app.modules.projects.models import (
     ProjectSetupRun,
 )
 
+from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
+from .source_state import is_compilation_source_setup
 from .context import compilation_context_from_material
 from .contracts import CompilationAttemptIdentity
 from .repository import GuideCompilationIntegrityError, GuideCompilationRepository
@@ -57,7 +59,9 @@ class AutomaticCompilationInputs:
                 "automatic compilation runtime configuration unavailable"
             )
         setup = await session.get(ProjectSetupRun, str(setup_run_id))
-        if setup is None:
+        if setup is None or not is_compilation_source_setup(
+            setup, project_guide_compilation_task_id(str(setup_run_id), setup.setup_generation)
+        ):
             raise GuideCompilationIntegrityError("automatic compilation setup unavailable")
         guide = await session.get(ProjectGuide, setup.guide_id)
         snapshot = await session.get(GuideSourceSnapshot, setup.source_snapshot_id)

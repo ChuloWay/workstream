@@ -497,35 +497,24 @@ Finding severity:
 - `warning`
 - `info`
 
-`ProjectGuideSufficiencyAgent` creates this report asynchronously for a guide
-version. Blocking gaps stop guide activation and create clarification requests
-for the project owner. Warnings can be acknowledged only by an authorized
-covered Project Manager before activation.
+The unified compiler assesses sufficiency once for the immutable guide material.
+Blocking gaps stop at findings; sufficient guides stop at draft policy review.
+The deterministic sufficiency projector creates the report from the persisted
+`ProjectGuideCompilation`, with server-owned agent identity. Provider-returned
+names and versions never establish provenance. The exact source snapshot hash,
+setup generation, canonical material hash/byte count and normalized
+`GuideSufficiencyReportSourceUsage` rows bind its verified source evidence.
 
-`source_snapshot_hash` is server-derived from the referenced
-`GuideSourceSnapshot.bundle_hash`. Clients cannot supply a conflicting hash.
+Manual reports use their separately authorized API and persist null agent name
+and version. They do not execute inference or supply compilation provenance.
+The removed run-sufficiency route is not a manager rerun API; that later workflow
+belongs to POL-05A → AUTH-12F4 → POL-05B.
 
-Agent-created reports also bind to the exact setup run and generation and to
-the SHA-256 and byte count of the canonical material sent to the agent. Their
-source provenance is normalized into `GuideSufficiencyReportSourceUsage` rows.
-
-Manual sufficiency reports persist `agent_name` and `agent_version` as null.
-Only reports created through the automatic fixed-service continuation persist
-Workstream-owned agent identity; provider-returned names or versions are not
-trusted as audit provenance. A Project Manager HTTP request authorizes only
-asynchronous dispatch and converges on the same setup run and deterministic
-task as automatic verified-material readiness. It creates no report inline. A
-source snapshot may have one diagnostic report and one verified agent report.
-Only the verified report, with a complete exact source-usage set, may support
-agent policy derivation or guide activation.
-
-The hidden unified-compilation projector can deterministically create the same
-canonical report from a persisted `ProjectGuideCompilation`. Its immutable
-`ProjectGuideComponentProjectionOperation` binds the report to the exact
-attempt, compilation, setup generation, component and result hashes, verified
-material digest and byte count, and authorization decision. It leaves the
-`ProjectSetupRun` unchanged and remains unreachable until its fixed-service
-authorization and background-execution cutover are activated.
+The live Celery path consumes the sufficiency projector under fresh fixed-service
+authority. Its immutable `ProjectGuideComponentProjectionOperation` binds the
+attempt, compilation, generation, component/result hashes and authorization.
+Projection itself leaves setup unchanged; the separate finalizer atomically
+records permitted outputs and seals the generation.
 
 ## GuideSufficiencyReportSourceUsage
 
@@ -619,8 +608,8 @@ Example:
   },
   "policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "derivation_source": "agent_derivation",
-  "derivation_agent_name": "SubmissionArtifactPolicyDerivationAgent",
-  "derivation_agent_version": "workstream-policy-derivation-agent-v0.1",
+  "derivation_agent_name": "ProjectGuideCompilationAgent",
+  "derivation_agent_version": "v1",
   "source_material_refs": ["project-guide:v1"],
   "lifecycle_status": "approved",
   "approved_by_admin_role_grant_id": "00000000-0000-0000-0000-000000000010",
@@ -629,31 +618,20 @@ Example:
 }
 ```
 
-Workstream derives this policy from project guide material after guide
-sufficiency passes or passes with warnings. An authorized covered Project
-Manager approves it after any sufficiency warnings are acknowledged. Project
-owners and contributors do not supply or approve this internal
-policy schema.
-`derivation_source` is server-owned. The legacy technical token
-`manual_admin_derivation` remains historical provenance until its owning
-migration; it does not grant authority. Policies created by the derivation agent persist
-`agent_derivation`. Client requests do not supply derivation provenance, and
-manual `policy_version` values cannot use the reserved `agent-` prefix.
-Agent-derived policy versioning and persisted derivation-agent identity are
-server-owned. The derivation agent can run only from a Workstream-agent
-sufficiency report for the same guide source snapshot; manual sufficiency
-reports can support manual policy creation after clearance, but they do not
-create agent-derivation provenance.
-Agent-derived policy provenance is revalidated before approval and guide
-activation, so seeded or stale rows with spoofed agent identity cannot become
-the active policy context.
+The live unified compiler proposes this policy together with sufficiency and
+separate pre-submission/post-submission policy components. ART readiness starts
+one Celery compilation; sufficient guides stop at draft review and blocked
+guides stop at findings. The deterministic artifact-policy projector consumes
+the persisted component only after its exact sufficiency projection exists.
+Its immutable operation binds inputs, output digest, prior report, generation
+and authorization evidence. Finalization records the exact permitted outputs.
 
-The hidden unified-compilation projector may also create the draft policy from
-the persisted artifact-policy component, but only after the exact sufficiency
-projection exists. The same projection-operation ledger binds its input,
-output digest, prior report, setup generation, and authorization evidence.
-Projection is idempotent and does not approve the policy, derive an effective
-policy, or update setup-run output pointers.
+`derivation_source`, agent identity and generated policy version are server-owned
+provenance. Clients cannot supply them or use the reserved `agent-` version
+prefix. Manual policies retain their own authorized provenance. A unified draft
+cannot use the generic manual-policy approval route: manager proposal review,
+correction, fresh-generation rerun and approval remain POL-05A → AUTH-12F4 →
+POL-05B. Projection creates neither effective policy nor executable checkers.
 
 ## ProjectGuideComponentProjectionOperation
 
@@ -968,16 +946,13 @@ reason, policy hash, and policy body provenance. A replacement links through
 the exact same setup context; bounded correction feedback reaches setup-time
 derivation, and Workstream rejects an identical replacement policy hash.
 
-For generated setup, `PostSubmitCheckerPolicyDerivationAgent` runs only after a
-authorized covered Project Manager approves the derived
-`SubmissionArtifactPolicy`, producing an approved
-`EffectiveProjectSubmissionArtifactPolicy` and compiled project
-`PreSubmitCheckerPolicy`. The agent receives bounded guide-source material,
-guide sufficiency summary, effective policy summary, pre-submit checker
-summary, and the registered post-submit checker catalog. It returns a
-constrained checker specification, unsupported required-check gaps, bounded
-reasons, and setup notes. It does not produce executable code and it does not
-judge contributor submissions at runtime.
+For generated setup, the sole unified guide compiler proposes the post-submit
+component in the same inference as sufficiency and pre-submit policy proposals.
+It receives exact verified guide material and registered capability snapshots.
+POL-04B retains that component in the immutable compilation and stops at draft
+review. Later approval and deterministic post-submit projection/compilation
+consume it without another agent call. The setup runtime does not execute
+checkers or judge contributor submissions.
 
 The constrained derivation output contains:
 

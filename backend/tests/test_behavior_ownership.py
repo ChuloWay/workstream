@@ -1696,6 +1696,7 @@ def test_partition_accepts_only_exact_unified_cutover_replacement():
         "backend/app/modules/projects/guide_compilation/diagnostics.py",
         "backend/app/modules/projects/guide_compilation/live.py",
         "backend/scripts/guide_compilation_e2e.py",
+        "backend/app/modules/projects/guide_compilation/source_state.py",
     }
     assert ownership.POL_04B_PARTITION_TARGETS == expected
     assert ownership.POL_04B_REMOVED_TARGETS == {"backend/scripts/week2_api_e2e.py"}

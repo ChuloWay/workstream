@@ -73,6 +73,8 @@ def contribution_policy_authorization(
 
 
 __all__ = (
+    "guide_compilation_request_authority",
+    "guide_compilation_execution_authority",
     "ContributionPolicyAuthorization",
     "contribution_policy_authorization",
     "CompensationAdapterBindingAuthorization",

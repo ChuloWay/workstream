@@ -21,12 +21,16 @@ The first user flows prove that Workstream can run real work from intake to acce
 
 ## Flow 1: Project Manager Creates A Project
 
+POL-04B delivers the automatic compilation and immutable draft/findings stop
+below. The remaining manager proposal view, correction, fresh-generation rerun
+and approval follow POL-05A → AUTH-12F4 → POL-05B; the complete activation flow
+below describes the target lifecycle, not a claim that those surfaces are live.
+
 1. A system-scoped Project Manager creates the project.
 2. Project owner provides open-ended guide material and business terms.
 3. An authorized covered Project Manager adds the guide.
-4. The covered Project Manager explicitly requests unified compilation of the
-   immutable guide-source snapshot; Workstream queues its authorized async
-   execution. Automatic ingestion continuation is not part of this cutover.
+4. Once ART verifies and prepares the immutable guide-source material,
+   Workstream automatically queues its authorized unified compilation in Celery.
 5. One unified compilation assesses sufficiency and proposes artifact,
    pre-submission and post-submission policy components from the exact guide
    and catalogue snapshots.

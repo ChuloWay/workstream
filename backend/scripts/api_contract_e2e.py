@@ -922,17 +922,25 @@ async def exercise_guide_setup_contract(
         await run_artifact_internal_operation("verification", identifier)
         await continue_guide_setup_after_verification(identifier)
 
-    published_work = 0
-    for _ in range(8):
-        published_generation = await scan_artifact_pending_work(
-            publish_put_attempt,
-            publish_verification_job,
-        )
-        published_work += published_generation
-        if published_generation == 0:
-            break
-    else:
-        raise AssertionError("guide artifact worker did not drain bounded committed work")
+    from unittest.mock import patch
+
+    # Emulate broker acknowledgement, not eager execution. The live guide is
+    # delivered below with its deterministic runtime; the task fixture never runs inference.
+    with patch(
+        "app.modules.projects.setup_queue.enqueue_project_guide_compilation",
+        side_effect=lambda **kwargs: kwargs["task_id"],
+    ):
+        published_work = 0
+        for _ in range(8):
+            published_generation = await scan_artifact_pending_work(
+                publish_put_attempt,
+                publish_verification_job,
+            )
+            published_work += published_generation
+            if published_generation == 0:
+                break
+        else:
+            raise AssertionError("guide artifact worker did not drain bounded committed work")
     ensure(published_work > 0, "guide artifact worker found no committed work")
     queued_setup = await request_json(
         client,
@@ -941,7 +949,7 @@ async def exercise_guide_setup_contract(
         diagnostic_reader_token,
     )
     from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDelivery
-    from guide_compilation_e2e import compile_live_guide, project_unfinalized_task_fixture
+    from guide_compilation_e2e import compile_live_guide, attach_verified_task_fixture_material
 
     delivery = ProjectGuideCompilationDelivery(
         project_id=project_id,
@@ -952,12 +960,9 @@ async def exercise_guide_setup_contract(
         task_id=queued_setup["celery_task_id"],
     )
     if task_fixture:
-        # Only the separately identified task guide is fixture-owned. Canonical
-        # projections supply source custody; the live finalizer is never bypassed.
-        # Manual policy approval requires its separate diagnostic report. The task
-        # fixture's activation still uses the authoritative unified projection and
-        # its exact ART usages; neither report is relabelled or overwritten.
-        await request_json(
+        # This separate guide supplies only manual downstream task prerequisites.
+        # Guide A independently proves the live compilation and immutable stop.
+        manual_report = await request_json(
             client,
             "POST",
             f"/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports",
@@ -971,8 +976,10 @@ async def exercise_guide_setup_contract(
             expected_status=201,
             idempotency_key=str(uuid4()),
         )
-        outputs = await project_unfinalized_task_fixture(delivery)
-        setup_run = {**queued_setup, **outputs}
+        fixture_report_id = await attach_verified_task_fixture_material(
+            delivery, manual_report["id"]
+        )
+        setup_run = {**queued_setup, "output_sufficiency_report_id": fixture_report_id}
     else:
         await compile_live_guide(delivery)
         setup_run = await request_json(
@@ -999,7 +1006,7 @@ async def exercise_guide_setup_contract(
     ensure(len(reports) == (2 if task_fixture else 1), "unexpected sufficiency report count")
     ensure(
         report["id"] in {item["id"] for item in reports},
-        "sufficiency report list omitted canonical report",
+        "sufficiency report list omitted selected report",
     )
     await request_json(
         client,
@@ -1007,28 +1014,29 @@ async def exercise_guide_setup_contract(
         f"/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports/{report['id']}",
         diagnostic_reader_token,
     )
-    policy = await request_json(
-        client,
-        "GET",
-        f"/api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies/"
-        f"{setup_run['output_submission_artifact_policy_id']}",
-        diagnostic_reader_token,
-    )
-    policies = await request_json(
-        client,
-        "GET",
-        f"/api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies",
-        diagnostic_reader_token,
-    )
-    ensure(isinstance(policies, list), "submission artifact policy list did not return a list")
-    ensure(len(policies) == 1, f"expected one submission artifact policy, got {len(policies)}")
-    ensure(policies[0]["id"] == policy["id"], "submission policy list returned wrong policy")
-    await request_json(
-        client,
-        "GET",
-        f"/api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies/{policy['id']}",
-        diagnostic_reader_token,
-    )
+    if not task_fixture:
+        policy = await request_json(
+            client,
+            "GET",
+            f"/api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies/"
+            f"{setup_run['output_submission_artifact_policy_id']}",
+            diagnostic_reader_token,
+        )
+        policies = await request_json(
+            client,
+            "GET",
+            f"/api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies",
+            diagnostic_reader_token,
+        )
+        ensure(isinstance(policies, list), "submission artifact policy list did not return a list")
+        ensure(len(policies) == 1, f"expected one submission artifact policy, got {len(policies)}")
+        ensure(policies[0]["id"] == policy["id"], "submission policy list returned wrong policy")
+        await request_json(
+            client,
+            "GET",
+            f"/api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies/{policy['id']}",
+            diagnostic_reader_token,
+        )
     manual_create_key = str(uuid4())
     manual_payload = {
         "source_snapshot_id": snapshot["id"],
@@ -1170,18 +1178,19 @@ async def exercise_guide_setup_contract(
         expected_status=409,
         idempotency_key=str(uuid4()),
     )
-    denied = await request_json(
-        client,
-        "POST",
-        f"{manual_path}/{policy['id']}/approve",
-        manager_token,
-        {"approval_note": "Unified proposal must wait for manager review workflow."},
-        expected_status=422,
-    )
-    ensure(
-        "unified compilation policy approval is unavailable" in denied["detail"],
-        "unified approval did not reach its specific draft-only guard",
-    )
+    if not task_fixture:
+        denied = await request_json(
+            client,
+            "POST",
+            f"{manual_path}/{policy['id']}/approve",
+            manager_token,
+            {"approval_note": "Unified proposal must wait for manager review workflow."},
+            expected_status=422,
+        )
+        ensure(
+            "unified compilation policy approval is unavailable" in denied["detail"],
+            "unified approval did not reach its specific draft-only guard",
+        )
     for suffix in ("effective-submission-artifact-policy", "pre-submit-checker-policy"):
         await request_json(
             client,

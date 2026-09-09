@@ -97,7 +97,23 @@ async def dispatch_project_guide_compilation_after_commit(
     elif setup_run.status == "queued" and setup_run.celery_task_id is not None:
         if setup_run.celery_task_id != expected_task_id:
             raise ProjectSetupQueueError("project setup task identity is stale before dispatch")
-        return setup_run.celery_task_id
+        if setup_run.updated_at > dispatch_stale_before():
+            return setup_run.celery_task_id
+        # Retry the immutable delivery, never a new attempt or provider key.
+        # Recheck terminal custody under the setup lock after candidate selection.
+        from app.modules.projects.guide_setup_continuation import _retryable_dispatch_predicate
+        from app.modules.projects.models import ProjectSetupRun
+        from sqlalchemy import select
+
+        reclaimable = await session.scalar(
+            select(ProjectSetupRun.id).where(
+                ProjectSetupRun.id == setup_run.id, _retryable_dispatch_predicate()
+            )
+        )
+        if reclaimable is None:
+            return setup_run.celery_task_id
+        deterministic_task_id = setup_run.celery_task_id
+        setup_run.updated_at = datetime.now(UTC)
     elif setup_run.status in {"queued", "enqueue_failed"}:
         deterministic_task_id = expected_task_id
         setup_run.status = "dispatch_pending"

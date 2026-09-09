@@ -77,7 +77,6 @@ from app.modules.projects import (
 )
 from app.modules.projects import service as project_service_module
 from app.modules.projects import guide_mutation_router as guide_mutation_router_module
-from app.modules.projects import guide_mutation_service as guide_mutation_service_module
 from app.modules.projects import setup_queue as project_setup_queue_module
 from app.modules.projects.create_repository import ProjectCreateRepository
 from app.modules.projects.create_router import (
@@ -2791,11 +2790,6 @@ async def test_guide_mutation_router_finishes_commit_and_replay_without_early_di
 async def test_guide_mutation_service_executes_all_three_authorized_happy_paths(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        guide_mutation_service_module,
-        "get_settings",
-        lambda: SimpleNamespace(project_setup_pipeline_autostart=True),
-    )
     project_id = uuid4()
     actor_id, link_id, grant_id = (uuid4() for _ in range(3))
     resolved = SimpleNamespace(

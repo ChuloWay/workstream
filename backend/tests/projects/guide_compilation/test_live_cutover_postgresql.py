@@ -201,7 +201,7 @@ async def test_stale_delivery_rejects_before_any_compilation_effect(
 
 @pytest.mark.parametrize("outcome", ["invalid", "uncertain"])
 async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_projection(
-    automatic_source, monkeypatch, outcome
+    automatic_source, monkeypatch, outcome, project_client
 ):
     from app.core.config import get_settings
     from app.interfaces.project_agents import (
@@ -241,6 +241,47 @@ async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_
     )
     assert (first["finished_at"] is not None) == (outcome == "invalid")
     assert "private-provider-detail" not in str(first)
+    from tests.projects.client_fixtures import auth_headers
+
+    path = f"/api/v1/projects/{delivery.project_id}/guides/{delivery.guide_id}/setup-runs/latest"
+    async with factory() as session:
+        before = await session.scalar(
+            text("select to_jsonb(s) from project_setup_runs s where id=:id"), {"id": str(setup_id)}
+        )
+    denied = await project_client.get(path)
+    assert denied.status_code == 401
+    response = await project_client.get(path, headers=auth_headers())
+    assert response.status_code == 200, response.text
+    body = response.json()
+    for field in ("status", "error_code", "error_summary"):
+        assert body[field] == first[field]
+    from datetime import datetime
+
+    assert (datetime.fromisoformat(body["finished_at"]) if body["finished_at"] else None) == (
+        datetime.fromisoformat(first["finished_at"]) if first["finished_at"] else None
+    )
+    assert body["started_at"] is not None
+    assert "private-provider-detail" not in response.text
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                text("select to_jsonb(s) from project_setup_runs s where id=:id"),
+                {"id": str(setup_id)},
+            )
+            == before
+        )
+    from app.modules.projects.guide_setup_continuation import retryable_source_snapshot_ids
+
+    async with factory() as session, session.begin():
+        await session.execute(
+            text(
+                "update project_setup_runs set updated_at=now()-interval '2 minutes' where id=:id"
+            ),
+            {"id": str(setup_id)},
+        )
+    assert delivery.source_snapshot_id not in await retryable_source_snapshot_ids(
+        factory, page_size=10
+    )
     async with factory() as session:
         setup = await session.get(ProjectSetupRun, str(setup_id))
         assert setup.status == "queued" and setup.current_step == "queued"
@@ -331,7 +372,9 @@ async def test_publisher_acknowledgement_cannot_overwrite_worker_finalization(
         await asyncio.gather(publisher, return_exceptions=True)
 
 
-@pytest.mark.parametrize("boundary", ["persisted", "sufficiency", "both_projections"])
+@pytest.mark.parametrize(
+    "boundary", ["persisted", "sufficiency", "both_projections", "retained_unconfigured"]
+)
 async def test_phase_crash_recovers_same_attempt_without_reinference(
     automatic_source, monkeypatch, boundary
 ):
@@ -357,7 +400,7 @@ async def test_phase_crash_recovers_same_attempt_without_reinference(
 
     class InterruptedProjections:
         async def project_guide_sufficiency(self, command):
-            if boundary == "persisted":
+            if boundary in {"persisted", "retained_unconfigured"}:
                 raise Crash()
             await projections.project_guide_sufficiency(command)
             if boundary == "sufficiency":
@@ -370,7 +413,48 @@ async def test_phase_crash_recovers_same_attempt_without_reinference(
     coordinator._projections = InterruptedProjections()
     with pytest.raises(Crash):
         await coordinator.run(delivery)
+    if boundary == "retained_unconfigured":
+        # Simulate the nullable additive-migration result using only this isolated
+        # database. Production immutability is independently proved in SQL tests.
+        async with factory() as session, session.begin():
+            from scripts.run_isolated_tests import NAME_RE
+
+            assert NAME_RE.fullmatch(await session.scalar(text("select current_database()")))
+            await session.execute(
+                text(
+                    "alter table project_guide_compilation_attempts disable trigger project_guide_runtime_configuration_guard"
+                )
+            )
+            await session.execute(
+                text(
+                    "update project_guide_compilation_attempts set runtime_configuration=null,runtime_configuration_hash=null"
+                )
+            )
+            await session.execute(
+                text(
+                    "alter table project_guide_compilation_attempts enable trigger project_guide_runtime_configuration_guard"
+                )
+            )
+        from app.modules.projects.guide_compilation.repository import GuideCompilationIntegrityError
+
+        with pytest.raises(
+            GuideCompilationIntegrityError, match="compilation runtime configuration unavailable"
+        ):
+            await coordinator.run(delivery)
+        async with factory() as session:
+            assert (
+                await session.scalar(text("select status from project_guide_compilation_attempts"))
+                == "compilation_persisted"
+            )
+            for table in (
+                "project_guide_component_projection_operations",
+                "project_guide_setup_finalizations",
+            ):
+                assert await session.scalar(text("select count(*) from " + table)) == 0
+        assert runtime.calls == 1
+        return
     coordinator._projections = projections
+    await _reclaim_exact_delivery(factory, delivery, monkeypatch)
     receipt = await coordinator.run(delivery)
     assert receipt["status"] == "policy_draft_ready"
     assert runtime.calls == 1
@@ -535,3 +619,130 @@ async def test_concurrent_live_deliveries_share_one_provider_and_finalization(
             "project_guide_setup_finalizations",
         ]:
             assert await session.scalar(text("select count(*) from " + table)) == 1
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("error_code", "stale"),
+        ("error_summary", "stale"),
+        ("started_at", "2026-01-01T00:00:00+00:00"),
+        ("finished_at", "2026-01-01T00:00:00+00:00"),
+        ("continuation_started_at", "2026-01-01T00:00:00+00:00"),
+        ("post_submit_derivation_summary", {"status": "stale"}),
+    ],
+)
+async def test_dirty_setup_rejects_before_request_or_provider(
+    automatic_source, monkeypatch, field, value
+):
+    from datetime import datetime
+    from app.core.config import get_settings
+    from app.modules.projects.models import ProjectSetupRun
+
+    monkeypatch.setenv("WORKSTREAM_CELERY_TASK_ALWAYS_EAGER", "true")
+    get_settings.cache_clear()
+    from app.workers import project_setup as worker
+
+    factory, actor, setup_id, snapshot = automatic_source
+    delivery = await _delivery(factory, setup_id)
+    async with factory() as session, session.begin():
+        setup = await session.get(ProjectSetupRun, str(setup_id))
+        setattr(setup, field, datetime.fromisoformat(value) if field.endswith("_at") else value)
+
+    def forbidden(*args):
+        pytest.fail("dirty setup reached configuration or provider")
+
+    monkeypatch.setattr(worker, "create_project_guide_runtime", forbidden)
+    monkeypatch.setattr(worker, "project_guide_runtime_configuration", forbidden)
+    with pytest.raises(ProjectGuideCompilationDeliveryError):
+        await worker._coordinator(factory).run(delivery)
+    async with factory() as session:
+        for table in (
+            "project_guide_compilation_request_operations",
+            "project_guide_compilation_attempts",
+            "project_guide_component_projection_operations",
+            "project_guide_setup_finalizations",
+        ):
+            assert await session.scalar(text("select count(*) from " + table)) == 0
+
+
+async def test_stale_queued_configuration_failure_is_reclaimed_and_finishes_same_delivery(
+    automatic_source, monkeypatch
+):
+    from app.core.config import get_settings
+    from app.modules.projects.guide_setup_continuation import retryable_source_snapshot_ids
+
+    monkeypatch.setenv("WORKSTREAM_CELERY_TASK_ALWAYS_EAGER", "true")
+    get_settings.cache_clear()
+    from app.workers import project_setup as worker
+
+    factory, actor, setup_id, snapshot = automatic_source
+    await create_verified_material_fixture(snapshot["id"])
+    delivery = await _delivery(factory, setup_id)
+
+    def unavailable(settings):
+        raise ValueError("missing runtime configuration")
+
+    monkeypatch.setattr(worker, "project_guide_runtime_configuration", unavailable)
+    for _ in range(4):
+        with pytest.raises(ValueError, match="missing runtime configuration"):
+            await worker._coordinator(factory).run(delivery)
+    async with factory() as session:
+        assert (
+            await session.scalar(text("select count(*) from project_guide_compilation_attempts"))
+            == 0
+        )
+    await _reclaim_exact_delivery(factory, delivery, monkeypatch)
+    runtime = Runtime()
+    monkeypatch.setattr(
+        worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
+    )
+    monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
+    first = await worker._coordinator(factory).run(delivery)
+    assert first["status"] == "policy_draft_ready"
+    assert await worker._coordinator(factory).run(delivery) == first
+    assert runtime.calls == 1
+    assert delivery.source_snapshot_id not in await retryable_source_snapshot_ids(
+        factory, page_size=10
+    )
+
+
+async def _reclaim_exact_delivery(factory, delivery, monkeypatch):
+    """Prove Beat selection and queue publication preserve the owned delivery."""
+    from app.modules.projects import setup_queue
+    from app.modules.projects.guide_setup_continuation import retryable_source_snapshot_ids
+
+    async with factory() as session, session.begin():
+        await session.execute(
+            text(
+                "update project_setup_runs set updated_at=now()-interval '2 minutes' where id=:id"
+            ),
+            {"id": str(delivery.setup_run_id)},
+        )
+    assert delivery.source_snapshot_id in await retryable_source_snapshot_ids(factory, page_size=10)
+    sent = []
+
+    def enqueue(**kwargs):
+        sent.append(kwargs)
+        return kwargs["task_id"]
+
+    monkeypatch.setattr(setup_queue, "enqueue_project_guide_compilation", enqueue)
+    async with factory() as session:
+        await setup_queue.dispatch_project_guide_compilation_after_commit(
+            session,
+            project_id=str(delivery.project_id),
+            guide_id=str(delivery.guide_id),
+            source_snapshot_id=str(delivery.source_snapshot_id),
+            setup_run_id=str(delivery.setup_run_id),
+            setup_generation=delivery.setup_generation,
+        )
+    assert sent == [
+        {
+            "project_id": str(delivery.project_id),
+            "guide_id": str(delivery.guide_id),
+            "source_snapshot_id": str(delivery.source_snapshot_id),
+            "setup_run_id": str(delivery.setup_run_id),
+            "setup_generation": delivery.setup_generation,
+            "task_id": str(delivery.task_id),
+        }
+    ]

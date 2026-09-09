@@ -6,6 +6,8 @@ from uuid import uuid4
 import pytest
 
 from app.core.config import get_settings
+from app.interfaces.external_services import UnknownExternalServiceProviderError
+from .helpers import runtime_configuration
 
 
 @pytest.fixture
@@ -90,6 +92,41 @@ def test_missing_broker_task_id_rejects_before_execution(worker, monkeypatch):
         assert worker.run_project_guide_compilation.run(*[str(uuid4()) for _ in range(4)], 1) == {
             "status": "delivery_rejected",
             "error_code": "invalid_compilation_delivery",
+        }
+    finally:
+        worker.run_project_guide_compilation.pop_request()
+
+
+def test_runtime_factory_uses_shared_identity_and_rejects_unknown_runtime(worker, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "unit-test-only")
+    configuration = runtime_configuration()
+    runtime = worker.create_project_guide_runtime(configuration)
+    assert runtime.identity == configuration.adapter_identity
+    with pytest.raises(UnknownExternalServiceProviderError):
+        worker.create_project_guide_runtime(
+            configuration.model_copy(update={"runtime_key": "uninstalled"})
+        )
+
+
+def test_stale_coordinator_error_is_rejected_without_transport_retry(worker, monkeypatch):
+    from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDeliveryError
+
+    class Coordinator:
+        async def run(self, delivery):
+            raise ProjectGuideCompilationDeliveryError()
+
+    monkeypatch.setattr(worker, "get_database_url", lambda: "postgresql+asyncpg://localhost/unit_test")
+    monkeypatch.setattr(worker, "_coordinator", lambda sessions: Coordinator())
+
+    def forbidden(**kwargs):
+        pytest.fail("stale delivery reached transport retry")
+
+    monkeypatch.setattr(worker.run_project_guide_compilation, "retry", forbidden)
+    worker.run_project_guide_compilation.push_request(id=str(uuid4()), retries=0)
+    try:
+        assert worker.run_project_guide_compilation.run(*[str(uuid4()) for _ in range(4)], 1) == {
+            "status": "delivery_rejected",
+            "error_code": "stale_compilation_delivery",
         }
     finally:
         worker.run_project_guide_compilation.pop_request()

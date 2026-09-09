@@ -27,6 +27,7 @@ from app.modules.projects.api.guide_compilation_projections import ProjectGuideP
 from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
 from app.modules.projects.repository import ProjectRepository
 from app.modules.projects.models import ProjectSetupRun
+from .source_state import is_compilation_source_setup
 from .diagnostics import compilation_setup_response
 from .automatic_request import AutomaticCompilationInputs, automatic_operation_id
 from .models import (
@@ -77,12 +78,11 @@ class LiveGuideCompilationCoordinator:
         finalization, has_attempt, snapshot = await self._admit(delivery)
         if finalization is not None:
             return await self._finalize(finalization)
+        if has_attempt and snapshot is None:
+            raise GuideCompilationIntegrityError("compilation runtime configuration unavailable")
         configuration = (
             ProjectGuideRuntimeConfiguration.model_validate(snapshot)
-            if snapshot is not None
-            else None
-            if has_attempt
-            else self._configuration()
+            if snapshot is not None else self._configuration()
         )
         operation_id = automatic_operation_id(delivery.setup_run_id, delivery.setup_generation)
         async with self._sessions() as session:
@@ -200,6 +200,8 @@ class LiveGuideCompilationCoordinator:
                 setup.status = "queued"
                 setup.current_step = "queued"
             elif setup.status != "queued" or setup.current_step != "queued":
+                raise ProjectGuideCompilationDeliveryError()
+            if not is_compilation_source_setup(setup, expected_task):
                 raise ProjectGuideCompilationDeliveryError()
             attempt = await session.scalar(
                 select(ProjectGuideCompilationAttempt).where(
