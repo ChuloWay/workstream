@@ -315,3 +315,14 @@ warning routing, blocked task setup, retry supersession, revision/resubmission,
 worker concealment, immutable locks and audit evidence. Remove only the obsolete
 file selectors in stale-wording guards; preserve the same rules on active files.
 Historical validation notes remain explicitly historical, not runnable proof.
+
+### Existing AUTH composition root
+
+Reuse `app/adapters/auth/__init__.py`, which already composes both projection
+authorities and setup finalization. Add only the fixed-service request/execution
+context composition there; the worker imports this existing composition root
+instead of AUTH private implementations. Remove its superseded private prepared
+edge from the AUTH ledger. This decreases inbound debt and introduces no new
+factory, permission, fallback or product-service dependency. The CHECKERS public
+pre-submit projection types remain dependency-safe; its existing private catalogue
+owner builds the snapshot at composition, without a public-to-private import.
