@@ -369,4 +369,3 @@ expected = {
     **dict.fromkeys((f"compensation.adapter_binding.{op}" for op in ("read", "create", "suspend", "resume")), ("compensation.adapter_binding.manage", "WS-ARCH-001-CP01A")),  # noqa: E501
     **dict.fromkeys((f"contribution.policy.{op}" for op in ("read", "create_draft", "update_draft", "publish", "retire")), ("compensation.policy.manage", "WS-ARCH-001-CP01B")),  # noqa: E501
 }
-

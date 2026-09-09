@@ -332,14 +332,15 @@ second permission system.
 
 ```text
 Hidden unified compilation, projections and setup finalization (complete)
-  -> AUTH finalization gate
+  -> AUTH finalization gate (complete)
+  -> automatic request authority and replay custody (complete)
   -> live unified compilation cutover
   -> Project Manager approval + effective pre-submit policy
   -> deterministic post-submit policy + single checker port
 
 Hidden ContributionPolicy behavior (complete)
-  -> AUTH policy activation
-  -> CON validation
+  -> AUTH policy action activation (complete)
+  -> CON selected-policy validation
   -> Project Guide policy-version binding
 
 Both chains

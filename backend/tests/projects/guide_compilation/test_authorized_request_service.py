@@ -101,7 +101,7 @@ async def test_request_rejects_caller_identity_drift_before_authority(
     clean_postgres_database: str,
 ) -> None:
     values = await seed_database(clean_postgres_database)
-    human, link, _grant = await _seed_human(clean_postgres_database, values)
+    human, link, grant = await _seed_human(clean_postgres_database, values)
     actor = ActorIdentityFacts(human, link, PublicActorKind.HUMAN)
     facts = _request(values)
     drifted = identity(context(values)).model_copy(update={"guide_version": "guide.v2"})
@@ -157,7 +157,7 @@ async def test_authorized_request_commits_one_bound_receipt_and_exact_replay(
     clean_postgres_database: str,
 ) -> None:
     values = await seed_database(clean_postgres_database)
-    human, link, _grant = await _seed_human(clean_postgres_database, values)
+    human, link, grant = await _seed_human(clean_postgres_database, values)
     actor = ActorIdentityFacts(human, link, PublicActorKind.HUMAN)
     facts = _request(values)
     attempt_identity = identity(context(values))
@@ -224,11 +224,12 @@ async def test_revoked_pm_cannot_recover_request(clean_postgres_database, revoke
 
 
 @pytest.mark.asyncio
-async def test_pm_replay_holds_current_authority_until_receipt_classification(clean_postgres_database, monkeypatch):
+@pytest.mark.parametrize("authority", ["identity_link", "grant"])
+async def test_pm_replay_holds_current_authority_until_receipt_classification(clean_postgres_database, monkeypatch, authority):
     import asyncio
     from app.modules.projects.guide_compilation import service as service_module
     values = await seed_database(clean_postgres_database)
-    human, link, _grant = await _seed_human(clean_postgres_database, values)
+    human, link, grant = await _seed_human(clean_postgres_database, values)
     actor = ActorIdentityFacts(human, link, PublicActorKind.HUMAN)
     engine = create_async_engine(clean_postgres_database)
     factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -246,9 +247,17 @@ async def test_pm_replay_holds_current_authority_until_receipt_classification(cl
     async def revoke():
         async with factory() as session, session.begin():
             revoke_started.set()
-            await session.execute(text("update actor_identity_links set status='revoked',revoked_by='test',revoked_at=now(),revoked_reason='test revocation' where id=:id"), {"id":str(link)})
+            if authority == "identity_link":
+                await session.execute(text("update actor_identity_links set status='revoked',revoked_by='test',revoked_at=now(),revoked_reason='test revocation' where id=:id"), {"id":str(link)})
+            else:
+                await session.execute(text("update admin_role_grants set status='revoked',version=2,revoked_by_actor_profile_id=:actor,revoked_by_admin_role_grant_id=:grant,revoked_at=now(),revoked_reason='replay race' where id=:grant"), {"actor":str(human),"grant":grant})
     pending = []
     try:
+        if authority == "grant":
+            # Fixture setup precedes the race so no ALTER TABLE lock can mask
+            # whether AUTH retains its actual grant row lock during classification.
+            async with factory() as session, session.begin():
+                await session.execute(text("alter table admin_role_grants disable trigger user"))
         first = await replay()
         monkeypatch.setattr(service_module, "_request_receipt", classify)
         replay_task = asyncio.create_task(replay())
@@ -268,4 +277,7 @@ async def test_pm_replay_holds_current_authority_until_receipt_classification(cl
             if not task.done():
                 task.cancel()
         await asyncio.gather(*pending, return_exceptions=True)
+        if authority == "grant":
+            async with factory() as session, session.begin():
+                await session.execute(text("alter table admin_role_grants enable trigger user"))
         await engine.dispose()

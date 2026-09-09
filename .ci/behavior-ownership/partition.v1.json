@@ -778,6 +778,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/automatic_request.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/projects/guide_compilation/context.py"
     },
     {
@@ -1069,7 +1073,7 @@
       "target": "backend/scripts/week2_api_e2e.py"
     }
   ],
-  "authority_digest": "f00f2779dfa5f5244a171cefedcceb10c6c9d6f18f231f680f4d2d47f1bf5f6f",
-  "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
+  "authority_digest": "dcfebee753bcdd14667a6f6378c708cf7a235f7e993e64999e48611b598ec30b",
+  "protected_base_commit": "b4b3d1d95d302011839f6f9dff3e2cb7c06c2124",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
