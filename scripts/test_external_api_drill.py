@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import httpx
@@ -16,6 +17,17 @@ SPEC.loader.exec_module(drill)
 
 
 class ContractTests(unittest.TestCase):
+    def test_collected_failure_keeps_cli_nonzero(self):
+        async def failed_run(args, report):
+            report["cases"].append({"result": "failed"})
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "result.json"
+            args = SimpleNamespace(report=output, isolation_metadata=Path(directory) / "db.json")
+            with patch.object(drill.argparse.ArgumentParser, "parse_args", return_value=args), \
+                 patch.object(drill, "run", failed_run):
+                self.assertEqual(drill.main(), 1)
+            self.assertEqual(json.loads(output.read_text())["result"], "failed")
+
     def test_nested_field_inventory_does_not_claim_execution(self):
         document = {"paths": {"/items": {"post": {
             "requestBody": {"content": {"application/json": {"schema": {
@@ -48,8 +60,37 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(claims["exp"] - claims["iat"], 600)
         self.assertNotIn(issuer.secret, token)
 
+    def test_response_predicates_reject_missing_malformed_and_extra_fields(self):
+        from uuid import uuid4
+        valid = {"id": str(uuid4()), "created_at": "2026-01-01T00:00:00Z"}
+        checks = {"id": drill.uuid_value, "created_at": drill.timestamp_value}
+        for invalid in (valid | {"id": "not-uuid"}, valid | {"created_at": "yesterday"},
+                        valid | {"created_at": "2026-01-01T00:00:00"},
+                        valid | {"created_at": "9999-01-01T00:00:00Z"},
+                        valid | {"secret": "should not appear"}, {"id": valid["id"]}):
+            with self.subTest(invalid=invalid), self.assertRaises(drill.ProbeFailure):
+                drill.verify_response(httpx.Response(200, json=invalid), 200, {}, checks, valid)
+        self.assertEqual(drill.verify_response(httpx.Response(200, json=valid), 200, {},
+                                              checks, valid), valid)
+
 
 class ExecutionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_actual_response_assertions_are_mapped_and_header_can_be_omitted(self):
+        def handler(request):
+            self.assertNotIn("Idempotency-Key", request.headers)
+            return httpx.Response(200, json={"enabled": True}, headers={
+                name: request.headers[name] for name in ("X-Request-ID", "X-Correlation-ID")})
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler),
+                                     base_url="http://127.0.0.1") as client:
+            report = {}
+            probe = drill.Drill(client, {"paths": {"/items": {"post": {}}}}, report)
+            await probe.call("assert_enabled", "POST", "/items", payload={},
+                             headers={"Idempotency-Key": None}, values={"enabled": True})
+            self.assertEqual(report["operations"]["POST /items"]["field_cases"],
+                             {"response.200.enabled": ["assert_enabled"]})
+            with self.assertRaisesRegex(drill.ProbeFailure, "duplicate_case_name"):
+                await probe.call("assert_enabled", "POST", "/items", payload={})
+
     async def test_denial_does_not_mark_operation_working(self):
         def handler(request):
             return httpx.Response(403, json={"error": {"code": "denied"}}, headers={

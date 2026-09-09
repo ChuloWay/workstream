@@ -15,7 +15,7 @@ in `WORKSTREAM_TEST_ADMIN_DATABASE_URL`:
 ```sh
 WORKSTREAM_ENVIRONMENT=local .venv/bin/python scripts/run_isolated_tests.py \
   --metadata-json /absolute/private/output/database.json \
-  --timeout-seconds 300 -- .venv/bin/python scripts/external_api_drill.py \
+  --timeout-seconds 480 -- .venv/bin/python scripts/external_api_drill.py \
   --isolation-metadata /absolute/private/output/database.json \
   --report /absolute/private/output/report.json
 ```
@@ -55,6 +55,14 @@ ungranted read denial, draft guides, initial review/revision policies and grant
 revocation. Other methods, nested policy fields and response fields remain
 explicitly uncovered. Add independent scenarios as current APIs become reachable;
 never manufacture active-guide, task or acceptance state to complete a report.
+
+Extended cases check profile omission and normalization, response shape and
+identity, policy replacement with a current selector, project length limits,
+project-role access and revocation, service provisioning and identity-link
+lifecycle. The client paces mutations against the default server rate budget;
+it does not disable rate controls. Independent boundary failures are retained
+while other independent probes continue, and any such failure keeps exit status
+nonzero. A stored idempotent replay is not treated as current-state readback.
 
 This does not prove deployment connectivity, real Flow integration, S3 custody,
 model quality, the unified setup pipeline, or end-to-end acceptance. Storage and

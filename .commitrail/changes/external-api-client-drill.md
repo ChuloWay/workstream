@@ -53,7 +53,9 @@ storage/provider-dependent APIs remain untested rather than falsely passing.
 Exercise real HTTP identity/profile, administration/grants, project/guide and
 policy operations; include replay and unauthenticated/foreign-resource denials.
 Every assertion checks status and relevant response values. Stop a dependent
-scenario on failure, preserve results and classify remaining OpenAPI operations
+scenario on failure. Independent boundary probes may collect separate failures
+and continue; any collected failure must still make the final exit nonzero.
+Preserve results and classify remaining OpenAPI operations
 as untested. Never count an expected denial as a successful positive operation.
 Record Git target, local-only authentication/storage limitations, setup actions,
 named assertions and sanitized method/route/status results. Do not save tokens,
@@ -101,3 +103,10 @@ overwrite an operation's prior failure. Failure is now sticky, with fail-then-
 success and fail-then-denial regression proof. No existing product tests or
 guards were changed. Unit tests live at the explicitly root-relative
 `scripts/test_external_api_drill.py` and run with the backend virtual environment.
+
+The continuing drill adds exact self-profile response shape and identity checks,
+omission/normalization/readback probes, real policy-selector advancement,
+project/database length boundaries, project-role access and revocation, service
+provisioning and identity-link lifecycle. Request pacing respects the default
+mutation budget without raising server limits. Schema inventory remains distinct
+from semantic verification; these extensions do not certify every public field.
