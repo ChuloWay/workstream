@@ -1,10 +1,16 @@
 # External API client drill
 
 - Initiative: None
-- Durable disposition: Planned
-- Intended merge outcome: a reusable real-HTTP inventory distinguishing tested client behavior from untested or unavailable routes.
+- Durable disposition: Complete
+- Intended merge outcome: deliver the bounded reusable HTTP and administrator drills with the API repairs; remaining all-field API certification is separate unfinished work.
 
 ## Intent
+
+Integrated delivery is owned by [API drill defect repair](api-drill-defect-repair.md).
+The sections below preserve the drill's original scope and historical evidence;
+peer ownership and outstanding five-defect statements describe that earlier
+execution, not the integrated repair's current state. This record completes the
+bounded tooling, not the remaining all-field API audit or MCP readiness.
 
 Support an external MCP adapter proposal with observed API behavior, not route
 existence or internal fixture success. Do not use the existing API drill: it
@@ -144,7 +150,9 @@ means separate identities/subjects, not twenty fabricated grants or DB seed rows
 Run focused unit tests and the new drill through `run_isolated_tests.py` against
 a private temporary PostgreSQL instance. Check links, stale wording, record and
 diff integrity. Full backend tests are unchanged; no blanket product certification.
-The roadmap needs no capability change: this adds verification tooling only.
+The initial tooling alone needed no capability change. Integrated delivery also
+updates the roadmap's verification scope alongside the five API repairs, without
+claiming new product capabilities from test tooling.
 
 ## Initial evidence and remaining scope
 

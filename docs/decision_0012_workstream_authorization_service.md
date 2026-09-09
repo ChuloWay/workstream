@@ -74,15 +74,14 @@ Contributor project grants are:
 
 - `submitter`
 - `reviewer`
-- `adjudicator`
 
 ADR 0015 supersedes the earlier combined-role design. These capabilities are
 independently granted.
 
 Contributor is the umbrella human product term. A contributor may hold separate
-exact-project `submitter`, `reviewer`, and `adjudicator` grants. The adjudicator
-grant creates no adjudication capability in v0.1; a future separately approved
-initiative must define the lifecycle before AUTH can register and activate any
+exact-project `submitter` and `reviewer` grants. Adjudicator grants and
+adjudication are excluded from v0.1; a future separately approved initiative
+must define the lifecycle before AUTH can register and activate any
 exact adjudication action. Celery, checker, setup, and
 background workers are internal services, not human product roles.
 Administrative roles alone do not authorize submission, review, or

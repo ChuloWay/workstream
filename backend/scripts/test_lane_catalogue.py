@@ -100,6 +100,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_local_artifact_store.py",
     "tests/test_merge_test_lane_evidence.py",
     "tests/migrations/test_compensation_adapter_identity.py",
+    "tests/migrations/test_project_role_scope.py",
     "tests/test_mutation_policy.py",
     "tests/test_s3_artifact_store.py",
     "tests/test_submission_archive.py",
@@ -189,6 +190,7 @@ SHARED_FOUNDATION_MODULES = (
 )
 
 PROJECT_MODULES = (
+    "tests/test_api_drill_repairs.py",
     "tests/projects/guide_compilation/finalization/test_authorization_concurrency_postgresql.py",
     "tests/projects/guide_compilation/finalization/test_authorization_postgresql.py",
 

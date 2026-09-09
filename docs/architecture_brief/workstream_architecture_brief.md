@@ -93,7 +93,7 @@ systems, or other uses of the resulting contribution facts.
 - Project managers, contributors, reviewers, operators, Finance
   Authorities, Access Administrators, and Audit Authorities interact with
   Workstream through their independent grants.
-- Adjudicator grants are independent but authorize no v0.1 lifecycle or action.
+- Adjudicator grants and adjudication are excluded from v0.1.
 - Flow Identity is the current v0.1 human identity and authentication source,
   not the definition or ownership boundary of Workstream.
 - Postgres is the record database.

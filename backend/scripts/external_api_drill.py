@@ -34,6 +34,36 @@ class ProbeFailure(Exception):
     """A named assertion failed; never include response bodies or credentials."""
 
 
+def openapi_document(response):
+    """Reject unavailable or malformed discovery without exposing response content."""
+    if response.status_code != 200:
+        raise ProbeFailure("openapi_document_unavailable")
+    try:
+        document = response.json()
+    except ValueError:
+        raise ProbeFailure("openapi_document_invalid") from None
+    if (not isinstance(document, dict)
+            or not isinstance(document.get("openapi"), str)
+            or not document["openapi"].startswith("3.")
+            or not isinstance(document.get("paths"), dict)):
+        raise ProbeFailure("openapi_document_invalid")
+    return document
+
+
+def stop_server(process, *, preserving_failure):
+    """Attempt bounded cleanup without replacing an existing probe failure."""
+    process.terminate()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            if not preserving_failure:
+                raise ProbeFailure("server_cleanup_timeout") from None
+
+
 class TokenIssuer:
     """Ephemeral local issuer; no authority grants and no production credentials."""
 
@@ -756,7 +786,7 @@ async def run(args, report, *, scenario=None):
                 await asyncio.sleep(0.2)
             else:
                 raise ProbeFailure("server_startup_timeout")
-            document = (await client.get("/openapi.json")).json()
+            document = openapi_document(await client.get("/openapi.json"))
             drill = Drill(client, document, report)
             drill.isolation_metadata = args.isolation_metadata
             await drill.call("health", "GET", "/api/v1/health")
@@ -776,12 +806,7 @@ async def run(args, report, *, scenario=None):
             await project_cases(drill, admin, manager, outsider, manager_body["actor_profile_id"])
             await service_actor_cases(drill, issuer, admin, manager)
     finally:
-        process.terminate()
-        try:
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=10)
+        stop_server(process, preserving_failure=sys.exc_info()[0] is not None)
 
 
 def main(*, scenario=None):

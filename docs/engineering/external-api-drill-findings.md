@@ -156,6 +156,16 @@ owned PostgreSQL server was stopped after the run.
   [review lifecycle](../spec_review_lifecycle.md) needs reconciliation with the
   human's two-role scope; assess the [roadmap](../roadmap_status.md) in the repair PR.
 
+## Bounded repair implementation
+
+The [repair change record](../../.commitrail/changes/api-drill-defect-repair.md)
+covers the five fixes and their additional regression proof. Request validation
+uses the existing 200/120/50 character limits; guide PATCH distinguishes omitted
+content from explicit null; current project roles are submitter and reviewer.
+The incremental role migration refuses incompatible retained authority history
+without deleting or relabeling it. These repair statements do not reattribute
+the historical executions above or complete the remaining API audit.
+
 ## Drill integrity fixes already made
 
 These are harness repairs, not additional product defects for the other agent:

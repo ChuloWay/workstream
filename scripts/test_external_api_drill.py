@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import httpx
 
@@ -17,6 +17,40 @@ SPEC.loader.exec_module(drill)
 
 
 class ContractTests(unittest.TestCase):
+    def test_openapi_discovery_has_stable_failure_codes(self):
+        cases = (
+            (httpx.Response(503, json={"paths": {}}), "openapi_document_unavailable"),
+            (httpx.Response(200, text="not JSON"), "openapi_document_invalid"),
+            (httpx.Response(200, json=[]), "openapi_document_invalid"),
+            (httpx.Response(200, json={"openapi": "3.1.0"}), "openapi_document_invalid"),
+            (httpx.Response(200, json={"openapi": "3.1.0", "paths": []}),
+             "openapi_document_invalid"),
+        )
+        for response, code in cases:
+            with self.subTest(code=code), self.assertRaisesRegex(drill.ProbeFailure, "^" + code + "$"):
+                drill.openapi_document(response)
+        document = {"openapi": "3.1.0", "paths": {}}
+        self.assertEqual(drill.openapi_document(httpx.Response(200, json=document)), document)
+
+    def test_cleanup_timeout_preserves_original_failure_and_rejects_success(self):
+        for preserving_failure in (True, False):
+            process = Mock()
+            process.wait.side_effect = drill.subprocess.TimeoutExpired("server", 10)
+            with self.subTest(preserving_failure=preserving_failure):
+                if preserving_failure:
+                    with self.assertRaisesRegex(drill.ProbeFailure, "^original_probe_failure$"):
+                        try:
+                            raise drill.ProbeFailure("original_probe_failure")
+                        finally:
+                            drill.stop_server(process, preserving_failure=True)
+                else:
+                    with self.assertRaisesRegex(drill.ProbeFailure, "^server_cleanup_timeout$"):
+                        drill.stop_server(process, preserving_failure=False)
+                process.terminate.assert_called_once_with()
+                process.kill.assert_called_once_with()
+                self.assertEqual(process.wait.call_count, 2)
+
+
     def test_collected_failure_keeps_cli_nonzero(self):
         async def failed_run(args, report):
             report["cases"].append({"result": "failed"})
