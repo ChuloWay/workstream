@@ -80,7 +80,7 @@ class ActorAuthorizationContextResponse(BaseModel):
     status: Literal["active", "suspended", "deactivated"]
     project_id: UUID
     admin_roles: tuple[str, ...]
-    project_roles: tuple[Literal["submitter", "reviewer", "adjudicator"], ...]
+    project_roles: tuple[Literal["submitter", "reviewer"], ...]
     effective_action_ids: tuple[ActionId, ...]
 
 

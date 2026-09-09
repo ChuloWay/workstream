@@ -74,7 +74,6 @@ class ProjectRole(StrEnum):
 
     SUBMITTER = "submitter"
     REVIEWER = "reviewer"
-    ADJUDICATOR = "adjudicator"
 
 
 class ContributorCandidateRead(BaseModel):
@@ -512,7 +511,6 @@ class AuthorityInvalidationContext(BaseModel):
         expected = {
             ProjectRole.SUBMITTER: "auth13_assignment",
             ProjectRole.REVIEWER: "rev_reviewer_obligation",
-            ProjectRole.ADJUDICATOR: "none",
         }.get(self.project_role)
         if (self.project_role is None) != (self.future_obligation is None):
             raise ValueError("invalid authority invalidation projection")

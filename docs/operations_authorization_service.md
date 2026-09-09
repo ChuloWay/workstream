@@ -647,15 +647,23 @@ actions, AUTH-09B controlled service provisioning, and the two AUTH-09C
 actor-registry reads are active. Project capability context waits for AUTH-10
 exact-project grants and canonical project composition.
 
-AUTH-10 uses independent `submitter`, `reviewer`, and `adjudicator` grants. The
+AUTH-10 uses independent `submitter` and `reviewer` grants. The
 retired `both` role and replacement-event migration states are not accepted by
 the v0.1 baseline. Recreate pre-v0.1 development databases. Production
 remediation requires a separately approved evidence-preserving data decision;
 never automatically convert or delete authority evidence.
 
+Migration `0014_project_role_scope` narrows the current project-role and audit
+contracts to `submitter` and `reviewer`. It preserves supported grants and
+qualification/audit history. If retained adjudicator grants, qualification
+snapshots, or authority audit facts exist, the migration refuses the upgrade
+atomically. Investigate and obtain an evidence-preserving data decision before
+retrying; do not delete, relabel, or bypass those rows to force migration success.
+Downgrade restores the prior database vocabulary without changing retained data;
+it does not enable adjudicator support in the current API.
+
 Project-role revocation is routed by exact role. Submitter invalidation may
-reach task assignment; reviewer invalidation reaches only REV; adjudicator
-invalidation remains dormant until that lifecycle exists. Verify grant ID,
+reach task assignment; reviewer invalidation reaches only REV. Verify grant ID,
 actor, project, role, and cause event before a consumer changes product state.
 Revoking one role must leave the other project roles and all AdminRoleGrants
 unchanged.
@@ -980,7 +988,7 @@ covered Project Manager or Audit Authority and remain readable for every project
 state. List responses contain exactly `items` and `next_cursor`; no count or
 total is computed or returned. Candidate pages accept `limit` 1..100 (default
 50) and a cursor of at most 512 characters. Grant pages add only optional
-`status=active|revoked` and `role=submitter|reviewer|adjudicator` filters.
+`status=active|revoked` and `role=submitter|reviewer` filters.
 
 Each grant contains exactly `id`, `project_id`, `actor_profile_id`, `role`,
 `status`, `version`, `grant_method`, `qualification_snapshot`,
@@ -1071,7 +1079,7 @@ The final release owner coordinates a supported API/command drill proving:
 - first human access;
 - one-time bootstrap and concurrent conflict;
 - scoped administrative grants;
-- exact-project submitter/reviewer/adjudicator grants;
+- exact-project submitter/reviewer grants;
 - admin/contributor separation and self-action denial;
 - same-unexpired-token revocation;
 - suspension/reactivation and link revocation;

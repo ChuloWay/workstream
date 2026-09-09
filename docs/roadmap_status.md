@@ -173,6 +173,8 @@ cannot be reused as post-submission review-gate evidence. See the
 - External subject identity resolves through ActorIdentityLink into a stable
   internal ActorProfile.
 - Human roles and fixed-service authority remain separate and fail closed.
+- Exact-project contributor grants support only `submitter` and `reviewer`.
+  Unsupported `adjudicator` inputs are rejected; adjudication remains deferred.
 - Project and administrative grants, resource guards, lifecycle revalidation,
   idempotency, rate controls, audit evidence, and opaque prepared authority are
   implemented.

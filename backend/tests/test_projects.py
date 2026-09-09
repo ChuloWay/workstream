@@ -1496,7 +1496,7 @@ async def test_project_role_grant_repository_filters_and_uses_strict_keyset(
         snapshots = []
         grants = []
         for index, grant_id in enumerate(grant_ids):
-            role = ("submitter", "reviewer", "adjudicator")[index]
+            role = ("submitter", "reviewer", "submitter")[index]
             snapshot_id = uuid4()
             snapshots.append(
                 ProjectRoleQualificationSnapshot(
@@ -1578,7 +1578,7 @@ async def test_project_role_grant_repository_filters_and_uses_strict_keyset(
         revoked = await repository.list_project_role_grants(
             project_id=project_id,
             status="revoked",
-            role="adjudicator",
+            role="submitter",
             cursor=None,
             limit=10,
         )

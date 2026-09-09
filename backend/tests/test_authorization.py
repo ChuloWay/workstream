@@ -286,9 +286,9 @@ def test_project_role_issue_advisory_key_contract_is_frozen_and_separated() -> N
     assert project_role_issue_lock_key(actor, project, "submitter") == -7801444014257588548
     values = {
         project_role_issue_lock_key(actor, project, role)
-        for role in ("submitter", "reviewer", "adjudicator")
+        for role in ("submitter", "reviewer")
     }
-    assert len(values) == 3
+    assert len(values) == 2
     assert all(-(2**63) <= value < 2**63 for value in values)
     assert project_role_issue_lock_key(actor, project, "submitter") != project_role_issue_lock_key(
         project, actor, "submitter"
@@ -355,6 +355,9 @@ def test_project_role_public_reason_and_qualification_contract_is_strict() -> No
     assert ProjectRoleGrantRevokeBody.model_validate({"reason": "Bounded removal"}).reason == (
         "Bounded removal"
     )
+    assert tuple(ProjectRole) == (ProjectRole.SUBMITTER, ProjectRole.REVIEWER)
+    with pytest.raises(ValidationError):
+        ProjectRoleGrantIssueBody.model_validate(payload | {"role": "adjudicator"})
     for reason in (" padded", "padded ", "control\x00", "é" * 251):
         with pytest.raises(ValidationError):
             ProjectRoleGrantIssueBody.model_validate(payload | {"reason": reason})
@@ -365,7 +368,6 @@ def test_project_role_invalidation_projection_is_closed_per_role() -> None:
     mappings = {
         ProjectRole.SUBMITTER: "auth13_assignment",
         ProjectRole.REVIEWER: "rev_reviewer_obligation",
-        ProjectRole.ADJUDICATOR: "none",
     }
     for role, obligation in mappings.items():
         context = AuthorityInvalidationContext(
@@ -408,6 +410,26 @@ def test_project_role_invalidation_projection_is_closed_per_role() -> None:
             after_facts={"effective": False, **projection},
         )
         assert event.after_facts["future_obligation"] == obligation
+    with pytest.raises(ValidationError):
+        AuthorityAuditEventInput.model_validate(
+            event.model_dump()
+            | {
+                "before_facts": {
+                    "effective": True,
+                    "role": "adjudicator",
+                    "scope_type": "project",
+                    "scope_id": str(project_id),
+                    "future_obligation": "none",
+                },
+                "after_facts": {
+                    "effective": False,
+                    "role": "adjudicator",
+                    "scope_type": "project",
+                    "scope_id": str(project_id),
+                    "future_obligation": "none",
+                },
+            }
+        )
     with pytest.raises(ValidationError):
         AuthorityInvalidationContext(
             event_id=uuid4(),
@@ -705,7 +727,7 @@ def test_authorization_read_cursor_rejects_missing_envelope_and_duplicate_keys()
         {"action_id": ActionId.PROJECT_CONTRIBUTOR_CANDIDATE_LIST},
         {"project_id": UUID("00000000-0000-4000-8000-000000000099")},
         {"status": "revoked"},
-        {"role": ProjectRole.ADJUDICATOR},
+        {"role": ProjectRole.SUBMITTER},
         {"limit": 51},
     ],
 )
@@ -11526,7 +11548,7 @@ def test_every_operation_has_one_strict_canonical_request_variant() -> None:
             operation=AuthorityOperation.PROJECT_ROLE_GRANT_ISSUE,
             project_id=project,
             target_actor_id=actor,
-            role=ProjectRole.ADJUDICATOR,
+            role=ProjectRole.REVIEWER,
             qualification=_project_role_qualification(),
             reason_digest=DIGEST,
         ),
@@ -11578,6 +11600,7 @@ def test_project_role_contract_rejects_replacement_and_bounds_qualification_refe
     }
     for invalid in (
         base | {"role": "both"},
+        base | {"role": "adjudicator"},
         base | {"replaced_grant_id": uuid4()},
     ):
         with pytest.raises(TypeError, match="invalid authority mutation request"):
@@ -11597,14 +11620,14 @@ def test_project_role_contract_rejects_replacement_and_bounds_qualification_refe
         {
             "project_id": project_id,
             "actor_profile_id": actor_id,
-            "requested_role": ProjectRole.ADJUDICATOR,
+            "requested_role": ProjectRole.REVIEWER,
             "skills_snapshot": available,
             "reputation_snapshot": unavailable,
             "prior_project_work_refs": [uuid4()],
             "external_expertise_refs": ["expertise:opaque-1"],
         }
     )
-    assert snapshot.requested_role is ProjectRole.ADJUDICATOR
+    assert snapshot.requested_role is ProjectRole.REVIEWER
     assert QualificationAvailabilitySnapshot.model_validate(available).reference_ids == [
         "work:opaque-1"
     ]

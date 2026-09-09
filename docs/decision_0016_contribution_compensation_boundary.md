@@ -108,8 +108,8 @@ The planned `task.post_submit.route` authority similarly covers only the
 guarded false/pass acceptance consequence, not a human review decision or
 generic contribution write. Both triggers require their own fresh AUTH allow.
 
-The global independent `adjudicator` grant from ADR 0015 remains untouched but
-creates no adjudication dependency or capability in this v0.1 lifecycle.
+Adjudicator grants and adjudication are excluded from v0.1 and create no
+dependency or capability in this lifecycle.
 
 ### Artifacts and fulfillment
 

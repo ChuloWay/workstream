@@ -84,8 +84,8 @@ Human review decisions are exactly:
 - `needs_revision`
 - `reject`
 
-Adjudication is outside this initiative. The independent `adjudicator` project
-grant remains recognized, but no adjudication action, queue, lease, policy,
+Adjudicator project grants and adjudication are excluded from v0.1. No
+adjudication action, queue, lease, policy,
 state, decision, contribution type, readiness gate, or API is available in
 v0.1. A future separately approved initiative may consume the immutable facts
 defined here without changing their historical meaning.
@@ -105,7 +105,7 @@ display labels, and UUID shape never substitute for actor identity or authority.
 
 Human review requires one exact active project `reviewer` ProjectRoleGrant plus
 all resource, assignment, lifecycle, no-self-review, and actor-state guards.
-Separate `submitter`, `adjudicator`, and administrative grants do not substitute.
+Separate `submitter` and administrative grants do not substitute.
 Revoking reviewer authority does not revoke or mutate another grant.
 
 Read operations use the request-scoped
