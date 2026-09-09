@@ -126,7 +126,11 @@ It retains the already-narrow generic audit fact allowlist. CI review found
 stale structure-ledger entries and legacy-test growth; new rejection assertions
 were moved to the focused regression module (including the audit guard's exact
 privacy-safe TypeError contract), touched legacy tests shrank without
-losing assertions, and existing debt fingerprints were refreshed. Current review,
+losing assertions, and existing debt fingerprints were refreshed. The schema fingerprint is generated on CI's PostgreSQL 16: comparison with
+PostgreSQL 17 found only three namespace-identity renderings (`pg_catalog.json`
+versus `json`) differed across 4,670 objects. The check retains one exact
+PostgreSQL 16 fingerprint, with no normalization or alternate accepted hashes.
+Current review,
 exact-head checks, and external findings are recorded in the PR.
 
 
