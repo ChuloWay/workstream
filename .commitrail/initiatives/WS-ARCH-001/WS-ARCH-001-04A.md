@@ -172,7 +172,7 @@ replay. New catalogue semantics use an explicit new schema/snapshot identity;
 POL-04B must create a new generation rather than enrich old results in place.
 POL-06 owns compilation of the new approved canonical post-policy body.
 
-## Acceptance and discriminating verification
+## Acceptance criteria
 
 The following are future implementation tests, not claims of executed proof.
 Each negative starts from the same complete passing fixture, changes one
@@ -198,7 +198,7 @@ Conformance tests exercise implementations, not a fake returning success.
 Substantive-invalid-work proof is required only when implementing an evaluator
 that actually claims substantive evaluation; none is added by this change.
 
-## Verification commands and evidence limits
+## Evidence
 
 From `backend/`, after the named implementation modules exist:
 
@@ -222,7 +222,7 @@ reviews only. It cannot establish runtime, race, worker or provider behavior.
 No local sheet exports are present. If exports appear before roadmap editing,
 update and verify the existing XLSX and CSV together.
 
-## Risk, reviews and human focus
+## Risk and review routing
 
 Risk L1: public architecture, immutable policy lineage and catalogue claims.
 Plan and implementation reviews cover architecture, security, QA,
