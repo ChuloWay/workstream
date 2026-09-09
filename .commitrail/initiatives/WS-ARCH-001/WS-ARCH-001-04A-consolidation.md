@@ -98,14 +98,14 @@ bridges, and unrelated activation of acceptance, checker execution, or payments.
   catalogue's selectable entries; project blocking severities can strengthen the
   platform floor. Remove redundant fixture selections of mandatory defaults.
 
-Dependent application paths: `checkers/service.py`, `tasks/service.py`, and
+Additional allowed dependent application paths: `checkers/service.py`, `tasks/service.py`, and
 `projects/service.py` for canonical policy parsing/derived lists and context
 adaptation; `projects/guide_compilation/context.py` and `orchestrator.py` only if
 the single projection type requires annotation correction. This correction adds
 no database columns; policy bodies are JSON. Earlier development data requires
 a clean baseline, not a compatibility reader or migration bridge.
 
-Dependent tests: the nine `tests/checkers/post_submit/test_*.py` modules and their
+Allowed dependent tests: the nine `tests/checkers/post_submit/test_*.py` modules and their
 `support.py`; `tests/test_checkers.py`, `test_projects.py`, `test_tasks.py`,
 `test_project_guide_compilation_contracts.py`, `test_agent_runtime.py`,
 `tests/projects/post_submit_fixtures.py`, `diagnostic_read_fixtures.py`,
@@ -143,3 +143,25 @@ Focused checks run locally. Full PostgreSQL/concurrency/backend coverage remains
 hosted. Run boundary, stale wording and link checks, discriminating invalid-input
 and missing-lineage tests, then wait for final-head CI and internal reviews.
 No correction is complete merely because old identifiers have been renamed.
+
+## Explicit documentation and verification scope
+
+Allowed documentation: `docs/roadmap_status.md`, `docs/architecture_checker_framework.md`,
+current checker policy template/spec, `.commitrail/INDEX.md`, `AGENTS.md`,
+ARCH-001 overview/ARCH-04A record/chunk map, POL-003 overview and downstream
+POL-04B contract where they require superseded preservation. No unrelated roadmap
+capability may be declared delivered. Conditional test-lane/behavior ownership
+files may change only if an owned test file is actually added, renamed or deleted;
+no removal of required checks or thresholds.
+
+Commands: from backend, `.venv/bin/ruff check app tests scripts`, focused
+`.venv/bin/python -m pytest tests/checkers/post_submit -q`, and pure affected
+compiler/context tests; `.venv/bin/python -m scripts.module_boundaries validate
+--protected-base ade2edc16368ef0c81a084f28342df39aac124a1`,
+`.venv/bin/python -m scripts.authorization_boundary validate --ledger
+../.ci/auth-boundaries/IMPORT_LEDGER.md`, plus test-structure and behavior-ownership
+validators. Root checks: `.venv/bin/python scripts/check_markdown_links.py`,
+`.venv/bin/python scripts/check_stale_workstream_wording.py`, and
+`.venv/bin/python scripts/check_commitrail_records.py --base-ref origin/main`.
+Hosted backend suite supplies PostgreSQL/lifecycle coverage for the named owners;
+record exact commands, nodes and results against the implementation candidate.
