@@ -120,13 +120,13 @@ Finance Authority, and Audit Authority.
 
 ### ProjectRoleGrant
 
-Immutable exact-project contributor-grant history with role `submitter`,
-`reviewer`, or `adjudicator`, target profile, issuing Project Manager grant,
+Immutable exact-project contributor-grant history with role `submitter`
+or `reviewer`, target profile, issuing Project Manager grant,
 role-specific qualification snapshot, reason, and active/revoked state.
 
 Contributor is the umbrella human product term. A human may hold separate
-active `submitter`, `reviewer`, and `adjudicator` grants for the same project;
-each is revoked independently. An adjudicator grant authorizes no v0.1 action.
+active `submitter` and `reviewer` grants for the same project;
+each is revoked independently. Adjudicator grants are outside v0.1.
 The review lifecycle defines no adjudication policy, queue, state, decision, or
 API; a future separately approved initiative owns any lifecycle definition,
 authorization, and release. Celery, checker,

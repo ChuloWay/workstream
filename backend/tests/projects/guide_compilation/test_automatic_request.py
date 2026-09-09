@@ -56,6 +56,15 @@ async def automatic_source(project_client, project_database_env, monkeypatch):  
             UUID(profile.id), UUID(link.id), ActorKind.SERVICE, "workstream.project.setup"
         )
         setup_id = UUID(setup.id)
+        from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
+
+        # The automatic request starts from an acknowledged, exact broker claim.
+        setup.status = "queued"
+        setup.current_step = "queued"
+        setup.celery_task_id = project_guide_compilation_task_id(setup.id, setup.setup_generation)
+        setup.error_code = None
+        setup.error_summary = None
+        await session.commit()
     try:
         yield factory, actor, setup_id, snapshot
     finally:
@@ -381,7 +390,7 @@ async def test_retained_automatic_evidence_prevents_configuration_downgrade(
     async with factory() as session:
         assert (
             await session.scalar(text("select version_num from alembic_version"))
-            == "0014_guide_runtime_configuration"
+            == "0015_guide_runtime_configuration"
         )
         assert (
             await session.scalar(

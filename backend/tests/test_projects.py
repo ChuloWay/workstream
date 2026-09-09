@@ -1380,7 +1380,7 @@ async def test_project_role_grant_repository_filters_and_uses_strict_keyset(
         snapshots = []
         grants = []
         for index, grant_id in enumerate(grant_ids):
-            role = ("submitter", "reviewer", "adjudicator")[index]
+            role = ("submitter", "reviewer", "submitter")[index]
             snapshot_id = uuid4()
             snapshots.append(
                 ProjectRoleQualificationSnapshot(
@@ -1462,18 +1462,15 @@ async def test_project_role_grant_repository_filters_and_uses_strict_keyset(
         revoked = await repository.list_project_role_grants(
             project_id=project_id,
             status="revoked",
-            role="adjudicator",
+            role="submitter",
             cursor=None,
             limit=10,
         )
         assert [row[0].id for row in revoked] == [grant_ids[2]]
-        assert (
-            await repository.get_project_role_grant(
-                project_id=uuid4(),
-                grant_id=grant_ids[0],
-            )
-            is None
+        missing = await repository.get_project_role_grant(
+            project_id=uuid4(), grant_id=grant_ids[0],
         )
+        assert missing is None
 
 
 def test_project_guide_partial_unique_index_metadata_compiles() -> None:

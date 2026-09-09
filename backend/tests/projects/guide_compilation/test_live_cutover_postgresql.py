@@ -427,12 +427,22 @@ async def test_phase_crash_recovers_same_attempt_without_reinference(
             )
             await session.execute(
                 text(
+                    "alter table project_guide_compilation_attempts disable trigger trg_compilation_attempt_update"
+                )
+            )
+            await session.execute(
+                text(
                     "update project_guide_compilation_attempts set runtime_configuration=null,runtime_configuration_hash=null"
                 )
             )
             await session.execute(
                 text(
                     "alter table project_guide_compilation_attempts enable trigger project_guide_runtime_configuration_guard"
+                )
+            )
+            await session.execute(
+                text(
+                    "alter table project_guide_compilation_attempts enable trigger trg_compilation_attempt_update"
                 )
             )
         from app.modules.projects.guide_compilation.repository import GuideCompilationIntegrityError

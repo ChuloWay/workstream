@@ -363,7 +363,7 @@ def test_empty_projection_migration_downgrades_and_reupgrades(
 
     with migration_lock():
         command.upgrade(_config(), "head")
-    assert asyncio.run(_version(clean_postgres_database)) == ("0014_guide_runtime_configuration")
+    assert asyncio.run(_version(clean_postgres_database)) == ("0015_guide_runtime_configuration")
 
 
 def test_populated_projection_migration_refuses_downgrade(
@@ -378,4 +378,4 @@ def test_populated_projection_migration_refuses_downgrade(
         pytest.raises(RuntimeError, match="guide projection custody is non-empty"),
     ):
         command.downgrade(_config(), "0008_guide_compilation_authorized_persistence")
-    assert asyncio.run(_version(clean_postgres_database)) == ("0014_guide_runtime_configuration")
+    assert asyncio.run(_version(clean_postgres_database)) == ("0015_guide_runtime_configuration")

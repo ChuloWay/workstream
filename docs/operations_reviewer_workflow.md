@@ -17,7 +17,7 @@ the current Review and reviewer contribution retain the active lease's frozen
 context.
 
 The reviewer must have an exact active project `reviewer` grant represented by
-canonical human `ActorProfile.id`. Submitter, adjudicator, administrative, or
+canonical human `ActorProfile.id`. Submitter, administrative, or
 token-role authority does not substitute. No-self-review and lifecycle guards
 still apply.
 

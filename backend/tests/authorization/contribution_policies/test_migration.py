@@ -17,7 +17,7 @@ from .postgresql_support import world, snapshot
 
 PRIOR = "0011_review_policy_human_review"
 OWN = "0012_contribution_policy_audit_resource"
-CURRENT_HEAD = "0014_guide_runtime_configuration"
+CURRENT_HEAD = "0015_guide_runtime_configuration"
 TOKEN = ", ('contribution_policy'::character varying)::text"
 CONSTRAINTS = (
     "ck_audit_events_authority_privacy_bounds",

@@ -1026,6 +1026,14 @@
     },
     {
       "group": "shared",
+      "target": "backend/scripts/admin_api_drill.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/admin_guard_probe.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/scripts/api_contract_e2e.py"
     },
     {
@@ -1047,6 +1055,10 @@
     {
       "group": "shared",
       "target": "backend/scripts/coverage_policy.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/external_api_drill.py"
     },
     {
       "group": "shared",
@@ -1097,7 +1109,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "21c1ec383ddef818eab5d4b42268d3252f9109be0cbb39df82cafefa01d9c812",
+  "authority_digest": "97a2ed73071a51567a0d3a32fdfe0cbd14d2c4272cb5c7781ada609719c1e249",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

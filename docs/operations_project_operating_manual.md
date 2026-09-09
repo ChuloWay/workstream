@@ -96,7 +96,7 @@ grants are non-authoritative for these reads:
 
 - `GET /api/v1/projects/{project_id}` provides canonical project identity.
   Eligible administrative grants receive the full identity fields; an active
-  exact-project Submitter, Reviewer, or Adjudicator grant receives only id,
+  exact-project Submitter or Reviewer grant receives only id,
   name, and status.
 - `GET /api/v1/actors/me/authorization-context?project_id=...` reports only the
   caller's current local roles and active route-backed actions for that project.

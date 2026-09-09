@@ -3,8 +3,8 @@
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0014_guide_runtime_configuration"
-down_revision = "0013_compilation_request_origin"
+revision = "0015_guide_runtime_configuration"
+down_revision = "0014_project_role_scope"
 branch_labels = None
 depends_on = None
 

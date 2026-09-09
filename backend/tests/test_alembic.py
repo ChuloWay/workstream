@@ -24,7 +24,7 @@ from scripts.schema_baseline_manifest import (
 )
 from scripts.schema_baseline_sql import split_sql_statements
 
-HEAD_REVISION = "0014_guide_runtime_configuration"
+HEAD_REVISION = "0015_guide_runtime_configuration"
 BASELINE_REVISION = "0001_v01_baseline"
 RECREATE_GUIDANCE = "Workstream v0.1 requires a fresh database; recreate this database"
 pytestmark = pytest.mark.postgres_schema_contract
@@ -84,6 +84,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0014_project_role_scope",
         "0013_compilation_request_origin",
         "0012_contribution_policy_audit_resource",
         "0011_review_policy_human_review",

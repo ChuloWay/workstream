@@ -64,10 +64,9 @@ mutation action.
 |---|---|---|
 | Submitter | exact project | Minimal project read, queue/claim/start under task guards, own submission creation/read. |
 | Reviewer | exact project | Minimal project read and the planned server-selected current-work/claim/release/decision capabilities under exact review guards. |
-| Adjudicator | exact project | Minimal project read only; v0.1 has no adjudication lifecycle or action. |
 
 Contributor is the umbrella human product term. A contributor may hold
-independent exact-project Submitter, Reviewer, and Adjudicator grants. Celery,
+independent exact-project Submitter and Reviewer grants. Celery,
 checker, setup, and background workers are internal services, not human product
 roles.
 
@@ -76,34 +75,34 @@ roles.
 Legend: system means the grant must cover all Workstream; covered means system
 or the exact project; own means record-level ownership still applies.
 
-| Capability | Access Administrator | Operator | Project Manager | Finance Authority | Audit Authority | Submitter | Reviewer | Adjudicator |
-|---|---|---|---|---|---|---|---|---|
-| Self profile | inherited human | inherited human | inherited human | inherited human | inherited human | inherited human | inherited human | inherited human |
-| Actor/link administration | system | no | no | no | minimal read covered | no | no | no |
-| Administrative grants | system | no | no | no | history read covered | no | no | no |
-| Project create | no | no | system only | no | no | no | no | no |
-| Project identity read | no | system, full identity | covered, full identity | covered, full identity | covered, full identity | exact project minimal | exact project minimal | exact project minimal |
-| Project, guide, submission/checker, review, and revision configuration | no | recovery-only where registered | covered | no | no | no | no | no |
-| Contribution policy and compensation-adapter binding | no | no | no | covered | no | no | no | no |
-| Project contributor grants | no | no | covered | no | read covered | no | no | no |
-| Task management | no | explicit recovery only | covered | no | read covered | no | no | no |
-| Task queue/claim | no | operational projection only | management projection only | no | read covered | exact project under guards | no | no |
-| Submission create/read | no | operational projection only | management projection only | no | read covered | own assignment | read-for-review only | no |
-| Human review decision | no | no | no without reviewer grant | no | no | no | exact project under review guards | no |
-| Adjudication action | no | no | no | no | no | no | no | unavailable in v0.1; future separate initiative |
-| Compensation award read and delivery reconciliation | no | no | no | covered | read covered | no | no | no |
-| Fulfillment result recording | no | no | no | no; authenticated WS-CON adapter callback only | read covered | no | no | no |
-| Audit read/export | authority history system | operational system | project covered | finance covered | covered | own chain only | assigned chain only | no |
+| Capability | Access Administrator | Operator | Project Manager | Finance Authority | Audit Authority | Submitter | Reviewer |
+|---|---|---|---|---|---|---|---|
+| Self profile | inherited human | inherited human | inherited human | inherited human | inherited human | inherited human | inherited human |
+| Actor/link administration | system | no | no | no | minimal read covered | no | no |
+| Administrative grants | system | no | no | no | history read covered | no | no |
+| Project create | no | no | system only | no | no | no | no |
+| Project identity read | no | system, full identity | covered, full identity | covered, full identity | covered, full identity | exact project minimal | exact project minimal |
+| Project, guide, submission/checker, review, and revision configuration | no | recovery-only where registered | covered | no | no | no | no |
+| Contribution policy and compensation-adapter binding | no | no | no | covered | no | no | no |
+| Project contributor grants | no | no | covered | no | read covered | no | no |
+| Task management | no | explicit recovery only | covered | no | read covered | no | no |
+| Task queue/claim | no | operational projection only | management projection only | no | read covered | exact project under guards | no |
+| Submission create/read | no | operational projection only | management projection only | no | read covered | own assignment | read-for-review only |
+| Human review decision | no | no | no without reviewer grant | no | no | no | exact project under review guards |
+| Adjudication action | no | no | no | no | no | no | no |
+| Compensation award read and delivery reconciliation | no | no | no | covered | read covered | no | no |
+| Fulfillment result recording | no | no | no | no; authenticated WS-CON adapter callback only | read covered | no | no |
+| Audit read/export | authority history system | operational system | project covered | finance covered | covered | own chain only | assigned chain only |
 
-A contributor may hold Submitter, Reviewer, and Adjudicator capabilities
-through three independent exact-project grants. No grant adds administrative
+A contributor may hold Submitter and Reviewer capabilities
+through two independent exact-project grants. No grant adds administrative
 capability, and every ownership, assignment, no-self-review,
 separation-of-duties, and lifecycle guard applies to the selected action.
 
 `GET /api/v1/projects/{project_id}` returns id, name, slug, description,
 status, and timestamps to an effective Operator, Project Manager, Finance
-Authority, or Audit Authority grant. An exact-project Submitter, Reviewer, or
-Adjudicator sees only id, name, and status. Access Administrator alone is
+Authority, or Audit Authority grant. An exact-project Submitter or Reviewer
+sees only id, name, and status. Access Administrator alone is
 concealed because that role has no `project.read` permission.
 
 `GET /api/v1/actors/me/authorization-context?project_id=...` is self-only. It

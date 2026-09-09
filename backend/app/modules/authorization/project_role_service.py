@@ -342,7 +342,6 @@ class ProjectRoleGrantMutationService:
                 future_obligation={
                     ProjectRole.SUBMITTER: "auth13_assignment",
                     ProjectRole.REVIEWER: "rev_reviewer_obligation",
-                    ProjectRole.ADJUDICATOR: "none",
                 }[ProjectRole(grant.role)],
             ),
         )

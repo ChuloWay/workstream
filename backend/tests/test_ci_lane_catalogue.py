@@ -119,6 +119,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/projects/submission_policy_mutations/test_repository.py",
             "tests/projects/submission_policy_mutations/test_public_routes.py",
             "tests/projects/test_retired_submission_derivation_route.py",
+            "tests/test_api_drill_repairs.py",
             "tests/test_projects.py",
         }
     )

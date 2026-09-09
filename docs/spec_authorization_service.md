@@ -112,10 +112,9 @@ cannot submit or review by administrative role alone.
 |---|---|
 | `submitter` | Minimal project read, task queue read/claim, own submission create/read, own review-chain read. |
 | `reviewer` | Minimal project read, review queue/claim/release/decision, submission read for review, review-chain read. |
-| `adjudicator` | Minimal project read only; this is shared resource visibility, not adjudication capability. WS-REV must define adjudication resources and AUTH must activate exact actions before adjudication is available. |
 
 Contributor is the umbrella human product term. A contributor may hold
-independent exact-project `submitter`, `reviewer`, and `adjudicator` grants.
+independent exact-project `submitter` and `reviewer` grants.
 Holding multiple rows does not bypass separation-of-duties or lifecycle guards.
 Celery, checker, setup, and background workers are internal services, not human
 product roles.
@@ -997,8 +996,7 @@ be returned as ordinary ready work.
 Project-role invalidation is exact-role-specific. Submitter revocation alone can
 enter task-assignment reconciliation and persists `auth13_assignment`. Reviewer
 revocation creates only the REV-owned review obligation and persists
-`rev_reviewer_obligation`; adjudicator invalidation persists `none` and remains
-dormant until its lifecycle is enabled. Revoking any one project role leaves the
+`rev_reviewer_obligation`. Revoking any one project role leaves the
 other roles and all AdminRoleGrants unchanged. Consumers verify the cause event,
 grant ID, actor, project, role, and closed future-obligation token before
 changing product state.
@@ -1074,7 +1072,7 @@ project-scoped `GET /api/v1/actors/me/authorization-context?project_id=...`.
 Both resolve the canonical project and use current local grants only. Project
 identity returns the registered full identity projection to effective Operator,
 Project Manager, Finance Authority, or Audit Authority grants, and only id,
-name, and status to exact-project Submitter, Reviewer, or Adjudicator grants.
+name, and status to exact-project Submitter or Reviewer grants.
 The self context lists effective role names and active route-backed project
 actions; it exposes no grant ids, identity-link data, planned actions, or
 unrelated system authority.
@@ -1365,7 +1363,7 @@ resources, project/grant mismatch, and candidate lifecycle denial use one public
 
 Candidate pages expose exactly actor profile ID plus nullable display name.
 Grant pages accept only optional active/revoked status and
-submitter/reviewer/adjudicator role filters, a 1..100 limit (default 50), and a
+submitter/reviewer role filters, a 1..100 limit (default 50), and a
 cursor bounded to 512 characters. Each grant exposes exactly `id`, `project_id`,
 `actor_profile_id`, `role`, `status`, `version`, `grant_method`,
 `qualification_snapshot`, both granting actor/admin-grant identifiers,

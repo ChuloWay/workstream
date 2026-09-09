@@ -20,7 +20,7 @@ async def test_upgrade_preserves_unconfigured_attempt_and_refuses_dispatch(isola
     def migrate(target, *, downgrade=False):
         with migration_lock():
             (command.downgrade if downgrade else command.upgrade)(Config("alembic.ini"), target)
-    await asyncio.to_thread(migrate, "0013_compilation_request_origin", downgrade=True)
+    await asyncio.to_thread(migrate, "0014_project_role_scope", downgrade=True)
     values = await seed_database(isolated_database_env)
     attempt_identity = identity(context(values))
     row = attempt_identity.model_dump(mode="json") | {
