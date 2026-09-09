@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 from dataclasses import replace
 import json
 from uuid import UUID, uuid4
@@ -37,6 +38,7 @@ async def _create_request(database_url: str) -> tuple[dict[str, UUID], UUID, UUI
     try:
         async with factory() as session:
             await _authorized_service(session, actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=actor,
                 facts=_request(values),
                 identity=identity(context(values)),
@@ -251,7 +253,8 @@ async def test_request_insert_guard_rejects_stale_digest_evidence(
                         "identity_link_id,project_id,guide_id,source_snapshot_id,setup_run_id,"
                         "setup_generation,expected_predecessor_compilation_id,"
                         "case when :mutation='facts' then :digest else request_facts_digest end,"
-                        "attempt_id,authorization_decision_event_id,created_at "
+                        "attempt_id,authorization_decision_event_id,created_at, "
+                        "request_trigger,source_mutation_operation_id,source_authorization_decision_event_id "
                         "from request_candidate"
                     ),
                     {"mutation": mutation, "digest": "sha256:" + "b" * 64},
@@ -341,6 +344,7 @@ async def test_repository_read_views_return_exact_request_and_empty_lineage(
         async with factory() as session, session.begin():
             repository = GuideCompilationRepository(session)
             operation = await repository.matching_request_operation(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=actor, facts=facts, lock=False
             )
             assert operation is not None
@@ -383,6 +387,7 @@ async def test_request_failure_rolls_back_attempt_and_authority_event(
         async with factory() as session:
             with pytest.raises(GuideCompilationStorageError, match="injected"):
                 await _authorized_service(session, actor).authorize_request(
+                    origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                     actor=actor,
                     facts=_request(values),
                     identity=identity(context(values)),
@@ -430,6 +435,7 @@ async def test_duplicate_request_insert_is_classified_as_concurrent_replay(
                     ).one()
                     attempt = await repository.attempt(attempt_id, lock=True)
                     await repository.insert_request_operation(
+                        origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                         actor=actor,
                         facts=facts,
                         attempt=attempt,
@@ -458,6 +464,7 @@ async def test_unknown_request_custody_failure_is_not_reported_as_replay(
                         identity(context(values))
                     )
                     await repository.insert_request_operation(
+                        origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                         actor=actor,
                         facts=facts,
                         attempt=attempt,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 import asyncio
 
 import pytest
@@ -29,6 +30,7 @@ async def test_concurrent_identical_requests_commit_one_attempt_event_and_receip
     async def request_once():
         async with factory() as session:
             return await _authorized_service(session, actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=actor, facts=facts, identity=attempt_identity
             )
 
@@ -65,6 +67,7 @@ async def test_concurrent_finalization_commits_one_compilation_and_event(
     try:
         async with factory() as session:
             requested = await _authorized_service(session, human_actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=human_actor,
                 facts=_request(values),
                 identity=identity(context(values)),

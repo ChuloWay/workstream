@@ -219,8 +219,12 @@ complete. ARCH-04A consolidation supplies one current post-submit catalogue,
 compiler/parser and registered implementation per checker ID. Active consumers
 validate the canonical policy body and matching stored summaries. Immutable
 phase contracts and structural-handler conformance remain distinct from live
-phase execution, which is still unavailable. The next selected work is POL-04B connecting
-those contracts and unified finalization to live setup execution. The reconciled
+phase execution, which is still unavailable. POL-04B1 supplies hidden automatic
+request authority and source-operation custody, with current-authority replay
+checks for both triggers. The next selected work is POL-04B connecting those
+contracts and unified finalization to automatic initial setup execution. Runtime adapter, model and instructions remain separate
+configuration concerns. Compilation stops at findings and draft pre/post policies;
+POL-05 supplies manager correction/manual rerun and approval. The reconciled
 [dependency and ownership plan](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
 permits selected-policy validation independently after completed CP05. The
 selected delivery order finishes unified setup, separate pre/post approval and
@@ -328,14 +332,15 @@ second permission system.
 
 ```text
 Hidden unified compilation, projections and setup finalization (complete)
-  -> AUTH finalization gate
+  -> AUTH finalization gate (complete)
+  -> automatic request authority and replay custody (complete)
   -> live unified compilation cutover
   -> Project Manager approval + effective pre-submit policy
   -> deterministic post-submit policy + single checker port
 
 Hidden ContributionPolicy behavior (complete)
-  -> AUTH policy activation
-  -> CON validation
+  -> AUTH policy action activation (complete)
+  -> CON selected-policy validation
   -> Project Guide policy-version binding
 
 Both chains
@@ -397,7 +402,7 @@ reader does not need internal engineering records to understand the roadmap
 above. The main
 remaining trace sequence is:
 
-- Unified guide: `POL-04B -> POL-05A -> AUTH-12F4 -> POL-05B -> POL-06A
+- Unified guide: `POL-04B1 -> POL-04B -> POL-05A -> AUTH-12F4 -> POL-05B -> POL-06A
   -> AUTH-12G -> POL-06B -> POL-07 -> AUTH-12H`. `ARCH-04A` catalogue/schema
   reconciliation precedes approval-eligible `POL-04B` generations, and actual
   selected-capability conformance precedes `POL-07`/activation. POL-05 includes

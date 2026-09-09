@@ -58,7 +58,7 @@ AUTH-12F4, 12G, and 12H are remaining narrow authorization/activation gates plac
 after the corresponding hidden POL behavior and before its live cutover. They
 are not blanket prerequisites for POL-01.
 
-The hidden sequence through AUTH-12B2 is complete; POL-04B is the live cutover:
+The hidden sequence through AUTH-12B2 is complete; POL-04B1 adds automatic request custody before the POL-04B live cutover:
 
 ```text
 POL-04A hidden compilation
@@ -66,7 +66,8 @@ POL-04A hidden compilation
 -> {POL-04A2 hidden finalization, AUTH-12J projection authority}
    (logical siblings; migration-bearing delivery is serialized and rebased)
 -> AUTH-12B2 finalization authority after {POL-04A2, AUTH-12J}
--> POL-04B explicit-PM-request live cutover
+-> POL-04B1 automatic request authority/custody
+-> POL-04B automatic initial live cutover
 ```
 
 POL-04A3 creates canonical sufficiency and artifact-policy drafts from the one
@@ -343,7 +344,7 @@ cannot claim or reuse agent compilation approval.
 
 ```text
 ART verified extraction
--> explicit authorized PM request/recovery (POL-04B)
+-> automatic source-ready request (POL-04B1/04B), or authorized PM correction/rerun in a new generation (POL-05)
 -> canonical platform/capability projections
 -> one unified model invocation
 -> trusted validation and immutable compilation
@@ -355,7 +356,10 @@ ART verified extraction
 -> CP07 hidden activation command + AUTH-12H exact live authority
 ```
 
-Automatic ingestion continuation is not part of POL-04B. No approval may occur before the complete immutable result, including its
+Automatic initial compilation stops at findings and draft proposals. An insufficient
+guide stops with blocking findings. No separate mode setting is required. Manager
+correction/rerun creates a new immutable generation and uses the same executor.
+No approval may occur before the complete immutable result, including its
 post-submit proposal, exists. Separate approvals preserve canonical policy
 lifecycles; they never trigger another inference.
 
@@ -421,3 +425,14 @@ compatibility alias, dual inference path, second registry, or independently
 invocable legacy precheck survives. The two canonical phase catalogues and one
 typed checker service port remain; the port has exactly one complete command
 per pre/post phase and no individual-checker product entry.
+
+## Replaceable runtime and independent configuration
+
+The project-agent integration follows ADR 0014 in the live cutover. Runtime
+adapter selection (OpenAI Agents SDK initially), model/provider selection, and
+instructions are independently configurable. The typed runtime port and explicit
+shared factory keep SDK types and construction out of PROJECTS/Celery/policy
+logic. Record and bind the exact runtime, model and instruction configuration to
+each attempt; never silently reinterpret an in-flight attempt using changed
+settings. Implement only installed adapters, rejecting unsupported selections.
+Remove the superseded hard-coded constructor and old inference-only prompt paths.

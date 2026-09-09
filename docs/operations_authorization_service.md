@@ -497,7 +497,7 @@ v0.1 baseline.
 The REV transfer adds no migration. The ART transfer does not grant Operator
 authority; its `OPERATOR` suffix denotes only future activation custody, and
 verification retry remains independently gated from read/status actions.
-Catalogue totals are 73 PermissionIds, 111 ActionIds, 67 active actions, and
+Catalogue totals are 73 PermissionIds, 112 ActionIds, 68 active actions, and
 44 planned actions. CP01A added four initially unavailable adapter-binding actions under
 `WS-ARCH-001-CP01A` custody; it adds no evaluator, identity, grant, service
 matrix row, route, or activation. CP01B registered five initially unavailable
@@ -1189,3 +1189,12 @@ The v0.1 baseline includes nullable historical provenance columns and the
 is refused after any 02B mutation/replay custody exists; do not delete policy or
 authorization evidence to force rollback. A populated rollback requires an
 explicit reviewed data-retention and migration plan.
+
+
+POL-04B1 adds the hidden `project.guide_compilation.request_automatic` action
+under the existing `project.guide_compilation.execute` permission, restricted to
+`workstream.project.setup`. It binds the exact committed source mutation and its
+authorization event to one setup generation. Both human and automatic request
+replays recheck current authority inside the receipt transaction. The live Celery
+cutover remains POL-04B; this request boundary does not run inference or approve
+policies.

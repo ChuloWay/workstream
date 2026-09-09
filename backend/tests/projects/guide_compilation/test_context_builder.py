@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 from dataclasses import replace
 from uuid import uuid4
 
@@ -46,6 +47,7 @@ async def test_context_rebuilds_the_exact_authorized_art_backed_identity(
     try:
         async with factory() as session:
             request = await _authorized_service(session, actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=actor,
                 facts=_request(values),
                 identity=identity(context(values)),
@@ -82,6 +84,7 @@ async def test_context_drift_fails_before_dispatch(
     try:
         async with factory() as session:
             request = await _authorized_service(session, actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=actor,
                 facts=_request(values),
                 identity=identity(context(values)),
@@ -121,6 +124,7 @@ async def test_context_requires_fresh_session_and_current_lineage(
     try:
         async with factory() as session:
             request = await _authorized_service(session, actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=actor,
                 facts=_request(values),
                 identity=identity(context(values)),
@@ -170,6 +174,7 @@ async def test_context_enforces_the_canonical_prompt_limit(
     try:
         async with factory() as session:
             request = await _authorized_service(session, actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=actor,
                 facts=_request(values),
                 identity=identity(context(values)),

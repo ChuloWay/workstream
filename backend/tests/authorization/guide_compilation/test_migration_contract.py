@@ -60,7 +60,7 @@ def test_current_schema_preserves_exact_compilation_registries(
     isolated_database_env: str,
 ) -> None:
     assert asyncio.run(_registry_state(isolated_database_env)) == (
-        "0012_contribution_policy_audit_resource",
+        "0013_compilation_request_origin",
         1,
         1,
         1,

@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import asdict, replace
 from typing import Any, Literal
 from uuid import UUID
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.modules.projects.models import ProjectSetupRun
 
 from app.interfaces.project_agents import (
     ProjectGuideCompilationContext,
@@ -17,8 +19,11 @@ from app.modules.authorization.api import (
     ProjectGuideCompilationExecutePersistFacts,
     ProjectGuideCompilationExecutePreflightFacts,
     ProjectGuideCompilationRequestFacts,
+    ProjectGuideCompilationRequestOrigin,
     project_guide_compilation_execute_resource_digest,
 )
+
+from .automatic_request import AutomaticCompilationInputs, automatic_operation_id
 
 from .contracts import (
     CompilationAttemptIdentity,
@@ -49,9 +54,38 @@ class GuideCompilationService:
         self,
         session: AsyncSession,
         authorization: ProjectGuideCompilationAuthorizationPort[Any],
+        *, automatic_inputs: AutomaticCompilationInputs | None = None,
     ) -> None:
         self._session = session
         self._authorization = authorization
+        self._automatic_inputs = automatic_inputs
+
+    async def request_automatic(self, *, actor: ActorIdentityFacts, setup_run_id: UUID) -> CompilationRequestReceipt:
+        """Resolve a source-ready selector without calling or constructing a provider."""
+        self._require_fresh_session()
+        if self._automatic_inputs is None:
+            raise GuideCompilationIntegrityError("automatic compilation inputs unavailable")
+        async with self._session.begin():
+            setup = await self._session.get(ProjectSetupRun, str(setup_run_id))
+            if setup is None:
+                raise GuideCompilationIntegrityError("automatic compilation setup unavailable")
+            operation = await self._session.scalar(select(ProjectGuideCompilationRequestOperation).where(
+                ProjectGuideCompilationRequestOperation.operation_id == automatic_operation_id(setup_run_id, setup.setup_generation)
+            ))
+            if operation is not None:
+                repository = GuideCompilationRepository(self._session)
+                attempt = await repository.attempt(operation.attempt_id, lock=False)
+                facts = _request_facts(operation, attempt)
+                identity = identity_from_attempt(attempt)
+                origin = ProjectGuideCompilationRequestOrigin(
+                    trigger=operation.request_trigger,
+                    source_mutation_operation_id=operation.source_mutation_operation_id,
+                    source_authorization_decision_event_id=UUID(operation.source_authorization_decision_event_id)
+                        if operation.source_authorization_decision_event_id else None,
+                )
+            else:
+                facts, identity, origin = await self._automatic_inputs.resolve(self._session, setup_run_id)
+        return await self.authorize_request(actor=actor, facts=facts, identity=identity, origin=origin)
 
     async def authorize_request(
         self,
@@ -59,21 +93,31 @@ class GuideCompilationService:
         actor: ActorIdentityFacts,
         facts: ProjectGuideCompilationRequestFacts,
         identity: CompilationAttemptIdentity,
+        origin: ProjectGuideCompilationRequestOrigin,
     ) -> CompilationRequestReceipt:
-        """Atomically persist a PM-authorized request or recover its receipt."""
+        """Atomically persist an authorized request or recover its receipt."""
         self._require_fresh_session()
         _require_identity_matches(facts, identity)
         try:
             async with self._session.begin():
                 repository = GuideCompilationRepository(self._session)
                 existing = await repository.matching_request_operation(
-                    actor=actor, facts=facts, lock=True
+                    actor=actor, facts=facts, origin=origin, lock=True
                 )
                 if existing is not None:
+                    await self._authorization.validate_request_replay(
+                        actor=actor, facts=facts, origin=origin,
+                    )
                     return await _request_receipt(repository, existing)
                 handle = await self._authorization.prepare_request(
-                    actor=actor, facts=facts
+                    actor=actor, facts=facts, origin=origin,
                 )
+                if origin.trigger == "automatic_source_ready":
+                    if self._automatic_inputs is None:
+                        raise GuideCompilationIntegrityError("automatic compilation inputs unavailable")
+                    resolved = await self._automatic_inputs.resolve(self._session, facts.setup_run_id)
+                    if resolved != (facts, identity, origin):
+                        raise GuideCompilationIntegrityError("automatic compilation request input mismatch")
                 outcome, attempt = await repository.reserve_attempt(identity)
                 if outcome == "mismatch":
                     raise GuideCompilationIntegrityError(
@@ -84,18 +128,19 @@ class GuideCompilationService:
                         "existing attempt has no authorized request custody"
                     )
                 event_id = await self._authorization.consume_request(
-                    handle=handle, actor=actor, facts=facts
+                    handle=handle, actor=actor, facts=facts, origin=origin,
                 )
                 operation = await repository.insert_request_operation(
                     actor=actor,
                     facts=facts,
+                    origin=origin,
                     attempt=attempt,
                     authorization_decision_event_id=event_id,
                 )
                 receipt = await _request_receipt(repository, operation)
             return receipt
         except GuideCompilationConcurrencyError:
-            return await self._recover_request(actor=actor, facts=facts)
+            return await self._recover_request(actor=actor, facts=facts, origin=origin)
 
     async def fence_dispatch(
         self,
@@ -220,17 +265,21 @@ class GuideCompilationService:
         *,
         actor: ActorIdentityFacts,
         facts: ProjectGuideCompilationRequestFacts,
+        origin: ProjectGuideCompilationRequestOrigin,
     ) -> CompilationRequestReceipt:
         self._require_fresh_session()
         async with self._session.begin():
             repository = GuideCompilationRepository(self._session)
             operation = await repository.matching_request_operation(
-                actor=actor, facts=facts, lock=False
+                actor=actor, facts=facts, origin=origin, lock=False
             )
             if operation is None:
                 raise GuideCompilationIntegrityError(
                     "concurrent request left no exact durable receipt"
                 )
+            await self._authorization.validate_request_replay(
+                actor=actor, facts=facts, origin=origin,
+            )
             return await _request_receipt(repository, operation)
 
     def _require_fresh_session(self) -> None:

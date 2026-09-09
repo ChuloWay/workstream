@@ -13,7 +13,8 @@ checker-remediation boundary before public Submission cutover.
 
 | Boundary | Hard predecessors | Sole output owner |
 |---|---|---|
-| POL-04B | Merged POL-04A/04A3/04A2, AUTH-12I/12J/12B2, ARCH-04A catalogue/schema foundation | PROJECTS live unified setup wiring, no new compiler/finalizer |
+| POL-04B1 | Existing AUTH-12I request contract and immutable compilation/ART material foundations | AUTH/PROJECTS automatic request origin custody, no provider call |
+| POL-04B | POL-04B1 plus merged POL-04A/04A3/04A2, AUTH-12I/12J/12B2, ARCH-04A catalogue/schema foundation | PROJECTS live unified setup wiring, no new compiler/finalizer |
 | CP05 | Merged CP04A/CP04B | AUTH exact policy-action activation |
 | CP06 | CP05 | CON selected-version validation facts |
 | CP07 | CP06 | PROJECTS hidden activation/binding command and replacement readiness guard |

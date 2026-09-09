@@ -17,6 +17,7 @@ from .postgresql_support import world, snapshot
 
 PRIOR = "0011_review_policy_human_review"
 OWN = "0012_contribution_policy_audit_resource"
+CURRENT_HEAD = "0013_compilation_request_origin"
 TOKEN = ", ('contribution_policy'::character varying)::text"
 CONSTRAINTS = (
     "ck_audit_events_authority_privacy_bounds",
@@ -114,7 +115,7 @@ async def test_audit_resource_downgrade_preserves_retained_policy_evidence(
         await migrate("downgrade", PRIOR, migration_lock)
     assert await snapshot(target.project) == before
     assert await definition() == constraint
-    assert await schema_value("select version_num from alembic_version") == OWN
+    assert await schema_value("select version_num from alembic_version") == CURRENT_HEAD
 
 
 async def clone_decision(event, changes):
