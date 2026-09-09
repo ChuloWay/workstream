@@ -214,6 +214,12 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(report["cases"][-1]["asserted_fields"], [])
 
     async def test_qualification_denial_detects_a_forbidden_revoked_history_row(self):
+        await self._assert_forbidden_qualification_history(422)
+
+    async def test_failed_valid_boundary_detects_a_forbidden_revoked_history_row(self):
+        await self._assert_forbidden_qualification_history(500)
+
+    async def _assert_forbidden_qualification_history(self, mutation_status):
         mutated = False
         route = "/api/v1/projects/{project_id}/role-grants"
         def handler(request):
@@ -223,7 +229,7 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
                 body = {"actor_profile_id": "target"}
             elif request.method == "POST":
                 mutated = True
-                status, body = 422, {"error": {"code": "validation_error"}}
+                status, body = mutation_status, {"error": {"code": "probe_error"}}
             else:
                 body = {"items": [{"id": "rogue", "status": "revoked"}]
                         if mutated and request.url.params.get("status") != "active" else [],
@@ -235,8 +241,13 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
             probe = drill.Drill(client, {"paths": {"/api/v1/actors/me": {"get": {}},
                                                 route: {"get": {}, "post": {}}}}, report)
             with self.assertRaisesRegex(drill.ProbeFailure, "response_value_mismatch"):
-                await drill.project_role_cases(probe, None, None, {"id": "project"}, "manager")
-            self.assertEqual(report["cases"][-1]["name"], "qualification_unchanged_missing_skills_snapshot")
+                if mutation_status == 500:
+                    with patch.object(drill, "qualification_invalids", return_value=()):
+                        await drill.project_role_cases(probe, None, None, {"id": "project"}, "manager")
+                else:
+                    await drill.project_role_cases(probe, None, None, {"id": "project"}, "manager")
+            self.assertEqual(report["cases"][-1]["name"], "qualification_failed_state_submitter"
+                             if mutation_status == 500 else "qualification_unchanged_missing_skills_snapshot")
             self.assertEqual(report["cases"][-1]["result"], "failed")
 
     async def test_pagination_detects_missing_duplicate_foreign_and_nonterminating_pages(self):

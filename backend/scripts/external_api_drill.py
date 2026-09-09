@@ -729,6 +729,8 @@ async def project_role_cases(drill, manager, contributor, project, manager_id):
         await drill.call("qualification_unchanged_" + name, "GET", route,
             path=path, token=manager, values={"items": [], "next_cursor": None})
     for role in ("submitter", "reviewer"):
+        before = await drill.call("qualification_before_limits_" + role, "GET", route,
+            path=path, token=manager)
         try:
             boundary = await drill.call("qualification_combined_limits_" + role, "POST", route,
                 path=path, token=manager, headers={"Idempotency-Key": str(uuid4())},
@@ -737,6 +739,10 @@ async def project_role_cases(drill, manager, contributor, project, manager_id):
                 expected=201, values={"role": role, "status": "active", "version": 1},
                 checks={"id": uuid_value})
         except ProbeFailure:
+            await drill.call("qualification_failed_state_" + role, "GET", route,
+                path=path, token=manager, values=before)
+            await drill.call("qualification_failed_access_" + role, "GET", "/api/v1/projects/{project_id}",
+                path=f'/api/v1/projects/{project["id"]}', token=contributor, expected=404)
             continue
         await drill.call("qualification_limits_readback_" + role, "GET", route + "/{grant_id}",
             path=path + "/" + boundary["id"], token=manager,
@@ -744,6 +750,21 @@ async def project_role_cases(drill, manager, contributor, project, manager_id):
         await drill.call("qualification_limits_revoke_" + role, "POST", route + "/{grant_id}/revoke",
             path=path + "/" + boundary["id"] + "/revoke", token=manager,
             payload={"reason": "End combined-boundary probe"}, values={"status": "revoked", "version": 2})
+    populated = deepcopy(qualification)
+    for field in ("skills_snapshot", "reputation_snapshot"):
+        populated[field]["reference_ids"] = populated[field]["reference_ids"][:1]
+    for field in ("prior_project_work_refs", "external_expertise_refs"):
+        populated[field] = populated[field][:1]
+    control = await drill.call("qualification_populated_control", "POST", route, path=path,
+        token=manager, payload={"target_actor_profile_id": actor["actor_profile_id"], "role": "submitter",
+                               "qualification": populated, "reason": "Independent populated field control"},
+        expected=201, checks={"id": uuid_value}, values={"status": "active", "role": "submitter"})
+    await drill.call("qualification_populated_readback", "GET", route + "/{grant_id}",
+        path=path + "/" + control["id"], token=manager,
+        values={"qualification_snapshot." + field: value for field, value in populated.items()})
+    await drill.call("qualification_populated_revoke", "POST", route + "/{grant_id}/revoke",
+        path=path + "/" + control["id"] + "/revoke", token=manager,
+        payload={"reason": "End independent field control"}, values={"status": "revoked", "version": 2})
     # Preserve independent small positive/replay/lifecycle controls even if a
     # combined maximum exposes a product defect. Never lower its expected 201.
     qualification = {

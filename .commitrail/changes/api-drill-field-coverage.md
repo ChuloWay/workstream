@@ -1,7 +1,7 @@
 # External API drill field coverage
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Extend client-side authorization and project-role field proof and document the remaining MCP handoff boundary.
 
 ## Intent
@@ -71,6 +71,9 @@ project query cursors. Internal review found that active-only readback could
 miss a forbidden revoked row; qualification denials now read unfiltered history.
 It also found old response annotations flowing into the newly separated request
 index; those call sites are corrected and invalid annotation prefixes fail closed.
+Failed combined-boundary controls now also verify unchanged history and denied
+project access. Expected pagination identities reject duplicate response IDs
+before insertion, so one logical grant cannot silently overwrite another.
 
 ## Product finding
 

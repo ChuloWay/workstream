@@ -57,6 +57,15 @@ class AuthorityDrill:
             raise ProbeFailure(name)
         print("evidence passed:", name, flush=True)
 
+    def remember_grant(self, name, rows, key, expected):
+        """A repeated response identity must not shrink independently expected truth."""
+        try:
+            valid = uuid_value(key)
+        except (ValueError, TypeError, AttributeError):
+            valid = False
+        self.proof(name + "_distinct_identity", valid and key not in rows)
+        rows[key] = expected
+
     async def snapshot(self, *, audit=False):
         connection = await asyncpg.connect(self.env["WORKSTREAM_DATABASE_URL"].replace(
             "postgresql+asyncpg:", "postgresql:", 1))
@@ -143,9 +152,9 @@ class AuthorityDrill:
             values={"resource_type": "admin_role_grant", "version": 1, "http_status": 201},
             checks={"resource_id": uuid_value})
         self.grants[target] = result["resource_id"]
-        self.admin_rows[result["resource_id"]] = {
+        self.remember_grant(name, self.admin_rows, result["resource_id"], {
             "target_actor_profile_id": self.actors[target], "role": role,
-            "scope_type": body["scope_type"], "scope_project_id": project, "status": "active"}
+            "scope_type": body["scope_type"], "scope_project_id": project, "status": "active"})
         return result
 
     async def bootstrap(self):
@@ -175,9 +184,9 @@ class AuthorityDrill:
         self.admin, self.second = (("bootstrap_a", "bootstrap_b") if win == 0 else ("bootstrap_b", "bootstrap_a"))
         grant_id = results[win][1]["grant_id"]
         self.grants[self.admin] = grant_id
-        self.admin_rows[grant_id] = {
+        self.remember_grant("bootstrap", self.admin_rows, grant_id, {
             "target_actor_profile_id": self.actors[self.admin], "role": "access_administrator",
-            "scope_type": "system", "scope_project_id": None, "status": "active"}
+            "scope_type": "system", "scope_project_id": None, "status": "active"})
         self.proof("bootstrap_loser_binds_winner", results[1-win][1]["grant_id"] == grant_id)
         state = await self.snapshot(audit=True)
         grants, control, events = (json.loads(state[k]) for k in ("admin_role_grants", "authority_control", "audit"))
@@ -286,9 +295,9 @@ class AuthorityDrill:
             payload=body | {"reason": "Different reason"}, headers=key, expected=409, code="idempotency_mismatch")
         await self.deny("grant_duplicate", "POST", GRANTS, self.admin, payload=body, expected=409)
         self.grants["grant_target"] = result["resource_id"]
-        self.admin_rows[result["resource_id"]] = {
+        self.remember_grant("grant_target", self.admin_rows, result["resource_id"], {
             "target_actor_profile_id": self.actors["grant_target"], "role": "operator",
-            "scope_type": "system", "scope_project_id": None, "status": "active"}
+            "scope_type": "system", "scope_project_id": None, "status": "active"})
         for label in (self.admin, "audit_system"):
             history = PROFILE + "/admin-role-grants"
             read = await self.call("grant_history_" + label, "GET", history, label,
@@ -333,9 +342,9 @@ class AuthorityDrill:
                 payload=dict(target_actor_profile_id=self.actors[label], role=role, qualification=qualification, **REASON),
                 values={"actor_profile_id": self.actors[label], "project_id": self.projects[project],
                         "role": role, "status": "active"})
-            self.project_rows[result["id"]] = {
+            self.remember_grant("project_grant_" + label + role, self.project_rows, result["id"], {
                 "actor_profile_id": self.actors[label], "project_id": self.projects[project],
-                "role": role, "status": "active"}
+                "role": role, "status": "active"})
         for label in ("submitter_a", "reviewer_a", "submitter_b", "reviewer_b", "dual_a"):
             own = "b" if label.endswith("b") else "a"
             for project in ("a", "b"):
