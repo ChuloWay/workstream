@@ -251,3 +251,11 @@ Traced shared fixture consumer `tests/projects/review_policy/test_activation.py`
 now uses the canonical post-submit compiler/parser supplied by its existing
 readiness fixture. Its obsolete sparse-parser mock is removed; review-policy
 semantics and required human-review/automated-acceptance guards stay covered.
+
+The aggregate API-contract drill is another traced compiler consumer:
+`backend/scripts/api_contract_e2e.py` now seeds no project additions by default
+and serializes blocking severities as a list. It uses the same canonical compiler;
+no E2E assertion, database-isolation check or CI step is removed. Its existing
+`backend/tests/test_api_contract_e2e.py` owner covers omitted/empty additions, a
+selectable addition, and rejection of explicit default reclassification before
+any fixture write. The focused regression failed before the fixture correction.
