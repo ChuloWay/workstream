@@ -1,5 +1,8 @@
 """Finite detached values, strict numbers and a reachable aggregate byte boundary."""
 
+from collections import UserDict
+from types import MappingProxyType
+
 import pytest
 from pydantic import ValidationError
 
@@ -165,3 +168,18 @@ def test_request_aggregate_exact_limit_and_one_byte_over():
     data["summary"] += "x"
     with pytest.raises(ValidationError, match="request capacity exceeded"):
         change_request(source, structural_input=data)
+
+
+@pytest.mark.parametrize("mapping", (dict, UserDict, MappingProxyType))
+@pytest.mark.parametrize("invalid", (True, 1.0, "1"))
+def test_resource_literal_strictness_does_not_depend_on_mapping_type(mapping, invalid):
+    assert PostSubmitResourceLimits.model_validate(mapping({"maximum_results": 1})).maximum_results == 1
+    with pytest.raises(ValidationError, match="limits require integers"):
+        PostSubmitResourceLimits.model_validate(mapping({"maximum_results": invalid}))
+
+
+@pytest.mark.parametrize("invalid", (True, 1.0, "1"))
+def test_resource_literals_revalidate_unchecked_copies(invalid):
+    unchecked = PostSubmitResourceLimits().model_copy(update={"maximum_results": invalid})
+    with pytest.raises(ValidationError, match="limits require integers"):
+        PostSubmitResourceLimits.model_validate(unchecked)

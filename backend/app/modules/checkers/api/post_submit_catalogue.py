@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from typing import Annotated, Literal, Self
 from uuid import UUID
 
@@ -55,7 +56,7 @@ class PostSubmitResourceLimits(PostSubmitValue):
     @classmethod
     def reject_noninteger_limits(cls, value: object) -> object:
         """Exact integer literals must reject boolean, float and string coercion."""
-        if isinstance(value, dict) and any(type(item) is not int for item in value.values()):
+        if isinstance(value, Mapping) and any(type(item) is not int for item in value.values()):
             raise ValueError("post-submit limits require integers")
         return value
 
