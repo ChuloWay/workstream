@@ -655,8 +655,8 @@ never automatically convert or delete authority evidence.
 
 Migration `0014_project_role_scope` narrows the current project-role and audit
 contracts to `submitter` and `reviewer`. It preserves supported grants and
-qualification/audit history. If retained adjudicator grants, qualification
-snapshots, or authority audit facts exist, the migration refuses the upgrade
+qualification/audit history. If retained grants, qualification
+snapshots, or authority audit facts contain the `adjudicator` role, the migration refuses the upgrade
 atomically. Investigate and obtain an evidence-preserving data decision before
 retrying; do not delete, relabel, or bypass those rows to force migration success.
 Downgrade restores the prior database vocabulary without changing retained data;

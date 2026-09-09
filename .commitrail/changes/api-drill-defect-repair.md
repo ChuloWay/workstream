@@ -25,6 +25,10 @@ Allowed files and responsibility:
   narrowing of role and audit contracts, preserving other installed rules.
 - `backend/alembic/env.py`, `backend/tests/test_alembic.py`: recognize the new
   incremental revision while retaining every existing supported migration entry.
+- Existing migration tests in `backend/tests/authorization/contribution_policies/`,
+  `backend/tests/authorization/guide_compilation/`, and
+  `backend/tests/projects/guide_compilation/`: update only current-head expectations
+  for the additive revision, preserving explicit historical targets and assertions.
 - `backend/scripts/test_lane_catalogue.py`,
   `backend/tests/test_ci_lane_catalogue.py`: enroll the new test modules in
   existing hosted lanes without changing selection or coverage policy.
@@ -130,7 +134,10 @@ losing assertions, and existing debt fingerprints were refreshed. The schema fin
 PostgreSQL 17 found only three namespace-identity renderings (`pg_catalog.json`
 versus `json`) differed across 4,670 objects. The check retains one exact
 PostgreSQL 16 fingerprint, with no normalization or alternate accepted hashes.
-Current review,
+Hosted migration regressions also exposed stale current-head expectations; these
+now name the additive revision while retaining historical migration targets and
+all custody assertions. External review hardened drill discovery and bounded
+server cleanup, with focused failure-preservation regressions. Current review,
 exact-head checks, and external findings are recorded in the PR.
 
 

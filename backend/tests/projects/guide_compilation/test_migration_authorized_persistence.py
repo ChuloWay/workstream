@@ -17,7 +17,7 @@ from .helpers import context, identity, seed_database
 
 pytestmark = pytest.mark.postgres_schema_contract
 OWN_REVISION = "0008_guide_compilation_authorized_persistence"
-CURRENT_HEAD = "0013_compilation_request_origin"
+CURRENT_HEAD = "0014_project_role_scope"
 
 
 def _config() -> Config:

@@ -363,7 +363,7 @@ def test_empty_projection_migration_downgrades_and_reupgrades(
     with migration_lock():
         command.upgrade(_config(), "head")
     assert asyncio.run(_version(clean_postgres_database)) == (
-        "0013_compilation_request_origin"
+        "0014_project_role_scope"
     )
 
 def test_populated_projection_migration_refuses_downgrade(
@@ -378,5 +378,5 @@ def test_populated_projection_migration_refuses_downgrade(
     ):
         command.downgrade(_config(), "0008_guide_compilation_authorized_persistence")
     assert asyncio.run(_version(clean_postgres_database)) == (
-        "0013_compilation_request_origin"
+        "0014_project_role_scope"
     )

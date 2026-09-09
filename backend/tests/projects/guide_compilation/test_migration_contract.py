@@ -48,7 +48,7 @@ def test_current_schema_preserves_guide_compilation_schema(
     isolated_database_env: str,
 ) -> None:
     assert asyncio.run(_schema_state(isolated_database_env)) == (
-        "0013_compilation_request_origin",
+        "0014_project_role_scope",
         True,
         4,
         1,
