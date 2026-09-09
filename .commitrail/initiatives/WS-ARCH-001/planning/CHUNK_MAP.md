@@ -8,7 +8,7 @@ work accounting. Foundations through 02H and CP04B are complete; none restart.
 |---|---|---|---|
 | `WS-ARCH-001-02I` | Admission-only public API/dispatch cutover and removal of legacy route reachability; physical economic cleanup remains CP09 after zero consumers | L1 | Deferred after 02H plus split 03/04/05 remediation, revision, checker-output and REV admission prerequisites |
 | [WS-ARCH-001-CP05](../WS-ARCH-001-CP05.md) | AUTH exact ContributionPolicy activation | L1 | Complete; exact policy authority delivered in PR #387 |
-| [WS-ARCH-001-CP06](chunks/WS-ARCH-001-CP06-con-policy-validation-port.md) | CON guide-activation/revision policy-validation port | L1 | Proposed skeleton after CP05 |
+| [WS-ARCH-001-CP06](chunks/WS-ARCH-001-CP06-con-policy-validation-port.md) | CON guide-activation/revision policy-validation port | L1 | Planned skeleton; CP05 is the technical prerequisite, while the selected delivery priority is after POL-07 |
 | [WS-ARCH-001-CP07](chunks/WS-ARCH-001-CP07-project-guide-policy-binding.md) | PROJECT hidden activation/binding and replacement readiness guard | L1 | Planned after CP06; AUTH-12H later supplies live activation authority |
 | [WS-ARCH-001-CP08](chunks/WS-ARCH-001-CP08-task-attempt-policy-lineage.md) | TASK/Assignment/Submission policy-lineage schema and public facts | L1 | Proposed foundation after CP07; no commands |
 | [WS-ARCH-001-CP09](chunks/WS-ARCH-001-CP09-legacy-economic-removal.md) | Physical retired economic-path cleanup coordination | L1 | Planned after all legacy consumers, including CHECKERS/public 02I, are replaced; not an allow_review dependency |

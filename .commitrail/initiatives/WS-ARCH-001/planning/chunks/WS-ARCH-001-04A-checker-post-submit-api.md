@@ -2,7 +2,7 @@
 
 Current bounded implementation record: [WS-ARCH-001-04A](../../WS-ARCH-001-04A.md).
 This adopted design remains normative; the record fixes current files, supported
-capabilities, proof and delivery priority before implementation.
+capabilities, proof and delivery priority for this implemented boundary.
 
 Disposition: Complete. Dependencies: merged CHECKER catalogue and unified
 compilation contracts; no POL-07, AUTH-12H, task activation or live run prerequisite.
