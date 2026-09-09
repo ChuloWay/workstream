@@ -158,8 +158,10 @@ policy mutation, locked lineage and retained-data protections still hold.
 Plan review decisions: configuration custody belongs to the existing attempt,
 not an additional table or registry; hash-only configuration would lose exact
 reconstruction evidence. Shared mutation services remain for non-inference
-operations. Catalogue binding validation already delegates to the canonical
-CHECKERS validator on main; preserve it and add parity proof without rewriting it.
+operations. Post-submit binding validation already delegates to the canonical CHECKERS
+validator; preserve it. Pre-submit binding validation currently checks only
+parameter names; reconcile its typed ownership and proposal-value validation
+against the canonical policy contract, with no duplicate rule schema.
 
 The existing `approve_submission_artifact_policy` boundary must reject a
 `unified_compilation` draft before any effective/pre-policy writes or enqueue,
@@ -186,3 +188,19 @@ The worker normalizes only dispatch_pending/current_step=dispatch with its exact
 persisted task/tuple to queued/queued; all other data stays unchanged. Terminal
 replay follows existing authority/custody paths and does not normalize or reopen
 setup rows. Test early delivery with a barrier around publisher acknowledgement.
+
+The worker must compare its actual bound Celery delivery ID, not merely a
+payload or recomputed ID. Before request/executor/configuration/projection work,
+the coordinator looks up exact existing finalization custody and invokes the
+existing finalizer replay with fresh AUTH; this includes sufficiency_blocked
+redelivery, which cannot enter the executor source-state guard.
+
+The existing authorized latest-setup diagnostic read projects current immutable
+attempt custody onto its response without changing setup rows: reserved, accepted
+but not persisted, invalid-terminal and provider-outcome-unresolved are explicit
+compilation statuses. Invalid output exposes the bounded failure code and terminal
+timestamp; uncertainty exposes a stable unresolved code with no invented finished
+timestamp. Finalized generations retain the exact finalization outcome and
+pointers. Worker results use the same bounded classification. Neither a read nor
+redelivery may reopen a finalized row, fabricate an outcome, or enqueue another
+provider call. Read authorization remains the existing diagnostic-read action.
