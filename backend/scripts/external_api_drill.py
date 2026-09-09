@@ -689,7 +689,7 @@ async def service_actor_cases(drill, issuer, admin, outsider):
 
 
 async def isolation(metadata_path, *, require_empty=True):
-    """Read-only preflight; never use a shared or populated database."""
+    """Require an owned database; empty at startup, populated only for owner probes."""
     metadata = json.loads(metadata_path.read_text())
     url = os.environ.get("WORKSTREAM_DATABASE_URL", "")
     parsed = urlsplit(url)

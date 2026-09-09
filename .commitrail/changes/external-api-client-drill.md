@@ -180,3 +180,19 @@ must now be treated as unsupported input, not functionality to complete. The
 handoff records its existing 503 and remaining contract cleanup. Product repairs
 belong to another agent. After those merge, rerun this drill on their exact main
 head and finish outstanding field coverage before the MCP endpoint handoff.
+
+The administrator/count-guard reproduction executed on clean
+`8969ae5d93168e8529ee584de66095c65322dd8f`: twenty HTTP-created profiles,
+352 checks, no unexpected failures or incomplete groups. Seven normal stored
+authority configurations exercised grant revocation, profile suspension,
+profile deactivation and identity-link revocation count guards directly under
+the canonical lock. Single effective admin states denied all four removals;
+two effective admins did not trigger that count guard. Suspending the backup,
+revoking its link, restoring it and cross-admin grant revocation produced the
+expected count transitions. Three isolated off-by-one mutants failed exactly
+their affected checks; the profile mutant failed both suspension and deactivation.
+Every owner probe preserved pre/post state and audit snapshots. The owned
+database/role cleanup completed and the temporary PostgreSQL server was stopped.
+This closes the previously unexecuted owner count-guard proof, separately from
+HTTP self-protection. It does not relabel owner checks as public API operations.
+The five earlier API defects remain the peer repair agent's work.
