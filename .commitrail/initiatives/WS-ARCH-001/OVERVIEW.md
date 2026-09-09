@@ -9,7 +9,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 
 - Disposition: Planned
 - Completed boundary: through 02H, [CP05](WS-ARCH-001-CP05.md), and
-  [ARCH-04A consolidation](WS-ARCH-001-04A1.md) canonical post-submit contracts/conformance.
+  [ARCH-04A consolidation](WS-ARCH-001-04A.md) canonical post-submit contracts/conformance.
 - Intent: keep product modules behind explicit ports and composition roots.
 - Current boundary: one CHECKERS catalogue, compiler/parser and implementation
   per checker ID serve active policy consumers; phase execution remains unavailable.

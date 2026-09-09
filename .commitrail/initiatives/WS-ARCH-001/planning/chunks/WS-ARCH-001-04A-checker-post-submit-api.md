@@ -1,6 +1,6 @@
 # Chunk Contract: WS-ARCH-001-04A CHECKER Post-Submit API
 
-Current bounded implementation record: [ARCH-04A consolidation](../../WS-ARCH-001-04A1.md).
+Current bounded implementation record: [ARCH-04A consolidation](../../WS-ARCH-001-04A.md).
 This adopted design remains normative; the record fixes current files, supported
 capabilities, proof and delivery priority for this implemented boundary.
 
