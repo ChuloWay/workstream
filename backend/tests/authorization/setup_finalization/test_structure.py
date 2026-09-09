@@ -24,7 +24,6 @@ def assert_no_live_finalization(paths):
         assert "finalize" not in calls
 
 
-
 async def test_finalization_authority_is_composed_only_for_unified_delivery():
     paths = tuple((ROOT / "app/modules").rglob("router.py")) + tuple(
         (ROOT / "app/workers").rglob("*.py")
@@ -107,3 +106,22 @@ def test_finalization_partition_additions_are_exact_and_fail_closed():
             _partition(sorted({retained, *expected, "backend/app/modules/authorization/extra.py"})),
             trusted,
         )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from app.adapters.auth import setup_finalization_authorization as ordinary\nordinary(session)\n",
+        "import app.adapters.auth as auth\nauth.setup_finalization_authorization(session)\n",
+        "from app.adapters.auth import setup_finalization_authorization\nordinary = setup_finalization_authorization\nordinary(session)\n",
+    ],
+)
+def test_exact_worker_cannot_call_aliased_finalization_factory(tmp_path, monkeypatch, source):
+    import sys
+
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+    path = tmp_path / "app/workers/project_setup.py"
+    path.parent.mkdir(parents=True)
+    path.write_text(source)
+    with pytest.raises(AssertionError):
+        assert_no_live_finalization((path,))

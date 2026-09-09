@@ -138,22 +138,29 @@ async def dispatch_project_guide_compilation_after_commit(
     setup_run = await repository.lock_project_setup_run(setup_run_id)
     if setup_run is None:
         raise ProjectSetupQueueError("project setup run missing before dispatch")
-    if setup_run.status == "dispatch_pending" and setup_run.celery_task_id is not None:
+    fresh_initial_claim = False
+    if setup_run.status in {"dispatch_pending", "queued"} and setup_run.celery_task_id is not None:
         if setup_run.celery_task_id != expected_task_id:
             raise ProjectSetupQueueError("project setup task identity is stale before dispatch")
         if claimed_task_id is not None and claimed_task_id != setup_run.celery_task_id:
             raise ProjectSetupQueueError("project setup dispatch claim is stale")
-        if claimed_task_id is None and setup_run.updated_at > dispatch_stale_before():
+        if (
+            setup_run.status == "queued" or claimed_task_id is None
+        ) and setup_run.updated_at > dispatch_stale_before():
             return setup_run.celery_task_id
+        fresh_initial_claim = (
+            setup_run.status == "dispatch_pending"
+            and claimed_task_id is not None
+            and setup_run.updated_at > dispatch_stale_before()
+        )
         deterministic_task_id = setup_run.celery_task_id
-        setup_run.updated_at = datetime.now(UTC)
-    elif setup_run.status == "queued" and setup_run.celery_task_id is not None:
-        if setup_run.celery_task_id != expected_task_id:
-            raise ProjectSetupQueueError("project setup task identity is stale before dispatch")
-        if setup_run.updated_at > dispatch_stale_before():
-            return setup_run.celery_task_id
-        # Retry the immutable delivery, never a new attempt or provider key.
-        # Recheck terminal custody under the setup lock after candidate selection.
+    elif setup_run.status in {"queued", "enqueue_failed"}:
+        deterministic_task_id = expected_task_id
+    else:
+        return setup_run.celery_task_id
+    # Every recovery publication rechecks the shared rule under the setup lock.
+    # Only the fresh explicit initial claim bypasses the stale-recovery cutoff.
+    if not fresh_initial_claim:
         reclaimable = await session.scalar(
             select(ProjectSetupRun.id).where(
                 ProjectSetupRun.id == setup_run.id, retryable_compilation_dispatch_predicate()
@@ -161,17 +168,12 @@ async def dispatch_project_guide_compilation_after_commit(
         )
         if reclaimable is None:
             return setup_run.celery_task_id
-        deterministic_task_id = setup_run.celery_task_id
+    if setup_run.celery_task_id is not None:
         setup_run.updated_at = datetime.now(UTC)
-    elif setup_run.status in {"queued", "enqueue_failed"}:
-        deterministic_task_id = expected_task_id
+    else:
         setup_run.status = "dispatch_pending"
         setup_run.current_step = "dispatch"
         setup_run.celery_task_id = deterministic_task_id
-    elif setup_run.celery_task_id is not None:
-        return setup_run.celery_task_id
-    else:
-        return None
     if setup_run.continuation_verification_job_id is None and verification_job_id is not None:
         setup_run.continuation_verification_job_id = verification_job_id
         setup_run.continuation_started_at = datetime.now(UTC)

@@ -229,6 +229,8 @@ async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_
         worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
     )
     coordinator = worker._coordinator(factory)
+    # Beat selects the exact delivery before terminal provider custody exists.
+    await _select_stale_delivery(factory, delivery)
     first = await coordinator.run(delivery)
     replay = await coordinator.run(delivery)
     assert first == replay
@@ -270,7 +272,7 @@ async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_
             )
             == before
         )
-    await _assert_terminal_not_reclaimable(factory, delivery)
+    await _assert_terminal_not_reclaimable(factory, delivery, monkeypatch)
     async with factory() as session:
         setup = await session.get(ProjectSetupRun, str(setup_id))
         assert setup.status == "queued" and setup.current_step == "queued"
@@ -285,9 +287,44 @@ async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_
             assert await session.scalar(text("select count(*) from " + table)) == 0
 
 
-async def _assert_terminal_not_reclaimable(factory, delivery):
+async def test_finalized_receipt_excludes_every_recovery_shape(automatic_source, monkeypatch):
+    from app.workers import project_setup as worker
+
+    factory, _actor, setup_id, snapshot = automatic_source
+    await create_verified_material_fixture(snapshot["id"])
+    delivery = await _delivery(factory, setup_id)
+    runtime = Runtime()
+    monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
+    monkeypatch.setattr(
+        worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
+    )
+    await _select_stale_delivery(factory, delivery)
+    receipt = await worker._coordinator(factory).run(delivery)
+    assert receipt["status"] == "policy_draft_ready"
+    async with factory() as session:
+        evidence = await session.scalar(
+            text("select to_jsonb(f) from project_guide_setup_finalizations f")
+        )
+    await _assert_terminal_not_reclaimable(factory, delivery, monkeypatch, finalized=True)
+    async with factory() as session:
+        assert (
+            await session.scalar(
+                text("select to_jsonb(f) from project_guide_setup_finalizations f")
+            )
+            == evidence
+        )
+    assert runtime.calls == 1
+
+
+async def _assert_terminal_not_reclaimable(factory, delivery, monkeypatch, *, finalized=False):
     from app.modules.projects.guide_setup_continuation import retryable_source_snapshot_ids
 
+    from app.modules.projects import setup_queue
+
+    def forbidden_enqueue(**kwargs):
+        pytest.fail("terminal custody was republished after candidate selection")
+
+    monkeypatch.setattr(setup_queue, "enqueue_project_guide_compilation", forbidden_enqueue)
     for status, step, task in (
         ("enqueue_failed", "enqueue", None),
         ("queued", "queued", None),
@@ -295,6 +332,16 @@ async def _assert_terminal_not_reclaimable(factory, delivery):
         ("queued", "queued", str(delivery.task_id)),
     ):
         async with factory() as session, session.begin():
+            if finalized:
+                from scripts.run_isolated_tests import NAME_RE
+
+                assert NAME_RE.fullmatch(await session.scalar(text("select current_database()")))
+                # Adversarial queue shapes only; receipt evidence remains untouched.
+                # Restore both production guards before exercising real dispatch.
+                for trigger in ("finalization_setup_change_guard", "finalization_atomic_custody"):
+                    await session.execute(
+                        text(f"alter table project_setup_runs disable trigger {trigger}")
+                    )
             await session.execute(
                 text(
                     "update project_setup_runs set status=:status,current_step=:step,"
@@ -302,9 +349,36 @@ async def _assert_terminal_not_reclaimable(factory, delivery):
                 ),
                 {"id": str(delivery.setup_run_id), "status": status, "step": step, "task": task},
             )
+            if finalized:
+                await session.execute(text("set constraints all immediate"))
+                for trigger in ("finalization_setup_change_guard", "finalization_atomic_custody"):
+                    await session.execute(
+                        text(f"alter table project_setup_runs enable trigger {trigger}")
+                    )
         assert delivery.source_snapshot_id not in await retryable_source_snapshot_ids(
             factory, page_size=10
         ), (status, task)
+        async with factory() as session:
+            before = await session.scalar(
+                text("select to_jsonb(s) from project_setup_runs s where id=:id"),
+                {"id": str(delivery.setup_run_id)},
+            )
+            returned = await setup_queue.dispatch_project_guide_compilation_after_commit(
+                session,
+                project_id=str(delivery.project_id),
+                guide_id=str(delivery.guide_id),
+                source_snapshot_id=str(delivery.source_snapshot_id),
+                setup_run_id=str(delivery.setup_run_id),
+                setup_generation=delivery.setup_generation,
+            )
+            assert returned == task
+            assert (
+                await session.scalar(
+                    text("select to_jsonb(s) from project_setup_runs s where id=:id"),
+                    {"id": str(delivery.setup_run_id)},
+                )
+                == before
+            )
 
 
 async def test_publisher_acknowledgement_cannot_overwrite_worker_finalization(
@@ -747,16 +821,8 @@ async def _remove_retained_runtime_configuration(factory):
 async def _reclaim_exact_delivery(factory, delivery, monkeypatch):
     """Prove Beat selection and queue publication preserve the owned delivery."""
     from app.modules.projects import setup_queue
-    from app.modules.projects.guide_setup_continuation import retryable_source_snapshot_ids
 
-    async with factory() as session, session.begin():
-        await session.execute(
-            text(
-                "update project_setup_runs set updated_at=now()-interval '2 minutes' where id=:id"
-            ),
-            {"id": str(delivery.setup_run_id)},
-        )
-    assert delivery.source_snapshot_id in await retryable_source_snapshot_ids(factory, page_size=10)
+    await _select_stale_delivery(factory, delivery)
     sent = []
 
     def enqueue(**kwargs):
@@ -783,3 +849,16 @@ async def _reclaim_exact_delivery(factory, delivery, monkeypatch):
             "task_id": str(delivery.task_id),
         }
     ]
+
+
+async def _select_stale_delivery(factory, delivery):
+    from app.modules.projects.guide_setup_continuation import retryable_source_snapshot_ids
+
+    async with factory() as session, session.begin():
+        await session.execute(
+            text(
+                "update project_setup_runs set updated_at=now()-interval '2 minutes' where id=:id"
+            ),
+            {"id": str(delivery.setup_run_id)},
+        )
+    assert delivery.source_snapshot_id in await retryable_source_snapshot_ids(factory, page_size=10)

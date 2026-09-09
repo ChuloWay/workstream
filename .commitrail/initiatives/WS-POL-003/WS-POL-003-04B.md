@@ -321,13 +321,20 @@ when bounded Celery retries exhaust. It republishes the same task and generation
 retaining attempt/provider custody; invalid or uncertain provider outcomes,
 existing attempts without runtime configuration, and finalized work are excluded.
 The shared eligibility predicate belongs to the queue owner; continuation consumes
-it without a reverse dependency. Configuration repair can then start the still
+it without a reverse dependency. Every recovery publication rechecks eligibility
+under the setup lock, including pending claims and absent task pointers. Only a
+fresh explicit initial claim uses its already-owned publication authority.
+Configuration repair can then start the still
 uninvoked attempt, while accepted/persisted recovery never reinvokes the provider.
 Typed runtime registration reuses the project-agent capability adapter root.
 The delivery port's JSON result shape remains an explicitly bounded low-risk
 review observation; existing frozen finalization and diagnostic owners determine
 its contents, and Celery serializes the result without granting authority.
 
+The uncalled role-only `ProjectService` report-creation and warning-acknowledgement
+implementations and their unused validation wrapper are removed; the
+prepared-authority mutation service owns both operations and reuses the canonical
+sufficiency payload validator.
 Warning acknowledgement records covered human provenance without resetting or
 requeueing setup. Its own mutation no longer changes the stale-output identity,
 so an identical request can replay under fresh authority; setup/report lineage
@@ -342,6 +349,20 @@ is proved by `test_concurrent_live_deliveries_share_one_provider_and_finalizatio
 `test_concurrent_automatic_callbacks_share_one_attempt`, and the authorized
 execution/concurrency tests. AUTH-12J projection tests retain exact service,
 source, task and component custody; human policy replay tests remain unchanged.
+Current submission-policy service/repository replay accepts human create/update
+only; the unused service namespace, reserved execution binding and claim option
+are removed. Existing nullable stored fields are retained, and current human
+reservation/completion explicitly exclude non-null service custody. AUTH-12J
+projection contracts and persisted evidence are unchanged. Alias-aware shared
+AST proofs detect imported factory aliases, direct concrete runtime calls and
+aliased finalization calls in the exact worker context. Finalized receipt recovery
+exclusion is tested across all queue shapes using isolated adversarial setup
+fixtures, restoring production guards before dispatch and preserving the receipt.
+The shared project repository removes four zero-consumer methods from superseded
+inference: agent-policy lookup, post-policy upsert, latest rejected-policy lookup
+and the unlocked policy list replaced by the authorized locked list. Current
+by-ID reads and retained correction-history listing stay intact. Consumer tracing
+covers all backend source/tests before removal; no stored rows are deleted.
 The two older migration guards are invoked directly in real PostgreSQL Alembic
 operation contexts, so the newer runtime-custody guard cannot mask their proof.
 Hosted installations include the configured agent runtime extra.

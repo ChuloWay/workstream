@@ -63,7 +63,6 @@ from app.modules.projects.schemas import (
     GuideSourceSnapshotCreate,
     GuideSourceSnapshotItemResponse,
     GuideSourceSnapshotResponse,
-    GuideSufficiencyAcknowledgement,
     GuideSufficiencyReportCreate,
     GuideSufficiencyReportResponse,
     PaymentPolicyInput,
@@ -641,92 +640,6 @@ class ProjectService:
             refreshed_setup_run,
             refreshed_policy,
         )
-
-    async def create_guide_sufficiency_report(
-        self,
-        actor: ActorContext,
-        project_id: str,
-        guide_id: str,
-        payload: GuideSufficiencyReportCreate,
-    ) -> GuideSufficiencyReportResponse:
-        """Record Workstream's sufficiency assessment for a guide snapshot.
-
-        Args:
-            actor: Verified Flow actor context for the current request.
-            project_id: Project that owns the guide.
-            guide_id: Guide whose source snapshot was assessed.
-            payload: Sufficiency status and findings.
-
-        Returns:
-            Persisted sufficiency report response.
-        """
-        require_any_role(actor, PROJECT_SETUP_ROLES)
-        guide = await self._lock_project_guide_for_setup(project_id, guide_id)
-        snapshot = await self._get_snapshot_for_guide(project_id, guide, payload.source_snapshot_id)
-        await self._ensure_snapshot_is_latest(project_id, guide, snapshot)
-        await self.validate_source_snapshot_integrity(snapshot, PolicySetupBlocked)
-        self._validate_sufficiency_report_payload(payload)
-        report = GuideSufficiencyReport(
-            id=str(uuid4()),
-            project_id=project_id,
-            guide_id=guide.id,
-            guide_version=guide.version,
-            source_snapshot_id=snapshot.id,
-            source_snapshot_hash=snapshot.bundle_hash,
-            status=payload.status,
-            findings=[finding.model_dump(mode="json") for finding in payload.findings],
-            summary=payload.summary,
-            agent_name=None,
-            agent_version=None,
-            created_by=actor.actor_id,
-        )
-        try:
-            report = await self._repo.add_guide_sufficiency_report(report)
-            await self._session.commit()
-        except IntegrityError as exc:
-            await self._session.rollback()
-            raise PolicySetupConflict(
-                "guide sufficiency report conflicted with concurrent setup; retry"
-            ) from exc
-        await self._session.refresh(report)
-        return GuideSufficiencyReportResponse.model_validate(report)
-
-    async def acknowledge_guide_sufficiency_warnings(
-        self,
-        actor: ActorContext,
-        project_id: str,
-        guide_id: str,
-        report_id: str,
-        payload: GuideSufficiencyAcknowledgement,
-    ) -> GuideSufficiencyReportResponse:
-        """Acknowledge non-blocking guide sufficiency warnings.
-
-        Args:
-            actor: Verified Flow actor context for the current request.
-            project_id: Project that owns the guide.
-            guide_id: Guide whose report is being acknowledged.
-            report_id: Sufficiency report id.
-            payload: Optional acknowledgement note.
-
-        Returns:
-            Updated sufficiency report response.
-        """
-        require_any_role(actor, PROJECT_SETUP_ROLES)
-        guide = await self._lock_project_guide_for_setup(project_id, guide_id)
-        if guide.status != "draft":
-            raise GuideEditBlocked("only draft guides can acknowledge sufficiency warnings")
-        report = await self._repo.get_guide_sufficiency_report(report_id)
-        if report is None or report.project_id != project_id or report.guide_id != guide.id:
-            raise SufficiencyReportNotFound("guide sufficiency report not found")
-        if report.status != "passed_with_warnings":
-            raise PolicySetupBlocked("only sufficiency warnings can be acknowledged")
-        report.warnings_acknowledged_by_role = self._approver_role(actor)
-        report.warnings_acknowledged_by_actor = actor.actor_id
-        report.warnings_acknowledged_at = datetime.now(UTC)
-        report.acknowledgement_note = payload.acknowledgement_note
-        await self._session.commit()
-        await self._session.refresh(report)
-        return GuideSufficiencyReportResponse.model_validate(report)
 
     async def approve_submission_artifact_policy(
         self,
@@ -1941,13 +1854,6 @@ class ProjectService:
             for package_format in allowed_formats
         ):
             raise PolicySetupBlocked("packaging rules contain unsupported package formats")
-
-    def _validate_sufficiency_report_payload(
-        self,
-        payload: GuideSufficiencyReportCreate,
-    ) -> None:
-        """Ensure sufficiency status and finding severities agree."""
-        validate_sufficiency_report_payload(payload)
 
     def _merge_effective_submission_artifact_policy(
         self,

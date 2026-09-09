@@ -230,11 +230,11 @@
     },
     {
       "capability": "unassigned_legacy_auth",
-      "content_sha256": "e8ee9126962428336cc8f5456cc2939263230e147515c9e97218e239013d612d",
-      "end_line": 8055,
+      "content_sha256": "cfe41cbb69b44b4ba5c1e48247bd5ccc32973e8d1a4ed9f754af81328c88697c",
+      "end_line": 8053,
       "hard_limit": 1200,
       "kind": "test_file",
-      "observed_lines": 8055,
+      "observed_lines": 8053,
       "path": "backend/tests/test_projects.py",
       "qualified_symbol": null,
       "removal_chunk": "WS-AUTH-003-CLOSE",
@@ -699,14 +699,14 @@
     {
       "capability": "unassigned_legacy_auth",
       "content_sha256": "5b90b7eb9a22e2d40d9e8e88eea46275803fdcc8ff6a59c4d83b1de9d875dfe2",
-      "end_line": 2921,
+      "end_line": 2919,
       "hard_limit": 120,
       "kind": "test_function",
       "observed_lines": 138,
       "path": "backend/tests/test_projects.py",
       "qualified_symbol": "test_guide_mutation_service_executes_all_three_authorized_happy_paths",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 2784
+      "start_line": 2782
     },
     {
       "capability": "unassigned_legacy_auth",

@@ -1501,8 +1501,6 @@ def test_policy_models_do_not_enforce_mutable_current_uniqueness() -> None:
 
 def test_setup_mutations_use_locked_guide_helper() -> None:
     locked_methods = [
-        "create_guide_sufficiency_report",
-        "acknowledge_guide_sufficiency_warnings",
         "approve_submission_artifact_policy",
         "approve_current_post_submit_checker_policy",
         "request_post_submit_checker_policy_correction",

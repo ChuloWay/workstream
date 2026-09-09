@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.hashing import canonical_json_hash
 from app.interfaces.artifact_operations import GuideSufficiencyMaterialPort
 from app.modules.actors.service import ResolvedActor
-from app.modules.actors.service_identities import ServiceIdentity
 from app.modules.authorization.prepared import PreparedAuthorizationService
 from app.modules.authorization.runtime import (
     MatchedAuthorityKind,
@@ -61,9 +60,8 @@ class SubmissionPolicyReplayFacts:
 
     actor_profile_id: str
     identity_link_id: str
-    service_identity: str | None
     action_id: str
-    idempotency_key: UUID | None
+    idempotency_key: UUID
     request_digest: str
     resource_context: ProjectSubmissionArtifactPolicyMutationResourceContext
     operation_id: UUID
@@ -71,10 +69,7 @@ class SubmissionPolicyReplayFacts:
     guide_id: str
     source_snapshot_id: str
     policy_id: str
-    setup_run_id: str | None
     setup_generation: int
-    setup_task_id: UUID | None
-    correlation_id: UUID | None
 
 
 class SubmissionPolicyMutationConflict(ProjectServiceError):
@@ -527,7 +522,6 @@ class SubmissionPolicyMutationService:
         facts = SubmissionPolicyReplayFacts(
             actor_profile_id=resolved.profile.id,
             identity_link_id=resolved.identity_link.id,
-            service_identity=None,
             action_id=action.value,
             idempotency_key=key,
             request_digest=digest,
@@ -537,10 +531,7 @@ class SubmissionPolicyMutationService:
             guide_id=str(guide_id),
             source_snapshot_id=str(source_snapshot_id),
             policy_id=str(committed_policy_id),
-            setup_run_id=None,
             setup_generation=final.setup_generation,
-            setup_task_id=None,
-            correlation_id=None,
         )
         disposition, replay = await self.reserve_replay(facts)
         if disposition == "replayed":
@@ -875,6 +866,11 @@ class SubmissionPolicyMutationService:
         resource = facts.resource_context
         try:
             action = ActionId(facts.action_id)
+            if action not in {
+                ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_CREATE,
+                ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_UPDATE,
+            }:
+                raise ValueError("unsupported human policy replay action")
             target_kind = PROJECT_SUBMISSION_POLICY_TARGET_KIND_BY_ACTION[action]
         except (KeyError, ValueError) as exc:
             raise ValueError("invalid submission-policy replay action") from exc
@@ -889,31 +885,15 @@ class SubmissionPolicyMutationService:
             or facts.setup_generation != resource.setup_generation
         ):
             raise ValueError("submission-policy replay facts do not match resource context")
-        custody = resource.setup_service_custody
-        if resource.execution_kind == "setup_service":
-            if (
-                facts.service_identity != ServiceIdentity.PROJECT_SETUP.value
-                or facts.idempotency_key is not None
-                or custody is None
-                or facts.setup_run_id != str(custody.setup_run_id)
-                or facts.setup_task_id != custody.task_id
-                or facts.correlation_id != custody.correlation_id
-            ):
-                raise ValueError("submission-policy service replay custody is invalid")
-        elif facts.idempotency_key is None or any(
-            value is not None
-            for value in (
-                facts.service_identity,
-                facts.setup_run_id,
-                facts.setup_task_id,
-                facts.correlation_id,
-            )
+        if (
+            resource.execution_kind != "human"
+            or resource.setup_service_custody is not None
+            or facts.idempotency_key is None
         ):
             raise ValueError("submission-policy human replay custody is invalid")
         return {
             "actor_profile_id": facts.actor_profile_id,
             "identity_link_id": facts.identity_link_id,
-            "service_identity": facts.service_identity,
             "action_id": facts.action_id,
             "idempotency_key": facts.idempotency_key,
             "request_digest": facts.request_digest,
@@ -924,25 +904,19 @@ class SubmissionPolicyMutationService:
             "guide_id": facts.guide_id,
             "source_snapshot_id": facts.source_snapshot_id,
             "policy_id": facts.policy_id,
-            "setup_run_id": facts.setup_run_id,
             "setup_generation": facts.setup_generation,
-            "setup_task_id": facts.setup_task_id,
-            "correlation_id": facts.correlation_id,
         }
 
     async def reserve_replay(
         self,
         facts: SubmissionPolicyReplayFacts,
-        *,
-        execution_claim: bool = False,
     ) -> tuple[
         Literal["claimed", "mismatch", "pending", "replayed"],
         SubmissionPolicyMutationIdempotencyRecord,
     ]:
         """Reserve replay custody while leaving transaction ownership to the caller."""
         self._require_root_transaction()
-        status: Literal["reserved", "pending"] = "reserved" if execution_claim else "pending"
-        return await self._replay.reserve(**self._replay_values(facts), status=status)
+        return await self._replay.reserve(**self._replay_values(facts))
 
     async def complete_replay(
         self,
@@ -960,15 +934,11 @@ class SubmissionPolicyMutationService:
             facts.operation_id,
             actor_profile_id=facts.actor_profile_id,
             identity_link_id=facts.identity_link_id,
-            service_identity=facts.service_identity,
             action_id=facts.action_id,
             idempotency_key=facts.idempotency_key,
             request_digest=facts.request_digest,
             resource_context_digest=str(values["resource_context_digest"]),
-            setup_run_id=facts.setup_run_id,
             setup_generation=facts.setup_generation,
-            setup_task_id=facts.setup_task_id,
-            correlation_id=facts.correlation_id,
             response_json=response_json,
             committed_policy_id=committed_policy_id,
             committed_effective_policy_id=committed_effective_policy_id,

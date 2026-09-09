@@ -58,7 +58,7 @@ async def test_replay_delegates_exact_custody_without_transaction_ownership(case
     if operation == "reserve":
         outcome = await case.service.reserve_replay(facts)
         assert outcome == case.replay.reserve.return_value
-        case.replay.reserve.assert_awaited_once_with(**expected, status="pending")
+        case.replay.reserve.assert_awaited_once_with(**expected)
     else:
         for field in (
             "operation_id",
@@ -108,4 +108,15 @@ async def test_replay_requires_active_root_transaction(case, state):
 async def test_invalid_human_replay_facts_never_reach_repository(case, field, value, error):
     with pytest.raises(ValueError, match=error):
         await case.service.reserve_replay(replace(rows.replay_facts(), **{field: value}))
+    case.replay.reserve.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "field,value", [("execution_kind", "setup_service"), ("setup_service_custody", object())]
+)
+async def test_human_replay_rejects_nonhuman_resource_custody(case, field, value):
+    facts = rows.replay_facts()
+    resource = facts.resource_context.model_copy(update={field: value})
+    with pytest.raises(ValueError, match="human replay custody is invalid"):
+        await case.service.reserve_replay(replace(facts, resource_context=resource))
     case.replay.reserve.assert_not_awaited()

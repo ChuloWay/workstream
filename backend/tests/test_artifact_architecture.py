@@ -5,6 +5,9 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+from tests.architecture_ast import imported_symbols_and_calls
+
 from app.interfaces import artifact_operations
 from app.db.base import Base
 from app.main import create_app
@@ -18,6 +21,8 @@ SUBMISSION_PREPARATION_API = (
 )
 SUBMISSION_ADMISSION_API = APP_ROOT / "modules" / "artifacts" / "api" / "submission_admission.py"
 COMPOSITION_ROOT = APP_ROOT / "adapters" / "artifacts" / "__init__.py"
+AGENT_COMPOSITION_ROOT = APP_ROOT / "adapters/project_agents/__init__.py"
+AGENT_ADAPTER_MODULE = "app.adapters.project_agents.openai_agent_sdk"
 S3_ADAPTER_MODULE = APP_ROOT / "adapters" / "artifacts" / "s3_compatible.py"
 CLOSED_PORTS = {
     "GuideArtifactIngestCommand",
@@ -284,35 +289,40 @@ def test_concrete_adapter_construction_has_one_composition_path() -> None:
     factory_calls: list[Path] = []
     adapter_calls: list[Path] = []
     concrete_imports: list[Path] = []
+    agent_imports: list[Path] = []
+    agent_calls: list[Path] = []
     for path in _python_files(APP_ROOT):
-        tree = _tree(path)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module in CONCRETE_ADAPTER_MODULES:
-                concrete_imports.append(path)
-            if isinstance(node, ast.Import) and any(
-                alias.name in CONCRETE_ADAPTER_MODULES for alias in node.names
-            ):
-                concrete_imports.append(path)
-            if not isinstance(node, ast.Call):
-                continue
-            called = node.func
-            if isinstance(called, ast.Subscript):
-                called = called.value
-            if isinstance(called, ast.Name):
-                name = called.id
-            elif isinstance(called, ast.Attribute):
-                name = called.attr
-            else:
-                name = None
-            if name == "ExternalServiceAdapterFactory":
-                factory_calls.append(path)
-            if name in {"LocalStorageAdapter", "S3CompatibleArtifactStore"}:
-                adapter_calls.append(path)
-
-    assert set(factory_calls) == {COMPOSITION_ROOT, APP_ROOT / "adapters/project_agents/__init__.py"}
+        imports, calls = imported_symbols_and_calls(_tree(path))
+        if imports & CONCRETE_ADAPTER_MODULES:
+            concrete_imports.append(path)
+        if AGENT_ADAPTER_MODULE in imports:
+            agent_imports.append(path)
+        factory_calls.extend(path for name in calls if name == "ExternalServiceAdapterFactory")
+        adapter_calls.extend(path for name in calls if name in {"LocalStorageAdapter", "S3CompatibleArtifactStore"})
+        agent_calls.extend(path for name in calls if name == "OpenAIAgentSdkProjectGuideRuntime")
+    assert set(factory_calls) == {COMPOSITION_ROOT, AGENT_COMPOSITION_ROOT}
     assert len(factory_calls) == 2
     assert adapter_calls == [COMPOSITION_ROOT, S3_ADAPTER_MODULE]
     assert set(concrete_imports) == {COMPOSITION_ROOT}
+    assert agent_imports == [AGENT_COMPOSITION_ROOT]
+    assert agent_calls == [AGENT_COMPOSITION_ROOT]
+
+
+@pytest.mark.parametrize("source", [
+    "from app.interfaces.external_services import ExternalServiceAdapterFactory as factory\nfactory[object]('extra')\n",
+    "import app.interfaces.external_services as external\nexternal.ExternalServiceAdapterFactory[object]('extra')\n",
+    "from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime as runtime\nruntime(configuration)\n",
+    "import app.adapters.project_agents.openai_agent_sdk as sdk\nsdk.OpenAIAgentSdkProjectGuideRuntime(configuration)\n",
+])
+def test_composition_proof_rejects_aliased_factories_and_concrete_runtimes(tmp_path, monkeypatch, source):
+    import sys
+
+    paths = _python_files(APP_ROOT)
+    injected = tmp_path / "extra.py"
+    injected.write_text(source)
+    monkeypatch.setattr(sys.modules[__name__], "_python_files", lambda *_: (*paths, injected))
+    with pytest.raises(AssertionError):
+        test_concrete_adapter_construction_has_one_composition_path()
 
 
 def test_s3_adapter_exposes_only_required_immutable_object_operations() -> None:

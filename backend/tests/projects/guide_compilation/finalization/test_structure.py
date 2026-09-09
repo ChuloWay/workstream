@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tests.architecture_ast import imported_symbols_and_calls
+
 ROOT = Path(__file__).resolve().parents[4]
 OWNER = ROOT / "app/modules/projects/guide_compilation"
 SOURCES = (
@@ -20,17 +22,9 @@ def imports_and_calls(paths):
     imports = set()
     calls = set()
     for path in paths:
-        for node in ast.walk(ast.parse(path.read_text())):
-            if isinstance(node, ast.ImportFrom):
-                imports.add(node.module or "")
-                imports.update(alias.name for alias in node.names)
-            elif isinstance(node, ast.Import):
-                imports.update(alias.name for alias in node.names)
-            elif isinstance(node, ast.Call):
-                if isinstance(node.func, ast.Attribute):
-                    calls.add(node.func.attr)
-                elif isinstance(node.func, ast.Name):
-                    calls.add(node.func.id)
+        path_imports, path_calls = imported_symbols_and_calls(ast.parse(path.read_text()))
+        imports.update(path_imports)
+        calls.update(path_calls)
     return imports, calls
 
 
