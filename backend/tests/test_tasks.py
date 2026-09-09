@@ -1029,7 +1029,7 @@ async def create_generated_post_submit_setup_output(
             project_id=project_id,
             guide_version=snapshot.guide_version,
             required_checkers=(
-                ["check_policy_context_present"] if required_checkers is None else required_checkers
+                [] if required_checkers is None else required_checkers
             ),
             warning_checkers=[] if warning_checkers is None else warning_checkers,
             blocking_severities=blocking_severities,
@@ -1052,7 +1052,7 @@ async def create_generated_post_submit_setup_output(
             pre_submit_checker_bundle_hash=pre_submit_checker_policy["compiled_bundle_hash"],
             required_checkers=compiled.required_checkers,
             warning_checkers=compiled.warning_checkers,
-            blocking_severities=compiled.blocking_severities,
+            blocking_severities=list(compiled.blocking_severities),
             policy_hash=compiled.policy_hash,
             policy_body=compiled.policy_body,
             lifecycle_status="approved",
@@ -1126,7 +1126,7 @@ def generated_post_submit_output_for_pre_submit(
     spec = build_project_post_submit_checker_spec(
         project_id=effective_policy.project_id,
         guide_version=effective_policy.guide_version,
-        required_checkers=["check_policy_context_present"],
+        required_checkers=[],
         warning_checkers=[],
         blocking_severities=["critical", "high"],
     )
@@ -1148,7 +1148,7 @@ def generated_post_submit_output_for_pre_submit(
         pre_submit_checker_bundle_hash=pre_submit_checker_bundle_hash,
         required_checkers=compiled.required_checkers,
         warning_checkers=compiled.warning_checkers,
-        blocking_severities=compiled.blocking_severities,
+        blocking_severities=list(compiled.blocking_severities),
         policy_hash=compiled.policy_hash,
         policy_body=compiled.policy_body,
         lifecycle_status="approved",
@@ -2915,49 +2915,7 @@ async def test_screening_locks_guide_policy_context_and_payment_fields(
     assert body["payout_type"] == "fixed"
 
 
-async def test_screening_uses_versioned_post_submit_policy_body_after_default_drift(
-    task_client: AsyncClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from app.modules.projects import post_submit_policy as post_submit_policy_module
-
-    project = await create_active_project(task_client)
-    async with db_session.get_session_factory()() as session:
-        source_policy = await session.scalar(
-            select(PostSubmitCheckerPolicy).where(
-                PostSubmitCheckerPolicy.project_id == project["id"],
-                PostSubmitCheckerPolicy.guide_version == "v1",
-            )
-        )
-        assert source_policy is not None
-        expected_policy_body = dict(source_policy.policy_body or {})
-        expected_policy_hash = source_policy.policy_hash
-
-    monkeypatch.setattr(
-        post_submit_policy_module,
-        "DEFAULT_DURABLE_CHECKERS",
-        [
-            *post_submit_policy_module.DEFAULT_DURABLE_CHECKERS,
-            "check_acceptance_criteria_present",
-        ],
-    )
-    task = await create_draft_task(task_client, project["id"])
-
-    response = await task_client.post(
-        f"/api/v1/tasks/{task['id']}/screen",
-        headers=auth_headers(),
-        json={"reason": "screen"},
-    )
-
-    assert response.status_code == 200, response.text
-    async with db_session.get_session_factory()() as session:
-        persisted_task = await session.get(WorkstreamTask, task["id"])
-    assert persisted_task is not None
-    assert persisted_task.locked_post_submit_checker_policy_body == expected_policy_body
-    assert persisted_task.locked_post_submit_checker_policy_hash == expected_policy_hash
-
-
-async def test_release_uses_locked_post_submit_policy_body_after_setup_mutation(
+async def test_release_rejects_crossed_post_submit_policy_sidecar(
     task_client: AsyncClient,
 ) -> None:
     project = await create_active_project(task_client)
@@ -2981,6 +2939,7 @@ async def test_release_uses_locked_post_submit_policy_body_after_setup_mutation(
             *post_submit_policy.required_checkers,
             "check_acceptance_criteria_present",
         ]
+        audit_ids = sorted(await session.scalars(select(AuditEvent.id)))
         await session.commit()
 
     release = await task_client.post(
@@ -2989,17 +2948,21 @@ async def test_release_uses_locked_post_submit_policy_body_after_setup_mutation(
         json={"reason": "release decision recorded"},
     )
 
-    assert release.status_code == 200, release.text
-    assert release.json()["status"] == "ready"
+    assert release.status_code == 422, release.text
+    assert release.json()["error"]["code"] == "task_locked_context_invalid"
+    assert "summaries are invalid" in release.json()["detail"]
     async with db_session.get_session_factory()() as session:
         persisted_task = await session.get(WorkstreamTask, task["id"])
+        assert sorted(await session.scalars(select(AuditEvent.id))) == audit_ids
+        assert await session.scalar(select(func.count()).select_from(Submission)) == 0
+        assert await session.scalar(select(func.count()).select_from(db_models.CheckerRun)) == 0
     assert persisted_task is not None
-    assert persisted_task.status == "ready"
+    assert persisted_task.status == "screening"
     assert persisted_task.locked_post_submit_checker_policy_body == locked_body
-    assert "check_acceptance_criteria_present" not in locked_body["required_checkers"]
-    assert "check_acceptance_criteria_present" not in locked_body["execution_checkers"]
-    assert "check_required_files" in locked_body["default_checkers"]
-    assert "check_required_files" in locked_body["execution_checkers"]
+    assert "check_acceptance_criteria_present" not in [entry["checker_id"] for entry in locked_body["entries"] if entry["classification"] == "project_required"]
+    assert "check_acceptance_criteria_present" not in [entry["checker_id"] for entry in locked_body["entries"]]
+    assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"] if entry["classification"] == "platform_default"]
+    assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"]]
 
 
 async def test_worker_task_response_redacts_locked_policy_hashes(
@@ -3157,9 +3120,7 @@ async def test_task_context_apis_return_worker_requirements_and_operator_provena
     )
     assert locked_body["locked_pre_submit_checker_bundle_hash"].startswith("sha256:")
     assert locked_body["locked_post_submit_checker_policy_hash"].startswith("sha256:")
-    assert locked_body["locked_post_submit_checker_policy_body_summary"]["required_checkers"] == [
-        "check_policy_context_present"
-    ]
+    assert locked_body["locked_post_submit_checker_policy_body_summary"]["required_checkers"] == []
 
 
 async def test_ready_worker_work_context_omits_private_task_source_fields(
@@ -5029,7 +4990,7 @@ async def test_submission_pre_submit_checker_setup_error_is_controlled(
     assert submissions == []
 
 
-async def test_submission_uses_locked_post_submit_policy_body_after_setup_mutation(
+async def test_submission_rejects_crossed_post_submit_policy_sidecar(
     task_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -5048,6 +5009,7 @@ async def test_submission_uses_locked_post_submit_policy_body_after_setup_mutati
             *post_submit_policy.required_checkers,
             "check_acceptance_criteria_present",
         ]
+        audit_ids = sorted(await session.scalars(select(AuditEvent.id)))
         await session.commit()
 
     response = await task_client.post(
@@ -5056,7 +5018,9 @@ async def test_submission_uses_locked_post_submit_policy_body_after_setup_mutati
         json=complete_submission_payload(),
     )
 
-    assert response.status_code == 201, response.text
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "task_locked_context_invalid"
+    assert response.json()["details"]["field"] == "locked_post_submit_checker_policy_body"
 
     async with db_session.get_session_factory()() as session:
         task = await session.get(WorkstreamTask, started_task["id"])
@@ -5070,16 +5034,16 @@ async def test_submission_uses_locked_post_submit_policy_body_after_setup_mutati
             .all()
         )
         checker_runs = (await session.execute(select(db_models.CheckerRun))).scalars().all()
+        assert sorted(await session.scalars(select(AuditEvent.id))) == audit_ids
     assert task is not None
-    assert task.status == "review_pending"
-    assert len(submissions) == 1
-    assert submissions[0].locked_post_submit_checker_policy_body == locked_body
-    assert "check_acceptance_criteria_present" not in locked_body["required_checkers"]
-    assert "check_acceptance_criteria_present" not in locked_body["execution_checkers"]
-    assert "check_required_files" in locked_body["default_checkers"]
-    assert "check_required_files" in locked_body["execution_checkers"]
-    assert len(checker_runs) == 1
-    assert checker_runs[0].locked_post_submit_checker_policy_body == locked_body
+    assert task.status == "in_progress"
+    assert submissions == []
+    assert task.locked_post_submit_checker_policy_body == locked_body
+    assert "check_acceptance_criteria_present" not in [entry["checker_id"] for entry in locked_body["entries"] if entry["classification"] == "project_required"]
+    assert "check_acceptance_criteria_present" not in [entry["checker_id"] for entry in locked_body["entries"]]
+    assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"] if entry["classification"] == "platform_default"]
+    assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"]]
+    assert checker_runs == []
 
 
 async def test_database_rejects_null_post_submit_context_on_non_draft_task(
@@ -6820,7 +6784,12 @@ async def test_queued_gate_policy_error_is_failed_and_repairable(
         assert pre_submit_policy is not None
         assert failed_run.status == "failed"
         assert failed_run.failure_code == "pre_review_gate_execution_failed"
-        assert task.status == "evaluation_pending"
+        assert task.status == "submitted"
+        assert await session.scalar(
+            select(func.count()).select_from(db_models.CheckerResult).where(
+                db_models.CheckerResult.submission_id == submission_id
+            )
+        ) == 0
         restored_bundle = dict(pre_submit_policy.compiled_bundle)
         restored_bundle.pop("tampered", None)
         pre_submit_policy.compiled_bundle = restored_bundle

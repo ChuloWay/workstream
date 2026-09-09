@@ -20,7 +20,7 @@ post-task requirement. Historical split parents 05/06 are not extra PRs.
 | `WS-POL-003-04A2` | Complete hidden immutable setup-ledger finalization with closed outcomes and no live route. | Merged 04A3 |
 | `WS-AUTH-001-12J` | Complete exact fixed-service authority for the two compilation-derived projection ports. | Merged 04A3 |
 | `WS-AUTH-001-12B2` | Complete exact setup-finalization authority (PR #384). | Complete POL-04A2 + AUTH-12J |
-| `WS-POL-003-04B` | Planned explicit-PM-request live cutover through the hidden projection/finalization chain; remove every legacy inference call from live reachability. | Merged 04A3 + 04A2 + AUTH-12J + AUTH-12B2 + ARCH-04A catalogue/schema |
+| `WS-POL-003-04B` | Planned explicit-PM-request live cutover through the hidden projection/finalization chain; physically delete the three superseded inference methods, prompts, affected consumers and obsolete tests in the same change. | Merged 04A3 + 04A2 + AUTH-12J + AUTH-12B2 + ARCH-04A catalogue/schema |
 | `WS-POL-003-05A` | Hidden complete review package, setup-wide correction and approval/effective/pre-submit behavior. | 04B |
 | `WS-AUTH-001-12F4` | Activate exact review-package read, PM correction/approval and PREP composition for the hidden 05A manifest. | 05A |
 | `WS-POL-003-05B` | Live PM approval and trusted effective/pre-submit projection cutover. | 05A + AUTH-12F4 |
@@ -29,11 +29,11 @@ post-task requirement. Historical split parents 05/06 are not extra PRs.
 | `WS-POL-003-06B` | Live deterministic post-submit projection/approval cutover with zero additional inference. | 06A + AUTH-12G |
 | `WS-POL-003-07` | One typed facade over existing ART pre and CHECKER post contracts; no post-result persistence. | 06B + ARCH-04A registered capability proof + merged ART-04B1-04B3 |
 | `WS-AUTH-001-12H` | Activate guide publication only over the complete approved current-generation unified chain. CP08, WS-ARCH-001-03A/03B/03C, and CP09 remain downstream. | POL-07 + corrected AUTH-12B2 + CP05 active ContributionPolicy behavior + CP06 validation + CP07 ProjectGuide binding |
-| `WS-POL-003-08` | Supplementary visibility and physical legacy cleanup; essential review/correction already belongs to 05A/05B and 06A/06B. | Planned after 07 + AUTH-12H + canonical WS-ARCH-001-04E manifest; physical cleanup additionally requires CP09's retained-history inventory, mapping and readability/recoverability proof for affected setup values and operation/evidence facts; not a prerequisite for 03A |
+| `WS-POL-003-08` | Supplementary visibility; separate remaining cleanup is parked and handled within each affected module. Essential review/correction belongs to 05A/05B and 06A/06B. | Planned after 07 + AUTH-12H + canonical WS-ARCH-001-04E manifest; any separately authorized retained-data change requires CP09's inventory, mapping and readability/recoverability proof for affected facts; no cleanup prerequisite for 04B |
 
 The 04E manifest proves canonical routing, not legacy-history preservation.
-POL-08 must reuse CP09's preservation proof for the data it removes before
-physical cleanup. This is not a dependency on completing unrelated CP09
+Any separately authorized POL-08 data removal must reuse CP09's preservation
+proof. Module code cleanup grants no data-deletion authority. This is not a dependency on completing unrelated CP09
 deletions; retained history must remain readable/recoverable and must never be
 guessed or silently discarded.
 

@@ -1,4 +1,4 @@
-"""Service-level guide readiness guards; parser and merge behavior remain controlled."""
+"""Guide readiness and persisted policy-summary custody guards."""
 
 from __future__ import annotations
 
@@ -16,6 +16,21 @@ from app.core.config import get_settings
 from app.core.hashing import canonical_json_hash
 from app.modules.projects import service as project_service_module
 from app.modules.projects.service import GuideActivationBlocked, ProjectService
+from app.modules.projects.post_submit_policy import (
+    build_project_post_submit_checker_spec, compile_project_post_submit_checker_spec,
+)
+from app.db import session as db_session
+from app.modules.projects.models import PostSubmitCheckerPolicy, ProjectGuide, ProjectSetupRun
+from app.modules.tasks.models import AuditEvent
+from httpx import AsyncClient
+from sqlalchemy import select
+from projects.client_fixtures import (
+    auth_headers, project_client as project_client,
+    project_database_env as project_database_env,
+)
+from projects.guide_fixtures import create_project, create_guide, complete_guide_payload
+from projects.policy_bundle_fixtures import create_approved_policy_bundle
+from project_create_fixtures import activate_guide_for_downstream_test
 
 
 @pytest.fixture(autouse=True)
@@ -34,6 +49,12 @@ def _post_submit_policy(
     pre_submit: SimpleNamespace,
 ) -> SimpleNamespace:
     """Bind post-submit readiness to the same guide and pre-submit lineage."""
+    compiled = compile_project_post_submit_checker_spec(
+        project_id=guide.project_id, guide_version=guide.version,
+        spec=build_project_post_submit_checker_spec(
+            project_id=guide.project_id, guide_version=guide.version,
+        ),
+    )
     return SimpleNamespace(
         id=str(uuid4()),
         project_id=guide.project_id,
@@ -49,11 +70,11 @@ def _post_submit_policy(
         approved_by_role="project_manager",
         approved_by_actor="actor-1",
         approved_at=datetime.now(UTC),
-        policy_body={"required_checkers": ["archive_safety"]},
-        policy_hash=f"sha256:{'b' * 64}",
-        required_checkers=["archive_safety"],
-        warning_checkers=[],
-        blocking_severities=["error"],
+        policy_body=compiled.policy_body,
+        policy_hash=compiled.policy_hash,
+        required_checkers=compiled.required_checkers,
+        warning_checkers=compiled.warning_checkers,
+        blocking_severities=list(compiled.blocking_severities),
     )
 
 
@@ -245,16 +266,6 @@ def test_activation_readiness_rejects_broken_chain_fact(
     )
     monkeypatch.setattr(
         project_service_module,
-        "parse_locked_post_submit_checker_policy_body",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            required_checkers=["archive_safety"],
-            warning_checkers=[],
-            blocking_severities=["error"],
-            execution_checkers=[],
-        ),
-    )
-    monkeypatch.setattr(
-        project_service_module,
         "require_complete_policy",
         lambda **_kwargs: None,
     )
@@ -273,17 +284,63 @@ def test_activation_readiness_accepts_complete_chain_without_payment(
         "_merge_effective_submission_artifact_policy",
         lambda _body: deepcopy(bundle["effective_policy"].effective_policy),
     )
-    monkeypatch.setattr(
-        project_service_module,
-        "parse_locked_post_submit_checker_policy_body",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            required_checkers=["archive_safety"],
-            warning_checkers=[],
-            blocking_severities=["error"],
-            execution_checkers=[],
-        ),
-    )
     monkeypatch.setattr(project_service_module, "require_complete_policy", lambda **_: None)
 
     bundle["payment_policy"] = None
     service.validate_activation_ready(**bundle, require_payment_policy=False)
+
+
+@pytest.mark.parametrize("operation", ["approve", "correct", "activate"])
+@pytest.mark.parametrize("field", ["required_checkers", "warning_checkers", "blocking_severities"])
+async def test_persisted_policy_sidecar_cross_denies_project_write(
+    project_client: AsyncClient, operation: str, field: str,
+) -> None:
+    """Valid persisted setup reaches summary validation before any owner mutation."""
+    project = await create_project(project_client)
+    guide = await create_guide(project_client, project["id"], complete_guide_payload())
+    bundle = await create_approved_policy_bundle(
+        project_client, project["id"], guide["id"],
+        approve_post_submit_checker=operation == "activate",
+    )
+    policy_id = bundle["post_submit_checker_policy"]["id"]
+    async with db_session.get_session_factory()() as session:
+        policy = await session.get(PostSubmitCheckerPolicy, policy_id)
+        setup = await session.scalar(select(ProjectSetupRun).where(
+            ProjectSetupRun.output_post_submit_checker_policy_id == policy_id,
+        ))
+        assert policy is not None and setup is not None
+        persisted_guide = await session.get(ProjectGuide, guide["id"])
+        assert persisted_guide is not None
+        service = ProjectService(session)
+        await service._validate_current_post_submit_policy_setup(persisted_guide, setup, policy)
+        locked_body, locked_hash = policy.policy_body, policy.policy_hash
+        initial_policy_status = policy.lifecycle_status
+        initial_setup = (setup.status, setup.output_post_submit_checker_policy_id)
+        audit_ids = sorted(await session.scalars(select(AuditEvent.id)))
+        setattr(policy, field, [*getattr(policy, field),
+            "medium" if field == "blocking_severities" else "check_acceptance_criteria_present"])
+        await session.commit()
+
+    if operation == "activate":
+        response = await activate_guide_for_downstream_test(
+            db_session.get_session_factory(), project_id=project["id"], guide_id=guide["id"],
+        )
+    else:
+        suffix = "approve" if operation == "approve" else "request-correction"
+        response = await project_client.post(
+            f"/api/v1/projects/{project['id']}/guides/{guide['id']}/post-submit-checker-policy/{suffix}",
+            headers=auth_headers(),
+            json={} if operation == "approve" else {"correction_reason": "Clarify evidence"},
+        )
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == "post-submit checker policy hash is invalid"
+    async with db_session.get_session_factory()() as session:
+        policy = await session.get(PostSubmitCheckerPolicy, policy_id)
+        setup = await session.get(ProjectSetupRun, setup.id)
+        persisted_guide = await session.get(ProjectGuide, guide["id"])
+        assert policy is not None and setup is not None and persisted_guide is not None
+        assert (policy.policy_body, policy.policy_hash) == (locked_body, locked_hash)
+        assert policy.lifecycle_status == initial_policy_status
+        assert (setup.status, setup.output_post_submit_checker_policy_id) == initial_setup
+        assert persisted_guide.status == "draft"
+        assert sorted(await session.scalars(select(AuditEvent.id))) == audit_ids

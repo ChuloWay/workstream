@@ -1,7 +1,7 @@
 # Chunk Contract: WS-POL-003-04B - Live Unified Setup Cutover
 
 Disposition: Planned. Dependencies: complete 04A/04A3/04A2 and AUTH-12I/12J/12B2,
-plus ARCH-04A's canonical post-catalogue/schema foundation. Risk: L1.
+plus [ARCH-04A consolidation](../../../WS-ARCH-001/WS-ARCH-001-04A.md). Risk: L1.
 
 ## Goal
 
@@ -26,20 +26,19 @@ compatibility routing, or a second provider attempt/key.
   PREP in their own atomic transaction. Each PREP binds the immutable
   compilation and accepted-result hashes plus its exact sufficiency or
   artifact-policy component hash.
-- All three old model methods/prompts are unreachable for unified generations;
-  no deferred legacy post call or fallback exists.
+- Delete all three superseded model methods/prompts and their consumers/tests;
+  no disabled retained implementation or fallback exists.
 - Complete replay returns canonical outputs with zero provider calls.
 - Explicit PM request/recovery is the live entry. Bind one immutable attempt,
   use AUTH-12J for the two projections and AUTH-12B2 for finalization. Reuse
   the exact finalizer; do not mutate its closed setup row or mint a parallel
   completion receipt. Automatic ingestion continuation is not added here.
-- Remove legacy model calls from live reachability in this PR. Later physical
-  deletion does not permit fallback execution in the interim.
+- Remove superseded model calls physically in this PR; no deferred deletion.
 - Consume the CHECKERS-owned public catalogue snapshot, not PROJECTS private
   registry imports or copied constants. Existing sparse-catalogue results are
   never enriched in place to make them approval-eligible.
 - Update the PROJECTS input projection/validation adapter to consume that
-  versioned public contract, including supported typed binding parameters;
+  single current public contract, including supported typed binding parameters;
   do not keep the old blanket parameter rejection while advertising new
   capability schemas. Reuse canonical validators and prove parity without
   rebuilding the completed attempt/finalization state machine.

@@ -217,8 +217,8 @@ def test_closed_result_shape_stays_below_declared_byte_ceilings():
         )),
     )
     phase = result(request(), member_results=(member,) * 9, evaluation_generation=2_147_483_647)
-    assert len(canonical_post_submit_bytes(member)) == 607
-    assert len(canonical_post_submit_bytes(phase)) == 5972
+    assert len(canonical_post_submit_bytes(member)) == 604
+    assert len(canonical_post_submit_bytes(phase)) == 5942
     assert len(canonical_post_submit_bytes(member)) < PostSubmitResourceLimits().maximum_result_bytes
     assert len(canonical_post_submit_bytes(phase)) < 65536
     with pytest.raises(ValidationError, match="100"):

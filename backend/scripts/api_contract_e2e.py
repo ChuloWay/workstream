@@ -1241,24 +1241,19 @@ async def create_approved_post_submit_policy_ci_bridge(
     warning_checkers: list[str] | None = None,
     blocking_severities: list[str] | None = None,
 ) -> dict:
-    """Persist a temporary approved post-submit policy for CI contract drills.
+    """Seed the canonical approved policy prerequisite for the API contract drill.
 
-    WS-POL-002-02 builds derivation and compilation, while WS-POL-002-03 owns
-    the server approval API. The CI API-contract drill still needs an active
-    guide to exercise task/submission/checker APIs without requiring external
-    agent credentials. This helper is therefore a test-only activation bridge:
-    all prerequisite records are created through the public API first, the real
-    trusted compiler builds the policy body, and the direct DB write is limited
-    to the generated policy approval plus setup-ledger marker that
-    WS-POL-002-03 will replace.
+    The real compiler builds the policy after API-created prerequisites. This
+    fixture supplies approval and setup-ledger state without external agent
+    credentials so the drill can exercise task/submission/checker APIs. It does
+    not prove live unified setup or guide-activation authority; those require
+    their separately governed product paths.
     """
     guide_version = effective_policy["guide_version"]
     spec = build_project_post_submit_checker_spec(
         project_id=project_id,
         guide_version=guide_version,
-        required_checkers=(
-            ["check_policy_context_present"] if required_checkers is None else required_checkers
-        ),
+        required_checkers=[] if required_checkers is None else required_checkers,
         warning_checkers=[] if warning_checkers is None else warning_checkers,
         blocking_severities=blocking_severities,
     )
@@ -1291,7 +1286,7 @@ async def create_approved_post_submit_policy_ci_bridge(
             pre_submit_checker_bundle_hash=pre_submit_checker_policy.compiled_bundle_hash,
             required_checkers=compiled.required_checkers,
             warning_checkers=compiled.warning_checkers,
-            blocking_severities=compiled.blocking_severities,
+            blocking_severities=list(compiled.blocking_severities),
             policy_hash=compiled.policy_hash,
             policy_body=compiled.policy_body,
             lifecycle_status="approved",

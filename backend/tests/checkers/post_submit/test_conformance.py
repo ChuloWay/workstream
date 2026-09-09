@@ -1,20 +1,21 @@
-"""Real registered handlers, reachable counterexamples, and explicit legacy dispatch."""
+"""Real registered handlers and reachable counterexamples."""
 
 from dataclasses import replace
-from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
 from app.modules.checkers.api import ExpectedPostSubmitContext
-from app.modules.checkers.api.post_submit_catalogue import LEGACY_IMPLEMENTATION_VERSION
 from app.modules.checkers.post_submit_implementations import (
     bounded_structural_result,
-    check_modern_policy_context,
     detached_checker_context,
     evaluate_registered_structural_member,
 )
-from app.modules.checkers.runner import CheckerContext, CheckerOutcome, default_checker_registry
+from app.modules.checkers.runner import (
+    check_policy_context_present,
+    CheckerOutcome,
+    default_checker_registry,
+)
 from tests.checkers.post_submit.support import change_request, request
 
 CASES = (
@@ -57,7 +58,7 @@ def damaged_input(source, name):
 async def test_structural_conformance(name, code, status):
     registry = default_checker_registry()
     source = request()
-    definition = source.catalogue.definition(name, "v0.2")
+    definition = source.catalogue.definition(name, "v0.1")
     control = await evaluate_registered_structural_member(registry, definition, source)
     assert (control.status, control.code, control.severity, control.failure_category) == (
         "passed",
@@ -80,7 +81,7 @@ async def test_structural_conformance(name, code, status):
 
 @pytest.mark.parametrize("field", tuple(ExpectedPostSubmitContext.model_fields))
 @pytest.mark.parametrize("kind", ("missing", "crossed"))
-async def test_modern_policy_context_without_payment(field, kind):
+async def test_current_policy_context_without_payment(field, kind):
     source = request()
     data = source.structural_input.model_dump()
     old = data["observed_context"][field]
@@ -95,7 +96,7 @@ async def test_modern_policy_context_without_payment(field, kind):
         )
     data["observed_context"][field] = replacement
     changed = change_request(source, structural_input=data)
-    definition = source.catalogue.definition("check_policy_context_present", "v0.2")
+    definition = source.catalogue.definition("check_policy_context_present", "v0.1")
     registry = default_checker_registry()
     assert (
         await evaluate_registered_structural_member(registry, definition, source)
@@ -105,44 +106,13 @@ async def test_modern_policy_context_without_payment(field, kind):
     assert result.status == "failed"
 
 
-async def test_legacy_name_only_execution_stays_on_exact_old_handler():
-    fields = (
-        "locked_guide_version",
-        "locked_post_submit_checker_policy_id",
-        "locked_post_submit_checker_policy_version",
-        "locked_post_submit_checker_policy_hash",
-        "locked_review_policy_id",
-        "locked_review_policy_generation",
-        "locked_review_policy_hash",
-        "locked_revision_policy_id",
-        "locked_revision_policy_generation",
-        "locked_revision_policy_hash",
-        "locked_payment_policy_version",
-        "locked_guide_source_snapshot_id",
-        "locked_guide_source_snapshot_hash",
-        "locked_effective_project_submission_artifact_policy_id",
-        "locked_effective_project_submission_artifact_policy_hash",
-        "locked_pre_submit_checker_policy_id",
-        "locked_pre_submit_checker_bundle_hash",
+async def test_registry_executes_canonical_entries_with_current_context():
+    source = request()
+    outcomes = await default_checker_registry().run(
+        detached_checker_context(source), source.policy.entries
     )
-    submission = SimpleNamespace(**dict.fromkeys(fields, "v1"))
-    context = CheckerContext(
-        task=None,
-        submission=submission,
-        required_checker_names=frozenset(),
-        warning_checker_names=frozenset(),
-        blocking_severities=frozenset(),
-    )
-    registry = default_checker_registry()
-    assert (await registry.run(context, ["check_policy_context_present"]))[0].status == "passed"
-    submission.locked_payment_policy_version = None
-    result = (await registry.run(context, ["check_policy_context_present"]))[0]
-    assert result.status == "failed"
-    assert result.metadata["missing_context"] == ["locked_payment_policy_version"]
-    assert (
-        registry.resolve("check_policy_context_present", LEGACY_IMPLEMENTATION_VERSION).definition
-        is None
-    )
+    assert [item.checker_name for item in outcomes] == source.policy.execution_checkers
+    assert all(item.status == "passed" for item in outcomes)
 
 
 async def test_presence_check_does_not_claim_substantive_quality():
@@ -154,7 +124,7 @@ async def test_presence_check_does_not_claim_substantive_quality():
             "summary": "An incorrect analysis with unsupported conclusions.",
         },
     )
-    definition = source.catalogue.definition("check_acceptance_criteria_present", "v0.2")
+    definition = source.catalogue.definition("check_acceptance_criteria_present", "v0.1")
     result = await evaluate_registered_structural_member(
         default_checker_registry(), definition, changed
     )
@@ -177,20 +147,18 @@ def test_bounded_result_rejects_malformed_handler_output(mutation):
         bounded_structural_result(definition, CheckerOutcome(**values))
 
 
-async def test_modern_handler_requires_detached_input_and_definitions_are_exact():
+async def test_context_handler_requires_observed_input_and_definitions_are_exact():
     source = request()
     context = detached_checker_context(source)
-    context = replace(context, detached_input=None)
-    with pytest.raises(ValueError, match="requires detached"):
-        await check_modern_policy_context(context)
+    context = replace(context, observed_context=None)
+    with pytest.raises(ValueError, match="requires expected and observed"):
+        await check_policy_context_present(context)
     definition = source.catalogue.definitions[0].model_copy(update={"state": "disabled"})
     with pytest.raises(ValueError, match="definition mismatch"):
         await evaluate_registered_structural_member(default_checker_registry(), definition, source)
     registry = default_checker_registry()
-    key = (source.catalogue.definitions[0].capability_id, LEGACY_IMPLEMENTATION_VERSION)
-    registry._checkers[key] = registry._checkers[
-        ("check_required_files", LEGACY_IMPLEMENTATION_VERSION)
-    ]
+    key = source.catalogue.definitions[0].capability_id
+    registry._checkers[key] = registry._checkers["check_required_files"]
     with pytest.raises(ValueError, match="installed definition mismatch"):
         await evaluate_registered_structural_member(
             registry, source.catalogue.definitions[0], source
@@ -216,15 +184,13 @@ async def test_additional_claim_specific_failures_reach_handlers(damage):
             data["manifest"] = ()
     changed = change_request(source, structural_input=data)
     result = await evaluate_registered_structural_member(
-        default_checker_registry(), source.catalogue.definition(name, "v0.2"), changed
+        default_checker_registry(), source.catalogue.definition(name, "v0.1"), changed
     )
     assert result.code == code
 
 
-@pytest.mark.parametrize("alias,legacy_status", (
-    ("./report.txt", "passed"), (".\\report.txt", "passed"), (" report.txt ", "failed"),
-))
-async def test_modern_normalized_duplicates_preserve_source_and_legacy(alias, legacy_status):
+@pytest.mark.parametrize("alias", ("./report.txt", ".\\report.txt", " report.txt "))
+async def test_normalized_duplicates_preserve_immutable_source(alias):
     source = request()
     data = source.structural_input.model_dump()
     entry = data["manifest"][0]
@@ -232,24 +198,10 @@ async def test_modern_normalized_duplicates_preserve_source_and_legacy(alias, le
     changed = change_request(source, structural_input=data)
     original = changed.model_dump_json()
     registry = default_checker_registry()
-    definition = changed.catalogue.definition("check_evidence_integrity", "v0.2")
+    definition = changed.catalogue.definition("check_evidence_integrity", "v0.1")
     outcome = await evaluate_registered_structural_member(registry, definition, changed)
     assert (outcome.status, outcome.code) == ("failed", "evidence_structure_invalid")
     assert changed.model_dump_json() == original
-
-    # Historical name-only execution receives the original, unnormalized packet.
-    context = detached_checker_context(changed)
-    legacy = replace(context, submission=replace(
-        context.submission,
-        artifact_hash_manifest=[item.model_dump() for item in changed.structural_input.manifest],
-    ))
-    assert (await registry.run(legacy, ["check_evidence_integrity"]))[0].status == legacy_status
-
-
-async def test_detached_input_cannot_impersonate_legacy_locked_context():
-    context = detached_checker_context(request())
-    with pytest.raises(ValueError, match="legacy checker requires locked policy context"):
-        await default_checker_registry().run(context, ["check_policy_context_present"])
 
 
 @pytest.mark.parametrize("path", ("../report.txt", "/report.txt", "./"))
@@ -261,17 +213,20 @@ async def test_invalid_copied_paths_reach_registered_failure(path):
     original = changed.model_dump_json()
     outcome = await evaluate_registered_structural_member(
         default_checker_registry(),
-        changed.catalogue.definition("check_evidence_integrity", "v0.2"),
+        changed.catalogue.definition("check_evidence_integrity", "v0.1"),
         changed,
     )
     assert (outcome.status, outcome.code) == ("failed", "evidence_structure_invalid")
     assert changed.model_dump_json() == original
 
 
-@pytest.mark.parametrize("uri,expected", (
-    ("./report.txt", "report.txt"),
-    ("https://example.com/proof", "https://example.com/proof"),
-))
+@pytest.mark.parametrize(
+    "uri,expected",
+    (
+        ("./report.txt", "report.txt"),
+        ("https://example.com/proof", "https://example.com/proof"),
+    ),
+)
 def test_copied_evidence_paths_preserve_external_uri_identity(uri, expected):
     source = request()
     data = source.structural_input.model_dump()
@@ -279,3 +234,22 @@ def test_copied_evidence_paths_preserve_external_uri_identity(uri, expected):
     changed = change_request(source, structural_input=data)
     assert detached_checker_context(changed).submission.evidence_items[0].uri == expected
     assert changed.structural_input.evidence[0].uri == uri
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "payment_policy_version",
+        "compilation_id",
+        "compilation_result_hash",
+        "contribution_policy_version_id",
+        "guide_id",
+        "project_id",
+    ),
+)
+def test_context_rejects_unsupported_or_fabricated_observations(field):
+    from app.modules.checkers.api import ObservedPostSubmitContext
+
+    values = request().structural_input.observed_context.model_dump()
+    with pytest.raises(ValueError, match="Extra inputs"):
+        ObservedPostSubmitContext.model_validate({**values, field: uuid4()})

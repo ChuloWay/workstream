@@ -15,7 +15,7 @@ from app.modules.checkers.api.post_submit_catalogue import PostSubmitCatalogue, 
 from app.modules.checkers.post_submit_catalogue import build_post_submit_catalogue
 from app.modules.checkers.post_submit_contracts import make_post_submit_request
 from app.modules.checkers.runner import default_checker_registry
-from app.modules.projects.post_submit_policy import compile_post_submit_policy_v2
+from app.modules.projects.post_submit_policy import build_project_post_submit_checker_spec, compile_project_post_submit_checker_spec
 
 HASH = "sha256:" + "a" * 64
 OTHER_HASH = "sha256:" + "b" * 64
@@ -38,12 +38,14 @@ def altered_catalogue(original=None, *, index=8, **changes):
 
 def request(*, snapshot=None, project_id=PROJECT):
     snapshot = snapshot or catalogue()
-    policy = compile_post_submit_policy_v2(
-        project_id=project_id,
-        guide_version="v1",
-        catalogue=snapshot,
-        required_checkers=("check_acceptance_criteria_present",),
+    policy = compile_project_post_submit_checker_spec(
+        project_id=str(project_id), guide_version="v1",
+        spec=build_project_post_submit_checker_spec(
+            project_id=str(project_id), guide_version="v1",
+            required_checkers=["check_acceptance_criteria_present"],
+        ),
     )
+    policy.validate_catalogue(snapshot)
     fields = {}
     for name in ExpectedPostSubmitContext.model_fields:
         if name.endswith("_id"):
@@ -54,7 +56,7 @@ def request(*, snapshot=None, project_id=PROJECT):
             fields[name] = 1
         else:
             fields[name] = HASH
-    fields.update(project_id=project_id, post_policy_hash=policy.policy_hash)
+    fields.update(post_policy_hash=policy.policy_hash)
     expected = ExpectedPostSubmitContext(**fields)
     data = PostSubmissionStructuralInput(
         summary="Delivered the documented result with supporting evidence.",

@@ -20,12 +20,11 @@ GuideVersion = Annotated[StrictStr, Field(min_length=1, max_length=50, pattern=r
 ResourceId = Annotated[UUID, Field(strict=True)]
 ByteCount = Annotated[StrictInt, Field(ge=0, le=9_223_372_036_854_775_807)]
 Severity = Literal["info", "low", "medium", "high", "critical"]
-LEGACY_IMPLEMENTATION_VERSION = "workstream-structural-v1"
-MODERN_CONTEXT_IMPLEMENTATION_VERSION = "workstream-policy-context-v2"
-POST_SUBMIT_COMPILER_V2 = "workstream-post-submit-compiler-v0.2"
+POST_SUBMIT_IMPLEMENTATION_ID = "workstream-structural"
+POST_SUBMIT_COMPILER_ID = "workstream-post-submit-compiler"
 POST_SUBMIT_CATALOGUE_ID = "workstream.post_submission_checkers"
-POST_SUBMIT_CATALOGUE_SCHEMA_V2 = "post_submission_checker_capability_projection.v2"
-POST_SUBMIT_POLICY_SCHEMA_V2 = "post_submit_checker_policy.v2"
+POST_SUBMIT_CATALOGUE_SCHEMA = "post_submission_checker_capability_projection"
+POST_SUBMIT_POLICY_SCHEMA = "post_submit_checker_policy"
 
 
 class PostSubmitValue(BaseModel):
@@ -65,7 +64,7 @@ class PostSubmitDefinition(PostSubmitValue):
     """Registered implementation metadata, never a callable or authority grant."""
 
     capability_id: Identifier
-    capability_version: Literal["v0.2"] = "v0.2"
+    capability_version: Literal["v0.1"] = "v0.1"
     implementation_version: Identifier
     stage: Literal["post_submit"] = "post_submit"
     platform_default: StrictBool
@@ -73,11 +72,11 @@ class PostSubmitDefinition(PostSubmitValue):
     state: Literal["enabled", "disabled"] = "enabled"
     disabled_behavior: Literal["unavailable"] = "unavailable"
     execution_method: Literal["deterministic"] = "deterministic"
-    configuration_schema: Literal["post_submit_empty_configuration.v1"] = (
-        "post_submit_empty_configuration.v1"
+    configuration_schema: Literal["post_submit_empty_configuration"] = (
+        "post_submit_empty_configuration"
     )
-    input_schema: Literal["post_submit_structural_input.v1"] = "post_submit_structural_input.v1"
-    result_schema: Literal["post_submit_structural_result.v1"] = "post_submit_structural_result.v1"
+    input_schema: Literal["post_submit_structural_input"] = "post_submit_structural_input"
+    result_schema: Literal["post_submit_structural_result"] = "post_submit_structural_result"
     order: Annotated[StrictInt, Field(ge=1, le=9)]
     dependencies: tuple[Identifier, ...] = Field(default=(), max_length=8)
     supported_claim: Literal[
@@ -132,9 +131,9 @@ class PostSubmitCatalogue(PostSubmitValue):
     """A canonical frozen snapshot; its hash proves identity, not installation."""
 
     catalogue_id: Literal["workstream.post_submission_checkers"] = POST_SUBMIT_CATALOGUE_ID
-    source_version: Literal["v0.2"] = "v0.2"
-    schema_version: Literal["post_submission_checker_capability_projection.v2"] = (
-        POST_SUBMIT_CATALOGUE_SCHEMA_V2
+    source_version: Literal["v0.1"] = "v0.1"
+    schema_version: Literal["post_submission_checker_capability_projection"] = (
+        POST_SUBMIT_CATALOGUE_SCHEMA
     )
     definitions: tuple[PostSubmitDefinition, ...] = Field(min_length=1, max_length=9)
     manifest_sha256: Sha256
@@ -175,23 +174,23 @@ class PostSubmitPolicyEntry(PostSubmitValue):
     """One ordered compiled entry pinned to an exact registered implementation."""
 
     checker_id: Identifier
-    definition_version: Literal["v0.2"]
+    definition_version: Literal["v0.1"]
     implementation_version: Identifier
     classification: Literal["platform_default", "project_required", "project_warning"]
     configuration: EmptyPostSubmitConfiguration
 
 
-class CompiledPostSubmitPolicyV2(PostSubmitValue):
+class CompiledPostSubmitPolicy(PostSubmitValue):
     """Canonical policy body; its existing policy_hash remains the only plan hash."""
 
-    schema_version: Literal["post_submit_checker_policy.v2"] = POST_SUBMIT_POLICY_SCHEMA_V2
-    compiler_version: Literal["workstream-post-submit-compiler-v0.2"] = POST_SUBMIT_COMPILER_V2
+    schema_version: Literal["post_submit_checker_policy"] = POST_SUBMIT_POLICY_SCHEMA
+    compiler_version: Literal["workstream-post-submit-compiler"] = POST_SUBMIT_COMPILER_ID
     project_id: ResourceId
     guide_version: GuideVersion
     catalogue_id: Literal["workstream.post_submission_checkers"] = POST_SUBMIT_CATALOGUE_ID
-    catalogue_source_version: Literal["v0.2"] = "v0.2"
-    catalogue_schema_version: Literal["post_submission_checker_capability_projection.v2"] = (
-        POST_SUBMIT_CATALOGUE_SCHEMA_V2
+    catalogue_source_version: Literal["v0.1"] = "v0.1"
+    catalogue_schema_version: Literal["post_submission_checker_capability_projection"] = (
+        POST_SUBMIT_CATALOGUE_SCHEMA
     )
     catalogue_manifest_sha256: Sha256
     entries: tuple[PostSubmitPolicyEntry, ...] = Field(min_length=1, max_length=9)
@@ -213,9 +212,55 @@ class CompiledPostSubmitPolicyV2(PostSubmitValue):
         """Hash the canonical body without adding a second persisted hash field."""
         return canonical_json_hash(self.model_dump(mode="json"))
 
+    @property
+    def policy_body(self) -> dict:
+        """Return the one serialized policy representation."""
+        return self.model_dump(mode="json")
+
+    @property
+    def default_checkers(self) -> list[str]:
+        """Derive mandatory entries from the canonical policy."""
+        return [
+            entry.checker_id for entry in self.entries if entry.classification == "platform_default"
+        ]
+
+    @property
+    def required_checkers(self) -> list[str]:
+        """Derive project-required entries from the canonical policy."""
+        return [
+            entry.checker_id for entry in self.entries if entry.classification == "project_required"
+        ]
+
+    @property
+    def warning_checkers(self) -> list[str]:
+        """Derive advisory project entries from the canonical policy."""
+        return [
+            entry.checker_id for entry in self.entries if entry.classification == "project_warning"
+        ]
+
+    @property
+    def execution_checkers(self) -> list[str]:
+        """Derive execution order without another stored plan."""
+        return [entry.checker_id for entry in self.entries]
+
+    def validate_sidecars(
+        self,
+        *,
+        required_checkers: list[str],
+        warning_checkers: list[str],
+        blocking_severities: list[str],
+    ) -> None:
+        """Reject persisted policy summaries that disagree with the canonical body."""
+        if (
+            required_checkers != self.required_checkers
+            or warning_checkers != self.warning_checkers
+            or blocking_severities != list(self.blocking_severities)
+        ):
+            raise ValueError("post-submit policy summaries disagree with canonical body")
+
     def validate_catalogue(self, catalogue: PostSubmitCatalogue) -> None:
         """Validate exact pinned members, defaults, configuration and ordering."""
-        self = CompiledPostSubmitPolicyV2.model_validate(self)
+        self = CompiledPostSubmitPolicy.model_validate(self)
         catalogue = PostSubmitCatalogue.model_validate(catalogue)
         if self.catalogue_manifest_sha256 != catalogue.manifest_sha256:
             raise ValueError("post-submit policy catalogue hash mismatch")
@@ -251,3 +296,83 @@ def canonical_post_submit_bytes(
         ensure_ascii=False,
         allow_nan=False,
     ).encode("utf-8")
+
+
+_STRUCTURAL_DEFINITIONS = (
+    ("check_submission_packet", "packet_presence", "packet_fields_missing", "submission_structure"),
+    (
+        "check_policy_context_present",
+        "policy_context_consistency",
+        "policy_context_invalid",
+        "task_configuration",
+    ),
+    ("check_evidence_present", "evidence_presence", "evidence_missing", "submission_structure"),
+    (
+        "check_evidence_integrity",
+        "evidence_structure",
+        "evidence_structure_invalid",
+        "submission_structure",
+    ),
+    (
+        "check_required_files",
+        "required_path_presence",
+        "required_files_missing",
+        "submission_structure",
+    ),
+    (
+        "check_forbidden_files",
+        "forbidden_path_detection",
+        "forbidden_path_present",
+        "submission_structure",
+    ),
+    (
+        "check_confidentiality_attestation",
+        "attestation_presence",
+        "attestation_missing",
+        "submission_structure",
+    ),
+    (
+        "check_low_quality_generated_artifacts",
+        "placeholder_signal_detection",
+        "placeholder_signal",
+        "submission_structure",
+    ),
+    (
+        "check_acceptance_criteria_present",
+        "criteria_presence",
+        "acceptance_criteria_missing",
+        "task_configuration",
+    ),
+)
+
+
+def structural_definition(name: str) -> PostSubmitDefinition:
+    """Mint the code-owned metadata attached to an explicit registration entry."""
+    for order, (checker_id, claim, failure, category) in enumerate(_STRUCTURAL_DEFINITIONS, 1):
+        if checker_id == name:
+            warning = name == "check_low_quality_generated_artifacts"
+            return PostSubmitDefinition(
+                capability_id=name,
+                implementation_version=POST_SUBMIT_IMPLEMENTATION_ID,
+                platform_default=order <= 8,
+                selectable=order == 9,
+                order=order,
+                supported_claim=claim,
+                failure_code=failure,
+                failure_category=category,
+                failure_status="warning" if warning else "failed",
+                failure_severity="medium" if warning else "high",
+            )
+    raise ValueError("unknown structural post-submit definition")
+
+
+def current_post_submit_catalogue() -> PostSubmitCatalogue:
+    """Return code-owned immutable metadata, without execution authority."""
+    definitions = tuple(structural_definition(row[0]) for row in _STRUCTURAL_DEFINITIONS)
+    body = {
+        "catalogue_id": POST_SUBMIT_CATALOGUE_ID,
+        "source_version": "v0.1",
+        "schema_version": POST_SUBMIT_CATALOGUE_SCHEMA,
+        "definitions": [item.model_dump(mode="json") for item in definitions],
+    }
+    return PostSubmitCatalogue(**body, manifest_sha256=canonical_json_hash(body))

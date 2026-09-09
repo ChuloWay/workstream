@@ -6,12 +6,12 @@ for current product capability.
 
 | Initiative | Durable disposition | Next usable boundary |
 |---|---|---|
-| [WS-ARCH-001](initiatives/WS-ARCH-001/OVERVIEW.md) | Planned | ARCH-04A contracts/conformance delivered; POL-04B live unified setup through POL-07; CP06/CP07 and AUTH-12H connect guide activation afterward |
+| [WS-ARCH-001](initiatives/WS-ARCH-001/OVERVIEW.md) | Planned | Canonical ARCH-04A delivered; POL-04B through POL-07 connect unified setup and approvals; CP06/CP07 and AUTH-12H connect guide activation afterward |
 | [WS-ART-001](initiatives/WS-ART-001/OVERVIEW.md) | Planned | Exact post-submit materialization after guide/checker contracts |
 | [WS-AUTH-001](initiatives/WS-AUTH-001/OVERVIEW.md) | Planned | Unavailable shared-dispatcher contracts after delivered CP05; POL-04B consumes completed finalization authority after catalogue reconciliation |
 | [WS-CON-001](initiatives/WS-CON-001/OVERVIEW.md) | Planned | CP06 selected-policy validation, then guide-activation persistence |
 | [WS-AUTH-003](initiatives/WS-AUTH-003/OVERVIEW.md) | Planned | Repair touched capabilities through `authorization.api` |
-| [WS-POL-003](initiatives/WS-POL-003/OVERVIEW.md) | Planned | ReviewPolicy setting and ARCH-04A catalogue/schema foundation delivered; POL-04B live unified setup next |
+| [WS-POL-003](initiatives/WS-POL-003/OVERVIEW.md) | Planned | ReviewPolicy setting and canonical ARCH-04A delivered; POL-04B connects unified setup and deletes superseded inference implementations |
 | [WS-REV-001](initiatives/WS-REV-001/OVERVIEW.md) | Planned | Shared acceptance/source and existing fence foundations; human hidden review work remains independently dependency-gated |
 | [WS-QUAL-002](initiatives/WS-QUAL-002/OVERVIEW.md) | Planned | Populate subsystem ownership before changed-line mutation work |
 | [WS-QUAL-003](initiatives/WS-QUAL-003/OVERVIEW.md) | Planned | Audit and prune test proof, add missing safety cases, decompose oversized test modules |

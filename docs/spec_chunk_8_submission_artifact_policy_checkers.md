@@ -190,12 +190,10 @@ This checker does not prove the claim is true. It only ensures the worker made t
 
 Warns when summary, artifact names, artifact notes, or evidence labels contain obvious placeholder/generated-output signals.
 
-Under the currently active v1 policy, the checker is warning-only by default.
-When a project explicitly lists it in
-required post-submit checkers, matching low-quality signals become
-worker-fixable blocking failures and route the task to `needs_revision`.
-The hidden v2 contract keeps this default mandatory, advisory and nonselectable;
-only `check_acceptance_criteria_present` is selectable.
+This mandatory default emits an advisory medium-severity warning. The project
+cannot reclassify or remove it. An explicitly stricter locked blocking-severity
+policy can require contributor revision for its warning. The sole selectable
+structural addition is `check_acceptance_criteria_present`.
 
 Default warning patterns:
 
@@ -208,11 +206,9 @@ Default warning patterns:
 - `as an ai language model`
 
 The raw structural detector emits `status = warning` when it finds a signal.
-Under active v1 policy, that remains non-blocking by default. When the checker
-is explicitly required, the existing policy application promotes the result
-to `failed` with `high` severity, blocks review, and routes the task to
-`needs_revision`. No separate checker is needed for that existing v1 behavior.
-The hidden v2 contract described above retains its mandatory advisory default.
+Policy application determines whether the locked blocking severities require
+revision. This remains structural signal detection, not substantive quality
+judgment, and uses one current implementation.
 
 ## Pre-Submit Versus Durable Runs
 

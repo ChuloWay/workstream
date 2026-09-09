@@ -102,3 +102,72 @@ def test_real_api_drill_provisions_exact_guide_artifact_pipeline_services() -> N
         "workstream.artifact.guide_reader",
         "workstream.project.setup",
     )
+
+
+@pytest.mark.parametrize(
+    "selected",
+    [None, [], ["check_acceptance_criteria_present"], ["check_policy_context_present"]],
+)
+@pytest.mark.parametrize("severity_floor", [None, ["critical", "high", "medium"]])
+async def test_api_drill_seeds_one_canonical_post_submit_policy(
+    monkeypatch, selected, severity_floor,
+) -> None:
+    """The real drill compiler accepts additions but cannot reclassify defaults."""
+    from contextlib import asynccontextmanager
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+    from uuid import uuid4
+
+    from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPolicy
+    from app.modules.projects.post_submit_policy import PostSubmitCheckerCompilerError
+
+    api_contract = MODULES[0]
+    setup = SimpleNamespace()
+    pre = SimpleNamespace(id=str(uuid4()), compiled_bundle_hash="sha256:" + "a" * 64)
+    session = SimpleNamespace(
+        scalar=AsyncMock(side_effect=[pre, setup]), add=Mock(), commit=AsyncMock(),
+    )
+
+    @asynccontextmanager
+    async def session_factory():
+        yield session
+
+    monkeypatch.setattr(api_contract.db_session, "get_session_factory", lambda: session_factory)
+    payload = dict(
+        project_id=str(uuid4()), guide_id=str(uuid4()), manager_subject="manager",
+        source_snapshot={"id": str(uuid4()), "bundle_hash": "sha256:" + "b" * 64},
+        sufficiency_report={"id": str(uuid4())}, submission_artifact_policy={"id": str(uuid4())},
+        effective_policy={
+            "id": str(uuid4()), "guide_version": "v1", "effective_policy_hash": "sha256:" + "c" * 64,
+        },
+    )
+    if severity_floor is not None:
+        payload["blocking_severities"] = severity_floor
+    if selected is not None:
+        payload["required_checkers"] = selected
+    if selected == ["check_policy_context_present"]:
+        with pytest.raises(PostSubmitCheckerCompilerError, match="project selection is unavailable"):
+            await api_contract.create_approved_post_submit_policy_ci_bridge(**payload)
+        session.scalar.assert_not_awaited()
+        session.add.assert_not_called()
+        session.commit.assert_not_awaited()
+        return
+
+    result = await api_contract.create_approved_post_submit_policy_ci_bridge(**payload)
+    session.add.assert_called_once()
+    policy = session.add.call_args.args[0]
+    parsed = CompiledPostSubmitPolicy.model_validate_json(json.dumps(policy.policy_body))
+    assert policy.required_checkers == ([] if selected is None else selected)
+    assert policy.blocking_severities == (
+        ["critical", "high"] if severity_floor is None else severity_floor
+    )
+    parsed.validate_sidecars(
+        required_checkers=policy.required_checkers, warning_checkers=policy.warning_checkers,
+        blocking_severities=policy.blocking_severities,
+    )
+    assert set(parsed.default_checkers) == api_contract.EXPECTED_DURABLE_CHECKERS
+    assert result == {"id": policy.id, "policy_hash": parsed.policy_hash}
+    assert setup.output_post_submit_checker_policy_id == policy.id
+    assert setup.post_submit_derivation_summary["required_checkers"] == policy.required_checkers
+    session.commit.assert_awaited_once()

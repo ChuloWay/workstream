@@ -150,8 +150,8 @@ submission evaluation must use the locked compiled policy; it must never ask an
 agent to judge a contributor submission.
 
 Select only checker names present in registered_checker_catalog. Default
-durable checkers are platform-owned and always run; do not repeat them unless a
-project-specific reason needs to emphasize them. If the guide requires a check
+durable checkers are platform-owned and always run; never repeat them in
+required_checkers or warning_checkers. Select only project-selectable additions. If the guide requires a check
 that is not registered, report it under unsupported_required_checks instead of
 inventing a checker name.
 

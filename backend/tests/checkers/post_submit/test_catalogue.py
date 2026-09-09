@@ -1,4 +1,4 @@
-"""Registry installation, identity, and historical version-selection proof."""
+"""Registry installation, identity, and single-handler installation proof."""
 
 from dataclasses import replace
 
@@ -7,14 +7,12 @@ from pydantic import ValidationError
 
 from app.core.hashing import canonical_json_hash
 from app.modules.checkers.api.post_submit_catalogue import (
-    LEGACY_IMPLEMENTATION_VERSION,
-    MODERN_CONTEXT_IMPLEMENTATION_VERSION,
+    structural_definition,
     PostSubmitCatalogue,
     PostSubmitDefinition,
 )
 from app.modules.checkers.post_submit_catalogue import (
     build_post_submit_catalogue,
-    structural_definition,
 )
 from app.modules.checkers.runner import (
     CheckerNameConflict,
@@ -27,31 +25,31 @@ from app.modules.checkers.runner import (
 from tests.checkers.post_submit.support import altered_catalogue, catalogue
 
 
-def test_catalogue_matches_registered_versions():
+def test_catalogue_matches_exactly_one_registered_handler_per_id():
     registry = default_checker_registry()
     snapshot = build_post_submit_catalogue(registry)
     assert len(snapshot.definitions) == 9
-    assert len(registry._checkers) == 10
+    assert len(registry._checkers) == 9
     for definition in snapshot.definitions:
-        entry = registry.resolve(definition.capability_id, definition.implementation_version)
+        entry = registry.resolve(definition.capability_id)
         assert entry.definition == definition
         assert entry.checker.name == definition.capability_id
-    legacy = registry.resolve("check_policy_context_present", LEGACY_IMPLEMENTATION_VERSION)
-    modern = registry.resolve("check_policy_context_present", MODERN_CONTEXT_IMPLEMENTATION_VERSION)
-    assert legacy.checker._handler is check_policy_context_present
-    assert modern.checker._handler is not check_policy_context_present
-    assert legacy.definition is None
-    assert modern.definition in snapshot.definitions
+    entry = registry.resolve("check_policy_context_present")
+    assert entry.checker._handler is check_policy_context_present
+    assert entry.definition in snapshot.definitions
     assert registry.names() == {item.capability_id for item in snapshot.definitions}
 
 
 @pytest.mark.parametrize("damage", ("missing", "version", "identity"))
 def test_catalogue_rejects_uninstalled_or_mismatched_handler(damage):
     registry = default_checker_registry()
-    key = ("check_submission_packet", LEGACY_IMPLEMENTATION_VERSION)
+    key = "check_submission_packet"
     entry = registry._checkers.pop(key)
     if damage == "version":
-        registry._checkers[(key[0], "wrong-version")] = entry
+        registry._checkers[key] = replace(
+            entry,
+            definition=entry.definition.model_copy(update={"implementation_version": "wrong"}),
+        )
     elif damage == "identity":
         registry._checkers[key] = replace(
             entry, checker=FunctionChecker("other", entry.checker._handler)
@@ -62,12 +60,12 @@ def test_catalogue_rejects_uninstalled_or_mismatched_handler(damage):
 
 def test_registry_rejects_duplicates_and_metadata_substitution():
     registry = default_checker_registry()
-    checker = registry.resolve("check_submission_packet", LEGACY_IMPLEMENTATION_VERSION).checker
+    checker = registry.resolve("check_submission_packet").checker
     with pytest.raises(CheckerNameConflict, match="already registered"):
-        registry.register(checker)
+        registry.register(checker, definition=structural_definition(checker.name))
     with pytest.raises(ValueError, match="definition mismatch"):
-        CheckerRegistry().register_versioned(
-            checker, "wrong-version", definition=structural_definition(checker.name)
+        CheckerRegistry().register(
+            checker, definition=structural_definition("check_required_files")
         )
     with pytest.raises(UnknownChecker, match="unregistered checker policy names"):
         registry.require_registered({"missing"})

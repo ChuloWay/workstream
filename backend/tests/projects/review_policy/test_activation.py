@@ -5,7 +5,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.modules.projects import service as service_module
 from app.modules.projects.policy_lineage import (
     ReviewPolicySemantics,
     RevisionPolicySemantics,
@@ -37,16 +36,6 @@ def test_current_validator_accepts_true_then_rejects_valid_false(monkeypatch, fo
         service,
         "_merge_effective_submission_artifact_policy",
         lambda _: deepcopy(bundle["effective_policy"].effective_policy),
-    )
-    monkeypatch.setattr(
-        service_module,
-        "parse_locked_post_submit_checker_policy_body",
-        lambda *_, **__: SimpleNamespace(
-            required_checkers=["archive_safety"],
-            warning_checkers=[],
-            blocking_severities=["error"],
-            execution_checkers=[],
-        ),
     )
     # The complete-policy validator remains real for both the positive and negative.
     service.validate_activation_ready(**bundle)
