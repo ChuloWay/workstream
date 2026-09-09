@@ -954,6 +954,23 @@ async def exercise_guide_setup_contract(
     if task_fixture:
         # Only the separately identified task guide is fixture-owned. Canonical
         # projections supply source custody; the live finalizer is never bypassed.
+        # Manual policy approval requires its separate diagnostic report. The task
+        # fixture's activation still uses the authoritative unified projection and
+        # its exact ART usages; neither report is relabelled or overwritten.
+        await request_json(
+            client,
+            "POST",
+            f"/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports",
+            diagnostic_reader_token,
+            {
+                "source_snapshot_id": snapshot["id"],
+                "status": "passed",
+                "findings": [],
+                "summary": "Manual diagnostic prerequisite for the isolated task fixture.",
+            },
+            expected_status=201,
+            idempotency_key=str(uuid4()),
+        )
         outputs = await project_unfinalized_task_fixture(delivery)
         setup_run = {**queued_setup, **outputs}
     else:
@@ -979,8 +996,11 @@ async def exercise_guide_setup_contract(
         diagnostic_reader_token,
     )
     ensure(isinstance(reports, list), "sufficiency report list did not return a list")
-    ensure(len(reports) == 1, f"expected one sufficiency report, got {len(reports)}")
-    ensure(reports[0]["id"] == report["id"], "sufficiency report list returned wrong report")
+    ensure(len(reports) == (2 if task_fixture else 1), "unexpected sufficiency report count")
+    ensure(
+        report["id"] in {item["id"] for item in reports},
+        "sufficiency report list omitted canonical report",
+    )
     await request_json(
         client,
         "GET",
@@ -1179,23 +1199,6 @@ async def exercise_guide_setup_contract(
         )
         ensure(after == setup_run, "policy probes changed immutable live finalization")
         return {}
-    # Manual policy approval requires its separate diagnostic report. The task
-    # fixture's activation still uses the authoritative unified projection and
-    # its exact ART usages; neither report is relabelled or overwritten.
-    await request_json(
-        client,
-        "POST",
-        f"/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports",
-        diagnostic_reader_token,
-        {
-            "source_snapshot_id": snapshot["id"],
-            "status": "passed",
-            "findings": [],
-            "summary": "Manual diagnostic prerequisite for the isolated task fixture.",
-        },
-        expected_status=201,
-        idempotency_key=str(uuid4()),
-    )
     effective_policy = await request_json(
         client,
         "POST",
