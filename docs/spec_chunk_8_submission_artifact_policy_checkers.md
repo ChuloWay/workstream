@@ -190,9 +190,12 @@ This checker does not prove the claim is true. It only ensures the worker made t
 
 Warns when summary, artifact names, artifact notes, or evidence labels contain obvious placeholder/generated-output signals.
 
-The checker is warning-only by default. When a project explicitly lists it in
+Under the currently active v1 policy, the checker is warning-only by default.
+When a project explicitly lists it in
 required post-submit checkers, matching low-quality signals become
 worker-fixable blocking failures and route the task to `needs_revision`.
+The hidden v2 contract keeps this default mandatory, advisory and nonselectable;
+only `check_acceptance_criteria_present` is selectable.
 
 Default warning patterns:
 

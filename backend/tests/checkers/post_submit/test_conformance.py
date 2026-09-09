@@ -219,3 +219,63 @@ async def test_additional_claim_specific_failures_reach_handlers(damage):
         default_checker_registry(), source.catalogue.definition(name, "v0.2"), changed
     )
     assert result.code == code
+
+
+@pytest.mark.parametrize("alias,legacy_status", (
+    ("./report.txt", "passed"), (".\\report.txt", "passed"), (" report.txt ", "failed"),
+))
+async def test_modern_normalized_duplicates_preserve_source_and_legacy(alias, legacy_status):
+    source = request()
+    data = source.structural_input.model_dump()
+    entry = data["manifest"][0]
+    data["manifest"] = (entry, {**entry, "artifact": alias})
+    changed = change_request(source, structural_input=data)
+    original = changed.model_dump_json()
+    registry = default_checker_registry()
+    definition = changed.catalogue.definition("check_evidence_integrity", "v0.2")
+    outcome = await evaluate_registered_structural_member(registry, definition, changed)
+    assert (outcome.status, outcome.code) == ("failed", "evidence_structure_invalid")
+    assert changed.model_dump_json() == original
+
+    # Historical name-only execution receives the original, unnormalized packet.
+    context = detached_checker_context(changed)
+    legacy = replace(context, submission=replace(
+        context.submission,
+        artifact_hash_manifest=[item.model_dump() for item in changed.structural_input.manifest],
+    ))
+    assert (await registry.run(legacy, ["check_evidence_integrity"]))[0].status == legacy_status
+
+
+async def test_detached_input_cannot_impersonate_legacy_locked_context():
+    context = detached_checker_context(request())
+    with pytest.raises(ValueError, match="legacy checker requires locked policy context"):
+        await default_checker_registry().run(context, ["check_policy_context_present"])
+
+
+@pytest.mark.parametrize("path", ("../report.txt", "/report.txt", "./"))
+async def test_invalid_copied_paths_reach_registered_failure(path):
+    source = request()
+    data = source.structural_input.model_dump()
+    data["manifest"][0]["artifact"] = path
+    changed = change_request(source, structural_input=data)
+    original = changed.model_dump_json()
+    outcome = await evaluate_registered_structural_member(
+        default_checker_registry(),
+        changed.catalogue.definition("check_evidence_integrity", "v0.2"),
+        changed,
+    )
+    assert (outcome.status, outcome.code) == ("failed", "evidence_structure_invalid")
+    assert changed.model_dump_json() == original
+
+
+@pytest.mark.parametrize("uri,expected", (
+    ("./report.txt", "report.txt"),
+    ("https://example.com/proof", "https://example.com/proof"),
+))
+def test_copied_evidence_paths_preserve_external_uri_identity(uri, expected):
+    source = request()
+    data = source.structural_input.model_dump()
+    data["evidence"][0]["uri"] = uri
+    changed = change_request(source, structural_input=data)
+    assert detached_checker_context(changed).submission.evidence_items[0].uri == expected
+    assert changed.structural_input.evidence[0].uri == uri

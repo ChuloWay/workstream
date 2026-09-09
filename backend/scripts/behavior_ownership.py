@@ -89,6 +89,15 @@ MODULE_PUBLIC_API_FOUNDATION_TARGETS = frozenset(
         "backend/app/modules/tasks/api/submission_context.py",
     }
 )
+ARCH_04A_POST_SUBMIT_TARGETS = frozenset(
+    {
+        "backend/app/modules/checkers/api/post_submit.py",
+        "backend/app/modules/checkers/api/post_submit_catalogue.py",
+        "backend/app/modules/checkers/post_submit_catalogue.py",
+        "backend/app/modules/checkers/post_submit_contracts.py",
+        "backend/app/modules/checkers/post_submit_implementations.py",
+    }
+)
 ARCH_02F_SUBMISSION_COMPOSITION_TARGETS = frozenset(
     {
         "backend/app/modules/tasks/api/submission_command.py",
@@ -422,6 +431,7 @@ def _validate_additive_partition_transition(
         | ARCH_CP03B_ADAPTER_BINDING_AUTH_TARGETS
             | ARCH_CP04A_CONTRIBUTION_POLICY_TARGETS
             | ARCH_CP04B_CONTRIBUTION_POLICY_TARGETS
+        | ARCH_04A_POST_SUBMIT_TARGETS
         | ARCH_CP05_POLICY_AUTH_TARGETS
         | V01_BASELINE_ADDED_TARGETS
     )

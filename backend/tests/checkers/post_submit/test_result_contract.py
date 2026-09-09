@@ -196,3 +196,32 @@ def test_consumers_revalidate_unchecked_copies():
     forged_member = complete.member_results[0].model_copy(update={"severity": "high"})
     with pytest.raises(ValidationError, match="passing result shape"):
         forged_member.validate_catalogue(source.catalogue)
+
+
+def test_closed_result_shape_stays_below_declared_byte_ceilings():
+    from app.modules.checkers.api.post_submit_catalogue import (
+        PostSubmitResourceLimits, canonical_post_submit_bytes,
+    )
+
+    # Longest allowed ASCII identities, closed tokens, all four counters at their
+    # maximum, and nine members bound the complete JSON shape without free text.
+    member = PostSubmitMemberResult(
+        checker_id="x" * 100,
+        implementation_version="x" * 100,
+        status="warning",
+        code="acceptance_criteria_missing",
+        failure_category="submission_structure",
+        severity="critical",
+        counters=tuple(PostSubmitCounter(key=key, value=1024) for key in (
+            "artifact_count", "missing_count", "invalid_count", "matched_count",
+        )),
+    )
+    phase = result(request(), member_results=(member,) * 9, evaluation_generation=2_147_483_647)
+    assert len(canonical_post_submit_bytes(member)) == 607
+    assert len(canonical_post_submit_bytes(phase)) == 5972
+    assert len(canonical_post_submit_bytes(member)) < PostSubmitResourceLimits().maximum_result_bytes
+    assert len(canonical_post_submit_bytes(phase)) < 65536
+    with pytest.raises(ValidationError, match="100"):
+        PostSubmitMemberResult(**{**member.model_dump(), "checker_id": "x" * 101})
+    with pytest.raises(ValidationError, match="at most 9"):
+        result(request(), member_results=(member,) * 10)

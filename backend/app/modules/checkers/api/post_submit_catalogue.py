@@ -40,22 +40,22 @@ class EmptyPostSubmitConfiguration(PostSubmitValue):
 class PostSubmitResourceLimits(PostSubmitValue):
     """Code-owned input ceilings; deadline enforcement belongs to the executor."""
 
-    maximum_input_bytes: StrictInt = Field(default=1_048_576, ge=1, le=1_048_576)
-    maximum_result_bytes: StrictInt = Field(default=4096, ge=1, le=4096)
+    maximum_input_bytes: Literal[1_048_576] = 1_048_576
+    maximum_result_bytes: Literal[4096] = 4096
     maximum_results: Literal[1] = 1
     maximum_generated_output_bytes: Literal[0] = 0
-    deadline_ms: StrictInt = Field(default=5000, ge=1, le=5000)
-    phase_deadline_ms: StrictInt = Field(default=45000, ge=1, le=45000)
-    maximum_manifest_items: StrictInt = Field(default=1024, ge=1, le=1024)
-    maximum_evidence_items: StrictInt = Field(default=1024, ge=1, le=1024)
-    maximum_policy_items: StrictInt = Field(default=256, ge=1, le=256)
-    maximum_text_characters: StrictInt = Field(default=65536, ge=1, le=65536)
+    deadline_ms: Literal[5000] = 5000
+    phase_deadline_ms: Literal[45000] = 45000
+    maximum_manifest_items: Literal[1024] = 1024
+    maximum_evidence_items: Literal[1024] = 1024
+    maximum_policy_items: Literal[256] = 256
+    maximum_text_characters: Literal[65536] = 65536
 
     @model_validator(mode="before")
     @classmethod
-    def reject_boolean_limits(cls, value: object) -> object:
-        """Literal integer fields must not accept Python boolean equality."""
-        if isinstance(value, dict) and any(type(item) is bool for item in value.values()):
+    def reject_noninteger_limits(cls, value: object) -> object:
+        """Exact integer literals must reject boolean, float and string coercion."""
+        if isinstance(value, dict) and any(type(item) is not int for item in value.values()):
             raise ValueError("post-submit limits require integers")
         return value
 
@@ -111,6 +111,8 @@ class PostSubmitDefinition(PostSubmitValue):
     @model_validator(mode="after")
     def validate_classification(self) -> Self:
         """Require exactly one policy classification and consistent warning severity."""
+        if len(self.dependencies) != len(set(self.dependencies)):
+            raise ValueError("post-submit definition has duplicate dependencies")
         if self.platform_default == self.selectable:
             raise ValueError("post-submit definition classification is invalid")
         if (self.failure_status == "warning") != (self.failure_severity == "medium"):

@@ -221,8 +221,6 @@ class PostSubmitMemberResult(PostSubmitValue):
             raise ValueError("post-submit nonpassing result shape is invalid")
         if len({item.key for item in self.counters}) != len(self.counters):
             raise ValueError("post-submit result counters repeat")
-        if len(canonical_post_submit_bytes(self)) > 4096:
-            raise ValueError("post-submit member result capacity exceeded")
         return self
 
     def validate_catalogue(self, catalogue: PostSubmitCatalogue) -> None:
@@ -275,8 +273,6 @@ class PostSubmissionEvaluationResult(PostSubmitValue):
                 raise ValueError("post-submit completed result shape is invalid")
         elif self.member_results or self.infrastructure_failure_code is None:
             raise ValueError("post-submit infrastructure result shape is invalid")
-        if len(canonical_post_submit_bytes(self)) > 65536:
-            raise ValueError("post-submit phase result capacity exceeded")
         if self.result_digest != canonical_json_hash(
             self.model_dump(mode="json", exclude={"result_digest"})
         ):

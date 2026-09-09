@@ -144,7 +144,7 @@ approved `human_review` disposition remains valid without a checker binding.
 Exact `(checker_id, implementation_version)` registration preserves historical
 name-only execution at `workstream-structural-v1`. The current policy-context
 check uses `workstream-policy-context-v2`, compares detached expected/observed
-policy references, and has no PaymentPolicy prerequisite. It proves local
+policy references, and has no legacy economic-policy prerequisite. It proves local
 consistency, not stored ownership or authorization. The v2 compiled body pins
 the catalogue, definition, implementation and configuration identities in the
 existing canonical `policy_hash`; historical v1 bodies/hashes stay unchanged.
@@ -214,9 +214,12 @@ Ensures the contributor explicitly attests that the submission does not contain 
 
 Flags repeated low-quality generated patterns banned by project submission artifact policy, such as generic helper files, hidden-test leakage patterns, fabricated model files, placeholder evidence, or boilerplate reports that do not prove task-specific work.
 
-This checker produces warnings by default. If a project explicitly includes it
+Under the currently active v1 policy, this checker produces warnings by default.
+If a project explicitly includes it
 in required post-submit checkers, matching low-quality signals become
 contributor-fixable blocking failures and route the task to `needs_revision`.
+The hidden v2 contract keeps this default mandatory, advisory and nonselectable;
+only `check_acceptance_criteria_present` is selectable.
 
 Revision closure, task lifecycle movement, task readiness, and pre-review routing are enforced as lifecycle guards in v0.1. They must not be configured as checker policy names until a registered checker exists for that contract.
 
@@ -437,13 +440,15 @@ The compiler always includes the platform default durable checkers in
 - `check_confidentiality_attestation`
 - `check_low_quality_generated_artifacts`
 
-Default-only projects are valid. In that case, project-specific
+Under the currently active v1 compiler, default-only projects are valid.
+In that case, project-specific
 `required_checkers` and `warning_checkers` are empty, while
 `execution_checkers` still contains every platform default checker. A project
 may use `required_checkers` to tighten routing for a registered checker,
 including a default checker such as `check_low_quality_generated_artifacts`.
 Project policy cannot remove, rename, reorder, or weaken the platform default
-checker list.
+checker list. The hidden v2 compiler does not accept defaults as project
+selections; its low-quality default retains its warning outcome.
 
 Platform blocking severities are `critical` and `high`. Project policy may add
 stricter blocking severities, but it cannot remove those platform blocking

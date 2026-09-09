@@ -7,10 +7,10 @@ import json
 import re
 from fnmatch import fnmatchcase
 from urllib.parse import urlparse
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Awaitable
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from app.modules.checkers.api.post_submit_catalogue import (
     LEGACY_IMPLEMENTATION_VERSION, PostSubmitDefinition,
@@ -18,7 +18,7 @@ from app.modules.checkers.api.post_submit_catalogue import (
 from app.modules.checkers.api.post_submit import (
     ExpectedPostSubmitContext, PostSubmissionStructuralInput,
 )
-from app.modules.tasks.models import Submission, WorkstreamTask
+from app.modules.tasks.models import WorkstreamTask
 from app.modules.tasks.schemas import SubmissionCreate
 from app.modules.checkers.pre_submit_defaults import (
     LOW_QUALITY_GENERATED_PATTERNS,
@@ -83,12 +83,141 @@ class CheckerOutcome:
     routing_recommendation: str | None = None
 
 
+class _StructuralTask(Protocol):
+    """Criteria consumed by the shared structural handlers."""
+
+    @property
+    def acceptance_criteria(self) -> str | None:
+        """Read acceptance criteria."""
+
+
+class _StructuralEvidence(Protocol):
+    """Read-only evidence attributes used by registered structural handlers."""
+
+    @property
+    def label(self) -> str:
+        """Read label."""
+
+    @property
+    def uri(self) -> str | None:
+        """Read uri."""
+
+    @property
+    def hash(self) -> str | None:
+        """Read hash."""
+
+    @property
+    def type(self) -> str:
+        """Read type."""
+
+    @property
+    def metadata_json(self) -> dict:
+        """Read metadata json."""
+
+
+class _StructuralSubmission(Protocol):
+    """Common packet attributes; historical locked context is a separate shape."""
+
+    @property
+    def summary(self) -> str:
+        """Read summary."""
+
+    @property
+    def package_hash(self) -> str | None:
+        """Read package hash."""
+
+    @property
+    def worker_attestation(self) -> str:
+        """Read worker attestation."""
+
+    @property
+    def artifact_hash_manifest(self) -> list[dict]:
+        """Read artifact hash manifest."""
+
+    @property
+    def evidence_items(self) -> Sequence[_StructuralEvidence]:
+        """Read evidence items."""
+
+
+@runtime_checkable
+class _LegacyLockedContext(Protocol):
+    """Historical locked fields required only by the legacy context handler."""
+
+    @property
+    def locked_guide_version(self) -> str | None:
+        """Read locked guide version."""
+
+    @property
+    def locked_post_submit_checker_policy_id(self) -> str | None:
+        """Read locked post submit checker policy id."""
+
+    @property
+    def locked_post_submit_checker_policy_version(self) -> str | None:
+        """Read locked post submit checker policy version."""
+
+    @property
+    def locked_post_submit_checker_policy_hash(self) -> str | None:
+        """Read locked post submit checker policy hash."""
+
+    @property
+    def locked_review_policy_id(self) -> str | None:
+        """Read locked review policy id."""
+
+    @property
+    def locked_review_policy_generation(self) -> int | None:
+        """Read locked review policy generation."""
+
+    @property
+    def locked_review_policy_hash(self) -> str | None:
+        """Read locked review policy hash."""
+
+    @property
+    def locked_revision_policy_id(self) -> str | None:
+        """Read locked revision policy id."""
+
+    @property
+    def locked_revision_policy_generation(self) -> int | None:
+        """Read locked revision policy generation."""
+
+    @property
+    def locked_revision_policy_hash(self) -> str | None:
+        """Read locked revision policy hash."""
+
+    @property
+    def locked_payment_policy_version(self) -> str | None:
+        """Read locked payment policy version."""
+
+    @property
+    def locked_guide_source_snapshot_id(self) -> str | None:
+        """Read locked guide source snapshot id."""
+
+    @property
+    def locked_guide_source_snapshot_hash(self) -> str | None:
+        """Read locked guide source snapshot hash."""
+
+    @property
+    def locked_effective_project_submission_artifact_policy_id(self) -> str | None:
+        """Read locked effective project submission artifact policy id."""
+
+    @property
+    def locked_effective_project_submission_artifact_policy_hash(self) -> str | None:
+        """Read locked effective project submission artifact policy hash."""
+
+    @property
+    def locked_pre_submit_checker_policy_id(self) -> str | None:
+        """Read locked pre submit checker policy id."""
+
+    @property
+    def locked_pre_submit_checker_bundle_hash(self) -> str | None:
+        """Read locked pre submit checker bundle hash."""
+
+
 @dataclass(frozen=True)
 class CheckerContext:
     """Data available to structural checkers."""
 
-    task: WorkstreamTask
-    submission: Submission
+    task: _StructuralTask
+    submission: _StructuralSubmission
     required_checker_names: frozenset[str]
     warning_checker_names: frozenset[str]
     blocking_severities: frozenset[str]
@@ -806,44 +935,47 @@ async def check_submission_packet(context: CheckerContext) -> CheckerOutcome:
     """Validate required submission packet fields after the packet is locked."""
     return _packet_shape_outcome(
         context.submission.summary,
-        context.submission.package_hash,
+        context.submission.package_hash or "",
         context.submission.artifact_hash_manifest,
     )
 
 
 async def check_policy_context_present(context: CheckerContext) -> CheckerOutcome:
     """Validate that the submission carries all locked guide and policy versions."""
+    submission = context.submission
+    if not isinstance(submission, _LegacyLockedContext):
+        raise ValueError("legacy checker requires locked policy context")
     missing = [
         name
         for name, value in {
-            "locked_guide_version": context.submission.locked_guide_version,
+            "locked_guide_version": submission.locked_guide_version,
             "locked_post_submit_checker_policy_id": (
-                context.submission.locked_post_submit_checker_policy_id
+                submission.locked_post_submit_checker_policy_id
             ),
             "locked_post_submit_checker_policy_version": (
-                context.submission.locked_post_submit_checker_policy_version
+                submission.locked_post_submit_checker_policy_version
             ),
             "locked_post_submit_checker_policy_hash": (
-                context.submission.locked_post_submit_checker_policy_hash
+                submission.locked_post_submit_checker_policy_hash
             ),
-            "locked_review_policy_id": context.submission.locked_review_policy_id,
-            "locked_review_policy_generation": context.submission.locked_review_policy_generation,
-            "locked_review_policy_hash": context.submission.locked_review_policy_hash,
-            "locked_revision_policy_id": context.submission.locked_revision_policy_id,
-            "locked_revision_policy_generation": context.submission.locked_revision_policy_generation,
-            "locked_revision_policy_hash": context.submission.locked_revision_policy_hash,
-            "locked_payment_policy_version": context.submission.locked_payment_policy_version,
-            "locked_guide_source_snapshot_id": context.submission.locked_guide_source_snapshot_id,
-            "locked_guide_source_snapshot_hash": context.submission.locked_guide_source_snapshot_hash,
+            "locked_review_policy_id": submission.locked_review_policy_id,
+            "locked_review_policy_generation": submission.locked_review_policy_generation,
+            "locked_review_policy_hash": submission.locked_review_policy_hash,
+            "locked_revision_policy_id": submission.locked_revision_policy_id,
+            "locked_revision_policy_generation": submission.locked_revision_policy_generation,
+            "locked_revision_policy_hash": submission.locked_revision_policy_hash,
+            "locked_payment_policy_version": submission.locked_payment_policy_version,
+            "locked_guide_source_snapshot_id": submission.locked_guide_source_snapshot_id,
+            "locked_guide_source_snapshot_hash": submission.locked_guide_source_snapshot_hash,
             "locked_effective_project_submission_artifact_policy_id": (
-                context.submission.locked_effective_project_submission_artifact_policy_id
+                submission.locked_effective_project_submission_artifact_policy_id
             ),
             "locked_effective_project_submission_artifact_policy_hash": (
-                context.submission.locked_effective_project_submission_artifact_policy_hash
+                submission.locked_effective_project_submission_artifact_policy_hash
             ),
-            "locked_pre_submit_checker_policy_id": context.submission.locked_pre_submit_checker_policy_id,
+            "locked_pre_submit_checker_policy_id": submission.locked_pre_submit_checker_policy_id,
             "locked_pre_submit_checker_bundle_hash": (
-                context.submission.locked_pre_submit_checker_bundle_hash
+                submission.locked_pre_submit_checker_bundle_hash
             ),
         }.items()
         if not value

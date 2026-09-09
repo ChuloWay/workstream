@@ -140,9 +140,9 @@ def test_nested_extra_fields_and_strict_resource_ids_deny():
         ("maximum_text_characters", 65536),
     ],
 )
-def test_catalogue_resource_ceiling_cannot_be_broadened(field, maximum):
+def test_catalogue_resource_limits_match_exact_enforced_contract(field, maximum):
     assert getattr(PostSubmitResourceLimits(**{field: maximum}), field) == maximum
-    for value in (True, 0, maximum + 1):
+    for value in (True, 0, maximum - 1, maximum + 1, float(maximum), str(maximum)):
         with pytest.raises(ValidationError):
             PostSubmitResourceLimits(**{field: value})
 

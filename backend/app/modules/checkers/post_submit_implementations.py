@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 from app.modules.checkers.api.post_submit import (
     PostSubmissionEvaluationRequest,
@@ -16,7 +17,16 @@ from app.modules.checkers.runner import (
     CheckerRegistry,
     _fail,
     _pass,
+    _normalize_artifact_path,
 )
+
+
+def _copied_artifact_path(value: str) -> str:
+    """Normalize valid private paths; let the actual handler classify invalid ones."""
+    try:
+        return _normalize_artifact_path(value)
+    except ValueError:
+        return value
 
 
 @dataclass(frozen=True)
@@ -41,7 +51,13 @@ class _EvidenceView:
         """Copy only closed evidence keys for the existing pure presence rule."""
         keys = ("key", "policy_key", "evidence_key", "required_evidence_key")
         metadata = {key: value for key in keys if (value := getattr(facts, key)) is not None}
-        return cls(facts.label, facts.uri, facts.hash, facts.type, metadata)
+        return cls(
+            facts.label,
+            _copied_artifact_path(facts.uri)
+            if facts.uri and not re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", facts.uri)
+            else facts.uri,
+            facts.hash, facts.type, metadata,
+        )
 
 
 @dataclass(frozen=True)
@@ -66,7 +82,10 @@ def detached_checker_context(request: PostSubmissionEvaluationRequest) -> Checke
             data.summary,
             data.package_hash,
             data.worker_attestation,
-            [item.model_dump(mode="json") for item in data.manifest],
+            [
+                {**item.model_dump(mode="json"), "artifact": _copied_artifact_path(item.artifact)}
+                for item in data.manifest
+            ],
             tuple(_EvidenceView.from_facts(item) for item in data.evidence),
         ),
         required_checker_names=frozenset(

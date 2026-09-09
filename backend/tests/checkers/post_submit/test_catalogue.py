@@ -80,7 +80,6 @@ def test_registry_rejects_duplicates_and_metadata_substitution():
     [
         {"state": "disabled"},
         {"implementation_version": "another-implementation"},
-        {"resources": {"deadline_ms": 1000}},
         {"supported_claim": "packet_presence"},
         {"dependencies": ["check_submission_packet"]},
     ],
@@ -91,7 +90,7 @@ def test_catalogue_hash_binds_semantics(change):
     assert changed.manifest_sha256 != original.manifest_sha256
     assert catalogue().manifest_sha256 == original.manifest_sha256
     exported = original.model_dump(mode="json")
-    exported["definitions"][0]["resources"]["deadline_ms"] = 1
+    exported["definitions"][0]["state"] = "disabled"
     assert original.definitions[0].resources.deadline_ms == 5000
     with pytest.raises(ValidationError, match="hash mismatch"):
         PostSubmitCatalogue.model_validate(exported)
@@ -124,3 +123,11 @@ def test_definition_validates_boolean_resource_limits_and_unknown_fields():
         PostSubmitDefinition(**definition)
     with pytest.raises(ValidationError, match="Extra inputs"):
         PostSubmitDefinition(**catalogue().definitions[0].model_dump(), arbitrary="secret")
+
+
+def test_hash_valid_catalogue_rejects_duplicate_dependencies():
+    body = catalogue().model_dump(mode="json", exclude={"manifest_sha256"})
+    dependency = body["definitions"][0]["capability_id"]
+    body["definitions"][1]["dependencies"] = [dependency, dependency]
+    with pytest.raises(ValidationError, match="definition has duplicate dependencies"):
+        PostSubmitCatalogue(**body, manifest_sha256=canonical_json_hash(body))

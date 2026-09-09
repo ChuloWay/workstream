@@ -84,11 +84,18 @@ All backend paths below are relative to `backend/`.
 - `scripts/test_lane_catalogue.py` and `tests/test_ci_lane_catalogue.py`: additive
   registration and exact ownership expectation for new test modules.
   Existing lane ownership and required collection remain unchanged.
+- `scripts/behavior_ownership.py` and repo-root
+  `.ci/behavior-ownership/partition.v1.json`: register exactly the five new
+  CHECKERS executable targets in the existing additive partition; preserve
+  every existing assignment, protected base, and enforcement rule.
 - `.ci/module-boundaries/private-edge-debt.v1.json` at repo root: remove an
   actually eliminated PROJECTS-to-CHECKERS private edge; never add exceptions.
 - This record, its adopted chunk pointer, ARCH/POL overviews and ARCH planning
   map, `.commitrail/INDEX.md`, `docs/roadmap_status.md`, and
-  `docs/architecture_checker_framework.md` for accurate intended outcomes.
+  `docs/architecture_checker_framework.md`,
+  `docs/spec_chunk_8_submission_artifact_policy_checkers.md` and
+  `docs/template_checker_policy.md` for accurate intended outcomes and explicit
+  v1/v2 configuration guidance.
 
 ### Not allowed
 
@@ -392,7 +399,7 @@ specific rejecting boundary. Hosted integration remains separate evidence.
 | `test_historical_compilation_and_policy_hashes` | Existing v1 examples preserve byte identity/hash and parameter rejection; new snapshot cannot be injected into old replay or selected as an implicit latest version. |
 | `test_requirement_disposition_is_preserved` | Explicit unbound `human_review` is valid. Unsupported requested automation remains `post_submit_capability_gap`, has no binding and cannot become approval-ready. Add a binding to either disposition and deny; never rewrite a gap to human review. |
 | `test_agent_projection_matches_canonical_catalogue` | Every v2 agent-visible field and manifest hash matches the public CHECKERS snapshot; changed/omitted semantic fields deny parity. v1 parser/hash controls remain unchanged. |
-| `test_input_and_result_bounds` | Exact-limit inputs pass shape validation and limit+1 fails specifically for every scalar/collection/aggregate ceiling; malformed nested fields and bool-as-int deny independently. |
+| `test_input_and_result_bounds` | Exact-limit inputs pass and limit+1 fails for each input scalar/collection and the reachable request aggregate guard; malformed nested fields and noninteger limits deny independently. Maximal closed result shapes remain below the declared byte ceilings; no unreachable result-byte guard is claimed. |
 | `test_public_api_has_no_private_owner_types` | Public imports expose immutable contracts only, one post command and no individual-checker product API; existing pre-submit contracts remain unchanged. |
 
 For configuration, modern-lineage and requirement-disposition guards, remove
@@ -422,10 +429,11 @@ hosted CI; do not run the full suite or local database concurrency on this
 resource-constrained workstation. New modules must have at least 90% coverage;
 preserve existing global floors, no skipped/deselected cases or gate weakening.
 
-The focused suite covers 249 contract/compilation cases and exceeds 99%
-statement coverage across the five new CHECKERS modules. The declared member
-and phase result byte ceilings are defensive: the closed field/cardinality
-limits already impose a stricter maximum. Input aggregate-limit tests reach
+The focused suite covers contract/compilation cases across the five new
+CHECKERS modules. The declared member and phase result byte ceilings are
+upper bounds: closed fields/cardinality limit a member to 607 canonical JSON
+bytes and a completed phase to 5,972 bytes. The maximal-shape regression proves
+these tighter bounds without unreachable byte guards. Input aggregate-limit tests reach
 the actual byte guard independently. Plan reviews establish contract
 feasibility only; no worker, database currentness or provider behavior is
 claimed by this change. Exact-head hosted and implementation review evidence
@@ -484,3 +492,14 @@ that those references and detached policy values match stored composite
 ownership before real execution. Catalogue budgets are finite declarations;
 worker deadline/isolation enforcement remains ARCH-04C. No new substantive
 evaluator or automatic acceptance is provided.
+
+
+Implementation review refined the contract in four places. Resource metadata
+uses exact integer literals so it cannot advertise limits the schemas do not
+enforce. Definitions reject repeated dependencies before canonical hashing.
+Private read-only protocols distinguish common structural input from the
+legacy locked-context shape. The modern adapter normalizes valid copied paths
+before the registered handler detects duplicates, while invalid paths still
+reach its bounded failure and original request facts and v1 behavior remain
+unchanged. A self-hashed catalogue is still identity, not installation proof;
+POL-04B/POL-06 must obtain the pinned snapshot from the trusted CHECKERS builder.
