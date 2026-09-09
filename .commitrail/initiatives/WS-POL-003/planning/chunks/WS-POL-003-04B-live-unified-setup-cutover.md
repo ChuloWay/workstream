@@ -274,3 +274,29 @@ event/action/permission/resource/request/correlation/digest predicate. Both guar
 must follow controlled provisioning; fixing compilation alone leaves finalization
 unusable. Test ready and blocked finalization using an opaque provisioned subject,
 and direct rejection for inactive actors/links or wrong actor/link custody.
+
+### E2E proof boundary after immutable draft finalization
+
+The existing API drill interleaves live guide setup with a test-only post-policy
+bridge that rewrites the same setup row. Replace that arrangement with two
+distinct guides in the existing isolated project. The live guide proves the real
+unified worker, complete draft stop, read/CRUD authority, denied unified approval
+and immutable finalization/replay. It never feeds task activation. The second
+guide belongs to one explicitly isolated locked-contract fixture for downstream
+active-guide/task/submission/review HTTP proof. Consolidate the existing activation
+seed and post-policy fixture under that boundary; use current canonical owners,
+never old inference methods or a product alternative path. Fixture construction
+must refuse finalized input and must not mutate the live guide or any finalization
+receipt. Preserve all downstream lifecycle and authorization assertions. Fixture
+seeding does not prove POL-05 approval or AUTH-12H public guide activation.
+
+Use version `unified-draft-proof-v1` for the live guide and retain `v1` for the
+fixture guide so task-lock assertions identify the latter explicitly. Build the
+fixture guide's report and ART source usages through the canonical request,
+execution and projection owners with the same deterministic typed-factory runtime;
+omit only finalization in fixture composition, without adding a worker mode.
+Create and approve a separate manual artifact policy through the real API, compile
+the post policy with its canonical compiler, and seed exact setup/activation
+prerequisites within `seed_active_guide_for_pre_12h_e2e`. Require no finalization
+row before that fixture transition and assert downstream reads and task locks
+refer to the fixture guide.
