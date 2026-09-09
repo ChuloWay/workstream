@@ -114,6 +114,7 @@ def test_finalization_partition_additions_are_exact_and_fail_closed():
         "from app.adapters.auth import setup_finalization_authorization as ordinary\nordinary(session)\n",
         "import app.adapters.auth as auth\nauth.setup_finalization_authorization(session)\n",
         "from app.adapters.auth import setup_finalization_authorization\nordinary = setup_finalization_authorization\nordinary(session)\n",
+        "from app.adapters.auth import setup_finalization_authorization\nordinary: object = setup_finalization_authorization\nordinary(session)\n",
     ],
 )
 def test_exact_worker_cannot_call_aliased_finalization_factory(tmp_path, monkeypatch, source):

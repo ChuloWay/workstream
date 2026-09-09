@@ -30,18 +30,22 @@ def imported_symbols_and_calls(tree: ast.AST) -> tuple[set[str], list[str]]:
             return resolve(node.value)
         return ""
 
-    assignments = [node for node in ast.walk(tree) if isinstance(node, ast.Assign)]
+    assignments = [
+        (node.targets if isinstance(node, ast.Assign) else [node.target], node.value)
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None
+    ]
     for _ in assignments:
         changed = False
-        for node in assignments:
-            root = node.value
+        for targets, value in assignments:
+            root = value
             while isinstance(root, (ast.Attribute, ast.Subscript)):
                 root = root.value
             if not isinstance(root, ast.Name) or root.id not in bindings:
                 continue
-            for target in node.targets:
+            for target in targets:
                 if isinstance(target, ast.Name) and target.id not in bindings:
-                    bindings[target.id] = resolve(node.value)
+                    bindings[target.id] = resolve(value)
                     changed = True
         if not changed:
             break
