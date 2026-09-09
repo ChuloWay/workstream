@@ -11,7 +11,12 @@ from pathlib import Path
 import textwrap
 from uuid import UUID
 
-from external_api_drill import isolation
+from external_api_drill import ProbeFailure, isolation
+
+FAILURE_CODES = frozenset({
+    "isolation_required", "fresh_owned_database_required", "mutation_target_not_unique",
+    "unexpected_effective_count", "missing_target", "target_fact_mismatch", "missing_link",
+})
 
 
 def boundary_mutant(function):
@@ -106,7 +111,11 @@ def main():
     try:
         result = asyncio.run(probe(args))
     except Exception as exc:
-        print(json.dumps({"result": "infrastructure_failure", "error_kind": type(exc).__name__}))
+        # Unexpected driver/filesystem errors may contain credentials or stored data.
+        code = (str(exc) if type(exc) in (ValueError, ProbeFailure)
+                and str(exc) in FAILURE_CODES else "guard_probe_failed")
+        print(json.dumps({"result": "infrastructure_failure", "error_kind": type(exc).__name__,
+                          "error_code": code}))
         return 1
     print(json.dumps(result))
     return 0 if result["result"] == "passed" else 2

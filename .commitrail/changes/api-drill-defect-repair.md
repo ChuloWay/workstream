@@ -201,6 +201,10 @@ distinct assertions. In separate ephemeral subprocesses, exactly one `<= 1`
 comparison is changed to `< 1` for each owner; each must fail its exact checks.
 No source file or live API process is mutated. Pre/post authority and audit
 snapshots must match. These checks are not additional HTTP operations.
+External review requested more diagnostic detail for failed subprocesses. Known
+failures now carry closed, privacy-safe codes; unexpected exception text remains
+excluded. A CLI regression proves specific codes, nonzero exit and secret
+redaction together, without changing guard decisions or successful probe results.
 
 Historical execution `8969ae5d93168e8529ee584de66095c65322dd8f` recorded twenty
 profiles and 352 checks with no unexpected failures or incomplete groups, seven

@@ -59,6 +59,10 @@ are compared. Separate ephemeral child-process mutations change `<= 1` to `< 1`
 and must fail the exact affected checks; no product source file or API process
 is changed. These are owner/transaction probes, not extra HTTP capabilities.
 Missing groups remain incomplete, never certified.
+Guard subprocess infrastructure failures retain an allowlisted `error_code` for
+known isolation/target/count failures. Unexpected exceptions use
+`guard_probe_failed`; arbitrary database or filesystem exception text is not
+persisted because it can contain credentials or stored data.
 
 Run its helper checks with
 `backend/.venv/bin/python -m unittest scripts.test_admin_api_drill scripts.test_external_api_drill`.

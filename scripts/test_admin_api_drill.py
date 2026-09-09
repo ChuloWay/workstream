@@ -1,10 +1,13 @@
 """Unit proof for the administrator drill's evidence checks, not API proof."""
 
 import importlib.util
+from contextlib import redirect_stdout
+import io
+import json
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 from types import SimpleNamespace
 
 DIRECTORY = Path(__file__).resolve().parents[1] / "backend/scripts"
@@ -24,6 +27,24 @@ def ambiguous_boundary(count):
 
 
 class EvidenceTests(unittest.IsolatedAsyncioTestCase):
+    def test_guard_failure_report_preserves_only_allowlisted_codes(self):
+        cases = [(ValueError(code), code) for code in guard_probe.FAILURE_CODES]
+        cases += [(module.ProbeFailure("isolation_required"), "isolation_required"),
+                  (ValueError("password=private-secret"), "guard_probe_failed"),
+                  (RuntimeError("password=private-secret"), "guard_probe_failed")]
+        for exc, expected in cases:
+            async def fail(args):
+                raise exc
+            output = io.StringIO()
+            with self.subTest(expected=expected, kind=type(exc).__name__), \
+                 patch.object(guard_probe.argparse.ArgumentParser, "parse_args", return_value=SimpleNamespace()), \
+                 patch.object(guard_probe, "probe", fail), redirect_stdout(output):
+                self.assertEqual(guard_probe.main(), 1)
+            self.assertEqual(json.loads(output.getvalue()), {
+                "result": "infrastructure_failure", "error_kind": type(exc).__name__,
+                "error_code": expected})
+            self.assertNotIn("private-secret", output.getvalue())
+
     def test_guard_mutant_changes_only_one_boundary_without_changing_original(self):
         mutant = guard_probe.boundary_mutant(count_boundary)
         self.assertTrue(count_boundary(1))
