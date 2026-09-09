@@ -4597,7 +4597,6 @@ async def test_submission_artifact_policy_replay_postgres_converges_exact_reserv
         values = {
             "actor_profile_id": ids["actor"],
             "identity_link_id": ids["link"],
-            "service_identity": None,
             "action_id": ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_CREATE.value,
             "idempotency_key": key,
             "request_digest": digest,
@@ -4608,10 +4607,7 @@ async def test_submission_artifact_policy_replay_postgres_converges_exact_reserv
             "guide_id": ids["guide"],
             "source_snapshot_id": ids["snapshot"],
             "policy_id": policy_id,
-            "setup_run_id": None,
             "setup_generation": 1,
-            "setup_task_id": None,
-            "correlation_id": None,
         }
         factory = async_sessionmaker(engine, expire_on_commit=False)
         first = factory()
