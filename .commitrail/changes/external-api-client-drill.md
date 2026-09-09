@@ -65,6 +65,37 @@ Always terminate the owned server; the isolation runner drops its owned DB/role.
 
 ## Acceptance criteria
 
+### Human-requested administrator deep drill
+
+Extend the same isolated harness with `backend/scripts/admin_api_drill.py` and
+`scripts/test_admin_api_drill.py`. Add a scenario callback to the existing runner
+instead of duplicating server/credential/database lifecycle code. This slice
+creates twenty separate human profiles through HTTP with two bootstrap candidates,
+all five admin roles, system/project-scoped variants, submitter/reviewer and
+ungranted/lifecycle targets. Roles come from actual grants, never token claims.
+The peer repair worktree owns the five previously recorded product defects;
+do not edit its files. Communicate newly reproduced findings without taking over
+product repairs. No roadmap capability changes are implied by this test tooling.
+
+Before any grant: exercise bootstrap invalid target, dry-run with unchanged
+authority state, concurrent execute with one winner, and later-conflict behavior.
+Use actual CLI subprocesses and permit read-only SQL evidence snapshots on the
+already verified isolated database for bootstrap/control/audit and forbidden
+side effects. No SQL writes, fixtures, disabled guards or imported product tests.
+Then use real grant APIs to establish and test role/scope boundaries, self-grant
+and self-revoke, idempotency/replay, cross-project concealment, actor and link
+revocation, and last-effective-admin protection. Create two real projects via a
+system Project Manager. Finish by leaving one effective admin and verify every
+reachable removal route refuses it. Do not claim role catalogue membership proves
+unimplemented finance/review/task operations; probe only reachable public routes.
+
+`admin_api_drill.py::scenario` owns these future cases. Its roster and result
+assertions require helper tests, a clean exact-target live run, and focused
+security/QA review including a falsified-response probe. Existing failures remain
+failures; independent groups continue when safe, dependent groups stop on broken
+prerequisites. Record blocked/unexecuted scope distinctly. About twenty profiles
+means separate identities/subjects, not twenty fabricated grants or DB seed rows.
+
 - No import or invocation of `api_contract_e2e`; no trigger suppression or
   direct product-state seed. No calls to hidden routes to claim public support.
 - Wrong status/body/replay identity produces failure and nonzero exit, with a
