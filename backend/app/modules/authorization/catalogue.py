@@ -132,6 +132,7 @@ class ActionId(StrEnum):
     PROJECT_GUIDE_UPDATE = "project.guide.update"
     PROJECT_GUIDE_SOURCE_SNAPSHOT_CREATE = "project.guide_source_snapshot.create"
     PROJECT_GUIDE_COMPILATION_REQUEST = "project.guide_compilation.request"
+    PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC = "project.guide_compilation.request_automatic"
     PROJECT_GUIDE_COMPILATION_EXECUTE = "project.guide_compilation.execute"
     PROJECT_REVIEW_POLICY_UPDATE = "project.review_policy.update"
     PROJECT_REVISION_POLICY_UPDATE = "project.revision_policy.update"
@@ -486,6 +487,11 @@ ACTION_DEFINITIONS = (
     _active(
         ActionId.PROJECT_GUIDE_COMPILATION_REQUEST,
         PermissionId.PROJECT_GUIDE_COMPILATION_REQUEST,
+        ActionOwner.AUTH_12I,
+    ),
+    _active(
+        ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC,
+        PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
         ActionOwner.AUTH_12I,
     ),
     _active(
@@ -849,6 +855,14 @@ NEW_PERMISSION_IDS = frozenset(
 HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 
+def _require_catalogue_counts() -> None:
+    """Keep the closed action inventory and permission boundary exact."""
+    if len(PERMISSION_IDS) != 73 or len(ACTION_IDS) != 112:
+        raise RuntimeError("authorization catalogue count mismatch")
+    if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 24:
+        raise RuntimeError("authorization permission boundary mismatch")
+
+
 def _index_actions(
     definitions: tuple[ActionDefinition, ...],
 ) -> MappingProxyType[ActionId, ActionDefinition]:
@@ -862,12 +876,9 @@ def _index_actions(
     ):
         raise RuntimeError("authorization action catalogue contains an invalid row")
     indexed = {definition.action_id: definition for definition in definitions}
-    if len(PERMISSION_IDS) != 73 or len(ACTION_IDS) != 111:
-        raise RuntimeError("authorization catalogue count mismatch")
+    _require_catalogue_counts()
     if len(indexed) != len(definitions) or set(indexed) != ACTION_IDS:
         raise RuntimeError("authorization action catalogue is incomplete")
-    if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 24:
-        raise RuntimeError("authorization permission boundary mismatch")
     active_actions = {
         *_CONTRIBUTION_POLICY_ACTION_IDS,
         ActionId.ACTOR_PROFILE_READ_SELF,
@@ -897,6 +908,7 @@ def _index_actions(
         ActionId.PROJECT_GUIDE_UPDATE,
         ActionId.PROJECT_GUIDE_SOURCE_SNAPSHOT_CREATE,
         ActionId.PROJECT_GUIDE_COMPILATION_REQUEST,
+        ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC,
         ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
         ActionId.PROJECT_SETUP_RUN_UPDATE,
         ActionId.PROJECT_REVIEW_POLICY_UPDATE,
@@ -978,6 +990,7 @@ _SERVICE_ACTIONS = {
     ServiceIdentity.PROJECT_SETUP: frozenset(
         {
             ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
+            ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC,
             ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
             ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE,
             ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE,
@@ -1022,6 +1035,7 @@ _EXPECTED_SERVICE_ACTION_MEMBERSHIPS = frozenset(
         (ServiceIdentity.ARTIFACT_MATERIALIZER, ActionId.ARTIFACT_REVIEW_PACKET_MATERIALIZE),
         (ServiceIdentity.ARTIFACT_CHECKER_OUTPUT, ActionId.ARTIFACT_CHECKER_OUTPUT_WRITE),
         (ServiceIdentity.PROJECT_SETUP, ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE),
+        (ServiceIdentity.PROJECT_SETUP, ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC),
         (ServiceIdentity.PROJECT_SETUP, ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN),
         (ServiceIdentity.PROJECT_SETUP, ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE),
         (ServiceIdentity.PROJECT_SETUP, ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE),
@@ -1053,6 +1067,7 @@ _ACTIVE_SERVICE_ACTIONS = {
     ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE,
     ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
     ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
+    ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC,
     ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE,
 }
 
@@ -1061,94 +1076,29 @@ def _index_service_actions(
     rows: dict[ServiceIdentity, frozenset[ActionId]],
 ) -> MappingProxyType[ServiceIdentity, frozenset[ActionId]]:
     expected_metadata = {
-        ActionId.ARTIFACT_VERIFICATION_EXECUTE: (
-            PermissionId.ARTIFACT_VERIFICATION_EXECUTE,
-            ActionOwner.AUTH_ART_02D_INTERNAL,
-        ),
-        ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE: (
-            PermissionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
-            ActionOwner.AUTH_ART_02D_INTERNAL,
-        ),
-        ActionId.ARTIFACT_PENDING_WORK_SCAN: (
-            PermissionId.ARTIFACT_PENDING_WORK_SCAN,
-            ActionOwner.AUTH_ART_02D_INTERNAL,
-        ),
-        ActionId.ARTIFACT_GUIDE_SOURCE_BINDING_CREATE: (
-            PermissionId.ARTIFACT_BINDING_CREATE,
-            ActionOwner.XINT_002_04B,
-        ),
-        ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE: (
-            PermissionId.ARTIFACT_BINDING_CREATE,
-            ActionOwner.AUTH_ART_05,
-        ),
-        ActionId.ARTIFACT_CHECKER_OUTPUT_BINDING_CREATE: (
-            PermissionId.ARTIFACT_BINDING_CREATE,
-            ActionOwner.AUTH_ART_06B,
-        ),
-        ActionId.ARTIFACT_GUIDE_SOURCE_READ: (
-            PermissionId.ARTIFACT_GUIDE_SOURCE_READ,
-            ActionOwner.XINT_002_04B,
-        ),
-        ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE: (
-            PermissionId.ARTIFACT_CHECKER_INPUT_MATERIALIZE,
-            ActionOwner.XINT_002_06A,
-        ),
-        ActionId.ARTIFACT_POST_SUBMIT_CHECKER_INPUT_MATERIALIZE: (
-            PermissionId.ARTIFACT_CHECKER_INPUT_MATERIALIZE,
-            ActionOwner.AUTH_ART_06A,
-        ),
-        ActionId.ARTIFACT_CHECKER_OUTPUT_WRITE: (
-            PermissionId.ARTIFACT_CHECKER_OUTPUT_WRITE,
-            ActionOwner.AUTH_ART_06B,
-        ),
-        ActionId.ARTIFACT_REVIEW_PACKET_MATERIALIZE: (
-            PermissionId.ARTIFACT_REVIEW_PACKET_MATERIALIZE,
-            ActionOwner.XINT_002_07,
-        ),
-        ActionId.ARTIFACT_REVIEW_EVIDENCE_BINDING_CREATE: (
-            PermissionId.ARTIFACT_BINDING_CREATE,
-            ActionOwner.XINT_002_07,
-        ),
-        ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN: (
-            PermissionId.PROJECT_GUIDE_MANAGE,
-            ActionOwner.AUTH_12E,
-        ),
-        ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE: (
-            PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
-            ActionOwner.AUTH_12I,
-        ),
-        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE: (
-            PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE,
-            ActionOwner.AUTH_12F3,
-        ),
-        ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE: (
-            PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE,
-            ActionOwner.AUTH_12G,
-        ),
-        ActionId.PROJECT_SETUP_RUN_UPDATE: (
-            PermissionId.PROJECT_GUIDE_MANAGE,
-            ActionOwner.AUTH_12B2,
-        ),
-        ActionId.REVIEW_PREFERENCE_EXPIRY_RUN: (
-            PermissionId.OPERATIONS_TIMER_RUN,
-            ActionOwner.AUTH_REV_06,
-        ),
-        ActionId.REVIEW_LEASE_EXPIRY_RUN: (
-            PermissionId.OPERATIONS_TIMER_RUN,
-            ActionOwner.AUTH_REV_06,
-        ),
-        ActionId.REVIEW_RECONCILE_RUN: (
-            PermissionId.OPERATIONS_RECONCILE_RUN,
-            ActionOwner.AUTH_REV_11,
-        ),
-        ActionId.REVIEW_ARTIFACT_REFERENCE_RECONCILE: (
-            PermissionId.OPERATIONS_RECONCILE_RUN,
-            ActionOwner.AUTH_REV_12,
-        ),
-        ActionId.REVIEW_PROJECTION_REBUILD: (
-            PermissionId.OPERATIONS_PROJECTION_REBUILD,
-            ActionOwner.AUTH_REV_12,
-        ),
+        ActionId.ARTIFACT_VERIFICATION_EXECUTE: (PermissionId.ARTIFACT_VERIFICATION_EXECUTE, ActionOwner.AUTH_ART_02D_INTERNAL),
+        ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE: (PermissionId.ARTIFACT_PUT_ATTEMPT_RESOLVE, ActionOwner.AUTH_ART_02D_INTERNAL),
+        ActionId.ARTIFACT_PENDING_WORK_SCAN: (PermissionId.ARTIFACT_PENDING_WORK_SCAN, ActionOwner.AUTH_ART_02D_INTERNAL),
+        ActionId.ARTIFACT_GUIDE_SOURCE_BINDING_CREATE: (PermissionId.ARTIFACT_BINDING_CREATE, ActionOwner.XINT_002_04B),
+        ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE: (PermissionId.ARTIFACT_BINDING_CREATE, ActionOwner.AUTH_ART_05),
+        ActionId.ARTIFACT_CHECKER_OUTPUT_BINDING_CREATE: (PermissionId.ARTIFACT_BINDING_CREATE, ActionOwner.AUTH_ART_06B),
+        ActionId.ARTIFACT_GUIDE_SOURCE_READ: (PermissionId.ARTIFACT_GUIDE_SOURCE_READ, ActionOwner.XINT_002_04B),
+        ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE: (PermissionId.ARTIFACT_CHECKER_INPUT_MATERIALIZE, ActionOwner.XINT_002_06A),
+        ActionId.ARTIFACT_POST_SUBMIT_CHECKER_INPUT_MATERIALIZE: (PermissionId.ARTIFACT_CHECKER_INPUT_MATERIALIZE, ActionOwner.AUTH_ART_06A),
+        ActionId.ARTIFACT_CHECKER_OUTPUT_WRITE: (PermissionId.ARTIFACT_CHECKER_OUTPUT_WRITE, ActionOwner.AUTH_ART_06B),
+        ActionId.ARTIFACT_REVIEW_PACKET_MATERIALIZE: (PermissionId.ARTIFACT_REVIEW_PACKET_MATERIALIZE, ActionOwner.XINT_002_07),
+        ActionId.ARTIFACT_REVIEW_EVIDENCE_BINDING_CREATE: (PermissionId.ARTIFACT_BINDING_CREATE, ActionOwner.XINT_002_07),
+        ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN: (PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.AUTH_12E),
+        ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC: (PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE, ActionOwner.AUTH_12I),
+        ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE: (PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE, ActionOwner.AUTH_12I),
+        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE: (PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE, ActionOwner.AUTH_12F3),
+        ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE: (PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE, ActionOwner.AUTH_12G),
+        ActionId.PROJECT_SETUP_RUN_UPDATE: (PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.AUTH_12B2),
+        ActionId.REVIEW_PREFERENCE_EXPIRY_RUN: (PermissionId.OPERATIONS_TIMER_RUN, ActionOwner.AUTH_REV_06),
+        ActionId.REVIEW_LEASE_EXPIRY_RUN: (PermissionId.OPERATIONS_TIMER_RUN, ActionOwner.AUTH_REV_06),
+        ActionId.REVIEW_RECONCILE_RUN: (PermissionId.OPERATIONS_RECONCILE_RUN, ActionOwner.AUTH_REV_11),
+        ActionId.REVIEW_ARTIFACT_REFERENCE_RECONCILE: (PermissionId.OPERATIONS_RECONCILE_RUN, ActionOwner.AUTH_REV_12),
+        ActionId.REVIEW_PROJECTION_REBUILD: (PermissionId.OPERATIONS_PROJECTION_REBUILD, ActionOwner.AUTH_REV_12),
     }
     if set(rows) != ACTION_BEARING_SERVICE_IDENTITIES:
         raise RuntimeError("service action matrix identity mismatch")

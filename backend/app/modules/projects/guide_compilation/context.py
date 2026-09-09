@@ -70,24 +70,39 @@ async def build_project_guide_compilation_context(
                 setup_generation=identity.setup_generation,
             )
         )
-        verified = VerifiedGuideMaterialSnapshot.from_material(
-            build_verified_guide_sufficiency_material(guide, snapshot, loaded.source_items)
-        )
-        context = ProjectGuideCompilationContext(
-            material=verified,
-            setup_run_id=identity.setup_run_id,
-            setup_generation=identity.setup_generation,
-            instruction_version=PROJECT_GUIDE_COMPILATION_INSTRUCTION_VERSION,
-            agent_identity=PROJECT_GUIDE_COMPILATION_AGENT_IDENTITY,
-            agent_version=PROJECT_GUIDE_COMPILATION_AGENT_VERSION,
+        context = compilation_context_from_material(
+            guide=guide, snapshot=snapshot, loaded=loaded,
+            setup_run_id=identity.setup_run_id, setup_generation=identity.setup_generation,
             pre_submission_capabilities=pre_submission_capabilities,
             post_submission_capabilities=post_submission_capabilities,
         )
-        if (
-            len(canonical_project_guide_compilation_context_bytes(context))
-            > MAXIMUM_PROJECT_GUIDE_COMPILATION_PROMPT_BYTES
-        ):
-            raise GuideCompilationIntegrityError("compilation context exceeds its limit")
         if CompilationAttemptIdentity.from_context(context) != identity:
             raise GuideCompilationIntegrityError("compilation context identity mismatch")
         return context
+
+
+def compilation_context_from_material(
+    *, guide, snapshot, loaded, setup_run_id, setup_generation,
+    pre_submission_capabilities: PreSubmissionCapabilityProjection,
+    post_submission_capabilities: PostSubmissionCapabilityProjection,
+) -> ProjectGuideCompilationContext:
+    """Build the one bounded context used by both request and execution."""
+    verified = VerifiedGuideMaterialSnapshot.from_material(
+        build_verified_guide_sufficiency_material(guide, snapshot, loaded.source_items)
+    )
+    context = ProjectGuideCompilationContext(
+        material=verified,
+        setup_run_id=setup_run_id,
+        setup_generation=setup_generation,
+        instruction_version=PROJECT_GUIDE_COMPILATION_INSTRUCTION_VERSION,
+        agent_identity=PROJECT_GUIDE_COMPILATION_AGENT_IDENTITY,
+        agent_version=PROJECT_GUIDE_COMPILATION_AGENT_VERSION,
+        pre_submission_capabilities=pre_submission_capabilities,
+        post_submission_capabilities=post_submission_capabilities,
+    )
+    if (
+        len(canonical_project_guide_compilation_context_bytes(context))
+        > MAXIMUM_PROJECT_GUIDE_COMPILATION_PROMPT_BYTES
+    ):
+        raise GuideCompilationIntegrityError("compilation context exceeds its limit")
+    return context

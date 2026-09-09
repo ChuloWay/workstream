@@ -284,7 +284,8 @@ Authority covering the exact project and activates only those four actions,
 producing 111 rows with 61 active and 50 planned actions. AUTH-12B2 then
 activates exact setup finalization, yielding 62 active and 49 planned
 actions without adding a row. CP05 activates the five existing ContributionPolicy
-actions, yielding the current 67 active and 44 planned actions. Only active human
+actions, yielding 67 active and 44 planned actions. POL-04B1 adds the automatic compilation
+request action, making the current totals 112 actions: 68 active and 44 planned. Only active human
 Finance Authority with system or exact-project scope is eligible. The explicit
 CON adapter uses serialized reads and transaction-bound PREP for mutations;
 committed replay requires fresh read authority. Registration custody remains
@@ -595,7 +596,7 @@ closed:
 | `workstream.artifact.guide_reader` | `artifact.guide_source.read` |
 | `workstream.artifact.materializer` | `artifact.pre_submit.checker_input.materialize`, `artifact.post_submit.checker_input.materialize`, `artifact.review_packet.materialize` |
 | `workstream.artifact.checker_output` | `artifact.checker_output.write` |
-| `workstream.project.setup` | `project.guide_compilation.execute`, `project.guide_sufficiency.run`, `project.submission_artifact_policy.derive`, `project.post_submit_checker_policy.derive`, `project.setup_run.update` |
+| `workstream.project.setup` | `project.guide_compilation.request_automatic`, `project.guide_compilation.execute`, `project.guide_sufficiency.run`, `project.submission_artifact_policy.derive`, `project.post_submit_checker_policy.derive`, `project.setup_run.update` |
 | `workstream.review.preference_expiry` | `review.preference_expiry.run` |
 | `workstream.review.lease_expiry` | `review.lease_expiry.run` |
 | `workstream.review.authority_invalidation_reconciliation` | `review.reconcile.run` |
@@ -1186,7 +1187,7 @@ outside any prepared handle; persistence obtains fresh authority. The fixed
 `workstream.project.setup` service may resolve only the run action internally
 with exact setup custody and no matched human grant.
 
-Unified guide compilation separates human dispatch from provider execution.
+Unified guide compilation separates request authority from provider execution.
 `project.guide_compilation.request` requires a current exact-project Project
 Manager grant; system-scoped grants do not substitute. Transaction-bound PREP
 binds the actor, identity link, matched grant, immutable guide/setup lineage,
@@ -1209,6 +1210,7 @@ execution task, calls no provider, and does not make the hidden POL workflow liv
 | `project.revision_policy.update` (active) | `project.review_policy.manage` | `WS-XINT-003-02B` |
 | `project.guide_sufficiency_report.create` (active) | `project.guide.manage` | `WS-AUTH-001-12E` |
 | `project.guide_sufficiency.run` (active) | `project.guide.manage` | `WS-AUTH-001-12E` |
+| `project.guide_compilation.request_automatic` (active) | `project.guide_compilation.execute` | `WS-AUTH-001-12I` |
 | `project.guide_compilation.request` (active) | `project.guide_compilation.request` | `WS-AUTH-001-12I` |
 | `project.guide_compilation.execute` (active) | `project.guide_compilation.execute` | `WS-AUTH-001-12I` |
 | `project.guide_sufficiency.warnings.acknowledge` (active) | `project.guide.manage` | `WS-AUTH-001-12E` |
@@ -1417,3 +1419,18 @@ This specification does not add Workstream login, implement runtime code,
 change review decision values, define contribution/compensation behavior, add a
 frontend, enable blockchain settlement, add source adapters, automate routing,
 or create an agent workspace.
+
+
+### Automatic compilation request origin
+
+`project.guide_compilation.request_automatic` requires current fixed
+`workstream.project.setup` authority and the existing compilation execution
+permission. The request records `automatic_source_ready` plus the exact committed
+source mutation operation and source authorization event. Human requests record
+`project_manager` with neither source selector. Mixed or incomplete tuples deny.
+Source consent is immutable; later revocation of its original manager does not
+turn the service into that manager. Request replay still requires the requesting
+actor's current authority, held through receipt classification. Automatic input
+is resolved from owned source/setup rows and verified ART material; callers
+cannot supply provider input or claimed context hashes. Neither trigger approves
+or activates guide policies.

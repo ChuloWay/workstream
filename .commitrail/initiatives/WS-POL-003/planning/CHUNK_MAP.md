@@ -20,8 +20,9 @@ post-task requirement. Historical split parents 05/06 are not extra PRs.
 | `WS-POL-003-04A2` | Complete hidden immutable setup-ledger finalization with closed outcomes and no live route. | Merged 04A3 |
 | `WS-AUTH-001-12J` | Complete exact fixed-service authority for the two compilation-derived projection ports. | Merged 04A3 |
 | `WS-AUTH-001-12B2` | Complete exact setup-finalization authority (PR #384). | Complete POL-04A2 + AUTH-12J |
-| `WS-POL-003-04B` | Planned explicit-PM-request live cutover through the hidden projection/finalization chain; physically delete the three superseded inference methods, prompts, affected consumers and obsolete tests in the same change. | Merged 04A3 + 04A2 + AUTH-12J + AUTH-12B2 + ARCH-04A catalogue/schema |
-| `WS-POL-003-05A` | Hidden complete review package, setup-wide correction and approval/effective/pre-submit behavior. | 04B |
+| `WS-POL-003-04B1` | Complete hidden automatic request authority and origin custody in the same request operation; current PM replay validation. | AUTH-12I + completed immutable compilation and ART material foundation |
+| `WS-POL-003-04B` | Planned automatic initial live cutover with replaceable runtime/model/instructions through the hidden projection/finalization chain; physically delete the three superseded inference methods, prompts, affected consumers and obsolete tests in the same change. | 04B1 + merged 04A3 + 04A2 + AUTH-12J + AUTH-12B2 + ARCH-04A catalogue/schema |
+| `WS-POL-003-05A` | Hidden complete review package, PM correction/manual rerun in a new generation, and approval/effective/pre-submit behavior. | 04B |
 | `WS-AUTH-001-12F4` | Activate exact review-package read, PM correction/approval and PREP composition for the hidden 05A manifest. | 05A |
 | `WS-POL-003-05B` | Live PM approval and trusted effective/pre-submit projection cutover. | 05A + AUTH-12F4 |
 | `WS-POL-003-06A` | Hidden deterministic post-submit projection and separate approval behavior; zero model calls. | 05B |

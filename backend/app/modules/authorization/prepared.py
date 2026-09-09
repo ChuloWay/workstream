@@ -445,7 +445,14 @@ class PreparedAuthorizationService:
                 action_id, resource, authority.scope_project_id
             )
             if setup_match is False or (
-                setup_match is None and action_id is not ActionId.ARTIFACT_SUBMISSION_BUNDLE_PREPARE
+                setup_match is None
+                and action_id is not ActionId.ARTIFACT_SUBMISSION_BUNDLE_PREPARE
+                and not (
+                    action_id is ActionId.PROJECT_GUIDE_COMPILATION_REQUEST
+                    and isinstance(resource, ProjectGuideCompilationRequestResourceContext)
+                    and resource.trigger == "project_manager"
+                    and resource.scope_project_id == authority.scope_project_id
+                )
             ):
                 raise PreparedAuthorizationUnsupported(
                     AuthorizationDenialCode.RESOURCE_GUARD_DENIED

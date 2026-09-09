@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, fields
 import hashlib
 import json
 import re
-from typing import Protocol, TypeVar
+from typing import Literal, Protocol, TypeVar
 from uuid import UUID
 
 from .facts import ActorIdentityFacts
@@ -204,11 +204,56 @@ def project_guide_compilation_request_authority_digest(
 PreparedHandleT = TypeVar("PreparedHandleT")
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ProjectGuideCompilationRequestOrigin:
+    """Trigger authority selectors, separate from immutable compilation content."""
+
+    trigger: Literal["project_manager", "automatic_source_ready"]
+    source_mutation_operation_id: UUID | None = None
+    source_authorization_decision_event_id: UUID | None = None
+
+    def __post_init__(self) -> None:
+        values = (self.source_mutation_operation_id, self.source_authorization_decision_event_id)
+        if self.trigger == "project_manager" and all(value is None for value in values):
+            return
+        if self.trigger == "automatic_source_ready" and all(isinstance(value, UUID) for value in values):
+            return
+        raise ValueError("compilation request origin is incomplete or conflicting")
+
+
+def project_guide_compilation_automatic_request_authority_digest(
+    *, actor_profile_id: UUID, identity_link_id: UUID, project_id: UUID,
+    operation_id: UUID, request_facts_digest: str,
+    origin: ProjectGuideCompilationRequestOrigin,
+) -> str:
+    """Bind the exact automatic trigger to its service and source authority."""
+    if origin.trigger != "automatic_source_ready":
+        raise ValueError("automatic request origin is required")
+    value = {
+        "action_id": "project.guide_compilation.request_automatic",
+        "permission_id": "project.guide_compilation.execute",
+        "resource_type": "project_guide_compilation_request",
+        "resource_id": str(operation_id),
+        "scope_project_id": str(project_id),
+        "actor_profile_id": str(actor_profile_id),
+        "identity_link_id": str(identity_link_id),
+        "service_identity": "workstream.project.setup",
+        "request_facts_digest": request_facts_digest,
+        "trigger": origin.trigger,
+        "source_mutation_operation_id": str(origin.source_mutation_operation_id),
+        "source_authorization_decision_event_id": str(origin.source_authorization_decision_event_id),
+    }
+    return "sha256:" + hashlib.sha256(json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    ).encode()).hexdigest()
+
+
 class ProjectGuideCompilationAuthorizationPort(Protocol[PreparedHandleT]):
     """Prepare and consume exact inactive compilation authority."""
 
     async def prepare_request(
-        self, *, actor: ActorIdentityFacts, facts: ProjectGuideCompilationRequestFacts
+        self, *, actor: ActorIdentityFacts, facts: ProjectGuideCompilationRequestFacts,
+        origin: ProjectGuideCompilationRequestOrigin,
     ) -> PreparedHandleT: ...
 
     async def consume_request(
@@ -217,7 +262,13 @@ class ProjectGuideCompilationAuthorizationPort(Protocol[PreparedHandleT]):
         handle: PreparedHandleT,
         actor: ActorIdentityFacts,
         facts: ProjectGuideCompilationRequestFacts,
+        origin: ProjectGuideCompilationRequestOrigin,
     ) -> UUID: ...
+
+    async def validate_request_replay(
+        self, *, actor: ActorIdentityFacts, facts: ProjectGuideCompilationRequestFacts,
+        origin: ProjectGuideCompilationRequestOrigin,
+    ) -> None: ...
 
     async def authorize_execute_preflight(
         self,

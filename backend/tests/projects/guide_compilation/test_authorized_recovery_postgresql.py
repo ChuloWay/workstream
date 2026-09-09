@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 from dataclasses import replace
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 import pytest
@@ -44,6 +45,7 @@ async def test_uncertain_restart_returns_unresolved_without_redispatch(
     try:
         async with factory() as session:
             requested = await _authorized_service(session, human_actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=human_actor,
                 facts=_request(values),
                 identity=identity(context(values)),
@@ -82,12 +84,14 @@ async def test_changed_request_replay_fails_without_new_authority_event(
     try:
         async with factory() as session:
             await _authorized_service(session, actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=actor, facts=facts, identity=identity(context(values))
             )
         changed = replace(facts, instruction_version="v2")
         async with factory() as session:
             with pytest.raises(GuideCompilationIntegrityError, match="replay mismatch"):
                 await _authorized_service(session, actor).authorize_request(
+                    origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                     actor=actor,
                     facts=changed,
                     identity=identity(context(values)).model_copy(

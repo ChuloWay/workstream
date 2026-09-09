@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 import asyncio
 from contextlib import asynccontextmanager
 
@@ -128,6 +129,7 @@ async def _authorized_attempt(database_url: str, values):
     try:
         async with factory() as session:
             return await _authorized_service(session, actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=actor,
                 facts=_request(values),
                 identity=identity(context(values)),

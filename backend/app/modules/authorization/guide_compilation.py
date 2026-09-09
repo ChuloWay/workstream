@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from uuid import UUID
 
 from app.modules.authorization.api import (
@@ -11,6 +12,7 @@ from app.modules.authorization.api import (
     ProjectGuideCompilationExecutePersistFacts,
     ProjectGuideCompilationExecutePreflightFacts,
     ProjectGuideCompilationRequestFacts,
+    ProjectGuideCompilationRequestOrigin,
     project_guide_compilation_execute_resource_digest,
     project_guide_compilation_facts_digest,
 )
@@ -36,8 +38,18 @@ from app.modules.authorization.runtime import (
 )
 
 
+def _request_action(origin: ProjectGuideCompilationRequestOrigin) -> ActionId:
+    """Select authority by the explicit trigger, never by ambient actor roles."""
+    return (
+        ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC
+        if origin.trigger == "automatic_source_ready"
+        else ActionId.PROJECT_GUIDE_COMPILATION_REQUEST
+    )
+
+
 def _request_context(
     facts: ProjectGuideCompilationRequestFacts,
+    origin: ProjectGuideCompilationRequestOrigin,
 ) -> ProjectGuideCompilationRequestResourceContext:
     return ProjectGuideCompilationRequestResourceContext(
         resource_type="project_guide_compilation_request",
@@ -51,6 +63,7 @@ def _request_context(
         request_id=facts.request_id,
         idempotency_key=facts.idempotency_key,
         request_facts_digest=project_guide_compilation_facts_digest(facts),
+        **asdict(origin),
     )
 
 
@@ -142,13 +155,14 @@ class ProjectGuideCompilationAuthorizationAdapter:
             raise BoundaryAuthorizationDenied("compilation authority denied") from exc
 
     async def prepare_request(
-        self, *, actor: ActorIdentityFacts, facts: ProjectGuideCompilationRequestFacts
+        self, *, actor: ActorIdentityFacts, facts: ProjectGuideCompilationRequestFacts,
+        origin: ProjectGuideCompilationRequestOrigin,
     ) -> PreparedAuthorizationHandle:
         self._assert_actor(actor)
-        resource = _request_context(facts)
+        resource = _request_context(facts, origin)
         return await self._invoke(
             self._prepared.prepare(
-                ActionId.PROJECT_GUIDE_COMPILATION_REQUEST,
+                _request_action(origin),
                 _input(resource, facts.idempotency_key),
                 PreparedAuthorityScope(
                     kind=PreparedAuthorityScopeKind.PROJECT, project_id=facts.project_id
@@ -162,18 +176,32 @@ class ProjectGuideCompilationAuthorizationAdapter:
         handle: PreparedAuthorizationHandle,
         actor: ActorIdentityFacts,
         facts: ProjectGuideCompilationRequestFacts,
+        origin: ProjectGuideCompilationRequestOrigin,
     ) -> UUID:
         self._assert_actor(actor)
-        resource = _request_context(facts)
+        resource = _request_context(facts, origin)
         decision = await self._invoke(
             self._prepared.consume(
                 handle,
-                ActionId.PROJECT_GUIDE_COMPILATION_REQUEST,
+                _request_action(origin),
                 _input(resource, facts.idempotency_key),
                 resource,
             )
         )
         return decision.decision_id
+
+    async def validate_request_replay(
+        self, *, actor: ActorIdentityFacts, facts: ProjectGuideCompilationRequestFacts,
+        origin: ProjectGuideCompilationRequestOrigin,
+    ) -> None:
+        """Hold current trigger authority in the caller's receipt transaction."""
+        self._assert_actor(actor)
+        resource = _request_context(facts, origin)
+        await self._invoke(self._prepared.preflight(
+            _request_action(origin), _input(resource, facts.idempotency_key),
+            PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.PROJECT, project_id=facts.project_id),
+            resource,
+        ))
 
     async def authorize_execute_preflight(
         self, *, actor: ActorIdentityFacts, facts: ProjectGuideCompilationExecutePreflightFacts

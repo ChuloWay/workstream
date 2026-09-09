@@ -1,6 +1,6 @@
 # WS-POL-003 — Unified project-guide compilation
 
-Latest completed POL behavior: [POL-04A2 hidden finalization](WS-POL-003-04A2.md).
+Latest completed POL behavior: [POL-04B1 hidden automatic request custody](WS-POL-003-04B1.md).
 Current remaining design: [POL plan](planning/PLAN.md) and the
 [cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract).
 
@@ -9,7 +9,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 [`planning/chunk contracts`](pre-cutover/chunks/).
 
 - Disposition: Planned
-- Completed boundary: hidden execution, deterministic projections, and immutable setup finalization.
+- Completed boundary: hidden execution, deterministic projections, immutable setup finalization,
+  and automatic request custody with current-authority replay.
 - Intent: compile one locked guide and its policies into authoritative,
   versioned project behavior without circular subsystem authority.
 - Next usable boundary: POL-04B consumes the [consolidated catalogue](../WS-ARCH-001/WS-ARCH-001-04A.md)
@@ -31,6 +32,10 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   concrete adapter; the default port remains unavailable and HTTP/Celery have
   no finalization composition.
 
+- POL-04B1 binds automatic source-ready requests to committed source consent
+  and current setup-service authority. Human and service replay hold current
+  authority through receipt classification; live execution remains POL-04B.
+
 ## Remaining v0.1 sequence
 
 The existing guide-bound ReviewPolicy now persists and exposes strict
@@ -41,8 +46,11 @@ Configured `false` remains available in draft but cannot activate a guide until
 the authorized automated FinalAcceptance/CON path is proven and available.
 Existing tasks retain their locked rules; adjudication is not included.
 
-1. Using completed ARCH-04A catalogue/schema contracts, POL-04B live explicit-manager
-   cutover with superseded inference implementations physically deleted.
+1. With POL-04B1 automatic request authority and completed ARCH-04A
+   contracts, POL-04B connects automatic initial compilation with independently
+   configurable runtime/model/instructions and deletes superseded inference paths.
+   The result stops at findings and draft pre/post proposals, without approval.
+   Manager correction/manual rerun in a new generation belongs to POL-05.
 2. POL-05/06 complete proposal visibility, setup-wide correction, approval and
    post-submit manifests with AUTH-12F4/12G. Immutable
    finalized setup rows require separately reviewed downstream custody before

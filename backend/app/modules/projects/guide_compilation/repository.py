@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID, uuid4
 
-from sqlalchemy import exists, func, or_, select, update
+from sqlalchemy import exists, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,7 @@ from app.modules.authorization.api import (
     ActorIdentityFacts,
     ProjectGuideCompilationExecutePersistFacts,
     ProjectGuideCompilationRequestFacts,
+    ProjectGuideCompilationRequestOrigin,
     project_guide_compilation_facts_digest,
 )
 from app.modules.projects.models import GuideSourceSnapshot, ProjectGuide, ProjectSetupRun
@@ -193,6 +194,7 @@ class GuideCompilationRepository:
         *,
         actor: ActorIdentityFacts,
         facts: ProjectGuideCompilationRequestFacts,
+        origin: ProjectGuideCompilationRequestOrigin,
         lock: bool = False,
     ) -> ProjectGuideCompilationRequestOperation | None:
         """Load one operation touching any replay identity and require exactness."""
@@ -219,7 +221,7 @@ class GuideCompilationRepository:
         rows = list((await self._session.scalars(statement)).all())
         if not rows:
             return None
-        if len(rows) != 1 or not _request_matches(rows[0], actor, facts):
+        if len(rows) != 1 or not _request_matches(rows[0], actor, facts, origin):
             raise GuideCompilationIntegrityError("compilation request replay mismatch")
         return rows[0]
 
@@ -242,12 +244,19 @@ class GuideCompilationRepository:
         *,
         actor: ActorIdentityFacts,
         facts: ProjectGuideCompilationRequestFacts,
+        origin: ProjectGuideCompilationRequestOrigin,
         attempt: ProjectGuideCompilationAttempt,
         authorization_decision_event_id: UUID,
     ) -> ProjectGuideCompilationRequestOperation:
         """Insert one authorized operation receipt bound to exact custody."""
         operation = ProjectGuideCompilationRequestOperation(
             operation_id=facts.operation_id,
+            request_trigger=origin.trigger,
+            source_mutation_operation_id=origin.source_mutation_operation_id,
+            source_authorization_decision_event_id=(
+                str(origin.source_authorization_decision_event_id)
+                if origin.source_authorization_decision_event_id is not None else None
+            ),
             request_id=facts.request_id,
             idempotency_key=facts.idempotency_key,
             actor_profile_id=str(actor.actor_profile_id),
@@ -274,6 +283,25 @@ class GuideCompilationRepository:
                 "compilation request custody failed before commit"
             ) from exc
         return operation
+
+    async def require_automatic_request_origin(
+        self, facts: ProjectGuideCompilationRequestFacts,
+        origin: ProjectGuideCompilationRequestOrigin,
+    ) -> None:
+        """Use the same locked origin rule as direct PostgreSQL insertion."""
+        try:
+            await self._session.execute(text(
+                "select require_automatic_compilation_origin("
+                ":project, :guide, :snapshot, :setup, :generation, :operation, :event)"
+            ), {
+                "project": str(facts.project_id), "guide": str(facts.guide_id),
+                "snapshot": str(facts.source_snapshot_id), "setup": str(facts.setup_run_id),
+                "generation": facts.setup_generation,
+                "operation": origin.source_mutation_operation_id,
+                "event": str(origin.source_authorization_decision_event_id),
+            })
+        except DBAPIError as exc:
+            raise GuideCompilationIntegrityError("automatic compilation origin unavailable") from exc
 
     async def attempt(
         self, attempt_id: UUID, *, lock: bool
@@ -650,10 +678,17 @@ def _request_matches(
     operation: ProjectGuideCompilationRequestOperation,
     actor: ActorIdentityFacts,
     facts: ProjectGuideCompilationRequestFacts,
+    origin: ProjectGuideCompilationRequestOrigin,
 ) -> bool:
     """Require every immutable replay selector and the complete facts digest."""
     return (
         operation.operation_id == facts.operation_id
+        and operation.request_trigger == origin.trigger
+        and operation.source_mutation_operation_id == origin.source_mutation_operation_id
+        and operation.source_authorization_decision_event_id == (
+            str(origin.source_authorization_decision_event_id)
+            if origin.source_authorization_decision_event_id is not None else None
+        )
         and operation.request_id == facts.request_id
         and operation.idempotency_key == facts.idempotency_key
         and operation.actor_profile_id == str(actor.actor_profile_id)

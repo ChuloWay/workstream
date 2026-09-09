@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 from dataclasses import asdict
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -100,7 +101,7 @@ async def test_request_rejects_caller_identity_drift_before_authority(
     clean_postgres_database: str,
 ) -> None:
     values = await seed_database(clean_postgres_database)
-    human, link, _grant = await _seed_human(clean_postgres_database, values)
+    human, link, grant = await _seed_human(clean_postgres_database, values)
     actor = ActorIdentityFacts(human, link, PublicActorKind.HUMAN)
     facts = _request(values)
     drifted = identity(context(values)).model_copy(update={"guide_version": "guide.v2"})
@@ -110,6 +111,7 @@ async def test_request_rejects_caller_identity_drift_before_authority(
         async with factory() as session:
             with pytest.raises(GuideCompilationIntegrityError, match="do not match"):
                 await _authorized_service(session, actor).authorize_request(
+                    origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                     actor=actor, facts=facts, identity=drifted
                 )
             counts = (
@@ -155,7 +157,7 @@ async def test_authorized_request_commits_one_bound_receipt_and_exact_replay(
     clean_postgres_database: str,
 ) -> None:
     values = await seed_database(clean_postgres_database)
-    human, link, _grant = await _seed_human(clean_postgres_database, values)
+    human, link, grant = await _seed_human(clean_postgres_database, values)
     actor = ActorIdentityFacts(human, link, PublicActorKind.HUMAN)
     facts = _request(values)
     attempt_identity = identity(context(values))
@@ -164,11 +166,13 @@ async def test_authorized_request_commits_one_bound_receipt_and_exact_replay(
     try:
         async with factory() as session:
             receipt = await _authorized_service(session, actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=actor, facts=facts, identity=attempt_identity
             )
         assert receipt.classification is CompilationRecoveryClassification.RESERVED
         async with factory() as session:
             replay = await _authorized_service(session, actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=actor, facts=facts, identity=attempt_identity
             )
             counts = (
@@ -185,4 +189,95 @@ async def test_authorized_request_commits_one_bound_receipt_and_exact_replay(
         assert replay == receipt
         assert counts == (1, 1, 1)
     finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("revoked_authority", ["identity_link", "project_manager_grant"])
+async def test_revoked_pm_cannot_recover_request(clean_postgres_database, revoked_authority):
+    from app.modules.authorization.api import AuthorizationDenied
+    values = await seed_database(clean_postgres_database)
+    human, link, grant = await _seed_human(clean_postgres_database, values)
+    actor = ActorIdentityFacts(human, link, PublicActorKind.HUMAN)
+    engine = create_async_engine(clean_postgres_database)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    facts = _request(values)
+    origin = ProjectGuideCompilationRequestOrigin(trigger="project_manager")
+    try:
+        async with factory() as session:
+            await _authorized_service(session,actor).authorize_request(actor=actor,facts=facts,identity=identity(context(values)),origin=origin)
+        async with factory() as session, session.begin():
+            if revoked_authority == "identity_link":
+                await session.execute(text("update actor_identity_links set status='revoked',revoked_by='test',revoked_at=now(),revoked_reason='test revocation' where id=:id"), {"id":str(link)})
+            else:
+                # Seed the committed revoked state; this test exercises replay admission,
+                # while AUTH's grant-revocation service has its own operation tests.
+                await session.execute(text("alter table admin_role_grants disable trigger user"))
+                await session.execute(text("update admin_role_grants set status='revoked',version=2,revoked_by_actor_profile_id=:actor,revoked_by_admin_role_grant_id=:grant,revoked_at=now(),revoked_reason='test revocation' where id=:grant"), {"actor":str(human),"grant":grant})
+                await session.execute(text("alter table admin_role_grants enable trigger user"))
+        async with factory() as session:
+            with pytest.raises(AuthorizationDenied):
+                await _authorized_service(session,actor).authorize_request(actor=actor,facts=facts,identity=identity(context(values)),origin=origin)
+            assert await session.scalar(text("select count(*) from audit_events where action_id='project.guide_compilation.request'")) == 1
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("authority", ["identity_link", "grant"])
+async def test_pm_replay_holds_current_authority_until_receipt_classification(clean_postgres_database, monkeypatch, authority):
+    import asyncio
+    from app.modules.projects.guide_compilation import service as service_module
+    values = await seed_database(clean_postgres_database)
+    human, link, grant = await _seed_human(clean_postgres_database, values)
+    actor = ActorIdentityFacts(human, link, PublicActorKind.HUMAN)
+    engine = create_async_engine(clean_postgres_database)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    facts, origin = _request(values), ProjectGuideCompilationRequestOrigin(trigger="project_manager")
+    entered, release, revoke_started = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    original = service_module._request_receipt
+    async def classify(repository, operation):
+        assert repository._session.in_transaction()
+        entered.set()
+        await release.wait()
+        return await original(repository, operation)
+    async def replay():
+        async with factory() as session:
+            return await _authorized_service(session,actor).authorize_request(actor=actor,facts=facts,identity=identity(context(values)),origin=origin)
+    async def revoke():
+        async with factory() as session, session.begin():
+            revoke_started.set()
+            if authority == "identity_link":
+                await session.execute(text("update actor_identity_links set status='revoked',revoked_by='test',revoked_at=now(),revoked_reason='test revocation' where id=:id"), {"id":str(link)})
+            else:
+                await session.execute(text("update admin_role_grants set status='revoked',version=2,revoked_by_actor_profile_id=:actor,revoked_by_admin_role_grant_id=:grant,revoked_at=now(),revoked_reason='replay race' where id=:grant"), {"actor":str(human),"grant":grant})
+    pending = []
+    try:
+        if authority == "grant":
+            # Fixture setup precedes the race so no ALTER TABLE lock can mask
+            # whether AUTH retains its actual grant row lock during classification.
+            async with factory() as session, session.begin():
+                await session.execute(text("alter table admin_role_grants disable trigger user"))
+        first = await replay()
+        monkeypatch.setattr(service_module, "_request_receipt", classify)
+        replay_task = asyncio.create_task(replay())
+        pending.append(replay_task)
+        await asyncio.wait_for(entered.wait(), 5)
+        revoke_task = asyncio.create_task(revoke())
+        pending.append(revoke_task)
+        await asyncio.wait_for(revoke_started.wait(), 5)
+        done, _ = await asyncio.wait({revoke_task}, timeout=0.2)
+        assert not done, "revocation escaped the replay transaction's authority lock"
+        release.set()
+        assert await asyncio.wait_for(replay_task, 5) == first
+        await asyncio.wait_for(revoke_task, 5)
+    finally:
+        release.set()
+        for task in pending:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        if authority == "grant":
+            async with factory() as session, session.begin():
+                await session.execute(text("alter table admin_role_grants enable trigger user"))
         await engine.dispose()

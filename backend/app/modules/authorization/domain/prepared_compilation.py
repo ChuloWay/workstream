@@ -16,6 +16,7 @@ from app.modules.authorization.runtime import PreparedAuthorizationHandleInvalid
 
 _CONTEXT_BY_ACTION = {
     ActionId.PROJECT_GUIDE_COMPILATION_REQUEST: ProjectGuideCompilationRequestResourceContext,
+    ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC: ProjectGuideCompilationRequestResourceContext,
     ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE: ProjectGuideCompilationExecuteResourceContext,
 }
 _UUID_FIELDS = (
@@ -29,6 +30,8 @@ _UUID_FIELDS = (
     "idempotency_key",
     "attempt_id",
     "provider_idempotency_key",
+    "source_mutation_operation_id",
+    "source_authorization_decision_event_id",
 )
 
 
@@ -42,9 +45,13 @@ def parse_prepared_compilation(
     try:
         value = dict(request_value)
         for field in _UUID_FIELDS:
-            if field in value:
+            if field in value and value[field] is not None:
                 value[field] = UUID(str(value[field]))
         resource = context_type.model_validate(value)
+        if isinstance(resource, ProjectGuideCompilationRequestResourceContext):
+            expected = ("automatic_source_ready" if action_id is ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC else "project_manager")
+            if resource.trigger != expected:
+                raise ValueError("request trigger does not match action")
     except (TypeError, ValueError) as exc:
         raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle") from exc
     return {

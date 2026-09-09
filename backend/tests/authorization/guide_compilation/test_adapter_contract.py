@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 from dataclasses import asdict
 from types import SimpleNamespace
 from uuid import uuid4
@@ -183,8 +184,8 @@ def test_from_prepared_preserves_the_existing_authorization_composition() -> Non
 async def test_request_prepare_and_consume_bind_the_exact_project_context() -> None:
     actor, facts = _actor(), _request()
     adapter, prepared = _adapter(actor)
-    handle = await adapter.prepare_request(actor=actor, facts=facts)
-    event_id = await adapter.consume_request(handle=handle, actor=actor, facts=facts)
+    handle = await adapter.prepare_request(origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"), actor=actor, facts=facts)
+    event_id = await adapter.consume_request(origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"), handle=handle, actor=actor, facts=facts)
     assert handle is prepared.handle
     assert event_id == prepared.event_id
     assert [call[1] for call in prepared.calls] == [
@@ -250,7 +251,7 @@ async def test_actor_mismatch_denies_before_prepared_service_access() -> None:
     adapter, prepared = _adapter(actor)
     wrong = ActorIdentityFacts(uuid4(), actor.identity_link_id, PublicActorKind.HUMAN)
     with pytest.raises(BoundaryAuthorizationDenied):
-        await adapter.prepare_request(actor=wrong, facts=facts)
+        await adapter.prepare_request(origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"), actor=wrong, facts=facts)
     assert prepared.calls == []
 
 
@@ -301,7 +302,7 @@ async def test_real_kernel_system_project_manager_grant_cannot_request_compilati
         context.actor_profile_id, context.identity_link_id, PublicActorKind.HUMAN
     )
     with pytest.raises(BoundaryAuthorizationDenied):
-        await adapter.prepare_request(actor=actor, facts=_request())
+        await adapter.prepare_request(origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"), actor=actor, facts=_request())
 
 
 @pytest.mark.asyncio
@@ -343,11 +344,11 @@ async def test_real_kernel_exact_project_manager_request_succeeds_and_replay_den
         context.actor_profile_id, context.identity_link_id, PublicActorKind.HUMAN
     )
     facts = _request()
-    handle = await adapter.prepare_request(actor=actor, facts=facts)
-    event_id = await adapter.consume_request(handle=handle, actor=actor, facts=facts)
+    handle = await adapter.prepare_request(origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"), actor=actor, facts=facts)
+    event_id = await adapter.consume_request(origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"), handle=handle, actor=actor, facts=facts)
     assert [event.event_id for event in evidence.events] == [event_id]
     with pytest.raises(PreparedAuthorizationInvalid):
-        await adapter.consume_request(handle=handle, actor=actor, facts=facts)
+        await adapter.consume_request(origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"), handle=handle, actor=actor, facts=facts)
 
 
 @pytest.mark.parametrize(
@@ -380,7 +381,7 @@ async def test_real_kernel_actor_matrix_denies_without_evidence(
     )
     with pytest.raises(BoundaryAuthorizationDenied):
         if method == "request":
-            await adapter.prepare_request(actor=actor, facts=_request())
+            await adapter.prepare_request(origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"), actor=actor, facts=_request())
         else:
             await adapter.authorize_execute_preflight(
                 actor=actor,
