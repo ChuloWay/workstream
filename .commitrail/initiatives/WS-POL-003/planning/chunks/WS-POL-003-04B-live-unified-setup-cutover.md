@@ -71,9 +71,118 @@ configurable and their exact content/configuration must be bound to each immutab
 attempt together with runtime/model identity. A changed deployment configuration
 cannot silently alter an in-flight attempt. No credentials enter evidence.
 
-Automatic compilation stops after findings and draft pre/post policy proposals;
+Automatic compilation persists findings and draft pre/post policy proposals;
+the worker returns their bounded completion receipt. Authorized PM proposal
+visibility remains POL-05; this chunk does not claim that read surface delivered.
+Compilation stops there;
 insufficient guide results also terminate with findings. It never approves or
 activates a guide. Manager correction/manual rerun is POL-05's new-generation
 operation, using this same runtime and executor. No mode setting is introduced.
 The superseded operator autostart flag must not leave manual-mode or parallel
 pipeline code in the affected source-generation/continuation modules.
+
+## Current-source implementation plan
+
+- Initiative: WS-POL-003
+- Intended merge outcome: one automatic, authorized unified guide compilation
+  replaces the three separately invoked setup agents and stops at draft output.
+
+Current main includes POL-04B1. `guide_mutation_service.py` still conditionally
+creates setup rows, `guide_setup_continuation.py` dispatches the separate
+sufficiency worker, and `workers/project_setup.py` runs sufficiency followed by
+artifact-policy inference. `ProjectService` retains another sufficiency method
+and post-submit inference/continuation. The runtime exposes all four methods.
+The unified orchestrator, component projections and finalizer already exist.
+
+Implementation order:
+
+1. Trace and remove each inference-only consumer, route, prompt and test. Retain
+   policy CRUD, diagnostic reads, canonical validation, authorization and
+   immutable historical evidence wherever shared. Remove the old manual
+   sufficiency-dispatch route; POL-05 owns authorized correction/new generation.
+   Remove approval-triggered post-submit inference without replacing it with
+   premature post-policy approval or projection.
+2. Extend the existing runtime port with ADR 0014 adapter identity and compose
+   it through the shared typed factory. Define one validated, credential-free
+   configuration for runtime selection, model/provider, instructions and bounded
+   run limits. Persist its exact immutable snapshot on the existing attempt in the request
+   transaction. Include it in canonical input identity, but exclude it from the
+   provider user prompt; use its instructions as instructions. Preserve semantic
+   agent/instruction versions. Existing retained rows receive no invented
+   backfill and cannot execute without configuration. Require configuration on
+   new inserts and forbid later changes in PostgreSQL and application guards.
+   Reconstruct from that snapshot, never from changed deployment settings.
+3. Make source setup creation unconditional. Preserve verified-source readiness,
+   deterministic queue claims and retry handling. Replace the existing worker
+   with request_automatic -> existing executor -> two existing projection ports
+   -> existing finalizer. Each authority belongs to its own existing transaction.
+   Worker arguments must match the persisted project/guide/source/generation
+   before request authority or any provider invocation. A fast worker may
+   normalize its exact persisted dispatch_pending claim to queued/queued before
+   projection; match the full tuple and deterministic task ID, preserve all other
+   setup fields, and prove publisher acknowledgement cannot overwrite terminal
+   work. Rename the existing queue/task symbols for unified compilation without
+   an alias, preserving retained task identity values where custody requires it.
+4. Return bounded terminal output for sufficient, insufficient, invalid and
+   uncertain results. Replay completed work without constructing/calling a
+   provider. Never rewrite finalized setup rows or schedule another model call.
+5. Replace obsolete test coverage with behavior proof for the unified flow,
+   then run focused checks, hosted PostgreSQL/Celery/API/coverage evidence and
+   impact-routed review. Update roadmap/navigation in this same implementation.
+
+Additional affected paths: `backend/app/interfaces/project_agents.py`,
+`backend/app/core/{config,project_agents}.py`,
+`backend/app/adapters/project_agents/`, affected PROJECTS router/source/sufficiency/
+submission-policy/service modules, queue task identity and Celery registration,
+AUTH action dispatch registrations for removed entry points, and exact affected
+schemas/migrations if configuration custody requires them. Existing audit facts
+and retained output rows must remain interpretable and immutable. Test fixtures,
+API/route inventories, lane/ownership inventories and structural-debt snapshots
+may change only to match the actual replacement, never to weaken gates.
+
+Required reviews: architecture/reuse (shared consumers and typed composition),
+security (source/service authority, replay and immutable configuration), QA/test
+delta (behavior replacement and discriminating failure tests), product/docs
+(terminal outputs and remaining manual workflow), CI integrity (test removals,
+registrations and full hosted custody). Human focus: old inference is physically
+removed; one run proposes both phase policies; no approval or extra model call.
+
+Planned proof, not yet execution evidence: configuration changes independently
+alter attempt identity; unsupported runtime/provider fails before dispatch;
+wrong worker tuple and revoked service perform zero provider calls; duplicate
+callbacks race to one attempt; sufficient/insufficient outputs finalize exact
+persisted pointers; interrupted projections replay without inference; unknown
+provider outcome remains blocked; removed routes/methods cannot execute; shared
+policy mutation, locked lineage and retained-data protections still hold.
+
+Plan review decisions: configuration custody belongs to the existing attempt,
+not an additional table or registry; hash-only configuration would lose exact
+reconstruction evidence. Shared mutation services remain for non-inference
+operations. Catalogue binding validation already delegates to the canonical
+CHECKERS validator on main; preserve it and add parity proof without rewriting it.
+
+The existing `approve_submission_artifact_policy` boundary must reject a
+`unified_compilation` draft before any effective/pre-policy writes or enqueue,
+until POL-05 provides the complete approved workflow. Preserve shared AUTH-12J
+actions `project.guide_sufficiency.run` and
+`project.submission_artifact_policy.derive`; these authorize deterministic
+projections even after their separate inference callers are removed.
+
+Verified readiness stays with ART verification callbacks and the existing
+guide continuation scanner through `GuideSetupPreparationService`; missing
+material stays eligible for continuation, without reserving a provider attempt.
+
+The runtime snapshot is a closed typed value, never a Settings dump: adapter
+capability/provider identity, model ID and safe behavior settings, instruction
+identity/version/exact content/SHA-256, and bounded run limits. Credentials,
+secret references, headers and signed endpoints are excluded. PostgreSQL checks
+its shape/hash and immutability. The canonical input hash (already present in
+AUTH facts and provider-key derivation) binds its full canonical value. Provider
+user-prompt serialization excludes the snapshot. Only a RESERVED attempt may
+construct/validate its selected runtime, before the one-shot dispatch fence;
+accepted, persisted, invalid and uncertain replay construct no runtime.
+
+The worker normalizes only dispatch_pending/current_step=dispatch with its exact
+persisted task/tuple to queued/queued; all other data stays unchanged. Terminal
+replay follows existing authority/custody paths and does not normalize or reopen
+setup rows. Test early delivery with a barrier around publisher acknowledgement.
