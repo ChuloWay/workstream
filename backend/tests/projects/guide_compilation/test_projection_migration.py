@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.modules.projects.repository import ProjectRepository
 
+from .test_migration_authorized_persistence import run_guarded_revision_downgrade
 from .helpers import seed_database
 from .test_projection_postgresql import _project_both
 
@@ -377,5 +378,7 @@ def test_populated_projection_migration_refuses_downgrade(
         migration_lock(),
         pytest.raises(RuntimeError, match="guide projection custody is non-empty"),
     ):
-        command.downgrade(_config(), "0008_guide_compilation_authorized_persistence")
+        asyncio.run(
+            run_guarded_revision_downgrade(clean_postgres_database, "0009_guide_compilation_projections")
+        )
     assert asyncio.run(_version(clean_postgres_database)) == ("0015_guide_runtime_configuration")

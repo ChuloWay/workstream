@@ -578,12 +578,6 @@ class GuideSufficiencyMutationService:
                 or setup_run.output_submission_artifact_policy_id is not None
             ):
                 raise GuideSufficiencyMutationConflict("project_setup_run_context_mismatch")
-            # A warning stopped the automatic continuation before derivation I/O.
-            setup_run.status = "enqueue_failed"
-            setup_run.current_step = "enqueue"
-            setup_run.celery_task_id = None
-            setup_run.error_code = None
-            setup_run.error_summary = None
         response = GuideSufficiencyReportResponse.model_validate(report)
         await self._replay.complete(
             replay, response_json=response.model_dump(mode="json"), report_id=report.id

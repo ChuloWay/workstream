@@ -5,65 +5,16 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_, select
-from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.modules.projects.models import ProjectSetupRun
-from app.modules.projects.guide_compilation.models import (
-    ProjectGuideCompilationAttempt,
-    ProjectGuideSetupFinalization,
-)
 from app.modules.projects.setup_queue import (
-    dispatch_stale_before,
+    retryable_compilation_dispatch_predicate,
     dispatch_project_guide_compilation_after_commit,
 )
 
 PrepareGeneration = Callable[..., Awaitable[bool]]
-
-
-def _retryable_dispatch_predicate() -> ColumnElement[bool]:
-    """Reclaim stale exact deliveries without reviving terminal provider custody."""
-    recoverable = (
-        ~select(ProjectGuideCompilationAttempt.id)
-        .where(
-            ProjectGuideCompilationAttempt.setup_run_id == ProjectSetupRun.id,
-            ProjectGuideCompilationAttempt.setup_generation == ProjectSetupRun.setup_generation,
-            ProjectGuideCompilationAttempt.status.in_(
-                (
-                    "compilation_invalid_terminal",
-                    "compilation_provider_uncertain",
-                )
-            ),
-        )
-        .exists()
-    )
-    unfinished = (
-        ~select(ProjectGuideSetupFinalization.id)
-        .where(
-            ProjectGuideSetupFinalization.setup_run_id == ProjectSetupRun.id,
-            ProjectGuideSetupFinalization.setup_generation == ProjectSetupRun.setup_generation,
-        )
-        .exists()
-    )
-    return or_(
-        and_(
-            ProjectSetupRun.status == "queued",
-            ProjectSetupRun.current_step == "queued",
-            ProjectSetupRun.celery_task_id.is_not(None),
-            ProjectSetupRun.updated_at <= dispatch_stale_before(),
-            recoverable,
-            unfinished,
-        ),
-        and_(
-            ProjectSetupRun.status == "dispatch_pending",
-            ProjectSetupRun.updated_at <= dispatch_stale_before(),
-        ),
-        and_(
-            ProjectSetupRun.status.in_(("queued", "enqueue_failed")),
-            ProjectSetupRun.celery_task_id.is_(None),
-        ),
-    )
 
 
 async def retryable_source_snapshot_ids(
@@ -77,7 +28,7 @@ async def retryable_source_snapshot_ids(
             await session.scalars(
                 select(ProjectSetupRun.source_snapshot_id)
                 .where(
-                    _retryable_dispatch_predicate(),
+                    retryable_compilation_dispatch_predicate(),
                 )
                 .order_by(ProjectSetupRun.created_at, ProjectSetupRun.id)
                 .limit(page_size)
@@ -96,7 +47,7 @@ async def retryable_setup_run_for_snapshot(
             select(ProjectSetupRun)
             .where(
                 ProjectSetupRun.source_snapshot_id == str(source_snapshot_id),
-                _retryable_dispatch_predicate(),
+                retryable_compilation_dispatch_predicate(),
             )
             .order_by(ProjectSetupRun.setup_generation.desc())
             .limit(1)

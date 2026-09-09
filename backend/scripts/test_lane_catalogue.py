@@ -246,8 +246,6 @@ PROJECT_MODULES = (
     "tests/projects/test_active_guide_read_composition.py",
     "tests/projects/test_diagnostic_read_composition.py",
     "tests/projects/test_diagnostic_read_rejections.py",
-    "tests/projects/test_execution_fence_binding.py",
-    "tests/projects/test_execution_fence_lifetime.py",
     "tests/projects/sufficiency_mutations/test_authority.py",
     "tests/projects/sufficiency_mutations/test_lineage.py",
     "tests/projects/sufficiency_mutations/test_report_create.py",

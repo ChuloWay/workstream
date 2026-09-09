@@ -56,19 +56,23 @@ async def automatic_source(project_client, project_database_env, monkeypatch):  
             UUID(profile.id), UUID(link.id), ActorKind.SERVICE, "workstream.project.setup"
         )
         setup_id = UUID(setup.id)
-        from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
-
-        # The automatic request starts from an acknowledged, exact broker claim.
-        setup.status = "queued"
-        setup.current_step = "queued"
-        setup.celery_task_id = project_guide_compilation_task_id(setup.id, setup.setup_generation)
-        setup.error_code = None
-        setup.error_summary = None
+        acknowledge_automatic_setup(setup)
         await session.commit()
     try:
         yield factory, actor, setup_id, snapshot
     finally:
         await engine.dispose()
+
+
+def acknowledge_automatic_setup(setup):
+    from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
+
+    # Automatic requests require an acknowledged, exact broker claim.
+    setup.status = "queued"
+    setup.current_step = "queued"
+    setup.celery_task_id = project_guide_compilation_task_id(setup.id, setup.setup_generation)
+    setup.error_code = None
+    setup.error_summary = None
 
 
 def automatic_service(session, actor):
@@ -547,6 +551,8 @@ async def test_stored_foreign_source_is_rejected_by_repository_and_insert(
         facts, identity, origin = await automatic_service(session, actor)._automatic_inputs.resolve(
             session, setup_id
         )
+        acknowledge_automatic_setup(other_setup)
+        await session.flush()
         other_facts, _, other_origin = await automatic_service(
             session, actor
         )._automatic_inputs.resolve(session, UUID(other_setup.id))

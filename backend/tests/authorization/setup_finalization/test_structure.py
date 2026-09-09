@@ -1,4 +1,4 @@
-"""Explicit composition and adversarial absence-of-live-reachability proof."""
+"""Explicit unified-worker composition and forbidden direct-finalization proof."""
 
 from pathlib import Path
 
@@ -15,11 +15,17 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def assert_no_live_finalization(paths):
-    imports, calls = imports_and_calls(paths)
-    assert not any("finalization" in name.lower() for name in imports | calls)
+    for path in paths:
+        imports, calls = imports_and_calls((path,))
+        if path == ROOT / "app/workers/project_setup.py":
+            assert "setup_finalization_authorization" in imports
+            imports.remove("setup_finalization_authorization")
+        assert not any("finalization" in name.lower() for name in imports | calls)
+        assert "finalize" not in calls
 
 
-async def test_finalization_authority_has_no_live_reachability():
+
+async def test_finalization_authority_is_composed_only_for_unified_delivery():
     paths = tuple((ROOT / "app/modules").rglob("router.py")) + tuple(
         (ROOT / "app/workers").rglob("*.py")
     )

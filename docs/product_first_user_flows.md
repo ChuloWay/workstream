@@ -86,9 +86,9 @@ Acceptance:
 - Submission artifact policy is Workstream-derived and approved by an
   authorized covered Project Manager; project owners do not author or approve
   the machine policy schema directly.
-- This flow is the agent-derived setup path. A manual sufficiency report follows
-  the explicit manual policy path; agent derivation requires an agent-created
-  sufficiency report for the same snapshot or a fresh guide-source snapshot.
+- This flow uses unified compilation and its deterministic verified-report
+  projection. Manual reports and policies retain separate diagnostic/manual
+  provenance and cannot replace or satisfy unified compilation evidence.
 - Submission artifact, checker, review, and revision policies are visible on the
   project page; contribution policy/version is an independently governed
   project record.

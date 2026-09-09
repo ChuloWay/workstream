@@ -1261,21 +1261,16 @@ async def create_policy_bundle_for_guide(
     assert snapshot_response.status_code == 201, snapshot_response.text
     snapshot = snapshot_response.json()
     async with db_session.get_session_factory()() as session:
-        session.add(
-            ProjectSetupRun(
-                id=str(uuid4()),
-                project_id=project_id,
-                guide_id=guide_id,
-                guide_version=snapshot["guide_version"],
-                source_snapshot_id=snapshot["id"],
-                source_snapshot_hash=snapshot["bundle_hash"],
-                setup_generation=1,
-                status="queued",
-                current_step="queued",
-                created_by="project-manager-subject",
+        setup = await session.scalar(
+            select(ProjectSetupRun).where(
+                ProjectSetupRun.project_id == project_id,
+                ProjectSetupRun.guide_id == guide_id,
+                ProjectSetupRun.source_snapshot_id == snapshot["id"],
             )
         )
-        await session.commit()
+        assert setup is not None
+        assert setup.source_snapshot_hash == snapshot["bundle_hash"]
+        assert setup.setup_generation == 1
 
     report_response = await client.post(
         f"/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports",

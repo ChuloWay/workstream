@@ -95,10 +95,30 @@ async def _seed_attempt(database_url: str) -> None:
         await engine.dispose()
 
 
+async def run_guarded_revision_downgrade(database_url: str, revision: str) -> None:
+    """Exercise a retained-data guard directly, without earlier guards masking it."""
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from alembic.script import ScriptDirectory
+
+    downgrade = ScriptDirectory.from_config(_config()).get_revision(revision).module.downgrade
+    engine = create_async_engine(database_url)
+
+    def run(connection):
+        with Operations.context(MigrationContext.configure(connection)):
+            downgrade()
+
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(run)
+    finally:
+        await engine.dispose()
+
+
 def test_0008_refuses_downgrade_with_compilation_custody(
     isolated_database_env: str, migration_lock
 ) -> None:
     asyncio.run(_seed_attempt(isolated_database_env))
     with migration_lock(), pytest.raises(RuntimeError, match="custody is non-empty"):
-        command.downgrade(_config(), "0007_contribution_policy_publication_custody")
+        asyncio.run(run_guarded_revision_downgrade(isolated_database_env, OWN_REVISION))
     assert asyncio.run(_schema(isolated_database_env))[0] == CURRENT_HEAD

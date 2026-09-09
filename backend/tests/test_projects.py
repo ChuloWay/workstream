@@ -12,6 +12,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID, uuid4
+from unittest.mock import AsyncMock
 
 import pytest  # type: ignore[import-not-found]
 from httpx import ASGITransport, AsyncClient
@@ -676,20 +677,15 @@ async def test_project_setup_dispatch_reuses_exact_queued_task_without_republish
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     expected = project_setup_identity.project_guide_compilation_task_id("run-1", 1)
-    setup_run = SimpleNamespace(status="queued", celery_task_id=expected)
+    setup_run = SimpleNamespace(status="queued", celery_task_id=expected, updated_at=datetime.now(UTC))
 
-    class Repository:
-        def __init__(self, _session: Any) -> None:
-            pass
-
-        async def lock_project_setup_run(self, _setup_run_id: str) -> Any:
-            return setup_run
+    repository = SimpleNamespace(lock_project_setup_run=AsyncMock(return_value=setup_run))
 
     class Session:
         async def commit(self) -> None:
             raise AssertionError("existing queue custody must not be mutated")
 
-    monkeypatch.setattr(project_repository_module, "ProjectRepository", Repository)
+    monkeypatch.setattr(project_repository_module, "ProjectRepository", lambda _: repository)
     monkeypatch.setattr(
         project_setup_queue_module,
         "enqueue_project_guide_compilation",
@@ -706,6 +702,7 @@ async def test_project_setup_dispatch_reuses_exact_queued_task_without_republish
     )
 
     assert result == expected
+    repository.lock_project_setup_run.assert_awaited_once_with("run-1")
 
 
 @pytest.mark.asyncio

@@ -184,16 +184,14 @@ The human-facing operating guide for a project. It contains the project instruct
 
 ## Guide Sufficiency Report
 
-The Workstream-owned sufficiency record for a project guide version and source
-snapshot. It is normally produced by `ProjectGuideSufficiencyAgent`, but an
-authorized covered Project Manager may also request that agent assessment over
-the canonical verified material. A separately created manual report is
-diagnostic and does not replace agent provenance.
-It records
-whether the guide passed, is blocked by gaps, or passed with warnings that an
-authorized covered Project Manager must acknowledge before activation. Manual reports
-clear only the manual policy path; agent derivation requires an agent-created
-sufficiency report for the same snapshot.
+The Workstream-owned sufficiency record for an exact project guide and source
+snapshot. After ART readiness automatically triggers unified compilation, a
+deterministic projection creates the verified report from that compilation's
+sufficiency component. It records whether the guide passed, is blocked by gaps,
+or passed with warnings for Project Manager review. Verified material and exact
+projection custody bind the report to its compilation and setup generation.
+Manual reports and policies retain their separately authorized diagnostic/manual
+provenance; they cannot replace or satisfy unified compilation evidence.
 
 ## Project Setup Run
 

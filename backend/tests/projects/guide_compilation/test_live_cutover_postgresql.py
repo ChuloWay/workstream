@@ -270,18 +270,7 @@ async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_
             )
             == before
         )
-    from app.modules.projects.guide_setup_continuation import retryable_source_snapshot_ids
-
-    async with factory() as session, session.begin():
-        await session.execute(
-            text(
-                "update project_setup_runs set updated_at=now()-interval '2 minutes' where id=:id"
-            ),
-            {"id": str(setup_id)},
-        )
-    assert delivery.source_snapshot_id not in await retryable_source_snapshot_ids(
-        factory, page_size=10
-    )
+    await _assert_terminal_not_reclaimable(factory, delivery)
     async with factory() as session:
         setup = await session.get(ProjectSetupRun, str(setup_id))
         assert setup.status == "queued" and setup.current_step == "queued"
@@ -294,6 +283,28 @@ async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_
             "project_guide_setup_finalizations",
         ]:
             assert await session.scalar(text("select count(*) from " + table)) == 0
+
+
+async def _assert_terminal_not_reclaimable(factory, delivery):
+    from app.modules.projects.guide_setup_continuation import retryable_source_snapshot_ids
+
+    for status, step, task in (
+        ("enqueue_failed", "enqueue", None),
+        ("queued", "queued", None),
+        ("dispatch_pending", "dispatch", str(delivery.task_id)),
+        ("queued", "queued", str(delivery.task_id)),
+    ):
+        async with factory() as session, session.begin():
+            await session.execute(
+                text(
+                    "update project_setup_runs set status=:status,current_step=:step,"
+                    "celery_task_id=:task,updated_at=now()-interval '2 minutes' where id=:id"
+                ),
+                {"id": str(delivery.setup_run_id), "status": status, "step": step, "task": task},
+            )
+        assert delivery.source_snapshot_id not in await retryable_source_snapshot_ids(
+            factory, page_size=10
+        ), (status, task)
 
 
 async def test_publisher_acknowledgement_cannot_overwrite_worker_finalization(
@@ -414,37 +425,19 @@ async def test_phase_crash_recovers_same_attempt_without_reinference(
     with pytest.raises(Crash):
         await coordinator.run(delivery)
     if boundary == "retained_unconfigured":
-        # Simulate the nullable additive-migration result using only this isolated
-        # database. Production immutability is independently proved in SQL tests.
-        async with factory() as session, session.begin():
-            from scripts.run_isolated_tests import NAME_RE
+        await _remove_retained_runtime_configuration(factory)
+        from app.modules.projects.guide_setup_continuation import retryable_source_snapshot_ids
 
-            assert NAME_RE.fullmatch(await session.scalar(text("select current_database()")))
+        async with factory() as session, session.begin():
             await session.execute(
                 text(
-                    "alter table project_guide_compilation_attempts disable trigger project_guide_runtime_configuration_guard"
-                )
+                    "update project_setup_runs set updated_at=now()-interval '2 minutes' where id=:id"
+                ),
+                {"id": str(setup_id)},
             )
-            await session.execute(
-                text(
-                    "alter table project_guide_compilation_attempts disable trigger trg_compilation_attempt_update"
-                )
-            )
-            await session.execute(
-                text(
-                    "update project_guide_compilation_attempts set runtime_configuration=null,runtime_configuration_hash=null"
-                )
-            )
-            await session.execute(
-                text(
-                    "alter table project_guide_compilation_attempts enable trigger project_guide_runtime_configuration_guard"
-                )
-            )
-            await session.execute(
-                text(
-                    "alter table project_guide_compilation_attempts enable trigger trg_compilation_attempt_update"
-                )
-            )
+        assert delivery.source_snapshot_id not in await retryable_source_snapshot_ids(
+            factory, page_size=10
+        )
         from app.modules.projects.guide_compilation.repository import GuideCompilationIntegrityError
 
         with pytest.raises(
@@ -715,6 +708,40 @@ async def test_stale_queued_configuration_failure_is_reclaimed_and_finishes_same
     assert delivery.source_snapshot_id not in await retryable_source_snapshot_ids(
         factory, page_size=10
     )
+
+
+async def _remove_retained_runtime_configuration(factory):
+    # Simulate the nullable additive-migration result using only this isolated
+    # database. Production immutability is independently proved in SQL tests.
+    async with factory() as session, session.begin():
+        from scripts.run_isolated_tests import NAME_RE
+
+        assert NAME_RE.fullmatch(await session.scalar(text("select current_database()")))
+        await session.execute(
+            text(
+                "alter table project_guide_compilation_attempts disable trigger project_guide_runtime_configuration_guard"
+            )
+        )
+        await session.execute(
+            text(
+                "alter table project_guide_compilation_attempts disable trigger trg_compilation_attempt_update"
+            )
+        )
+        await session.execute(
+            text(
+                "update project_guide_compilation_attempts set runtime_configuration=null,runtime_configuration_hash=null"
+            )
+        )
+        await session.execute(
+            text(
+                "alter table project_guide_compilation_attempts enable trigger project_guide_runtime_configuration_guard"
+            )
+        )
+        await session.execute(
+            text(
+                "alter table project_guide_compilation_attempts enable trigger trg_compilation_attempt_update"
+            )
+        )
 
 
 async def _reclaim_exact_delivery(factory, delivery, monkeypatch):

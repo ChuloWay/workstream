@@ -318,13 +318,33 @@ is unavailable even if its compilation was already persisted.
 
 The existing Beat continuation reclaims stale queued deterministic deliveries
 when bounded Celery retries exhaust. It republishes the same task and generation,
-retaining attempt/provider custody; invalid or uncertain provider outcomes and
-finalized work are excluded. Configuration repair can then start the still
+retaining attempt/provider custody; invalid or uncertain provider outcomes,
+existing attempts without runtime configuration, and finalized work are excluded.
+The shared eligibility predicate belongs to the queue owner; continuation consumes
+it without a reverse dependency. Configuration repair can then start the still
 uninvoked attempt, while accepted/persisted recovery never reinvokes the provider.
 Typed runtime registration reuses the project-agent capability adapter root.
 The delivery port's JSON result shape remains an explicitly bounded low-risk
 review observation; existing frozen finalization and diagnostic owners determine
 its contents, and Celery serializes the result without granting authority.
+
+Warning acknowledgement records covered human provenance without resetting or
+requeueing setup. Its own mutation no longer changes the stale-output identity,
+so an identical request can replay under fresh authority; setup/report lineage
+and late-conflict rollback checks remain intact. Shared task fixtures consume
+the setup created by the source API instead of inserting a duplicate generation.
+
+Retired sufficiency and submission-policy inference execution fences and
+fixed-service inference replay tests are removed with their owners. The remaining
+submission-policy fence had no product consumers; its isolated fence-test modules
+and fixture are removed, with exact lane catalogue updates. Required one-attempt/concurrency protection
+is proved by `test_concurrent_live_deliveries_share_one_provider_and_finalization`,
+`test_concurrent_automatic_callbacks_share_one_attempt`, and the authorized
+execution/concurrency tests. AUTH-12J projection tests retain exact service,
+source, task and component custody; human policy replay tests remain unchanged.
+The two older migration guards are invoked directly in real PostgreSQL Alembic
+operation contexts, so the newer runtime-custody guard cannot mask their proof.
+Hosted installations include the configured agent runtime extra.
 
 ### Superseded executable consumers
 

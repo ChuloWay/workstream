@@ -9,7 +9,14 @@ from app.modules.projects.api import setup_identity
 
 from celery.exceptions import CeleryError
 from kombu.exceptions import KombuError
+from sqlalchemy import and_, or_, select
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.modules.projects.models import ProjectSetupRun
+from app.modules.projects.guide_compilation.models import (
+    ProjectGuideCompilationAttempt,
+    ProjectGuideSetupFinalization,
+)
 
 from app.workers.errors import CeleryConfigurationError
 from app.workers.task_settings import sync_task_settings
@@ -21,6 +28,52 @@ DISPATCH_RETRY_AFTER_SECONDS = 60
 def dispatch_stale_before() -> datetime:
     """Return the shared cutoff for reclaiming an abandoned dispatch claim."""
     return datetime.now(UTC) - timedelta(seconds=DISPATCH_RETRY_AFTER_SECONDS)
+
+
+def retryable_compilation_dispatch_predicate() -> ColumnElement[bool]:
+    """Reclaim stale exact deliveries without reviving terminal provider custody."""
+    recoverable = (
+        ~select(ProjectGuideCompilationAttempt.id)
+        .where(
+            ProjectGuideCompilationAttempt.setup_run_id == ProjectSetupRun.id,
+            ProjectGuideCompilationAttempt.setup_generation == ProjectSetupRun.setup_generation,
+            or_(
+                ProjectGuideCompilationAttempt.runtime_configuration.is_(None),
+                ProjectGuideCompilationAttempt.status.in_(
+                    ("compilation_invalid_terminal", "compilation_provider_uncertain")
+                ),
+            ),
+        )
+        .exists()
+    )
+    unfinished = (
+        ~select(ProjectGuideSetupFinalization.id)
+        .where(
+            ProjectGuideSetupFinalization.setup_run_id == ProjectSetupRun.id,
+            ProjectGuideSetupFinalization.setup_generation == ProjectSetupRun.setup_generation,
+        )
+        .exists()
+    )
+    return and_(
+        recoverable,
+        unfinished,
+        or_(
+            and_(
+                ProjectSetupRun.status == "queued",
+                ProjectSetupRun.current_step == "queued",
+                ProjectSetupRun.celery_task_id.is_not(None),
+                ProjectSetupRun.updated_at <= dispatch_stale_before(),
+            ),
+            and_(
+                ProjectSetupRun.status == "dispatch_pending",
+                ProjectSetupRun.updated_at <= dispatch_stale_before(),
+            ),
+            and_(
+                ProjectSetupRun.status.in_(("queued", "enqueue_failed")),
+                ProjectSetupRun.celery_task_id.is_(None),
+            ),
+        ),
+    )
 
 
 class ProjectSetupQueueError(RuntimeError):
@@ -101,13 +154,9 @@ async def dispatch_project_guide_compilation_after_commit(
             return setup_run.celery_task_id
         # Retry the immutable delivery, never a new attempt or provider key.
         # Recheck terminal custody under the setup lock after candidate selection.
-        from app.modules.projects.guide_setup_continuation import _retryable_dispatch_predicate
-        from app.modules.projects.models import ProjectSetupRun
-        from sqlalchemy import select
-
         reclaimable = await session.scalar(
             select(ProjectSetupRun.id).where(
-                ProjectSetupRun.id == setup_run.id, _retryable_dispatch_predicate()
+                ProjectSetupRun.id == setup_run.id, retryable_compilation_dispatch_predicate()
             )
         )
         if reclaimable is None:

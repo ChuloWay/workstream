@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import json
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Literal, cast
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import JsonValue
-from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.hashing import canonical_json_hash
 from app.interfaces.artifact_operations import GuideSufficiencyMaterialPort
@@ -126,36 +124,6 @@ class SubmissionPolicyMutationService:
         self._projects = ProjectRepository(session)
         self._admin = AdminAuthorizationRepository(session)
         self._validation = ProjectService(session, guide_sufficiency_material=material)
-
-    @asynccontextmanager
-    async def _execution_fence(self, actor_profile_id: str, action: ActionId, key: UUID):
-        """Serialize one service-owned external derivation across processes."""
-        engine = self._session.bind
-        if not isinstance(engine, AsyncEngine):
-            raise RuntimeError("submission-policy derivation requires an async database engine")
-        digest = canonical_json_hash(
-            {
-                "domain": "workstream.submission_policy.execution_fence.v1",
-                "actor_profile_id": actor_profile_id,
-                "action_id": action.value,
-                "key": str(key),
-            }
-        )
-        lock_key = int(digest.removeprefix("sha256:")[:16], 16)
-        if lock_key >= 2**63:
-            lock_key -= 2**64
-        async with engine.connect() as connection:
-            acquired = await connection.scalar(
-                text("select pg_try_advisory_lock(:lock_key)"), {"lock_key": lock_key}
-            )
-            if acquired is not True:
-                raise SubmissionPolicyMutationConflict("idempotency_pending")
-            try:
-                yield
-            finally:
-                await connection.execute(
-                    text("select pg_advisory_unlock(:lock_key)"), {"lock_key": lock_key}
-                )
 
     @staticmethod
     def _stable_uuid(*parts: object) -> UUID:

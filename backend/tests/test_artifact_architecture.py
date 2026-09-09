@@ -309,7 +309,8 @@ def test_concrete_adapter_construction_has_one_composition_path() -> None:
             if name in {"LocalStorageAdapter", "S3CompatibleArtifactStore"}:
                 adapter_calls.append(path)
 
-    assert factory_calls == [COMPOSITION_ROOT]
+    assert set(factory_calls) == {COMPOSITION_ROOT, APP_ROOT / "adapters/project_agents/__init__.py"}
+    assert len(factory_calls) == 2
     assert adapter_calls == [COMPOSITION_ROOT, S3_ADAPTER_MODULE]
     assert set(concrete_imports) == {COMPOSITION_ROOT}
 
