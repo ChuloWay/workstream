@@ -607,14 +607,14 @@ Example:
     }
   },
   "policy_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "derivation_source": "agent_derivation",
-  "derivation_agent_name": "ProjectGuideCompilationAgent",
+  "derivation_source": "unified_compilation",
+  "derivation_agent_name": "ProjectGuideCompilationProjection",
   "derivation_agent_version": "v1",
-  "source_material_refs": ["project-guide:v1"],
-  "lifecycle_status": "approved",
-  "approved_by_admin_role_grant_id": "00000000-0000-0000-0000-000000000010",
-  "approved_by_actor_profile_id": "00000000-0000-0000-0000-000000000020",
-  "approved_at": "2026-06-22T12:00:00Z"
+  "source_material_refs": ["artifact-content:00000000-0000-0000-0000-000000000030#extraction-usage:00000000-0000-0000-0000-000000000040"],
+  "lifecycle_status": "draft",
+  "approved_by_admin_role_grant_id": null,
+  "approved_by_actor_profile_id": null,
+  "approved_at": null
 }
 ```
 
