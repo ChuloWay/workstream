@@ -210,6 +210,14 @@ async def task_side_effect_snapshot(task_id: str) -> dict:
                     run.submission_version,
                     run.attempt_number,
                     run.routing_recommendation,
+                    run.status,
+                    run.is_current_for_submission,
+                    run.failure_code,
+                    run.failure_message,
+                    run.queued_at,
+                    run.started_at,
+                    run.completed_at,
+                    run.created_at,
                 )
                 for run in checker_runs
             ],

@@ -242,3 +242,12 @@ Queued invalid-policy execution stays submitted until validation succeeds. The
 constant-default-drift preservation test is removed; canonical lock integrity
 remains covered. Current POL navigation assigns physical inference replacement to
 POL-04B and imposes no separate cleanup prerequisite.
+
+The checker-denial snapshot includes mutable existing-run status, current-run
+flag, failure details and timestamps as well as row identity/routing. Denial
+proof must catch mutation of retained runs, not only newly inserted rows.
+
+Traced shared fixture consumer `tests/projects/review_policy/test_activation.py`
+now uses the canonical post-submit compiler/parser supplied by its existing
+readiness fixture. Its obsolete sparse-parser mock is removed; review-policy
+semantics and required human-review/automated-acceptance guards stay covered.
