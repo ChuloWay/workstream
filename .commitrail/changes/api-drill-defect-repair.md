@@ -4,7 +4,7 @@
 - Durable disposition: Complete
 - Intended merge outcome: Reject the five observed invalid API inputs with 422 and preserve valid project, guide, and two-role authority behavior.
 
-## Intent and current behavior
+## Intent
 
 The [drill findings](../../docs/engineering/external-api-drill-findings.md) record
 five historical 503 responses. The starting main exposed unbounded project
@@ -15,6 +15,7 @@ Only submitter and reviewer project grants belong to current v0.1.
 ## Bounded change
 
 Allowed files and responsibility:
+
 - `backend/app/modules/projects/schemas.py`: the three existing bounds and
   omitted-versus-null guide content validation only.
 - `backend/app/modules/authorization/{schemas,models,project_role_service}.py`,
