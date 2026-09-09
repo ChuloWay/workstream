@@ -124,6 +124,31 @@ Durable phase:
 
 Checker names must not drift between project guides, policy templates, implementation code, and checker results. New behavior uses a new checker version or a new checker id.
 
+## Hidden versioned post-submit contracts
+
+ARCH-04A exposes an immutable v0.2 catalogue from the existing versioned
+registry, detached evaluation-request/result contracts and a dormant explicit
+v2 post-policy compiler. The sole public post phase port remains unavailable;
+ARCH-04C/04D supply later durable execution/currentness and authority.
+POL-04B connects the catalogue to live unified setup, and POL-06 invokes the
+pure v2 compiler for approved policy persistence. No default live caller is
+switched by these contracts.
+
+The eight mandatory structural defaults and the selectable
+`check_acceptance_criteria_present` have real conformance fixtures. Criteria
+presence does not prove that submitted work satisfies the criteria; placeholder
+signal detection remains advisory under the locked policy. Unsupported
+substantive automation remains an explicit capability gap, while an explicitly
+approved `human_review` disposition remains valid without a checker binding.
+
+Exact `(checker_id, implementation_version)` registration preserves historical
+name-only execution at `workstream-structural-v1`. The current policy-context
+check uses `workstream-policy-context-v2`, compares detached expected/observed
+policy references, and has no PaymentPolicy prerequisite. It proves local
+consistency, not stored ownership or authorization. The v2 compiled body pins
+the catalogue, definition, implementation and configuration identities in the
+existing canonical `policy_hash`; historical v1 bodies/hashes stay unchanged.
+
 ## Blocking Policy
 
 Default:

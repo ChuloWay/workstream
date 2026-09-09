@@ -8,12 +8,13 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 [`planning/chunk contracts`](pre-cutover/chunks/).
 
 - Disposition: Planned
-- Completed boundary: through 02H and [CP05](WS-ARCH-001-CP05.md).
+- Completed boundary: through 02H, [CP05](WS-ARCH-001-CP05.md), and
+  [ARCH-04A](WS-ARCH-001-04A.md) hidden post-submit contracts/conformance.
 - Intent: keep product modules behind explicit ports and composition roots.
-- Current boundary: hidden ContributionPolicy behavior has durable custody and exact
-  Finance Authority; public exposure remains separate.
-- Next usable boundary: [ARCH-04A](WS-ARCH-001-04A.md) checker catalogue/schema
-  and capability proof, then POL-04B live unified setup and the adopted POL
+- Current boundary: CHECKERS exposes hidden versioned catalogue and phase
+  contracts with registered structural conformance; live setup consumes them next.
+- Next usable boundary: POL-04B live unified setup using the completed
+  ARCH-04A catalogue/schema foundation, then the adopted POL
   approval/facade sequence. Return to independent CP06/CP07 after POL-07, then
   connect guide activation through AUTH-12H.
 - Governing sources: `docs/architecture_lockdown.md`, accepted ADRs, code, and
@@ -32,7 +33,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   CP06-CP09 remain: selected-policy validation, hidden guide binding/activation, and task-attempt lineage.
   CP09 physical removal follows zero legacy consumers, including checker/public
   Submission cutover; it is not on the `allow_review` critical path.
-- Independent ARCH-04A supplies contracts/capability proof before guide
-  activation, not durable runs. ARCH-03A-03C then ARCH-04B-04F build project/task readiness,
+- ARCH-04A supplies hidden versioned catalogue, immutable phase contracts and
+  registered structural conformance, not durable runs. ARCH-03A-03C then ARCH-04B-04F build project/task readiness,
   post-submit checker/materialization, remediation, and `allow_review` before
   final public 02I cutover and later REV admission.

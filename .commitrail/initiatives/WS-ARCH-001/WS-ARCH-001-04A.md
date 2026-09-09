@@ -1,7 +1,7 @@
 # WS-ARCH-001-04A — Registered post-submit contracts for unified guide setup
 
 - Initiative: WS-ARCH-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: CHECKERS exposes its versioned post-submit catalogue and immutable phase contracts, with conformance evidence for its registered structural implementations; live unified setup remains POL-04B.
 
 ## Intent
@@ -81,7 +81,8 @@ All backend paths below are relative to `backend/`.
   `test_input_bounds.py`, `test_requirement_dispositions.py`.
 - `tests/test_project_guide_compilation_contracts.py`, `tests/test_checkers.py`
   only for focused historical parity controls; no bulk rewrites.
-- `scripts/test_lane_catalogue.py`: additive registration of new test modules.
+- `scripts/test_lane_catalogue.py` and `tests/test_ci_lane_catalogue.py`: additive
+  registration and exact ownership expectation for new test modules.
   Existing lane ownership and required collection remain unchanged.
 - `.ci/module-boundaries/private-edge-debt.v1.json` at repo root: remove an
   actually eliminated PROJECTS-to-CHECKERS private edge; never add exceptions.
@@ -374,9 +375,9 @@ until those owners prove stored composite ownership and current authority.
 
 ## Acceptance criteria
 
-The following are future implementation tests, not claims of executed proof.
-Each negative starts from the same complete passing fixture, changes one
-property, and asserts the specific rejecting boundary.
+Focused implementation tests now cover these contracts. Each negative starts
+from the same complete passing fixture, changes one property, and asserts the
+specific rejecting boundary. Hosted integration remains separate evidence.
 
 | Proof | Valid control and counterexample |
 |---|---|
@@ -404,7 +405,7 @@ that actually claims substantive evaluation; none is added by this change.
 
 ## Evidence
 
-From `backend/`, after the named implementation modules exist:
+From `backend/`, run the focused implementation checks:
 
 ```sh
 .venv/bin/python -m pytest -q tests/checkers/post_submit tests/test_project_guide_compilation_contracts.py
@@ -421,8 +422,14 @@ hosted CI; do not run the full suite or local database concurrency on this
 resource-constrained workstation. New modules must have at least 90% coverage;
 preserve existing global floors, no skipped/deselected cases or gate weakening.
 
-Planning evidence consists of current-source inspection and focused plan
-reviews only. It cannot establish runtime, race, worker or provider behavior.
+The focused suite covers 249 contract/compilation cases and exceeds 99%
+statement coverage across the five new CHECKERS modules. The declared member
+and phase result byte ceilings are defensive: the closed field/cardinality
+limits already impose a stricter maximum. Input aggregate-limit tests reach
+the actual byte guard independently. Plan reviews establish contract
+feasibility only; no worker, database currentness or provider behavior is
+claimed by this change. Exact-head hosted and implementation review evidence
+belongs in the PR.
 No local sheet exports are present. If exports appear before roadmap editing,
 update and verify the existing XLSX and CSV together.
 
@@ -446,10 +453,9 @@ external provider requires its own scoped implementation decision.
 
 PR #387 completed CP05; #388's shared-acceptance prerequisites remain intact.
 This chunk advances the selected unified-guide path, not live post-submit
-execution or false-policy acceptance. On implementation merge, record exact
-capability and API outcomes in the roadmap and advance next work to POL-04B.
-Until implementation evidence exists, retain Planned and do not describe the
-catalogue, modern context checker or execution contracts as delivered.
+execution or false-policy acceptance. Its intended merged outcome is the hidden versioned catalogue, dormant v2
+compiler, detached phase facts and registered structural conformance. Next
+work is POL-04B live unified setup; no worker/route default is changed here.
 
 ## Review findings incorporated
 
@@ -459,5 +465,22 @@ bounds, per-handler conformance and human-review/gap proof. The design now
 fixes those choices and distinguishes local fact consistency from later stored
 composite ownership and AUTH checks. Subsequent review also corrected the
 existing string version types and made disabled-definition fixtures explicit
-through hash-bound state/disabled behavior. These are plan corrections, not claims of
-implemented or runtime-verified behavior.
+through hash-bound state/disabled behavior. Implementation preserves those
+decisions; contract and handler conformance do not imply live phase execution.
+
+## Implementation scope and proof limits
+
+This is one cohesive public-contract boundary with no migrations or live
+activation. The diff exceeds the preferred small L1 line guideline because
+it includes closed catalogue/policy/input/result schemas and independent
+per-handler, lineage, version and bound tests. Splitting those mutually
+constraining value contracts would leave the guide consumer without a complete
+reviewable contract. Review tracks receive bounded ownership/proof scopes.
+
+The historical runner remains name-pinned to v1. Modern policy-context checking
+compares detached observed references to complete expected references; this
+proves structural consistency only. The future owner resolvers must prove
+that those references and detached policy values match stored composite
+ownership before real execution. Catalogue budgets are finite declarations;
+worker deadline/isolation enforcement remains ARCH-04C. No new substantive
+evaluator or automatic acceptance is provided.

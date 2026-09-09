@@ -12,6 +12,12 @@ from dataclasses import dataclass, field
 from typing import Awaitable
 from typing import Protocol
 
+from app.modules.checkers.api.post_submit_catalogue import (
+    LEGACY_IMPLEMENTATION_VERSION, PostSubmitDefinition,
+)
+from app.modules.checkers.api.post_submit import (
+    ExpectedPostSubmitContext, PostSubmissionStructuralInput,
+)
 from app.modules.tasks.models import Submission, WorkstreamTask
 from app.modules.tasks.schemas import SubmissionCreate
 from app.modules.checkers.pre_submit_defaults import (
@@ -87,6 +93,8 @@ class CheckerContext:
     warning_checker_names: frozenset[str]
     blocking_severities: frozenset[str]
     effective_policy: dict | None = None
+    detached_input: PostSubmissionStructuralInput | None = None
+    expected_context: ExpectedPostSubmitContext | None = None
 
 
 class Checker(Protocol):
@@ -119,59 +127,67 @@ class FunctionChecker:
         return await self._handler(context)
 
 
+@dataclass(frozen=True)
+class CheckerRegistration:
+    """Keep versioned metadata and the actual implementation in one entry."""
+
+    checker: Checker
+    definition: PostSubmitDefinition | None
+
+
 class CheckerRegistry:
-    """Registry of canonical checker implementations."""
+    """One exact-version registry with legacy name-only calls explicitly pinned."""
 
     def __init__(self) -> None:
-        """Create an empty checker registry."""
-        self._checkers: dict[str, Checker] = {}
+        """Create one registry indexed by exact implementation identity."""
+        self._checkers: dict[tuple[str, str], CheckerRegistration] = {}
 
-    def register(self, checker: Checker) -> None:
-        """Register one checker implementation by canonical name.
+    def register(self, checker: Checker, *, definition: PostSubmitDefinition | None = None) -> None:
+        """Preserve historical name-only registration at its fixed legacy version."""
+        self.register_versioned(checker, LEGACY_IMPLEMENTATION_VERSION, definition=definition)
 
-        Args:
-            checker: Checker implementation to register.
-
-        Raises:
-            CheckerNameConflict: If another checker already owns the same name.
-        """
-        if checker.name in self._checkers:
+    def register_versioned(
+        self, checker: Checker, implementation_version: str,
+        *, definition: PostSubmitDefinition | None,
+    ) -> None:
+        """Register one exact pair; metadata cannot advertise a different handler."""
+        key = (checker.name, implementation_version)
+        if key in self._checkers:
             raise CheckerNameConflict(f"checker already registered: {checker.name}")
-        self._checkers[checker.name] = checker
+        if definition is not None and (
+            definition.capability_id != checker.name
+            or definition.implementation_version != implementation_version
+        ):
+            raise ValueError("checker registration definition mismatch")
+        self._checkers[key] = CheckerRegistration(checker, definition)
+
+    def resolve(self, checker_name: str, implementation_version: str) -> CheckerRegistration:
+        """Never substitute a different registered version for an absent pair."""
+        try:
+            return self._checkers[(checker_name, implementation_version)]
+        except KeyError as exc:
+            raise UnknownChecker(f"unregistered checker: {checker_name}@{implementation_version}") from exc
+
+    def definitions(self) -> tuple[PostSubmitDefinition, ...]:
+        """Return immutable current metadata from the actual registration entries."""
+        return tuple(entry.definition for entry in self._checkers.values()
+                     if entry.definition is not None)
 
     def require_registered(self, checker_names: set[str]) -> None:
-        """Validate that all policy checker names have implementations.
-
-        Args:
-            checker_names: Checker names from locked checker policy.
-
-        Raises:
-            UnknownChecker: If any checker name is not registered.
-        """
-        missing = sorted(checker_names.difference(self._checkers))
+        """Validate historical name-only policies against the pinned legacy set."""
+        missing = sorted(checker_names.difference(self.names()))
         if missing:
             raise UnknownChecker(f"unregistered checker policy names: {', '.join(missing)}")
 
-    async def run(
-        self,
-        context: CheckerContext,
-        checker_names: list[str],
-    ) -> list[CheckerOutcome]:
-        """Run checkers in policy order.
-
-        Args:
-            context: Locked checker context.
-            checker_names: Canonical checker names to execute.
-
-        Returns:
-            Checker outcomes in the same order as ``checker_names``.
-        """
+    async def run(self, context: CheckerContext, checker_names: list[str]) -> list[CheckerOutcome]:
+        """Execute historical policy names at v1; modern execution stays unavailable."""
         self.require_registered(set(checker_names))
-        return [await self._checkers[name].run(context) for name in checker_names]
+        return [await self.resolve(name, LEGACY_IMPLEMENTATION_VERSION).checker.run(context)
+                for name in checker_names]
 
     def names(self) -> set[str]:
-        """Return all registered checker names."""
-        return set(self._checkers)
+        """Keep the historical name set stable when another version is installed."""
+        return {name for name, version in self._checkers if version == LEGACY_IMPLEMENTATION_VERSION}
 
 
 def canonical_artifact_manifest_hash(manifest: list[dict]) -> str:
@@ -961,24 +977,23 @@ async def check_low_quality_generated_artifacts(context: CheckerContext) -> Chec
 
 
 def default_checker_registry() -> CheckerRegistry:
-    """Create the built-in checker registry for v0.1 structural checks."""
+    """Install exact legacy pairs and the distinct modern context implementation."""
+    from app.modules.checkers.post_submit_catalogue import structural_definition
+    from app.modules.checkers.post_submit_implementations import check_modern_policy_context
+    from app.modules.checkers.api.post_submit_catalogue import MODERN_CONTEXT_IMPLEMENTATION_VERSION
+
     registry = CheckerRegistry()
-    registry.register(FunctionChecker("check_submission_packet", check_submission_packet))
-    registry.register(FunctionChecker("check_policy_context_present", check_policy_context_present))
-    registry.register(
-        FunctionChecker("check_acceptance_criteria_present", check_acceptance_criteria_present)
-    )
-    registry.register(FunctionChecker("check_evidence_present", check_evidence_present))
-    registry.register(FunctionChecker("check_evidence_integrity", check_evidence_integrity))
-    registry.register(FunctionChecker("check_required_files", check_required_files))
-    registry.register(FunctionChecker("check_forbidden_files", check_forbidden_files))
-    registry.register(
-        FunctionChecker("check_confidentiality_attestation", check_confidentiality_attestation)
-    )
-    registry.register(
-        FunctionChecker(
-            "check_low_quality_generated_artifacts",
-            check_low_quality_generated_artifacts,
-        )
+    for handler in (
+        check_submission_packet, check_policy_context_present, check_evidence_present,
+        check_evidence_integrity, check_required_files, check_forbidden_files,
+        check_confidentiality_attestation, check_low_quality_generated_artifacts,
+        check_acceptance_criteria_present,
+    ):
+        definition = None if handler is check_policy_context_present else structural_definition(handler.__name__)
+        registry.register(FunctionChecker(handler.__name__, handler), definition=definition)
+    registry.register_versioned(
+        FunctionChecker("check_policy_context_present", check_modern_policy_context),
+        MODERN_CONTEXT_IMPLEMENTATION_VERSION,
+        definition=structural_definition("check_policy_context_present"),
     )
     return registry

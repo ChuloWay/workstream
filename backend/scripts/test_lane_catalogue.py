@@ -255,6 +255,15 @@ PROJECT_MODULES = (
 )
 
 TASK_MODULES = (
+    "tests/checkers/post_submit/test_catalogue.py",
+    "tests/checkers/post_submit/test_compiled_policy.py",
+    "tests/checkers/post_submit/test_configuration.py",
+    "tests/checkers/post_submit/test_conformance.py",
+    "tests/checkers/post_submit/test_input_bounds.py",
+    "tests/checkers/post_submit/test_public_boundary.py",
+    "tests/checkers/post_submit/test_request.py",
+    "tests/checkers/post_submit/test_requirement_dispositions.py",
+    "tests/checkers/post_submit/test_result_contract.py",
     "tests/test_checker_catalogue.py",
     "tests/test_checkers.py",
     "tests/test_default_pre_submit_execution.py",

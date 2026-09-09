@@ -12,8 +12,9 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Completed boundary: hidden execution, deterministic projections, and immutable setup finalization.
 - Intent: compile one locked guide and its policies into authoritative,
   versioned project behavior without circular subsystem authority.
-- Next usable boundary: ARCH-04A public catalogue/schema reconciliation before
-  POL-04B produces approval-eligible live generations using completed AUTH-12B2.
+- Next usable boundary: POL-04B consumes completed ARCH-04A public
+  catalogue/schema contracts to produce approval-eligible live generations
+  using completed AUTH-12B2.
   The existing ReviewPolicy boolean is delivered; automated acceptance remains unavailable.
 - Governing sources: project-guide specifications, authorization and
   contribution-policy specifications, code, migrations, and tests.
@@ -40,7 +41,7 @@ Configured `false` remains available in draft but cannot activate a guide until
 the authorized automated FinalAcceptance/CON path is proven and available.
 Existing tasks retain their locked rules; adjudication is not included.
 
-1. After ARCH-04A catalogue/schema reconciliation, POL-04B live explicit-manager
+1. Using completed ARCH-04A catalogue/schema contracts, POL-04B live explicit-manager
    cutover with every legacy inference call removed from reachability.
 2. POL-05/06 complete proposal visibility, setup-wide correction, approval and
    post-submit manifests with AUTH-12F4/12G. Immutable
