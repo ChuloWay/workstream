@@ -326,3 +326,12 @@ edge from the AUTH ledger. This decreases inbound debt and introduces no new
 factory, permission, fallback or product-service dependency. The CHECKERS public
 pre-submit projection types remain dependency-safe; its existing private catalogue
 owner builds the snapshot at composition, without a public-to-private import.
+
+The protected module boundary also forbids new worker private PROJECTS/CHECKERS
+edges. Use existing `app/adapters/projects/__init__.py` to construct the same
+coordinator/executor/projections from injected ports, exposed through a public
+delivery protocol and bounded stale-delivery error. Existing CHECKERS adapter
+composition builds the pre capability snapshot; use the already-public current
+post catalogue directly and remove the redundant PROJECTS wrapper. No second
+orchestrator, new registry, validator relaxation or private-edge allowance is
+introduced. Remove retired worker edges from both durable debt inventories.
