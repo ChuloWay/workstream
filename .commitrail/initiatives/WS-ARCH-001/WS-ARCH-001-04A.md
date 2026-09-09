@@ -110,6 +110,11 @@ no database columns; policy bodies are JSON. Retained development data is not de
 new setup generations use the current contract. Code cleanup grants no data-deletion
 authority and introduces no compatibility reader or migration bridge.
 
+Additional traced caller: `adapters/project_agents/openai_agent_sdk.py` must
+prohibit repeating mandatory defaults in project selections; its current prompt
+otherwise contradicts the consolidated compiler. POL `planning/CHUNK_MAP.md`
+must match the scoped cleanup rule and the adopted POL-04B deletion boundary.
+
 Allowed dependent tests: the nine `tests/checkers/post_submit/test_*.py` modules and their
 `support.py`; `tests/test_checkers.py`, `test_projects.py`, `test_tasks.py`,
 `test_project_guide_compilation_contracts.py`, `test_agent_runtime.py`,
@@ -221,3 +226,19 @@ PR #389 supplied the public catalogue and bounded phase contracts but retained
 alternate development representations. This record now describes the corrected
 scoped implementation; the earlier hash/handler preservation requirements are
 withdrawn. Its former reviews prove only that earlier target, not this correction.
+
+## Review-driven regression corrections
+
+Affected caller instructions now prohibit repeating platform defaults in project
+selections. All summary consumers use the canonical validator, and worker-facing
+severity escalation describes a blocking finding without claiming required
+classification. The sparse-projection type branch is removed.
+
+Obsolete success-after-sidecar-corruption tests are replaced by release, submission
+and manual-checker denial tests with durable side-effect assertions. An idempotent
+finalize request no longer stands in for execution proof. Real PROJECTS fixtures
+exercise independently crossed summaries before approval, correction and activation.
+Queued invalid-policy execution stays submitted until validation succeeds. The
+constant-default-drift preservation test is removed; canonical lock integrity
+remains covered. Current POL navigation assigns physical inference replacement to
+POL-04B and imposes no separate cleanup prerequisite.

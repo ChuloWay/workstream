@@ -2223,12 +2223,14 @@ class ProjectService:
             )
         except ValueError as exc:
             raise PolicySetupBlocked("post-submit checker policy hash is invalid") from exc
-        if (
-            parsed_policy.required_checkers != policy.required_checkers
-            or parsed_policy.warning_checkers != policy.warning_checkers
-            or list(parsed_policy.blocking_severities) != policy.blocking_severities
-        ):
-            raise PolicySetupBlocked("post-submit checker policy hash is invalid")
+        try:
+            parsed_policy.validate_sidecars(
+                required_checkers=policy.required_checkers,
+                warning_checkers=policy.warning_checkers,
+                blocking_severities=policy.blocking_severities,
+            )
+        except ValueError as exc:
+            raise PolicySetupBlocked("post-submit checker policy hash is invalid") from exc
 
     async def _post_submit_policy_setup_response(
         self,
@@ -3647,15 +3649,14 @@ class ProjectService:
             )
         except ValueError as exc:
             raise GuideActivationBlocked("post-submit checker policy hash is invalid") from exc
-        if (
-            parsed_post_submit_policy.required_checkers
-            != post_submit_checker_policy.required_checkers
-            or parsed_post_submit_policy.warning_checkers
-            != post_submit_checker_policy.warning_checkers
-            or list(parsed_post_submit_policy.blocking_severities)
-            != post_submit_checker_policy.blocking_severities
-        ):
-            raise GuideActivationBlocked("post-submit checker policy hash is invalid")
+        try:
+            parsed_post_submit_policy.validate_sidecars(
+                required_checkers=post_submit_checker_policy.required_checkers,
+                warning_checkers=post_submit_checker_policy.warning_checkers,
+                blocking_severities=post_submit_checker_policy.blocking_severities,
+            )
+        except ValueError as exc:
+            raise GuideActivationBlocked("post-submit checker policy hash is invalid") from exc
         if review_policy is None or revision_policy is None:
             raise GuideActivationBlocked(
                 "complete review and revision policy selections are required"

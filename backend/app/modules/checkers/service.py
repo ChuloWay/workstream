@@ -1941,7 +1941,7 @@ class CheckerService:
                     worker_suggested_fix=(
                         outcome.worker_suggested_fix
                         or (
-                            "Resolve this required checker finding before review can continue."
+                            "Resolve this blocking finding before review can continue."
                             if escalated_warning and outcome.worker_visible
                             else None
                         )

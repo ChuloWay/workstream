@@ -1364,7 +1364,7 @@ def test_blocking_policy_escalates_required_warning_and_preserves_optional_warni
         True,
     )
     assert required.worker_suggested_fix == (
-        "Resolve this required checker finding before review can continue."
+        "Resolve this blocking finding before review can continue."
     )
     assert required.metadata == {"required_checker_warning_escalated": True}
     assert (optional.status, optional.blocks_review) == ("warning", False)
@@ -1413,7 +1413,11 @@ async def test_locked_medium_severity_escalates_default_without_reclassifying_it
         required_checker_names=frozenset(policy.required_checkers),
         blocking_severities=frozenset(policy.blocking_severities),
     )
+    raw = replace(raw, worker_suggested_fix=None)
     strict = CheckerService._apply_blocking_policy([raw], strict_context)[0]
+    assert strict.worker_suggested_fix == (
+        "Resolve this blocking finding before review can continue."
+    )
     assert (strict.status, strict.severity, strict.blocks_review) == ("failed", "high", True)
     assert strict.metadata["blocking_severity_warning_escalated"] is True
     assert "required_checker_warning_escalated" not in strict.metadata
@@ -3140,7 +3144,7 @@ async def test_database_rejects_missing_submission_post_submit_policy_context(
     assert results != []
 
 
-async def test_checker_run_uses_locked_post_submit_policy_body_after_setup_mutation(
+async def test_manual_checker_run_rejects_crossed_post_submit_policy_sidecar(
     checker_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -3170,48 +3174,25 @@ async def test_checker_run_uses_locked_post_submit_policy_body_after_setup_mutat
         ]
         await session.commit()
 
+    before = await task_side_effect_snapshot(started_task["id"])
+    assert len(before["checker_runs"]) == 1
+    assert before["checker_results"]
     set_dev_actor(monkeypatch, roles="project_manager", subject="project-manager-subject")
-    locked = await checker_client.post(
-        f"/api/v1/submissions/{created.json()['id']}/finalize",
+    rejected = await checker_client.post(
+        f"/api/v1/submissions/{created.json()['id']}/checker-runs",
         headers=auth_headers(),
+        json={"trigger_reason": "Retry after policy corruption"},
     )
 
-    assert locked.status_code == 200, locked.text
+    assert rejected.status_code == 422, rejected.text
+    assert rejected.json()["detail"] == "locked post-submit checker policy summaries are invalid"
+    assert await task_side_effect_snapshot(started_task["id"]) == before
     async with db_session.get_session_factory()() as session:
         task = await session.get(WorkstreamTask, started_task["id"])
         submission = await session.get(Submission, created.json()["id"])
-        runs = (
-            (
-                await session.execute(
-                    select(CheckerRun).where(CheckerRun.submission_id == created.json()["id"])
-                )
-            )
-            .scalars()
-            .all()
-        )
-        results = (
-            (
-                await session.execute(
-                    select(CheckerResult).where(CheckerResult.submission_id == created.json()["id"])
-                )
-            )
-            .scalars()
-            .all()
-        )
-    assert task is not None
-    assert task.status == "review_pending"
-    assert submission is not None
-    assert submission.locked_at is not None
-    assert submission.locked_post_submit_checker_policy_body == locked_body
-    assert len(runs) == 1
-    assert runs[0].locked_post_submit_checker_policy_body == locked_body
-    assert "check_acceptance_criteria_present" not in [entry["checker_id"] for entry in locked_body["entries"] if entry["classification"] == "project_required"]
-    assert "check_acceptance_criteria_present" not in [entry["checker_id"] for entry in locked_body["entries"]]
-    assert "check_evidence_present" in [entry["checker_id"] for entry in locked_body["entries"] if entry["classification"] == "platform_default"]
-    assert "check_evidence_present" in [entry["checker_id"] for entry in locked_body["entries"]]
-    assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"]]
-    assert "check_acceptance_criteria_present" not in {result.checker_name for result in results}
-    assert results != []
+        assert task is not None and submission is not None
+        assert task.locked_post_submit_checker_policy_body == locked_body
+        assert submission.locked_post_submit_checker_policy_body == locked_body
 
 
 async def test_submission_rejects_malformed_locked_post_submit_policy_body_without_side_effects(
@@ -4666,14 +4647,14 @@ def test_old_checker_name_blocks_post_submit_compilation_without_alias(
     old_checker_name: str,
 ) -> None:
     spec = build_project_post_submit_checker_spec(
-        project_id="old-checker-name-project",
+        project_id="00000000-0000-0000-0000-000000000001",
         guide_version="v1",
         required_checkers=[old_checker_name],
     )
 
-    with pytest.raises(PostSubmitCheckerCompilerError, match="unregistered checker"):
+    with pytest.raises(PostSubmitCheckerCompilerError, match="post-submit project selection is unavailable"):
         compile_project_post_submit_checker_spec(
-            project_id="old-checker-name-project",
+            project_id="00000000-0000-0000-0000-000000000001",
             guide_version="v1",
             spec=spec,
         )

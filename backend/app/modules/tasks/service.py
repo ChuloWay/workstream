@@ -1315,12 +1315,14 @@ class TaskService:
             )
         except ValueError as exc:
             raise TaskProjectNotReady("active post-submit checker policy hash is invalid") from exc
-        if (
-            parsed_checker_policy.required_checkers != checker_policy.required_checkers
-            or parsed_checker_policy.warning_checkers != checker_policy.warning_checkers
-            or list(parsed_checker_policy.blocking_severities) != checker_policy.blocking_severities
-        ):
-            raise TaskProjectNotReady("active post-submit checker policy hash is invalid")
+        try:
+            parsed_checker_policy.validate_sidecars(
+                required_checkers=checker_policy.required_checkers,
+                warning_checkers=checker_policy.warning_checkers,
+                blocking_severities=checker_policy.blocking_severities,
+            )
+        except ValueError as exc:
+            raise TaskProjectNotReady("active post-submit checker policy hash is invalid") from exc
         return (
             guide,
             checker_policy,

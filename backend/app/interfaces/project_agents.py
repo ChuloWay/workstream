@@ -604,7 +604,7 @@ def _validate_platform_coverage(
             valid = (
                 post_definition is not None
                 and post_definition.capability_version == coverage.capability_version
-                and (not isinstance(post_definition, PostSubmitDefinition) or post_definition.state == "enabled")
+                and post_definition.state == "enabled"
                 and post_definition.platform_default
                 and not post_definition.selectable
             )

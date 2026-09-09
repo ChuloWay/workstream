@@ -135,6 +135,8 @@ def test_post_submit_agent_prompt_forbids_runtime_judgment_and_code() -> None:
     assert "Runtime submission evaluation must use the locked compiled policy" in instructions
     assert "must never ask an agent to judge a contributor submission" in instructions
     assert "Select only checker names present in registered_checker_catalog" in instructions
+    assert "never repeat them in required_checkers or warning_checkers" in instructions
+    assert "Select only project-selectable additions" in instructions
 
 
 def test_post_submit_derivation_result_rejects_uncontracted_fields() -> None:
