@@ -12,6 +12,8 @@ from app.modules.authorization.domain.guide_compilation import ProjectGuideCompi
 from app.modules.authorization.domain.resource_digest import authorization_resource_digest as authorization_resource_digest
 from app.modules.authorization.domain.project_setup_finalization import ProjectSetupFinalizationResourceContext
 from app.modules.authorization.domain.guide_compilation_projections import ProjectGuideProjectionResourceContext
+from app.modules.authorization.domain.audit import AuthorizationDecisionResourceType
+from app.modules.authorization.domain.contribution_policies import ContributionPolicyReadResourceContext, ContributionPolicyMutationResourceContext
 from app.modules.authorization.domain.adapter_bindings import AdapterBindingMutationResourceContext, AdapterBindingReadResourceContext
 from app.modules.authorization.domain.project_create import ProjectCreateResourceContext
 from app.modules.actors.service_identities import ServiceIdentity
@@ -1518,6 +1520,7 @@ AuthorizationResourceContext = (
     | SubmissionBundlePreparationPreflightResourceContext
     | SubmissionBundlePreparationResourceContext
     | AdapterBindingReadResourceContext | AdapterBindingMutationResourceContext
+    | ContributionPolicyReadResourceContext | ContributionPolicyMutationResourceContext
 )
 
 
@@ -1562,50 +1565,7 @@ class AuthorizationDecision(BaseModel):
     permission_id: PermissionId | None
     allowed: bool
     denial_code: AuthorizationDenialCode | None
-    resource_type: Literal[
-        "actor_profile",
-        "actor_authorization_context",
-        "project",
-        "project_diagnostic",
-        "project_policy_read",
-        "project_active_guide_read",
-        "project_create",
-        "project_guide_mutation",
-        "project_guide_source_snapshot_mutation",
-        "project_guide_mutation_request",
-        "project_review_policy_mutation",
-        "project_revision_policy_mutation",
-        "project_policy_mutation_request",
-        "project_guide_sufficiency_mutation",
-        "project_submission_artifact_policy_mutation",
-        "project_guide_compilation_request",
-        "project_guide_compilation_attempt",
-        "project_guide_setup_finalization",
-        "project_setup_run_mutation",
-        "project_guide_sufficiency_projection",
-        "project_submission_artifact_policy_projection",
-        "actor_identity_link",
-        "system",
-        "permission_catalogue",
-        "admin_role_definitions",
-        "admin_role_grant_collection",
-        "actor_admin_role_grant_history",
-        "admin_role_grant_issue",
-        "admin_role_grant",
-        "service_actor_provisioning",
-        "project_contributor_candidate_collection",
-        "project_role_grant_collection",
-        "project_role_grant",
-        "artifact_put_attempt",
-        "artifact_verification_job",
-        "artifact_pending_work",
-        "guide_source_binding",
-        "guide_source_read",
-        "pre_submit_checker_input",
-        "submission_bundle_preparation_preflight",
-        "submission_bundle_preparation",
-        "submission_creation", "submission_binding", "compensation_adapter_binding",
-    ]
+    resource_type: AuthorizationDecisionResourceType
     resource_id: (
         UUID
         | ServiceIdentity

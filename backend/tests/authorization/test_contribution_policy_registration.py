@@ -1,4 +1,4 @@
-"""CP01B proof for planned ContributionPolicy AUTH registration."""
+"""CP05 proof preserving exact ContributionPolicy registration custody."""
 
 from __future__ import annotations
 
@@ -36,15 +36,14 @@ _ACTIONS = {
 _SHA256 = "sha256:" + "a" * 64
 
 
-def test_cp01b_registers_only_exact_planned_policy_actions() -> None:
-    """The five canonical actions remain unavailable and unassigned."""
+def test_cp05_activates_only_exact_registered_policy_actions() -> None:
+    """The five canonical actions activate without service membership or identity drift."""
     for action in _ACTIONS:
         definition = ACTION_BY_ID[action]
         assert definition.permission_id is PermissionId.COMPENSATION_POLICY_MANAGE
         assert definition.owner is ActionOwner.ARCH_CP01B
-        assert definition.availability is ActionAvailability.PLANNED
-        with pytest.raises(ValueError, match="authorization action is not active"):
-            resolve_executable_action(action)
+        assert definition.availability is ActionAvailability.ACTIVE
+        assert resolve_executable_action(action) == definition
 
     assert not ({"compensation.policy.read", "compensation.policy.publish"} & {item.value for item in ActionId})
     assert all(_ACTIONS.isdisjoint(actions) for actions in SERVICE_ACTIONS_BY_IDENTITY.values())

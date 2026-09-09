@@ -282,8 +282,15 @@ is complete while keeping all four binding actions unavailable. CP03B
 then installs the exact read/PREP adapter for an authenticated human Finance
 Authority covering the exact project and activates only those four actions,
 producing 111 rows with 61 active and 50 planned actions. AUTH-12B2 then
-activates exact setup finalization, yielding the current 62 active and 49 planned
-actions without adding a row.
+activates exact setup finalization, yielding 62 active and 49 planned
+actions without adding a row. CP05 activates the five existing ContributionPolicy
+actions, yielding the current 67 active and 44 planned actions. Only active human
+Finance Authority with system or exact-project scope is eligible. The explicit
+CON adapter uses serialized reads and transaction-bound PREP for mutations;
+committed replay requires fresh read authority. Registration custody remains
+CP01B. No permission, service membership or policy HTTP route is added. Migration `0012_contribution_policy_audit_resource`
+adds the exact policy resource token and five existing action/permission pairs
+to the two closed database audit constraints, preserving their other clauses. Downgrade refuses while policy audit history exists.
 AUTH-10A added five project-role read/manage rows;
 AUTH-10B owns and activates the three reads, while AUTH-10C owns and activates
 the two reason-bound, idempotent project-role mutations. AUTH-11A adds eleven

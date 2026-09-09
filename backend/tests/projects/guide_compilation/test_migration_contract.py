@@ -48,7 +48,7 @@ def test_current_schema_preserves_guide_compilation_schema(
     isolated_database_env: str,
 ) -> None:
     assert asyncio.run(_schema_state(isolated_database_env)) == (
-        "0011_review_policy_human_review",
+        "0012_contribution_policy_audit_resource",
         True,
         4,
         1,

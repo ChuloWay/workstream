@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 CONTEXT_DIGEST_RESOURCE_TYPES = (
     "artifact_put_attempt",
     "artifact_verification_job",
@@ -17,4 +19,54 @@ CONTEXT_DIGEST_RESOURCE_TYPES = (
     "project_guide_sufficiency_projection",
     "project_submission_artifact_policy_projection",
     "project_guide_setup_finalization",
+    "contribution_policy",
 )
+
+
+AuthorizationDecisionResourceType = Literal[
+    "actor_profile",
+    "actor_authorization_context",
+    "project",
+    "project_diagnostic",
+    "project_policy_read",
+    "project_active_guide_read",
+    "project_create",
+    "project_guide_mutation",
+    "project_guide_source_snapshot_mutation",
+    "project_guide_mutation_request",
+    "project_review_policy_mutation",
+    "project_revision_policy_mutation",
+    "project_policy_mutation_request",
+    "project_guide_sufficiency_mutation",
+    "project_submission_artifact_policy_mutation",
+    "project_guide_compilation_request",
+    "project_guide_compilation_attempt",
+    "project_guide_setup_finalization",
+    "project_setup_run_mutation",
+    "project_guide_sufficiency_projection",
+    "project_submission_artifact_policy_projection",
+    "actor_identity_link",
+    "system",
+    "permission_catalogue",
+    "admin_role_definitions",
+    "admin_role_grant_collection",
+    "actor_admin_role_grant_history",
+    "admin_role_grant_issue",
+    "admin_role_grant",
+    "service_actor_provisioning",
+    "project_contributor_candidate_collection",
+    "project_role_grant_collection",
+    "project_role_grant",
+    "artifact_put_attempt",
+    "artifact_verification_job",
+    "artifact_pending_work",
+    "guide_source_binding",
+    "guide_source_read",
+    "pre_submit_checker_input",
+    "submission_bundle_preparation_preflight",
+    "submission_bundle_preparation",
+    "submission_creation",
+    "submission_binding",
+    "compensation_adapter_binding",
+    "contribution_policy",
+]

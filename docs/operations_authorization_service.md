@@ -497,11 +497,17 @@ v0.1 baseline.
 The REV transfer adds no migration. The ART transfer does not grant Operator
 authority; its `OPERATOR` suffix denotes only future activation custody, and
 verification retry remains independently gated from read/status actions.
-Catalogue totals are 73 PermissionIds, 111 ActionIds, 62 active actions, and
-49 planned actions. CP01A added four initially unavailable adapter-binding actions under
+Catalogue totals are 73 PermissionIds, 111 ActionIds, 67 active actions, and
+44 planned actions. CP01A added four initially unavailable adapter-binding actions under
 `WS-ARCH-001-CP01A` custody; it adds no evaluator, identity, grant, service
-matrix row, route, or activation. CP01B adds five unavailable
-`contribution.policy.*` actions with the same non-activation guarantees. CP01C
+matrix row, route, or activation. CP01B registered five initially unavailable
+`contribution.policy.*` actions with the same non-activation guarantees. CP05
+now activates exactly those five actions through explicit human Finance Authority
+composition (system or exact project). Mutations require transaction-bound PREP;
+reads and committed replay check current authority. Default CON composition
+still denies access and no policy HTTP route is added. Migration `0012_contribution_policy_audit_resource`
+adds the exact policy resource token and five existing action/permission pairs
+to the two closed database audit constraints, preserving their other clauses. Downgrade refuses while policy audit history exists. CP01C
 corrects only the unavailable binding fact shapes before CP02: binding identity
 and CON's unchanged `instrument_type` are explicit on create, unit is absent,
 and suspend/resume include the exact lifecycle version. AUTH does not translate

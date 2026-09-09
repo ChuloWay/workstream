@@ -33,6 +33,12 @@ from app.modules.authorization.domain.guide_compilation import (
     ProjectGuideCompilationRequestResourceContext,
 )
 from app.modules.authorization.domain.prepared_compilation import prepared_compilation_matches
+from app.modules.authorization.domain.contribution_policies import (
+    CONTRIBUTION_POLICY_MUTATION_ACTIONS, ContributionPolicyMutationResourceContext,
+)
+from app.modules.authorization.domain.prepared_contribution_policies import (
+    parse_prepared_contribution_policy, prepared_contribution_policy_matches,
+)
 from app.modules.authorization.domain.adapter_bindings import (
     ADAPTER_BINDING_MUTATION_ACTIONS,
     AdapterBindingMutationResourceContext,
@@ -207,6 +213,8 @@ class _PreparedAuthorizationBinding:
     submission_preparation_final_digest: str | None = None
     guide_compilation_context: dict | None = None
     guide_compilation_resource_digest: str | None = None
+    contribution_policy_context: dict | None = None
+    contribution_policy_resource_digest: str | None = None
     adapter_binding_context: dict | None = None
     adapter_binding_resource_digest: str | None = None
     guide_projection_prepare_context: dict | None = None
@@ -481,6 +489,11 @@ class PreparedAuthorizationService:
             ),
         ) and not _guide_mutation_binding_matches(issuance.binding, final_resource_context):
             raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle")
+        if expected_action_id in CONTRIBUTION_POLICY_MUTATION_ACTIONS and not prepared_contribution_policy_matches(
+            expected_action_id, issuance.binding.contribution_policy_context,
+            issuance.binding.contribution_policy_resource_digest, final_resource_context,
+        ):
+            raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle")
         if isinstance(
             final_resource_context, AdapterBindingMutationResourceContext
         ) and not prepared_adapter_binding_matches(
@@ -669,15 +682,12 @@ class PreparedAuthorizationService:
             exact_artifact_context = consumption_resource.model_dump(mode="json")
             exact_artifact_resource_digest = authorization_resource_digest(consumption_resource)
         if action_id is ActionId.ARTIFACT_SUBMISSION_BUNDLE_PREPARE:
-            submission_binding = parse_submission_binding(
+            (submission_preparation_context, submission_preparation_resource_digest,
+             submission_preparation_final_context, submission_preparation_final_digest) = parse_submission_binding(
                 dict(caller_input.request_value),
                 PreparedAuthorizationHandleInvalid,
                 parse_submission_preparation_or_invalid,
             )
-            submission_preparation_context = submission_binding[0]
-            submission_preparation_resource_digest = submission_binding[1]
-            submission_preparation_final_context = submission_binding[2]
-            submission_preparation_final_digest = submission_binding[3]
         if action_id is ActionId.PROJECT_CREATE:
             operation_id, project_id, operation_generation = parse_project_create_binding(
                 dict(caller_input.request_value), PreparedAuthorizationHandleInvalid
@@ -914,6 +924,7 @@ class PreparedAuthorizationService:
                 )
             ),
             **parse_prepared_adapter_binding(action_id, caller_input.request_value),
+            **parse_prepared_contribution_policy(action_id, caller_input.request_value),
             **setup_bindings,
         )
 
@@ -946,6 +957,8 @@ class PreparedAuthorizationService:
         expected_project_mutation = PROJECT_MUTATION_RESOURCE_BY_ACTION.get(
             action_id
         ) or COMPILATION_RESOURCE_BY_ACTION.get(action_id)
+        if action_id in CONTRIBUTION_POLICY_MUTATION_ACTIONS and isinstance(resource, ContributionPolicyMutationResourceContext):
+            return PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.PROJECT, project_id=resource.scope_project_id)
         if action_id in ADAPTER_BINDING_MUTATION_ACTIONS and isinstance(
             resource, AdapterBindingMutationResourceContext
         ):

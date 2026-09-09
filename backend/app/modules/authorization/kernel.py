@@ -19,7 +19,12 @@ from app.modules.authorization.catalogue import (
     ActionId,
     PermissionId,
 )
-from app.modules.authorization.domain import adapter_bindings, guide_compilation as compilation
+from app.modules.authorization.domain import adapter_bindings, contribution_policies, guide_compilation as compilation
+from app.modules.authorization.domain.action_groups import (
+    GUIDE_BOUND_PROJECT_MANAGER_MUTATIONS as _GUIDE_BOUND_PROJECT_MANAGER_MUTATIONS,
+    SUBMISSION_POLICY_MUTATIONS as _SUBMISSION_POLICY_MUTATIONS,
+    PROJECT_SCOPED_ADMIN_MUTATIONS, CONTEXT_DIGEST_ACTIONS,
+)
 from app.modules.authorization.domain.audit import CONTEXT_DIGEST_RESOURCE_TYPES
 from app.modules.authorization.domain.audit_targets import project_authority_audit_target
 from app.modules.authorization.domain.prepared_service import (
@@ -105,23 +110,6 @@ ContextRevalidator = Callable[
     Awaitable[HumanAuthorizationContext],
 ]
 
-_GUIDE_BOUND_PROJECT_MANAGER_MUTATIONS = frozenset(
-    {
-        ActionId.PROJECT_GUIDE_CREATE,
-        ActionId.PROJECT_GUIDE_UPDATE,
-        ActionId.PROJECT_GUIDE_SOURCE_SNAPSHOT_CREATE,
-        ActionId.PROJECT_GUIDE_COMPILATION_REQUEST,
-        ActionId.PROJECT_REVIEW_POLICY_UPDATE,
-        ActionId.PROJECT_REVISION_POLICY_UPDATE,
-        ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_CREATE,
-        ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
-        ActionId.PROJECT_GUIDE_SUFFICIENCY_WARNINGS_ACKNOWLEDGE,
-        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_CREATE,
-        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_UPDATE,
-        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_APPROVE,
-    }
-)
-_SUBMISSION_POLICY_MUTATIONS = frozenset(PROJECT_SUBMISSION_POLICY_TARGET_KIND_BY_ACTION)
 
 ServiceContextRevalidator = Callable[
     [ServiceAuthorizationContext, ActionId],
@@ -160,7 +148,7 @@ _ADMIN_ACTIONS = frozenset(
         ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ,
         ActionId.PROJECT_ACTIVE_GUIDE_READ,
     }
-) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS
+) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS
 _SERIALIZED_ADMIN_READS = frozenset(
     {
         ActionId.ACTOR_PROFILE_READ,
@@ -175,7 +163,7 @@ _SERIALIZED_ADMIN_READS = frozenset(
         ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ,
         ActionId.PROJECT_ACTIVE_GUIDE_READ,
     }
-) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS
+) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS
 _ADMIN_MUTATIONS = frozenset(
     {
         ActionId.ADMIN_ROLE_GRANT_ISSUE,
@@ -189,7 +177,7 @@ _ADMIN_MUTATIONS = frozenset(
         ActionId.PROJECT_ROLE_GRANT_ISSUE,
         ActionId.PROJECT_ROLE_GRANT_REVOKE,
     }
-) | adapter_bindings.ADAPTER_BINDING_MUTATION_ACTIONS
+) | adapter_bindings.ADAPTER_BINDING_MUTATION_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_MUTATION_ACTIONS
 
 _ARTIFACT_INTERNAL_RESOURCES = {
     ActionId.ARTIFACT_GUIDE_SOURCE_BINDING_CREATE: (
@@ -256,6 +244,7 @@ _ADMIN_EXPECTED_RESOURCES = MappingProxyType(
         ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ: ProjectPolicyReadResourceContext,
         ActionId.PROJECT_ACTIVE_GUIDE_READ: ProjectActiveGuideReadResourceContext,
         **adapter_bindings.ADAPTER_BINDING_RESOURCE_BY_ACTION,
+        **contribution_policies.CONTRIBUTION_POLICY_RESOURCE_BY_ACTION,
         **PROJECT_MUTATION_RESOURCE_BY_ACTION,
     }
 )
@@ -461,12 +450,7 @@ class AuthorizationService:
                 )
             if scope.kind not in {PreparedAuthorityScopeKind.SYSTEM, PreparedAuthorityScopeKind.PROJECT}:
                 raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.SCOPE_NOT_AUTHORIZED)
-            if scope.kind is PreparedAuthorityScopeKind.PROJECT and action_id not in {
-                ActionId.ADMIN_ROLE_GRANT_ISSUE,
-                ActionId.PROJECT_ROLE_GRANT_ISSUE,
-                ActionId.PROJECT_ROLE_GRANT_REVOKE,
-                *adapter_bindings.ADAPTER_BINDING_MUTATION_ACTIONS,
-            }:
+            if scope.kind is PreparedAuthorityScopeKind.PROJECT and action_id not in PROJECT_SCOPED_ADMIN_MUTATIONS:
                 raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.SCOPE_NOT_AUTHORIZED)
             await self._admin.lock_control()
             if action_id is ActionId.PROJECT_ROLE_GRANT_ISSUE:
@@ -495,6 +479,7 @@ class AuthorizationService:
                 system_scope_only=scope.project_id is None,
                 for_update=True,
                 **adapter_bindings.finance_authority_grant_filters(action_id),
+                **contribution_policies.policy_finance_grant_filters(action_id),
             )
             if grant is None:
                 raise PreparedAuthorizationUnsupported(
@@ -1223,6 +1208,7 @@ class AuthorizationService:
             grant_filters.update(
                 adapter_bindings.finance_authority_grant_filters(action.action_id)
             )
+        grant_filters.update(contribution_policies.policy_finance_grant_filters(action.action_id))
         matched = await self._admin.find_effective_grant(
             context.actor_profile_id,
             action.permission_id,
@@ -1334,6 +1320,8 @@ class AuthorizationService:
         action_id: ActionId,
         resource: AuthorizationResourceContext,
     ) -> bool:
+        if action_id in contribution_policies.CONTRIBUTION_POLICY_ACTIONS:
+            return type(resource) is contribution_policies.CONTRIBUTION_POLICY_RESOURCE_BY_ACTION[action_id]
         expected = _ADMIN_EXPECTED_RESOURCES.get(action_id)
         if expected is None or not isinstance(resource, expected):
             return False
@@ -1510,13 +1498,7 @@ class AuthorizationService:
                     target_ref_kind = "project"
                     target_ref_id = str(project_id)
         after_facts: dict[str, object] = {"allowed": decision.allowed}
-        if decision.resource_type in CONTEXT_DIGEST_RESOURCE_TYPES or decision.action_id in {
-            ActionId.ARTIFACT_GUIDE_SOURCE_INGEST,
-            ActionId.PROJECT_CREATE,
-            *_GUIDE_BOUND_PROJECT_MANAGER_MUTATIONS,
-            *_SUBMISSION_POLICY_MUTATIONS,
-            *adapter_bindings.ADAPTER_BINDING_ACTIONS,
-        }:
+        if decision.resource_type in CONTEXT_DIGEST_RESOURCE_TYPES or decision.action_id in CONTEXT_DIGEST_ACTIONS:
             after_facts["resource_context_digest"] = decision.resource_context_digest
         try:
             await self._audit.add_authority_event(

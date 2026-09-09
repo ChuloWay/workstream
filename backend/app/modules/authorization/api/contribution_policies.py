@@ -1,4 +1,4 @@
-"""Public AUTH facts for planned ContributionPolicy actions."""
+"""Public AUTH facts for exact ContributionPolicy actions."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 import hashlib
 import json
 import re
-from typing import TypeAlias
+from typing import Protocol, TypeAlias
 from uuid import UUID
 
 from .action_ids import ActionId
@@ -33,9 +33,7 @@ class ContributionPolicyReadFacts:
         _require_uuid("project_id", self.project_id)
         _require_uuid("contribution_policy_id", self.contribution_policy_id)
         if self.contribution_policy_version_id is not None:
-            _require_uuid(
-                "contribution_policy_version_id", self.contribution_policy_version_id
-            )
+            _require_uuid("contribution_policy_version_id", self.contribution_policy_version_id)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -135,9 +133,7 @@ _FACT_TYPE_BY_ACTION = {
 }
 
 
-def contribution_policy_resource_digest(
-    action_id: ActionId, facts: ContributionPolicyFacts
-) -> str:
+def contribution_policy_resource_digest(action_id: ActionId, facts: ContributionPolicyFacts) -> str:
     """Hash one exact action and its immutable ContributionPolicy facts."""
     action = str(action_id)
     expected_type = _FACT_TYPE_BY_ACTION.get(action)
@@ -169,3 +165,77 @@ def _json_facts(facts: ContributionPolicyFacts) -> dict[str, object]:
         )
         for key, value in asdict(facts).items()
     }
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ContributionPolicyMutationAuthorityFacts:
+    """Complete server-owned mutation facts carried across the public AUTH port."""
+
+    action_id: ActionId
+    actor_profile_id: UUID
+    operation_id: UUID
+    request_digest: str
+    contribution_policy_id: UUID
+    contribution_policy_version_id: UUID
+    expected_policy_status: str | None
+    expected_version_status: str | None
+    resource_facts: ContributionPolicyFacts
+
+    @property
+    def project_id(self) -> UUID:
+        """Use the project identity bound by the action-specific public facts."""
+        return self.resource_facts.project_id
+
+    def __post_init__(self) -> None:
+        """Reject mismatched actions, identities, digests, and lifecycle facts."""
+        action = str(self.action_id)
+        if action not in _FACT_TYPE_BY_ACTION or action == "contribution.policy.read":
+            raise ValueError("invalid ContributionPolicy mutation action")
+        contribution_policy_resource_digest(self.action_id, self.resource_facts)
+        for name in (
+            "actor_profile_id",
+            "operation_id",
+            "contribution_policy_id",
+            "contribution_policy_version_id",
+        ):
+            _require_uuid(name, getattr(self, name))
+        if not isinstance(self.request_digest, str) or not _SHA256.fullmatch(self.request_digest):
+            raise ValueError("request_digest must be canonical sha256")
+        if self.expected_policy_status not in {None, "draft", "active"}:
+            raise ValueError("invalid expected policy status")
+        if action == "contribution.policy.create_draft":
+            if self.expected_version_status is not None:
+                raise ValueError("new draft cannot have prior version status")
+        else:
+            facts = self.resource_facts
+            if (
+                facts.contribution_policy_id != self.contribution_policy_id
+                or facts.contribution_policy_version_id != self.contribution_policy_version_id
+            ):
+                raise ValueError("mutation identities disagree")
+            if facts.expected_status != self.expected_version_status:
+                raise ValueError("mutation version status disagrees")
+            if self.expected_policy_status is None:
+                raise ValueError("existing policy requires expected status")
+            if action == "contribution.policy.retire" and self.expected_policy_status != "active":
+                raise ValueError("retirement requires active policy")
+
+
+class ContributionPolicyAuthorizationPort(Protocol):
+    """Authorize exact reads and opaque transaction-bound policy mutations."""
+
+    async def authorize_read(
+        self, *, actor_profile_id: UUID, facts: ContributionPolicyReadFacts
+    ) -> None:
+        """Authorize the exact current read without disclosing product rows."""
+
+    async def prepare_mutation(self, facts: ContributionPolicyMutationAuthorityFacts) -> object:
+        """Prepare exact mutation authority in the caller transaction."""
+
+    async def consume_mutation(
+        self, prepared: object, facts: ContributionPolicyMutationAuthorityFacts
+    ) -> UUID:
+        """Consume once and return the authorized actor identity."""
+
+    def close_mutation(self, prepared: object) -> None:
+        """Invalidate the opaque prepared handle."""

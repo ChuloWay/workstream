@@ -1,0 +1,1 @@
+"""Exact ContributionPolicy activation proof."""

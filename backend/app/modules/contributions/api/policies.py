@@ -246,26 +246,26 @@ class ContributionPolicyMutationAuthorizationPort(Protocol):
 
 
 class DenyContributionPolicyAuthorization:
-    """Production-safe default while CP05 actions remain unavailable."""
+    """Production-safe default when explicit policy authorization is absent."""
 
     async def authorize_contribution_policy_read(
         self, request: ContributionPolicyReadRequest
     ) -> None:
-        """Deny reads until the CP05 authorization activation."""
+        """Deny reads without explicit authorization composition."""
         del request
         raise ContributionPolicyUnavailable("contribution_policy_unavailable")
 
     async def prepare_contribution_policy_mutation(
         self, facts: ContributionPolicyAuthorizationFacts
     ) -> object:
-        """Deny mutation preparation until CP05 activation."""
+        """Deny mutation preparation without explicit authorization composition."""
         del facts
         raise ContributionPolicyUnavailable("contribution_policy_unavailable")
 
     async def consume_contribution_policy_mutation(
         self, prepared: object, facts: ContributionPolicyAuthorizationFacts
     ) -> UUID:
-        """Deny mutation consumption until CP05 activation."""
+        """Deny mutation consumption without explicit authorization composition."""
         del prepared, facts
         raise ContributionPolicyUnavailable("contribution_policy_unavailable")
 

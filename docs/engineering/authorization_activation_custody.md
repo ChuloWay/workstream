@@ -7,8 +7,8 @@ This document explains activation custody; historical sequences below do not
 restart completed work or create another contribution-permission system.
 The canonical [authorization specification](../spec_authorization_service.md)
 and typed runtime catalogue define the registered facts and availability.
-After CP03B and AUTH-12B2, the catalogue has 73 PermissionIds, 111 ActionIds,
-62 active actions and 49 planned actions. Verify the then-current registry
+After CP03B, AUTH-12B2 and CP05, the catalogue has 73 PermissionIds, 111 ActionIds,
+67 active actions and 44 planned actions. Verify the then-current registry
 when implementing rather than treating an older count as a future gate.
 
 Historical entry evidence is preserved in the
@@ -77,19 +77,21 @@ gated `artifact.verification_job.retry`
 remains planned and
 cannot be activated by read/status proof. The historical transfer added no
 migration because owner and availability are typed metadata. WS-XINT-002-01
-reconciles PostgreSQL parity through migration `0036`. After CP03B and AUTH-12B2 activation, the
-current catalogue has 73 PermissionIds, 111 ActionIds, 62 active actions, and
-49 planned actions. Its closed registry contains fifteen service identities:
+reconciles PostgreSQL parity through migration `0036`. After CP03B, AUTH-12B2 and CP05 activation, the
+current catalogue has 73 PermissionIds, 111 ActionIds, 67 active actions, and
+44 planned actions. Its closed registry contains fifteen service identities:
 fourteen action-bearing identities with twenty-three matrix memberships plus
 the target-only `workstream.compensation.adapter` identity.
-CP01A contributes four planned/unavailable adapter-binding actions and CP01B
-contributes five planned/unavailable ContributionPolicy actions; neither
+CP01A registered four initially unavailable adapter-binding actions and CP01B
+registered five initially unavailable ContributionPolicy actions; neither
 changes fixed-service identity or matrix membership. CP01C corrects only the
 unavailable adapter-binding resource facts before CP02. It does not change
 catalogue custody, action identifiers, fixed-service identity, availability,
 or matrix membership. CP03A establishes that target-only identity and owner
 eligibility without a service-action matrix row; all four binding actions
-remain unavailable until CP03B.
+were activated by CP03B. CP05 activates exactly the five policy actions for
+human Finance Authority through explicit AUTH composition, retaining CP01B
+registration custody. Public policy routes and service authority remain unavailable.
 
 ## REV custody transfer
 

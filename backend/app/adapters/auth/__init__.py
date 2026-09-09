@@ -2,6 +2,9 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.auth.contribution_policies import ContributionPolicyAuthorization
+from app.modules.authorization.contribution_policy_authorization import ContributionPolicyAuthorizationAdapter
+
 from app.adapters.auth.adapter_bindings import CompensationAdapterBindingAuthorization
 from app.modules.authorization.adapter_binding_authorization import (
     AdapterBindingAuthorizationAdapter,
@@ -49,7 +52,17 @@ def compensation_adapter_binding_authorization(
     )
 
 
+def contribution_policy_authorization(session: AsyncSession, context: AuthorizationContext) -> ContributionPolicyAuthorization:
+    """Compose exact Finance Authority policy permissions in the caller session."""
+    repository = AdminAuthorizationRepository(session)
+    kernel = AuthorizationService(session, context, admin_repository=repository)
+    prepared = PreparedAuthorizationService(session, context, kernel, repository)
+    return ContributionPolicyAuthorization(ContributionPolicyAuthorizationAdapter(kernel, prepared))
+
+
 __all__ = (
+    "ContributionPolicyAuthorization",
+    "contribution_policy_authorization",
     "CompensationAdapterBindingAuthorization",
     "compensation_adapter_binding_authorization",
     "artifact_policy_projection_authorization",

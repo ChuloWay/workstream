@@ -135,7 +135,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
 | Project Guide source custody | **Live foundation** | Project Manager ingestion; immutable snapshots; verified binding and reads; PDF, DOCX, PPTX, XLSX and image handling; bounded extraction | Complete the unified-generation cutover and later remove remaining legacy inference paths |
 | Unified Project Guide compilation | **Hidden and proven** | One immutable model attempt; persisted complete result; crash/recovery custody; deterministic sufficiency and submission-artifact-policy projections; immutable atomic setup finalization; exact AUTH request/execute/projection/finalization adapters | Cut live execution over, add approval and deterministic post-submit projection, expose one checker-service port |
-| Contribution policy administration | **Hidden and proven** | Finance Authority adapter-binding lifecycle; ContributionPolicy read/create/update/publish/retire behavior; immutable operation and event history | Activate the five policy actions, expose validation, bind one published complete version to the active guide generation |
+| Contribution policy administration | **Hidden and proven** | Finance Authority adapter-binding lifecycle; ContributionPolicy read/create/update/publish/retire with exact Finance Authority; immutable operation and event history | Expose selected-policy validation, bind one published complete version to the active guide generation |
 | Task readiness and claim | **Foundation plus planned replacement** | Task records, lifecycle guards, assignments, locked work context, public owner facts | A task must inherit the guide-bound ContributionPolicyVersion before `READY`; claim copies the prepared task context into TaskAssignment without a current-policy lookup; activate exact task authority |
 | Contributor artifact preparation | **Hidden and proven** | One outer ZIP; bounded scratch inspection; canonical manifest; platform and project prechecks; unchanged-work rejection; durable put intent; verification; capacity-charged ready admission | Connect only the active unified guide/checker lineage and complete the later public admission-only cutover |
 | Pre-submission intake checking | **Hidden and proven; unified-guide integration remains** | Separate versioned pre-submission catalogue, locked effective-plan compilation, platform/project checks during continuous preparation, and blocking feedback before Submission creation | Connect approved unified-guide pre-submit policy lineage through task/assignment preparation and complete the canonical public cutover; passing intake must never substitute for post-submit evaluation |
@@ -200,8 +200,9 @@ cannot be reused as post-submission review-gate evidence. See the
 - Finance Authority can manage compensation adapter bindings through the
   hidden, authorized boundary.
 - Complete hidden ContributionPolicy draft/publication/retirement behavior is
-  persisted with immutable lifecycle history; its AUTH actions intentionally
-  remain unavailable until the activation gate.
+  persisted with immutable lifecycle history. All five actions have exact human
+  Finance Authority through explicit AUTH composition; default composition denies
+  access and public policy routes remain unavailable.
 - REV queue/admission and lease/preference persistence foundations are merged.
 - The governing rule is fixed: one ContributionPolicyVersion contains both the
   `accepted_submission` and `completed_review` rules. It is bound before task
@@ -217,7 +218,7 @@ Hidden unified-guide setup finalization and its exact authorization gate are
 complete. The next product boundary is POL-04B, which connects the unified
 compilation and finalization path to live setup execution. The reconciled
 [dependency and ownership plan](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
-also permits independent ContributionPolicy activation and CHECKER capability
+also permits independent selected-policy validation after completed CP05 and CHECKER capability
 contract work. These can proceed alongside the AUTH test-proof audit without
 waiting for the full quality audit. Plans are not implementation claims.
 The sequence below describes product dependencies; production activation still
@@ -235,9 +236,10 @@ The next dependency-safe product sequence is:
    policy, activate their narrow AUTH gates, and expose one typed checker-service
    facade. Approval/projection records reference immutable setup finalization;
    they cannot reopen or overwrite it.
-3. **Activate and bind ContributionPolicy.** Activate only the five proven
-   hidden policy actions, expose CON validation, and bind one exact published,
-   complete, binding-valid ContributionPolicyVersion to the Project Guide.
+3. **Validate and bind the selected ContributionPolicy.** CP05 completes
+   authorization for the five hidden policy actions. CP06 supplies selected-policy
+   validation; CP07 binds one exact published, complete, binding-valid
+   ContributionPolicyVersion to the Project Guide.
 4. **Activate the complete guide generation.** AUTH may permit terminal guide
    activation only when compilation, sufficiency, pre-submit policy,
    post-submit policy, review policy, revision policy, and ContributionPolicy
@@ -394,7 +396,7 @@ remaining trace sequence is:
   reconciliation precedes approval-eligible `POL-04B` generations, and actual
   selected-capability conformance precedes `POL-07`/activation. POL-05 includes
   complete proposal visibility and setup-wide correction before approval.
-- Contribution lineage: `CP05 -> CP06 -> CP07`. Hidden `CP07` is another
+- Contribution lineage: CP05 authorization is complete; `CP06 -> CP07` remain. Hidden `CP07` is another
   prerequisite of `AUTH-12H`, not a second live activation. `CP08` supplies
   lineage fields after `CP07`; `ARCH-03A` follows both `AUTH-12H` and `CP08`,
   then `ARCH-03B -> ARCH-03C`. `CP09` physical cleanup waits for all remaining

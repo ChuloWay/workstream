@@ -298,6 +298,15 @@ def _active(
     return ActionDefinition(action_id, permission_id, owner, ActionAvailability.ACTIVE)
 
 
+_CONTRIBUTION_POLICY_ACTION_IDS = (
+    ActionId.CONTRIBUTION_POLICY_READ,
+    ActionId.CONTRIBUTION_POLICY_CREATE_DRAFT,
+    ActionId.CONTRIBUTION_POLICY_UPDATE_DRAFT,
+    ActionId.CONTRIBUTION_POLICY_PUBLISH,
+    ActionId.CONTRIBUTION_POLICY_RETIRE,
+)
+
+
 ACTION_DEFINITIONS = (
     _active(
         ActionId.ACTOR_PROFILE_READ_SELF, PermissionId.ACTOR_PROFILE_READ_SELF, ActionOwner.AUTH_07B
@@ -795,30 +804,9 @@ ACTION_DEFINITIONS = (
         PermissionId.COMPENSATION_ADAPTER_BINDING_MANAGE,
         ActionOwner.ARCH_CP01A,
     ),
-    _planned(
-        ActionId.CONTRIBUTION_POLICY_READ,
-        PermissionId.COMPENSATION_POLICY_MANAGE,
-        ActionOwner.ARCH_CP01B,
-    ),
-    _planned(
-        ActionId.CONTRIBUTION_POLICY_CREATE_DRAFT,
-        PermissionId.COMPENSATION_POLICY_MANAGE,
-        ActionOwner.ARCH_CP01B,
-    ),
-    _planned(
-        ActionId.CONTRIBUTION_POLICY_UPDATE_DRAFT,
-        PermissionId.COMPENSATION_POLICY_MANAGE,
-        ActionOwner.ARCH_CP01B,
-    ),
-    _planned(
-        ActionId.CONTRIBUTION_POLICY_PUBLISH,
-        PermissionId.COMPENSATION_POLICY_MANAGE,
-        ActionOwner.ARCH_CP01B,
-    ),
-    _planned(
-        ActionId.CONTRIBUTION_POLICY_RETIRE,
-        PermissionId.COMPENSATION_POLICY_MANAGE,
-        ActionOwner.ARCH_CP01B,
+    *(
+        _active(action, PermissionId.COMPENSATION_POLICY_MANAGE, ActionOwner.ARCH_CP01B)
+        for action in _CONTRIBUTION_POLICY_ACTION_IDS
     ),
 )
 
@@ -881,6 +869,7 @@ def _index_actions(
     if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 24:
         raise RuntimeError("authorization permission boundary mismatch")
     active_actions = {
+        *_CONTRIBUTION_POLICY_ACTION_IDS,
         ActionId.ACTOR_PROFILE_READ_SELF,
         ActionId.ACTOR_PROFILE_UPDATE_SELF,
         ActionId.AUTHORIZATION_PERMISSION_CATALOGUE_READ,

@@ -4,13 +4,13 @@ Current pre-review work follows the [cross-owner dependency contract](../WS-ARCH
 and the [capability ledger](../../../docs/roadmap_status.md).
 
 - Disposition: Planned
-- Completed boundary: hidden policy behavior.
+- Completed boundary: hidden policy behavior and exact Finance Authority.
 - Intent: record completed authorized reviews and accepted submissions as
   immutable ContributionRecords and optional
   project-policy-driven compensation awards without coupling lifecycle truth to
   an economic provider.
-- Next usable boundary: prepare CP05 activation, then guide-activation
-  validation/persistence before task readiness.
+- Next usable boundary: CP06 selected-policy validation, then guide-activation
+  persistence before task readiness.
 - Governing sources: `docs/spec_contribution_compensation.md`,
   [`CONFORMANCE.md`](CONFORMANCE.md), code, migrations, and tests.
 - Preserve: exact policy-version lineage, no claim-time drift, decimal-string
@@ -22,24 +22,26 @@ and the [capability ledger](../../../docs/roadmap_status.md).
 - Shared outbox, adapter-binding persistence and hidden lifecycle behavior,
   contribution-policy persistence and hidden draft/publication/retirement
   behavior, and shared lifecycle-audit participation are merged.
-- Finance Authority adapter-binding actions are active; five policy actions
-  remain unavailable. ContributionRecord, award, dispatch, fulfillment, and
+- Finance Authority adapter-binding and five policy actions are active through
+  explicit AUTH composition; public policy routes remain unavailable. ContributionRecord, award, dispatch, fulfillment, and
   public CON behavior are not yet complete.
 
 ## Remaining v0.1 sequence
 
 Use the [current cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
-for the existing CP05-CP09 work; CON does not create a second policy/binding lane.
+for the remaining CP06-CP09 work; CON does not create a second policy/binding lane.
 
-1. CP05 activates only the merged hidden policy behavior.
-2. CP06 validates the expected version against the active policy's current
+[CP05](../WS-ARCH-001/WS-ARCH-001-CP05.md) delivered exact authorization for
+the hidden policy behavior.
+
+1. CP06 validates the expected version against the active policy's current
    published selector for new guide activation, without reselecting existing
    frozen work; CP07 builds hidden PROJECTS
    activation/binding, and AUTH-12H activates it. CP08 supplies lineage fields;
    ARCH-03B locks/copies them through TaskAssignment and Submission. CP09 removes the replaced legacy
    economic path only after all consumers are replaced, including CHECKERS and
    public Submission cutover; it does not block canonical `allow_review`.
-3. Add CON-03C ContributionRecord/CompensationAward persistence after the
+2. Add CON-03C ContributionRecord/CompensationAward persistence after the
    REV-04B shared source/FinalAcceptance FK foundation, then the CON-07 atomic
    submitter participant. These shared pieces do not require live human
    decision/queue/lease behavior. The locked ReviewPolicy boolean
@@ -50,7 +52,7 @@ for the existing CP05-CP09 work; CON does not create a second policy/binding lan
    operation; later drain and fulfillment surfaces do not block it.
    Automated acceptance must not require live human-review infrastructure;
    see the [canonical source, authority and transaction contract](../../../docs/spec_review_lifecycle.md#finalacceptance).
-4. Shared dispatcher CON-02B is pulled forward before canonical task authority
+3. Shared dispatcher CON-02B is pulled forward before canonical task authority
    invalidation and post-submit routing, independently of ContributionRecord/
    award persistence. AUTH-OUTBOX-01 supplies its unavailable contract and
    AUTH-OUTBOX-02 activates its proven mechanics. Add fulfillment,
@@ -82,6 +84,8 @@ remains in the archive; its old directory paths and relative sequencing do
 not override this current contract.
 
 ## Preserved history
+
+ReviewPolicy setting history: [product-builder handoff](../../changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
 
 Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 [`CHUNK_MAP.md`](pre-cutover/CHUNK_MAP.md), and

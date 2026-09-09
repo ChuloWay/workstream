@@ -8,11 +8,11 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 [`planning/chunk contracts`](pre-cutover/chunks/).
 
 - Disposition: Planned
-- Completed boundary: through 02H and CP04B.
+- Completed boundary: through 02H and [CP05](WS-ARCH-001-CP05.md).
 - Intent: keep product modules behind explicit ports and composition roots.
-- Current boundary: hidden ContributionPolicy behavior has durable custody;
-  live activation remains separate.
-- Next usable boundary: CP05 policy activation; independent ARCH-04A checker
+- Current boundary: hidden ContributionPolicy behavior has durable custody and exact
+  Finance Authority; public exposure remains separate.
+- Next usable boundary: CP06 selected-policy validation; independent ARCH-04A checker
   contract/capability proof precedes POL-07 and guide activation.
 - Governing sources: `docs/architecture_lockdown.md`, accepted ADRs, code, and
   architecture tests.
@@ -26,8 +26,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   composition, and exact contributor/binding activation are merged through
   02H; the public route remains unchanged.
 - Adapter-binding behavior and activation and hidden ContributionPolicy
-  draft/publication behavior are complete. CP05-CP09 remain: policy activation,
-  validation, hidden guide binding/activation, and task-attempt lineage.
+  draft/publication behavior and exact Finance Authority are complete.
+  CP06-CP09 remain: selected-policy validation, hidden guide binding/activation, and task-attempt lineage.
   CP09 physical removal follows zero legacy consumers, including checker/public
   Submission cutover; it is not on the `allow_review` critical path.
 - Independent ARCH-04A supplies contracts/capability proof before guide

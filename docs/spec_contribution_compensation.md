@@ -797,8 +797,9 @@ complete update-draft behavior. CONTRIBUTIONS owns policy and unit truth;
 COMPENSATION and PROJECTS expose transaction-held public owner ports. Every
 mutation uses a caller-owned root transaction, advisory operation fence,
 opaque prepare/consume/close participant, complete graph replacement, and one
-immutable recoverable lifecycle event. Production authorization remains
-deny-default and all five policy actions remain unavailable until CP05.
+immutable recoverable lifecycle event. Default composition remains deny-default. CP05 supplies explicit AUTH
+composition for all five actions, limited to active human Finance Authority
+with system or exact-project scope.
 
 CP04B adds hidden publication and terminal retirement. Publication locks and
 revalidates the complete server-owned graph, project units, and adapter
@@ -806,8 +807,12 @@ bindings, computes canonical digest/binding facts, consumes and closes opaque
 authority before product effects, and atomically replaces any prior published
 version. Database-owned transition custody binds every affected row and event
 to one actor, operation, and timestamp. The behavior remains route-unreachable
-and deny-default; CP05 alone installs the real AUTH adapter and activates the
-five policy actions.
+and deny-default unless the CP05 AUTH adapter is explicitly supplied. CP05
+activates the five policy actions using serialized read authorization and exact
+transaction-bound PREP. Committed replay checks current read authority. Migration `0012` admits only
+the policy resource token and five exact action/permission pairs in the existing
+closed audit constraints; it does not
+change the event shape or policy lifecycle.
 
 | ActionId | PermissionId | Principal / target | Protocol | Feature owner |
 |---|---|---|---:|---|
@@ -817,11 +822,11 @@ five policy actions.
 | `compensation.adapter_binding.suspend` | `compensation.adapter_binding.manage` | covered human Finance Authority / active binding | T | WS-ARCH-001-CP03B (active; CP01A registration custody) |
 | `compensation.adapter_binding.resume` | `compensation.adapter_binding.manage` | covered human Finance Authority / suspended binding | T | WS-ARCH-001-CP03B (active; CP01A registration custody) |
 | `compensation.adapter_binding.retire` | `compensation.adapter_binding.manage` | Finance / dependency-free binding | T | CON-10B |
-| `contribution.policy.read` | `compensation.policy.manage` | Finance / policy version | Q | WS-ARCH-001-CP04A (hidden behavior; CP01B registration custody; unavailable) |
-| `contribution.policy.create_draft` | `compensation.policy.manage` | Finance / policy collection | T | WS-ARCH-001-CP04A (hidden behavior; CP01B registration custody; unavailable) |
-| `contribution.policy.update_draft` | `compensation.policy.manage` | Finance / draft version | T | WS-ARCH-001-CP04A (hidden behavior; CP01B registration custody; unavailable) |
-| `contribution.policy.publish` | `compensation.policy.manage` | Finance / complete draft | T | WS-ARCH-001-CP04B (hidden behavior; CP01B registration custody; unavailable) |
-| `contribution.policy.retire` | `compensation.policy.manage` | Finance / published version | T | WS-ARCH-001-CP04B (hidden behavior; CP01B registration custody; unavailable) |
+| `contribution.policy.read` | `compensation.policy.manage` | Finance / policy version | Q | WS-ARCH-001-CP05 (active AUTH; CP04A hidden behavior; CP01B registration custody) |
+| `contribution.policy.create_draft` | `compensation.policy.manage` | Finance / policy collection | T | WS-ARCH-001-CP05 (active AUTH; CP04A hidden behavior; CP01B registration custody) |
+| `contribution.policy.update_draft` | `compensation.policy.manage` | Finance / draft version | T | WS-ARCH-001-CP05 (active AUTH; CP04A hidden behavior; CP01B registration custody) |
+| `contribution.policy.publish` | `compensation.policy.manage` | Finance / complete draft | T | WS-ARCH-001-CP05 (active AUTH; CP04B hidden behavior; CP01B registration custody) |
+| `contribution.policy.retire` | `compensation.policy.manage` | Finance / published version | T | WS-ARCH-001-CP05 (active AUTH; CP04B hidden behavior; CP01B registration custody) |
 | `compensation.fulfillment.report` | proposed `compensation.fulfillment.report` | exact bound service / award and binding | T | CON-08B |
 | `contribution.read_self` | `contribution.read_self` | contributor / own record | Q | CON-10A |
 | `contribution.read_project` | `contribution.read_project` | eligible AdminRole / project records | Q | CON-10A |

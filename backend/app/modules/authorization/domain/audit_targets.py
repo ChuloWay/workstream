@@ -3,6 +3,9 @@
 
 def project_authority_audit_target(resource: object) -> tuple[str, str, str, str, str] | None:
     """Project-scoped exact contexts share bounded audit selectors, never raw facts."""
+    from app.modules.authorization.domain.contribution_policies import (
+        ContributionPolicyReadResourceContext, ContributionPolicyMutationResourceContext,
+    )
     from app.modules.authorization.domain.adapter_bindings import (
         AdapterBindingReadResourceContext,
         AdapterBindingMutationResourceContext,
@@ -25,6 +28,7 @@ def project_authority_audit_target(resource: object) -> tuple[str, str, str, str
             PreSubmitCheckerInputResourceContext,
             ProjectGuideCompilationRequestResourceContext,
             ProjectGuideCompilationExecuteResourceContext,
+            ContributionPolicyReadResourceContext, ContributionPolicyMutationResourceContext,
             AdapterBindingReadResourceContext,
             AdapterBindingMutationResourceContext,
             ProjectGuideProjectionResourceContext,

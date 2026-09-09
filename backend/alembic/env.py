@@ -24,7 +24,8 @@ _BASELINE_REVISION = "0001_v01_baseline"
 _PREVIOUS_HEAD_REVISION = "0008_guide_compilation_authorized_persistence"
 _PROJECTION_HEAD_REVISION = "0009_guide_compilation_projections"
 _FINALIZATION_HEAD_REVISION = "0010_project_guide_setup_finalization"
-_CURRENT_HEAD_REVISION = "0011_review_policy_human_review"
+_REVIEW_POLICY_HEAD_REVISION = "0011_review_policy_human_review"
+_CURRENT_HEAD_REVISION = "0012_contribution_policy_audit_resource"
 _RECREATE_GUIDANCE = (
     "Workstream v0.1 requires a fresh database; recreate this database before "
     "running the 0001_v01_baseline migration"
@@ -61,6 +62,7 @@ def do_run_migrations(connection: Connection) -> None:
             (_PREVIOUS_HEAD_REVISION,),
             (_PROJECTION_HEAD_REVISION,),
             (_FINALIZATION_HEAD_REVISION,),
+            (_REVIEW_POLICY_HEAD_REVISION,),
             (_CURRENT_HEAD_REVISION,),
         ):
             raise RuntimeError(_RECREATE_GUIDANCE)
