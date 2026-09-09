@@ -234,6 +234,15 @@ second catalogue-hashing implementation.
 
 ### Exact supported definitions and conformance
 
+Every definition has code-owned `state` (`enabled` or `disabled`) and
+`disabled_behavior` (only `unavailable` in this version), both included in the
+canonical hash and agent-visible projection. All nine current rows are enabled.
+A disabled selectable automated requirement remains an explicit capability gap;
+it is never bound, skipped or reassigned to human review. A disabled mandatory
+default makes v2 compilation unavailable; defaults cannot be omitted or
+substituted. Tests may construct a disabled frozen snapshot with its recomputed
+identity to reach these guards. No runtime configuration endpoint is added.
+
 All rows use `deterministic` execution, the empty configuration and structural
 input/result schemas above. Order is the table order (1-9), dependencies are
 empty, provider recovery is `none`, and required generated-output/log roles
@@ -334,10 +343,12 @@ evidence-type/key values 200; structural hash text 128. Blank/malformed
 structural text remains representable for handler failure tests. Authoritative
 SHA-256 fields instead require the existing exact prefixed 64-hex form.
 
-Guide version is a nonblank opaque string of at most 128 code points; policy
-versions/generations use positive strict integers except the pinned compiler/
-definition/implementation string identities named above. UUIDs are strict;
-positive versions/generations are at most 2,147,483,647.
+Guide version and post-policy version are nonblank opaque strings of at most
+50 code points, matching the existing String(50) owners. The post-policy
+version equals its guide version; duplicated references must agree. Submission
+version and evaluation/review/revision generations are positive strict integers
+of at most 2,147,483,647. Compiler/definition/implementation versions are the
+exact string identities above. UUIDs are strict.
 Declared content/manifest size is 0..9,223,372,036,854,775,807 bytes, matching
 signed database size capacity; this is a reference bound, not permission to
 load that many bytes. No content bytes are loaded in 04A. Result counters are
@@ -446,5 +457,7 @@ The first focused plan review identified missing exact registry/version
 selection, v2 compiler/type ownership, detached input/result shapes, numeric
 bounds, per-handler conformance and human-review/gap proof. The design now
 fixes those choices and distinguishes local fact consistency from later stored
-composite ownership and AUTH checks. These are plan corrections, not claims of
+composite ownership and AUTH checks. Subsequent review also corrected the
+existing string version types and made disabled-definition fixtures explicit
+through hash-bound state/disabled behavior. These are plan corrections, not claims of
 implemented or runtime-verified behavior.
