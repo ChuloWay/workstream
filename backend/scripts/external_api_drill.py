@@ -122,6 +122,19 @@ def timestamp_value(value):
     return parsed.tzinfo is not None and parsed <= datetime.now(timezone.utc)
 
 
+def strict_equal(actual, expected):
+    """Compare JSON containers recursively without bool/integer coercion."""
+    if type(actual) is not type(expected):
+        return False
+    if isinstance(expected, dict):
+        return actual.keys() == expected.keys() and all(
+            strict_equal(actual[key], value) for key, value in expected.items())
+    if isinstance(expected, list):
+        return len(actual) == len(expected) and all(
+            strict_equal(left, right) for left, right in zip(actual, expected, strict=True))
+    return actual == expected
+
+
 def verify_response(response, expected_status, expected_values, checks=None, exact_fields=None):
     """Assert explicit status and values; malformed JSON is not a passing body."""
     if response.status_code != expected_status:
@@ -134,7 +147,7 @@ def verify_response(response, expected_status, expected_values, checks=None, exa
         raise ProbeFailure("response_shape_mismatch")
     for path, expected in expected_values.items():
         value = response_value(body, path)
-        if value != expected or type(value) is not type(expected):
+        if not strict_equal(value, expected):
             raise ProbeFailure("response_value_mismatch")
     for path, check in (checks or {}).items():
         try:
@@ -431,13 +444,17 @@ async def project_field_cases(drill, manager, outsider, project, guide, manager_
     for field, maximum in (("name", 200), ("slug", 120), ("version", 50)):
         body = ({"name": "Overflow", "slug": "overflow-" + uuid4().hex}
                 if field != "version" else {"version": "overflow", "content_markdown": "# Overflow"})
+        failed_key = {"Idempotency-Key": str(uuid4())}
         try:
             await drill.call("overflow_" + field, "POST", route if field != "version" else groute,
                 path=route if field != "version" else gpath, token=manager,
-                payload=body | {field: "x" * (maximum + 1)}, expected=422,
+                payload=body | {field: "x" * (maximum + 1)}, expected=422, headers=failed_key,
                 fields=("body." + field,))
         except ProbeFailure:
             pass
+        await drill.call("overflow_" + field + "_retry_after_rollback", "POST",
+            route if field != "version" else groute, path=route if field != "version" else gpath,
+            token=manager, payload=body, headers=failed_key, expected=201, values=body)
     # A new-key no-op PATCH returns current guide state, not a cached replay response.
     await drill.call("guide_current_state_after_overflow", "PATCH", groute + "/{guide_id}",
         path=gpath + "/" + boundary_guide["id"], token=manager, payload={},
@@ -445,6 +462,20 @@ async def project_field_cases(drill, manager, outsider, project, guide, manager_
     await drill.call("guide_foreign_actor_patch", "PATCH", groute + "/{guide_id}",
         path=gpath + "/" + guide["id"], token=outsider,
         payload={"content_markdown": "Unauthorized replacement"}, expected=403)
+    await drill.call("guide_foreign_actor_patch_unchanged", "PATCH", groute + "/{guide_id}",
+        path=gpath + "/" + guide["id"], token=manager, payload={},
+        values={"id": guide["id"], "project_id": project["id"], "version": "initial",
+                "status": "draft", "content_markdown": "# Updated guide", "change_summary": "Updated",
+                "created_by": manager_id, "created_at": guide["created_at"]})
+    try:
+        await drill.call("guide_null_content", "PATCH", groute + "/{guide_id}",
+            path=gpath + "/" + guide["id"], token=manager,
+            payload={"content_markdown": None}, expected=422)
+    except ProbeFailure:
+        pass
+    await drill.call("guide_null_content_unchanged", "PATCH", groute + "/{guide_id}",
+        path=gpath + "/" + guide["id"], token=manager, payload={},
+        values={"content_markdown": "# Updated guide", "change_summary": "Updated"})
 
 
 async def authority_cases(drill, admin, manager, outsider, manager_id, project):
@@ -515,11 +546,19 @@ async def project_role_cases(drill, manager, contributor, project, manager_id):
         body = {"target_actor_profile_id": actor["actor_profile_id"], "role": role,
                 "qualification": qualification, "reason": "Exact project contribution role"}
         key = {"Idempotency-Key": str(uuid4())}
-        result = await drill.call("issue_project_" + role, "POST", route, path=path, token=manager,
-            payload=body, headers=key, expected=201,
-            values={"project_id": project["id"], "actor_profile_id": actor["actor_profile_id"],
-                    "role": role, "status": "active", "version": 1},
-            checks={"id": uuid_value, "qualification_snapshot_id": uuid_value})
+        try:
+            result = await drill.call("issue_project_" + role, "POST", route, path=path, token=manager,
+                payload=body, headers=key, expected=201,
+                values={"project_id": project["id"], "actor_profile_id": actor["actor_profile_id"],
+                        "role": role, "status": "active", "version": 1},
+                checks={"id": uuid_value, "qualification_snapshot_id": uuid_value})
+        except ProbeFailure:
+            await drill.call("failed_grant_no_active_row_" + role, "GET", route,
+                path=path + f"?role={role}&status=active", token=manager,
+                values={"items": [], "next_cursor": None})
+            await drill.call("failed_grant_no_access_" + role, "GET", "/api/v1/projects/{project_id}",
+                path=f'/api/v1/projects/{project["id"]}', token=contributor, expected=404)
+            continue
         await drill.call("replay_project_" + role, "POST", route, path=path, token=manager,
             payload=body, headers=key, expected=201, values=result)
         read_path = path + "/" + result["id"]

@@ -110,3 +110,10 @@ project/database length boundaries, project-role access and revocation, service
 provisioning and identity-link lifecycle. Request pacing respects the default
 mutation budget without raising server limits. Schema inventory remains distinct
 from semantic verification; these extensions do not certify every public field.
+
+Focused review additionally required recursive type-strict response comparison
+and current-state verification after a denied guide edit. Both are incorporated;
+nested boolean/integer coercions have dedicated helper regressions. Failed
+project-role issuance also checks that no active grant or project access survives,
+and failed oversized creates are followed by corrected same-key requests to
+probe idempotency rollback. No expected product failure is relabeled as a pass.

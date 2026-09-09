@@ -49,6 +49,16 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(drill.verify_response(httpx.Response(200, json={"enabled": True}),
                                               200, {"enabled": True}), {"enabled": True})
 
+    def test_nested_containers_do_not_coerce_boolean_integer_or_float(self):
+        for actual, expected in (({"enabled": 1}, {"enabled": True}), ([1], [True]),
+                                 ([{"values": [1.0]}], [{"values": [1]}]),
+                                 ([1], [1, 2]), ({"a": 1, "b": 2}, {"a": 1})):
+            with self.subTest(actual=actual, expected=expected), self.assertRaises(drill.ProbeFailure):
+                drill.verify_response(httpx.Response(200, json={"nested": actual}),
+                                      200, {"nested": expected})
+        valid = {"nested": [{"enabled": True, "values": [1, None, "value"]}]}
+        self.assertEqual(drill.verify_response(httpx.Response(200, json=valid), 200, valid), valid)
+
     def test_token_has_no_implicit_administrator(self):
         import base64
         issuer = drill.TokenIssuer()
