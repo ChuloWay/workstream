@@ -185,7 +185,7 @@ These are harness repairs, not additional product defects for the other agent:
 
 ## New finding: API-DRILL-006 — valid qualification exceeds internal admission limit
 
-**Unrepaired product defect; do not certify the full grant-input contract.**
+**Repaired by the operation-specific admission change; original evidence below.**
 The extended drill at `cf5e4633` against unchanged product main `c681b51f`
 observed HTTP **500**, `error.code=internal_error`, for both submitter and
 reviewer grants with valid populated qualification fields.
@@ -201,26 +201,30 @@ reviewer grants with valid populated qualification fields.
   120-character `x` token plus nineteen `expertise:<n>` tokens (`n` from 0 to 18).
 - Every field passes `ProjectRoleGrantIssueBody`; lists are at the advertised
   twenty-item limit and tokens at or below 120 characters. Canonical request
-  serialization is 2,250 bytes for this recipe.
+  serialization is 2,250 bytes for submitter (2,249 for reviewer) in this recipe.
 - `parse_authority_request` in `authorization/schemas.py` rejects canonical
   requests above 2,048 bytes with `TypeError("invalid authority mutation request")`.
   `ProjectRoleGrantMutationService.reserve` reaches this check before completing
   the grant. A direct schema/admission probe reproduces the rejection without a
   database; the real HTTP cases reproduce the external 500.
-- Required repair: reconcile the public qualification contract with bounded
-  canonical admission, preserving closed input validation, authorization,
-  idempotency, snapshots and audit atomicity. Do not blindly raise a shared
-  authority limit or lower a drill expectation to accept 500.
+- Repair: strictly validated project-role issuance uses a 9 KiB canonical
+  envelope, sufficient for its actual largest permitted request (8,626 bytes).
+  Every other authority mutation retains 2,048 bytes. Public field constraints,
+  authorization, idempotency, snapshots and bounded audit projections remain
+  unchanged. Selection occurs after validation of the closed request union.
 - Retest: `qualification_combined_limits_submitter` and
   `qualification_combined_limits_reviewer` must return 201, read back every
   supplied reference and revoke normally. Keep independent smaller positive,
   replay and lifecycle controls; malformed cases must still reject without any
   new grant history. Add focused product-level regression and safe-bound tests.
 
-This finding does not invalidate the smaller successful grant scenarios or the
-five repairs above. It does prevent advertising all permitted qualification
-inputs as working. Raw runs stay outside Git; their failure must remain visible
-until a product repair passes the unchanged expectation.
+The same PR now includes public-maximum parser and PostgreSQL regressions for
+both roles: exact persisted references/readback, replay, mismatch and conflict
+without another snapshot, and unauthorized refusal without grant, snapshot,
+idempotency or audit residue. Envelope-edge tests retain bounded admission and
+generic non-retaining errors. Both complete drills must pass on the repaired
+candidate; the original failed runs are historical and remain unchanged outside
+Git. This repair does not certify every other API field or deployed provider.
 
 ## Retest and handoff criteria
 

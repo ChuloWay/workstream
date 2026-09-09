@@ -195,9 +195,10 @@ cannot be reused as post-submission review-gate evidence. See the
   separate value/predicate/shape/request evidence. Remaining field combinations
   and provider-dependent flows still need client proof before inclusion in the
   MCP endpoint-and-field handoff; route discovery alone is not readiness.
-  The combined qualification limits expose API-DRILL-006: public-valid inputs
-  exceed internal canonical admission size and return 500. That boundary remains
-  unrepaired; smaller successful grant inputs are not full-contract certification.
+  API-DRILL-006 is repaired with a bounded project-role issuance envelope that
+  accommodates the existing public qualification maxima; other authority
+  mutations retain their original limit. Full-max parser/PostgreSQL regressions
+  cover both roles, persistence, replay, conflict and unauthorized rollback.
 - Guide ingestion, guide binding/read, artifact verification/recovery,
   contributor preparation, Submission consumption/binding, unified compilation
   request/execute, and deterministic projection authority are implemented at

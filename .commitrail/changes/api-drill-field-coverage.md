@@ -2,7 +2,7 @@
 
 - Initiative: None
 - Durable disposition: Complete
-- Intended merge outcome: Extend client-side authorization and project-role field proof and document the remaining MCP handoff boundary.
+- Intended merge outcome: Extend client-side field proof, repair qualification request admission, and document the remaining MCP handoff boundary.
 
 ## Intent
 
@@ -19,12 +19,18 @@ Allowed: `backend/scripts/external_api_drill.py`,
 `backend/scripts/admin_api_drill.py`, `scripts/test_external_api_drill.py`,
 `scripts/test_admin_api_drill.py`, `docs/engineering/external-api-drill.md`,
 `docs/engineering/external-api-drill-findings.md`, `docs/roadmap_status.md`,
-and this record. Local ignored roadmap exports, if present, follow AGENTS.md.
+and this record. The human expanded this same PR to repair API-DRILL-006:
+`backend/app/modules/authorization/schemas.py`, existing
+`backend/tests/test_api_drill_repairs.py`, and
+`docs/spec_authorization_service.md` are also allowed for request admission,
+regression proof and its documented bound. Local ignored roadmap exports, if
+present, follow AGENTS.md.
 
-Prohibited: product code, migrations, permissions, hidden routes, seeded product
+Prohibited: other product code, migrations, permissions, hidden routes, seeded product
 SQL writes, disabled guards, production credentials, CI/coverage changes, MCP
-implementation, and product-builder files. Newly discovered product defects are
-reported with reproductions, not silently accepted or repaired in this scope.
+implementation, and product-builder files. Other newly discovered product defects
+are communicated with a recommendation to repair in scope or hand off; no silent
+expansion or weakening of probe expectations.
 
 ## Acceptance criteria
 
@@ -42,14 +48,22 @@ reported with reproductions, not silently accepted or repaired in this scope.
 5. Run helper regressions, both clean-candidate real HTTP/PostgreSQL drills,
    focused review and hosted checks. Reconcile documentation with actual proof;
    do not advertise complete field certification or untested product flows.
+6. Preserve the existing bounded public qualification fields and the 2,048-byte
+   canonical limit for other authority mutations. Admit the full permitted
+   project-role issuance envelope with a narrowly typed finite bound. Prove
+   both roles' maximum reference collections through public validation,
+   canonical/prepared admission, database persistence and exact replay; retain
+   malformed, unauthorized, idempotency-conflict and safe-error rejection.
 
 ## Risk and review routing
 
-Risk: L1, authorization evidence integrity; production behavior is unchanged.
+Risk: L1, authorization evidence integrity and bounded request-admission repair.
 Plan feasibility review precedes implementation. Focused security review covers
 cursor/resource substitution, unchanged-state proof and secret handling. QA and
 test-delta review cover falsifiable assertions; documentation review covers
-MCP claims. Related tracks may share a bounded reviewer assignment.
+MCP claims. Architecture review additionally checks consistency across public,
+canonical/prepared and stored/audit owners. Related tracks may share a bounded
+reviewer assignment.
 
 ## Evidence
 
@@ -81,5 +95,8 @@ The combined qualification-bound control exposed API-DRILL-006: public validatio
 accepts inputs whose canonical request exceeds the internal 2,048-byte admission
 limit, producing 500 rather than a successful valid grant. Expected 201 remains
 unchanged and failure remains in the report. Independent smaller positive/replay/
-revocation cases continue. Product repair is outside this harness change; the
-findings document owns its reproduction and required follow-up proof.
+revocation cases continue. The human subsequently authorized repairing this
+narrow product defect in the same PR, followed by both complete drills. Extend
+only the validated project-role issuance envelope: a global size increase or
+reducing advertised qualification limits would change unrelated boundaries or
+the client contract. The findings document preserves the original reproduction.

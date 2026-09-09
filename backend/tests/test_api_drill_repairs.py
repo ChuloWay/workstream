@@ -1,6 +1,8 @@
 """PostgreSQL regressions for the bounded external API drill repairs."""
 
-from uuid import uuid4
+from copy import deepcopy
+import json
+from uuid import UUID, uuid4
 
 from httpx import AsyncClient
 import pytest
@@ -11,7 +13,10 @@ from app.db import session as db_session
 from app.main import create_app
 from app.modules.audit.schemas import ActorReferenceKind, AuthorityAuditEventInput, AuthorityEventType
 from app.modules.authorization.catalogue import PermissionId
-from app.modules.authorization.models import ProjectRoleGrant
+from app.modules.authorization import schemas as authority_schemas
+from app.modules.authorization.models import AuthorityIdempotencyRecord, ProjectRoleGrant, ProjectRoleQualificationSnapshot
+from app.modules.authorization.project_role_schemas import ProjectRoleGrantIssueBody
+from app.modules.tasks.models import AuditEvent
 from app.modules.projects.models import (
     GuideMutationIdempotencyRecord,
     Project,
@@ -24,6 +29,136 @@ from projects.client_fixtures import (
     project_database_env as project_database_env,
 )
 from projects.guide_fixtures import complete_guide_payload, create_guide, create_project
+
+
+def maximum_qualification() -> dict:
+    references = [f"{index:02d}" + "x" * 118 for index in range(20)]
+    return {
+        "skills_snapshot": {"availability": "available", "reference_ids": references[:],
+                            "unavailable_reason": None},
+        "reputation_snapshot": {"availability": "available", "reference_ids": references[:],
+                                "unavailable_reason": None},
+        "prior_project_work_refs": [str(uuid4()) for _ in range(20)],
+        "external_expertise_refs": references[:],
+    }
+
+
+def maximum_role_request(role: str):
+    body = ProjectRoleGrantIssueBody(target_actor_profile_id=uuid4(), role=role,
+        qualification=maximum_qualification(), reason="Maximum qualification regression")
+    return authority_schemas.ProjectRoleGrantIssueRequest(
+        operation=authority_schemas.AuthorityOperation.PROJECT_ROLE_GRANT_ISSUE,
+        project_id=uuid4(), target_actor_id=body.target_actor_profile_id, role=body.role,
+        qualification=body.qualification, reason_digest=authority_schemas.derive_reason_digest(body.reason))
+
+
+@pytest.mark.parametrize(("role", "size"), [("submitter", 8626), ("reviewer", 8625)])
+def test_maximum_public_qualification_fits_canonical_authority_admission(role: str, size: int) -> None:
+    request = maximum_role_request(role)
+    encoded = json.dumps(request.model_dump(mode="json", exclude_none=True),
+                         sort_keys=True, separators=(",", ":")).encode()
+    assert len(encoded) == size
+    assert 2048 < size <= 9 * 1024
+    admitted = authority_schemas.parse_authority_request(request.model_dump())
+    assert admitted == request
+
+
+def test_qualification_expansion_preserves_closed_nonretaining_admission() -> None:
+    request = maximum_role_request("submitter").model_dump()
+    invalids = []
+    for collection in ("skills_snapshot", "reputation_snapshot", "external_expertise_refs", "prior_project_work_refs"):
+        invalid = deepcopy(request)
+        references = invalid["qualification"][collection]
+        if isinstance(references, dict):
+            references = references["reference_ids"]
+        references.append(references[0])
+        invalids.append(invalid)
+    secret = "PRIVATE_REJECTED_QUALIFICATION"
+    invalid = deepcopy(request)
+    invalid["qualification"]["external_expertise_refs"] = [secret + "x" * 121]
+    invalids += [invalid, request | {"extra": secret},
+                 request | {"operation": authority_schemas.AuthorityOperation.ADMIN_ROLE_GRANT_ISSUE}]
+    for value in invalids:
+        with pytest.raises(TypeError, match="^invalid authority mutation request$") as caught:
+            authority_schemas.parse_authority_request(value)
+        assert secret not in str(caught.value)
+        assert caught.value.__cause__ is None
+        assert caught.value.__context__ is None
+
+
+@pytest.mark.parametrize("project_role", [False, True])
+def test_authority_envelope_bound_is_operation_specific(monkeypatch: pytest.MonkeyPatch, project_role: bool) -> None:
+    request = maximum_role_request("submitter") if project_role else authority_schemas.ActorProfileSuspendRequest(
+        operation=authority_schemas.AuthorityOperation.ACTOR_PROFILE_SUSPEND,
+        actor_profile_id=uuid4(), reason_digest=authority_schemas.derive_reason_digest("Bound proof"))
+    limit = 9 * 1024 if project_role else 2048
+    # Artificial serialization sizes exercise the guard itself; the real maximum
+    # request test above separately proves the public schema's actual encoding.
+    monkeypatch.setattr(authority_schemas.json, "dumps", lambda *args, **kwargs: "x" * limit)
+    assert authority_schemas.parse_authority_request(request.model_dump()) == request
+    monkeypatch.setattr(authority_schemas.json, "dumps", lambda *args, **kwargs: "x" * (limit + 1))
+    with pytest.raises(TypeError, match="^invalid authority mutation request$"):
+        authority_schemas.parse_authority_request(request.model_dump())
+
+
+@pytest.mark.parametrize("role", ["submitter", "reviewer"])
+async def test_maximum_qualification_grant_persists_replays_and_conflicts_without_extra_history(
+    project_client: AsyncClient, monkeypatch: pytest.MonkeyPatch, role: str,
+) -> None:
+    project = await create_project(project_client, name="Maximum qualification")
+    monkeypatch.setenv("WORKSTREAM_DEV_AUTH_SUBJECT", f"qualification-target-{uuid4()}")
+    monkeypatch.setenv("WORKSTREAM_DEV_AUTH_ROLES", "contributor")
+    get_settings.cache_clear()
+    target = await project_client.get("/api/v1/actors/me", headers=auth_headers())
+    assert target.status_code == 200, target.text
+    actor_id = target.json()["actor_profile_id"]
+    monkeypatch.setenv("WORKSTREAM_DEV_AUTH_SUBJECT", "project-manager-subject")
+    monkeypatch.setenv("WORKSTREAM_DEV_AUTH_ROLES", "project_manager")
+    get_settings.cache_clear()
+    qualification = maximum_qualification()
+    payload = dict(target_actor_profile_id=actor_id, role=role, qualification=qualification,
+                   reason="Maximum qualification regression")
+    route = f"/api/v1/projects/{project['id']}/role-grants"
+    headers = auth_headers() | {"Idempotency-Key": str(uuid4())}
+    issued = await project_client.post(route, headers=headers, json=payload)
+    assert issued.status_code == 201, issued.text
+    replay = await project_client.post(route, headers=headers, json=payload)
+    assert replay.status_code == 201, replay.text
+    assert replay.json() == issued.json()
+    mismatch = await project_client.post(route, headers=headers, json=payload | {"reason": "Changed reason"})
+    assert mismatch.status_code == 409, mismatch.text
+    assert mismatch.json()["error"]["code"] == "idempotency_mismatch"
+    conflict = await project_client.post(route, headers=auth_headers(), json=payload)
+    assert conflict.status_code == 409, conflict.text
+    assert conflict.json()["error"]["code"] == "project_role_grant_exists"
+    read = await project_client.get(route + "/" + issued.json()["id"], headers=auth_headers())
+    assert read.status_code == 200, read.text
+    for field, expected in qualification.items():
+        assert read.json()["qualification_snapshot"][field] == expected
+    async with db_session.get_session_factory()() as session:
+        grant = await session.get(ProjectRoleGrant, UUID(issued.json()["id"]))
+        snapshot = await session.get(ProjectRoleQualificationSnapshot, UUID(issued.json()["qualification_snapshot_id"]))
+        assert grant is not None and snapshot is not None
+        assert grant.qualification_snapshot_id == snapshot.id
+        assert (grant.project_id, grant.actor_profile_id, grant.role) == (project["id"], actor_id, role)
+        for field, expected in qualification.items():
+            assert getattr(snapshot, field) == expected
+        assert await session.scalar(select(func.count()).select_from(ProjectRoleGrant)) == 1
+        assert await session.scalar(select(func.count()).select_from(ProjectRoleQualificationSnapshot)) == 1
+    monkeypatch.setenv("WORKSTREAM_DEV_AUTH_SUBJECT", f"qualification-ungranted-{uuid4()}")
+    monkeypatch.setenv("WORKSTREAM_DEV_AUTH_ROLES", "contributor")
+    get_settings.cache_clear()
+    third_actor = await project_client.get("/api/v1/actors/me", headers=auth_headers())
+    assert third_actor.status_code == 200, third_actor.text
+    models = (ProjectRoleGrant, ProjectRoleQualificationSnapshot, AuthorityIdempotencyRecord, AuditEvent)
+    async with db_session.get_session_factory()() as session:
+        before = [await session.scalar(select(func.count()).select_from(model)) for model in models]
+    denied = await project_client.post(route, headers=auth_headers(), json=payload)
+    assert denied.status_code == 404, denied.text
+    assert denied.json()["error"]["code"] == "resource_not_found"
+    async with db_session.get_session_factory()() as session:
+        after = [await session.scalar(select(func.count()).select_from(model)) for model in models]
+    assert after == before
 
 
 def test_api_drill_request_limits_are_exposed_in_openapi() -> None:

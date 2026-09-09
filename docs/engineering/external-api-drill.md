@@ -119,9 +119,10 @@ versus unavailable consistency, opaque references, UUID input and collection/
 token bounds. Denials are followed by unchanged full grant-history readback, and the
 same rejected idempotency key must admit a subsequent valid grant. Combined-bound
 controls require successful readback of populated references at their exact limits.
-They currently expose [API-DRILL-006](external-api-drill-findings.md#new-finding-api-drill-006--valid-qualification-exceeds-internal-admission-limit),
-not passing boundary evidence; expected 201 and the nonzero drill exit remain
-unchanged until repaired. Failed combined-bound controls also check unchanged
+They reproduced [API-DRILL-006](external-api-drill-findings.md#new-finding-api-drill-006--valid-qualification-exceeds-internal-admission-limit),
+now repaired with a project-role-specific canonical request budget. Their
+expected 201 is unchanged, and any failure still makes the drill exit nonzero.
+Failed combined-bound controls also check unchanged
 full history and denied project access. Independent smaller grant controls,
 including a populated value for every reference collection, continue afterward.
 
