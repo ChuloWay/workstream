@@ -23,6 +23,16 @@ from pydantic import (
 )
 
 from app.modules.checkers.api import PostSubmitCatalogue, PostSubmitDefinition
+from app.modules.checkers.api.pre_submit_catalogue import (
+    PreSubmissionCapabilityDefinition,
+    PreSubmissionCapabilityProjection,
+)
+from app.interfaces.external_services import (
+    ExternalServiceAdapter,
+    ExternalServiceAdapterError,
+    ExternalServiceConfigurationError,
+)
+from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 
 
 MAXIMUM_VERIFIED_GUIDE_AGENT_MATERIAL_BYTES = 12 * 1024 * 1024
@@ -85,58 +95,6 @@ class RequirementDisposition(StrEnum):
     PROJECT_LIFECYCLE_POLICY = "project_lifecycle_policy"
     GUIDE_BLOCKER = "guide_blocker"
     INFORMATIONAL = "informational"
-
-
-class ResourceBudget(BaseModel):
-    """Frozen canonical ART resource budget."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    maximum_results: StrictInt = Field(ge=1)
-
-
-class PreSubmissionCapabilityDefinition(BaseModel):
-    """Exact read-only projection of one ART catalogue definition."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    stable_id: str
-    version: str
-    public_name: str
-    owner: str
-    phase: str
-    order: int = Field(ge=0)
-    dependencies: tuple[str, ...]
-    classification: str
-    typed_inputs: tuple[str, ...]
-    result_schema: str
-    failure_code: str
-    resource_budget: ResourceBudget
-    state: Literal["enabled", "disabled"]
-    disabled_behavior: str
-    policy_trace_source: str
-    dispatch_kind: Literal["platform_capability", "policy_primitive"]
-    dispatch_capability: str
-    primitive: str | None = None
-    policy_fields: tuple[str, ...] = ()
-    selectable: bool
-
-
-class PreSubmissionCapabilityProjection(BaseModel):
-    """Complete immutable ART catalogue plus model-facing selectability."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    catalogue_id: Literal["workstream.pre_submission_checkers"]
-    version: Literal["v0.1"]
-    schema_version: Literal["pre_submission_checker_catalogue.v1"]
-    manifest_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    available: bool
-    definitions: tuple[PreSubmissionCapabilityDefinition, ...]
-
-
-class PostSubmissionCapabilityProjection(PostSubmitCatalogue):
-    """Agent-facing projection of CHECKERS canonical fields and validators."""
 
 
 class RepresentativeTaskPolicyContext(BaseModel):
@@ -221,7 +179,7 @@ class VerifiedGuideMaterialSnapshot(BaseModel):
 
     @classmethod
     def from_material(cls, material: GuideSourceMaterial) -> VerifiedGuideMaterialSnapshot:
-        """Snapshot exact verified material after rejecting legacy open shapes."""
+        """Snapshot exact verified material after rejecting noncanonical input shapes."""
         if not material.verified_artifact_material:
             raise ValueError("compilation requires ART-verified guide material")
         if material.representative_task_material.items:
@@ -429,9 +387,17 @@ class ProjectGuideCompilationContext(BaseModel):
     instruction_version: str = Field(max_length=100)
     agent_identity: str = Field(max_length=100)
     agent_version: str = Field(max_length=100)
+    runtime_configuration: ProjectGuideRuntimeConfiguration
     pre_submission_capabilities: PreSubmissionCapabilityProjection
-    post_submission_capabilities: PostSubmissionCapabilityProjection
+    post_submission_capabilities: PostSubmitCatalogue
     representative_task: RepresentativeTaskPolicyContext | None = None
+
+    @model_validator(mode="after")
+    def validate_instruction_configuration(self) -> ProjectGuideCompilationContext:
+        """Bind the semantic instruction version to its exact execution snapshot."""
+        if self.instruction_version != self.runtime_configuration.instruction_version:
+            raise ValueError("compilation instruction configuration mismatch")
+        return self
 
 
 def canonical_project_guide_compilation_context_bytes(
@@ -446,6 +412,15 @@ def canonical_project_guide_compilation_context_bytes(
         separators=(",", ":"),
         ensure_ascii=False,
         allow_nan=False,
+    ).encode("utf-8")
+
+
+def project_guide_compilation_prompt_bytes(context: ProjectGuideCompilationContext) -> bytes:
+    """Serialize only source and capability input, excluding trusted runtime settings."""
+    body = json.loads(canonical_project_guide_compilation_context_bytes(context))
+    del body["runtime_configuration"]
+    return json.dumps(
+        body, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
     ).encode("utf-8")
 
 
@@ -524,17 +499,22 @@ def validate_project_guide_compilation_result(
         for definition in context.pre_submission_capabilities.definitions
     }
     post_capabilities = context.post_submission_capabilities
-    post_capabilities = PostSubmissionCapabilityProjection.model_validate(post_capabilities)
-    if any(item.platform_default and item.state != "enabled" for item in post_capabilities.definitions):
+    post_capabilities = PostSubmitCatalogue.model_validate(post_capabilities)
+    if any(
+        item.platform_default and item.state != "enabled" for item in post_capabilities.definitions
+    ):
         raise ValueError("post-submit capability projection is unavailable")
     post_definitions = {
-        definition.capability_id: definition
-        for definition in post_capabilities.definitions
+        definition.capability_id: definition for definition in post_capabilities.definitions
     }
     _validate_platform_coverage(result.requirements, pre_definitions, post_definitions)
     _validate_evidence_lineage(context, result)
     pre_bound_requirements = _validate_bindings(
-        result.pre_submit_bindings, requirements, pre_definitions, "pre_submit"
+        result.pre_submit_bindings,
+        requirements,
+        pre_definitions,
+        "pre_submit",
+        result.submission_artifact_policy,
     )
     post_bound_requirements = _validate_bindings(
         result.post_submit_bindings, requirements, post_definitions, "post_submit"
@@ -645,6 +625,7 @@ def _validate_bindings(
     requirements: dict[str, AtomicGuideRequirement],
     definitions: dict[str, PreSubmissionCapabilityDefinition | PostSubmitDefinition],
     expected_stage: Literal["pre_submit", "post_submit"],
+    artifact_proposal: SubmissionArtifactPolicyProposal | None = None,
 ) -> set[str]:
     """Validate exact stage, version, selectability, and parameter ownership."""
     seen_requirements: set[str] = set()
@@ -673,20 +654,47 @@ def _validate_bindings(
         if binding.capability_version != version:
             raise ValueError("compilation capability version is stale")
         if isinstance(definition, PreSubmissionCapabilityDefinition):
-            allowed_fields = set(definition.policy_fields)
-            if any(parameter.name not in allowed_fields for parameter in binding.parameters):
-                raise ValueError("pre-submit capability parameters are invalid")
+            _validate_pre_binding_parameters(binding, definition, artifact_proposal)
         else:
-            definition.validate_configuration({item.name: item.value for item in binding.parameters})
+            definition.validate_configuration(
+                {item.name: item.value for item in binding.parameters}
+            )
         seen_requirements.add(binding.requirement_id)
     return seen_requirements
 
 
-class ProjectAgentRuntimeError(Exception):
+def _validate_pre_binding_parameters(
+    binding: CapabilityBindingProposal,
+    definition: PreSubmissionCapabilityDefinition,
+    proposal: SubmissionArtifactPolicyProposal | None,
+) -> None:
+    """Require bindings to describe the same typed policy, never another policy."""
+    if not binding.parameters:
+        return
+    fields = set(definition.policy_fields) & SubmissionArtifactPolicyProposal.model_fields.keys()
+    parameters = {item.name: item.value for item in binding.parameters}
+    if proposal is None or set(parameters) != fields:
+        raise ValueError("pre-submit capability parameters are invalid")
+    expected = proposal.model_dump(mode="json")
+    SubmissionArtifactPolicyProposal.model_validate(expected | parameters)
+    if json.dumps(parameters, sort_keys=True) != json.dumps(
+        {key: expected[key] for key in fields}, sort_keys=True
+    ):
+        raise ValueError("pre-submit capability parameters conflict with artifact policy")
+
+
+class ProjectAgentRuntimeError(ExternalServiceAdapterError):
     """Raised when a project-agent runtime cannot complete a trusted operation."""
 
+    def __init__(self, message: str) -> None:
+        """Expose only a caller-supplied stable error, never provider exception text."""
+        self.identity = None
+        Exception.__init__(self, message)
 
-class ProjectAgentRuntimeConfigurationError(ProjectAgentRuntimeError):
+
+class ProjectAgentRuntimeConfigurationError(
+    ProjectAgentRuntimeError, ExternalServiceConfigurationError
+):
     """Raised when a configured project-agent runtime is unavailable or incomplete."""
 
 
@@ -765,132 +773,7 @@ def canonical_guide_source_material_bytes(material: GuideSourceMaterial) -> byte
     ).encode("utf-8")
 
 
-class AgentFinding(BaseModel):
-    """Structured finding emitted by a project setup agent."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    severity: Literal["blocking_gap", "warning", "info"]
-    code: str = Field(max_length=100)
-    message: str = Field(max_length=1000)
-    location: str | None = Field(default=None, max_length=500)
-
-
-class GuideSufficiencyAgentResult(BaseModel):
-    """Structured output from the project guide sufficiency agent."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    status: Literal[
-        "guide_sufficient",
-        "guide_blocked",
-        "guide_sufficient_with_warnings",
-    ]
-    findings: list[AgentFinding] = Field(default_factory=list)
-    summary: str | None = Field(default=None, max_length=2000)
-    agent_name: str = Field(default="ProjectGuideSufficiencyAgent", max_length=100)
-    agent_version: str = Field(max_length=50)
-
-
-class SubmissionArtifactPolicyDerivationResult(BaseModel):
-    """Structured output from the submission artifact policy derivation agent."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    policy_version: str = Field(max_length=50)
-    policy_body: dict[str, Any]
-    change_summary: str | None = Field(default=None, max_length=2000)
-    agent_name: str = Field(default="SubmissionArtifactPolicyDerivationAgent", max_length=100)
-    agent_version: str = Field(max_length=100)
-
-
-class PostSubmitCheckerCatalogEntry(BaseModel):
-    """One registered deterministic checker available for post-submit setup."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = Field(max_length=100)
-    platform_default: bool = False
-
-
-class PostSubmitCheckerPolicyEvidenceRef(BaseModel):
-    """Bounded source-evidence reference for post-submit derivation reasons."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    ref: str = Field(max_length=200)
-
-
-class PostSubmitCheckerPolicyReason(BaseModel):
-    """Reason tying a requested checker to bounded source evidence."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    checker_name: str = Field(max_length=100)
-    rationale: str = Field(max_length=1000)
-    evidence_refs: list[PostSubmitCheckerPolicyEvidenceRef] = Field(
-        default_factory=list,
-        max_length=10,
-    )
-
-
-class UnsupportedPostSubmitCheckerGap(BaseModel):
-    """Unsupported required post-submit checker requirement from guide setup."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    requested_checker: str = Field(max_length=500)
-    reason: str = Field(max_length=1000)
-    evidence_refs: list[PostSubmitCheckerPolicyEvidenceRef] = Field(
-        default_factory=list,
-        max_length=10,
-    )
-
-
-class PostSubmitCheckerPolicyCorrectionFeedback(BaseModel):
-    """Bounded operator feedback for replacing one superseded checker policy."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    superseded_policy_id: str = Field(max_length=36)
-    superseded_policy_hash: str = Field(max_length=71)
-    required_checkers: list[str] = Field(default_factory=list, max_length=100)
-    warning_checkers: list[str] = Field(default_factory=list, max_length=100)
-    blocking_severities: list[str] = Field(default_factory=list, max_length=10)
-    correction_reason: str = Field(max_length=500)
-
-
-class PostSubmitCheckerPolicyDerivationContext(BaseModel):
-    """Server-owned context supplied to the post-submit policy derivation agent."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    sufficiency_report_summary: dict[str, Any]
-    effective_policy_summary: dict[str, Any]
-    pre_submit_checker_summary: dict[str, Any]
-    registered_checker_catalog: list[PostSubmitCheckerCatalogEntry]
-    correction_feedback: PostSubmitCheckerPolicyCorrectionFeedback | None = None
-
-
-class PostSubmitCheckerPolicyDerivationResult(BaseModel):
-    """Structured output from the post-submit checker policy derivation agent."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    required_checkers: list[str] = Field(default_factory=list, max_length=100)
-    warning_checkers: list[str] = Field(default_factory=list, max_length=100)
-    blocking_severities: list[str] | None = Field(default=None, max_length=10)
-    reasons: list[PostSubmitCheckerPolicyReason] = Field(default_factory=list, max_length=100)
-    unsupported_required_checks: list[UnsupportedPostSubmitCheckerGap] = Field(
-        default_factory=list,
-        max_length=100,
-    )
-    setup_notes: list[str] = Field(default_factory=list, max_length=20)
-    agent_name: str = Field(default="PostSubmitCheckerPolicyDerivationAgent", max_length=100)
-    agent_version: str = Field(max_length=100)
-
-
-class ProjectGuideAgentRuntime(Protocol):
+class ProjectGuideAgentRuntime(ExternalServiceAdapter, Protocol):
     """Port implemented by project guide setup agent runtimes."""
 
     async def compile_project_guide(
@@ -898,23 +781,3 @@ class ProjectGuideAgentRuntime(Protocol):
         context: ProjectGuideCompilationContext,
     ) -> ProjectGuideCompilationResult:
         """Compile one complete untrusted project-guide proposal."""
-
-    async def analyze_guide_sufficiency(
-        self,
-        material: GuideSourceMaterial,
-    ) -> GuideSufficiencyAgentResult:
-        """Assess whether guide material is sufficient for project setup."""
-
-    async def derive_submission_artifact_policy(
-        self,
-        material: GuideSourceMaterial,
-        sufficiency_report: GuideSufficiencyAgentResult,
-    ) -> SubmissionArtifactPolicyDerivationResult:
-        """Derive the machine-readable submission artifact policy."""
-
-    async def derive_post_submit_checker_policy(
-        self,
-        material: GuideSourceMaterial,
-        context: PostSubmitCheckerPolicyDerivationContext,
-    ) -> PostSubmitCheckerPolicyDerivationResult:
-        """Derive the constrained project post-submit checker policy spec."""

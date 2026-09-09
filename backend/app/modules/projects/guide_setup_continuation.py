@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.modules.projects.models import ProjectSetupRun
 from app.modules.projects.setup_queue import (
     dispatch_stale_before,
-    dispatch_pre_submit_setup_pipeline_after_commit,
+    dispatch_project_guide_compilation_after_commit,
 )
 
 PrepareGeneration = Callable[..., Awaitable[bool]]
@@ -98,7 +98,7 @@ async def continue_setup_after_verified_guide_item(
     if not ready:
         return
     async with session_factory() as session:
-        await dispatch_pre_submit_setup_pipeline_after_commit(
+        await dispatch_project_guide_compilation_after_commit(
             session,
             project_id=run.project_id,
             guide_id=run.guide_id,

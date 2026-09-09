@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.projects.guide_compilation.helpers import runtime_configuration
+
 import asyncio
 from pathlib import Path
 
@@ -17,7 +19,7 @@ from .helpers import context, identity, seed_database
 
 pytestmark = pytest.mark.postgres_schema_contract
 OWN_REVISION = "0008_guide_compilation_authorized_persistence"
-CURRENT_HEAD = "0013_compilation_request_origin"
+CURRENT_HEAD = "0014_guide_runtime_configuration"
 
 
 def _config() -> Config:
@@ -87,7 +89,7 @@ async def _seed_attempt(database_url: str) -> None:
     try:
         async with factory() as session, session.begin():
             await GuideCompilationRepository(session).reserve_attempt(
-                identity(context(values))
+                identity(context(values)), runtime_configuration=runtime_configuration()
             )
     finally:
         await engine.dispose()

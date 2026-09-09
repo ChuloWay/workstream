@@ -460,8 +460,8 @@ Destructive real API drills use the separate local test database:
 postgresql+asyncpg://workstream:workstream@localhost:5433/workstream_test
 ```
 
-Project guide sufficiency, submission artifact policy derivation, and
-post-submit checker policy derivation run through the OpenAI Agents SDK adapter.
+One project-guide compilation proposes sufficiency findings and separate
+pre-submission and post-submission policies through the OpenAI Agents SDK adapter.
 Install the backend agent extra and set the model explicitly before running
 automatic project setup:
 
@@ -471,32 +471,39 @@ cd backend
 ```
 
 ```text
-WORKSTREAM_PROJECT_AGENT_OPENAI_AGENT_SDK_MODEL=<approved-model>
+WORKSTREAM_PROJECT_AGENT_RUNTIME=openai_agents_sdk
+WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER=openai
+WORKSTREAM_PROJECT_AGENT_MODEL=<approved-model>
+WORKSTREAM_PROJECT_AGENT_MODEL_API=responses
 WORKSTREAM_PROJECT_AGENT_RUN_TIMEOUT_SECONDS=1800
 WORKSTREAM_PROJECT_AGENT_MAX_PROMPT_BYTES=2000000
 OPENAI_API_KEY=<runtime-secret>
-WORKSTREAM_PROJECT_SETUP_PIPELINE_AUTOSTART=true
 WORKSTREAM_CELERY_BROKER_URL=redis://localhost:6379/0
 ```
 
-The Celery project setup pipeline uses the OpenAI Agents SDK runtime. The Celery worker
-environment must include `OPENAI_API_KEY` and the approved model settings.
-Persisted sufficiency and derivation agent identity is Workstream-owned; runtime
-or provider-returned identity fields are not trusted as audit provenance.
+The Celery worker captures runtime, model provider, model, API, instructions,
+timeout and prompt limit on the attempt before execution. Credentials stay in
+the Celery worker environment. `WORKSTREAM_PROJECT_AGENT_INSTRUCTIONS` and
+`WORKSTREAM_PROJECT_AGENT_INSTRUCTION_VERSION` configure trusted instructions;
+omitting the text selects the repository's canonical compilation instructions.
+For an OpenAI-compatible model service, select `openai_compatible` and configure
+`WORKSTREAM_PROJECT_AGENT_MODEL_ENDPOINT` with its credential-free HTTPS base URL.
+The runtime adapter is selected through the shared typed adapter factory.
 
-Run the Celery worker before creating guide-source snapshots that should automatically
-prepare pre-submit policy, continue into post-submit policy derivation after setup
-submission artifact policy approval, and advance locked submissions through the
-automatic pre-review checker gate:
+Verified guide-source readiness automatically delivers one compilation. A ready
+result records both policy proposals and stops at a draft; an insufficient guide
+stops with findings. Automatic compilation ends without approving the proposals.
+Project Manager proposal editing, explicit reruns and approval are the remaining
+POL-05 boundary. The separate post-submission Celery worker evaluates submitted work.
+Run Celery and Beat before creating guide sources:
 
 ```bash
 cd backend
 WORKSTREAM_DATABASE_URL=postgresql+asyncpg://workstream:workstream@localhost:5433/workstream \
 WORKSTREAM_AUTH_PROVIDER=flow \
 WORKSTREAM_ENVIRONMENT=local \
-WORKSTREAM_PROJECT_AGENT_OPENAI_AGENT_SDK_MODEL=<approved-model> \
+WORKSTREAM_PROJECT_AGENT_MODEL=<approved-model> \
 OPENAI_API_KEY=<runtime-secret> \
-WORKSTREAM_PROJECT_SETUP_PIPELINE_AUTOSTART=true \
 WORKSTREAM_CELERY_BROKER_URL=redis://localhost:6379/0 \
 .venv/bin/celery -A app.workers.celery_app.celery_app worker --beat --loglevel=INFO
 ```

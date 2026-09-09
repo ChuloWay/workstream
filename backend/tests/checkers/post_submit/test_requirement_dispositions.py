@@ -10,7 +10,9 @@ from app.interfaces.project_agents import (
     ProjectGuideCompilationResult,
     validate_project_guide_compilation_result,
 )
-from app.interfaces.project_agents import PostSubmissionCapabilityProjection
+from app.modules.checkers.api.post_submit_catalogue import (
+    PostSubmitCatalogue,
+)
 from tests.test_project_guide_compilation_contracts import _artifact_policy, _context
 from tests.checkers.post_submit.support import altered_catalogue, catalogue
 
@@ -18,7 +20,7 @@ from tests.checkers.post_submit.support import altered_catalogue, catalogue
 def context(snapshot=None):
     base = _context()
     fields = base.model_dump()
-    fields["post_submission_capabilities"] = PostSubmissionCapabilityProjection.model_validate(
+    fields["post_submission_capabilities"] = PostSubmitCatalogue.model_validate(
         (snapshot or catalogue()).model_dump()
     )
     return ProjectGuideCompilationContext.model_validate(fields)

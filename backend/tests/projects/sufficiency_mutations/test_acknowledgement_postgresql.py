@@ -114,7 +114,7 @@ async def test_acknowledgement_late_conflict_rolls_back(project_client, monkeypa
 
     dispatch = AsyncMock(side_effect=AssertionError("denied acknowledgement dispatched work"))
     monkeypatch.setattr(ProjectRepository, "lock_project_setup_run", observe_staged_effects)
-    monkeypatch.setattr(router, "dispatch_pre_submit_setup_pipeline_after_commit", dispatch)
+    monkeypatch.setattr(router, "dispatch_project_guide_compilation_after_commit", dispatch)
     response = await project_client.post(
         f"/api/v1/projects/{project['id']}/guides/{guide['id']}/sufficiency-reports/"
         f"{report_id}/acknowledge-warnings",

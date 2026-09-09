@@ -11,6 +11,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.hashing import canonical_json_hash
+from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.interfaces.project_agents import (
     ProjectGuideCompilationContext,
     ProjectGuideCompilationResult,
@@ -139,6 +140,7 @@ class CompilationExecutionState:
     preflight_facts: ProjectGuideCompilationExecutePreflightFacts
     classification: CompilationRecoveryClassification
     compilation_id: UUID | None = None
+    runtime_configuration: ProjectGuideRuntimeConfiguration | None = None
 
 
 class CompilationComponentHashes(BaseModel):
@@ -191,9 +193,7 @@ def accepted_compilation_result(result: ProjectGuideCompilationResult) -> Accept
                 {"status": body["status"], "findings": body["findings"]}
             ),
             artifact_policy_hash=canonical_json_hash(artifact),
-            requirement_inventory_hash=canonical_json_hash(
-                {"requirements": body["requirements"]}
-            ),
+            requirement_inventory_hash=canonical_json_hash({"requirements": body["requirements"]}),
             pre_submit_hash=canonical_json_hash(
                 {"pre_submit_bindings": body["pre_submit_bindings"]}
             ),

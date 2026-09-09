@@ -167,9 +167,7 @@ async def test_response_context_overwrites_ids_and_preserves_headers() -> None:
                 "Retry-After": "7",
             },
         )
-        response.raw_headers.extend(
-            [(b"set-cookie", b"first=1"), (b"set-cookie", b"second=2")]
-        )
+        response.raw_headers.extend([(b"set-cookie", b"first=1"), (b"set-cookie", b"second=2")])
         return response
 
     response = await _get(
@@ -439,28 +437,22 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         for method, operation in path_item.items()
         if method in methods and operation.get("security")
     )
-    assert len(route_inventory) == 77
+    assert len(route_inventory) == 76
     assert sha256("\n".join(route_inventory).encode()).hexdigest() == (
-        "9fa013de5446a81a87bfda1f4a31b2fa958a802bbe2e151a6f283d857a7786d9"
+        "c90850edf2de2b77b8daa219ab7968502471ba8dc1a0691966694d61659faba7"
     )
-    assert len(protected_inventory) == 75
+    assert len(protected_inventory) == 74
     assert sha256("\n".join(protected_inventory).encode()).hexdigest() == (
-        "be16e83bdfe03b493f2016b6f85156eea2db172a09f03ed27a65002921f1944c"
+        "0f236c5e5d457ca5a29a47c7d6effb6de0d8086630d5ecbcc64e600b757e7f45"
     )
     assert set(schema["paths"]["/health"]["get"]["responses"]) == {"200", "400", "500"}
-    assert {"401", "403", "503"} <= set(
-        schema["paths"]["/api/v1/auth/me"]["get"]["responses"]
-    )
-    service_actor_responses = schema["paths"]["/api/v1/service-actors"]["post"][
-        "responses"
-    ]
+    assert {"401", "403", "503"} <= set(schema["paths"]["/api/v1/auth/me"]["get"]["responses"])
+    service_actor_responses = schema["paths"]["/api/v1/service-actors"]["post"]["responses"]
     assert "409" in service_actor_responses
     assert service_actor_responses["409"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/ApiErrorResponse"
     }
-    assert {"404"} <= set(
-        schema["paths"]["/api/v1/tasks/{task_id}"]["get"]["responses"]
-    )
+    assert {"404"} <= set(schema["paths"]["/api/v1/tasks/{task_id}"]["get"]["responses"])
     assert {"404", "409"} <= set(
         schema["paths"]["/api/v1/tasks/{task_id}/claim"]["post"]["responses"]
     )
@@ -473,9 +465,7 @@ def test_openapi_documents_request_error_and_response_context() -> None:
     assert action_declarations == {
         "GET /api/v1/actors/me": "actor.profile.read_self",
         "PATCH /api/v1/actors/me": "actor.profile.update_self",
-        "GET /api/v1/actors/me/authorization-context": (
-            "actor.authorization_context.read"
-        ),
+        "GET /api/v1/actors/me/authorization-context": ("actor.authorization_context.read"),
         "GET /api/v1/actors/{actor_profile_id}": "actor.profile.read",
         "GET /api/v1/actors/{actor_profile_id}/identity-links": "actor.identity_link.read",
         "POST /api/v1/actors/{actor_profile_id}/suspend": "actor.profile.suspend",
@@ -502,9 +492,7 @@ def test_openapi_documents_request_error_and_response_context() -> None:
             "project.contributor_candidate.list"
         ),
         "GET /api/v1/projects/{project_id}/role-grants": "project_role_grant.list",
-        "GET /api/v1/projects/{project_id}/role-grants/{grant_id}": (
-            "project_role_grant.read"
-        ),
+        "GET /api/v1/projects/{project_id}/role-grants/{grant_id}": ("project_role_grant.read"),
         "POST /api/v1/projects/{project_id}/role-grants": "project_role_grant.issue",
         "POST /api/v1/projects/{project_id}/role-grants/{grant_id}/revoke": (
             "project_role_grant.revoke"
@@ -525,14 +513,8 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         "POST /api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports": (
             "project.guide_sufficiency_report.create"
         ),
-        "POST /api/v1/projects/{project_id}/guides/{guide_id}/source-snapshots/"
-        "{source_snapshot_id}/run-sufficiency-agent": (
-            "project.guide_sufficiency.run"
-        ),
         "POST /api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports/"
-        "{report_id}/acknowledge-warnings": (
-            "project.guide_sufficiency.warnings.acknowledge"
-        ),
+        "{report_id}/acknowledge-warnings": ("project.guide_sufficiency.warnings.acknowledge"),
         "GET /api/v1/projects/{project_id}/guides/{guide_id}/setup-runs/latest": (
             "project.setup_run.read"
         ),
@@ -590,9 +572,7 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         "$ref": "#/components/schemas/ActorAuthorizationContextResponse"
     }
     assert (
-        schema["components"]["schemas"]["ActorAuthorizationContextResponse"][
-            "additionalProperties"
-        ]
+        schema["components"]["schemas"]["ActorAuthorizationContextResponse"]["additionalProperties"]
         is False
     )
     for path in (
@@ -600,11 +580,9 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         "/api/v1/projects/{project_id}/role-grants/{grant_id}/revoke",
     ):
         operation = schema["paths"][path]["post"]
-        assert operation["responses"]["201" if path.endswith("role-grants") else "200"][
-            "content"
-        ]["application/json"]["schema"] == {
-            "$ref": "#/components/schemas/ProjectRoleGrantMutationResponse"
-        }
+        assert operation["responses"]["201" if path.endswith("role-grants") else "200"]["content"][
+            "application/json"
+        ]["schema"] == {"$ref": "#/components/schemas/ProjectRoleGrantMutationResponse"}
     for path, schema_name in (
         ("/api/v1/actors/{actor_profile_id}", "ActorProfileAdminResponse"),
         (
@@ -641,9 +619,7 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         for method, operation in path_item.items():
             if method not in {"get", "put", "post", "delete", "options", "head", "patch"}:
                 continue
-            request_headers = {
-                parameter["name"] for parameter in operation["parameters"]
-            }
+            request_headers = {parameter["name"] for parameter in operation["parameters"]}
             assert {"X-Request-ID", "X-Correlation-ID"} <= request_headers
             for response in operation["responses"].values():
                 assert {"X-Request-ID", "X-Correlation-ID"} <= set(response["headers"])

@@ -5,7 +5,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.db import session as db_session
 from app.modules.projects.models import PostSubmitCheckerPolicy, ProjectGuide, ProjectSetupRun
@@ -81,6 +81,11 @@ async def create_generated_post_submit_setup_output(
             )
             session.add(setup_run)
             await session.commit()
+        finalized = await session.scalar(
+            text("select 1 from project_guide_setup_finalizations where setup_run_id=:setup"),
+            {"setup": setup_run.id},
+        )
+        assert finalized is None, "post-policy fixture refuses finalized setup"
         setup_run.status = "post_submit_policy_compiled"
         setup_run.current_step = "post_submit_checker_policy_compilation"
         setup_run.output_sufficiency_report_id = sufficiency_report["id"]

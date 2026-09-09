@@ -36,9 +36,7 @@ _ARTIFACT_S3_SECRET_FIELDS = frozenset(
         "artifact_s3_session_token",
     }
 )
-_ARTIFACT_S3_SENSITIVE_INPUT_FIELDS = _ARTIFACT_S3_SECRET_FIELDS | {
-    "artifact_s3_endpoint_url"
-}
+_ARTIFACT_S3_SENSITIVE_INPUT_FIELDS = _ARTIFACT_S3_SECRET_FIELDS | {"artifact_s3_endpoint_url"}
 _EMPTY_ARTIFACT_S3_SECRETS: tuple[SecretStr | None, SecretStr | None, SecretStr | None] = (
     None,
     None,
@@ -109,10 +107,15 @@ class Settings(BaseSettings):
     token_introspection_write_timeout_seconds: float = Field(default=3.0, ge=0.1, le=10.0)
     token_introspection_pool_timeout_seconds: float = Field(default=1.0, ge=0.1, le=10.0)
     token_introspection_total_timeout_seconds: float = Field(default=5.0, ge=0.5, le=15.0)
-    project_agent_openai_agent_sdk_model: str | None = None
-    project_agent_run_timeout_seconds: float = Field(default=1800.0, gt=0.0, le=7200.0)
-    project_agent_max_prompt_bytes: int = Field(default=2_000_000, gt=0, le=10_000_000)
-    project_setup_pipeline_autostart: bool = True
+    project_agent_runtime: str = "openai_agents_sdk"
+    project_agent_model_provider: Literal["openai", "openai_compatible"] = "openai"
+    project_agent_model: str | None = None
+    project_agent_model_api: Literal["responses", "chat_completions"] = "responses"
+    project_agent_model_endpoint: str | None = None
+    project_agent_instructions: str | None = None
+    project_agent_instruction_version: str = "v1"
+    project_agent_run_timeout_seconds: int = Field(default=1800, ge=1, le=7200)
+    project_agent_max_prompt_bytes: int = Field(default=2_000_000, ge=1024, le=16 * 1024 * 1024)
     celery_broker_url: str | None = None
     celery_result_backend_url: str | None = None
     celery_task_always_eager: bool = False
@@ -131,15 +134,21 @@ class Settings(BaseSettings):
     artifact_s3_bucket: str | None = None
     artifact_s3_private_prefix: str = "workstream/artifacts"
     artifact_s3_addressing_style: Literal["path", "virtual"] = "virtual"
-    artifact_s3_credential_mode: Literal[
-        "aws_workload_identity",
-        "local_static",
-    ] | None = None
-    artifact_s3_aws_workload_identity_method: Literal[
-        "assume-role-with-web-identity",
-        "container-role",
-        "iam-role",
-    ] | None = None
+    artifact_s3_credential_mode: (
+        Literal[
+            "aws_workload_identity",
+            "local_static",
+        ]
+        | None
+    ) = None
+    artifact_s3_aws_workload_identity_method: (
+        Literal[
+            "assume-role-with-web-identity",
+            "container-role",
+            "iam-role",
+        ]
+        | None
+    ) = None
     artifact_s3_connect_timeout_seconds: float = Field(default=5.0, gt=0.0, le=60.0)
     artifact_s3_read_timeout_seconds: float = Field(default=60.0, gt=0.0, le=1800.0)
     artifact_s3_write_timeout_seconds: float = Field(default=1800.0, gt=0.0, le=3600.0)
@@ -168,9 +177,7 @@ class Settings(BaseSettings):
     artifact_submission_zip_maximum_expanded_bytes: int = Field(
         default=512 * 1024 * 1024, gt=0, le=512 * 1024 * 1024
     )
-    artifact_submission_zip_maximum_compression_ratio: int = Field(
-        default=100, gt=0, le=10_000
-    )
+    artifact_submission_zip_maximum_compression_ratio: int = Field(default=100, gt=0, le=10_000)
     artifact_submission_zip_maximum_inspection_seconds: float = Field(
         default=300.0, gt=0.0, le=1800.0
     )
@@ -187,9 +194,7 @@ class Settings(BaseSettings):
     )
     artifact_scratch_maximum_files: int = Field(default=8, ge=1, le=1024)
     artifact_scratch_maximum_concurrency: int = Field(default=4, ge=1, le=1024)
-    artifact_scratch_maximum_workspace_entries: int = Field(
-        default=2_000, ge=1, le=100_000
-    )
+    artifact_scratch_maximum_workspace_entries: int = Field(default=2_000, ge=1, le=100_000)
     artifact_scratch_minimum_free_bytes: int = Field(
         default=512 * 1024 * 1024,
         ge=0,
@@ -220,9 +225,7 @@ class Settings(BaseSettings):
     guide_setup_continuation_scan_page_size: int = Field(default=100, gt=0, le=1000)
     artifact_execution_lease_seconds: float = Field(default=900.0, gt=0.0, le=7200.0)
     artifact_complete_read_deadline_seconds: float = Field(default=600.0, gt=0.0, le=7200.0)
-    artifact_terminal_persistence_margin_seconds: float = Field(
-        default=120.0, gt=0.0, le=1800.0
-    )
+    artifact_terminal_persistence_margin_seconds: float = Field(default=120.0, gt=0.0, le=1800.0)
     artifact_provider_observation_maximum_attempts: int = Field(default=5, ge=1, le=100)
 
     model_config = SettingsConfigDict(
@@ -400,9 +403,7 @@ class Settings(BaseSettings):
         """Keep the manually resolved rate key out of dotenv validation input."""
         if isinstance(dotenv_settings, DotEnvSettingsSource):
             dotenv_settings.env_vars.pop("workstream_api_rate_limit_key_secret", None)
-            dotenv_settings.env_vars.pop(
-                "workstream_pagination_cursor_hmac_secret", None
-            )
+            dotenv_settings.env_vars.pop("workstream_pagination_cursor_hmac_secret", None)
             for field_name in _ARTIFACT_S3_SECRET_FIELDS:
                 dotenv_settings.env_vars.pop(f"workstream_{field_name}", None)
         return init_settings, env_settings, dotenv_settings, file_secret_settings
@@ -456,8 +457,7 @@ class Settings(BaseSettings):
             secrets = _EMPTY_ARTIFACT_S3_SECRETS
             raise ValueError("static artifact credentials require MinIO storage")
         if self.artifact_s3_provider_profile == "minio" and (
-            self.artifact_s3_access_key_id is None
-            or self.artifact_s3_secret_access_key is None
+            self.artifact_s3_access_key_id is None or self.artifact_s3_secret_access_key is None
         ):
             secrets = _EMPTY_ARTIFACT_S3_SECRETS
             raise ValueError("MinIO artifact storage requires complete static credentials")
@@ -490,9 +490,7 @@ class Settings(BaseSettings):
             self.artifact_submission_zip_maximum_entry_bytes
             > self.artifact_submission_zip_maximum_expanded_bytes
         ):
-            raise ValueError(
-                "artifact submission ZIP entry limit cannot exceed expanded limit"
-            )
+            raise ValueError("artifact submission ZIP entry limit cannot exceed expanded limit")
         if (
             self.artifact_submission_zip_maximum_inspection_seconds
             >= self.artifact_preparation_total_deadline_seconds
@@ -573,9 +571,7 @@ class Settings(BaseSettings):
             raise ValueError("MinIO artifact storage requires local static credentials")
         if self.artifact_s3_aws_workload_identity_method is not None:
             raise ValueError("MinIO artifact storage cannot select AWS workload identity")
-        self.artifact_s3_endpoint_url = canonical_minio_endpoint(
-            self.artifact_s3_endpoint_url
-        )
+        self.artifact_s3_endpoint_url = canonical_minio_endpoint(self.artifact_s3_endpoint_url)
 
     def _validate_native_aws_storage(self) -> None:
         """Validate native AWS configuration without activating its runtime."""
@@ -624,11 +620,7 @@ def _normalize_artifact_s3_endpoint_input(values: dict[str, object]) -> None:
         env_file = values.get("_env_file", ".env")
         if env_file is not None:
             env_encoding = values.get("_env_file_encoding", "utf-8")
-            env_files = (
-                (env_file,)
-                if isinstance(env_file, (str, os.PathLike))
-                else tuple(env_file)
-            )
+            env_files = (env_file,) if isinstance(env_file, (str, os.PathLike)) else tuple(env_file)
             for path in env_files:
                 raw_value = dotenv_values(path, encoding=env_encoding).get(
                     "WORKSTREAM_ARTIFACT_S3_ENDPOINT_URL",

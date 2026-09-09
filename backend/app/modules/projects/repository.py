@@ -350,7 +350,10 @@ class ProjectRepository:
     async def lock_project_setup_run(self, setup_run_id: str) -> ProjectSetupRun | None:
         """Load one project setup run with a transactional row lock."""
         result = await self._session.execute(
-            select(ProjectSetupRun).where(ProjectSetupRun.id == setup_run_id).with_for_update()
+            select(ProjectSetupRun)
+            .where(ProjectSetupRun.id == setup_run_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
 
@@ -503,12 +506,15 @@ class ProjectRepository:
     ) -> GuideSufficiencyReport | None:
         """Load the newest verified report bound to a guide-source snapshot."""
         result = await self._session.execute(
-            select(GuideSufficiencyReport).where(
+            select(GuideSufficiencyReport)
+            .where(
                 GuideSufficiencyReport.source_snapshot_id == snapshot_id,
                 GuideSufficiencyReport.project_setup_run_id.is_not(None),
-            ).order_by(
+            )
+            .order_by(
                 GuideSufficiencyReport.setup_generation.desc(),
-            ).limit(1)
+            )
+            .limit(1)
         )
         return result.scalar_one_or_none()
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
-from app.core.config import get_settings
 from app.core.hashing import canonical_json_hash
 from app.modules.actors.service import ResolvedActor
 from app.modules.authorization.catalogue import ActionId
@@ -370,41 +369,39 @@ class GuideMutationService:
         )
         items = build_guide_source_snapshot_items(snapshot.id, sanitized)
         await self._repo.add_guide_source_snapshot(snapshot, items)
-        setup_run = None
-        if get_settings().project_setup_pipeline_autostart:
-            setup_generation = await self._repo.next_project_setup_generation(guide.id)
-            setup_run = ProjectSetupRun(
-                id=str(uuid4()),
-                project_id=guide.project_id,
-                guide_id=guide.id,
-                guide_version=guide.version,
-                source_snapshot_id=snapshot.id,
-                source_snapshot_hash=snapshot.bundle_hash,
-                setup_generation=setup_generation,
-                status="queued",
-                current_step="queued",
-                created_by=resolved.profile.id,
-                authorized_by_actor_profile_id=resolved.profile.id,
-                authorized_via_identity_link_id=resolved.identity_link.id,
-                authorized_by_admin_role_grant_id=decision.matched_grant_id,
-                authorization_scope_type=provenance["creation_scope_type"],
-                authorization_scope_project_id=provenance["creation_scope_project_id"],
-                authorization_action_id=action.value,
-                authorization_decision_event_id=str(decision.decision_id),
-            )
-            await self._repo.add_project_setup_run(setup_run)
+        setup_generation = await self._repo.next_project_setup_generation(guide.id)
+        setup_run = ProjectSetupRun(
+            id=str(uuid4()),
+            project_id=guide.project_id,
+            guide_id=guide.id,
+            guide_version=guide.version,
+            source_snapshot_id=snapshot.id,
+            source_snapshot_hash=snapshot.bundle_hash,
+            setup_generation=setup_generation,
+            status="queued",
+            current_step="queued",
+            created_by=resolved.profile.id,
+            authorized_by_actor_profile_id=resolved.profile.id,
+            authorized_via_identity_link_id=resolved.identity_link.id,
+            authorized_by_admin_role_grant_id=decision.matched_grant_id,
+            authorization_scope_type=provenance["creation_scope_type"],
+            authorization_scope_project_id=provenance["creation_scope_project_id"],
+            authorization_action_id=action.value,
+            authorization_decision_event_id=str(decision.decision_id),
+        )
+        await self._repo.add_project_setup_run(setup_run)
         response = GuideSourceSnapshotResponse.model_validate(snapshot)
         response.items = [GuideSourceSnapshotItemResponse.model_validate(item) for item in items]
         await self._replay.complete(
             replay,
             response_json=response.model_dump(mode="json"),
-            setup_run_id=setup_run.id if setup_run else None,
+            setup_run_id=setup_run.id,
         )
         return GuideMutationOutcome(
             response,
             False,
-            setup_run.id if setup_run else None,
-            setup_run.setup_generation if setup_run else None,
+            setup_run.id,
+            setup_run.setup_generation,
         )
 
     async def update_guide(

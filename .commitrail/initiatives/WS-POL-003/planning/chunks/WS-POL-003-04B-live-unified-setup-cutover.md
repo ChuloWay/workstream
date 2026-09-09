@@ -1,6 +1,6 @@
 # Chunk Contract: WS-POL-003-04B - Live Unified Setup Cutover
 
-Disposition: Planned. Dependencies: complete 04A/04A3/04A2 and AUTH-12I/12J/12B2,
+Disposition: Complete. Dependencies: complete 04A/04A3/04A2 and AUTH-12I/12J/12B2,
 plus POL-04B1 automatic request custody and [ARCH-04A consolidation](../../../WS-ARCH-001/WS-ARCH-001-04A.md). Risk: L1.
 
 ## Goal
@@ -87,7 +87,7 @@ pipeline code in the affected source-generation/continuation modules.
 - Intended merge outcome: one automatic, authorized unified guide compilation
   replaces the three separately invoked setup agents and stops at draft output.
 
-Current main includes POL-04B1. `guide_mutation_service.py` still conditionally
+Pre-change base `fa49529b` includes POL-04B1. `guide_mutation_service.py` still conditionally
 creates setup rows, `guide_setup_continuation.py` dispatches the separate
 sufficiency worker, and `workers/project_setup.py` runs sufficiency followed by
 artifact-policy inference. `ProjectService` retains another sufficiency method
@@ -335,3 +335,32 @@ composition builds the pre capability snapshot; use the already-public current
 post catalogue directly and remove the redundant PROJECTS wrapper. No second
 orchestrator, new registry, validator relaxation or private-edge allowance is
 introduced. Remove retired worker edges from both durable debt inventories.
+
+## Test replacement and retained safeguards
+
+This cutover deletes tests whose only subject was a removed inference method,
+its prompt, queue continuation, mutable setup-service custody or removed HTTP
+dispatch route. It retains the shared manual CRUD/approval, warning
+acknowledgement, lifecycle and immutable evidence tests. Replacement proof:
+
+| Removed implementation-specific proof | Required behavior retained by current proof |
+|---|---|
+| Three runtime methods, prompts and hard-coded model factory | `test_agent_runtime.py`: closed unified output, separate configuration, SDK single call/retries disabled, timeout/error sanitization and both caller/internal cancellation |
+| Separate pre/post dispatch and mutable worker progress | `test_live_worker.py`, `test_live_cutover_postgresql.py`: actual task ID, every stale selector, one invocation, ready/warning/blocked endings and safe invalid/uncertain diagnostics |
+| Old service report/policy adoption and continuation replay | Existing AUTH-12J projection PostgreSQL tests plus live crash-boundary/revocation tests preserve exact source usage, transaction rollback and one-attempt recovery |
+| Approval/correction-triggered inference | Live unified approval rejects with zero effective/pre-policy/audit writes; retained correction tests preserve supersession/audit without enqueuing |
+| Hidden-only worker reachability assertions | Syntax-aware tests require the sole PROJECTS coordinator to call both projection ports; finalizer remains free of provider/projection/approval calls |
+| Week 2 and terminal example executables | Current checker/task suites retain their required lifecycle and authorization cases; the canonical HTTP drill separately proves live draft finalization and fixture-owned downstream task lineage |
+
+The lane catalogue includes every new test module and removes only the deleted
+dispatch module. The supplemental sufficiency coverage command drops its three
+removed setup-service selections; the remaining mutation family and both
+90-percent file floors remain enforced. The seven-lane complete inventory,
+zero-skip/deselection checks and global/subsystem coverage gates remain intact.
+
+Runtime configuration migration adds no invented configuration to retained
+attempts. They remain immutable evidence and cannot execute with missing
+configuration. Business policy versions, semantic result identifiers and
+retained deterministic task IDs remain required lineage, not parallel code.
+Remaining shared AUTH action IDs are consumed by the current deterministic
+projection owners and therefore are retained.

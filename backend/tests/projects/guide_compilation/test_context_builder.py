@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from app.modules.checkers.catalogue import project_guide_pre_submission_capabilities
+
+from tests.projects.guide_compilation.helpers import runtime_configuration
+
 from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 from dataclasses import replace
 from uuid import uuid4
@@ -15,7 +19,6 @@ from app.modules.artifacts.guide_sufficiency_material import (
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.checkers.catalogue import (
     build_pre_submission_checker_catalogue,
-    project_guide_pre_submission_capabilities,
 )
 from app.modules.projects.guide_compilation.context import (
     build_project_guide_compilation_context,
@@ -27,9 +30,7 @@ from app.modules.projects.guide_compilation.repository import (
 from app.modules.projects.guide_compilation.service import (
     load_compilation_execution_state,
 )
-from app.modules.projects.post_submit_policy import (
-    project_guide_post_submission_capabilities,
-)
+from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
 
 from .helpers import context, identity, seed_database
 from .test_authorized_request_service import _authorized_service, _request, _seed_human
@@ -51,6 +52,7 @@ async def test_context_rebuilds_the_exact_authorized_art_backed_identity(
                 actor=actor,
                 facts=_request(values),
                 identity=identity(context(values)),
+                runtime_configuration=runtime_configuration(),
             )
         async with factory() as session:
             state = await load_compilation_execution_state(session, request.attempt_id)
@@ -62,7 +64,7 @@ async def test_context_rebuilds_the_exact_authorized_art_backed_identity(
                 pre_submission_capabilities=project_guide_pre_submission_capabilities(
                     build_pre_submission_checker_catalogue()
                 ),
-                post_submission_capabilities=project_guide_post_submission_capabilities(),
+                post_submission_capabilities=current_post_submit_catalogue(),
             )
 
         assert rebuilt == context(values)
@@ -88,6 +90,7 @@ async def test_context_drift_fails_before_dispatch(
                 actor=actor,
                 facts=_request(values),
                 identity=identity(context(values)),
+                runtime_configuration=runtime_configuration(),
             )
         async with factory() as session:
             state = await load_compilation_execution_state(session, request.attempt_id)
@@ -104,9 +107,7 @@ async def test_context_drift_fails_before_dispatch(
                     pre_submission_capabilities=project_guide_pre_submission_capabilities(
                         drifted_catalogue
                     ),
-                    post_submission_capabilities=(
-                        project_guide_post_submission_capabilities()
-                    ),
+                    post_submission_capabilities=(current_post_submit_catalogue()),
                 )
     finally:
         await engine.dispose()
@@ -128,13 +129,14 @@ async def test_context_requires_fresh_session_and_current_lineage(
                 actor=actor,
                 facts=_request(values),
                 identity=identity(context(values)),
+                runtime_configuration=runtime_configuration(),
             )
         async with factory() as session:
             state = await load_compilation_execution_state(session, request.attempt_id)
         capabilities = project_guide_pre_submission_capabilities(
             build_pre_submission_checker_catalogue()
         )
-        post_capabilities = project_guide_post_submission_capabilities()
+        post_capabilities = current_post_submit_catalogue()
         async with factory() as session, session.begin():
             with pytest.raises(GuideCompilationIntegrityError, match="fresh root"):
                 await build_project_guide_compilation_context(
@@ -178,6 +180,7 @@ async def test_context_enforces_the_canonical_prompt_limit(
                 actor=actor,
                 facts=_request(values),
                 identity=identity(context(values)),
+                runtime_configuration=runtime_configuration(),
             )
         async with factory() as session:
             state = await load_compilation_execution_state(session, request.attempt_id)
@@ -195,9 +198,7 @@ async def test_context_enforces_the_canonical_prompt_limit(
                     pre_submission_capabilities=project_guide_pre_submission_capabilities(
                         build_pre_submission_checker_catalogue()
                     ),
-                    post_submission_capabilities=(
-                        project_guide_post_submission_capabilities()
-                    ),
+                    post_submission_capabilities=(current_post_submit_catalogue()),
                 )
     finally:
         await engine.dispose()

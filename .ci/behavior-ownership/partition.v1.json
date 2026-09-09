@@ -101,6 +101,10 @@
       "target": "backend/app/core/project_agents.py"
     },
     {
+      "group": "lifecycle",
+      "target": "backend/app/core/project_guide_instructions.py"
+    },
+    {
       "group": "shared",
       "target": "backend/app/core/s3_validation.py"
     },
@@ -139,6 +143,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/interfaces/project_agents.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/interfaces/project_guide_runtime.py"
     },
     {
       "group": "shared",
@@ -582,6 +590,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/pre_submit_catalogue.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/checkers/catalogue.py"
     },
     {
@@ -794,11 +806,19 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/diagnostics.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/projects/guide_compilation/finalization.py"
     },
     {
       "group": "lifecycle",
       "target": "backend/app/modules/projects/guide_compilation/finalization_payloads.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/live.py"
     },
     {
       "group": "lifecycle",
@@ -1026,6 +1046,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/scripts/guide_compilation_e2e.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/scripts/legacy_actor_classification.py"
     },
     {
@@ -1067,13 +1091,9 @@
     {
       "group": "shared",
       "target": "backend/scripts/validate_test_lane_evidence.py"
-    },
-    {
-      "group": "shared",
-      "target": "backend/scripts/week2_api_e2e.py"
     }
   ],
-  "authority_digest": "8a42d3001fe5c90014f9f10c8f63b87c17efadbbfdbd871b3eb113a43847a4a4",
+  "authority_digest": "27b0c437f32b3b687843e939a55012078fa8b670b2a3f08791d4fec8b5f720e5",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

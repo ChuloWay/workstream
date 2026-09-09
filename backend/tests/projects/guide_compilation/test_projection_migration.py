@@ -239,22 +239,22 @@ async def test_source_usage_guard_blocks_late_insert_but_preserves_legacy_update
             projected_report_id,
         )
         await connection.execute(
-            "update guide_sufficiency_report_source_usages set item_order=7 "
-            "where report_id=$1",
+            "update guide_sufficiency_report_source_usages set item_order=7 where report_id=$1",
             legacy_report_id,
         )
-        assert await connection.fetchval(
-            "select item_order from guide_sufficiency_report_source_usages "
-            "where report_id=$1",
-            legacy_report_id,
-        ) == 7
+        assert (
+            await connection.fetchval(
+                "select item_order from guide_sufficiency_report_source_usages where report_id=$1",
+                legacy_report_id,
+            )
+            == 7
+        )
         with pytest.raises(
             asyncpg.PostgresError,
             match="projected source usage is immutable",
         ):
             await connection.execute(
-                "update guide_sufficiency_report_source_usages set report_id=$1 "
-                "where report_id=$2",
+                "update guide_sufficiency_report_source_usages set report_id=$1 where report_id=$2",
                 projected_report_id,
                 legacy_report_id,
             )
@@ -322,19 +322,22 @@ async def test_verified_reports_allow_same_snapshot_across_setup_generations(
                 generation,
                 datetime(2099 if generation == 1 else 2000, 1, 1, tzinfo=UTC),
             )
-        assert await connection.fetchval(
-            "select count(*) from guide_sufficiency_reports where source_snapshot_id=$1",
-            str(values["snapshot"]),
-        ) == 2
+        assert (
+            await connection.fetchval(
+                "select count(*) from guide_sufficiency_reports where source_snapshot_id=$1",
+                str(values["snapshot"]),
+            )
+            == 2
+        )
     finally:
         await connection.close()
 
     engine = create_async_engine(clean_postgres_database)
     try:
         async with async_sessionmaker(engine, expire_on_commit=False)() as session:
-            selected = await ProjectRepository(
-                session
-            ).get_sufficiency_report_for_snapshot(str(values["snapshot"]))
+            selected = await ProjectRepository(session).get_sufficiency_report_for_snapshot(
+                str(values["snapshot"])
+            )
         assert selected is not None
         assert selected.id == report_ids[2]
         assert selected.setup_generation == 2
@@ -356,15 +359,12 @@ def test_empty_projection_migration_downgrades_and_reupgrades(
     with migration_lock():
         command.upgrade(_config(), "0009_guide_compilation_projections")
         command.upgrade(_config(), "0009_guide_compilation_projections")
-    assert asyncio.run(_version(clean_postgres_database)) == (
-        "0009_guide_compilation_projections"
-    )
+    assert asyncio.run(_version(clean_postgres_database)) == ("0009_guide_compilation_projections")
 
     with migration_lock():
         command.upgrade(_config(), "head")
-    assert asyncio.run(_version(clean_postgres_database)) == (
-        "0013_compilation_request_origin"
-    )
+    assert asyncio.run(_version(clean_postgres_database)) == ("0014_guide_runtime_configuration")
+
 
 def test_populated_projection_migration_refuses_downgrade(
     isolated_database_env: str,
@@ -373,10 +373,9 @@ def test_populated_projection_migration_refuses_downgrade(
     clean_postgres_database = isolated_database_env
     values = asyncio.run(seed_database(clean_postgres_database))
     asyncio.run(_project_both(clean_postgres_database, values))
-    with migration_lock(), pytest.raises(
-        RuntimeError, match="guide projection custody is non-empty"
+    with (
+        migration_lock(),
+        pytest.raises(RuntimeError, match="guide projection custody is non-empty"),
     ):
         command.downgrade(_config(), "0008_guide_compilation_authorized_persistence")
-    assert asyncio.run(_version(clean_postgres_database)) == (
-        "0013_compilation_request_origin"
-    )
+    assert asyncio.run(_version(clean_postgres_database)) == ("0014_guide_runtime_configuration")

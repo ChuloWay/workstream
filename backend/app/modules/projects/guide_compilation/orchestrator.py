@@ -15,14 +15,18 @@ from app.interfaces.artifact_operations import (
     GuideSufficiencyMaterialUnavailable,
 )
 from app.interfaces.project_agents import (
-    PostSubmissionCapabilityProjection,
-    PreSubmissionCapabilityProjection,
     ProjectGuideAgentRuntime,
     ProjectGuideCompilationContext,
     ProjectGuideCompilationInvalidOutputError,
     ProjectGuideCompilationResult,
     require_complete_project_guide_compilation_result,
     validate_project_guide_compilation_result,
+)
+from app.modules.checkers.api.pre_submit_catalogue import (
+    PreSubmissionCapabilityProjection,
+)
+from app.modules.checkers.api.post_submit_catalogue import (
+    PostSubmitCatalogue,
 )
 from app.modules.authorization.api import (
     ActorIdentityFacts,
@@ -53,6 +57,12 @@ from .service import (
     GuideCompilationService,
     load_compilation_execution_state,
 )
+from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
+from app.interfaces.external_services import ExternalServiceAdapterError
+from app.interfaces.project_agents import (
+    ProjectAgentRuntimeError,
+    project_guide_compilation_prompt_bytes,
+)
 
 
 class GuideCompilationAuthorizationContext(Protocol):
@@ -80,7 +90,7 @@ class SqlAlchemyGuideCompilationExecutionBackend:
         *,
         material_factory: Callable[[AsyncSession], GuideSufficiencyMaterialPort],
         pre_submission_capabilities: PreSubmissionCapabilityProjection,
-        post_submission_capabilities: PostSubmissionCapabilityProjection,
+        post_submission_capabilities: PostSubmitCatalogue,
         authorization_context: GuideCompilationAuthorizationContext,
     ) -> None:
         """Store the owner-supplied ports used by each short transaction."""
@@ -191,9 +201,9 @@ def project_guide_compilation_execution_port(
     *,
     material_factory: Callable[[AsyncSession], GuideSufficiencyMaterialPort],
     pre_submission_capabilities: PreSubmissionCapabilityProjection,
-    post_submission_capabilities: PostSubmissionCapabilityProjection,
+    post_submission_capabilities: PostSubmitCatalogue,
     authorization_context: GuideCompilationAuthorizationContext,
-    runtime: ProjectGuideAgentRuntime,
+    runtime_factory: Callable[[ProjectGuideRuntimeConfiguration], ProjectGuideAgentRuntime],
 ) -> ProjectGuideCompilationExecutionPort:
     """Compose the hidden port from existing owner-supplied dependencies."""
     backend = SqlAlchemyGuideCompilationExecutionBackend(
@@ -203,7 +213,7 @@ def project_guide_compilation_execution_port(
         post_submission_capabilities=post_submission_capabilities,
         authorization_context=authorization_context,
     )
-    return HiddenGuideCompilationOrchestrator(backend, runtime)
+    return GuideCompilationOrchestrator(backend, runtime_factory)
 
 
 class GuideCompilationExecutionBackend(Protocol):
@@ -231,17 +241,17 @@ class GuideCompilationExecutionBackend(Protocol):
     ) -> CompilationPersistenceReceipt: ...
 
 
-class HiddenGuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
+class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
     """Drive one attempt without creating authority or retrying uncertainty."""
 
     def __init__(
         self,
         backend: GuideCompilationExecutionBackend,
-        runtime: ProjectGuideAgentRuntime,
+        runtime_factory: Callable[[ProjectGuideRuntimeConfiguration], ProjectGuideAgentRuntime],
     ) -> None:
         """Bind the durable backend to the single provider runtime."""
         self._backend = backend
-        self._runtime = runtime
+        self._runtime_factory = runtime_factory
 
     async def execute(
         self, command: ProjectGuideCompilationExecutionCommand
@@ -253,6 +263,17 @@ class HiddenGuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
             return recovered
 
         context = await self._backend.context(state)
+        try:
+            if (
+                len(project_guide_compilation_prompt_bytes(context))
+                > context.runtime_configuration.maximum_prompt_bytes
+            ):
+                raise ValueError("configured prompt limit exceeded")
+            runtime = self._runtime_factory(context.runtime_configuration)
+            if runtime.identity != context.runtime_configuration.adapter_identity:
+                raise ValueError("runtime identity mismatch")
+        except (ExternalServiceAdapterError, ProjectAgentRuntimeError, ValueError):
+            raise ProjectGuideCompilationExecutionError("runtime_unavailable") from None
         dispatch = await self._backend.fence(state)
         if not dispatch.dispatch_permitted:
             raced_state = await self._backend.load(command.attempt_id)
@@ -261,7 +282,7 @@ class HiddenGuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
                 raise ProjectGuideCompilationExecutionError("context_unavailable")
             return recovered
         try:
-            result = await self._runtime.compile_project_guide(context)
+            result = await runtime.compile_project_guide(context)
         except ProjectGuideCompilationInvalidOutputError as exc:
             return _receipt_result(await self._backend.record_invalid(state, exc.failure_code))
         except Exception:  # noqa: BLE001 - unknown provider outcome stays unresolved

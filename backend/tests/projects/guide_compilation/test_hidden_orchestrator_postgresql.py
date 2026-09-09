@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from app.modules.checkers.catalogue import project_guide_pre_submission_capabilities
+
+from tests.projects.guide_compilation.helpers import runtime_configuration
+
 from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 import asyncio
 from contextlib import asynccontextmanager
@@ -35,23 +39,22 @@ from app.modules.projects.api import (
     ProjectGuideCompilationExecutionError,
 )
 from app.modules.projects.guide_compilation.orchestrator import (
-    HiddenGuideCompilationOrchestrator,
+    GuideCompilationOrchestrator,
     SqlAlchemyGuideCompilationExecutionBackend,
     project_guide_compilation_execution_port,
 )
 from app.modules.checkers.catalogue import (
     build_pre_submission_checker_catalogue,
-    project_guide_pre_submission_capabilities,
 )
-from app.modules.projects.post_submit_policy import (
-    project_guide_post_submission_capabilities,
-)
+from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
 
 from .helpers import context, identity, result, seed_database
 from .test_authorized_request_service import _authorized_service, _request, _seed_human
 
 
 class _Runtime:
+    identity = runtime_configuration().adapter_identity
+
     def __init__(self, outcome=result(), *, delay: float = 0) -> None:
         self.outcome = outcome
         self.delay = delay
@@ -103,7 +106,7 @@ def _backend(factory):
         pre_submission_capabilities=project_guide_pre_submission_capabilities(
             build_pre_submission_checker_catalogue()
         ),
-        post_submission_capabilities=project_guide_post_submission_capabilities(),
+        post_submission_capabilities=current_post_submit_catalogue(),
         authorization_context=_fixed_service_authorization,
     )
 
@@ -115,9 +118,9 @@ def _port(factory, runtime):
         pre_submission_capabilities=project_guide_pre_submission_capabilities(
             build_pre_submission_checker_catalogue()
         ),
-        post_submission_capabilities=project_guide_post_submission_capabilities(),
+        post_submission_capabilities=current_post_submit_catalogue(),
         authorization_context=_fixed_service_authorization,
-        runtime=runtime,
+        runtime_factory=lambda configuration: runtime,
     )
 
 
@@ -133,6 +136,7 @@ async def _authorized_attempt(database_url: str, values):
                 actor=actor,
                 facts=_request(values),
                 identity=identity(context(values)),
+                runtime_configuration=runtime_configuration(),
             )
     finally:
         await engine.dispose()
@@ -288,15 +292,15 @@ async def test_loser_fencing_after_winner_converges_without_second_provider_call
     command = ProjectGuideCompilationExecutionCommand(attempt_id=requested.attempt_id)
     try:
         loser = asyncio.create_task(
-            HiddenGuideCompilationOrchestrator(
+            GuideCompilationOrchestrator(
                 delayed,
-                loser_runtime,  # type: ignore[arg-type]
+                lambda configuration: loser_runtime,
             ).execute(command)
         )
         await delayed.waiting.wait()
-        winner = await HiddenGuideCompilationOrchestrator(
+        winner = await GuideCompilationOrchestrator(
             backend,
-            winner_runtime,  # type: ignore[arg-type]
+            lambda configuration: winner_runtime,
         ).execute(command)
         delayed.release.set()
         recovered = await loser
@@ -337,16 +341,16 @@ async def test_loser_persists_an_accepted_winner_without_second_provider_call(
     command = ProjectGuideCompilationExecutionCommand(attempt_id=requested.attempt_id)
     try:
         loser = asyncio.create_task(
-            HiddenGuideCompilationOrchestrator(
+            GuideCompilationOrchestrator(
                 delayed,
-                loser_runtime,  # type: ignore[arg-type]
+                lambda configuration: loser_runtime,
             ).execute(command)
         )
         await delayed.waiting.wait()
         with pytest.raises(ProjectGuideCompilationExecutionError) as failure:
-            await HiddenGuideCompilationOrchestrator(
+            await GuideCompilationOrchestrator(
                 _FailFirstPersist(backend),
-                winner_runtime,  # type: ignore[arg-type]
+                lambda configuration: winner_runtime,
             ).execute(command)
         assert failure.value.code == "storage_unavailable"
 
@@ -388,17 +392,17 @@ async def test_accepted_result_recovers_without_a_second_provider_call(
     command = ProjectGuideCompilationExecutionCommand(attempt_id=requested.attempt_id)
     try:
         with pytest.raises(ProjectGuideCompilationExecutionError) as failure:
-            await HiddenGuideCompilationOrchestrator(
+            await GuideCompilationOrchestrator(
                 failing,
-                first_runtime,  # type: ignore[arg-type]
+                lambda configuration: first_runtime,
             ).execute(command)
         assert failure.value.code == "storage_unavailable"
         assert first_runtime.calls == 1
 
         recovery_runtime = _Runtime(ProjectAgentRuntimeError("must not run"))
-        receipt = await HiddenGuideCompilationOrchestrator(
+        receipt = await GuideCompilationOrchestrator(
             backend,
-            recovery_runtime,  # type: ignore[arg-type]
+            lambda configuration: recovery_runtime,
         ).execute(command)
         assert receipt.classification is ProjectGuideCompilationExecutionClassification.PERSISTED
         assert recovery_runtime.calls == 0
@@ -541,15 +545,13 @@ async def test_unavailable_authority_returns_only_the_safe_public_code(
             pre_submission_capabilities=project_guide_pre_submission_capabilities(
                 build_pre_submission_checker_catalogue()
             ),
-            post_submission_capabilities=project_guide_post_submission_capabilities(),
+            post_submission_capabilities=current_post_submit_catalogue(),
             authorization_context=_unavailable_service_authorization,
-            runtime=runtime,
+            runtime_factory=lambda configuration: runtime,
         )
         with pytest.raises(ProjectGuideCompilationExecutionError) as failure:
             await port.execute(
-                ProjectGuideCompilationExecutionCommand(
-                    attempt_id=requested.attempt_id
-                )
+                ProjectGuideCompilationExecutionCommand(attempt_id=requested.attempt_id)
             )
         assert failure.value.code == "service_authority_denied"
         assert str(failure.value) == "service_authority_denied"

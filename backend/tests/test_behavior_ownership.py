@@ -1686,3 +1686,26 @@ def test_partition_accepts_only_exact_automatic_request_target() -> None:
         ownership._validate_additive_partition_transition(
             _partition(sorted({retained, *expected, "backend/app/modules/projects/guide_compilation/live_request.py"})), trusted
         )
+
+
+def test_partition_accepts_only_exact_unified_cutover_replacement():
+    expected = {
+        "backend/app/core/project_guide_instructions.py",
+        "backend/app/interfaces/project_guide_runtime.py",
+        "backend/app/modules/checkers/api/pre_submit_catalogue.py",
+        "backend/app/modules/projects/guide_compilation/diagnostics.py",
+        "backend/app/modules/projects/guide_compilation/live.py",
+        "backend/scripts/guide_compilation_e2e.py",
+    }
+    assert ownership.POL_04B_PARTITION_TARGETS == expected
+    assert ownership.POL_04B_REMOVED_TARGETS == {"backend/scripts/week2_api_e2e.py"}
+    retained = "backend/app/core/config.py"
+    trusted = _partition(sorted({retained, "backend/scripts/week2_api_e2e.py"}))
+    current = _partition(sorted({retained, *expected}))
+    ownership._validate_additive_partition_transition(current, trusted)
+    for invalid in [
+        _partition(sorted(expected)),
+        _partition(sorted({retained, *expected, "backend/app/modules/projects/extra.py"})),
+    ]:
+        with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+            ownership._validate_additive_partition_transition(invalid, trusted)

@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from app.modules.projects.api.setup_identity import pre_submit_setup_task_id
 
-import asyncio
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -34,6 +32,7 @@ from app.modules.artifacts.models import (
     GuideSourceExtractionAttempt,
     GuideSourceFormatClassification,
 )
+
 _INCIDENT_ID = uuid4()
 
 
@@ -68,7 +67,10 @@ def _factory(session: _Session):
 def test_guide_setup_service_composes_canonical_materialization_and_extraction() -> None:
     session_factory = object()
     service = GuideSetupPreparationService(
-        session_factory, object(), object(), object()  # type: ignore[arg-type]
+        session_factory,
+        object(),
+        object(),
+        object(),  # type: ignore[arg-type]
     )
 
     assert service._session_factory is session_factory
@@ -78,119 +80,8 @@ def test_guide_setup_service_composes_canonical_materialization_and_extraction()
     assert isinstance(service._extraction._service, GuideExtractionService)
     assert service._extraction._service._session_factory is session_factory
     assert isinstance(service._extraction._service._registry, GuideExtractionRegistry)
-    assert isinstance(
-        service._extraction._materializer, AuthorizedGuideExtractionMaterializer
-    )
+    assert isinstance(service._extraction._materializer, AuthorizedGuideExtractionMaterializer)
     assert service._extraction._materializer._materialization is service._materialization
-
-
-def test_project_setup_tasks_dispatch_exact_canonical_arguments(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("WORKSTREAM_CELERY_TASK_ALWAYS_EAGER", "true")
-    from app.workers import project_setup as project_setup_worker
-
-    pre_submit = AsyncMock(return_value={"status": "policy_draft_ready"})
-    post_submit = AsyncMock(return_value={"status": "completed"})
-    monkeypatch.setattr(project_setup_worker, "_run_pre_submit_setup_pipeline", pre_submit)
-    monkeypatch.setattr(project_setup_worker, "_run_post_submit_setup_continuation", post_submit)
-    monkeypatch.setattr(
-        project_setup_worker, "run_async_task", lambda factory: asyncio.run(factory())
-    )
-
-    assert project_setup_worker.run_pre_submit_setup_pipeline.run(
-        "project", "guide", "snapshot", "run", 3
-    ) == {"status": "policy_draft_ready"}
-    pre_submit.assert_awaited_once_with("project", "guide", "snapshot", "run", 3)
-    assert project_setup_worker.run_post_submit_setup_continuation.run(
-        "project", "guide", "snapshot", "run", "effective", "checker"
-    ) == {"status": "completed"}
-    post_submit.assert_awaited_once_with(
-        "project", "guide", "snapshot", "run", "effective", "checker"
-    )
-
-
-@pytest.mark.asyncio
-async def test_verified_worker_stops_exactly_on_blocked_sufficiency(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("WORKSTREAM_CELERY_TASK_ALWAYS_EAGER", "true")
-    from app.workers import project_setup as project_setup_worker
-
-    engine = SimpleNamespace(dispose=AsyncMock())
-    session = _Session()
-    project_id, guide_id, snapshot_id, setup_run_id, report_id = (
-        str(uuid4()) for _ in range(5)
-    )
-    report = SimpleNamespace(status="blocked", id=report_id)
-    service = SimpleNamespace(
-        validate_project_setup_run_context=AsyncMock(),
-        update_project_setup_run_status=AsyncMock(),
-        run_verified_guide_sufficiency_agent=AsyncMock(return_value=(report, True)),
-    )
-    monkeypatch.setattr(
-        project_setup_worker, "create_async_engine", lambda *_args, **_kwargs: engine
-    )
-    monkeypatch.setattr(
-        project_setup_worker,
-        "get_database_url",
-        lambda: "postgresql+asyncpg://unused",
-    )
-    monkeypatch.setattr(
-        project_setup_worker,
-        "async_sessionmaker",
-        lambda *_args, **_kwargs: _factory(session),
-    )
-    monkeypatch.setattr(
-        project_setup_worker, "ProjectService", lambda *_args, **_kwargs: service
-    )
-    authorized_run = AsyncMock(return_value=SimpleNamespace(response=report))
-    monkeypatch.setattr(
-        project_setup_worker,
-        "_run_authorized_setup_sufficiency",
-        authorized_run,
-    )
-
-    result = await project_setup_worker._run_verified_pre_submit_sufficiency_continuation(
-        project_id, guide_id, snapshot_id, setup_run_id, 3
-    )
-
-    assert result == {
-        "status": "sufficiency_blocked",
-        "guide_sufficiency_report_id": report_id,
-        "submission_artifact_policy_id": None,
-    }
-    service.validate_project_setup_run_context.assert_awaited_once_with(
-        setup_run_id,
-        project_id=project_id,
-        guide_id=guide_id,
-        source_snapshot_id=snapshot_id,
-        setup_generation=3,
-        celery_task_id=pre_submit_setup_task_id(setup_run_id, 3),
-    )
-    authorized_run.assert_awaited_once_with(
-        session,
-        project_id=project_id,
-        guide_id=guide_id,
-        source_snapshot_id=snapshot_id,
-        setup_run_id=setup_run_id,
-        setup_generation=3,
-    )
-    assert service.update_project_setup_run_status.await_args_list == [
-        (
-            (setup_run_id,),
-            {"status": "running_sufficiency_agent", "current_step": "guide_sufficiency"},
-        ),
-        (
-            (setup_run_id,),
-            {
-                "status": "sufficiency_blocked",
-                "current_step": "guide_sufficiency",
-                "output_sufficiency_report_id": report_id,
-            },
-        ),
-    ]
-    engine.dispose.assert_awaited_once_with()
 
 
 @pytest.mark.asyncio
@@ -199,14 +90,20 @@ async def test_prepare_generation_rejects_missing_run_and_empty_snapshot() -> No
     service._session_factory = _factory(_Session())
     ids = [uuid4() for _ in range(4)]
     assert not await service.prepare_generation(
-        project_id=ids[0], guide_id=ids[1], source_snapshot_id=ids[2],
-        setup_run_id=ids[3], setup_generation=1,
+        project_id=ids[0],
+        guide_id=ids[1],
+        source_snapshot_id=ids[2],
+        setup_run_id=ids[3],
+        setup_generation=1,
     )
 
     service._session_factory = _factory(_Session(run=object()))
     assert not await service.prepare_generation(
-        project_id=ids[0], guide_id=ids[1], source_snapshot_id=ids[2],
-        setup_run_id=ids[3], setup_generation=1,
+        project_id=ids[0],
+        guide_id=ids[1],
+        source_snapshot_id=ids[2],
+        setup_run_id=ids[3],
+        setup_generation=1,
     )
 
 
@@ -220,20 +117,30 @@ async def test_prepare_generation_requires_every_verified_item() -> None:
     ids = [uuid4() for _ in range(4)]
 
     assert not await service.prepare_generation(
-        project_id=ids[0], guide_id=ids[1], source_snapshot_id=ids[2],
-        setup_run_id=ids[3], setup_generation=2,
+        project_id=ids[0],
+        guide_id=ids[1],
+        source_snapshot_id=ids[2],
+        setup_run_id=ids[3],
+        setup_generation=2,
     )
     service._prepare_item.assert_not_awaited()
 
     verified = _VerifiedItem(item_id, uuid4(), uuid4(), "a" * 64, 12)
     service._verified_item = AsyncMock(return_value=verified)
     assert await service.prepare_generation(
-        project_id=ids[0], guide_id=ids[1], source_snapshot_id=ids[2],
-        setup_run_id=ids[3], setup_generation=2,
+        project_id=ids[0],
+        guide_id=ids[1],
+        source_snapshot_id=ids[2],
+        setup_run_id=ids[3],
+        setup_generation=2,
     )
     service._prepare_item.assert_awaited_once_with(
-        verified, project_id=ids[0], guide_id=ids[1], source_snapshot_id=ids[2],
-        setup_run_id=ids[3], setup_generation=2,
+        verified,
+        project_id=ids[0],
+        guide_id=ids[1],
+        source_snapshot_id=ids[2],
+        setup_run_id=ids[3],
+        setup_generation=2,
     )
 
 
@@ -264,7 +171,9 @@ async def test_verified_item_projects_repository_candidate(monkeypatch: pytest.M
 
 
 @pytest.mark.asyncio
-async def test_prepare_item_binds_materializes_and_extracts(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_prepare_item_binds_materializes_and_extracts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     ids = [uuid4() for _ in range(6)]
     item = _VerifiedItem(ids[4], ids[5], uuid4(), "c" * 64, 19)
     binding_id = uuid4()
@@ -298,15 +207,25 @@ async def test_prepare_item_binds_materializes_and_extracts(monkeypatch: pytest.
     service._extraction = SimpleNamespace(extract=AsyncMock())
 
     await service._prepare_item(
-        item, project_id=ids[0], guide_id=ids[1], source_snapshot_id=ids[2],
-        setup_run_id=ids[3], setup_generation=3,
+        item,
+        project_id=ids[0],
+        guide_id=ids[1],
+        source_snapshot_id=ids[2],
+        setup_run_id=ids[3],
+        setup_generation=3,
     )
 
     facts_factory.assert_called_once_with(
-        project_id=ids[0], guide_id=ids[1], source_snapshot_id=ids[2],
-        source_item_id=item.item_id, setup_run_id=ids[3], setup_generation=3,
-        content_id=item.content_id, replica_id=item.replica_id,
-        sha256=item.sha256, byte_count=item.byte_count,
+        project_id=ids[0],
+        guide_id=ids[1],
+        source_snapshot_id=ids[2],
+        source_item_id=item.item_id,
+        setup_run_id=ids[3],
+        setup_generation=3,
+        content_id=item.content_id,
+        replica_id=item.replica_id,
+        sha256=item.sha256,
+        byte_count=item.byte_count,
     )
     assert authority.prepare.await_args.kwargs["facts"] is authority_facts
     binding_request = binding_service.bind_guide_source.await_args.args[0]

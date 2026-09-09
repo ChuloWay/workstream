@@ -19,7 +19,7 @@ from app.modules.artifacts.models import (
 from app.modules.projects.repository import ProjectRepository
 from app.modules.projects.models import ProjectSetupRun, ProjectGuide, GuideSourceSnapshot
 from app.modules.projects.service import build_verified_guide_sufficiency_material
-from app.modules.projects.api.setup_identity import pre_submit_setup_task_id
+from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
 from ..helpers import context
 
 
@@ -52,7 +52,7 @@ async def second_generation(factory, values):
             updated_at=created,
             # ORM JSON None becomes JSON null; a pristine setup requires SQL NULL.
             post_submit_derivation_summary=null(),
-            celery_task_id=pre_submit_setup_task_id(setup_id, 2),
+            celery_task_id=project_guide_compilation_task_id(setup_id, 2),
         )
         await session.execute(text("alter table project_setup_runs enable trigger user"))
         latest = await ProjectRepository(session).lock_latest_project_setup_run(

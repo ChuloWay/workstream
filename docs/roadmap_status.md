@@ -188,10 +188,13 @@ cannot be reused as post-submission review-gate evidence. See the
 - Original bytes are immutable and verified before binding. Classification and
   extraction occur asynchronously from stored bytes; extracted content never
   replaces the original artifact.
-- The unified compiler produces sufficiency, submission artifact, pre-submit,
-  and post-submit proposals in one accepted result. The sufficiency and
-  submission-artifact-policy components now project deterministically without
-  another model call.
+- Verified guide-source readiness automatically runs one unified compilation
+  through Celery. It persists sufficiency findings and separate pre-submit and
+  post-submit proposals, then projects the sufficiency and artifact-policy
+  components and atomically finalizes the setup at draft output. A blocked guide
+  ends at findings. Runtime, model/provider and instructions are independently
+  configured and bound to the attempt; replay never starts a second inference.
+  Project Manager proposal review, correction and manual rerun remain POL-05.
 - Contributor ZIP preparation uses one verified byte lineage from scratch
   inspection through durable admission and eventual Submission binding.
 
@@ -221,10 +224,13 @@ validate the canonical policy body and matching stored summaries. Immutable
 phase contracts and structural-handler conformance remain distinct from live
 phase execution, which is still unavailable. POL-04B1 supplies hidden automatic
 request authority and source-operation custody, with current-authority replay
-checks for both triggers. The next selected work is POL-04B connecting those
-contracts and unified finalization to automatic initial setup execution. Runtime adapter, model and instructions remain separate
-configuration concerns. Compilation stops at findings and draft pre/post policies;
-POL-05 supplies manager correction/manual rerun and approval. The reconciled
+checks for both triggers. POL-04B connects those contracts and unified
+finalization to automatic initial setup execution, replacing the separate
+inference methods and prompts. Runtime adapter, model and instructions are
+independently configured. Compilation stops at findings and draft pre/post
+policies. POL-05A is next: hidden complete-proposal review, correction and pre-policy
+approval custody, followed by AUTH-12F4 and POL-05B live manager review,
+approval and manual rerun through the same compiler. The reconciled
 [dependency and ownership plan](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
 permits selected-policy validation independently after completed CP05. The
 selected delivery order finishes unified setup, separate pre/post approval and
@@ -236,10 +242,9 @@ requires its exact owner-proven prerequisites.
 
 The next dependency-safe product sequence is:
 
-1. **Connect the unified-guide generation.** Cut live execution over to the
-   complete unified compilation, projection, and authorized atomic finalization
-   path. This completes one stored setup result without
-   reviving the three legacy inference calls.
+1. **Complete manager proposal review and correction.** Expose the complete
+   unified result and preserve its distinct pre-submit and post-submit proposals.
+   Authorized manual rerun creates a fresh generation through the same compiler.
 2. **Complete guide policy approval.** Project Manager approval consumes the
    already-produced unified result; it does not run another agent. Persist the
    effective pre-submit policy and deterministically compiled post-submit

@@ -151,40 +151,25 @@ Adds protected v1 routes:
 
 These routes require an actor role allowed to manage project setup.
 
-Normal project setup does not depend on manually requesting sufficiency, and
-there is no public derivation route. Creating guide-source snapshot metadata enqueues the Celery
-project setup pipeline; guide creation alone does not. The pipeline runs guide sufficiency first and only
-continues to submission artifact policy derivation when sufficiency is not
-blocked.
+Verified source readiness dispatches the sole unified project-guide compilation
+through Celery. Source metadata without verified ART material remains pending;
+ART readiness resumes the same generation. Guide creation alone does not invoke
+the provider. One authorized attempt proposes sufficiency findings and separate
+pre-submission and post-submission checker policies. A blocked guide records
+findings without a policy projection; a ready guide records draft proposals.
 
-ART-03C makes verified guide bindings and canonical extraction usages resume the
-same setup generation automatically. The authorized `run-sufficiency-agent`
-route remains available for a covered Project Manager to request the same
-verified assessment directly; invoking it does not resume or advance the
-automatic setup run. Both paths use the canonical same-generation ART material.
+The old sufficiency-run route and three inference methods are removed. The fixed
+`workstream.project.setup` service requests, executes, projects and finalizes the
+same attempt under fresh authority at each boundary. Runtime configuration is
+immutable attempt evidence. Recovery never repeats an uncertain provider call.
+Manual reports remain human-authored diagnostics and cannot occupy the verified
+compilation report slot. Each verified report binds exact extraction usages.
+New projected artifact policies use `unified_compilation` provenance.
 
-- `POST /api/v1/projects/{project_id}/guides/{guide_id}/source-snapshots/{source_snapshot_id}/run-sufficiency-agent`
-
-`WS-AUTH-001-12F3` removes the public inline derivation endpoint. Submission
-artifact policy derivation runs only in the asynchronous project-setup worker
-under fresh `workstream.project.setup` fixed-service authority
-using exact active service-profile, identity-link, action, and setup-custody
-checks. After that merge, automatic
-derivation is owned only by the fixed `workstream.project.setup` service after
-current lineage and sufficiency are revalidated; a Project Manager cannot
-invoke the agent inline.
-Manual policy creation does not accept derivation provenance fields. Manual
-policies persist `manual_admin_derivation`; agent-created policies persist
-`agent_derivation` and use a server-owned `agent-<snapshot-hash>` policy
-version. Manual policy creation requires sufficiency clearance first. Agent
-policy derivation requires a Workstream-agent sufficiency report for the same
-snapshot, and persisted agent identity is server-owned rather than copied from
-provider output. A source snapshot may have one diagnostic report and one
-verified agent report. Diagnostic reports support manual inspection and policy
-authoring but cannot satisfy agent derivation or activation. The verified report
-may be produced by the authorized human request or the automatic fixed-service
-continuation and records one exact extraction usage for every declared source
-item.
+Project Manager proposal reads, correction, fresh-generation reruns and approval
+remain POL-05. Existing generic approval rejects unified compilation drafts before
+writing effective policy or checker contracts. No correction or approval enqueues
+another inference operation.
 
 `POST /submission-artifact-policies/{policy_id}/approve` returns the merged
 `EffectiveProjectSubmissionArtifactPolicy`. The approval path also creates the

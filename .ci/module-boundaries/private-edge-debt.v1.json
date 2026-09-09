@@ -633,33 +633,9 @@
     },
     {
       "source_file": "backend/app/workers/project_setup.py",
-      "target_module": "actors",
-      "imported_private_path": "app.modules.actors.service_identities",
-      "repair_owner": "WS-ARCH-001-03"
-    },
-    {
-      "source_file": "backend/app/workers/project_setup.py",
       "target_module": "artifacts",
       "imported_private_path": "app.modules.artifacts.guide_sufficiency_material",
       "repair_owner": "WS-ARCH-001-04"
-    },
-    {
-      "source_file": "backend/app/workers/project_setup.py",
-      "target_module": "projects",
-      "imported_private_path": "app.modules.projects.service",
-      "repair_owner": "WS-ARCH-001-03"
-    },
-    {
-      "source_file": "backend/app/workers/project_setup.py",
-      "target_module": "projects",
-      "imported_private_path": "app.modules.projects.submission_policy_mutation_service",
-      "repair_owner": "WS-ARCH-001-03"
-    },
-    {
-      "source_file": "backend/app/workers/project_setup.py",
-      "target_module": "projects",
-      "imported_private_path": "app.modules.projects.sufficiency_mutation_service",
-      "repair_owner": "WS-ARCH-001-03"
     }
   ]
 }

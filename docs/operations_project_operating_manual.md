@@ -112,37 +112,28 @@ a UUID `Idempotency-Key` on every request:
 
 - `POST /api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports`
   records an explicitly human-authored report.
-- `POST /api/v1/projects/{project_id}/guides/{guide_id}/source-snapshots/{source_snapshot_id}/run-sufficiency-agent`
-  authorizes an asynchronous recovery request and returns `202 Accepted` with
-  stable, committed setup-run dispatch custody. Authorization evidence, replay
-  response, and the deterministic dispatch claim commit before broker
-  publication, so uncertain delivery remains recoverable. The route never reads
-  ART material or invokes the agent inside the HTTP request.
 - `POST /api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports/{report_id}/acknowledge-warnings`
   records the Project Manager and exact authorization provenance.
 
 Issuer role claims, contributor grants, and service tokens cannot invoke these
 public routes. A manual report is not an agent-run replay and does not occupy
-the authoritative verified-report slot. Automatic verified-material readiness
-and an authorized manual request converge on the same deterministic Celery
-task. The fixed setup service creates a distinct
-verified report from canonical ART material; the diagnostic row is neither
-reused nor linked as setup output.
-The manual request is rejected as `guide_sufficiency_run_not_needed` when the
-exact current setup generation already has a terminal authoritative report or
-compiled policy; changing the idempotency key cannot spend agent tokens again.
-The fixed `workstream.project.setup` service may use only the run action through
-internal command resolution with fresh setup custody; it cannot call the HTTP
-route or create manual reports or acknowledgements.
+the authoritative verified-report slot. Automatic verified-material readiness dispatches one unified compilation under
+the fixed setup service. Its verified report binds canonical ART material; a
+manual diagnostic report is neither reused nor linked as compilation output.
+The three former inference steps and sufficiency-run endpoint are removed.
 
-Unified compilation projections are currently hidden and route-unreachable.
-They can materialize an exact persisted compilation into one canonical
-sufficiency report and, when permitted by that result, one draft submission
-artifact policy. They do not call a model, change setup status or output
-pointers, approve policy, or enqueue work. Operators should continue to rely on
-the existing setup APIs; no manual repair or direct database invocation of the
-hidden projector is supported before the authorization and background-execution
-cutover.
+A ready compilation persists separate pre-submission and post-submission
+proposals and stops at a draft. An insufficient guide stops with findings.
+The latest setup diagnostic reflects durable invalid or unresolved provider
+outcomes without rewriting setup evidence. An uncertain attempt is never
+invoked again. Transport failures retry the same task and attempt; accepted
+results resume persistence and projection without another model call.
+
+Project Manager proposal visibility, editing, explicit fresh-generation reruns
+and approval remain POL-05. Generic artifact-policy approval rejects unified
+drafts before creating effective policy. Neither warning acknowledgement nor
+post-submit policy correction dispatches inference. Operators must not invoke
+projectors directly or rewrite retained attempt evidence.
 
 AUTH-11C2 separately exposes current active-guide configuration through the
 following endpoints:

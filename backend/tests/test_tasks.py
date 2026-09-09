@@ -178,12 +178,8 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
         locked_guide_version=references.guide_version,
         locked_guide_source_snapshot_id=str(references.source_snapshot_id),
         locked_guide_source_snapshot_hash=references.source_snapshot_hash,
-        locked_effective_project_submission_artifact_policy_id=str(
-            references.effective_policy_id
-        ),
-        locked_effective_project_submission_artifact_policy_hash=(
-            references.effective_policy_hash
-        ),
+        locked_effective_project_submission_artifact_policy_id=str(references.effective_policy_id),
+        locked_effective_project_submission_artifact_policy_hash=(references.effective_policy_hash),
         locked_pre_submit_checker_policy_id=str(references.pre_submit_policy_id),
         locked_pre_submit_checker_bundle_hash=references.pre_submit_policy_bundle_hash,
     )
@@ -277,9 +273,7 @@ async def test_task_repository_rejects_stale_submission_predecessor() -> None:
     repository = TaskRepository(session)
     repository.get_task = AsyncMock(return_value=task)
     repository.get_latest_submission_for_task = AsyncMock(
-        return_value=MagicMock(
-            id=str(uuid4()), version=1, contributor_id=str(contributor_id)
-        )
+        return_value=MagicMock(id=str(uuid4()), version=1, contributor_id=str(contributor_id))
     )
 
     with pytest.raises(
@@ -924,7 +918,6 @@ def set_dev_actor(
     else:
         monkeypatch.setenv("WORKSTREAM_DEV_AUTH_DISPLAY_NAME", display_name)
     monkeypatch.setenv("WORKSTREAM_DEV_AUTH_ROLES", roles)
-    monkeypatch.setenv("WORKSTREAM_PROJECT_SETUP_PIPELINE_AUTOSTART", "false")
     get_settings.cache_clear()
 
 
@@ -1028,9 +1021,7 @@ async def create_generated_post_submit_setup_output(
         spec = build_project_post_submit_checker_spec(
             project_id=project_id,
             guide_version=snapshot.guide_version,
-            required_checkers=(
-                [] if required_checkers is None else required_checkers
-            ),
+            required_checkers=([] if required_checkers is None else required_checkers),
             warning_checkers=[] if warning_checkers is None else warning_checkers,
             blocking_severities=blocking_severities,
         )
@@ -1591,9 +1582,7 @@ async def _submission_context_request_for_started_task(
         assignment_id=UUID(assignment_id),
         contributor_id=UUID(contributor_id),
         predecessor_submission_id=(
-            UUID(predecessor_submission_id)
-            if predecessor_submission_id is not None
-            else None
+            UUID(predecessor_submission_id) if predecessor_submission_id is not None else None
         ),
     )
 
@@ -1609,9 +1598,7 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
     subject = "worker-submission-context"
     task = await create_started_task(task_client, project["id"], monkeypatch, subject)
     contributor_id = actor_id(subject)
-    initial_request = await _submission_context_request_for_started_task(
-        task["id"], contributor_id
-    )
+    initial_request = await _submission_context_request_for_started_task(task["id"], contributor_id)
 
     async with db_session.get_session_factory()() as session:
         initial = await TaskRepository(session).lock_submission_context(initial_request)
@@ -1664,9 +1651,7 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
         task["id"], contributor_id, predecessor_submission_id=predecessor["id"]
     )
     async with db_session.get_session_factory()() as session:
-        revision = await TaskRepository(session).lock_submission_context(
-            revision_request
-        )
+        revision = await TaskRepository(session).lock_submission_context(revision_request)
         assert revision.kind == "revision"
         assert revision.status == "needs_revision"
         assert revision.predecessor == SubmissionPredecessorFacts(
@@ -1729,9 +1714,7 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
             TaskSubmissionContextUnavailable,
             match="task_submission_context_invalid",
         ):
-            await TaskRepository(session).lock_submission_context(
-                cross_contributor_request
-            )
+            await TaskRepository(session).lock_submission_context(cross_contributor_request)
 
 
 @pytest.mark.asyncio
@@ -1744,9 +1727,7 @@ async def test_task_repository_postgresql_submission_context_lock_serializes_rac
     project = await create_active_project(task_client)
     subject = "worker-submission-context-race"
     task = await create_started_task(task_client, project["id"], monkeypatch, subject)
-    request = await _submission_context_request_for_started_task(
-        task["id"], actor_id(subject)
-    )
+    request = await _submission_context_request_for_started_task(task["id"], actor_id(subject))
     contender_name = f"task-context-{uuid4()}"
 
     holder = db_session.get_session_factory()()
@@ -2423,8 +2404,6 @@ async def test_chunk4_migration_creates_expected_tables(task_database_env: str) 
     }.issubset(table_names)
 
 
-
-
 def test_task_assignment_partial_unique_index_metadata_compiles() -> None:
     index = next(
         index
@@ -2959,9 +2938,19 @@ async def test_release_rejects_crossed_post_submit_policy_sidecar(
     assert persisted_task is not None
     assert persisted_task.status == "screening"
     assert persisted_task.locked_post_submit_checker_policy_body == locked_body
-    assert "check_acceptance_criteria_present" not in [entry["checker_id"] for entry in locked_body["entries"] if entry["classification"] == "project_required"]
-    assert "check_acceptance_criteria_present" not in [entry["checker_id"] for entry in locked_body["entries"]]
-    assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"] if entry["classification"] == "platform_default"]
+    assert "check_acceptance_criteria_present" not in [
+        entry["checker_id"]
+        for entry in locked_body["entries"]
+        if entry["classification"] == "project_required"
+    ]
+    assert "check_acceptance_criteria_present" not in [
+        entry["checker_id"] for entry in locked_body["entries"]
+    ]
+    assert "check_required_files" in [
+        entry["checker_id"]
+        for entry in locked_body["entries"]
+        if entry["classification"] == "platform_default"
+    ]
     assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"]]
 
 
@@ -5039,9 +5028,19 @@ async def test_submission_rejects_crossed_post_submit_policy_sidecar(
     assert task.status == "in_progress"
     assert submissions == []
     assert task.locked_post_submit_checker_policy_body == locked_body
-    assert "check_acceptance_criteria_present" not in [entry["checker_id"] for entry in locked_body["entries"] if entry["classification"] == "project_required"]
-    assert "check_acceptance_criteria_present" not in [entry["checker_id"] for entry in locked_body["entries"]]
-    assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"] if entry["classification"] == "platform_default"]
+    assert "check_acceptance_criteria_present" not in [
+        entry["checker_id"]
+        for entry in locked_body["entries"]
+        if entry["classification"] == "project_required"
+    ]
+    assert "check_acceptance_criteria_present" not in [
+        entry["checker_id"] for entry in locked_body["entries"]
+    ]
+    assert "check_required_files" in [
+        entry["checker_id"]
+        for entry in locked_body["entries"]
+        if entry["classification"] == "platform_default"
+    ]
     assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"]]
     assert checker_runs == []
 
@@ -6785,11 +6784,14 @@ async def test_queued_gate_policy_error_is_failed_and_repairable(
         assert failed_run.status == "failed"
         assert failed_run.failure_code == "pre_review_gate_execution_failed"
         assert task.status == "submitted"
-        assert await session.scalar(
-            select(func.count()).select_from(db_models.CheckerResult).where(
-                db_models.CheckerResult.submission_id == submission_id
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(db_models.CheckerResult)
+                .where(db_models.CheckerResult.submission_id == submission_id)
             )
-        ) == 0
+            == 0
+        )
         restored_bundle = dict(pre_submit_policy.compiled_bundle)
         restored_bundle.pop("tampered", None)
         pre_submit_policy.compiled_bundle = restored_bundle

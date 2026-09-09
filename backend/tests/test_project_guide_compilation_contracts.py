@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from app.modules.checkers.catalogue import project_guide_pre_submission_capabilities
+
+from tests.projects.guide_compilation.helpers import runtime_configuration
+
 from uuid import UUID, uuid4
 
 from app.core.hashing import canonical_json_hash
@@ -26,12 +30,9 @@ from app.interfaces.project_agents import (
 from app.modules.checkers.catalogue import (
     PreSubmissionCheckerClassification,
     build_pre_submission_checker_catalogue,
-    project_guide_pre_submission_capabilities,
 )
-from app.modules.projects.post_submit_policy import (
-    DEFAULT_DURABLE_CHECKERS,
-    project_guide_post_submission_capabilities,
-)
+from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+from app.modules.projects.post_submit_policy import DEFAULT_DURABLE_CHECKERS
 
 
 SHA256 = "sha256:" + "a" * 64
@@ -68,7 +69,8 @@ def _context() -> ProjectGuideCompilationContext:
         pre_submission_capabilities=project_guide_pre_submission_capabilities(
             build_pre_submission_checker_catalogue()
         ),
-        post_submission_capabilities=project_guide_post_submission_capabilities(),
+        post_submission_capabilities=current_post_submit_catalogue(),
+        runtime_configuration=runtime_configuration(),
     )
 
 
@@ -155,7 +157,7 @@ def test_compilation_rejects_unavailable_mandatory_pre_submission_projection() -
 
 
 def test_post_submission_projection_uses_registry_and_frozen_default_truth() -> None:
-    projection = project_guide_post_submission_capabilities()
+    projection = current_post_submit_catalogue()
     by_name = {item.capability_id: item for item in projection.definitions}
 
     assert projection.source_version == "v0.1"
@@ -170,15 +172,20 @@ def test_post_submission_projection_uses_registry_and_frozen_default_truth() -> 
 
 
 def test_post_submission_projection_rejects_sparse_definitions() -> None:
-    from app.interfaces.project_agents import PostSubmissionCapabilityProjection
-    projection = project_guide_post_submission_capabilities()
+    from app.modules.checkers.api.post_submit_catalogue import PostSubmitCatalogue
+
+    projection = current_post_submit_catalogue()
     body = projection.model_dump(mode="json")
     sparse_keys = {"capability_id", "capability_version", "stage", "platform_default", "selectable"}
-    body["definitions"] = [{key: value for key, value in item.items() if key in sparse_keys}
-                           for item in body["definitions"]]
-    body["manifest_sha256"] = canonical_json_hash({key: value for key, value in body.items() if key != "manifest_sha256"})
+    body["definitions"] = [
+        {key: value for key, value in item.items() if key in sparse_keys}
+        for item in body["definitions"]
+    ]
+    body["manifest_sha256"] = canonical_json_hash(
+        {key: value for key, value in body.items() if key != "manifest_sha256"}
+    )
     with pytest.raises(ValidationError, match="Field required"):
-        PostSubmissionCapabilityProjection.model_validate(body)
+        PostSubmitCatalogue.model_validate(body)
 
 
 @pytest.mark.parametrize(
@@ -278,14 +285,10 @@ def test_unified_result_accepts_exact_stage_capability_and_closed_parameters() -
         pre_submit_bindings=(
             CapabilityBindingProposal(
                 requirement_id="requirement.packet",
-                capability_id="policy.submission_packet.validate",
+                capability_id="policy.file_size.limit",
                 capability_version="v1",
                 stage="pre_submit",
-                parameters=(
-                    CapabilityParameter(
-                        name="required_packet_fields", value=("summary", "evidence")
-                    ),
-                ),
+                parameters=(CapabilityParameter(name="maximum_file_size_bytes", value=1_000),),
             ),
         ),
         post_submit_bindings=(
@@ -723,3 +726,41 @@ def test_blocked_result_cannot_publish_policy_or_bindings() -> None:
     )
     with pytest.raises(ValueError, match="blocked guide"):
         validate_project_guide_compilation_result(context, result)
+
+
+@pytest.mark.parametrize("value", [True, False, 1_000.0, "1000", 0, -1, 999, 1_001])
+def test_pre_binding_rejects_wrong_type_or_conflicting_policy_value(value) -> None:
+    """A valid surrounding proposal cannot hide a different bound intake limit."""
+    proposal = ProjectGuideCompilationResult(
+        status="draft_ready",
+        findings=(),
+        submission_artifact_policy=_artifact_policy(),
+        requirements=(
+            AtomicGuideRequirement(
+                requirement_id="requirement.size",
+                statement="Limit file size.",
+                disposition="supported_pre_submit",
+            ),
+        ),
+        pre_submit_bindings=(
+            CapabilityBindingProposal(
+                requirement_id="requirement.size",
+                capability_id="policy.file_size.limit",
+                capability_version="v1",
+                stage="pre_submit",
+                parameters=(CapabilityParameter(name="maximum_file_size_bytes", value=value),),
+            ),
+        ),
+        post_submit_bindings=(),
+        capability_suggestions=(),
+        agent_version="v1",
+    )
+    with pytest.raises(ValueError, match="integer|greater than|conflict"):
+        validate_project_guide_compilation_result(_context(), proposal)
+
+
+def test_context_rejects_instruction_version_separate_from_snapshot() -> None:
+    payload = _context().model_dump(mode="json")
+    payload["instruction_version"] = "different"
+    with pytest.raises(ValidationError, match="instruction configuration mismatch"):
+        ProjectGuideCompilationContext.model_validate(payload)

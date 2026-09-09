@@ -58,7 +58,7 @@ from app.modules.projects.service import (
     PolicySetupBlocked,
     build_verified_guide_sufficiency_material,
 )
-from app.modules.projects.api.setup_identity import pre_submit_setup_task_id
+from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
 
 from .contracts import AcceptedCompilationResult
 from .custody_payloads import (
@@ -138,9 +138,8 @@ class GuideCompilationProjectionService:
         """Bind storage, material, and purpose-specific AUTH factories."""
         self._session_factory = session_factory
         self._material_factory = material_factory
-        self._sufficiency_authorization_factory = (
-            sufficiency_authorization_factory
-            or (lambda _session: _UnavailableSufficiencyAuthorization())
+        self._sufficiency_authorization_factory = sufficiency_authorization_factory or (
+            lambda _session: _UnavailableSufficiencyAuthorization()
         )
         self._policy_authorization_factory = policy_authorization_factory or (
             lambda _session: _UnavailablePolicyAuthorization()
@@ -158,9 +157,7 @@ class GuideCompilationProjectionService:
         self, command: ProjectGuideProjectionCommand
     ) -> ProjectGuideProjectionReceipt:
         """Create or replay the exact canonical artifact-policy draft."""
-        seed = await self._preflight(
-            command.attempt_id, "submission_artifact_policy"
-        )
+        seed = await self._preflight(command.attempt_id, "submission_artifact_policy")
         assert seed.policy_body is not None
         return await self._run_policy(seed, retry_conflict=True)
 
@@ -187,9 +184,7 @@ class GuideCompilationProjectionService:
                     result_hash=compilation.result_hash,
                     component_hashes=compilation.component_hashes,
                 )
-                result = ProjectGuideCompilationResult.model_validate(
-                    accepted.canonical_result
-                )
+                result = ProjectGuideCompilationResult.model_validate(accepted.canonical_result)
                 if (
                     attempt.persisted_compilation_id != compilation.id
                     or compilation.attempt_id != attempt.id
@@ -228,9 +223,7 @@ class GuideCompilationProjectionService:
                     compilation_id=compilation.id,
                     result_hash=compilation.result_hash,
                     component_hash=component_hash,
-                    sufficiency_component_hash=(
-                        accepted.component_hashes.sufficiency_hash
-                    ),
+                    sufficiency_component_hash=(accepted.component_hashes.sufficiency_hash),
                     result_schema_version=result.schema_version,
                     compilation_agent_name=result.agent_name,
                     compilation_agent_version=result.agent_version,
@@ -258,12 +251,8 @@ class GuideCompilationProjectionService:
                     locator = ProjectGuideProjectionLocator(
                         project_id=seed.project_id, attempt_id=seed.attempt_id
                     )
-                    async with authorization.prepare_sufficiency_projection(
-                        locator
-                    ) as capability:
-                        return await self._write_sufficiency(
-                            session, seed, capability
-                        )
+                    async with authorization.prepare_sufficiency_projection(locator) as capability:
+                        return await self._write_sufficiency(session, seed, capability)
         except IntegrityError:
             if retry_conflict:
                 return await self._run_sufficiency(seed, retry_conflict=False)
@@ -349,9 +338,7 @@ class GuideCompilationProjectionService:
                 seed.guide_version,
             )
             _require_replay(operation, seed, identity, facts, output_digest, report)
-            await capability.validate_replay(
-                facts, UUID(operation.authorization_decision_event_id)
-            )
+            await capability.validate_replay(facts, UUID(operation.authorization_decision_event_id))
             return _receipt(seed, identity, output_digest, "guide_sufficiency", "replayed")
 
         if await _report_exists(session, seed, identity.output_id):
@@ -400,9 +387,7 @@ class GuideCompilationProjectionService:
         output = _policy_output(seed, locked, identity, seed.policy_body)
         output_digest = canonical_json_hash(
             {
-                "domain": (
-                    "workstream.project_submission_artifact_policy_projection.output.v1"
-                ),
+                "domain": ("workstream.project_submission_artifact_policy_projection.output.v1"),
                 "facts": output,
             }
         )
@@ -413,9 +398,7 @@ class GuideCompilationProjectionService:
                 str(identity.output_id)
             )
             _require_replay(operation, seed, identity, facts, output_digest, policy)
-            await capability.validate_replay(
-                facts, UUID(operation.authorization_decision_event_id)
-            )
+            await capability.validate_replay(facts, UUID(operation.authorization_decision_event_id))
             return _receipt(
                 seed,
                 identity,
@@ -427,9 +410,7 @@ class GuideCompilationProjectionService:
         if await _policy_exists(session, seed, identity.output_id):
             raise ProjectGuideProjectionError("source_state_unavailable")
         authority = await capability.consume_new(facts)
-        _require_authority(
-            authority, seed, identity, facts, "submission_artifact_policy"
-        )
+        _require_authority(authority, seed, identity, facts, "submission_artifact_policy")
         policy = _new_policy(seed, locked, identity, authority, seed.policy_body)
         session.add(policy)
         await session.flush()
@@ -455,15 +436,11 @@ class GuideCompilationProjectionService:
             "projected",
         )
 
-    async def _lock_common(
-        self, session: AsyncSession, seed: _ProjectionSeed
-    ) -> _LockedProjection:
+    async def _lock_common(self, session: AsyncSession, seed: _ProjectionSeed) -> _LockedProjection:
         """Lock and revalidate the compilation, material, guide, and setup."""
         compilation_repo = GuideCompilationRepository(session)
         attempt = await compilation_repo.attempt(seed.attempt_id, lock=True)
-        request = await compilation_repo.request_operation_for_attempt(
-            seed.attempt_id, lock=True
-        )
+        request = await compilation_repo.request_operation_for_attempt(seed.attempt_id, lock=True)
         if not _seed_matches(attempt, request, seed):
             raise ProjectGuideProjectionError("source_state_unavailable")
         material = await self._material_factory(session).load(
@@ -487,7 +464,7 @@ class GuideCompilationProjectionService:
         )
         if guide is None or setup is None or snapshot is None:
             raise ProjectGuideProjectionError("source_state_unavailable")
-        expected_task = pre_submit_setup_task_id(setup.id, setup.setup_generation)
+        expected_task = project_guide_compilation_task_id(setup.id, setup.setup_generation)
         if not _is_exact_projection_source_state(
             guide,
             snapshot,
@@ -499,9 +476,7 @@ class GuideCompilationProjectionService:
         ):
             raise ProjectGuideProjectionError("source_state_unavailable")
         verified = VerifiedGuideMaterialSnapshot.from_material(
-            build_verified_guide_sufficiency_material(
-                guide, snapshot, material.source_items
-            )
+            build_verified_guide_sufficiency_material(guide, snapshot, material.source_items)
         )
         if verified.canonical_payload_sha256 != attempt.guide_material_hash:
             raise ProjectGuideProjectionError("source_state_unavailable")
@@ -733,12 +708,9 @@ async def _required_sufficiency_operation(
     operation = await session.scalar(
         select(ProjectGuideComponentProjectionOperation)
         .where(
-            ProjectGuideComponentProjectionOperation.setup_run_id
-            == str(seed.setup_run_id),
-            ProjectGuideComponentProjectionOperation.setup_generation
-            == seed.setup_generation,
-            ProjectGuideComponentProjectionOperation.component
-            == "guide_sufficiency",
+            ProjectGuideComponentProjectionOperation.setup_run_id == str(seed.setup_run_id),
+            ProjectGuideComponentProjectionOperation.setup_generation == seed.setup_generation,
+            ProjectGuideComponentProjectionOperation.component == "guide_sufficiency",
         )
         .with_for_update()
     )
@@ -794,9 +766,7 @@ async def _required_sufficiency_operation(
     return operation
 
 
-async def _report_exists(
-    session: AsyncSession, seed: _ProjectionSeed, report_id: UUID
-) -> bool:
+async def _report_exists(session: AsyncSession, seed: _ProjectionSeed, report_id: UUID) -> bool:
     """Detect a conflicting report before inserting custody."""
     from sqlalchemy import exists, select
 
@@ -816,9 +786,7 @@ async def _report_exists(
     )
 
 
-async def _policy_exists(
-    session: AsyncSession, seed: _ProjectionSeed, policy_id: UUID
-) -> bool:
+async def _policy_exists(session: AsyncSession, seed: _ProjectionSeed, policy_id: UUID) -> bool:
     """Detect a conflicting policy before inserting custody."""
     from sqlalchemy import exists, select
 

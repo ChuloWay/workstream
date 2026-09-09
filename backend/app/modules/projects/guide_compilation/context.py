@@ -13,18 +13,22 @@ from app.interfaces.project_agents import (
     MAXIMUM_PROJECT_GUIDE_COMPILATION_PROMPT_BYTES,
     PROJECT_GUIDE_COMPILATION_AGENT_IDENTITY,
     PROJECT_GUIDE_COMPILATION_AGENT_VERSION,
-    PROJECT_GUIDE_COMPILATION_INSTRUCTION_VERSION,
-    PostSubmissionCapabilityProjection,
-    PreSubmissionCapabilityProjection,
     ProjectGuideCompilationContext,
     VerifiedGuideMaterialSnapshot,
     canonical_project_guide_compilation_context_bytes,
+)
+from app.modules.checkers.api.pre_submit_catalogue import (
+    PreSubmissionCapabilityProjection,
+)
+from app.modules.checkers.api.post_submit_catalogue import (
+    PostSubmitCatalogue,
 )
 from app.modules.projects.models import GuideSourceSnapshot, ProjectGuide
 from app.modules.projects.service import build_verified_guide_sufficiency_material
 
 from .contracts import CompilationAttemptIdentity, CompilationExecutionState
 from .repository import GuideCompilationIntegrityError
+from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 
 
 async def build_project_guide_compilation_context(
@@ -33,7 +37,7 @@ async def build_project_guide_compilation_context(
     state: CompilationExecutionState,
     material: GuideSufficiencyMaterialPort,
     pre_submission_capabilities: PreSubmissionCapabilityProjection,
-    post_submission_capabilities: PostSubmissionCapabilityProjection,
+    post_submission_capabilities: PostSubmitCatalogue,
 ) -> ProjectGuideCompilationContext:
     """Return an immutable context only when every current fact matches custody."""
     if session.in_transaction():
@@ -41,6 +45,8 @@ async def build_project_guide_compilation_context(
             "guide compilation context requires a fresh root transaction"
         )
     identity = state.identity
+    if state.runtime_configuration is None:
+        raise GuideCompilationIntegrityError("compilation runtime configuration is unavailable")
     async with session.begin():
         guide = await session.scalar(
             select(ProjectGuide).where(
@@ -71,10 +77,14 @@ async def build_project_guide_compilation_context(
             )
         )
         context = compilation_context_from_material(
-            guide=guide, snapshot=snapshot, loaded=loaded,
-            setup_run_id=identity.setup_run_id, setup_generation=identity.setup_generation,
+            guide=guide,
+            snapshot=snapshot,
+            loaded=loaded,
+            setup_run_id=identity.setup_run_id,
+            setup_generation=identity.setup_generation,
             pre_submission_capabilities=pre_submission_capabilities,
             post_submission_capabilities=post_submission_capabilities,
+            runtime_configuration=state.runtime_configuration,
         )
         if CompilationAttemptIdentity.from_context(context) != identity:
             raise GuideCompilationIntegrityError("compilation context identity mismatch")
@@ -82,9 +92,15 @@ async def build_project_guide_compilation_context(
 
 
 def compilation_context_from_material(
-    *, guide, snapshot, loaded, setup_run_id, setup_generation,
+    *,
+    guide,
+    snapshot,
+    loaded,
+    setup_run_id,
+    setup_generation,
     pre_submission_capabilities: PreSubmissionCapabilityProjection,
-    post_submission_capabilities: PostSubmissionCapabilityProjection,
+    post_submission_capabilities: PostSubmitCatalogue,
+    runtime_configuration: ProjectGuideRuntimeConfiguration,
 ) -> ProjectGuideCompilationContext:
     """Build the one bounded context used by both request and execution."""
     verified = VerifiedGuideMaterialSnapshot.from_material(
@@ -94,9 +110,10 @@ def compilation_context_from_material(
         material=verified,
         setup_run_id=setup_run_id,
         setup_generation=setup_generation,
-        instruction_version=PROJECT_GUIDE_COMPILATION_INSTRUCTION_VERSION,
+        instruction_version=runtime_configuration.instruction_version,
         agent_identity=PROJECT_GUIDE_COMPILATION_AGENT_IDENTITY,
         agent_version=PROJECT_GUIDE_COMPILATION_AGENT_VERSION,
+        runtime_configuration=runtime_configuration,
         pre_submission_capabilities=pre_submission_capabilities,
         post_submission_capabilities=post_submission_capabilities,
     )

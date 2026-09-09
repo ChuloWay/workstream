@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.modules.checkers.catalogue import project_guide_pre_submission_capabilities
+
 from dataclasses import replace
 import hashlib
 from uuid import UUID, uuid4
@@ -42,16 +44,13 @@ from app.modules.authorization.api import (
 )
 from app.modules.checkers.catalogue import (
     build_pre_submission_checker_catalogue,
-    project_guide_pre_submission_capabilities,
 )
 from app.modules.projects.guide_compilation.contracts import (
     CompilationAttemptIdentity,
     accepted_compilation_result,
 )
-from app.modules.projects.post_submit_policy import (
-    project_guide_post_submission_capabilities,
-)
-from app.modules.projects.api.setup_identity import pre_submit_setup_task_id
+from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
 
 SHA256 = "sha256:" + "a" * 64
 SOURCE_ITEM_ID = UUID("11111111-1111-1111-1111-111111111111")
@@ -86,6 +85,24 @@ def ids() -> dict[str, UUID]:
             "audit",
         )
     }
+
+
+def runtime_configuration():
+    """Return explicit, non-secret execution settings for isolated test attempts."""
+    from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
+
+    instructions = "Compile the verified guide into bounded draft policy proposals."
+    return ProjectGuideRuntimeConfiguration(
+        runtime_key="openai_agents_sdk",
+        model_provider="openai",
+        model="test-model",
+        model_api="responses",
+        instruction_version="v1",
+        instructions=instructions,
+        instructions_sha256="sha256:" + hashlib.sha256(instructions.encode()).hexdigest(),
+        timeout_seconds=30,
+        maximum_prompt_bytes=16 * 1024 * 1024,
+    )
 
 
 def context(values: dict[str, UUID], *, generation: int = 1) -> ProjectGuideCompilationContext:
@@ -127,6 +144,7 @@ def context(values: dict[str, UUID], *, generation: int = 1) -> ProjectGuideComp
         ],
     )
     return ProjectGuideCompilationContext(
+        runtime_configuration=runtime_configuration(),
         material=VerifiedGuideMaterialSnapshot.from_material(material),
         setup_run_id=values[f"setup_{generation}"],
         setup_generation=generation,
@@ -136,7 +154,7 @@ def context(values: dict[str, UUID], *, generation: int = 1) -> ProjectGuideComp
         pre_submission_capabilities=project_guide_pre_submission_capabilities(
             build_pre_submission_checker_catalogue()
         ),
-        post_submission_capabilities=project_guide_post_submission_capabilities(),
+        post_submission_capabilities=current_post_submit_catalogue(),
     )
 
 
@@ -145,9 +163,7 @@ def result() -> ProjectGuideCompilationResult:
     return ProjectGuideCompilationResult(
         status="draft_ready",
         findings=(
-            CompilationFinding(
-                severity="info", code="guide.ready", message="Guide is complete."
-            ),
+            CompilationFinding(severity="info", code="guide.ready", message="Guide is complete."),
         ),
         submission_artifact_policy=SubmissionArtifactPolicyProposal(
             maximum_file_size_bytes=1_000,
@@ -300,14 +316,12 @@ async def _seed_project_rows(
                     "setup": str(values[f"setup_{generation}"]),
                     "hash": SHA256,
                     "generation": generation,
-                    "task_id": pre_submit_setup_task_id(
+                    "task_id": project_guide_compilation_task_id(
                         str(values[f"setup_{generation}"]), generation
                     ),
                 },
             )
-        for table in reversed(
-            ("project_guides", "guide_source_snapshots", "project_setup_runs")
-        ):
+        for table in reversed(("project_guides", "guide_source_snapshots", "project_setup_runs")):
             await connection.execute(text(f"alter table {table} enable trigger user"))
 
 
@@ -334,9 +348,7 @@ async def _seed_snapshot_item(engine: AsyncEngine, values: dict[str, UUID]) -> N
             )
 
 
-async def _seed_artifact_custody(
-    session: AsyncSession, values: dict[str, UUID]
-) -> None:
+async def _seed_artifact_custody(session: AsyncSession, values: dict[str, UUID]) -> None:
     session.add_all(
         [
             ArtifactStorageNamespace(

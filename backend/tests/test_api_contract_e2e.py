@@ -10,7 +10,7 @@ from app.core.config import Settings
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
-MODULES = [importlib.import_module("api_contract_e2e"), importlib.import_module("week2_api_e2e")]
+MODULES = [importlib.import_module("api_contract_e2e")]
 
 
 @pytest.mark.parametrize("module", MODULES)
@@ -73,7 +73,6 @@ def test_api_contract_uses_runner_owned_minio_namespace(
 
     env = api_contract.api_environment()
 
-    assert env["WORKSTREAM_PROJECT_SETUP_PIPELINE_AUTOSTART"] == "true"
     assert env["WORKSTREAM_ARTIFACT_STORE_BACKEND"] == "s3_compatible"
     assert env["WORKSTREAM_ARTIFACT_S3_PROVIDER_PROFILE"] == "minio"
     assert env["WORKSTREAM_ARTIFACT_S3_ENDPOINT_URL"] == "http://127.0.0.1:9000"
@@ -110,10 +109,11 @@ def test_real_api_drill_provisions_exact_guide_artifact_pipeline_services() -> N
 )
 @pytest.mark.parametrize("severity_floor", [None, ["critical", "high", "medium"]])
 async def test_api_drill_seeds_one_canonical_post_submit_policy(
-    monkeypatch, selected, severity_floor,
+    monkeypatch,
+    selected,
+    severity_floor,
 ) -> None:
     """The real drill compiler accepts additions but cannot reclassify defaults."""
-    from contextlib import asynccontextmanager
     import json
     from types import SimpleNamespace
     from unittest.mock import AsyncMock, Mock
@@ -126,20 +126,22 @@ async def test_api_drill_seeds_one_canonical_post_submit_policy(
     setup = SimpleNamespace()
     pre = SimpleNamespace(id=str(uuid4()), compiled_bundle_hash="sha256:" + "a" * 64)
     session = SimpleNamespace(
-        scalar=AsyncMock(side_effect=[pre, setup]), add=Mock(), commit=AsyncMock(),
+        scalar=AsyncMock(side_effect=[pre, setup, None]),
+        add=Mock(),
+        commit=AsyncMock(),
     )
 
-    @asynccontextmanager
-    async def session_factory():
-        yield session
-
-    monkeypatch.setattr(api_contract.db_session, "get_session_factory", lambda: session_factory)
     payload = dict(
-        project_id=str(uuid4()), guide_id=str(uuid4()), manager_subject="manager",
+        project_id=str(uuid4()),
+        guide_id=str(uuid4()),
+        manager_subject="manager",
         source_snapshot={"id": str(uuid4()), "bundle_hash": "sha256:" + "b" * 64},
-        sufficiency_report={"id": str(uuid4())}, submission_artifact_policy={"id": str(uuid4())},
+        sufficiency_report={"id": str(uuid4())},
+        submission_artifact_policy={"id": str(uuid4())},
         effective_policy={
-            "id": str(uuid4()), "guide_version": "v1", "effective_policy_hash": "sha256:" + "c" * 64,
+            "id": str(uuid4()),
+            "guide_version": "v1",
+            "effective_policy_hash": "sha256:" + "c" * 64,
         },
     )
     if severity_floor is not None:
@@ -147,14 +149,16 @@ async def test_api_drill_seeds_one_canonical_post_submit_policy(
     if selected is not None:
         payload["required_checkers"] = selected
     if selected == ["check_policy_context_present"]:
-        with pytest.raises(PostSubmitCheckerCompilerError, match="project selection is unavailable"):
-            await api_contract.create_approved_post_submit_policy_ci_bridge(**payload)
+        with pytest.raises(
+            PostSubmitCheckerCompilerError, match="project selection is unavailable"
+        ):
+            await api_contract._seed_task_fixture_post_policy(session=session, **payload)
         session.scalar.assert_not_awaited()
         session.add.assert_not_called()
         session.commit.assert_not_awaited()
         return
 
-    result = await api_contract.create_approved_post_submit_policy_ci_bridge(**payload)
+    result = await api_contract._seed_task_fixture_post_policy(session=session, **payload)
     session.add.assert_called_once()
     policy = session.add.call_args.args[0]
     parsed = CompiledPostSubmitPolicy.model_validate_json(json.dumps(policy.policy_body))
@@ -163,7 +167,8 @@ async def test_api_drill_seeds_one_canonical_post_submit_policy(
         ["critical", "high"] if severity_floor is None else severity_floor
     )
     parsed.validate_sidecars(
-        required_checkers=policy.required_checkers, warning_checkers=policy.warning_checkers,
+        required_checkers=policy.required_checkers,
+        warning_checkers=policy.warning_checkers,
         blocking_severities=policy.blocking_severities,
     )
     assert set(parsed.default_checkers) == api_contract.EXPECTED_DURABLE_CHECKERS
