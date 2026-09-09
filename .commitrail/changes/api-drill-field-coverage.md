@@ -88,14 +88,19 @@ index; those call sites are corrected and invalid annotation prefixes fail close
 Failed combined-boundary controls now also verify unchanged history and denied
 project access. Expected pagination identities reject duplicate response IDs
 before insertion, so one logical grant cannot silently overwrite another.
+The admission review also found rejected payloads retained in parser-owned
+traceback locals despite generic errors. The parser clears those locals before
+raising; regressions cover validation and encoded-size rejection. This does not
+claim to clear caller-owned inputs or unrelated process memory.
 
 ## Product finding
 
 The combined qualification-bound control exposed API-DRILL-006: public validation
 accepts inputs whose canonical request exceeds the internal 2,048-byte admission
 limit, producing 500 rather than a successful valid grant. Expected 201 remains
-unchanged and failure remains in the report. Independent smaller positive/replay/
-revocation cases continue. The human subsequently authorized repairing this
+unchanged; original failed reports are preserved as historical evidence, separate
+from repaired-candidate reruns. Independent smaller positive/replay/revocation
+cases continue. The human subsequently authorized repairing this
 narrow product defect in the same PR, followed by both complete drills. Extend
 only the validated project-role issuance envelope: a global size increase or
 reducing advertised qualification limits would change unrelated boundaries or

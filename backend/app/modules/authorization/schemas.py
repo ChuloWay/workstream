@@ -396,7 +396,7 @@ _PROJECT_ROLE_ISSUE_MAX_BYTES = 9 * 1024
 
 
 def parse_authority_request(value: object) -> AuthorityMutationRequest:
-    """Readmit an untrusted request without retaining rejected input."""
+    """Readmit input without exposing it in errors or this frame's locals."""
     admitted = None
     try:
         candidate = dict(value) if isinstance(value, Mapping) else None
@@ -414,6 +414,9 @@ def parse_authority_request(value: object) -> AuthorityMutationRequest:
     except Exception:  # noqa: BLE001 - Mapping and rejected values are untrusted
         admitted = None
     if admitted is None:
+        # Diagnostic collectors may capture traceback locals. Drop rejected
+        # payloads from this frame as well as suppressing validation exceptions.
+        value = candidate = encoded = None
         raise TypeError("invalid authority mutation request")
     return admitted
 

@@ -63,6 +63,23 @@ def test_maximum_public_qualification_fits_canonical_authority_admission(role: s
     assert admitted == request
 
 
+def assert_parser_error_drops_input(error: TypeError) -> None:
+    assert str(error) == "invalid authority mutation request"
+    assert error.__cause__ is None
+    assert error.__context__ is None
+    frames = []
+    traceback = error.__traceback__
+    while traceback is not None:
+        if traceback.tb_frame.f_code is authority_schemas.parse_authority_request.__code__:
+            frames.append(traceback.tb_frame.f_locals)
+        traceback = traceback.tb_next
+    assert len(frames) == 1
+    # Caller frames necessarily own their inputs; the parser must not retain
+    # its copies in either validation-failure or encoded-size-failure paths.
+    for name in ("value", "candidate", "encoded", "admitted"):
+        assert frames[0][name] is None
+
+
 def test_qualification_expansion_preserves_closed_nonretaining_admission() -> None:
     request = maximum_role_request("submitter").model_dump()
     invalids = []
@@ -82,8 +99,7 @@ def test_qualification_expansion_preserves_closed_nonretaining_admission() -> No
         with pytest.raises(TypeError, match="^invalid authority mutation request$") as caught:
             authority_schemas.parse_authority_request(value)
         assert secret not in str(caught.value)
-        assert caught.value.__cause__ is None
-        assert caught.value.__context__ is None
+        assert_parser_error_drops_input(caught.value)
 
 
 @pytest.mark.parametrize("project_role", [False, True])
@@ -96,9 +112,12 @@ def test_authority_envelope_bound_is_operation_specific(monkeypatch: pytest.Monk
     # request test above separately proves the public schema's actual encoding.
     monkeypatch.setattr(authority_schemas.json, "dumps", lambda *args, **kwargs: "x" * limit)
     assert authority_schemas.parse_authority_request(request.model_dump()) == request
-    monkeypatch.setattr(authority_schemas.json, "dumps", lambda *args, **kwargs: "x" * (limit + 1))
-    with pytest.raises(TypeError, match="^invalid authority mutation request$"):
+    secret = "PRIVATE_REJECTED_QUALIFICATION"
+    monkeypatch.setattr(authority_schemas.json, "dumps",
+                        lambda *args, **kwargs: secret + "x" * (limit + 1 - len(secret)))
+    with pytest.raises(TypeError, match="^invalid authority mutation request$") as caught:
         authority_schemas.parse_authority_request(request.model_dump())
+    assert_parser_error_drops_input(caught.value)
 
 
 @pytest.mark.parametrize("role", ["submitter", "reviewer"])

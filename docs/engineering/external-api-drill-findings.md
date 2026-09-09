@@ -222,7 +222,9 @@ The same PR now includes public-maximum parser and PostgreSQL regressions for
 both roles: exact persisted references/readback, replay, mismatch and conflict
 without another snapshot, and unauthorized refusal without grant, snapshot,
 idempotency or audit residue. Envelope-edge tests retain bounded admission and
-generic non-retaining errors. Both complete drills must pass on the repaired
+generic errors without rejected input in parser-owned traceback locals. Caller
+frames and unrelated process memory are outside that diagnostic guarantee.
+Both complete drills must pass on the repaired
 candidate; the original failed runs are historical and remain unchanged outside
 Git. This repair does not certify every other API field or deployed provider.
 
