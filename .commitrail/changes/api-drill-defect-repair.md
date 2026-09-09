@@ -158,7 +158,7 @@ exact-head checks, and external findings are recorded in the PR.
 
 Original source is main `fa49529b` (PR #391); no open PRs at that initial inspection. The product
 builder worktree is separate and clean at inspection. Additive migration avoids
-rewriting its baseline. Roadmap role exposure will be reconciled in this PR.
+rewriting its baseline. This PR reconciles roadmap role exposure and drill scope.
 Next usable boundary: human merge, then orchestrator reruns exact-main HTTP drill
 and extends remaining field coverage. No next implementation chunk is started.
 

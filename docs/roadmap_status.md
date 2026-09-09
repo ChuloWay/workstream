@@ -180,7 +180,7 @@ cannot be reused as post-submission review-gate evidence. See the
   implemented.
 - A reusable [real-HTTP authorization drill](engineering/external-api-drill.md)
   exercises twenty human profiles, the actual local administrator bootstrap,
-  all five administrative role catalogues and applicable scope boundaries,
+  all five administrative role definitions and applicable scope boundaries,
   submitter/reviewer grants, self-protection, replay and lifecycle revocation.
   Separate rollback-only probes exercise the four last-effective-administrator
   count guards on stored authority; isolated off-by-one mutants verify that the
