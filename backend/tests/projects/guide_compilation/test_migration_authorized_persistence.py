@@ -17,7 +17,7 @@ from .helpers import context, identity, seed_database
 
 pytestmark = pytest.mark.postgres_schema_contract
 OWN_REVISION = "0008_guide_compilation_authorized_persistence"
-CURRENT_HEAD = "0012_contribution_policy_audit_resource"
+CURRENT_HEAD = "0013_compilation_request_origin"
 
 
 def _config() -> Config:
@@ -65,7 +65,7 @@ async def _version(database_url: str) -> str:
 def test_0008_installs_exact_request_custody_and_round_trips_empty(
     isolated_database_env: str, migration_lock
 ) -> None:
-    assert asyncio.run(_schema(isolated_database_env)) == (CURRENT_HEAD, 2, 3, 16)
+    assert asyncio.run(_schema(isolated_database_env)) == (CURRENT_HEAD, 2, 3, 19)
     with migration_lock():
         command.downgrade(_config(), "0007_contribution_policy_publication_custody")
         assert asyncio.run(_version(isolated_database_env)) == (
@@ -77,7 +77,7 @@ def test_0008_installs_exact_request_custody_and_round_trips_empty(
     with migration_lock():
         command.upgrade(_config(), CURRENT_HEAD)
         command.upgrade(_config(), CURRENT_HEAD)
-    assert asyncio.run(_schema(isolated_database_env)) == (CURRENT_HEAD, 2, 3, 16)
+    assert asyncio.run(_schema(isolated_database_env)) == (CURRENT_HEAD, 2, 3, 19)
 
 
 async def _seed_attempt(database_url: str) -> None:

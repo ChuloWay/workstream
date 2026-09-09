@@ -198,6 +198,13 @@ class ProjectGuideCompilationRequestOperation(Base):
 
     __tablename__ = "project_guide_compilation_request_operations"
     __table_args__ = (
+        CheckConstraint(
+            "(request_trigger = 'project_manager' and source_mutation_operation_id is null "
+            "and source_authorization_decision_event_id is null) or "
+            "(request_trigger = 'automatic_source_ready' and source_mutation_operation_id is not null "
+            "and source_authorization_decision_event_id is not null)",
+            name="ck_compilation_request_origin",
+        ),
         ForeignKeyConstraint(
             ["identity_link_id", "actor_profile_id"],
             ["actor_identity_links.id", "actor_identity_links.actor_profile_id"],
@@ -282,6 +289,13 @@ class ProjectGuideCompilationRequestOperation(Base):
     )
 
     operation_id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    request_trigger: Mapped[str] = mapped_column(String(32))
+    source_mutation_operation_id: Mapped[UUID | None] = mapped_column(
+        Uuid(), ForeignKey("guide_mutation_idempotency_records.operation_id", name="fk_compilation_request_source_operation")
+    )
+    source_authorization_decision_event_id: Mapped[str | None] = mapped_column(
+        ForeignKey("audit_events.id")
+    )
     request_id: Mapped[UUID] = mapped_column(Uuid())
     idempotency_key: Mapped[UUID] = mapped_column(Uuid())
     actor_profile_id: Mapped[str] = mapped_column(ForeignKey("actor_profiles.id"))

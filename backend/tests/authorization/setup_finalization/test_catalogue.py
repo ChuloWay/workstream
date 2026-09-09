@@ -101,6 +101,7 @@ async def test_human_and_direct_kernel_finalization_denied(monkeypatch, principa
 
 def test_setup_existing_active_pairs_and_downstream_plans_are_preserved():
     expected = {
+        ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC: PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
         ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE: PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
         ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN: PermissionId.PROJECT_GUIDE_MANAGE,
         ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE: PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE,
@@ -154,6 +155,7 @@ def test_exact_active_action_inventory():
         ActionId.PROJECT_GUIDE_UPDATE,
         ActionId.PROJECT_GUIDE_SOURCE_SNAPSHOT_CREATE,
         ActionId.PROJECT_GUIDE_COMPILATION_REQUEST,
+        ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC,
         ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
         ActionId.PROJECT_SETUP_RUN_UPDATE,
         ActionId.PROJECT_REVIEW_POLICY_UPDATE,

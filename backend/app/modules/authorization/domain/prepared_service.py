@@ -7,6 +7,7 @@ from uuid import UUID
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.domain.guide_compilation import (
     ProjectGuideCompilationExecuteResourceContext,
+    ProjectGuideCompilationRequestResourceContext,
 )
 from app.modules.authorization.domain.guide_compilation_projections import (
     ProjectGuideProjectionResourceContext,
@@ -25,6 +26,7 @@ _PROJECT_SETUP_ACTIONS = frozenset(
         ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
         ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE,
         ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
+        ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC,
         ActionId.PROJECT_SETUP_RUN_UPDATE,
     }
 )
@@ -76,6 +78,12 @@ def project_setup_resource_matches(
     if action_id is ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE:
         return (
             isinstance(resource, ProjectGuideCompilationExecuteResourceContext)
+            and resource.scope_project_id == project_id
+        )
+    if action_id is ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC:
+        return (
+            isinstance(resource, ProjectGuideCompilationRequestResourceContext)
+            and resource.trigger == "automatic_source_ready"
             and resource.scope_project_id == project_id
         )
     return None

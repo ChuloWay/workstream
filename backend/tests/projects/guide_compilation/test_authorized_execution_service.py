@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 from dataclasses import asdict, replace
 from uuid import UUID, uuid4
 
@@ -41,7 +42,7 @@ from .test_authorized_request_service import _authorized_service, _request, _see
 
 
 def _execution_service(
-    session: AsyncSession, actor: ActorIdentityFacts
+    session: AsyncSession, actor: ActorIdentityFacts, *, automatic_inputs=None
 ) -> GuideCompilationService:
     context_value = ServiceAuthorizationContext(
         actor_profile_id=actor.actor_profile_id,
@@ -63,6 +64,7 @@ def _execution_service(
     return GuideCompilationService(
         session,
         ProjectGuideCompilationAuthorizationAdapter(authorization, prepared),
+        automatic_inputs=automatic_inputs,
     )
 
 
@@ -89,6 +91,7 @@ async def test_authorized_execution_fences_accepts_and_persists_atomically(
     try:
         async with factory() as session:
             requested = await _authorized_service(session, human_actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=human_actor,
                 facts=_request(values),
                 identity=identity(context(values)),
@@ -155,6 +158,7 @@ async def test_invalid_provider_result_becomes_one_bounded_terminal_outcome(
     try:
         async with factory() as session:
             requested = await _authorized_service(session, human_actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=human_actor,
                 facts=_request(values),
                 identity=identity(context(values)),
@@ -215,6 +219,7 @@ async def test_execution_rejects_nonfresh_session_and_durable_fact_drift(
     try:
         async with factory() as session:
             requested = await _authorized_service(session, human_actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=human_actor,
                 facts=_request(values),
                 identity=identity(context(values)),
@@ -262,6 +267,7 @@ async def test_execution_rejects_stale_setup_lineage_before_authority_or_transit
     try:
         async with factory() as session:
             requested = await _authorized_service(session, human_actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=human_actor,
                 facts=_request(values),
                 identity=identity(context(values)),
@@ -324,6 +330,7 @@ async def test_execution_rechecks_setup_lineage_for_outcome_and_persistence(
     try:
         async with factory() as session:
             requested = await _authorized_service(session, human_actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=human_actor,
                 facts=_request(values),
                 identity=identity(context(values)),

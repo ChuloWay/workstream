@@ -219,9 +219,10 @@ complete. ARCH-04A consolidation supplies one current post-submit catalogue,
 compiler/parser and registered implementation per checker ID. Active consumers
 validate the canonical policy body and matching stored summaries. Immutable
 phase contracts and structural-handler conformance remain distinct from live
-phase execution, which is still unavailable. The next selected work is POL-04B1 automatic request authority/custody, then
-POL-04B connecting those contracts and unified finalization to automatic initial
-setup execution. Runtime adapter, model and instructions remain separate
+phase execution, which is still unavailable. POL-04B1 supplies hidden automatic
+request authority and source-operation custody, with current-authority replay
+checks for both triggers. The next selected work is POL-04B connecting those
+contracts and unified finalization to automatic initial setup execution. Runtime adapter, model and instructions remain separate
 configuration concerns. Compilation stops at findings and draft pre/post policies;
 POL-05 supplies manager correction/manual rerun and approval. The reconciled
 [dependency and ownership plan](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract)

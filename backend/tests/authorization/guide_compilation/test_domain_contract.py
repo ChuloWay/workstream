@@ -1,5 +1,6 @@
 """Focused domain proof for compilation resource and PREP guards."""
 
+from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 from dataclasses import asdict
 from uuid import uuid4
 
@@ -47,7 +48,7 @@ def test_fixed_service_matrix_rejects_an_empty_identity_row() -> None:
 
 
 def test_request_context_rejects_an_operation_selector_mismatch() -> None:
-    resource = _request_context(_request())
+    resource = _request_context(_request(), ProjectGuideCompilationRequestOrigin(trigger="project_manager"))
     with pytest.raises(ValidationError, match="must match operation"):
         ProjectGuideCompilationRequestResourceContext(
             **{**resource.model_dump(), "resource_id": uuid4()}
@@ -68,7 +69,7 @@ def test_execute_context_requires_phase_appropriate_result_digest() -> None:
 
 def test_request_digest_requires_a_grant_and_binds_it() -> None:
     actor, facts = _actor(), _request()
-    resource = _request_context(facts)
+    resource = _request_context(facts, ProjectGuideCompilationRequestOrigin(trigger="project_manager"))
     assert request_authority_digest(
         resource,
         actor_profile_id=actor.actor_profile_id,
@@ -93,7 +94,7 @@ def test_request_digest_requires_a_grant_and_binds_it() -> None:
 
 
 def test_prepared_parser_round_trips_exact_request_and_rejects_bad_uuid() -> None:
-    resource = _request_context(_request())
+    resource = _request_context(_request(), ProjectGuideCompilationRequestOrigin(trigger="project_manager"))
     binding = parse_prepared_compilation(
         ActionId.PROJECT_GUIDE_COMPILATION_REQUEST, resource.model_dump(mode="json")
     )
@@ -151,3 +152,38 @@ def test_compilation_resource_contexts_reject_scalar_coercion() -> None:
             phase="preflight",
             request_facts_digest="sha256:" + "a" * 64,
         )
+
+
+@pytest.mark.parametrize("trigger,operation,event", [
+    ("automatic_source_ready", None, None),
+    ("automatic_source_ready", uuid4(), None),
+    ("automatic_source_ready", None, uuid4()),
+    ("project_manager", uuid4(), None),
+    ("project_manager", None, uuid4()),
+    ("project_manager", uuid4(), uuid4()),
+    ("unknown", None, None),
+    ("automatic_source_ready", "not-a-uuid", uuid4()),
+])
+def test_request_origin_rejects_incomplete_mixed_or_invalid_tuples(trigger, operation, event):
+    with pytest.raises(ValueError):
+        ProjectGuideCompilationRequestOrigin(trigger=trigger,
+            source_mutation_operation_id=operation, source_authorization_decision_event_id=event)
+
+
+def test_automatic_origin_binds_both_source_selectors_and_rejects_human_action():
+    from dataclasses import replace
+    actor, facts = _actor(), _request()
+    origin = ProjectGuideCompilationRequestOrigin(trigger="automatic_source_ready",
+        source_mutation_operation_id=uuid4(), source_authorization_decision_event_id=uuid4())
+    resource = _request_context(facts, origin)
+    binding = parse_prepared_compilation(ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC,
+        resource.model_dump(mode="json"))
+    assert binding is not None
+    with pytest.raises(PreparedAuthorizationHandleInvalid):
+        parse_prepared_compilation(ActionId.PROJECT_GUIDE_COMPILATION_REQUEST, resource.model_dump(mode="json"))
+    def digest(value):
+        return request_authority_digest(_request_context(facts,value),
+            actor_profile_id=actor.actor_profile_id,identity_link_id=actor.identity_link_id,grant_id=None)
+    assert digest(origin) is not None
+    assert digest(origin) != digest(replace(origin, source_mutation_operation_id=uuid4()))
+    assert digest(origin) != digest(replace(origin, source_authorization_decision_event_id=uuid4()))

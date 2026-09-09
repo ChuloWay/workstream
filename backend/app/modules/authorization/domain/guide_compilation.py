@@ -8,6 +8,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.authorization.api import (
+    ProjectGuideCompilationRequestOrigin,
+    project_guide_compilation_automatic_request_authority_digest,
     project_guide_compilation_request_authority_digest,
 )
 from app.modules.authorization.catalogue import ActionId
@@ -30,12 +32,24 @@ class ProjectGuideCompilationRequestResourceContext(BaseModel):
     request_id: UUID
     idempotency_key: UUID
     request_facts_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    trigger: Literal["project_manager", "automatic_source_ready"]
+    source_mutation_operation_id: UUID | None = None
+    source_authorization_decision_event_id: UUID | None = None
 
     @model_validator(mode="after")
     def require_operation_selector(self):
         if self.resource_id != self.operation_id:
             raise ValueError("compilation request resource must match operation")
+        self.request_origin()
         return self
+
+    def request_origin(self) -> ProjectGuideCompilationRequestOrigin:
+        """Require one complete trigger tuple for preparation and evidence."""
+        return ProjectGuideCompilationRequestOrigin(
+            trigger=self.trigger,
+            source_mutation_operation_id=self.source_mutation_operation_id,
+            source_authorization_decision_event_id=self.source_authorization_decision_event_id,
+        )
 
 
 class ProjectGuideCompilationExecuteResourceContext(BaseModel):
@@ -69,6 +83,7 @@ CompilationResourceContext = (
 )
 COMPILATION_RESOURCE_BY_ACTION = {
     ActionId.PROJECT_GUIDE_COMPILATION_REQUEST: ProjectGuideCompilationRequestResourceContext,
+    ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC: ProjectGuideCompilationRequestResourceContext,
     ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE: ProjectGuideCompilationExecuteResourceContext,
 }
 
@@ -91,7 +106,15 @@ def request_authority_digest(
     grant_id: UUID | None,
 ) -> str | None:
     """Return the grant-bound digest for one allowed human request."""
-    if not isinstance(resource, ProjectGuideCompilationRequestResourceContext) or grant_id is None:
+    if not isinstance(resource, ProjectGuideCompilationRequestResourceContext):
+        return None
+    if resource.trigger == "automatic_source_ready":
+        return project_guide_compilation_automatic_request_authority_digest(
+            actor_profile_id=actor_profile_id, identity_link_id=identity_link_id,
+            project_id=resource.scope_project_id, operation_id=resource.operation_id,
+            request_facts_digest=resource.request_facts_digest, origin=resource.request_origin(),
+        )
+    if grant_id is None:
         return None
     return project_guide_compilation_request_authority_digest(
         actor_profile_id=actor_profile_id,
