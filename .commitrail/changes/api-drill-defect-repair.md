@@ -30,6 +30,10 @@ Allowed files and responsibility:
   existing hosted lanes without changing selection or coverage policy.
 - `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`: refresh exact existing debt
   fingerprints/spans after shrinking touched legacy tests; no new exceptions.
+- `.ci/behavior-ownership/partition.v1.json`,
+  `backend/scripts/behavior_ownership.py`, `backend/tests/test_behavior_ownership.py`:
+  enroll only the transferred drill in the existing shared target partition;
+  preserve protected-base custody and reject adjacent unapproved targets.
 - `backend/tests/test_projects.py`, `backend/tests/test_authorization.py`,
   `backend/tests/test_api_drill_repairs.py`,
   `backend/tests/migrations/test_project_role_scope.py`, `backend/tests/conftest.py`:
@@ -120,7 +124,8 @@ parsed constraint spelling and SQLAlchemy's name-prefix convention; the repair
 uses checked transformations of installed definitions and exact constraint names.
 It retains the already-narrow generic audit fact allowlist. CI review found
 stale structure-ledger entries and legacy-test growth; new rejection assertions
-were moved to the focused regression module, touched legacy tests shrank without
+were moved to the focused regression module (including the audit guard's exact
+privacy-safe TypeError contract), touched legacy tests shrank without
 losing assertions, and existing debt fingerprints were refreshed. Current review,
 exact-head checks, and external findings are recorded in the PR.
 

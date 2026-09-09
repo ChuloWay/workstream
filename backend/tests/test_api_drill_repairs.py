@@ -4,7 +4,6 @@ from uuid import uuid4
 
 from httpx import AsyncClient
 import pytest
-from pydantic import ValidationError
 from sqlalchemy import func, select
 
 from app.core.config import get_settings
@@ -348,7 +347,7 @@ def test_adjudicator_invalidation_audit_facts_are_rejected() -> None:
         after_facts={"effective": False, **projection},
     )
     unsupported = projection | {"role": "adjudicator", "future_obligation": "none"}
-    with pytest.raises(ValidationError):
+    with pytest.raises(TypeError, match="^invalid authority audit input$"):
         AuthorityAuditEventInput.model_validate(event.model_dump() | {
             "before_facts": {"effective": True, **unsupported},
             "after_facts": {"effective": False, **unsupported},

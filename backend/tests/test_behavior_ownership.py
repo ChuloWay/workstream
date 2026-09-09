@@ -1686,3 +1686,21 @@ def test_partition_accepts_only_exact_automatic_request_target() -> None:
         ownership._validate_additive_partition_transition(
             _partition(sorted({retained, *expected, "backend/app/modules/projects/guide_compilation/live_request.py"})), trusted
         )
+
+
+
+def test_partition_accepts_only_exact_external_api_drill_target() -> None:
+    """Drill enrollment preserves closed target admission for neighboring scripts."""
+    expected = {"backend/scripts/external_api_drill.py"}
+    assert ownership.API_DRILL_PARTITION_TARGETS == expected
+    assert ownership.group_for_target("backend/scripts/external_api_drill.py") == "shared"
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *expected})), trusted
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted({retained, *expected, "backend/scripts/extra_api_drill.py"})),
+            trusted,
+        )

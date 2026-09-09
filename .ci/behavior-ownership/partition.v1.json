@@ -1026,6 +1026,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/scripts/external_api_drill.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/scripts/legacy_actor_classification.py"
     },
     {
@@ -1073,7 +1077,7 @@
       "target": "backend/scripts/week2_api_e2e.py"
     }
   ],
-  "authority_digest": "8a42d3001fe5c90014f9f10c8f63b87c17efadbbfdbd871b3eb113a43847a4a4",
+  "authority_digest": "acdf63de637d801e8132f623ad01797fa0964a246a43fb164b3626586fb6f878",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
