@@ -13,9 +13,9 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Intent: keep product modules behind explicit ports and composition roots.
 - Current boundary: CHECKERS exposes hidden versioned catalogue and phase
   contracts with registered structural conformance; live setup consumes them next.
-- Next usable boundary: POL-04B live unified setup using the completed
-  ARCH-04A catalogue/schema foundation, then the adopted POL
-  approval/facade sequence. Return to independent CP06/CP07 after POL-07, then
+- Next usable boundary: [ARCH-04A consolidation](WS-ARCH-001-04A-consolidation.md)
+  removes duplicate development contracts and compatibility paths before POL-04B.
+  Then resume the adopted POL approval/facade sequence. Return to independent CP06/CP07 after POL-07, then
   connect guide activation through AUTH-12H.
 - Governing sources: `docs/architecture_lockdown.md`, accepted ADRs, code, and
   architecture tests.
