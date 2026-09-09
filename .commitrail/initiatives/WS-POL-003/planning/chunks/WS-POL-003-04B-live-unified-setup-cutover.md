@@ -204,3 +204,44 @@ timestamp. Finalized generations retain the exact finalization outcome and
 pointers. Worker results use the same bounded classification. Neither a read nor
 redelivery may reopen a finalized row, fabricate an outcome, or enqueue another
 provider call. Read authorization remains the existing diagnostic-read action.
+
+## Discriminating verification cases
+
+- A real verified-source control and each wrong worker selector (including actual
+  bound delivery ID) prove denial before request/audit/attempt/provider effects.
+- Pause publisher acknowledgement while an eager worker completes the exact
+  claim; resume acknowledgement and compare all terminal pointers/timestamps.
+  Two concurrent deliveries still admit at most one provider invocation.
+- Replay finalized blocked and ready generations through fresh finalizer AUTH
+  before any runtime/configuration construction; no new audit or product writes.
+- Inject failure after persistence, after sufficiency, and after both projections;
+  restoration completes the missing effects under current phase authority with
+  one total provider invocation. Revoke service authority separately at each phase.
+- Invalid schema/unsafe output and provider uncertainty retain truthful bounded
+  diagnostics; reads and redeliveries neither rewrite setup nor reinvoke runtime.
+- New missing/malformed/oversized/hash-mismatched snapshots fail direct SQL;
+  configuration mutation fails; retained missing configuration remains unchanged
+  and unavailable for live execution. Deployment changes cannot replace snapshot.
+- A valid unified projected draft hits the named approval denial before writes;
+  an otherwise valid manual-policy control retains its required behavior.
+- Replace inference-only tests, keeping mixed CRUD, lineage, source-usage,
+  warning-acknowledgement, correction-audit and immutable-policy protections.
+  AST/route/registry checks prove the three methods/prompts and old tasks/routes
+  are absent, rather than monkeypatching symbols that should have been deleted.
+
+Pre-submission projection ownership moves to CHECKERS public API, replacing the
+current CHECKERS-to-agent-interface import. The unified result validator keeps
+cross-component equality: proposal-backed parameter names are the intersection
+of the selected definition's policy_fields and SubmissionArtifactPolicyProposal
+fields. Empty parameters select the capability against that separately hashed
+proposal. Nonempty parameters require the complete relevant field set and exact
+canonical JSON/type equality with the validated proposal; platform-owned fields,
+extra/missing fields and conflicting values fail. Parameters never form another
+executable policy or feed the compiler independently. This reuses the existing
+proposal schema without a parallel checker configuration model. Test int/float,
+tuple/list normalization, packaging/storage, unsupported fields and conflicts.
+
+One PROJECTS-owned coordinator reads its own exact persisted attempt/result and
+finalization to branch blocked versus draft-ready. The worker only composes and
+calls it. No private ORM/result read is added to Celery and no new public receipt
+field exists solely for the branch.
