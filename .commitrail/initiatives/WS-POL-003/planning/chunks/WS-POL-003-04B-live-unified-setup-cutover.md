@@ -300,3 +300,18 @@ the post policy with its canonical compiler, and seed exact setup/activation
 prerequisites within `seed_active_guide_for_pre_12h_e2e`. Require no finalization
 row before that fixture transition and assert downstream reads and task locks
 refer to the fixture guide.
+
+### Superseded executable consumers
+
+Trace the old setup helper through the June `backend/scripts/week2_api_e2e.py`
+drill and `examples/terminal_benchmark/terminal_benchmark_api_e2e.py`. Neither
+is current CI or canonical runtime proof; both still call removed setup paths,
+and the week2 caller was already incompatible with the current helper signature.
+Remove these obsolete executables and their current command claims. Retain the
+canonical API drill's database/environment guard tests once. Required checker
+and task behaviors remain in `tests/test_checkers.py`, `tests/test_tasks.py` and
+the hosted canonical API drill: intake non-durability, packet/integrity guards,
+warning routing, blocked task setup, retry supersession, revision/resubmission,
+worker concealment, immutable locks and audit evidence. Remove only the obsolete
+file selectors in stale-wording guards; preserve the same rules on active files.
+Historical validation notes remain explicitly historical, not runnable proof.
