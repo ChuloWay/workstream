@@ -33,7 +33,7 @@ __all__ = (
 )
 
 from app.modules.checkers.api.post_submit_catalogue import (
-    CompiledPostSubmitPolicyV2,
+    CompiledPostSubmitPolicy,
     EmptyPostSubmitConfiguration,
     PostSubmitCatalogue,
     PostSubmitDefinition,
@@ -56,7 +56,7 @@ from app.modules.checkers.api.post_submit import (
 )
 
 __all__ += (
-    "CompiledPostSubmitPolicyV2", "EmptyPostSubmitConfiguration", "PostSubmitCatalogue",
+    "CompiledPostSubmitPolicy", "EmptyPostSubmitConfiguration", "PostSubmitCatalogue",
     "PostSubmitDefinition", "PostSubmitPolicyEntry", "ExpectedPostSubmitContext",
     "ObservedPostSubmitContext", "PostSubmissionEvaluationRequest", "PostSubmissionEvaluationResult",
     "PostSubmissionExecutionPort", "PostSubmissionExecutionUnavailable", "PostSubmissionStructuralInput",

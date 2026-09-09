@@ -1670,16 +1670,10 @@ class DeterministicTestProjectGuideAgentRuntime:
             for entry in context.registered_checker_catalog
         )
         return PostSubmitCheckerPolicyDerivationResult(
-            required_checkers=["check_policy_context_present"],
+            required_checkers=[],
             warning_checkers=[],
             blocking_severities=["critical", "high"],
-            reasons=[
-                PostSubmitCheckerPolicyReason(
-                    checker_name="check_policy_context_present",
-                    rationale="Human review requires the locked policy context.",
-                    evidence_refs=[PostSubmitCheckerPolicyEvidenceRef(ref="project_guide")],
-                )
-            ],
+            reasons=[],
             unsupported_required_checks=[],
             setup_notes=["Post-submit policy derived from project setup context."],
             agent_version="deterministic-test-runtime-v0.1",
@@ -4071,7 +4065,7 @@ async def test_policy_approval_resumes_post_submit_setup_continuation(
         )
     assert post_submit_policy is not None
     assert post_submit_policy.policy_hash is not None
-    assert "check_policy_context_present" in post_submit_policy.required_checkers
+    assert any(entry["checker_id"] == "check_policy_context_present" and entry["classification"] == "platform_default" for entry in post_submit_policy.policy_body["entries"])
     assert post_submit_policy.lifecycle_status == "compiled"
     assert post_submit_policy.guide_id == guide["id"]
     assert post_submit_policy.source_snapshot_id == setup_run["source_snapshot_id"]
@@ -11709,9 +11703,7 @@ async def test_guide_activation_and_active_guide_retrieval(project_client: Async
     assert active.json()["guide"]["effective_at"] is not None
     assert activation.json()["guide"]["approved_by"] == guide["created_by"]
     assert activation.json()["guide"]["effective_at"] == active.json()["guide"]["effective_at"]
-    assert active.json()["post_submit_checker_policy"]["required_checkers"] == [
-        "check_policy_context_present"
-    ]
+    assert active.json()["post_submit_checker_policy"]["required_checkers"] == []
     assert (
         active.json()["guide_source_snapshot"]["bundle_hash"]
         == (bundle["source_snapshot"]["bundle_hash"])

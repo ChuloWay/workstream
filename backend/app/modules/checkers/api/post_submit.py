@@ -9,7 +9,7 @@ from pydantic import Field, StrictInt, StrictStr, model_validator
 from app.core.hashing import canonical_json_hash
 from app.modules.checkers.api.post_submit_catalogue import (
     ByteCount,
-    CompiledPostSubmitPolicyV2,
+    CompiledPostSubmitPolicy,
     GuideVersion,
     Identifier,
     PostSubmitCatalogue,
@@ -62,13 +62,9 @@ class PostSubmitPolicyInputs(PostSubmitValue):
 class ObservedPostSubmitContext(PostSubmitValue):
     """Nullable observed source fields permit precise missing-context outcomes."""
 
-    project_id: ResourceId | None = None
-    guide_id: ResourceId | None = None
     guide_version: GuideVersion | None = None
     source_id: ResourceId | None = None
     source_hash: Sha256 | None = None
-    compilation_id: ResourceId | None = None
-    compilation_result_hash: Sha256 | None = None
     effective_policy_id: ResourceId | None = None
     effective_policy_hash: Sha256 | None = None
     pre_policy_id: ResourceId | None = None
@@ -82,19 +78,14 @@ class ObservedPostSubmitContext(PostSubmitValue):
     revision_policy_id: ResourceId | None = None
     revision_generation: VersionNumber | None = None
     revision_hash: Sha256 | None = None
-    contribution_policy_version_id: ResourceId | None = None
 
 
 class ExpectedPostSubmitContext(ObservedPostSubmitContext):
-    """The complete expected lineage, without a legacy PaymentPolicy dependency."""
+    """Complete currently persisted task lineage expected on a submission."""
 
-    project_id: ResourceId
-    guide_id: ResourceId
     guide_version: GuideVersion
     source_id: ResourceId
     source_hash: Sha256
-    compilation_id: ResourceId
-    compilation_result_hash: Sha256
     effective_policy_id: ResourceId
     effective_policy_hash: Sha256
     pre_policy_id: ResourceId
@@ -108,7 +99,6 @@ class ExpectedPostSubmitContext(ObservedPostSubmitContext):
     revision_policy_id: ResourceId
     revision_generation: VersionNumber
     revision_hash: Sha256
-    contribution_policy_version_id: ResourceId
 
     @model_validator(mode="after")
     def validate_versions(self) -> Self:
@@ -121,7 +111,7 @@ class ExpectedPostSubmitContext(ObservedPostSubmitContext):
 class PostSubmissionStructuralInput(PostSubmitValue):
     """Immutable detached values consumed by the actual structural handlers."""
 
-    schema_version: Literal["post_submit_structural_input.v1"] = "post_submit_structural_input.v1"
+    schema_version: Literal["post_submit_structural_input"] = "post_submit_structural_input"
     summary: Text
     worker_attestation: Text
     package_hash: HashText
@@ -135,8 +125,8 @@ class PostSubmissionStructuralInput(PostSubmitValue):
 class PostSubmissionEvaluationRequest(PostSubmitValue):
     """Hash-bound value consistency, never stored ownership or execution authority."""
 
-    schema_version: Literal["post_submit_evaluation_request.v1"] = (
-        "post_submit_evaluation_request.v1"
+    schema_version: Literal["post_submit_evaluation_request"] = (
+        "post_submit_evaluation_request"
     )
     evaluation_request_id: ResourceId
     evaluation_generation: VersionNumber
@@ -151,7 +141,7 @@ class PostSubmissionEvaluationRequest(PostSubmitValue):
     byte_count: ByteCount
     expected_context: ExpectedPostSubmitContext
     catalogue: PostSubmitCatalogue
-    policy: CompiledPostSubmitPolicyV2
+    policy: CompiledPostSubmitPolicy
     structural_input: PostSubmissionStructuralInput
     request_sha256: Sha256
 
@@ -160,10 +150,7 @@ class PostSubmissionEvaluationRequest(PostSubmitValue):
         """Reject inconsistent duplicated facts before the unavailable execution port."""
         if len(canonical_post_submit_bytes(self)) > 1_048_576:
             raise ValueError("post-submit request capacity exceeded")
-        if (
-            self.project_id != self.expected_context.project_id
-            or self.project_id != self.policy.project_id
-        ):
+        if self.project_id != self.policy.project_id:
             raise ValueError("post-submit request project mismatch")
         if self.policy.guide_version != self.expected_context.guide_version:
             raise ValueError("post-submit request guide version mismatch")
@@ -186,9 +173,9 @@ class PostSubmitCounter(PostSubmitValue):
 class PostSubmitMemberResult(PostSubmitValue):
     """One sanitized structural outcome, validated against its pinned definition."""
 
-    schema_version: Literal["post_submit_structural_result.v1"] = "post_submit_structural_result.v1"
+    schema_version: Literal["post_submit_structural_result"] = "post_submit_structural_result"
     checker_id: Identifier
-    definition_version: Literal["v0.2"] = "v0.2"
+    definition_version: Literal["v0.1"] = "v0.1"
     implementation_version: Identifier
     status: Literal["passed", "warning", "failed"]
     code: Literal[
@@ -246,7 +233,7 @@ class PostSubmitMemberResult(PostSubmitValue):
 class PostSubmissionEvaluationResult(PostSubmitValue):
     """A typed phase result is not evidence that a durable result is current."""
 
-    schema_version: Literal["post_submit_evaluation_result.v1"] = "post_submit_evaluation_result.v1"
+    schema_version: Literal["post_submit_evaluation_result"] = "post_submit_evaluation_result"
     request_id: ResourceId
     request_digest: Sha256
     attempt_id: ResourceId
@@ -307,8 +294,8 @@ class PostSubmissionEvaluationResult(PostSubmitValue):
 class PostSubmitCurrentResultReference(PostSubmitValue):
     """A later owner-issued reference, with no self-authorizing is_current flag."""
 
-    schema_version: Literal["post_submit_current_result_reference.v1"] = (
-        "post_submit_current_result_reference.v1"
+    schema_version: Literal["post_submit_current_result_reference"] = (
+        "post_submit_current_result_reference"
     )
     request_id: ResourceId
     request_digest: Sha256

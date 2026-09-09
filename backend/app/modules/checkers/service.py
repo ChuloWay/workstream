@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
+import json
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +33,7 @@ from app.modules.checkers.runner import (
     canonical_artifact_manifest_hash,
     default_checker_registry,
     pre_submit_static_feedback,
+    policy_context_mismatches,
 )
 from app.modules.checkers.schemas import (
     CheckerFeedbackItem,
@@ -43,8 +45,9 @@ from app.modules.projects.models import (
     EffectiveProjectSubmissionArtifactPolicy,
     PreSubmitCheckerPolicy,
 )
+from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPolicy
+from app.modules.checkers.api.post_submit import ExpectedPostSubmitContext, ObservedPostSubmitContext
 from app.modules.projects.post_submit_policy import (
-    LockedPostSubmitCheckerPolicy,
     parse_locked_post_submit_checker_policy_body,
 )
 from app.modules.projects.repository import ProjectRepository
@@ -365,7 +368,7 @@ class CheckerService:
         self,
         task: WorkstreamTask,
         submission: Submission,
-    ) -> LockedPostSubmitCheckerPolicy:
+    ) -> CompiledPostSubmitPolicy:
         """Load and validate the locked post-submit checker policy.
 
         Args:
@@ -412,12 +415,61 @@ class CheckerService:
         except ValueError as exc:
             raise CheckerPolicyInvalid("locked post-submit checker policy hash is invalid") from exc
         try:
+            if policy.policy_body != locked_policy.policy_body:
+                raise ValueError("persisted post-submit policy body differs from lock")
+            locked_policy.validate_sidecars(
+                required_checkers=policy.required_checkers,
+                warning_checkers=policy.warning_checkers,
+                blocking_severities=policy.blocking_severities,
+            )
+        except ValueError as exc:
+            raise CheckerPolicyInvalid("locked post-submit checker policy summaries are invalid") from exc
+        try:
             self._registry.require_registered(set(locked_policy.execution_checkers))
         except UnknownChecker as exc:
             raise CheckerPolicyInvalid(
                 "locked post-submit checker policy references unregistered checker"
             ) from exc
         return locked_policy
+
+    @staticmethod
+    def _observed_policy_context(source: WorkstreamTask | Submission) -> ObservedPostSubmitContext:
+        """Copy actual persisted locks into the closed structural fact contract."""
+        try:
+            return ObservedPostSubmitContext.model_validate_json(
+                json.dumps(
+                    {
+                        "guide_version": source.locked_guide_version,
+                        "source_id": source.locked_guide_source_snapshot_id,
+                        "source_hash": source.locked_guide_source_snapshot_hash,
+                        "effective_policy_id": source.locked_effective_project_submission_artifact_policy_id,
+                        "effective_policy_hash": source.locked_effective_project_submission_artifact_policy_hash,
+                        "pre_policy_id": source.locked_pre_submit_checker_policy_id,
+                        "pre_policy_hash": source.locked_pre_submit_checker_bundle_hash,
+                        "post_policy_id": source.locked_post_submit_checker_policy_id,
+                        "post_policy_version": source.locked_post_submit_checker_policy_version,
+                        "post_policy_hash": source.locked_post_submit_checker_policy_hash,
+                        "review_policy_id": source.locked_review_policy_id,
+                        "review_generation": source.locked_review_policy_generation,
+                        "review_hash": source.locked_review_policy_hash,
+                        "revision_policy_id": source.locked_revision_policy_id,
+                        "revision_generation": source.locked_revision_policy_generation,
+                        "revision_hash": source.locked_revision_policy_hash,
+                    }
+                )
+            )
+        except ValueError as exc:
+            raise CheckerPolicyInvalid("locked structural policy context is invalid") from exc
+
+    @classmethod
+    def _expected_policy_context(cls, task: WorkstreamTask) -> ExpectedPostSubmitContext:
+        """Require complete actual task facts; no default or fabricated lineage."""
+        try:
+            return ExpectedPostSubmitContext.model_validate(
+                cls._observed_policy_context(task).model_dump()
+            )
+        except ValueError as exc:
+            raise CheckerPolicyInvalid("locked structural task context is incomplete") from exc
 
     @staticmethod
     def _effective_policy_shape_is_valid(effective_policy: Any) -> bool:
@@ -557,6 +609,10 @@ class CheckerService:
             )
 
         checker_policy = await self._load_locked_post_submit_policy(task, submission)
+        expected_context = self._expected_policy_context(task)
+        observed_context = self._observed_policy_context(submission)
+        if policy_context_mismatches(expected_context, observed_context):
+            raise CheckerPolicyInvalid("submission policy context does not match task lock")
         effective_policy, _ = await self._load_locked_pre_submit_context(
             task,
             submission,
@@ -593,10 +649,12 @@ class CheckerService:
             warning_checker_names=frozenset(checker_policy.warning_checkers),
             blocking_severities=frozenset(checker_policy.blocking_severities or []),
             effective_policy=effective_policy.effective_policy,
+            expected_context=expected_context,
+            observed_context=observed_context,
         )
         now = datetime.now(UTC)
         outcomes = self._apply_blocking_policy(
-            await self._registry.run(context, checker_names),
+            await self._registry.run(context, checker_policy.entries),
             context,
         )
         audit_event = await self._write_checker_audit(
@@ -913,17 +971,14 @@ class CheckerService:
                     "pre-review gate requester provenance did not match locked submission audit"
                 )
             await self._assert_pre_review_gate_claim_still_current(checker_run)
-            await self._enter_evaluation_pending(
-                actor,
-                task,
-                submission,
-                checker_run.trigger_reason or PRE_REVIEW_GATE_TRIGGER_REASON,
-                checker_run.trigger_source or PRE_REVIEW_GATE_TRIGGER_SOURCE,
-                requester_payload,
-            )
+
 
             try:
                 checker_policy = await self._load_locked_post_submit_policy(task, submission)
+                expected_context = self._expected_policy_context(task)
+                observed_context = self._observed_policy_context(submission)
+                if policy_context_mismatches(expected_context, observed_context):
+                    raise CheckerPolicyInvalid("submission policy context does not match task lock")
                 effective_policy, _ = await self._load_locked_pre_submit_context(
                     task,
                     submission,
@@ -953,6 +1008,15 @@ class CheckerService:
             except ValueError:
                 artifact_manifest_hash = "invalid:artifact_manifest"
 
+            await self._enter_evaluation_pending(
+                actor,
+                task,
+                submission,
+                checker_run.trigger_reason or PRE_REVIEW_GATE_TRIGGER_REASON,
+                checker_run.trigger_source or PRE_REVIEW_GATE_TRIGGER_SOURCE,
+                requester_payload,
+            )
+
             context = CheckerContext(
                 task=task,
                 submission=submission,
@@ -960,10 +1024,12 @@ class CheckerService:
                 warning_checker_names=frozenset(checker_policy.warning_checkers),
                 blocking_severities=frozenset(checker_policy.blocking_severities or []),
                 effective_policy=effective_policy.effective_policy,
+                expected_context=expected_context,
+                observed_context=observed_context,
             )
             now = datetime.now(UTC)
             outcomes = self._apply_blocking_policy(
-                await self._registry.run(context, checker_names),
+                await self._registry.run(context, checker_policy.entries),
                 context,
             )
             audit_event = await self._write_checker_audit(
@@ -1848,11 +1914,18 @@ class CheckerService:
                 outcome.status == "warning"
                 and outcome.checker_name in context.required_checker_names
             )
-            status = "failed" if required_warning else outcome.status
-            severity = "high" if required_warning else outcome.severity
+            severity_warning = (
+                outcome.status == "warning"
+                and outcome.severity in context.blocking_severities
+            )
+            escalated_warning = required_warning or severity_warning
+            status = "failed" if escalated_warning else outcome.status
+            severity = "high" if escalated_warning else outcome.severity
             metadata = dict(outcome.metadata)
             if required_warning:
                 metadata["required_checker_warning_escalated"] = True
+            if severity_warning:
+                metadata["blocking_severity_warning_escalated"] = True
             blocks_review = status == "failed" and (
                 outcome.blocks_review
                 or outcome.checker_name in context.required_checker_names
@@ -1869,7 +1942,7 @@ class CheckerService:
                         outcome.worker_suggested_fix
                         or (
                             "Resolve this required checker finding before review can continue."
-                            if required_warning and outcome.worker_visible
+                            if escalated_warning and outcome.worker_visible
                             else None
                         )
                     ),

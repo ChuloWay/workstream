@@ -10,13 +10,13 @@ from urllib.parse import urlparse
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Awaitable
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 from app.modules.checkers.api.post_submit_catalogue import (
-    LEGACY_IMPLEMENTATION_VERSION, PostSubmitDefinition,
+    PostSubmitDefinition, PostSubmitPolicyEntry, structural_definition,
 )
 from app.modules.checkers.api.post_submit import (
-    ExpectedPostSubmitContext, PostSubmissionStructuralInput,
+    ExpectedPostSubmitContext, ObservedPostSubmitContext,
 )
 from app.modules.tasks.models import WorkstreamTask
 from app.modules.tasks.schemas import SubmissionCreate
@@ -116,7 +116,7 @@ class _StructuralEvidence(Protocol):
 
 
 class _StructuralSubmission(Protocol):
-    """Common packet attributes; historical locked context is a separate shape."""
+    """Packet attributes consumed by the structural handlers."""
 
     @property
     def summary(self) -> str:
@@ -139,79 +139,6 @@ class _StructuralSubmission(Protocol):
         """Read evidence items."""
 
 
-@runtime_checkable
-class _LegacyLockedContext(Protocol):
-    """Historical locked fields required only by the legacy context handler."""
-
-    @property
-    def locked_guide_version(self) -> str | None:
-        """Read locked guide version."""
-
-    @property
-    def locked_post_submit_checker_policy_id(self) -> str | None:
-        """Read locked post submit checker policy id."""
-
-    @property
-    def locked_post_submit_checker_policy_version(self) -> str | None:
-        """Read locked post submit checker policy version."""
-
-    @property
-    def locked_post_submit_checker_policy_hash(self) -> str | None:
-        """Read locked post submit checker policy hash."""
-
-    @property
-    def locked_review_policy_id(self) -> str | None:
-        """Read locked review policy id."""
-
-    @property
-    def locked_review_policy_generation(self) -> int | None:
-        """Read locked review policy generation."""
-
-    @property
-    def locked_review_policy_hash(self) -> str | None:
-        """Read locked review policy hash."""
-
-    @property
-    def locked_revision_policy_id(self) -> str | None:
-        """Read locked revision policy id."""
-
-    @property
-    def locked_revision_policy_generation(self) -> int | None:
-        """Read locked revision policy generation."""
-
-    @property
-    def locked_revision_policy_hash(self) -> str | None:
-        """Read locked revision policy hash."""
-
-    @property
-    def locked_payment_policy_version(self) -> str | None:
-        """Read locked payment policy version."""
-
-    @property
-    def locked_guide_source_snapshot_id(self) -> str | None:
-        """Read locked guide source snapshot id."""
-
-    @property
-    def locked_guide_source_snapshot_hash(self) -> str | None:
-        """Read locked guide source snapshot hash."""
-
-    @property
-    def locked_effective_project_submission_artifact_policy_id(self) -> str | None:
-        """Read locked effective project submission artifact policy id."""
-
-    @property
-    def locked_effective_project_submission_artifact_policy_hash(self) -> str | None:
-        """Read locked effective project submission artifact policy hash."""
-
-    @property
-    def locked_pre_submit_checker_policy_id(self) -> str | None:
-        """Read locked pre submit checker policy id."""
-
-    @property
-    def locked_pre_submit_checker_bundle_hash(self) -> str | None:
-        """Read locked pre submit checker bundle hash."""
-
-
 @dataclass(frozen=True)
 class CheckerContext:
     """Data available to structural checkers."""
@@ -222,7 +149,7 @@ class CheckerContext:
     warning_checker_names: frozenset[str]
     blocking_severities: frozenset[str]
     effective_policy: dict | None = None
-    detached_input: PostSubmissionStructuralInput | None = None
+    observed_context: ObservedPostSubmitContext | None = None
     expected_context: ExpectedPostSubmitContext | None = None
 
 
@@ -258,65 +185,68 @@ class FunctionChecker:
 
 @dataclass(frozen=True)
 class CheckerRegistration:
-    """Keep versioned metadata and the actual implementation in one entry."""
+    """Keep canonical metadata and the actual implementation in one entry."""
 
     checker: Checker
-    definition: PostSubmitDefinition | None
+    definition: PostSubmitDefinition
 
 
 class CheckerRegistry:
-    """One exact-version registry with legacy name-only calls explicitly pinned."""
+    """Install exactly one handler and immutable definition per checker ID."""
 
     def __init__(self) -> None:
-        """Create one registry indexed by exact implementation identity."""
-        self._checkers: dict[tuple[str, str], CheckerRegistration] = {}
+        """Start an empty explicit installation."""
+        self._checkers: dict[str, CheckerRegistration] = {}
 
-    def register(self, checker: Checker, *, definition: PostSubmitDefinition | None = None) -> None:
-        """Preserve historical name-only registration at its fixed legacy version."""
-        self.register_versioned(checker, LEGACY_IMPLEMENTATION_VERSION, definition=definition)
-
-    def register_versioned(
-        self, checker: Checker, implementation_version: str,
-        *, definition: PostSubmitDefinition | None,
-    ) -> None:
-        """Register one exact pair; metadata cannot advertise a different handler."""
-        key = (checker.name, implementation_version)
-        if key in self._checkers:
+    def register(self, checker: Checker, *, definition: PostSubmitDefinition) -> None:
+        """Reject duplicate IDs and metadata belonging to another handler."""
+        if checker.name in self._checkers:
             raise CheckerNameConflict(f"checker already registered: {checker.name}")
-        if definition is not None and (
-            definition.capability_id != checker.name
-            or definition.implementation_version != implementation_version
-        ):
+        definition = PostSubmitDefinition.model_validate(definition)
+        if definition.capability_id != checker.name:
             raise ValueError("checker registration definition mismatch")
-        self._checkers[key] = CheckerRegistration(checker, definition)
+        self._checkers[checker.name] = CheckerRegistration(checker, definition)
 
-    def resolve(self, checker_name: str, implementation_version: str) -> CheckerRegistration:
-        """Never substitute a different registered version for an absent pair."""
+    def resolve(self, checker_name: str) -> CheckerRegistration:
+        """Resolve the sole installed handler for an exact checker ID."""
         try:
-            return self._checkers[(checker_name, implementation_version)]
+            return self._checkers[checker_name]
         except KeyError as exc:
-            raise UnknownChecker(f"unregistered checker: {checker_name}@{implementation_version}") from exc
+            raise UnknownChecker(f"unregistered checker: {checker_name}") from exc
 
     def definitions(self) -> tuple[PostSubmitDefinition, ...]:
-        """Return immutable current metadata from the actual registration entries."""
-        return tuple(entry.definition for entry in self._checkers.values()
-                     if entry.definition is not None)
+        """Return metadata attached to installed handlers."""
+        return tuple(entry.definition for entry in self._checkers.values())
 
     def require_registered(self, checker_names: set[str]) -> None:
-        """Validate historical name-only policies against the pinned legacy set."""
+        """Reject selections absent from this installation."""
         missing = sorted(checker_names.difference(self.names()))
         if missing:
             raise UnknownChecker(f"unregistered checker policy names: {', '.join(missing)}")
 
-    async def run(self, context: CheckerContext, checker_names: list[str]) -> list[CheckerOutcome]:
-        """Execute historical policy names at v1; modern execution stays unavailable."""
-        self.require_registered(set(checker_names))
-        return [await self.resolve(name, LEGACY_IMPLEMENTATION_VERSION).checker.run(context)
-                for name in checker_names]
+    async def run(
+        self, context: CheckerContext, entries: tuple[PostSubmitPolicyEntry, ...]
+    ) -> list[CheckerOutcome]:
+        """Validate all compiled member identities before executing any handler."""
+        registrations = []
+        seen: set[str] = set()
+        for entry in entries:
+            entry = PostSubmitPolicyEntry.model_validate(entry)
+            registration = self.resolve(entry.checker_id)
+            definition = registration.definition
+            if entry.checker_id in seen or (
+                entry.definition_version != definition.capability_version
+                or entry.implementation_version != definition.implementation_version
+            ):
+                raise ValueError("post-submit installed implementation mismatch")
+            definition.validate_configuration(entry.configuration)
+            seen.add(entry.checker_id)
+            registrations.append(registration)
+        return [await registration.checker.run(context) for registration in registrations]
 
     def names(self) -> set[str]:
-        """Keep the historical name set stable when another version is installed."""
-        return {name for name, version in self._checkers if version == LEGACY_IMPLEMENTATION_VERSION}
+        """Return installed checker IDs."""
+        return set(self._checkers)
 
 
 def canonical_artifact_manifest_hash(manifest: list[dict]) -> str:
@@ -940,56 +870,30 @@ async def check_submission_packet(context: CheckerContext) -> CheckerOutcome:
     )
 
 
+def policy_context_mismatches(
+    expected: ExpectedPostSubmitContext, observed: ObservedPostSubmitContext,
+) -> list[str]:
+    """Compare the one closed current fact shape for owner guards and checking."""
+    expected = ExpectedPostSubmitContext.model_validate(expected)
+    observed = ObservedPostSubmitContext.model_validate(observed)
+    return [key for key, value in expected.model_dump().items() if getattr(observed, key) != value]
+
+
 async def check_policy_context_present(context: CheckerContext) -> CheckerOutcome:
-    """Validate that the submission carries all locked guide and policy versions."""
-    submission = context.submission
-    if not isinstance(submission, _LegacyLockedContext):
-        raise ValueError("legacy checker requires locked policy context")
-    missing = [
-        name
-        for name, value in {
-            "locked_guide_version": submission.locked_guide_version,
-            "locked_post_submit_checker_policy_id": (
-                submission.locked_post_submit_checker_policy_id
-            ),
-            "locked_post_submit_checker_policy_version": (
-                submission.locked_post_submit_checker_policy_version
-            ),
-            "locked_post_submit_checker_policy_hash": (
-                submission.locked_post_submit_checker_policy_hash
-            ),
-            "locked_review_policy_id": submission.locked_review_policy_id,
-            "locked_review_policy_generation": submission.locked_review_policy_generation,
-            "locked_review_policy_hash": submission.locked_review_policy_hash,
-            "locked_revision_policy_id": submission.locked_revision_policy_id,
-            "locked_revision_policy_generation": submission.locked_revision_policy_generation,
-            "locked_revision_policy_hash": submission.locked_revision_policy_hash,
-            "locked_payment_policy_version": submission.locked_payment_policy_version,
-            "locked_guide_source_snapshot_id": submission.locked_guide_source_snapshot_id,
-            "locked_guide_source_snapshot_hash": submission.locked_guide_source_snapshot_hash,
-            "locked_effective_project_submission_artifact_policy_id": (
-                submission.locked_effective_project_submission_artifact_policy_id
-            ),
-            "locked_effective_project_submission_artifact_policy_hash": (
-                submission.locked_effective_project_submission_artifact_policy_hash
-            ),
-            "locked_pre_submit_checker_policy_id": submission.locked_pre_submit_checker_policy_id,
-            "locked_pre_submit_checker_bundle_hash": (
-                submission.locked_pre_submit_checker_bundle_hash
-            ),
-        }.items()
-        if not value
-    ]
-    if missing:
+    """Compare current locked facts without asserting ownership or authorization."""
+    if context.observed_context is None or context.expected_context is None:
+        raise ValueError("checker requires expected and observed policy context")
+    mismatches = policy_context_mismatches(context.expected_context, context.observed_context)
+    if mismatches:
         return _fail(
             "check_policy_context_present",
-            "Submission is missing locked guide or policy context.",
-            "A project manager must re-screen the task before review can continue.",
-            metadata={"missing_context": missing},
+            "Submission policy context is incomplete or inconsistent.",
+            "A project manager must correct the locked policy context.",
+            metadata={"invalid_context": mismatches},
             worker_visible=False,
             routing_recommendation=ROUTING_TASK_SETUP_BLOCKED,
         )
-    return _pass("check_policy_context_present", "Submission has locked guide and policy context.")
+    return _pass("check_policy_context_present", "Submission has consistent policy context.")
 
 
 async def check_evidence_integrity(context: CheckerContext) -> CheckerOutcome:
@@ -1109,23 +1013,24 @@ async def check_low_quality_generated_artifacts(context: CheckerContext) -> Chec
 
 
 def default_checker_registry() -> CheckerRegistry:
-    """Install exact legacy pairs and the distinct modern context implementation."""
-    from app.modules.checkers.post_submit_catalogue import structural_definition
-    from app.modules.checkers.post_submit_implementations import check_modern_policy_context
-    from app.modules.checkers.api.post_submit_catalogue import MODERN_CONTEXT_IMPLEMENTATION_VERSION
+    """Install one structural implementation per canonical definition."""
+    from app.modules.checkers.post_submit_catalogue import build_post_submit_catalogue
 
     registry = CheckerRegistry()
     for handler in (
-        check_submission_packet, check_policy_context_present, check_evidence_present,
-        check_evidence_integrity, check_required_files, check_forbidden_files,
-        check_confidentiality_attestation, check_low_quality_generated_artifacts,
+        check_submission_packet,
+        check_policy_context_present,
+        check_evidence_present,
+        check_evidence_integrity,
+        check_required_files,
+        check_forbidden_files,
+        check_confidentiality_attestation,
+        check_low_quality_generated_artifacts,
         check_acceptance_criteria_present,
     ):
-        definition = None if handler is check_policy_context_present else structural_definition(handler.__name__)
-        registry.register(FunctionChecker(handler.__name__, handler), definition=definition)
-    registry.register_versioned(
-        FunctionChecker("check_policy_context_present", check_modern_policy_context),
-        MODERN_CONTEXT_IMPLEMENTATION_VERSION,
-        definition=structural_definition("check_policy_context_present"),
-    )
+        registry.register(
+            FunctionChecker(handler.__name__, handler),
+            definition=structural_definition(handler.__name__),
+        )
+    build_post_submit_catalogue(registry)
     return registry

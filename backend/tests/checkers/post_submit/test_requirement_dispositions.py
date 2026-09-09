@@ -10,7 +10,7 @@ from app.interfaces.project_agents import (
     ProjectGuideCompilationResult,
     validate_project_guide_compilation_result,
 )
-from app.modules.projects.post_submit_policy import project_guide_post_submission_capabilities_v2
+from app.interfaces.project_agents import PostSubmissionCapabilityProjection
 from tests.test_project_guide_compilation_contracts import _artifact_policy, _context
 from tests.checkers.post_submit.support import altered_catalogue, catalogue
 
@@ -18,8 +18,8 @@ from tests.checkers.post_submit.support import altered_catalogue, catalogue
 def context(snapshot=None):
     base = _context()
     fields = base.model_dump()
-    fields["post_submission_capabilities"] = project_guide_post_submission_capabilities_v2(
-        snapshot or catalogue()
+    fields["post_submission_capabilities"] = PostSubmissionCapabilityProjection.model_validate(
+        (snapshot or catalogue()).model_dump()
     )
     return ProjectGuideCompilationContext.model_validate(fields)
 
@@ -41,7 +41,7 @@ def proposal(disposition, *, binding=False):
             CapabilityBindingProposal(
                 requirement_id="quality",
                 capability_id="check_acceptance_criteria_present",
-                capability_version="v0.2",
+                capability_version="v0.1",
                 stage="post_submit",
             ),
         )
@@ -73,13 +73,11 @@ def test_unbound_dispositions_cannot_acquire_a_binding(disposition):
         validate_project_guide_compilation_result(context(), proposal(disposition, binding=True))
 
 
-def test_supported_v2_binding_is_valid_and_roundtrips_with_v1():
+def test_supported_binding_is_valid_and_roundtrips():
     source = context()
     valid = proposal("supported_post_submit", binding=True)
     validate_project_guide_compilation_result(source, valid)
     assert ProjectGuideCompilationContext.model_validate_json(source.model_dump_json()) == source
-    legacy = _context()
-    assert ProjectGuideCompilationContext.model_validate_json(legacy.model_dump_json()) == legacy
 
 
 @pytest.mark.parametrize(
@@ -92,7 +90,7 @@ def test_supported_v2_binding_is_valid_and_roundtrips_with_v1():
         ({"parameters": (CapabilityParameter(name="arbitrary", value="data"),)}, "Extra inputs"),
     ],
 )
-def test_v2_binding_rejects_exact_invalid_property(change, message):
+def test_binding_rejects_exact_invalid_property(change, message):
     valid = proposal("supported_post_submit", binding=True)
     binding = valid.post_submit_bindings[0]
     invalid = CapabilityBindingProposal(**{**binding.model_dump(), **change})

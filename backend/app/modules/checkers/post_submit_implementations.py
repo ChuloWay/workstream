@@ -15,8 +15,6 @@ from app.modules.checkers.runner import (
     CheckerContext,
     CheckerOutcome,
     CheckerRegistry,
-    _fail,
-    _pass,
     _normalize_artifact_path,
 )
 
@@ -62,7 +60,7 @@ class _EvidenceView:
 
 @dataclass(frozen=True)
 class _SubmissionView:
-    """Private copies shield immutable source facts from legacy helper mutation."""
+    """Private copies shield immutable source facts from handler mutation."""
 
     summary: str
     package_hash: str
@@ -72,7 +70,7 @@ class _SubmissionView:
 
 
 def detached_checker_context(request: PostSubmissionEvaluationRequest) -> CheckerContext:
-    """Use copies for legacy pure helpers; no original immutable fact can be mutated."""
+    """Use copies for structural helpers; no original immutable fact can be mutated."""
     request = PostSubmissionEvaluationRequest.model_validate(request)
     data = request.structural_input
     policy = data.policy_inputs
@@ -91,7 +89,7 @@ def detached_checker_context(request: PostSubmissionEvaluationRequest) -> Checke
         required_checker_names=frozenset(
             entry.checker_id
             for entry in request.policy.entries
-            if entry.classification != "project_warning"
+            if entry.classification == "project_required"
         ),
         warning_checker_names=frozenset(
             entry.checker_id
@@ -111,32 +109,15 @@ def detached_checker_context(request: PostSubmissionEvaluationRequest) -> Checke
             ],
             "attestation_terms": list(policy.required_attestation_terms),
         },
-        detached_input=data,
+        observed_context=data.observed_context,
         expected_context=request.expected_context,
     )
-
-
-async def check_modern_policy_context(context: CheckerContext) -> CheckerOutcome:
-    """Check structural source-reference consistency, without asserting authorization."""
-    if context.detached_input is None or context.expected_context is None:
-        raise ValueError("modern checker requires detached context")
-    observed = context.detached_input.observed_context
-    expected = context.expected_context
-    if any(getattr(observed, key) != value for key, value in expected.model_dump().items()):
-        return _fail(
-            "check_policy_context_present",
-            "Submission policy context is incomplete or inconsistent.",
-            "A project manager must correct the locked policy context.",
-            worker_visible=False,
-            routing_recommendation="task_setup_blocked",
-        )
-    return _pass("check_policy_context_present", "Submission has consistent policy context.")
 
 
 def bounded_structural_result(
     definition: PostSubmitDefinition, outcome: CheckerOutcome
 ) -> PostSubmitMemberResult:
-    """Discard legacy text/metadata and require the registered claim's closed outcome."""
+    """Discard free-form text/metadata and require the registered claim's closed outcome."""
     if outcome.checker_name != definition.capability_id:
         raise ValueError("post-submit handler returned another checker identity")
     passed = outcome.status == "passed"
@@ -166,7 +147,7 @@ async def evaluate_registered_structural_member(
     if selected != definition:
         raise ValueError("post-submit conformance definition mismatch")
     definition.validate_configuration({})
-    registration = registry.resolve(definition.capability_id, definition.implementation_version)
+    registration = registry.resolve(definition.capability_id)
     if registration.definition != definition:
         raise ValueError("post-submit installed definition mismatch")
     context = detached_checker_context(request)

@@ -67,10 +67,7 @@ from app.modules.checkers.service import (
 from app.modules.projects.models import PostSubmitCheckerPolicy
 from app.modules.projects.post_submit_policy import (
     DEFAULT_DURABLE_CHECKERS,
-    POST_SUBMIT_CHECKER_POLICY_SCHEMA_VERSION,
-    POST_SUBMIT_COMPILER_VERSION,
     POST_SUBMIT_CHECKER_POLICY_SPEC_SCHEMA_VERSION,
-    POST_SUBMIT_V01_DEFAULT_CHECKERS,
     PostSubmitCheckerCompilerError,
     build_project_post_submit_checker_spec,
     compile_project_post_submit_checker_spec,
@@ -244,99 +241,123 @@ async def task_side_effect_snapshot(task_id: str) -> dict:
         }
 
 
-def test_locked_post_submit_policy_parser_uses_persisted_body_hash() -> None:
-    body = {
-        "schema_version": POST_SUBMIT_CHECKER_POLICY_SCHEMA_VERSION,
-        "compiler_version": POST_SUBMIT_COMPILER_VERSION,
-        "project_id": "project-id",
-        "guide_version": "v1",
-        "default_checkers": list(DEFAULT_DURABLE_CHECKERS),
-        "required_checkers": ["project_required_checker"],
-        "warning_checkers": [],
-        "execution_checkers": [
-            *DEFAULT_DURABLE_CHECKERS,
-            "project_required_checker",
-        ],
-        "blocking_severities": ["critical", "high"],
-    }
-    policy_hash = canonical_json_hash(body)
+def _current_locked_test_facts() -> dict:
+    """Supply real current lock types to orchestration tests, without PaymentPolicy."""
+    from tests.checkers.post_submit.support import request
 
-    parsed = parse_locked_post_submit_checker_policy_body(
-        body,
-        project_id="project-id",
+    facts = request().expected_context.model_dump(mode="json")
+    return {
+        "locked_guide_version": facts["guide_version"],
+        "locked_guide_source_snapshot_id": facts["source_id"],
+        "locked_guide_source_snapshot_hash": facts["source_hash"],
+        "locked_effective_project_submission_artifact_policy_id": facts["effective_policy_id"],
+        "locked_effective_project_submission_artifact_policy_hash": facts["effective_policy_hash"],
+        "locked_pre_submit_checker_policy_id": facts["pre_policy_id"],
+        "locked_pre_submit_checker_bundle_hash": facts["pre_policy_hash"],
+        "locked_post_submit_checker_policy_id": facts["post_policy_id"],
+        "locked_post_submit_checker_policy_version": facts["post_policy_version"],
+        "locked_post_submit_checker_policy_hash": facts["post_policy_hash"],
+        "locked_review_policy_id": facts["review_policy_id"],
+        "locked_review_policy_generation": facts["review_generation"],
+        "locked_review_policy_hash": facts["review_hash"],
+        "locked_revision_policy_id": facts["revision_policy_id"],
+        "locked_revision_policy_generation": facts["revision_generation"],
+        "locked_revision_policy_hash": facts["revision_hash"],
+    }
+
+
+def _canonical_test_post_policy():
+    project_id = "11111111-1111-4111-8111-111111111111"
+    return compile_project_post_submit_checker_spec(
+        project_id=project_id,
         guide_version="v1",
-        policy_hash=policy_hash,
+        spec=build_project_post_submit_checker_spec(project_id=project_id, guide_version="v1"),
     )
 
-    assert parsed.default_checkers == DEFAULT_DURABLE_CHECKERS
-    assert parsed.execution_checkers == [
-        *DEFAULT_DURABLE_CHECKERS,
-        "project_required_checker",
-    ]
+
+def _parse_test_post_body(body):
+    return parse_locked_post_submit_checker_policy_body(
+        body,
+        project_id=body["project_id"],
+        guide_version=body["guide_version"],
+        policy_hash=canonical_json_hash(body),
+    )
+
+
+def test_locked_post_submit_policy_parser_uses_persisted_body_hash() -> None:
+    compiled = _canonical_test_post_policy()
+    parsed = parse_locked_post_submit_checker_policy_body(
+        compiled.policy_body, project_id=str(compiled.project_id),
+        guide_version=compiled.guide_version, policy_hash=compiled.policy_hash,
+    )
+    assert parsed == compiled
+    with pytest.raises(ValueError, match="policy hash is invalid"):
+        parse_locked_post_submit_checker_policy_body(
+            compiled.policy_body, project_id=str(compiled.project_id),
+            guide_version=compiled.guide_version, policy_hash="sha256:" + "0" * 64,
+        )
 
 
 def test_post_submit_compiler_accepts_default_only_policy() -> None:
     spec = build_project_post_submit_checker_spec(
-        project_id="project-id",
+        project_id="11111111-1111-4111-8111-111111111111",
         guide_version="v1",
     )
 
     compiled = compile_project_post_submit_checker_spec(
-        project_id="project-id",
+        project_id="11111111-1111-4111-8111-111111111111",
         guide_version="v1",
         spec=spec,
     )
 
-    assert compiled.compiler_version == POST_SUBMIT_COMPILER_VERSION
+    assert compiled.compiler_version == "workstream-post-submit-compiler"
     assert compiled.policy_body["compiler_version"] == compiled.compiler_version
     assert compiled.required_checkers == []
     assert compiled.warning_checkers == []
     assert compiled.execution_checkers == DEFAULT_DURABLE_CHECKERS
-    assert compiled.policy_body["default_checkers"] == DEFAULT_DURABLE_CHECKERS
-    assert compiled.policy_body["execution_checkers"] == DEFAULT_DURABLE_CHECKERS
+    assert compiled.default_checkers == DEFAULT_DURABLE_CHECKERS
+    assert [entry["checker_id"] for entry in compiled.policy_body["entries"]] == DEFAULT_DURABLE_CHECKERS
     assert compiled.policy_hash == canonical_json_hash(compiled.policy_body)
-    assert compiled.blocking_severities == ["critical", "high"]
+    assert list(compiled.blocking_severities) == ["critical", "high"]
 
 
 def test_post_submit_compiler_canonicalizes_project_specific_checker_spec() -> None:
     spec = build_project_post_submit_checker_spec(
-        project_id="project-id",
+        project_id="11111111-1111-4111-8111-111111111111",
         guide_version="v1",
         required_checkers=[
             "check_acceptance_criteria_present",
-            "check_low_quality_generated_artifacts",
         ],
         warning_checkers=[],
         blocking_severities=["critical", "high", "medium"],
     )
 
     compiled = compile_project_post_submit_checker_spec(
-        project_id="project-id",
+        project_id="11111111-1111-4111-8111-111111111111",
         guide_version="v1",
         spec=spec,
     )
 
     assert compiled.required_checkers == [
         "check_acceptance_criteria_present",
-        "check_low_quality_generated_artifacts",
     ]
     assert compiled.execution_checkers == [
         *DEFAULT_DURABLE_CHECKERS,
         "check_acceptance_criteria_present",
     ]
-    assert compiled.blocking_severities == ["critical", "high", "medium"]
+    assert list(compiled.blocking_severities) == ["critical", "high", "medium"]
 
 
 def test_post_submit_compiler_rejects_unknown_checker_name() -> None:
     spec = build_project_post_submit_checker_spec(
-        project_id="project-id",
+        project_id="11111111-1111-4111-8111-111111111111",
         guide_version="v1",
         required_checkers=["missing_checker"],
     )
 
-    with pytest.raises(PostSubmitCheckerCompilerError, match="unregistered checker"):
+    with pytest.raises(PostSubmitCheckerCompilerError, match="selection is unavailable"):
         compile_project_post_submit_checker_spec(
-            project_id="project-id",
+            project_id="11111111-1111-4111-8111-111111111111",
             guide_version="v1",
             spec=spec,
         )
@@ -347,7 +368,7 @@ def test_post_submit_compiler_rejects_non_object_spec() -> None:
 
     with pytest.raises(PostSubmitCheckerCompilerError, match="spec shape"):
         compile_project_post_submit_checker_spec(
-            project_id="project-id",
+            project_id="11111111-1111-4111-8111-111111111111",
             guide_version="v1",
             spec=spec,
         )
@@ -356,7 +377,7 @@ def test_post_submit_compiler_rejects_non_object_spec() -> None:
 def test_post_submit_compiler_rejects_tuple_spec_lists() -> None:
     spec = {
         "schema_version": POST_SUBMIT_CHECKER_POLICY_SPEC_SCHEMA_VERSION,
-        "project_id": "project-id",
+        "project_id": "11111111-1111-4111-8111-111111111111",
         "guide_version": "v1",
         "required_checkers": ("check_acceptance_criteria_present",),
         "warning_checkers": [],
@@ -365,7 +386,7 @@ def test_post_submit_compiler_rejects_tuple_spec_lists() -> None:
 
     with pytest.raises(PostSubmitCheckerCompilerError, match="required_checkers"):
         compile_project_post_submit_checker_spec(
-            project_id="project-id",
+            project_id="11111111-1111-4111-8111-111111111111",
             guide_version="v1",
             spec=spec,
         )
@@ -374,7 +395,7 @@ def test_post_submit_compiler_rejects_tuple_spec_lists() -> None:
 def test_post_submit_compiler_rejects_duplicate_checker_names() -> None:
     spec = {
         "schema_version": POST_SUBMIT_CHECKER_POLICY_SPEC_SCHEMA_VERSION,
-        "project_id": "project-id",
+        "project_id": "11111111-1111-4111-8111-111111111111",
         "guide_version": "v1",
         "required_checkers": [
             "check_acceptance_criteria_present",
@@ -386,7 +407,7 @@ def test_post_submit_compiler_rejects_duplicate_checker_names() -> None:
 
     with pytest.raises(PostSubmitCheckerCompilerError, match="duplicate checker"):
         compile_project_post_submit_checker_spec(
-            project_id="project-id",
+            project_id="11111111-1111-4111-8111-111111111111",
             guide_version="v1",
             spec=spec,
         )
@@ -395,7 +416,7 @@ def test_post_submit_compiler_rejects_duplicate_checker_names() -> None:
 def test_post_submit_compiler_rejects_conflicting_checker_classification() -> None:
     spec = {
         "schema_version": POST_SUBMIT_CHECKER_POLICY_SPEC_SCHEMA_VERSION,
-        "project_id": "project-id",
+        "project_id": "11111111-1111-4111-8111-111111111111",
         "guide_version": "v1",
         "required_checkers": ["check_acceptance_criteria_present"],
         "warning_checkers": ["check_acceptance_criteria_present"],
@@ -404,7 +425,7 @@ def test_post_submit_compiler_rejects_conflicting_checker_classification() -> No
 
     with pytest.raises(PostSubmitCheckerCompilerError, match="conflicting checker"):
         compile_project_post_submit_checker_spec(
-            project_id="project-id",
+            project_id="11111111-1111-4111-8111-111111111111",
             guide_version="v1",
             spec=spec,
         )
@@ -413,7 +434,7 @@ def test_post_submit_compiler_rejects_conflicting_checker_classification() -> No
 def test_post_submit_compiler_rejects_warning_only_default_checker_override() -> None:
     with pytest.raises(PostSubmitCheckerCompilerError, match="default checkers"):
         build_project_post_submit_checker_spec(
-            project_id="project-id",
+            project_id="11111111-1111-4111-8111-111111111111",
             guide_version="v1",
             warning_checkers=["check_submission_packet"],
         )
@@ -422,7 +443,7 @@ def test_post_submit_compiler_rejects_warning_only_default_checker_override() ->
 def test_post_submit_compiler_rejects_raw_spec_warning_only_default_checker_override() -> None:
     spec = {
         "schema_version": POST_SUBMIT_CHECKER_POLICY_SPEC_SCHEMA_VERSION,
-        "project_id": "project-id",
+        "project_id": "11111111-1111-4111-8111-111111111111",
         "guide_version": "v1",
         "required_checkers": [],
         "warning_checkers": ["check_submission_packet"],
@@ -431,7 +452,7 @@ def test_post_submit_compiler_rejects_raw_spec_warning_only_default_checker_over
 
     with pytest.raises(PostSubmitCheckerCompilerError, match="default checkers"):
         compile_project_post_submit_checker_spec(
-            project_id="project-id",
+            project_id="11111111-1111-4111-8111-111111111111",
             guide_version="v1",
             spec=spec,
         )
@@ -440,7 +461,7 @@ def test_post_submit_compiler_rejects_raw_spec_warning_only_default_checker_over
 def test_post_submit_compiler_rejects_raw_spec_blocking_severity_downgrade() -> None:
     spec = {
         "schema_version": POST_SUBMIT_CHECKER_POLICY_SPEC_SCHEMA_VERSION,
-        "project_id": "project-id",
+        "project_id": "11111111-1111-4111-8111-111111111111",
         "guide_version": "v1",
         "required_checkers": [],
         "warning_checkers": [],
@@ -449,7 +470,7 @@ def test_post_submit_compiler_rejects_raw_spec_blocking_severity_downgrade() -> 
 
     with pytest.raises(PostSubmitCheckerCompilerError, match="blocking severities"):
         compile_project_post_submit_checker_spec(
-            project_id="project-id",
+            project_id="11111111-1111-4111-8111-111111111111",
             guide_version="v1",
             spec=spec,
         )
@@ -464,7 +485,7 @@ def test_post_submit_compiler_rejects_blocking_severity_downgrade(
 ) -> None:
     with pytest.raises(PostSubmitCheckerCompilerError, match="blocking severities"):
         build_project_post_submit_checker_spec(
-            project_id="project-id",
+            project_id="11111111-1111-4111-8111-111111111111",
             guide_version="v1",
             blocking_severities=blocking_severities,
         )
@@ -473,134 +494,46 @@ def test_post_submit_compiler_rejects_blocking_severity_downgrade(
 @pytest.mark.parametrize(
     "default_checkers",
     [
-        list(POST_SUBMIT_V01_DEFAULT_CHECKERS[:-1]),
-        list(reversed(POST_SUBMIT_V01_DEFAULT_CHECKERS)),
-        [*POST_SUBMIT_V01_DEFAULT_CHECKERS[:-1], "renamed_default_checker"],
-        [*POST_SUBMIT_V01_DEFAULT_CHECKERS, "extra_default_checker"],
+        list(DEFAULT_DURABLE_CHECKERS[:-1]),
+        list(reversed(DEFAULT_DURABLE_CHECKERS)),
+        [*DEFAULT_DURABLE_CHECKERS[:-1], "renamed_default_checker"],
+        [*DEFAULT_DURABLE_CHECKERS, "extra_default_checker"],
     ],
 )
-def test_locked_post_submit_policy_parser_rejects_default_checker_drift(
-    default_checkers: list[str],
-) -> None:
-    body = {
-        "schema_version": POST_SUBMIT_CHECKER_POLICY_SCHEMA_VERSION,
-        "compiler_version": POST_SUBMIT_COMPILER_VERSION,
-        "project_id": "project-id",
-        "guide_version": "v1",
-        "default_checkers": default_checkers,
-        "required_checkers": [],
-        "warning_checkers": [],
-        "execution_checkers": list(POST_SUBMIT_V01_DEFAULT_CHECKERS),
-        "blocking_severities": ["critical", "high"],
-    }
-    policy_hash = canonical_json_hash(body)
-
-    with pytest.raises(ValueError, match="policy body is invalid"):
-        parse_locked_post_submit_checker_policy_body(
-            body,
-            project_id="project-id",
-            guide_version="v1",
-            policy_hash=policy_hash,
-        )
+def test_locked_post_submit_policy_parser_rejects_default_checker_drift(default_checkers: list[str]) -> None:
+    body = _canonical_test_post_policy().policy_body
+    by_name = {entry["checker_id"]: entry for entry in body["entries"]}
+    template = body["entries"][0]
+    body["entries"] = [by_name.get(name, {**template, "checker_id": name}) for name in default_checkers]
+    with pytest.raises(ValueError):
+        _parse_test_post_body(body)
 
 
 @pytest.mark.parametrize(
     "drifted_defaults",
     [
-        list(POST_SUBMIT_V01_DEFAULT_CHECKERS[:-1]),
-        list(reversed(POST_SUBMIT_V01_DEFAULT_CHECKERS)),
-        [*POST_SUBMIT_V01_DEFAULT_CHECKERS[:-1], "renamed_default_checker"],
-        [*POST_SUBMIT_V01_DEFAULT_CHECKERS, "extra_default_checker"],
+        list(DEFAULT_DURABLE_CHECKERS[:-1]),
+        list(reversed(DEFAULT_DURABLE_CHECKERS)),
+        [*DEFAULT_DURABLE_CHECKERS[:-1], "renamed_default_checker"],
+        [*DEFAULT_DURABLE_CHECKERS, "extra_default_checker"],
     ],
 )
-def test_locked_post_submit_policy_parser_rejects_self_consistent_default_drift(
-    drifted_defaults: list[str],
-) -> None:
-    body = {
-        "schema_version": POST_SUBMIT_CHECKER_POLICY_SCHEMA_VERSION,
-        "compiler_version": POST_SUBMIT_COMPILER_VERSION,
-        "project_id": "project-id",
-        "guide_version": "v1",
-        "default_checkers": drifted_defaults,
-        "required_checkers": [],
-        "warning_checkers": [],
-        "execution_checkers": list(drifted_defaults),
-        "blocking_severities": ["critical", "high"],
-    }
-    policy_hash = canonical_json_hash(body)
-
-    with pytest.raises(ValueError, match="policy body is invalid"):
-        parse_locked_post_submit_checker_policy_body(
-            body,
-            project_id="project-id",
-            guide_version="v1",
-            policy_hash=policy_hash,
-        )
+def test_locked_post_submit_policy_parser_rejects_self_consistent_default_drift(drifted_defaults: list[str]) -> None:
+    body = _canonical_test_post_policy().policy_body
+    template = body["entries"][0]
+    body["entries"] = [{**template, "checker_id": name} for name in drifted_defaults]
+    # Recomputed digest proves the canonical catalogue rejects changed defaults.
+    with pytest.raises(ValueError):
+        _parse_test_post_body(body)
 
 
-def test_locked_post_submit_policy_parser_uses_v01_snapshot_not_current_defaults(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from app.modules.projects import post_submit_policy as post_submit_policy_module
-
-    original_v01_body = {
-        "schema_version": POST_SUBMIT_CHECKER_POLICY_SCHEMA_VERSION,
-        "compiler_version": POST_SUBMIT_COMPILER_VERSION,
-        "project_id": "project-id",
-        "guide_version": "v1",
-        "default_checkers": list(POST_SUBMIT_V01_DEFAULT_CHECKERS),
-        "required_checkers": [],
-        "warning_checkers": [],
-        "execution_checkers": list(POST_SUBMIT_V01_DEFAULT_CHECKERS),
-        "blocking_severities": ["critical", "high"],
-    }
-    later_defaults = [*POST_SUBMIT_V01_DEFAULT_CHECKERS, "check_acceptance_criteria_present"]
-    invented_v01_body = {
-        **original_v01_body,
-        "default_checkers": later_defaults,
-        "execution_checkers": later_defaults,
-    }
-
-    monkeypatch.setattr(post_submit_policy_module, "DEFAULT_DURABLE_CHECKERS", later_defaults)
-
-    parsed = parse_locked_post_submit_checker_policy_body(
-        original_v01_body,
-        project_id="project-id",
-        guide_version="v1",
-        policy_hash=canonical_json_hash(original_v01_body),
-    )
-    assert parsed.default_checkers == list(POST_SUBMIT_V01_DEFAULT_CHECKERS)
-
-    with pytest.raises(ValueError, match="policy body is invalid"):
-        parse_locked_post_submit_checker_policy_body(
-            invented_v01_body,
-            project_id="project-id",
-            guide_version="v1",
-            policy_hash=canonical_json_hash(invented_v01_body),
-        )
 
 
 def test_locked_post_submit_policy_parser_rejects_unsupported_compiler_version() -> None:
-    body = {
-        "schema_version": POST_SUBMIT_CHECKER_POLICY_SCHEMA_VERSION,
-        "compiler_version": "workstream-post-submit-compiler-v9",
-        "project_id": "project-id",
-        "guide_version": "v1",
-        "default_checkers": list(DEFAULT_DURABLE_CHECKERS),
-        "required_checkers": [],
-        "warning_checkers": [],
-        "execution_checkers": list(DEFAULT_DURABLE_CHECKERS),
-        "blocking_severities": ["critical", "high"],
-    }
-    policy_hash = canonical_json_hash(body)
-
-    with pytest.raises(ValueError, match="policy body is invalid"):
-        parse_locked_post_submit_checker_policy_body(
-            body,
-            project_id="project-id",
-            guide_version="v1",
-            policy_hash=policy_hash,
-        )
+    body = _canonical_test_post_policy().policy_body
+    body["compiler_version"] = "unsupported"
+    with pytest.raises(ValueError, match="compiler_version"):
+        _parse_test_post_body(body)
 
 
 @pytest.mark.parametrize(
@@ -615,59 +548,28 @@ def test_locked_post_submit_policy_parser_rejects_unsupported_compiler_version()
     ],
 )
 def test_locked_post_submit_policy_parser_rejects_conflicting_classifications(
-    required_checkers: list[str],
-    warning_checkers: list[str],
-    execution_checkers: list[str],
+    required_checkers: list[str], warning_checkers: list[str], execution_checkers: list[str],
 ) -> None:
-    body = {
-        "schema_version": POST_SUBMIT_CHECKER_POLICY_SCHEMA_VERSION,
-        "compiler_version": POST_SUBMIT_COMPILER_VERSION,
-        "project_id": "project-id",
-        "guide_version": "v1",
-        "default_checkers": list(DEFAULT_DURABLE_CHECKERS),
-        "required_checkers": required_checkers,
-        "warning_checkers": warning_checkers,
-        "execution_checkers": execution_checkers,
-        "blocking_severities": ["critical", "high"],
-    }
-    policy_hash = canonical_json_hash(body)
-
-    with pytest.raises(ValueError, match="policy body is invalid"):
-        parse_locked_post_submit_checker_policy_body(
-            body,
-            project_id="project-id",
-            guide_version="v1",
-            policy_hash=policy_hash,
-        )
+    body = _canonical_test_post_policy().policy_body
+    template = {**body["entries"][0], "checker_id": "check_acceptance_criteria_present"}
+    if required_checkers:
+        body["entries"] = body["entries"][:-1] + [{**template, "classification": "project_required"},
+                            {**template, "classification": "project_warning"}]
+    else:
+        body["entries"][0]["classification"] = "project_warning"
+    with pytest.raises(ValueError, match="duplicate entries|classification mismatch"):
+        _parse_test_post_body(body)
 
 
 @pytest.mark.parametrize(
     "blocking_severities",
     [[], ["critical"], ["high"]],
 )
-def test_locked_post_submit_policy_parser_rejects_blocking_severity_downgrade(
-    blocking_severities: list[str],
-) -> None:
-    body = {
-        "schema_version": POST_SUBMIT_CHECKER_POLICY_SCHEMA_VERSION,
-        "compiler_version": POST_SUBMIT_COMPILER_VERSION,
-        "project_id": "project-id",
-        "guide_version": "v1",
-        "default_checkers": list(DEFAULT_DURABLE_CHECKERS),
-        "required_checkers": [],
-        "warning_checkers": [],
-        "execution_checkers": list(DEFAULT_DURABLE_CHECKERS),
-        "blocking_severities": blocking_severities,
-    }
-    policy_hash = canonical_json_hash(body)
-
-    with pytest.raises(ValueError, match="policy body is invalid"):
-        parse_locked_post_submit_checker_policy_body(
-            body,
-            project_id="project-id",
-            guide_version="v1",
-            policy_hash=policy_hash,
-        )
+def test_locked_post_submit_policy_parser_rejects_blocking_severity_downgrade(blocking_severities: list[str]) -> None:
+    body = _canonical_test_post_policy().policy_body
+    body["blocking_severities"] = blocking_severities
+    with pytest.raises(ValueError, match="blocking_severities"):
+        _parse_test_post_body(body)
 
 
 def test_checker_models_are_registered_for_alembic_metadata() -> None:
@@ -1236,38 +1138,22 @@ def test_artifact_path_and_pattern_normalization_fail_closed() -> None:
 
 @pytest.mark.asyncio
 async def test_policy_context_checker_blocks_incomplete_lock_without_exposing_details() -> None:
-    lock_fields = {
-        "locked_guide_version": "v1",
-        "locked_post_submit_checker_policy_id": "post-1",
-        "locked_post_submit_checker_policy_version": "v1",
-        "locked_post_submit_checker_policy_hash": "sha256:post",
-        "locked_review_policy_id": "review-1",
-        "locked_review_policy_generation": 1,
-        "locked_review_policy_hash": "sha256:review",
-        "locked_revision_policy_id": "revision-1",
-        "locked_revision_policy_generation": 1,
-        "locked_revision_policy_hash": "sha256:revision",
-        "locked_payment_policy_version": "v1",
-        "locked_guide_source_snapshot_id": "snapshot-1",
-        "locked_guide_source_snapshot_hash": "sha256:snapshot",
-        "locked_effective_project_submission_artifact_policy_id": "effective-1",
-        "locked_effective_project_submission_artifact_policy_hash": "sha256:effective",
-        "locked_pre_submit_checker_policy_id": "pre-1",
-        "locked_pre_submit_checker_bundle_hash": None,
-    }
-    context = CheckerContext(
-        task=cast(Any, None),
-        submission=cast(Any, SimpleNamespace(**lock_fields)),
-        required_checker_names=frozenset(),
-        warning_checker_names=frozenset(),
-        blocking_severities=frozenset(),
+    from dataclasses import replace
+    from app.modules.checkers.api import ObservedPostSubmitContext
+    from app.modules.checkers.post_submit_implementations import detached_checker_context
+    from tests.checkers.post_submit.support import request
+    source = request()
+    context = detached_checker_context(source)
+    assert (await checker_runner_module.check_policy_context_present(context)).status == "passed"
+    observed = source.structural_input.observed_context.model_dump()
+    observed["pre_policy_id"] = None
+    outcome = await checker_runner_module.check_policy_context_present(
+        replace(context, observed_context=ObservedPostSubmitContext(**observed))
     )
-
-    outcome = await checker_runner_module.check_policy_context_present(context)
-
-    assert outcome.blocks_review is True
+    assert outcome.status == "failed"
     assert outcome.worker_visible is False
-    assert outcome.metadata == {"missing_context": ["locked_pre_submit_checker_bundle_hash"]}
+    assert outcome.routing_recommendation == "task_setup_blocked"
+    assert outcome.metadata == {"invalid_context": ["pre_policy_id"]}
 
 
 @pytest.mark.asyncio
@@ -1318,21 +1204,20 @@ def test_attestation_and_policy_projection_helpers_preserve_required_only_rules(
 
 @pytest.mark.asyncio
 async def test_checker_registry_preserves_policy_order_and_rejects_name_drift() -> None:
+    from app.modules.checkers.api.post_submit_catalogue import structural_definition
     registry = CheckerRegistry()
-
     async def outcome(name: str) -> CheckerOutcome:
         return CheckerOutcome(name, "passed", "info", f"{name} passed")
-
-    for name in ("first", "second"):
-        registry.register(FunctionChecker(name, lambda _context, name=name: outcome(name)))
-
-    context = cast(CheckerContext, object())
-    results = await registry.run(context, ["second", "first"])
-
-    assert registry.names() == {"first", "second"}
-    assert [result.checker_name for result in results] == ["second", "first"]
+    policy = _canonical_test_post_policy()
+    for name in policy.execution_checkers:
+        registry.register(FunctionChecker(name, lambda _context, name=name: outcome(name)),
+                          definition=structural_definition(name))
+    results = await registry.run(cast(CheckerContext, object()), policy.entries)
+    assert [result.checker_name for result in results] == policy.execution_checkers
+    name = policy.execution_checkers[0]
     with pytest.raises(CheckerNameConflict, match="already registered"):
-        registry.register(FunctionChecker("first", lambda _context: outcome("first")))
+        registry.register(FunctionChecker(name, lambda _context: outcome(name)),
+                          definition=structural_definition(name))
     with pytest.raises(UnknownChecker, match="missing, unknown"):
         registry.require_registered({"unknown", "missing"})
 
@@ -1484,6 +1369,60 @@ def test_blocking_policy_escalates_required_warning_and_preserves_optional_warni
     assert required.metadata == {"required_checker_warning_escalated": True}
     assert (optional.status, optional.blocks_review) == ("warning", False)
     assert critical.blocks_review is True
+
+
+@pytest.mark.asyncio
+async def test_locked_medium_severity_escalates_default_without_reclassifying_it() -> None:
+    from dataclasses import replace
+    from tests.checkers.post_submit.support import request, change_request
+    from app.modules.checkers.post_submit_implementations import detached_checker_context
+
+    source = request()
+    changed = change_request(
+        source,
+        structural_input={
+            **source.structural_input.model_dump(),
+            "summary": "TODO: provide evidence",
+        },
+    )
+    context = detached_checker_context(changed)
+    raw = await checker_runner_module.check_low_quality_generated_artifacts(context)
+    assert (raw.status, raw.severity) == ("warning", "medium")
+    default = CheckerService._apply_blocking_policy([raw], context)[0]
+    assert (default.status, default.severity, default.blocks_review) == ("warning", "medium", False)
+    assert CheckerService._routing_recommendation_for_outcomes([default]) == "allow_review"
+    spec = build_project_post_submit_checker_spec(
+        project_id=str(source.project_id),
+        guide_version="v1",
+        blocking_severities=["critical", "high", "medium"],
+    )
+    policy = compile_project_post_submit_checker_spec(
+        project_id=str(source.project_id),
+        guide_version="v1",
+        spec=spec,
+    )
+    assert "check_low_quality_generated_artifacts" not in policy.required_checkers
+    assert (
+        next(
+            entry for entry in policy.entries if entry.checker_id == raw.checker_name
+        ).classification
+        == "platform_default"
+    )
+    strict_context = replace(
+        context,
+        required_checker_names=frozenset(policy.required_checkers),
+        blocking_severities=frozenset(policy.blocking_severities),
+    )
+    strict = CheckerService._apply_blocking_policy([raw], strict_context)[0]
+    assert (strict.status, strict.severity, strict.blocks_review) == ("failed", "high", True)
+    assert strict.metadata["blocking_severity_warning_escalated"] is True
+    assert "required_checker_warning_escalated" not in strict.metadata
+    assert CheckerService._routing_recommendation_for_outcomes([strict]) == "needs_revision"
+    failed = CheckerService._apply_blocking_policy([replace(raw, status="failed")], strict_context)[
+        0
+    ]
+    assert failed.blocks_review is True
+    assert "blocking_severity_warning_escalated" not in failed.metadata
 
 
 def test_blocking_policy_does_not_expose_fix_for_hidden_required_warning() -> None:
@@ -1830,6 +1769,7 @@ async def test_gate_repair_dispatch_commits_only_successful_claim(claimed: bool)
 
 @pytest.mark.asyncio
 async def test_manual_checker_run_persists_policy_adjusted_outcomes() -> None:
+    from tests.checkers.post_submit.support import request as current_post_test_request
     actor = pre_review_gate_system_actor()
     submission = SimpleNamespace(
         id="submission-1",
@@ -1870,13 +1810,20 @@ async def test_manual_checker_run_persists_policy_adjusted_outcomes() -> None:
 
     class Registry:
         def require_registered(self, names: set[str]) -> None:
-            assert names == {"required"}
+            assert names == set(DEFAULT_DURABLE_CHECKERS) | {"check_acceptance_criteria_present"}
 
-        async def run(self, context: CheckerContext, names: list[str]) -> list[CheckerOutcome]:
-            assert names == ["required"]
+        async def run(self, context: CheckerContext, entries: tuple) -> list[CheckerOutcome]:
+            assert [entry.checker_id for entry in entries] == [*DEFAULT_DURABLE_CHECKERS, "check_acceptance_criteria_present"]
             assert context.effective_policy == {"manifest_required": True}
-            return [_checker_outcome("required", status="warning", severity="medium")]
+            return [_checker_outcome("check_acceptance_criteria_present", status="warning", severity="medium")]
 
+    current_locks = _current_locked_test_facts()
+    if task is not None:
+        for key, value in current_locks.items():
+            setattr(task, key, value)
+    if submission is not None:
+        for key, value in current_locks.items():
+            setattr(submission, key, value)
     service = object.__new__(CheckerService)
     service._session = cast(Any, Session())
     service._task_repo = cast(Any, TaskRepository())
@@ -1886,12 +1833,7 @@ async def test_manual_checker_run_persists_policy_adjusted_outcomes() -> None:
     service._get_task_for_actor = AsyncMock(return_value=task)
     service._ensure_checker_trigger_authorized = lambda *_args: None
     service._load_locked_post_submit_policy = AsyncMock(
-        return_value=SimpleNamespace(
-            execution_checkers=["required"],
-            required_checkers=["required"],
-            warning_checkers=[],
-            blocking_severities=["high"],
-        )
+        return_value=current_post_test_request().policy
     )
     service._load_locked_pre_submit_context = AsyncMock(
         return_value=(SimpleNamespace(effective_policy={"manifest_required": True}), object())
@@ -2260,6 +2202,7 @@ async def test_queued_gate_reports_claim_removed_after_atomic_claim() -> None:
 
 @pytest.mark.asyncio
 async def test_queued_gate_executes_locked_policy_and_persists_completion() -> None:
+    from tests.checkers.post_submit.support import request as current_post_test_request
     actor = pre_review_gate_system_actor()
     requester = {
         "requester_actor_id": "requester-1",
@@ -2312,13 +2255,20 @@ async def test_queued_gate_executes_locked_policy_and_persists_completion() -> N
 
     class Registry:
         def require_registered(self, names: set[str]) -> None:
-            assert names == {"required"}
+            assert names == set(DEFAULT_DURABLE_CHECKERS) | {"check_acceptance_criteria_present"}
 
-        async def run(self, context: CheckerContext, names: list[str]) -> list[CheckerOutcome]:
-            assert names == ["required"]
+        async def run(self, context: CheckerContext, entries: tuple) -> list[CheckerOutcome]:
+            assert [entry.checker_id for entry in entries] == [*DEFAULT_DURABLE_CHECKERS, "check_acceptance_criteria_present"]
             assert context.effective_policy == {"manifest_required": True}
-            return [_checker_outcome("required", status="warning", severity="medium")]
+            return [_checker_outcome("check_acceptance_criteria_present", status="warning", severity="medium")]
 
+    current_locks = _current_locked_test_facts()
+    if task is not None:
+        for key, value in current_locks.items():
+            setattr(task, key, value)
+    if submission is not None:
+        for key, value in current_locks.items():
+            setattr(submission, key, value)
     service = object.__new__(CheckerService)
     service._session = cast(Any, Session())
     service._checker_repo = cast(Any, Repository())
@@ -2331,12 +2281,7 @@ async def test_queued_gate_executes_locked_policy_and_persists_completion() -> N
     service._assert_pre_review_gate_claim_still_current = AsyncMock()
     service._enter_evaluation_pending = AsyncMock()
     service._load_locked_post_submit_policy = AsyncMock(
-        return_value=SimpleNamespace(
-            execution_checkers=["required"],
-            required_checkers=["required"],
-            warning_checkers=[],
-            blocking_severities=["high"],
-        )
+        return_value=current_post_test_request().policy
     )
     service._load_locked_pre_submit_context = AsyncMock(
         return_value=(SimpleNamespace(effective_policy={"manifest_required": True}), object())
@@ -2389,6 +2334,7 @@ def _queued_gate_failure_service(
         is_current_for_submission=True,
         status="queued",
     )
+    from tests.checkers.post_submit.support import request as current_post_test_request
     resolved_submission = submission or SimpleNamespace(
         id="submission-1",
         task_id="task-1",
@@ -2398,6 +2344,13 @@ def _queued_gate_failure_service(
     resolved_task = task or SimpleNamespace(id="task-1", status="submitted")
     resolved_latest = latest_submission if latest_submission is not None else resolved_submission
 
+    current_locks = _current_locked_test_facts()
+    if resolved_task is not None:
+        for key, value in current_locks.items():
+            setattr(resolved_task, key, value)
+    if resolved_submission is not None:
+        for key, value in current_locks.items():
+            setattr(resolved_submission, key, value)
     service = object.__new__(CheckerService)
     service._checker_repo = cast(
         Any,
@@ -2425,12 +2378,7 @@ def _queued_gate_failure_service(
     service._assert_pre_review_gate_claim_still_current = AsyncMock()
     service._enter_evaluation_pending = AsyncMock()
     service._load_locked_post_submit_policy = AsyncMock(
-        return_value=SimpleNamespace(
-            execution_checkers=["required"],
-            required_checkers=["required"],
-            warning_checkers=[],
-            blocking_severities=["high"],
-        )
+        return_value=current_post_test_request().policy
     )
     service._load_locked_pre_submit_context = AsyncMock(
         return_value=(SimpleNamespace(effective_policy={"manifest_required": True}), object())
@@ -2439,7 +2387,7 @@ def _queued_gate_failure_service(
         Any,
         SimpleNamespace(
             require_registered=lambda _names: None,
-            run=AsyncMock(return_value=[_checker_outcome("required")]),
+            run=AsyncMock(return_value=[_checker_outcome("check_acceptance_criteria_present")]),
         ),
     )
     service._write_checker_audit = AsyncMock(return_value=SimpleNamespace(id="audit-1"))
@@ -2886,6 +2834,7 @@ async def create_checker_trial_project(
     client: AsyncClient,
     slug: str,
     required_checkers: list[str] | None = None,
+    blocking_severities: list[str] | None = None,
 ) -> dict:
     """Create and activate a project guide for one checker trial scenario.
 
@@ -2921,6 +2870,7 @@ async def create_checker_trial_project(
         project["id"],
         guide_response.json()["id"],
         post_submit_required_checkers=required_checkers,
+        post_submit_blocking_severities=blocking_severities,
     )
     activation_response = await activate_guide_for_downstream_test(
         db_session.get_session_factory(),
@@ -3255,11 +3205,11 @@ async def test_checker_run_uses_locked_post_submit_policy_body_after_setup_mutat
     assert submission.locked_post_submit_checker_policy_body == locked_body
     assert len(runs) == 1
     assert runs[0].locked_post_submit_checker_policy_body == locked_body
-    assert "check_acceptance_criteria_present" not in locked_body["required_checkers"]
-    assert "check_acceptance_criteria_present" not in locked_body["execution_checkers"]
-    assert "check_evidence_present" in locked_body["default_checkers"]
-    assert "check_evidence_present" in locked_body["execution_checkers"]
-    assert "check_required_files" in locked_body["execution_checkers"]
+    assert "check_acceptance_criteria_present" not in [entry["checker_id"] for entry in locked_body["entries"] if entry["classification"] == "project_required"]
+    assert "check_acceptance_criteria_present" not in [entry["checker_id"] for entry in locked_body["entries"]]
+    assert "check_evidence_present" in [entry["checker_id"] for entry in locked_body["entries"] if entry["classification"] == "platform_default"]
+    assert "check_evidence_present" in [entry["checker_id"] for entry in locked_body["entries"]]
+    assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"]]
     assert "check_acceptance_criteria_present" not in {result.checker_name for result in results}
     assert results != []
 
@@ -3675,7 +3625,7 @@ async def test_chunk8_default_blocking_checker_survives_omitted_blocking_severit
         checker_client,
         project["id"],
         guide_response.json()["id"],
-        post_submit_required_checkers=["check_policy_context_present"],
+        post_submit_required_checkers=[],
         post_submit_blocking_severities=None,
     )
     activation_response = await activate_guide_for_downstream_test(
@@ -3810,7 +3760,7 @@ async def test_checker_caused_revision_resubmits_fixed_version_through_api(
     project = await create_checker_trial_project(
         checker_client,
         "checker-caused-revision-project",
-        required_checkers=["check_low_quality_generated_artifacts"],
+        blocking_severities=["critical", "high", "medium"],
     )
     started_task = await create_started_task(checker_client, project["id"], monkeypatch)
     v1_payload = complete_submission_payload()
@@ -4727,3 +4677,97 @@ def test_old_checker_name_blocks_post_submit_compilation_without_alias(
             guide_version="v1",
             spec=spec,
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,damage",
+    [(name, "crossed") for name in ("required_checkers", "warning_checkers", "blocking_severities", "policy_body")]
+    + [("submission." + name, damage) for name in _current_locked_test_facts()
+       for damage in ("missing", "crossed")],
+)
+async def test_canonical_policy_sidecars_deny_before_manual_execution(field: str, damage: str) -> None:
+    from tests.checkers.post_submit.support import request
+
+    source = request()
+    policy = source.policy
+    locks = _current_locked_test_facts()
+    locks.update(
+        locked_post_submit_checker_policy_body=policy.policy_body,
+        locked_post_submit_checker_policy_hash=policy.policy_hash,
+    )
+    task = SimpleNamespace(
+        id="task-1", project_id=str(source.project_id), status="submitted", **locks
+    )
+    submission = SimpleNamespace(
+        id="submission-1", task_id=task.id, locked_at=datetime.now(UTC), **locks
+    )
+    row = SimpleNamespace(
+        project_id=task.project_id,
+        guide_version="v1",
+        policy_hash=policy.policy_hash,
+        policy_body=policy.policy_body,
+        required_checkers=policy.required_checkers,
+        warning_checkers=policy.warning_checkers,
+        blocking_severities=list(policy.blocking_severities),
+    )
+    service = object.__new__(CheckerService)
+    service._project_repo = SimpleNamespace(
+        get_post_submit_checker_policy_by_id=AsyncMock(return_value=row)
+    )
+    service._registry = checker_runner_module.default_checker_registry()
+    assert await service._load_locked_post_submit_policy(task, submission) == policy
+    if field.startswith("submission."):
+        name = field.removeprefix("submission.")
+        previous = getattr(submission, name)
+        replacement = None
+        if damage == "crossed":
+            replacement = (previous + 1 if type(previous) is int else
+                           "sha256:" + "b" * 64 if "sha256:" in previous else
+                           "other" if name.endswith("version") else str(uuid4()))
+        setattr(submission, name, replacement)
+    elif field == "policy_body":
+        row.policy_body = {**row.policy_body, "guide_version": "crossed"}
+    else:
+        setattr(row, field, [*getattr(row, field), "crossed"])
+    service._get_submission = AsyncMock(return_value=submission)
+    service._get_task_for_actor = AsyncMock(return_value=task)
+    service._ensure_checker_trigger_authorized = lambda *_: None
+    service._task_repo = SimpleNamespace(
+        get_latest_submission_for_task=AsyncMock(return_value=submission)
+    )
+    service._checker_repo = SimpleNamespace(
+        get_current_run_for_submission=AsyncMock(return_value=None)
+    )
+    service._enter_evaluation_pending = AsyncMock()
+    service._write_checker_audit = AsyncMock()
+    service._registry.run = AsyncMock()
+    with pytest.raises(CheckerPolicyInvalid, match="context|summaries"):
+        await service.run_submission_checkers(
+            pre_review_gate_system_actor(), submission.id, "check"
+        )
+    service._enter_evaluation_pending.assert_not_awaited()
+    service._write_checker_audit.assert_not_awaited()
+    service._registry.run.assert_not_awaited()
+
+
+@pytest.mark.parametrize("field", (
+    "locked_guide_version", "locked_guide_source_snapshot_id", "locked_guide_source_snapshot_hash",
+    "locked_effective_project_submission_artifact_policy_id",
+    "locked_effective_project_submission_artifact_policy_hash",
+    "locked_pre_submit_checker_policy_id", "locked_pre_submit_checker_bundle_hash",
+    "locked_post_submit_checker_policy_id", "locked_post_submit_checker_policy_version",
+    "locked_post_submit_checker_policy_hash", "locked_review_policy_id",
+    "locked_review_policy_generation", "locked_review_policy_hash", "locked_revision_policy_id",
+    "locked_revision_policy_generation", "locked_revision_policy_hash",
+))
+def test_orm_context_adapter_requires_each_current_task_fact(field: str) -> None:
+    source = SimpleNamespace(**_current_locked_test_facts())
+    control = CheckerService._expected_policy_context(source)
+    assert control == type(control).model_validate(
+        CheckerService._observed_policy_context(source).model_dump()
+    )
+    assert not hasattr(source, "locked_payment_policy_version")
+    setattr(source, field, None)
+    with pytest.raises(CheckerPolicyInvalid, match="context is incomplete"):
+        CheckerService._expected_policy_context(source)

@@ -45,7 +45,7 @@ from app.modules.checkers.compiler import (
     PreSubmitCheckerCompilerError,
     compile_effective_project_submission_artifact_policy,
 )
-from app.modules.checkers.runner import UnknownChecker, default_checker_registry
+from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
 from app.modules.projects.models import (
     EffectiveProjectSubmissionArtifactPolicy,
     GuideSourceSnapshot,
@@ -1141,7 +1141,7 @@ class ProjectService:
                 "status": "compiled",
                 "required_checkers": compiled_policy.required_checkers,
                 "warning_checkers": compiled_policy.warning_checkers,
-                "blocking_severities": compiled_policy.blocking_severities,
+                "blocking_severities": list(compiled_policy.blocking_severities),
                 "agent_name": POST_SUBMIT_CHECKER_POLICY_DERIVATION_AGENT_NAME,
                 "agent_version": POST_SUBMIT_CHECKER_POLICY_DERIVATION_AGENT_VERSION,
                 "reason_count": len(result.reasons),
@@ -1214,7 +1214,7 @@ class ProjectService:
             pre_submit_checker_bundle_hash=pre_submit_checker_policy.compiled_bundle_hash,
             required_checkers=compiled_policy.required_checkers,
             warning_checkers=compiled_policy.warning_checkers,
-            blocking_severities=compiled_policy.blocking_severities,
+            blocking_severities=list(compiled_policy.blocking_severities),
             policy_hash=compiled_policy.policy_hash,
             policy_body=compiled_policy.policy_body,
             lifecycle_status="compiled",
@@ -1231,7 +1231,7 @@ class ProjectService:
                 existing is not None
                 and existing.required_checkers == compiled_policy.required_checkers
                 and existing.warning_checkers == compiled_policy.warning_checkers
-                and existing.blocking_severities == compiled_policy.blocking_severities
+                and existing.blocking_severities == list(compiled_policy.blocking_severities)
                 and existing.policy_hash == compiled_policy.policy_hash
                 and existing.policy_body == compiled_policy.policy_body
                 and existing.guide_id == guide.id
@@ -2226,7 +2226,7 @@ class ProjectService:
         if (
             parsed_policy.required_checkers != policy.required_checkers
             or parsed_policy.warning_checkers != policy.warning_checkers
-            or parsed_policy.blocking_severities != policy.blocking_severities
+            or list(parsed_policy.blocking_severities) != policy.blocking_severities
         ):
             raise PolicySetupBlocked("post-submit checker policy hash is invalid")
 
@@ -2357,7 +2357,7 @@ class ProjectService:
             "pre_submit_checker_bundle_hash": None,
             "pre_submit_checker_count": None,
             "pre_submit_checker_names": [],
-            "registered_post_submit_checker_count": len(default_checker_registry().names()),
+            "registered_post_submit_checker_count": len(current_post_submit_catalogue().definitions),
         }
         if setup_run.output_sufficiency_report_id is not None:
             report = await self._repo.get_guide_sufficiency_report(
@@ -3286,7 +3286,7 @@ class ProjectService:
         superseded_policy: PostSubmitCheckerPolicy | None,
     ) -> PostSubmitCheckerPolicyDerivationContext:
         """Build bounded server-owned context for post-submit derivation."""
-        registered_names = default_checker_registry().names()
+        registered_names = {item.capability_id for item in current_post_submit_catalogue().definitions}
         default_names = set(DEFAULT_DURABLE_CHECKERS)
         return PostSubmitCheckerPolicyDerivationContext(
             sufficiency_report_summary={
@@ -3400,7 +3400,7 @@ class ProjectService:
     ) -> None:
         """Surface unregistered checker names as operator-visible setup blockers."""
         requested_checker_names = set(result.required_checkers).union(result.warning_checkers)
-        registered_checker_names = default_checker_registry().names()
+        registered_checker_names = {item.capability_id for item in current_post_submit_catalogue().definitions}
         unknown_checker_names = sorted(requested_checker_names.difference(registered_checker_names))
         if not unknown_checker_names:
             return
@@ -3652,17 +3652,10 @@ class ProjectService:
             != post_submit_checker_policy.required_checkers
             or parsed_post_submit_policy.warning_checkers
             != post_submit_checker_policy.warning_checkers
-            or parsed_post_submit_policy.blocking_severities
+            or list(parsed_post_submit_policy.blocking_severities)
             != post_submit_checker_policy.blocking_severities
         ):
             raise GuideActivationBlocked("post-submit checker policy hash is invalid")
-        checker_names = set(parsed_post_submit_policy.execution_checkers)
-        try:
-            default_checker_registry().require_registered(checker_names)
-        except UnknownChecker as exc:
-            raise GuideActivationBlocked(
-                "post-submit checker policy references unregistered checker"
-            ) from exc
         if review_policy is None or revision_policy is None:
             raise GuideActivationBlocked(
                 "complete review and revision policy selections are required"

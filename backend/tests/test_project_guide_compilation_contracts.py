@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from uuid import UUID, uuid4
 
+from app.core.hashing import canonical_json_hash
+
 import pytest
 from pydantic import ValidationError
 
@@ -27,9 +29,7 @@ from app.modules.checkers.catalogue import (
     project_guide_pre_submission_capabilities,
 )
 from app.modules.projects.post_submit_policy import (
-    POST_SUBMIT_COMPILER_VERSION,
-    POST_SUBMIT_V01_DEFAULT_CHECKERS,
-    PostSubmitCheckerCompilerError,
+    DEFAULT_DURABLE_CHECKERS,
     project_guide_post_submission_capabilities,
 )
 
@@ -158,10 +158,10 @@ def test_post_submission_projection_uses_registry_and_frozen_default_truth() -> 
     projection = project_guide_post_submission_capabilities()
     by_name = {item.capability_id: item for item in projection.definitions}
 
-    assert projection.source_version == POST_SUBMIT_COMPILER_VERSION
-    assert set(POST_SUBMIT_V01_DEFAULT_CHECKERS).issubset(by_name)
+    assert projection.source_version == "v0.1"
+    assert set(DEFAULT_DURABLE_CHECKERS).issubset(by_name)
     assert {name for name, item in by_name.items() if item.platform_default} == set(
-        POST_SUBMIT_V01_DEFAULT_CHECKERS
+        DEFAULT_DURABLE_CHECKERS
     )
     assert [item.capability_id for item in projection.definitions if item.selectable] == [
         "check_acceptance_criteria_present"
@@ -169,60 +169,16 @@ def test_post_submission_projection_uses_registry_and_frozen_default_truth() -> 
     assert all(item.stage == "post_submit" for item in projection.definitions)
 
 
-def test_post_submission_projection_does_not_select_new_registration_by_default(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class ExpandedRegistry:
-        def names(self) -> set[str]:
-            return {
-                *POST_SUBMIT_V01_DEFAULT_CHECKERS,
-                "check_acceptance_criteria_present",
-                "check_experimental_internal",
-            }
-
-    monkeypatch.setattr(
-        "app.modules.projects.post_submit_policy.default_checker_registry",
-        ExpandedRegistry,
-    )
+def test_post_submission_projection_rejects_sparse_definitions() -> None:
+    from app.interfaces.project_agents import PostSubmissionCapabilityProjection
     projection = project_guide_post_submission_capabilities()
-    experimental = next(
-        item
-        for item in projection.definitions
-        if item.capability_id == "check_experimental_internal"
-    )
-    assert experimental.platform_default is False
-    assert experimental.selectable is False
-
-
-def test_post_submission_projection_rejects_missing_selectable_registration(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class DefaultsOnlyRegistry:
-        def names(self) -> set[str]:
-            return set(POST_SUBMIT_V01_DEFAULT_CHECKERS)
-
-    monkeypatch.setattr(
-        "app.modules.projects.post_submit_policy.default_checker_registry",
-        DefaultsOnlyRegistry,
-    )
-    with pytest.raises(PostSubmitCheckerCompilerError, match="registration parity"):
-        project_guide_post_submission_capabilities()
-
-
-def test_post_submission_projection_rejects_default_selectable_overlap(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "app.modules.projects.post_submit_policy.POST_SUBMIT_SELECTABLE_CHECKERS_BY_COMPILER_VERSION",
-        {POST_SUBMIT_COMPILER_VERSION: (POST_SUBMIT_V01_DEFAULT_CHECKERS[0],)},
-    )
-    with pytest.raises(PostSubmitCheckerCompilerError, match="snapshots overlap"):
-        project_guide_post_submission_capabilities()
-
-
-def test_post_submission_projection_rejects_unknown_compiler_snapshot() -> None:
-    with pytest.raises(PostSubmitCheckerCompilerError):
-        project_guide_post_submission_capabilities(compiler_version="unknown")
+    body = projection.model_dump(mode="json")
+    sparse_keys = {"capability_id", "capability_version", "stage", "platform_default", "selectable"}
+    body["definitions"] = [{key: value for key, value in item.items() if key in sparse_keys}
+                           for item in body["definitions"]]
+    body["manifest_sha256"] = canonical_json_hash({key: value for key, value in body.items() if key != "manifest_sha256"})
+    with pytest.raises(ValidationError, match="Field required"):
+        PostSubmissionCapabilityProjection.model_validate(body)
 
 
 @pytest.mark.parametrize(
@@ -336,7 +292,7 @@ def test_unified_result_accepts_exact_stage_capability_and_closed_parameters() -
             CapabilityBindingProposal(
                 requirement_id="requirement.acceptance",
                 capability_id="check_acceptance_criteria_present",
-                capability_version=POST_SUBMIT_COMPILER_VERSION,
+                capability_version="v0.1",
                 stage="post_submit",
             ),
         ),
@@ -353,13 +309,13 @@ def test_unified_result_accepts_exact_stage_capability_and_closed_parameters() -
         ("unknown.capability", "v1", "pre_submit", "binding is invalid"),
         (
             "check_submission_packet",
-            POST_SUBMIT_COMPILER_VERSION,
+            "v0.1",
             "post_submit",
             "binding is invalid",
         ),
         (
             "check_acceptance_criteria_present",
-            POST_SUBMIT_COMPILER_VERSION,
+            "v0.1",
             "pre_submit",
             "binding is invalid",
         ),
@@ -553,7 +509,7 @@ def test_capability_binding_rejects_unowned_parameters(stage: str) -> None:
         capability_id=(
             "policy.submission_packet.validate" if is_pre else "check_acceptance_criteria_present"
         ),
-        capability_version="v1" if is_pre else POST_SUBMIT_COMPILER_VERSION,
+        capability_version="v1" if is_pre else "v0.1",
         stage=stage,
         parameters=(CapabilityParameter(name="unowned_parameter", value=True),),
     )
@@ -571,7 +527,7 @@ def test_capability_binding_rejects_unowned_parameters(stage: str) -> None:
         post_submit_bindings=() if is_pre else (binding,),
         agent_version="v1",
     )
-    with pytest.raises(ValueError, match="parameters"):
+    with pytest.raises(ValueError, match="parameters" if is_pre else "Extra inputs"):
         validate_project_guide_compilation_result(context, result)
 
 
@@ -704,7 +660,7 @@ def test_platform_coverage_accepts_exact_post_submit_default() -> None:
                 disposition="platform_covered",
                 platform_coverage=PlatformCoverageRef(
                     capability_id="check_submission_packet",
-                    capability_version=POST_SUBMIT_COMPILER_VERSION,
+                    capability_version="v0.1",
                     stage="post_submit",
                 ),
             ),

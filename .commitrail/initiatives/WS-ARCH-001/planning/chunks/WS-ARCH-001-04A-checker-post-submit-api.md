@@ -1,6 +1,6 @@
 # Chunk Contract: WS-ARCH-001-04A CHECKER Post-Submit API
 
-Current bounded implementation record: [WS-ARCH-001-04A](../../WS-ARCH-001-04A.md).
+Current bounded implementation record: [ARCH-04A consolidation](../../WS-ARCH-001-04A-consolidation.md).
 This adopted design remains normative; the record fixes current files, supported
 capabilities, proof and delivery priority for this implemented boundary.
 
@@ -14,7 +14,7 @@ routing manifest.
 
 Allowed: `backend/app/modules/checkers/api/**`, focused CHECKER-owned
 implementation/tests, the shared typed catalogue/compilation input contract
-where its versioned shape changes, boundary ledgers and initiative evidence/status. Not
+where its canonical shape changes, boundary ledgers and initiative evidence/status. Not
 allowed: ART provider access, TASK transitions, AUTH activation, REV admission,
 ORM leakage, generic checker payloads or a second checker catalogue.
 
@@ -25,30 +25,25 @@ surface. POL owns facade composition, not a second definition of these facts.
 
 ## Catalogue and compiled policy identity
 
-The current PROJECTS post-catalogue projection exposes only ID/version/stage
-and selection/default flags and rejects post-binding parameters. It is not
-already the richer capability contract below. CHECKERS owns the single public
-catalogue and registered implementation definitions: execution method, typed
-configuration/result schema, failure categories, dependency ordering and
-resource budgets, provider recovery capability and required output/log roles.
-Only declared generated outputs require ART binding; do not fabricate an empty
-artifact to satisfy a run that declares none. Extend the shared unified-compilation input/binding contract
-alongside that catalogue; do not advertise unsupported fields to the agent.
-PROJECTS/POL later consumes the frozen public snapshot instead of importing
-the private CHECKERS registry or copying its default constants.
+CHECKERS owns the single rich public catalogue and immutable registered
+implementation definitions: execution method, closed configuration/result schemas,
+ordering/dependencies, resource budgets and declared outputs. PROJECTS consumes
+that metadata through the public value contract. The registry validates exactly
+one installed handler per definition. No sparse projection or alternate reader
+remains supported. Only declared outputs require ART binding.
 
 Use the existing `PostSubmitCheckerPolicy.policy_hash` as the post-plan hash.
 It hashes the complete canonical compiled policy body, including ordered
 mandatory defaults, approved project entries/configuration and pinned compiler/
-catalogue/implementation identities. Extend/version that body where necessary;
+catalogue/implementation identities. Replace the development body and its consumers together where necessary;
 do not add a second task-level plan or hash algorithm. TASK stamps its existing
 locked post-policy identity/hash/body, and the evaluation envelope separately
-binds the immutable task/submission facts. Execution validates that frozen
-policy and never recompiles against the newest catalogue.
+binds the immutable task/submission facts. Execution validates the exact locked body/hash against the sole supported
+catalogue; it never recompiles or translates unsupported development bodies.
 
 This catalogue/schema foundation precedes POL-04B generations intended for
-approval. Sparse-catalogue generations remain immutable evidence and cannot be
-upgraded in place; changed capability input requires a new generation. Actual
+approval. Unsupported development generations cannot be replayed through a compatibility
+reader; use the current clean baseline and create a fresh generation. Actual
 registered evaluator conformance is required before activation, not a claim
 that the current presence-only implementation is substantive evaluation.
 

@@ -1318,7 +1318,7 @@ class TaskService:
         if (
             parsed_checker_policy.required_checkers != checker_policy.required_checkers
             or parsed_checker_policy.warning_checkers != checker_policy.warning_checkers
-            or parsed_checker_policy.blocking_severities != checker_policy.blocking_severities
+            or list(parsed_checker_policy.blocking_severities) != checker_policy.blocking_severities
         ):
             raise TaskProjectNotReady("active post-submit checker policy hash is invalid")
         return (
@@ -1468,6 +1468,19 @@ class TaskService:
         except ValueError as exc:
             raise TaskLockedContextInvalid(
                 "task locked post-submit checker policy body is invalid",
+                {"field": "locked_post_submit_checker_policy_body"},
+            ) from exc
+        try:
+            if post_submit_checker_policy.policy_body != parsed_post_submit_body.policy_body:
+                raise ValueError("persisted post-submit policy body differs from lock")
+            parsed_post_submit_body.validate_sidecars(
+                required_checkers=post_submit_checker_policy.required_checkers,
+                warning_checkers=post_submit_checker_policy.warning_checkers,
+                blocking_severities=post_submit_checker_policy.blocking_severities,
+            )
+        except ValueError as exc:
+            raise TaskLockedContextInvalid(
+                "task locked post-submit checker policy summaries are invalid",
                 {"field": "locked_post_submit_checker_policy_body"},
             ) from exc
         post_submit_summary = PostSubmitPolicyBodySummary(
@@ -2069,11 +2082,18 @@ class TaskService:
         ):
             raise TaskProjectNotReady("locked post-submit checker policy is invalid")
         try:
-            parse_locked_post_submit_checker_policy_body(
+            parsed_policy = parse_locked_post_submit_checker_policy_body(
                 task.locked_post_submit_checker_policy_body,
                 project_id=task.project_id,
                 guide_version=task.locked_post_submit_checker_policy_version or "",
                 policy_hash=task.locked_post_submit_checker_policy_hash or "",
+            )
+            if policy.policy_body != parsed_policy.policy_body:
+                raise ValueError("persisted post-submit policy body differs from lock")
+            parsed_policy.validate_sidecars(
+                required_checkers=policy.required_checkers,
+                warning_checkers=policy.warning_checkers,
+                blocking_severities=policy.blocking_severities,
             )
         except ValueError as exc:
             raise TaskProjectNotReady("locked post-submit checker policy hash is invalid") from exc

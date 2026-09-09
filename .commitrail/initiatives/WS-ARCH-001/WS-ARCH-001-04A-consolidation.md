@@ -1,7 +1,7 @@
 # ARCH-04A consolidation — One initial v0.1 checker contract
 
 - Initiative: WS-ARCH-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: remove superseded post-submission catalogue, compiler,
   parser, registry, and projection branches retained or introduced by ARCH-04A;
   use one canonical initial-v0.1 contract throughout its consumers.
@@ -146,7 +146,7 @@ No correction is complete merely because old identifiers have been renamed.
 
 ## Explicit documentation and verification scope
 
-Allowed documentation: `docs/roadmap_status.md`, `docs/architecture_checker_framework.md`,
+Allowed documentation: `docs/architecture_data_model.md`, `docs/roadmap_status.md`, `docs/architecture_checker_framework.md`,
 current checker policy template/spec, `.commitrail/INDEX.md`, `AGENTS.md`,
 ARCH-001 overview/ARCH-04A record/chunk map, POL-003 overview and downstream
 POL-04B contract where they require superseded preservation. No unrelated roadmap
@@ -165,3 +165,43 @@ validators. Root checks: `.venv/bin/python scripts/check_markdown_links.py`,
 `.venv/bin/python scripts/check_commitrail_records.py --base-ref origin/main`.
 Hosted backend suite supplies PostgreSQL/lifecycle coverage for the named owners;
 record exact commands, nodes and results against the implementation candidate.
+
+Allowed boundary bookkeeping: remove the resolved PROJECTS post-submit compiler
+and service private CHECKERS runner edges from `.ci/module-boundaries/private-edge-debt.v1.json`;
+this removes debt and permits no replacement private edge.
+
+## Locked severity semantics
+
+The registered placeholder detector still emits raw warning/medium. Mandatory
+entries cannot be selected again as project-required entries. Policy application
+escalates a warning when its original severity is in the validated locked blocking
+severities, or a selectable checker is explicitly required. It records the actual
+escalation reason, persists failed/high, and requires revision. Default critical/
+high leaves the medium warning advisory. This preserves stricter project intent
+through one canonical policy, with no handler alternative or default reclassification.
+Adjusted routing outcomes do not masquerade as raw catalogue-conformance results.
+Security/QA feasibility review confirmed this bounded policy correction; test the
+raw/default/explicit-medium controls and mutation removing severity escalation.
+
+The structural-debt inventory updates only observed positions/hash and reduced
+size for the touched PROJECTS test owner in `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`;
+no new debt, exceptions, limits or test-selection changes are allowed.
+
+## Intended delivered boundary
+
+The correction replaces both development representations with one rich catalogue,
+one compiled policy and parser, and one ID-keyed registration per checker.
+PROJECTS no longer imports the private CHECKERS runner. Active consumers derive
+execution lists from canonical entries and validate stored summary equality.
+Current context uses actual task/submission locks, with no fabricated future facts.
+
+Preservation-only hash/alternate-handler tests are removed. Their replacements
+prove canonical round trips, unsupported sparse-body rejection even with recomputed
+hashes, each current context omission/cross, exact catalogue/configuration identity,
+sidecar custody before execution, and policy-driven warning escalation. No test
+lane, skip policy, coverage threshold, workflow or dependency is relaxed.
+
+POL-04B remains the next independently bounded change. This correction does not
+activate unified setup, durable public phase execution, acceptance or compensation.
+No local roadmap spreadsheet exports are present. Current navigation and normative
+checker/data-model documentation describe the intended merged contract.

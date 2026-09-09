@@ -37,7 +37,7 @@ Task setup and post-submit checks must stay separated from contributor-fixable s
 | `check_evidence_present` | high | yes | Submission must include audit evidence. |
 | `check_evidence_integrity` | high | yes | Evidence and checker runs must bind to submitted artifacts. |
 | `check_confidentiality_attestation` | high | yes | Contributor attestation must address confidentiality and credential handling. |
-| `check_low_quality_generated_artifacts` | low/high | policy-dependent | Low-quality generated artifact signals warn by default and block review only when the project explicitly requires this post-submit checker. |
+| `check_low_quality_generated_artifacts` | medium/high | policy-dependent | Placeholder signals warn by default; the locked blocking severities may require contributor revision. |
 
 Task setup checks:
 
@@ -47,21 +47,18 @@ Task setup checks:
 
 ## Compiler Contract
 
-The currently active v1 compiler compiles this project policy into the canonical
-`PostSubmitCheckerPolicy` body. The compiler always includes Workstream default
-durable checkers in `default_checkers` and `execution_checkers`. Default-only
-projects leave project-specific `required_checkers` and `warning_checkers`
-empty, but they still execute every default checker.
+One compiler creates the canonical ordered `PostSubmitCheckerPolicy` body.
+All eight platform defaults are mandatory and nonselectable. Default-only
+projects have no project-specific required or warning entries but execute all
+defaults. `check_acceptance_criteria_present` is the sole selectable structural
+addition; it proves presence, not substantive satisfaction of task criteria.
 
-Project-specific `required_checkers` may add a registered checker or tighten a
-default checker's routing. `warning_checkers` must not weaken a default
-checker. Unknown checker names, duplicate classifications, conflicting
-required/warning classifications, and default-checker list drift fail closed.
-
-The hidden v2 compiler has a separate contract: all eight defaults are mandatory
-and nonselectable, the low-quality default retains its advisory warning, and
-only `check_acceptance_criteria_present` is selectable. This v1 template does
-not configure that dormant compiler.
+Required/warning/execution lists are derived from canonical entries. Persisted
+summaries must agree with that body and its exact hash. Unknown identities,
+unsupported configuration, conflicting classifications, altered mandatory
+entries and stale hashes reject. No earlier development body has a fallback
+reader. A new project policy version records changed rules within this one
+current software contract.
 
 ## Pre-Submit Boundary
 

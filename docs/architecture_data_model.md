@@ -1003,80 +1003,52 @@ agent input, not an evidence reference. Evidence refs must not contain local
 filesystem paths, signed URLs, credentials, private storage locators, raw source
 excerpts, or contributor submission data.
 
-When a task locks its project context, Workstream stamps
-`locked_post_submit_checker_policy_body` by copying the persisted project
-`PostSubmitCheckerPolicy.policy_body`. Submissions copy that body from the task,
-and durable checker runs copy it from the submission. Checker execution
-validates the body against the stamped hash, schema version, supported
-`compiler_version`, and the locked body's internal structure, then executes from
-that locked body, not from mutable project setup rows. Later project policy
-edits therefore cannot change already locked task, submission, or checker-run
-behavior. A future platform default-checker list change requires a separately
-approved and security-reviewed versioning or migration path instead of silently
-reinterpreting old locked bodies.
+When a task locks project context, Workstream copies the canonical persisted
+`PostSubmitCheckerPolicy.policy_body` and its exact hash. Submission and checker
+runs copy that same body/hash. Later changes to a project's policy do not rewrite
+those locked facts. Project policy versions describe changes to project rules;
+they do not select different software readers.
 
-The policy body includes:
+Initial v0.1 has one supported body, compiler and catalogue. Earlier development
+representations reject; no migration reader, translation or fallback preserves
+them. Use a clean development baseline when the software contract is replaced.
 
-- `schema_version`
-- `compiler_version`
-- `project_id`
-- `guide_version`
-- `default_checkers`
-- `required_checkers`
-- `warning_checkers`
-- `execution_checkers`
+The canonical body contains:
+
+- `schema_version`: `post_submit_checker_policy`
+- `compiler_version`: `workstream-post-submit-compiler`
+- `project_id` and `guide_version`
+- `catalogue_id`, `catalogue_source_version`, `catalogue_schema_version` and
+  `catalogue_manifest_sha256`
+- ordered `entries`, with checker ID, definition/implementation identity,
+  classification and closed configuration
 - `blocking_severities`
 
-`execution_checkers` is the complete ordered durable checker list. It is
-compiled from Workstream default durable checkers plus project-specific
-required and warning checker classifications, and it is covered by
-`policy_hash`. `default_checkers` must exactly match the platform-owned default
-durable checker list at compile time. Runtime treats that stamped list as locked
-policy data and validates it through `policy_hash` and the frozen default-list
-snapshot for the stamped `compiler_version`, not by comparing it to the mutable
-server constant. Default-only projects leave `required_checkers` and
-`warning_checkers` empty; they still execute every default checker through
-`execution_checkers`.
+Each mandatory entry has classification `platform_default`. The eight defaults
+cannot be omitted, reordered or reclassified. The sole selectable structural
+addition is `check_acceptance_criteria_present`, classified as `project_required`
+or `project_warning`. Default/required/warning/execution lists are derived from
+these entries; they are not another serialized policy body. Existing persisted
+required/warning/blocking summaries must exactly match the parsed canonical body
+at setup continuation, activation, task locking/reading, submission validation
+and execution. A recomputed hash cannot make an unsupported body valid.
 
-The trusted post-submit compiler owns the policy body. It rejects unknown
-checker names, duplicate or conflicting classifications, warning-only
-reclassification of default checkers, malformed locked-body drift, and
-blocking-severity downgrades. Platform blocking severities are `critical` and `high`; project
-policy may add stricter blocking severities but cannot remove those defaults.
-
-Example:
+Each entry has this shape (illustrative entry, not a complete policy):
 
 ```json
 {
-  "schema_version": "post_submit_checker_policy.v1",
-  "compiler_version": "workstream-post-submit-compiler-v0.1",
-  "project_id": "project-id",
-  "guide_version": "v1",
-  "default_checkers": [
-    "check_submission_packet",
-    "check_policy_context_present",
-    "check_evidence_present",
-    "check_evidence_integrity",
-    "check_required_files",
-    "check_forbidden_files",
-    "check_confidentiality_attestation",
-    "check_low_quality_generated_artifacts"
-  ],
-  "required_checkers": [],
-  "warning_checkers": [],
-  "execution_checkers": [
-    "check_submission_packet",
-    "check_policy_context_present",
-    "check_evidence_present",
-    "check_evidence_integrity",
-    "check_required_files",
-    "check_forbidden_files",
-    "check_confidentiality_attestation",
-    "check_low_quality_generated_artifacts"
-  ],
-  "blocking_severities": ["critical", "high"]
+  "checker_id": "check_submission_packet",
+  "definition_version": "v0.1",
+  "implementation_version": "workstream-structural",
+  "classification": "platform_default",
+  "configuration": {}
 }
 ```
+
+The compiler rejects unknown selections, conflicting classifications, invalid
+configuration, missing defaults and weakened blocking severities. The floor is
+`critical` and `high`; projects may add stricter severities. Raw structural
+warnings remain distinct from policy-adjusted blocking outcomes.
 
 Post-submit checker policy governs durable internal checker runs after a submission is finalized. It does not replace the generated project pre-submit checker policy.
 

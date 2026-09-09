@@ -1029,7 +1029,7 @@ async def create_generated_post_submit_setup_output(
             project_id=project_id,
             guide_version=snapshot.guide_version,
             required_checkers=(
-                ["check_policy_context_present"] if required_checkers is None else required_checkers
+                [] if required_checkers is None else required_checkers
             ),
             warning_checkers=[] if warning_checkers is None else warning_checkers,
             blocking_severities=blocking_severities,
@@ -1052,7 +1052,7 @@ async def create_generated_post_submit_setup_output(
             pre_submit_checker_bundle_hash=pre_submit_checker_policy["compiled_bundle_hash"],
             required_checkers=compiled.required_checkers,
             warning_checkers=compiled.warning_checkers,
-            blocking_severities=compiled.blocking_severities,
+            blocking_severities=list(compiled.blocking_severities),
             policy_hash=compiled.policy_hash,
             policy_body=compiled.policy_body,
             lifecycle_status="approved",
@@ -1126,7 +1126,7 @@ def generated_post_submit_output_for_pre_submit(
     spec = build_project_post_submit_checker_spec(
         project_id=effective_policy.project_id,
         guide_version=effective_policy.guide_version,
-        required_checkers=["check_policy_context_present"],
+        required_checkers=[],
         warning_checkers=[],
         blocking_severities=["critical", "high"],
     )
@@ -1148,7 +1148,7 @@ def generated_post_submit_output_for_pre_submit(
         pre_submit_checker_bundle_hash=pre_submit_checker_bundle_hash,
         required_checkers=compiled.required_checkers,
         warning_checkers=compiled.warning_checkers,
-        blocking_severities=compiled.blocking_severities,
+        blocking_severities=list(compiled.blocking_severities),
         policy_hash=compiled.policy_hash,
         policy_body=compiled.policy_body,
         lifecycle_status="approved",
@@ -2996,10 +2996,10 @@ async def test_release_uses_locked_post_submit_policy_body_after_setup_mutation(
     assert persisted_task is not None
     assert persisted_task.status == "ready"
     assert persisted_task.locked_post_submit_checker_policy_body == locked_body
-    assert "check_acceptance_criteria_present" not in locked_body["required_checkers"]
-    assert "check_acceptance_criteria_present" not in locked_body["execution_checkers"]
-    assert "check_required_files" in locked_body["default_checkers"]
-    assert "check_required_files" in locked_body["execution_checkers"]
+    assert "check_acceptance_criteria_present" not in [entry["checker_id"] for entry in locked_body["entries"] if entry["classification"] == "project_required"]
+    assert "check_acceptance_criteria_present" not in [entry["checker_id"] for entry in locked_body["entries"]]
+    assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"] if entry["classification"] == "platform_default"]
+    assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"]]
 
 
 async def test_worker_task_response_redacts_locked_policy_hashes(
@@ -5074,10 +5074,10 @@ async def test_submission_uses_locked_post_submit_policy_body_after_setup_mutati
     assert task.status == "review_pending"
     assert len(submissions) == 1
     assert submissions[0].locked_post_submit_checker_policy_body == locked_body
-    assert "check_acceptance_criteria_present" not in locked_body["required_checkers"]
-    assert "check_acceptance_criteria_present" not in locked_body["execution_checkers"]
-    assert "check_required_files" in locked_body["default_checkers"]
-    assert "check_required_files" in locked_body["execution_checkers"]
+    assert "check_acceptance_criteria_present" not in [entry["checker_id"] for entry in locked_body["entries"] if entry["classification"] == "project_required"]
+    assert "check_acceptance_criteria_present" not in [entry["checker_id"] for entry in locked_body["entries"]]
+    assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"] if entry["classification"] == "platform_default"]
+    assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"]]
     assert len(checker_runs) == 1
     assert checker_runs[0].locked_post_submit_checker_policy_body == locked_body
 

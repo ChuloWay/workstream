@@ -32,7 +32,7 @@ async def create_generated_post_submit_setup_output(
         spec = build_project_post_submit_checker_spec(
             project_id=project_id,
             guide_version=guide.version,
-            required_checkers=["check_policy_context_present"],
+            required_checkers=[],
             warning_checkers=[],
             blocking_severities=["critical", "high"],
         )
@@ -54,7 +54,7 @@ async def create_generated_post_submit_setup_output(
             pre_submit_checker_bundle_hash=pre_submit_checker_policy["compiled_bundle_hash"],
             required_checkers=compiled.required_checkers,
             warning_checkers=compiled.warning_checkers,
-            blocking_severities=compiled.blocking_severities,
+            blocking_severities=list(compiled.blocking_severities),
             policy_hash=compiled.policy_hash,
             policy_body=compiled.policy_body,
             lifecycle_status="compiled",
