@@ -30,7 +30,13 @@ they are not called again as an implicit evaluator of contributor work.
 
 ## Checker Result Contract
 
-Every checker returns:
+The following illustrative provenance envelope uses a pre-submission catalogue
+`v1` definition; it is not a universal serialized result schema. The
+[hidden v0.2 post-submit contract](#hidden-versioned-post-submit-contracts) uses
+`PostSubmitMemberResult` with schema `post_submit_structural_result.v1` and its
+separate bounded fields.
+
+Illustrative pre-submission provenance envelope:
 
 ```json
 {
