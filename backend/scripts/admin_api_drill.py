@@ -38,6 +38,10 @@ def one_winner(outcomes):
     return sorted(outcomes) == [0, 3]
 
 
+def exact_role_list(items):
+    return len(items) == len(ROLES) and {row["role"] for row in items} == set(ROLES)
+
+
 class AuthorityDrill:
     def __init__(self, drill, issuer, env):
         self.drill, self.issuer, self.env = drill, issuer, env
@@ -165,7 +169,7 @@ class AuthorityDrill:
             route = "/api/v1/authorization/admin-role-definitions"
             if allowed:
                 body = await self.call("role_definitions_" + label, "GET", route, label, values={"total": 5})
-                self.proof("closed_role_list_" + label, {r["role"] for r in body["items"]} == set(ROLES))
+                self.proof("closed_role_list_" + label, exact_role_list(body["items"]))
                 for row in body["items"]:
                     expected = {"system"} if row["role"] in ROLES[:2] else {"system", "project"}
                     self.proof("role_scopes_" + label + "_" + row["role"], set(row["allowed_scopes"]) == expected)
@@ -208,7 +212,7 @@ class AuthorityDrill:
         invalids += [("null_" + field, body | {field: None})
                      for field in ("target_actor_profile_id", "role", "scope_type", "reason")]
         invalids += [("unknown_role", body | {"role": "owner"}), ("unknown_scope", body | {"scope_type": "all"}),
-                     ("extra", body | {"admin": True}), ("blank_reason", body | {"reason": " "}),
+                     ("extra", body | {"admin": True}), ("empty_reason", body | {"reason": ""}),
                      ("invalid_actor", body | {"target_actor_profile_id": "bad"})]
         for name, invalid in invalids:
             await self.deny("grant_" + name, "POST", GRANTS, self.admin, payload=invalid, expected=422)
@@ -236,12 +240,31 @@ class AuthorityDrill:
             self.proof("grant_history_exact_" + label, len(rows) == 1 and rows[0]["grant_id"] == result["resource_id"]
                        and rows[0]["role"] == "operator" and rows[0]["status"] == "active"
                        and rows[0]["granted_by_ref"] == self.actors[self.admin])
+        route = GRANTS + "/{grant_id}/revoke"
+        path = GRANTS + "/" + result["resource_id"] + "/revoke"
+        revoke_key = {"Idempotency-Key": str(uuid4())}
+        revoked = await self.call("grant_target_revoke", "POST", route, self.admin,
+            path=path, payload=REASON, headers=revoke_key,
+            values={"resource_id": result["resource_id"], "version": 2, "http_status": 200})
+        before = await self.snapshot()
+        await self.call("grant_target_revoke_replay", "POST", route, self.admin,
+            path=path, payload=REASON, headers=revoke_key, values=revoked)
+        self.proof("revoke_replay_no_change", before == await self.snapshot())
+        await self.deny("grant_target_revoke_mismatch", "POST", route, self.admin,
+            path=path, payload={"reason": "Changed revoke reason"}, headers=revoke_key,
+            expected=409, code="idempotency_mismatch")
+        stored = await self.call("revoked_grant_history", "GET", PROFILE + "/admin-role-grants", self.admin,
+            path=f'/api/v1/actors/{self.actors["grant_target"]}/admin-role-grants?scope_type=system&status=all')
+        self.proof("revocation_history_retained", len(stored["items"]) == 1
+                   and stored["items"][0]["status"] == "revoked" and stored["items"][0]["version"] == 2)
+        await self.deny("revoked_operator_no_project_access", "GET", PROJECT, "grant_target",
+            path=f'/api/v1/projects/{self.projects["a"]}', expected=404)
 
     async def contributor_roles(self):
         qualification = {"skills_snapshot": {"availability": "unavailable", "reference_ids": [],
-                         "unavailable_reason": "No external evidence in isolated drill"},
+                         "unavailable_reason": "not_collected"},
             "reputation_snapshot": {"availability": "unavailable", "reference_ids": [],
-                         "unavailable_reason": "No reputation record"},
+                         "unavailable_reason": "no_record"},
             "prior_project_work_refs": [], "external_expertise_refs": []}
         for label, role, project in (("submitter_a", "submitter", "a"), ("reviewer_a", "reviewer", "a"),
                 ("submitter_b", "submitter", "b"), ("reviewer_b", "reviewer", "b"),
@@ -263,6 +286,12 @@ class AuthorityDrill:
             await self.call("contributor_context_" + label, "GET", "/api/v1/actors/me/authorization-context", label,
                 path=f'/api/v1/actors/me/authorization-context?project_id={self.projects[own]}',
                 values={"admin_roles": [], "project_roles": expected_roles})
+        route = PROJECT + "/role-grants"
+        path = f'/api/v1/projects/{self.projects["a"]}/role-grants'
+        for role in ("submitter", "reviewer"):
+            await self.deny("manager_self_project_grant_" + role, "POST", route, "manager_a",
+                path=path, payload=dict(target_actor_profile_id=self.actors["manager_a"],
+                role=role, qualification=qualification, **REASON), code="self_grant_forbidden")
 
     async def lifecycle(self):
         for label, action, state in (("suspend_target", "suspend", "suspended"),

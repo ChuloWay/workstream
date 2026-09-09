@@ -27,6 +27,12 @@ class EvidenceTests(unittest.IsolatedAsyncioTestCase):
         for outcomes in ([0, 0], [3, 3], [0, 1], [0], [0, 3, 3]):
             self.assertFalse(module.one_winner(outcomes))
 
+    def test_duplicate_role_cannot_hide_behind_exact_set(self):
+        items = [{"role": role} for role in module.ROLES]
+        self.assertTrue(module.exact_role_list(items))
+        self.assertFalse(module.exact_role_list(items + items[:1]))
+        self.assertFalse(module.exact_role_list(items[:-1]))
+
     def test_failed_state_assertion_is_retained(self):
         drill = SimpleNamespace(results=[])
         instance = module.AuthorityDrill(drill, None, {})

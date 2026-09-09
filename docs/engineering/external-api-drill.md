@@ -43,7 +43,9 @@ of `scripts/external_api_drill.py` and allow a 900-second timeout for rate pacin
 It performs actual local bootstrap CLI calls and read-only isolated-database
 snapshots to check forbidden authority/state changes. All later mutations use
 HTTP. The original no-product-SQL-write/no-disabled-guard rules still apply.
-`local_evidence` cases are CLI/state assertions, not additional HTTP endpoints.
+`local_evidence` cases are CLI/state/direct-concurrency assertions, not additional
+HTTP endpoints. Cross-admin concurrent HTTP responses are checked there together
+with their persisted outcome rather than counted as ordinary HTTP cases.
 Concurrent calls demonstrate observed outcomes, not forced database lock overlap.
 Self-removal denials do not prove direct execution of the later count-based
 last-administrator guard. Missing groups remain incomplete, never certified.
