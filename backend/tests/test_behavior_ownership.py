@@ -1671,3 +1671,18 @@ def test_partition_accepts_only_exact_cp05_authorization_targets() -> None:
         ownership._validate_additive_partition_transition(
             _partition(sorted({retained, *expected, "backend/app/modules/authorization/extra.py"})), trusted
         )
+
+
+def test_partition_accepts_only_exact_automatic_request_target() -> None:
+    """The request resolver addition cannot authorize adjacent lifecycle owners."""
+    expected = {"backend/app/modules/projects/guide_compilation/automatic_request.py"}
+    assert ownership.POL_04B1_PARTITION_TARGETS == expected
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *expected})), trusted
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted({retained, *expected, "backend/app/modules/projects/guide_compilation/live_request.py"})), trusted
+        )
