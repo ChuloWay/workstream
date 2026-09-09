@@ -542,7 +542,7 @@ async def project_role_cases(drill, manager, contributor, project, manager_id):
                                 "unavailable_reason": "no_record"},
         "prior_project_work_refs": [], "external_expertise_refs": ["expertise:drill"],
     }
-    for role in ("submitter", "reviewer", "adjudicator"):
+    for role in ("submitter", "reviewer"):
         body = {"target_actor_profile_id": actor["actor_profile_id"], "role": role,
                 "qualification": qualification, "reason": "Exact project contribution role"}
         key = {"Idempotency-Key": str(uuid4())}
@@ -595,6 +595,18 @@ async def project_role_cases(drill, manager, contributor, project, manager_id):
             checks={"revoked_at": timestamp_value})
         await drill.call("revoked_contributor_read_" + role, "GET", "/api/v1/projects/{project_id}",
             path=f'/api/v1/projects/{project["id"]}', token=contributor, expected=404)
+    # Human-confirmed v0.1 scope has two roles. Do not implement adjudication to pass this probe.
+    try:
+        await drill.call("unsupported_adjudicator_rejected", "POST", route, path=path, token=manager,
+            payload={"target_actor_profile_id": actor["actor_profile_id"], "role": "adjudicator",
+                     "qualification": qualification, "reason": "Unsupported role negative probe"},
+            expected=422)
+    except ProbeFailure:
+        pass
+    await drill.call("unsupported_adjudicator_no_active_grant", "GET", route,
+        path=path + "?status=active", token=manager, values={"items": [], "next_cursor": None})
+    await drill.call("unsupported_adjudicator_no_access", "GET", "/api/v1/projects/{project_id}",
+        path=f'/api/v1/projects/{project["id"]}', token=contributor, expected=404)
 
 
 async def service_actor_cases(drill, issuer, admin, outsider):

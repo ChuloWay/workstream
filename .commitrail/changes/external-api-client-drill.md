@@ -14,8 +14,9 @@ external-client lifecycle readiness.
 ## Bounded change
 
 Allowed: `backend/scripts/external_api_drill.py`, its focused tests under
-`scripts/test_external_api_drill.py`, this record and a usage document under
-`docs/engineering/`. Generated reports stay outside Git. Reuse the existing
+`scripts/test_external_api_drill.py`, this record, the usage document and the
+human-requested `docs/engineering/external-api-drill-findings.md` repair handoff.
+Generated raw evidence stays outside Git. Reuse the existing
 isolated-database runner and administrator bootstrap, not the old API drill.
 
 No product code, CI, thresholds, provider changes, peer-worktree changes, direct
@@ -117,3 +118,10 @@ nested boolean/integer coercions have dedicated helper regressions. Failed
 project-role issuance also checks that no active grant or project access survives,
 and failed oversized creates are followed by corrected same-key requests to
 probe idempotency rollback. No expected product failure is relabeled as a pass.
+
+The human clarified that v0.1 has only submitter and reviewer project roles.
+The earlier probe followed the public enum's adjudicator option; that option
+must now be treated as unsupported input, not functionality to complete. The
+handoff records its existing 503 and remaining contract cleanup. Product repairs
+belong to another agent. After those merge, rerun this drill on their exact main
+head and finish outstanding field coverage before the MCP endpoint handoff.
