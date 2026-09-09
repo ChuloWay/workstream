@@ -71,11 +71,32 @@ bridges, and unrelated activation of acceptance, checker execution, or payments.
 - Registry keys are checker IDs, with one handler and its metadata per key.
   Metadata comparison can reject mismatches, but cannot select an older handler.
 - One policy-context checker consumes explicit expected and observed current
-  locked facts. ORM and detached inputs are adaptations to that same fact shape,
+  locked facts: guide version; source snapshot ID/hash; effective artifact policy
+  ID/hash; pre-submit policy ID/bundle hash; post-submit policy ID/version/hash;
+  review policy ID/generation/hash; revision policy ID/generation/hash. Project ID
+  remains checked in the owning request/task/policy envelope, because Submission
+  has no independently persisted project ID. Exclude guide ID, compilation and
+  ContributionPolicy references rather than inventing observations. ORM and detached inputs are adaptations to that same fact shape,
   not alternative implementations. Remove the obsolete PaymentPolicy requirement.
   Do not claim compilation/ContributionPolicy task locks exist before their
   persistence owners implement them. The full guide-activation requirements remain
   normative and unavailable until their remaining owners supply the evidence.
+
+- CHECKERS public catalogue owns the single immutable metadata factory; its
+  registry validates installation against that metadata. PROJECTS consumes only
+  that public value and removes its private runner import.
+- Use schema identifiers `post_submit_checker_policy`,
+  `post_submission_checker_capability_projection`, compiler identity
+  `workstream-post-submit-compiler`, implementation identity
+  `workstream-structural`, and single capability/source identity `v0.1`.
+  These identify the current contract, never select alternate readers.
+- Parsed entries are canonical custody for derived checker lists. Existing policy
+  required/warning/blocking sidecars must equal those derived values at setup
+  continuation, activation, task lock/read, submission validation and execution.
+  Independently crossed sidecars must fail before writes or execution.
+- Mandatory platform defaults cannot be reclassified. Project additions use the
+  catalogue's selectable entries; project blocking severities can strengthen the
+  platform floor. Remove redundant fixture selections of mandatory defaults.
 
 Dependent application paths: `checkers/service.py`, `tasks/service.py`, and
 `projects/service.py` for canonical policy parsing/derived lists and context
@@ -111,6 +132,12 @@ Implementation reviews: architecture/reuse, security, QA/test delta,
 documentation/product operations; CI integrity if test ownership is affected.
 Human focus: complete consolidation, no disguised compatibility path, and honest
 remaining integration dependencies.
+
+Required negative proof includes old sparse bodies with recomputed hashes, each
+current context field independently absent/crossed, each sidecar independently
+crossed, obsolete/future context fields rejected as extras, and complete current
+facts without PaymentPolicy passing. Owner lineage/AUTH checks remain authoritative;
+coherent checker values alone grant no authority.
 
 Focused checks run locally. Full PostgreSQL/concurrency/backend coverage remains
 hosted. Run boundary, stale wording and link checks, discriminating invalid-input
