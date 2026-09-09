@@ -67,6 +67,28 @@ Always terminate the owned server; the isolation runner drops its owned DB/role.
 
 ### Human-requested administrator deep drill
 
+The human further requests concrete reproductions for the count-guard gap.
+Add `backend/scripts/admin_guard_probe.py`, invoked only by the isolated admin
+drill, and helper tests in `scripts/test_admin_api_drill.py`. The subprocess
+loads the actual stored actors/links/grants, acquires the canonical control lock,
+calls the existing grant/profile/link conflict owners, and always rolls back.
+It creates no authority, claim handle or fabricated authorization decision.
+Verify all four removal checks with one administrator (deny), two (allow),
+and one after real HTTP revocation (deny); also test an ineffective second
+administrator after HTTP suspension or link revocation, then reactivation.
+Keep these owner/transaction checks distinct from HTTP-route enforcement.
+
+In separate short-lived probe subprocesses, deliberately mutate only the
+count-comparison boundary from `<= 1` to `< 1` for each of the three owner
+methods. Expected probe failure demonstrates that these checks detect the
+specific off-by-one defect. No product files or running API process are changed,
+no database guards are disabled and no SQL data writes are introduced.
+Only read/lock queries against the validated owned database are permitted.
+Named proof must verify fetched actor/link/grant relationships and the actual
+effective count, then assert guard output; pre/post snapshots must remain equal.
+Security/QA plan review checks feasibility before implementation; exact clean
+run and discriminating mutation evidence precede a completion claim.
+
 Extend the same isolated harness with `backend/scripts/admin_api_drill.py` and
 `scripts/test_admin_api_drill.py`. Add a scenario callback to the existing runner
 instead of duplicating server/credential/database lifecycle code. This slice
