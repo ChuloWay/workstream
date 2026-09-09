@@ -265,3 +265,12 @@ Prove a controlled-provisioning link can persist; wrong actor/link, revocation,
 wrong service and forged/mismatched authorization evidence still reject.
 This repair requires focused security/architecture review in addition to the
 cutover's implementation reviews.
+
+The same repair includes `guard_project_guide_setup_finalization`, which also
+requires the literal external subject. Replace that subject predicate with
+active actor and active link checks while retaining exact actor/link IDs,
+relationship, service kinds, fixed service identity and every existing finalization
+event/action/permission/resource/request/correlation/digest predicate. Both guards
+must follow controlled provisioning; fixing compilation alone leaves finalization
+unusable. Test ready and blocked finalization using an opaque provisioned subject,
+and direct rejection for inactive actors/links or wrong actor/link custody.
