@@ -115,7 +115,7 @@ Workstream uses three separate quality gates:
 
 Workstream verifies external Flow tokens and owns product authorization through
 local ActorProfile/ActorIdentityLink records, administrative grants,
-exact-project submitter/reviewer/adjudicator grants, registered permissions,
+exact-project submitter/reviewer grants, registered permissions,
 resource and lifecycle guards, revocation, and append-only authority evidence.
 
 The global role catalogue does not define the v0.1 review lifecycle. Shipping

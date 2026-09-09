@@ -685,9 +685,9 @@ provide a production allow fallback.
 - Administrative reads and mutations require the exact action-specific
   AdminRoleGrant selected by AUTH.
 
-No unrelated project or administrative grant substitutes. The independent
-global `adjudicator` grant defined by ADR 0015 adds no action, policy, queue,
-state, branch, or readiness dependency to this v0.1 boundary.
+No unrelated project or administrative grant substitutes. Adjudicator grants
+and adjudication are excluded from v0.1, with no action, policy, queue, state,
+branch, or readiness dependency in this boundary.
 
 FinalAcceptance creation has no ActionId. Derived ContributionRecord and
 CompensationAward inserts inside `review.decision` add no

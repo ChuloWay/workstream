@@ -207,7 +207,7 @@ async def test_retained_automatic_evidence_prevents_origin_downgrade(automatic_s
     with pytest.raises(RuntimeError, match="automatic compilation evidence prevents downgrade"):
         await asyncio.to_thread(downgrade)
     async with factory() as session:
-        assert await session.scalar(text("select version_num from alembic_version")) == "0013_compilation_request_origin"
+        assert await session.scalar(text("select version_num from alembic_version")) == "0014_project_role_scope"
         assert await session.scalar(text("select count(*) from project_guide_compilation_request_operations")) == 1
 
 

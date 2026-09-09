@@ -64,7 +64,7 @@ _DENIAL_CODES = frozenset(
 _ADMIN_ROLES = frozenset(
     {"access_administrator", "operator", "project_manager", "finance_authority", "audit_authority"}
 )
-_PROJECT_ROLES = frozenset({"submitter", "reviewer", "adjudicator"})
+_PROJECT_ROLES = frozenset({"submitter", "reviewer"})
 _FACT_VALUES: dict[str, frozenset[str]] = {
     "status": frozenset({"active", "suspended", "deactivated", "revoked", "captured"}),
     "subject_kind": frozenset({"human", "service"}),
@@ -495,7 +495,6 @@ def _event_facts_valid(
         expected_obligation = {
             "submitter": "auth13_assignment",
             "reviewer": "rev_reviewer_obligation",
-            "adjudicator": "none",
         }.get(before.get("role"))
         keys = {"effective", "role", "scope_type", "scope_id", "future_obligation"}
         return (

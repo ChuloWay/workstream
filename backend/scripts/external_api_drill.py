@@ -1,0 +1,849 @@
+"""Exercise current public APIs over real HTTP without product-state fixtures.
+
+Run only through run_isolated_tests.py; see docs/engineering/external-api-drill.md.
+This is a field-accounted integration probe, not production Flow certification.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import base64
+from datetime import datetime, timezone
+import hashlib
+import hmac
+import json
+import os
+from pathlib import Path
+import re
+import socket
+import subprocess
+import sys
+import time
+from urllib.parse import unquote, urlsplit
+from uuid import UUID, uuid4
+
+import asyncpg
+import httpx
+
+ROOT = Path(__file__).resolve().parents[1]
+METHODS = {"get", "post", "put", "patch", "delete"}
+
+
+class ProbeFailure(Exception):
+    """A named assertion failed; never include response bodies or credentials."""
+
+
+def openapi_document(response):
+    """Reject unavailable or malformed discovery without exposing response content."""
+    if response.status_code != 200:
+        raise ProbeFailure("openapi_document_unavailable")
+    try:
+        document = response.json()
+    except ValueError:
+        raise ProbeFailure("openapi_document_invalid") from None
+    if (not isinstance(document, dict)
+            or not isinstance(document.get("openapi"), str)
+            or not document["openapi"].startswith("3.")
+            or not isinstance(document.get("paths"), dict)):
+        raise ProbeFailure("openapi_document_invalid")
+    return document
+
+
+def stop_server(process, *, preserving_failure):
+    """Attempt bounded cleanup without replacing an existing probe failure."""
+    process.terminate()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            if not preserving_failure:
+                raise ProbeFailure("server_cleanup_timeout") from None
+
+
+async def wait_for_server(client, process, *, timeout_seconds=90):
+    """Bound local startup by elapsed time; slow imports are not API failures."""
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise ProbeFailure("server_startup_failed")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        try:
+            response = await asyncio.wait_for(client.get("/api/v1/health"), remaining)
+            if response.status_code == 200:
+                return
+        except (httpx.ConnectError, httpx.TimeoutException, asyncio.TimeoutError):
+            pass
+        await asyncio.sleep(min(0.2, max(0, deadline - time.monotonic())))
+    raise ProbeFailure("server_startup_timeout")
+
+
+class TokenIssuer:
+    """Ephemeral local issuer; no authority grants and no production credentials."""
+
+    def __init__(self):
+        self.secret = os.urandom(32).hex()
+        self.issuer = "https://flow.invalid/external-api-drill"
+        self.audience = "workstream-external-api-drill"
+
+    def issue(self, subject: str, **overrides) -> str:
+        now = int(time.time())
+        claims = dict(iss=self.issuer, aud=self.audience, sub=subject,
+                      jti=str(uuid4()), subject_kind="human", scope="workstream:access",
+                      iat=now, nbf=now - 5, exp=now + 600, roles=[])
+        claims.update(overrides)
+
+        def encode(value):
+            return base64.urlsafe_b64encode(json.dumps(value).encode()).rstrip(b"=")
+
+        content = encode({"alg": "HS256", "typ": "JWT"}) + b"." + encode(claims)
+        signature = hmac.new(self.secret.encode(), content, hashlib.sha256).digest()
+        return (content + b"." + base64.urlsafe_b64encode(signature).rstrip(b"=")).decode()
+
+
+def schema_fields(schema, document, prefix, seen=()):
+    """Inventory nested fields; recursion stops, never silently grants coverage."""
+    result = {prefix}
+    ref = schema.get("$ref")
+    if ref:
+        if ref in seen or not ref.startswith("#/"):
+            return result
+        target = document
+        for part in ref[2:].split("/"):
+            target = target[part.replace("~1", "/").replace("~0", "~")]
+        result |= schema_fields(target, document, prefix, (*seen, ref))
+    for name, value in schema.get("properties", {}).items():
+        result |= schema_fields(value, document, f"{prefix}.{name}", seen)
+    if "items" in schema:
+        result |= schema_fields(schema["items"], document, prefix + "[]", seen)
+    for kind in ("anyOf", "allOf", "oneOf"):
+        for value in schema.get(kind, []):
+            result |= schema_fields(value, document, prefix, seen)
+    return result
+
+
+def inventory(document):
+    """Build a method/path manifest of request and response schema fields."""
+    operations = {}
+    for path, item in document.get("paths", {}).items():
+        for method, operation in item.items():
+            if method not in METHODS:
+                continue
+            fields = set()
+            for parameter in item.get("parameters", []) + operation.get("parameters", []):
+                fields |= schema_fields(parameter.get("schema", {}), document,
+                                        f'{parameter["in"]}.{parameter["name"]}')
+            for value in operation.get("requestBody", {}).get("content", {}).values():
+                fields |= schema_fields(value.get("schema", {}), document, "body")
+            for status, response in operation.get("responses", {}).items():
+                for value in response.get("content", {}).values():
+                    fields |= schema_fields(value.get("schema", {}), document,
+                                            f"response.{status}")
+            operations[f"{method.upper()} {path}"] = {
+                "schema_fields": sorted(fields), "cases": [], "status": "untested",
+                "field_cases": {}, "uncovered_fields": sorted(fields),
+            }
+    return operations
+
+
+def response_value(body, path):
+    value = body
+    for part in path.split("."):
+        if not isinstance(value, dict) or part not in value:
+            raise ProbeFailure("missing_response_field")
+        value = value[part]
+    return value
+
+
+def uuid_value(value):
+    return isinstance(value, str) and str(UUID(value)) == value
+
+
+def timestamp_value(value):
+    if not isinstance(value, str):
+        return False
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return parsed.tzinfo is not None and parsed <= datetime.now(timezone.utc)
+
+
+def strict_equal(actual, expected):
+    """Compare JSON containers recursively without bool/integer coercion."""
+    if type(actual) is not type(expected):
+        return False
+    if isinstance(expected, dict):
+        return actual.keys() == expected.keys() and all(
+            strict_equal(actual[key], value) for key, value in expected.items())
+    if isinstance(expected, list):
+        return len(actual) == len(expected) and all(
+            strict_equal(left, right) for left, right in zip(actual, expected, strict=True))
+    return actual == expected
+
+
+def verify_response(response, expected_status, expected_values, checks=None, exact_fields=None):
+    """Assert explicit status and values; malformed JSON is not a passing body."""
+    if response.status_code != expected_status:
+        raise ProbeFailure("unexpected_status")
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise ProbeFailure("invalid_json") from exc
+    if exact_fields is not None and (not isinstance(body, dict) or set(body) != set(exact_fields)):
+        raise ProbeFailure("response_shape_mismatch")
+    for path, expected in expected_values.items():
+        value = response_value(body, path)
+        if not strict_equal(value, expected):
+            raise ProbeFailure("response_value_mismatch")
+    for path, check in (checks or {}).items():
+        try:
+            valid = check(response_value(body, path))
+        except (ValueError, TypeError, OverflowError) as exc:
+            raise ProbeFailure("response_predicate_failed") from exc
+        if valid is not True:
+            raise ProbeFailure("response_predicate_failed")
+    return body
+
+
+class Drill:
+    """Record actual assertions separately from schema presence and denials."""
+
+    def __init__(self, client, document, report):
+        self.client, self.report = client, report
+        report["operations"] = inventory(document)
+        self.results = report["cases"] = []
+        self.mutations = {}
+
+    async def call(self, name, method, route, *, path=None, token=None, payload=None,
+                   expected=200, values=None, fields=(), headers=None, checks=None,
+                   exact_fields=None):
+        operation = self.report["operations"][f"{method} {route}"]
+        request_headers = {"X-Request-ID": str(uuid4()), "X-Correlation-ID": str(uuid4())}
+        if token:
+            request_headers["Authorization"] = f"Bearer {token}"
+        if payload is not None:
+            request_headers["Idempotency-Key"] = str(uuid4())
+        request_headers.update(headers or {})
+        request_headers = {key: value for key, value in request_headers.items() if value is not None}
+        asserted = set(fields) | {f"response.{expected}.{key}" for key in (values or {})}
+        asserted |= {f"response.{expected}.{key}" for key in (checks or {})}
+        row = {"name": name, "operation": f"{method} {route}", "expected": expected,
+               "actual": None, "result": "failed", "asserted_fields": sorted(asserted)}
+        if any(previous["name"] == name for previous in self.results):
+            raise ProbeFailure("duplicate_case_name")
+        self.results.append(row)
+        operation["cases"].append(name)
+        try:
+            # Respect the default 30/minute mutation budget without changing server guards.
+            if method in {"POST", "PUT", "PATCH", "DELETE"} and token:
+                times = self.mutations.setdefault(token, [])
+                times[:] = [stamp for stamp in times if time.monotonic() - stamp < 61]
+                if len(times) >= 29:
+                    delay = max(0, 61 - (time.monotonic() - times[0]))
+                    print(f"pacing local mutation requests for {delay:.1f}s", flush=True)
+                    await asyncio.sleep(delay)
+                    times[:] = [stamp for stamp in times if time.monotonic() - stamp < 61]
+                times.append(time.monotonic())
+            response = await self.client.request(method, path or route, json=payload,
+                                                 headers=request_headers)
+            row["actual"] = response.status_code
+            if response.status_code >= 400:
+                try:
+                    code = response.json().get("error", {}).get("code")
+                    if isinstance(code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,99}", code):
+                        row["actual_error_code"] = code
+                except (ValueError, AttributeError):
+                    pass
+            body = verify_response(response, expected, values or {}, checks, exact_fields)
+            for header in ("X-Request-ID", "X-Correlation-ID"):
+                if response.headers.get(header) != request_headers[header]:
+                    raise ProbeFailure("request_provenance_mismatch")
+            row["result"] = "success" if expected < 300 else "expected_denial"
+            if operation["status"] != "failed":
+                operation["status"] = (
+                    "partial_positive" if row["result"] == "success"
+                    or operation["status"] == "partial_positive" else "denial_only"
+                )
+            for field in asserted:
+                operation["field_cases"].setdefault(field, []).append(name)
+            operation["uncovered_fields"] = sorted(
+                set(operation["schema_fields"]) - operation["field_cases"].keys()
+            )
+            print(f'{row["result"]}: {name}: {method} {route} -> {response.status_code}', flush=True)
+            return body
+        except Exception as exc:
+            operation["status"] = "failed"
+            row["failure_kind"] = type(exc).__name__
+            if isinstance(exc, ProbeFailure):
+                row["failure_code"] = str(exc)
+            raise
+
+
+async def profile_cases(drill, issuer, token):
+    route = "/api/v1/actors/me"
+    for name, bad in (("missing", None), ("signature", TokenIssuer().issue("outsider")),
+                      ("expired", issuer.issue("outsider", exp=int(time.time()) - 60)),
+                      ("issuer", issuer.issue("outsider", iss="https://wrong.invalid")),
+                      ("audience", issuer.issue("outsider", aud="wrong")),
+                      ("not_before", issuer.issue("outsider", nbf=int(time.time()) + 300))):
+        await drill.call("token_" + name, "GET", route, token=bad, expected=401)
+    actor = await drill.call("profile_self", "GET", route, token=token,
+        values={"actor_kind": "human", "status": "active", "domains": ["contributor"],
+                "admin_roles": [], "project_role_grants": [], "display_name": None,
+                "contact_email": None},
+        checks={"actor_profile_id": uuid_value, "created_at": timestamp_value,
+                "updated_at": timestamp_value, "last_seen_at": timestamp_value},
+        exact_fields=("actor_profile_id", "actor_kind", "status", "domains", "admin_roles",
+                      "project_role_grants", "display_name", "contact_email", "created_at",
+                      "updated_at", "last_seen_at"))
+    stable = {key: actor[key] for key in ("actor_profile_id", "created_at", "actor_kind",
+                                         "domains", "admin_roles", "project_role_grants", "status")}
+    await drill.call("profile_stable_identity", "GET", route, token=token, values=stable)
+    await drill.call("profile_both_fields", "PATCH", route, token=token,
+        payload={"display_name": "  Display 名  ", "contact_email": "  opaque contact  "},
+        values=stable | {"display_name": "Display 名", "contact_email": "opaque contact"})
+    await drill.call("profile_patch_omission_preserves_other", "PATCH", route, token=token,
+        payload={"display_name": "single"},
+        values=stable | {"display_name": "single", "contact_email": "opaque contact"})
+    await drill.call("profile_omission_readback", "GET", route, token=token,
+        values=stable | {"display_name": "single", "contact_email": "opaque contact"})
+    for field, limit in (("display_name", 200), ("contact_email", 320)):
+        for label, value in (("text", "example"), ("limit", "x" * limit), ("null", None)):
+            await drill.call(f"{field}_{label}", "PATCH", route, token=token,
+                             payload={field: value}, values={field: value},
+                             fields=(f"body.{field}", f"response.200.{field}"))
+            await drill.call(f"{field}_{label}_readback", "GET", route, token=token,
+                             values={field: value}, fields=(f"response.200.{field}",))
+        for label, value in (("too_long", "x" * (limit + 1)), ("blank", "  "), ("empty", ""),
+                             ("type", {"unexpected": True}), ("number", 1), ("bool", True),
+                             ("array", [])):
+            await drill.call(f"{field}_{label}", "PATCH", route, token=token,
+                             payload={field: value}, expected=422, fields=(f"body.{field}",))
+            await drill.call(f"{field}_{label}_unchanged", "GET", route, token=token,
+                             values={field: None}, fields=(f"response.200.{field}",))
+    await drill.call("empty_profile_patch", "PATCH", route, token=token, payload={}, expected=422)
+    await drill.call("unknown_profile_field", "PATCH", route, token=token,
+                     payload={"admin_roles": ["access_administrator"]}, expected=422)
+    await drill.call("profile_unauthenticated_patch", "PATCH", route,
+        payload={"display_name": "unauthorized"}, expected=401)
+    await drill.call("profile_failed_changes_readback", "GET", route, token=token,
+        values=stable | {"display_name": None, "contact_email": None})
+    return actor["actor_profile_id"]
+
+
+async def project_cases(drill, admin, manager, outsider, manager_id):
+    grant = await drill.call("grant_manager", "POST", "/api/v1/admin-role-grants", token=admin,
+        payload={"target_actor_profile_id": manager_id, "role": "project_manager",
+                 "scope_type": "system", "reason": "Isolated external API drill"}, expected=201)
+    for route in ("/api/v1/authorization/permissions", "/api/v1/authorization/admin-role-definitions"):
+        await drill.call("read_" + route.rsplit("/", 1)[1], "GET", route, token=admin)
+    await drill.call("list_system_grants", "GET", "/api/v1/admin-role-grants",
+                     path="/api/v1/admin-role-grants?scope_type=system", token=admin)
+    payload = {"name": "External drill", "slug": "drill-" + uuid4().hex,
+               "description": "Disposable HTTP-only project"}
+    key = {"Idempotency-Key": str(uuid4())}
+    project = await drill.call("create_project", "POST", "/api/v1/projects", token=manager,
+        payload=payload, headers=key, expected=201, values=payload,
+        fields=("body.name", "body.slug", "body.description", "header.Idempotency-Key"))
+    await drill.call("replay_project", "POST", "/api/v1/projects", token=manager,
+        payload=payload, headers=key, expected=201, values={"id": project["id"]})
+    await drill.call("conflicting_project_replay", "POST", "/api/v1/projects", token=manager,
+        payload=payload | {"name": "Changed"}, headers=key, expected=409)
+    route, path = "/api/v1/projects/{project_id}", f'/api/v1/projects/{project["id"]}'
+    await drill.call("read_project", "GET", route, path=path, token=manager, values=payload)
+    await drill.call("ungranted_project_denied", "GET", route, path=path, token=outsider, expected=404)
+    guide_route = route + "/guides"
+    guide = await drill.call("create_guide", "POST", guide_route, path=path + "/guides",
+        token=manager, expected=201, payload={"version": "initial", "content_markdown": "# Task guide",
+                                            "change_summary": "Initial draft"},
+        values={"version": "initial", "content_markdown": "# Task guide", "status": "draft"},
+        fields=("body.version", "body.content_markdown", "body.change_summary"))
+    gpath, groute = path + "/guides/" + guide["id"], guide_route + "/{guide_id}"
+    await drill.call("patch_guide", "PATCH", groute, path=gpath, token=manager,
+        payload={"content_markdown": "# Updated guide", "change_summary": "Updated"},
+        values={"content_markdown": "# Updated guide", "change_summary": "Updated"},
+        fields=("body.content_markdown", "body.change_summary"))
+    await policy_cases(drill, manager, groute, gpath)
+    await project_field_cases(drill, manager, outsider, project, guide, manager_id)
+    await project_role_cases(drill, manager, outsider, project, manager_id)
+    await authority_cases(drill, admin, manager, outsider, manager_id, project)
+    await drill.call("revoke_manager", "POST", "/api/v1/admin-role-grants/{grant_id}/revoke",
+        path=f'/api/v1/admin-role-grants/{grant["resource_id"]}/revoke', token=admin,
+        payload={"reason": "Verify authority revocation"})
+    await drill.call("revoked_project_creation", "POST", "/api/v1/projects", token=manager,
+        payload=payload | {"slug": "revoked-" + uuid4().hex}, expected=403)
+
+
+async def policy_cases(drill, manager, groute, gpath):
+    """Exercise explicit policy fields, defaults, validation and stored replay."""
+    policies = {
+        "review-policy": {"human_review_required": True, "review_preference_window_seconds": 3600,
+                          "review_lease_duration_seconds": 1800},
+        "revision-policy": {"max_revision_rounds": 2, "revision_deadline_hours": 24},
+    }
+    defaults = {
+        "review-policy": {"max_active_review_leases_per_reviewer": 1, "self_review_allowed": False,
+            "reject_policy": "close_task", "finding_evidence_requirement": "optional",
+            "requires_second_review": False, "allowed_decisions": ["accept", "needs_revision", "reject"],
+            "minimum_finding_fields": []},
+        "revision-policy": {"allowed_resubmission_states": ["needs_revision"],
+                            "reviewer_reassignment_rule": None},
+    }
+    for suffix, body in policies.items():
+        key = {"If-Match": '"no-current-policy"', "Idempotency-Key": str(uuid4())}
+        result = await drill.call("create_" + suffix, "PUT", groute + "/" + suffix,
+            path=gpath + "/" + suffix, token=manager, payload=body, headers=key,
+            values=body | defaults[suffix] | {"policy_generation": 1},
+            fields=tuple("body." + field for field in body))
+        await drill.call("stored_replay_" + suffix, "PUT", groute + "/" + suffix,
+            path=gpath + "/" + suffix, token=manager, payload=body, headers=key, values=result)
+        invalids = [("unknown", body | {"unexpected": 1})]
+        for field in body:
+            if field != "human_review_required":
+                invalids.append((field + "_missing", {k: v for k, v in body.items() if k != field}))
+                invalids.append((field + "_zero", body | {field: 0}))
+            invalids.append((field + "_null", body | {field: None}))
+            invalids.append((field + "_type", body | {field: {"bad": True}}))
+        invalids += [(field + "_enum", body | {field: "invalid"}) for field in defaults[suffix]
+                     if field not in {"reviewer_reassignment_rule"}]
+        for label, invalid in invalids:
+            await drill.call(suffix + "_" + label, "PUT", groute + "/" + suffix,
+                path=gpath + "/" + suffix, token=manager, payload=invalid,
+                headers={"If-Match": '"no-current-policy"'}, expected=422)
+        await drill.call("after_rejections_" + suffix, "PUT", groute + "/" + suffix,
+            path=gpath + "/" + suffix, token=manager, payload=body, headers=key, values=result)
+        await drill.call("stale_selector_" + suffix, "PUT", groute + "/" + suffix,
+            path=gpath + "/" + suffix, token=manager, payload=body,
+            headers={"If-Match": '"no-current-policy"'}, expected=409)
+        # A fresh update with the prior selector proves rejections did not advance it.
+        selector = f'"{result["id"]}.{result["policy_generation"]}.{result["policy_hash"].removeprefix("sha256:")}"'
+        replacement = (body | {"human_review_required": False, "finding_evidence_requirement": "required_for_all",
+                              "requires_second_review": True, "allowed_decisions": ["accept", "reject"],
+                              "minimum_finding_fields": ["summary", "evidence"]}
+                       if suffix == "review-policy" else
+                       body | {"max_revision_rounds": 1, "revision_deadline_hours": 1,
+                               "reviewer_reassignment_rule": "same_reviewer"})
+        replacement_key = {"If-Match": selector, "Idempotency-Key": str(uuid4())}
+        updated = await drill.call("replace_" + suffix, "PUT", groute + "/" + suffix,
+            path=gpath + "/" + suffix, token=manager, payload=replacement, headers=replacement_key,
+            values=defaults[suffix] | replacement | {"policy_generation": 2,
+                "supersedes_policy_id": result["id"], "project_id": result["project_id"],
+                "guide_version": "initial", "semantics_status": "complete"},
+            checks={"id": lambda value: uuid_value(value) and value != result["id"],
+                    "created_at": timestamp_value,
+                    "policy_hash": lambda value: isinstance(value, str) and
+                    re.fullmatch(r"sha256:[0-9a-f]{64}", value) is not None and value != result["policy_hash"]},
+            fields=tuple("body." + field for field in replacement))
+        await drill.call("replacement_replay_" + suffix, "PUT", groute + "/" + suffix,
+            path=gpath + "/" + suffix, token=manager, payload=replacement,
+            headers=replacement_key, values=updated)
+        await drill.call("superseded_selector_" + suffix, "PUT", groute + "/" + suffix,
+            path=gpath + "/" + suffix, token=manager, payload=body,
+            headers={"If-Match": selector}, expected=409)
+
+
+async def project_field_cases(drill, manager, outsider, project, guide, manager_id):
+    """Input boundaries and current-state checks using public project operations."""
+    route = "/api/v1/projects"
+    for field in ("name", "slug", "description"):
+        body = {"name": "Type test", "slug": "type-" + uuid4().hex}
+        for label, value in (("object", {}), ("number", 1), ("array", [])):
+            await drill.call(f"project_{field}_{label}", "POST", route, token=manager,
+                payload=body | {field: value}, expected=422, fields=("body." + field,))
+        if field != "description":
+            await drill.call(f"project_{field}_missing", "POST", route, token=manager,
+                payload={k: v for k, v in body.items() if k != field}, expected=422)
+            await drill.call(f"project_{field}_null", "POST", route, token=manager,
+                payload=body | {field: None}, expected=422)
+    await drill.call("project_extra", "POST", route, token=manager,
+        payload={"name": "Extra", "slug": "extra", "status": "active"}, expected=422)
+    await drill.call("project_duplicate_slug", "POST", route, token=manager,
+        payload={"name": "Duplicate", "slug": project["slug"]}, expected=409,
+        values={"error.code": "project_slug_conflict"})
+    for label, key in (("missing", None), ("malformed", "bad-key")):
+        await drill.call("project_key_" + label, "POST", route, token=manager,
+            payload={"name": "Key test", "slug": "key-" + uuid4().hex},
+            headers={"Idempotency-Key": key}, expected=422)
+    at_limit = {"name": "n" * 200, "slug": "s" * 120, "description": None}
+    limit_project = await drill.call("project_maximum_lengths", "POST", route, token=manager,
+        payload=at_limit, expected=201, values=at_limit | {"status": "draft"},
+        checks={"id": uuid_value, "created_at": timestamp_value, "updated_at": timestamp_value},
+        exact_fields=("id", "name", "slug", "description", "status", "created_at", "updated_at"))
+    await drill.call("project_maximum_readback", "GET", route + "/{project_id}",
+        path=route + "/" + limit_project["id"], token=manager, values=limit_project)
+    groute = route + "/{project_id}/guides"
+    gpath = f'{route}/{project["id"]}/guides'
+    gbody = {"version": "v" * 50, "content_markdown": "# Boundary guide"}
+    boundary_guide = await drill.call("guide_maximum_version", "POST", groute,
+        path=gpath, token=manager, payload=gbody, expected=201,
+        values=gbody | {"project_id": project["id"], "status": "draft", "change_summary": None,
+                       "approved_by": None, "effective_at": None, "superseded_at": None,
+                       "created_by": manager_id},
+        checks={"id": uuid_value, "created_at": timestamp_value, "updated_at": timestamp_value},
+        exact_fields=("id", "project_id", "version", "status", "content_markdown", "change_summary",
+                      "approved_by", "effective_at", "superseded_at", "created_by", "created_at", "updated_at"))
+    for field in gbody:
+        await drill.call("guide_" + field + "_missing", "POST", groute, path=gpath, token=manager,
+            payload={k: v for k, v in gbody.items() if k != field}, expected=422)
+    # These probes are independent. Preserve every failure and continue to the next field.
+    # Never alter the expected 422 to match an observed server error.
+    for field, maximum in (("name", 200), ("slug", 120), ("version", 50)):
+        body = ({"name": "Overflow", "slug": "overflow-" + uuid4().hex}
+                if field != "version" else {"version": "overflow", "content_markdown": "# Overflow"})
+        failed_key = {"Idempotency-Key": str(uuid4())}
+        try:
+            await drill.call("overflow_" + field, "POST", route if field != "version" else groute,
+                path=route if field != "version" else gpath, token=manager,
+                payload=body | {field: "x" * (maximum + 1)}, expected=422, headers=failed_key,
+                fields=("body." + field,))
+        except ProbeFailure:
+            pass
+        await drill.call("overflow_" + field + "_retry_after_rollback", "POST",
+            route if field != "version" else groute, path=route if field != "version" else gpath,
+            token=manager, payload=body, headers=failed_key, expected=201, values=body)
+    # A new-key no-op PATCH returns current guide state, not a cached replay response.
+    await drill.call("guide_current_state_after_overflow", "PATCH", groute + "/{guide_id}",
+        path=gpath + "/" + boundary_guide["id"], token=manager, payload={},
+        values={key: value for key, value in boundary_guide.items() if key != "updated_at"})
+    await drill.call("guide_foreign_actor_patch", "PATCH", groute + "/{guide_id}",
+        path=gpath + "/" + guide["id"], token=outsider,
+        payload={"content_markdown": "Unauthorized replacement"}, expected=403)
+    await drill.call("guide_foreign_actor_patch_unchanged", "PATCH", groute + "/{guide_id}",
+        path=gpath + "/" + guide["id"], token=manager, payload={},
+        values={"id": guide["id"], "project_id": project["id"], "version": "initial",
+                "status": "draft", "content_markdown": "# Updated guide", "change_summary": "Updated",
+                "created_by": manager_id, "created_at": guide["created_at"]})
+    try:
+        await drill.call("guide_null_content", "PATCH", groute + "/{guide_id}",
+            path=gpath + "/" + guide["id"], token=manager,
+            payload={"content_markdown": None}, expected=422)
+    except ProbeFailure:
+        pass
+    await drill.call("guide_null_content_unchanged", "PATCH", groute + "/{guide_id}",
+        path=gpath + "/" + guide["id"], token=manager, payload={},
+        values={"content_markdown": "# Updated guide", "change_summary": "Updated"})
+
+
+async def authority_cases(drill, admin, manager, outsider, manager_id, project):
+    """Prove scoped authority against a real second project and lifecycle reads."""
+    other = await drill.call("second_project", "POST", "/api/v1/projects", token=manager,
+        payload={"name": "Foreign project", "slug": "foreign-" + uuid4().hex}, expected=201)
+    outsider_body = await drill.call("scoped_actor", "GET", "/api/v1/actors/me", token=outsider)
+    scoped_id = outsider_body["actor_profile_id"]
+    await drill.call("grant_scoped_manager", "POST", "/api/v1/admin-role-grants", token=admin,
+        payload={"target_actor_profile_id": scoped_id, "role": "project_manager",
+                 "scope_type": "project", "scope_project_id": project["id"],
+                 "reason": "Exact-project test"}, expected=201)
+    route = "/api/v1/projects/{project_id}"
+    await drill.call("scoped_project_control", "GET", route,
+                     path=f'/api/v1/projects/{project["id"]}', token=outsider,
+                     values={"id": project["id"]})
+    await drill.call("foreign_project_denial", "GET", route,
+                     path=f'/api/v1/projects/{other["id"]}', token=outsider, expected=404)
+    await drill.call("scoped_authorization_context", "GET", "/api/v1/actors/me/authorization-context",
+        path=f'/api/v1/actors/me/authorization-context?project_id={project["id"]}', token=outsider,
+        values={"project_id": project["id"], "admin_roles": ["project_manager"]})
+    for suffix in ("contributor-candidates", "role-grants"):
+        await drill.call("list_" + suffix, "GET", route + "/" + suffix,
+            path=f'/api/v1/projects/{project["id"]}/{suffix}?limit=1', token=outsider)
+        await drill.call("invalid_limit_" + suffix, "GET", route + "/" + suffix,
+            path=f'/api/v1/projects/{project["id"]}/{suffix}?limit=0', token=outsider, expected=422,
+            fields=("query.limit",))
+    for suffix in ("", "/identity-links", "/admin-role-grants"):
+        await drill.call("admin_actor_read" + suffix, "GET", "/api/v1/actors/{actor_profile_id}" + suffix,
+            path=f"/api/v1/actors/{manager_id}" + suffix + ("?scope_type=system" if suffix == "/admin-role-grants" else ""),
+            token=admin)
+    for action in ("suspend", "reactivate", "deactivate"):
+        await drill.call("actor_" + action, "POST", "/api/v1/actors/{actor_profile_id}/" + action,
+            path=f"/api/v1/actors/{scoped_id}/" + action, token=admin,
+            payload={"reason": "Isolated lifecycle probe"})
+        state = {"suspend": "suspended", "reactivate": "active", "deactivate": "deactivated"}[action]
+        await drill.call("actor_" + action + "_readback", "GET", "/api/v1/actors/{actor_profile_id}",
+            path=f"/api/v1/actors/{scoped_id}", token=admin, values={"status": state})
+        if action == "reactivate":
+            await drill.call("reactivated_self_write", "PATCH", "/api/v1/actors/me", token=outsider,
+                payload={"display_name": "Reactivated owner"}, values={"display_name": "Reactivated owner"})
+        else:
+            await drill.call(action + "_self_write_denied", "PATCH", "/api/v1/actors/me", token=outsider,
+                payload={"display_name": "Forbidden change"}, expected=403,
+                values={"error.code": "actor_suspended" if action == "suspend" else "actor_deactivated"})
+            await drill.call(action + "_write_unchanged", "GET", "/api/v1/actors/{actor_profile_id}",
+                path=f"/api/v1/actors/{scoped_id}", token=admin,
+                values={"display_name": None if action == "suspend" else "Reactivated owner"})
+    await drill.call("deactivated_actor_cannot_reactivate", "POST", "/api/v1/actors/{actor_profile_id}/reactivate",
+        path=f"/api/v1/actors/{scoped_id}/reactivate", token=admin,
+        payload={"reason": "Attempt forbidden terminal transition"}, expected=409,
+        values={"error.code": "actor_deactivated_terminal"})
+
+
+async def project_role_cases(drill, manager, contributor, project, manager_id):
+    """Issue exact-project grants, observe actual access, then revoke it."""
+    actor = await drill.call("role_target_identity", "GET", "/api/v1/actors/me", token=contributor)
+    route = "/api/v1/projects/{project_id}/role-grants"
+    path = f'/api/v1/projects/{project["id"]}/role-grants'
+    qualification = {
+        "skills_snapshot": {"availability": "available", "reference_ids": ["skill:drill"],
+                            "unavailable_reason": None},
+        "reputation_snapshot": {"availability": "unavailable", "reference_ids": [],
+                                "unavailable_reason": "no_record"},
+        "prior_project_work_refs": [], "external_expertise_refs": ["expertise:drill"],
+    }
+    for role in ("submitter", "reviewer"):
+        body = {"target_actor_profile_id": actor["actor_profile_id"], "role": role,
+                "qualification": qualification, "reason": "Exact project contribution role"}
+        key = {"Idempotency-Key": str(uuid4())}
+        try:
+            result = await drill.call("issue_project_" + role, "POST", route, path=path, token=manager,
+                payload=body, headers=key, expected=201,
+                values={"project_id": project["id"], "actor_profile_id": actor["actor_profile_id"],
+                        "role": role, "status": "active", "version": 1},
+                checks={"id": uuid_value, "qualification_snapshot_id": uuid_value})
+        except ProbeFailure:
+            await drill.call("failed_grant_no_active_row_" + role, "GET", route,
+                path=path + f"?role={role}&status=active", token=manager,
+                values={"items": [], "next_cursor": None})
+            await drill.call("failed_grant_no_access_" + role, "GET", "/api/v1/projects/{project_id}",
+                path=f'/api/v1/projects/{project["id"]}', token=contributor, expected=404)
+            continue
+        await drill.call("replay_project_" + role, "POST", route, path=path, token=manager,
+            payload=body, headers=key, expected=201, values=result)
+        read_path = path + "/" + result["id"]
+        stored = await drill.call("read_project_" + role, "GET", route + "/{grant_id}",
+            path=read_path, token=manager,
+            values={"id": result["id"], "project_id": project["id"], "actor_profile_id": actor["actor_profile_id"],
+                    "role": role, "status": "active", "version": 1, "grant_method": "manual",
+                    "grant_reason": body["reason"], "granted_by_actor_profile_id": manager_id,
+                    "qualification_snapshot.id": result["qualification_snapshot_id"],
+                    "qualification_snapshot.requested_role": role,
+                    "qualification_snapshot.skills_snapshot": qualification["skills_snapshot"],
+                    "qualification_snapshot.reputation_snapshot": qualification["reputation_snapshot"],
+                    "qualification_snapshot.prior_project_work_refs": [],
+                    "qualification_snapshot.external_expertise_refs": ["expertise:drill"],
+                    "revoked_by_actor_profile_id": None, "revoked_at": None, "revoked_reason": None},
+            checks={"granted_at": timestamp_value, "granted_by_admin_role_grant_id": uuid_value,
+                    "qualification_snapshot.captured_at": timestamp_value})
+        await drill.call("contributor_project_access_" + role, "GET", "/api/v1/projects/{project_id}",
+            path=f'/api/v1/projects/{project["id"]}', token=contributor,
+            values={"id": project["id"], "name": project["name"], "status": "draft"},
+            exact_fields=("id", "name", "status"))
+        await drill.call("contributor_context_" + role, "GET", "/api/v1/actors/me/authorization-context",
+            path=f'/api/v1/actors/me/authorization-context?project_id={project["id"]}', token=contributor,
+            values={"actor_profile_id": actor["actor_profile_id"], "project_id": project["id"],
+                    "status": "active", "admin_roles": [], "project_roles": [role]})
+        revoked = await drill.call("revoke_project_" + role, "POST", route + "/{grant_id}/revoke",
+            path=read_path + "/revoke", token=manager, payload={"reason": "End role probe"},
+            values=result | {"status": "revoked", "version": 2})
+        await drill.call("revoked_grant_readback_" + role, "GET", route + "/{grant_id}",
+            path=read_path, token=manager,
+            values={key: stored[key] for key in ("id", "role", "project_id", "actor_profile_id", "qualification_snapshot")}
+                   | {"status": revoked["status"], "version": 2, "revoked_reason": "End role probe",
+                      "revoked_by_actor_profile_id": manager_id},
+            checks={"revoked_at": timestamp_value})
+        await drill.call("revoked_contributor_read_" + role, "GET", "/api/v1/projects/{project_id}",
+            path=f'/api/v1/projects/{project["id"]}', token=contributor, expected=404)
+    # Human-confirmed v0.1 scope has two roles. Do not implement adjudication to pass this probe.
+    try:
+        await drill.call("unsupported_adjudicator_rejected", "POST", route, path=path, token=manager,
+            payload={"target_actor_profile_id": actor["actor_profile_id"], "role": "adjudicator",
+                     "qualification": qualification, "reason": "Unsupported role negative probe"},
+            expected=422)
+    except ProbeFailure:
+        pass
+    await drill.call("unsupported_adjudicator_no_active_grant", "GET", route,
+        path=path + "?status=active", token=manager, values={"items": [], "next_cursor": None})
+    await drill.call("unsupported_adjudicator_no_access", "GET", "/api/v1/projects/{project_id}",
+        path=f'/api/v1/projects/{project["id"]}', token=contributor, expected=404)
+
+
+async def service_actor_cases(drill, issuer, admin, outsider):
+    """Provision through HTTP and prove binding, replay, privacy and revocation."""
+    route = "/api/v1/service-actors"
+    subject = "external-drill-service"
+    payload = {"service_identity": "workstream.review.projection", "subject": subject,
+               "reason": "Verify exact service binding"}
+    for label, token, status in (("missing_auth", None, 401), ("ungranted", outsider, 403)):
+        await drill.call("service_" + label, "POST", route, token=token, payload=payload,
+                         expected=status)
+    for field in payload:
+        invalids = (("missing", {k: v for k, v in payload.items() if k != field}),
+                    ("null", payload | {field: None}), ("object", payload | {field: {}}),
+                    ("empty", payload | {field: ""}))
+        for label, invalid in invalids:
+            await drill.call(f"service_{field}_{label}", "POST", route, token=admin,
+                             payload=invalid, expected=422, fields=("body." + field,))
+    for field, value, label in (("subject", " padded ", "padding"),
+        ("subject", "é" * 101, "utf8_overflow"), ("reason", "é" * 251, "utf8_overflow"),
+        ("service_identity", "unregistered.service", "unknown_identity"),
+        ("unexpected", True, "extra")):
+        await drill.call("service_" + field + "_" + label, "POST", route, token=admin,
+                         payload=payload | {field: value}, expected=422)
+    for label, value in (("missing_key", None), ("malformed_key", "not-a-uuid")):
+        await drill.call("service_" + label, "POST", route, token=admin, payload=payload,
+                         headers={"Idempotency-Key": value}, expected=422,
+                         fields=("header.Idempotency-Key",))
+    key = {"Idempotency-Key": str(uuid4())}
+    created = await drill.call("service_provision", "POST", route, token=admin,
+        payload=payload, headers=key, expected=201,
+        values={"service_identity": payload["service_identity"], "actor_status": "active",
+                "identity_link_status": "active", "provisioning_method": "manual_service_provisioning"},
+        checks={"actor_profile_id": uuid_value, "created_at": timestamp_value, "linked_at": timestamp_value},
+        exact_fields=("actor_profile_id", "service_identity", "actor_status", "identity_link_status",
+                      "provisioning_method", "created_at", "linked_at"),
+        fields=tuple("body." + field for field in payload))
+    await drill.call("service_replay", "POST", route, token=admin, payload=payload,
+                     headers=key, expected=201, values=created)
+    await drill.call("service_key_conflict", "POST", route, token=admin,
+                     payload=payload | {"subject": "different-subject"}, headers=key, expected=409,
+                     values={"error.code": "idempotency_mismatch"})
+    actor_id = created["actor_profile_id"]
+    actor_route = "/api/v1/actors/{actor_profile_id}"
+    actor_path = f"/api/v1/actors/{actor_id}"
+    await drill.call("service_persisted_profile", "GET", actor_route, path=actor_path, token=admin,
+        values={"actor_profile_id": actor_id, "actor_kind": "service", "status": "active",
+                "provisioning_method": "manual_service_provisioning", "display_name": None,
+                "service_identity": payload["service_identity"], "suspended_at": None,
+                "reactivated_at": None, "deactivated_at": None})
+    link = await drill.call("service_persisted_identity", "GET", actor_route + "/identity-links",
+        path=actor_path + "/identity-links", token=admin,
+        values={"actor_profile_id": actor_id, "subject_kind": "service", "status": "active",
+                "revoked_at": None, "reactivated_at": None},
+        checks={"identity_link_id": uuid_value, "linked_at": timestamp_value},
+        exact_fields=("identity_link_id", "actor_profile_id", "subject_kind", "status", "linked_at",
+                      "last_verified_at", "revoked_at", "reactivated_at"))
+    service = issuer.issue(subject, subject_kind="service", scope="workstream:service")
+    # An established service identity is not an administrative grant.
+    await drill.call("service_cannot_provision", "POST", route, token=service,
+                     payload=payload, expected=403)
+    for action, state in (("revoke", "revoked"), ("reactivate", "active")):
+        mutation = "/api/v1/actor-identity-links/{identity_link_id}/" + action
+        path = f'/api/v1/actor-identity-links/{link["identity_link_id"]}/{action}'
+        mutation_key = {"Idempotency-Key": str(uuid4())}
+        result = await drill.call("service_link_" + action, "POST", mutation,
+            path=path, token=admin, payload={"reason": " Verify binding lifecycle "}, headers=mutation_key,
+            values={"resource_type": "actor_identity_link", "resource_id": link["identity_link_id"],
+                    "version": None, "http_status": 200})
+        await drill.call("service_link_" + action + "_replay", "POST", mutation,
+            path=path, token=admin, payload={"reason": " Verify binding lifecycle "},
+            headers=mutation_key, values=result)
+        await drill.call("service_link_" + action + "_readback", "GET", actor_route + "/identity-links",
+            path=actor_path + "/identity-links", token=admin,
+            values={"identity_link_id": link["identity_link_id"], "actor_profile_id": actor_id,
+                    "status": state}, checks={"revoked_at" if action == "revoke" else "reactivated_at": timestamp_value})
+        await drill.call("service_link_" + action + "_admission", "POST", route, token=service,
+            payload=payload, expected=403,
+            values={"error.code": "identity_link_revoked" if action == "revoke" else "permission_not_granted"})
+
+
+async def isolation(metadata_path, *, require_empty=True):
+    """Require an owned database; empty at startup, populated only for owner probes."""
+    metadata = json.loads(metadata_path.read_text())
+    url = os.environ.get("WORKSTREAM_DATABASE_URL", "")
+    parsed = urlsplit(url)
+    sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    if not (parsed.scheme == "postgresql+asyncpg" and parsed.hostname == "127.0.0.1"
+            and not parsed.query and not parsed.fragment
+            and re.fullmatch(r"workstream_test_[a-f0-9]{12}", parsed.path[1:])
+            and re.fullmatch(r"workstream_role_[a-f0-9]{12}", unquote(parsed.username or ""))
+            and metadata.get("schema_version") == 2 and metadata.get("database_provisioned") is True
+            and metadata.get("database_cleanup_complete") is False
+            and metadata.get("tree_sha") == sha
+            and metadata.get("database_name") == parsed.path[1:]
+            and metadata.get("database_role") == unquote(parsed.username or "")):
+        raise ProbeFailure("isolation_required")
+    connection = await asyncpg.connect(url.replace("postgresql+asyncpg:", "postgresql:", 1))
+    try:
+        row = await connection.fetchrow("select current_database() as db, current_user as role, "
+                                        "(select count(*) from actor_profiles) as actors")
+        if (row["db"] != metadata["database_name"] or row["role"] != metadata["database_role"]
+                or (require_empty and row["actors"])):
+            raise ProbeFailure("fresh_owned_database_required")
+    finally:
+        await connection.close()
+    return url, sha
+
+
+async def run(args, report, *, scenario=None):
+    url, sha = await isolation(args.isolation_metadata)
+    if (ROOT / ".env").exists():
+        raise ProbeFailure("ambient_backend_env_file_forbidden")
+    issuer = TokenIssuer()
+    env = {"WORKSTREAM_DATABASE_URL": url, "WORKSTREAM_ENVIRONMENT": "local",
+           "WORKSTREAM_AUTH_PROVIDER": "flow", "WORKSTREAM_FLOW_AUTH_ISSUER": issuer.issuer,
+           "WORKSTREAM_FLOW_AUTH_AUDIENCE": issuer.audience,
+           "WORKSTREAM_FLOW_AUTH_LOCAL_HMAC_SECRET": issuer.secret,
+           "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET": base64.b64encode(os.urandom(32)).decode(),
+           "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET": base64.b64encode(os.urandom(32)).decode(),
+           "WORKSTREAM_ARTIFACT_STORE_BACKEND": "disabled",
+           "WORKSTREAM_PROJECT_SETUP_PIPELINE_AUTOSTART": "false", "PYTHONPATH": str(ROOT)}
+    dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT))
+    report.update(commit=sha, worktree_dirty=dirty,
+        drill_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        limitations=["local synthetic Flow issuer, not deployed Flow",
+        "artifact storage disabled; no provider/model calls", "no product fixtures or trigger suppression",
+        "partial scenarios; no operation certified fully field-complete"], setup=[])
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    process = subprocess.Popen([sys.executable, "-m", "uvicorn", "app.main:create_app", "--factory",
+        "--host", "127.0.0.1", "--port", str(port), "--no-access-log"], cwd=ROOT, env=env,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{port}", trust_env=False,
+                                     follow_redirects=False, timeout=20) as client:
+            await wait_for_server(client, process)
+            document = openapi_document(await client.get("/openapi.json"))
+            drill = Drill(client, document, report)
+            drill.isolation_metadata = args.isolation_metadata
+            await drill.call("health", "GET", "/api/v1/health")
+            if scenario is not None:
+                await scenario(drill, issuer, env)
+                return
+            admin, manager, outsider = (issuer.issue(name) for name in ("admin", "manager", "outsider"))
+            admin_id = await profile_cases(drill, issuer, admin)
+            bootstrap = subprocess.run([sys.executable, "scripts/bootstrap_access_administrator.py",
+                "--actor-profile-id", admin_id, "--execute"], env=env, cwd=ROOT,
+                capture_output=True, timeout=30)
+            if bootstrap.returncode != 0:
+                raise ProbeFailure("bootstrap_failed")
+            report["setup"].append("documented initial Access Administrator bootstrap CLI")
+            manager_body = await drill.call("manager_profile", "GET", "/api/v1/actors/me", token=manager)
+            await drill.call("outsider_profile", "GET", "/api/v1/actors/me", token=outsider)
+            await project_cases(drill, admin, manager, outsider, manager_body["actor_profile_id"])
+            await service_actor_cases(drill, issuer, admin, manager)
+    finally:
+        stop_server(process, preserving_failure=sys.exc_info()[0] is not None)
+
+
+def main(*, scenario=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--isolation-metadata", type=Path, required=True)
+    parser.add_argument("--report", type=Path, required=True)
+    args = parser.parse_args()
+    report = {"result": "failed", "operations": {}, "cases": []}
+    if args.report.resolve().is_relative_to(ROOT.parent):
+        raise SystemExit("report must be outside repository")
+    descriptor = os.open(args.report, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, "w") as output:
+        try:
+            if scenario is None:
+                asyncio.run(run(args, report))
+            else:
+                asyncio.run(run(args, report, scenario=scenario))
+            report["result"] = ("failed" if any(row["result"] == "failed" for row in report["cases"])
+                                else "completed_partial_coverage")
+        except Exception as exc:
+            report["failure_kind"] = type(exc).__name__
+            if isinstance(exc, ProbeFailure):
+                report["failure_code"] = str(exc)
+        finally:
+            json.dump(report, output, indent=2)
+            output.write("\n")
+    print(report["result"])
+    return 0 if report["result"] == "completed_partial_coverage" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

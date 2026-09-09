@@ -173,9 +173,24 @@ cannot be reused as post-submission review-gate evidence. See the
 - External subject identity resolves through ActorIdentityLink into a stable
   internal ActorProfile.
 - Human roles and fixed-service authority remain separate and fail closed.
+- Exact-project contributor grants support only `submitter` and `reviewer`.
+  Unsupported `adjudicator` inputs are rejected; adjudication remains deferred.
 - Project and administrative grants, resource guards, lifecycle revalidation,
   idempotency, rate controls, audit evidence, and opaque prepared authority are
   implemented.
+- A reusable [real-HTTP authorization drill](engineering/external-api-drill.md)
+  exercises twenty human profiles, the actual local administrator bootstrap,
+  all five administrative role definitions and applicable scope boundaries,
+  submitter/reviewer grants, self-protection, replay and lifecycle revocation.
+  Separate rollback-only probes exercise the four last-effective-administrator
+  count guards on stored authority; isolated off-by-one mutants verify that the
+  assertions detect those defects. These are local synthetic-Flow checks, not
+  deployed identity-provider certification or exhaustive API-field coverage.
+- The [five API drill defects](engineering/external-api-drill-findings.md) are
+  repaired: project name/slug and guide version enforce existing storage limits,
+  guide PATCH rejects explicit null content while preserving omission, and
+  unsupported project-role input is rejected before mutation. Full API-field
+  coverage and an exact-main rerun remain necessary before the MCP handoff.
 - Guide ingestion, guide binding/read, artifact verification/recovery,
   contributor preparation, Submission consumption/binding, unified compilation
   request/execute, and deterministic projection authority are implemented at

@@ -216,7 +216,7 @@ class ProjectRoleQualificationSnapshot(Base):
 
     __tablename__ = "project_role_qualification_snapshots"
     __table_args__ = (
-        CheckConstraint("requested_role in ('submitter','reviewer','adjudicator')", name="role"),
+        CheckConstraint("requested_role in ('submitter','reviewer')", name="role"),
         CheckConstraint(
             "project_role_availability_is_safe(skills_snapshot) and "
             "project_role_availability_is_safe(reputation_snapshot)",
@@ -270,7 +270,7 @@ class ProjectRoleGrant(Base):
 
     __tablename__ = "project_role_grants"
     __table_args__ = (
-        CheckConstraint("role in ('submitter','reviewer','adjudicator')", name="role"),
+        CheckConstraint("role in ('submitter','reviewer')", name="role"),
         CheckConstraint("grant_method='manual'", name="grant_method"),
         CheckConstraint(
             "project_role_reason_is_safe(grant_reason) and "

@@ -445,8 +445,8 @@ class ProjectCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str
-    slug: str
+    name: str = Field(max_length=200)
+    slug: str = Field(max_length=120)
     description: str | None = None
 
 
@@ -479,7 +479,7 @@ class ProjectGuideCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    version: str
+    version: str = Field(max_length=50)
     content_markdown: str
     change_summary: str | None = None
 
@@ -489,7 +489,7 @@ class ProjectGuideUpdate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    content_markdown: str | None = None
+    content_markdown: str = Field(default_factory=str)
     change_summary: str | None = None
 
 
