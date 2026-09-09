@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+from copy import deepcopy
 from datetime import datetime, timezone
 import hashlib
 import hmac
@@ -20,7 +21,7 @@ import socket
 import subprocess
 import sys
 import time
-from urllib.parse import unquote, urlsplit
+from urllib.parse import unquote, urlencode, urlsplit
 from uuid import UUID, uuid4
 
 import asyncpg
@@ -147,6 +148,7 @@ def inventory(document):
             operations[f"{method.upper()} {path}"] = {
                 "schema_fields": sorted(fields), "cases": [], "status": "untested",
                 "field_cases": {}, "uncovered_fields": sorted(fields),
+                "predicate_cases": {}, "shape_cases": {}, "request_cases": {},
             }
     return operations
 
@@ -182,6 +184,71 @@ def strict_equal(actual, expected):
         return len(actual) == len(expected) and all(
             strict_equal(left, right) for left, right in zip(actual, expected, strict=True))
     return actual == expected
+
+
+def equality_fields(value, prefix):
+    """Index only values actually compared; an empty array proves no item fields."""
+    result = {prefix}
+    if isinstance(value, dict):
+        for key, item in value.items():
+            result |= equality_fields(item, prefix + "." + key)
+    elif isinstance(value, list):
+        for item in value:
+            result |= equality_fields(item, prefix + "[]")
+    return result
+
+
+def page_matches(items, expected_rows, seen, limit, identity):
+    """Validate page identities and independent expected field values, not totals alone."""
+    if not isinstance(items, list) or len(items) > limit:
+        return False
+    ids = []
+    for row in items:
+        if not isinstance(row, dict) or not isinstance(row.get(identity), str):
+            return False
+        key = row[identity]
+        if key not in expected_rows or key in seen or key in ids:
+            return False
+        if any(not strict_equal(row.get(field), value) or field not in row
+               for field, value in expected_rows[key].items()):
+            return False
+        ids.append(key)
+    return True
+
+
+async def page_cases(drill, name, route, path, token, expected_rows, *,
+                     identity, query=None, limit=1, total=False):
+    """Bound traversal by known HTTP-created rows; fail on missing/foreign/repeated rows."""
+    seen, cursors = set(), set()
+    cursor = first_cursor = None
+    query = dict(query or {}) | {"limit": limit}
+    for index in range(len(expected_rows) + 1):
+        params = query | ({"cursor": cursor} if cursor is not None else {})
+        page_ids = set()
+        def items_valid(items):
+            valid = page_matches(items, expected_rows, seen, limit, identity)
+            if valid:
+                page_ids.update(row[identity] for row in items)
+            return valid
+        def cursor_valid(value):
+            complete = seen | page_ids == set(expected_rows)
+            if value is None:
+                return complete
+            return (not complete and bool(page_ids) and isinstance(value, str)
+                    and 0 < len(value) <= 512 and value not in cursors)
+        body = await drill.call(name + "_page_" + str(index), "GET", route,
+            path=path + "?" + urlencode(params), token=token,
+            values={"total": len(expected_rows)} if total else {},
+            checks={"items": items_valid, "next_cursor": cursor_valid},
+            exact_fields=("items", "next_cursor", "total") if total else ("items", "next_cursor"),
+            fields=tuple("query." + field for field in params))
+        seen |= page_ids
+        cursor = body["next_cursor"]
+        if cursor is None:
+            return first_cursor
+        first_cursor = first_cursor or cursor
+        cursors.add(cursor)
+    raise ProbeFailure("pagination_bound_exceeded")
 
 
 def verify_response(response, expected_status, expected_values, checks=None, exact_fields=None):
@@ -228,15 +295,23 @@ class Drill:
             request_headers["Idempotency-Key"] = str(uuid4())
         request_headers.update(headers or {})
         request_headers = {key: value for key, value in request_headers.items() if value is not None}
-        asserted = set(fields) | {f"response.{expected}.{key}" for key in (values or {})}
-        asserted |= {f"response.{expected}.{key}" for key in (checks or {})}
+        asserted = set()
+        for key, value in (values or {}).items():
+            asserted |= equality_fields(value, f"response.{expected}.{key}")
+        asserted |= {"header.X-Request-ID", "header.X-Correlation-ID"}
+        predicates = {f"response.{expected}.{key}" for key in (checks or {})}
+        shapes = {f"response.{expected}.{key}" for key in (exact_fields or ())}
         row = {"name": name, "operation": f"{method} {route}", "expected": expected,
-               "actual": None, "result": "failed", "asserted_fields": sorted(asserted)}
+               "actual": None, "result": "failed", "asserted_fields": [],
+               "request_fields": sorted(set(fields)), "predicate_fields": [], "shape_fields": []}
         if any(previous["name"] == name for previous in self.results):
             raise ProbeFailure("duplicate_case_name")
         self.results.append(row)
         operation["cases"].append(name)
         try:
+            if any(not isinstance(field, str) or not field.startswith(("body.", "query.", "path.", "header."))
+                   for field in fields):
+                raise ProbeFailure("invalid_request_field_annotation")
             # Respect the default 30/minute mutation budget without changing server guards.
             if method in {"POST", "PUT", "PATCH", "DELETE"} and token:
                 times = self.mutations.setdefault(token, [])
@@ -262,6 +337,9 @@ class Drill:
                 if response.headers.get(header) != request_headers[header]:
                     raise ProbeFailure("request_provenance_mismatch")
             row["result"] = "success" if expected < 300 else "expected_denial"
+            row["asserted_fields"] = sorted(asserted)
+            row["predicate_fields"] = sorted(predicates)
+            row["shape_fields"] = sorted(shapes)
             if operation["status"] != "failed":
                 operation["status"] = (
                     "partial_positive" if row["result"] == "success"
@@ -269,6 +347,10 @@ class Drill:
                 )
             for field in asserted:
                 operation["field_cases"].setdefault(field, []).append(name)
+            for kind, observed in (("predicate_cases", predicates), ("shape_cases", shapes),
+                                   ("request_cases", fields)):
+                for field in observed:
+                    operation[kind].setdefault(field, []).append(name)
             operation["uncovered_fields"] = sorted(
                 set(operation["schema_fields"]) - operation["field_cases"].keys()
             )
@@ -314,16 +396,16 @@ async def profile_cases(drill, issuer, token):
         for label, value in (("text", "example"), ("limit", "x" * limit), ("null", None)):
             await drill.call(f"{field}_{label}", "PATCH", route, token=token,
                              payload={field: value}, values={field: value},
-                             fields=(f"body.{field}", f"response.200.{field}"))
+                             fields=(f"body.{field}",))
             await drill.call(f"{field}_{label}_readback", "GET", route, token=token,
-                             values={field: value}, fields=(f"response.200.{field}",))
+                             values={field: value})
         for label, value in (("too_long", "x" * (limit + 1)), ("blank", "  "), ("empty", ""),
                              ("type", {"unexpected": True}), ("number", 1), ("bool", True),
                              ("array", [])):
             await drill.call(f"{field}_{label}", "PATCH", route, token=token,
                              payload={field: value}, expected=422, fields=(f"body.{field}",))
             await drill.call(f"{field}_{label}_unchanged", "GET", route, token=token,
-                             values={field: None}, fields=(f"response.200.{field}",))
+                             values={field: None})
     await drill.call("empty_profile_patch", "PATCH", route, token=token, payload={}, expected=422)
     await drill.call("unknown_profile_field", "PATCH", route, token=token,
                      payload={"admin_roles": ["access_administrator"]}, expected=422)
@@ -579,11 +661,112 @@ async def authority_cases(drill, admin, manager, outsider, manager_id, project):
         values={"error.code": "actor_deactivated_terminal"})
 
 
+def qualification_invalids(valid):
+    """Independent malformed shapes and cross-field contradictions for the public input."""
+    for field in valid:
+        omitted = deepcopy(valid)
+        del omitted[field]
+        yield "missing_" + field, omitted
+        for name, value in (("null", None), ("type", 7)):
+            yield name + "_" + field, valid | {field: value}
+    for snapshot in ("skills_snapshot", "reputation_snapshot"):
+        for field in valid[snapshot]:
+            omitted = deepcopy(valid)
+            del omitted[snapshot][field]
+            yield "missing_" + snapshot + "_" + field, omitted
+        for name, changes in (
+            ("no_refs", {"reference_ids": []}),
+            ("available_with_reason", {"unavailable_reason": "no_record"}),
+            ("unavailable_with_refs", {"availability": "unavailable", "unavailable_reason": "no_record"}),
+            ("unavailable_no_reason", {"availability": "unavailable", "reference_ids": []}),
+            ("unknown_availability", {"availability": "pending"}),
+            ("null_refs", {"reference_ids": None}),
+            ("too_many", {"reference_ids": ["ref:" + str(i) for i in range(21)]}),
+            ("too_long", {"reference_ids": ["x" * 121]}),
+            ("url", {"reference_ids": ["https://example.invalid/ref"]}),
+            ("extra", {"private_note": "not permitted"}),
+        ):
+            invalid = deepcopy(valid)
+            invalid[snapshot].update(changes)
+            yield snapshot + "_" + name, invalid
+    for name, field, value in (
+        ("prior_too_many", "prior_project_work_refs", [str(uuid4()) for _ in range(21)]),
+        ("prior_bad_uuid", "prior_project_work_refs", ["bad"]),
+        ("prior_bool", "prior_project_work_refs", [True]),
+        ("external_too_many", "external_expertise_refs", ["ref:" + str(i) for i in range(21)]),
+        ("external_too_long", "external_expertise_refs", ["x" * 121]),
+        ("external_url", "external_expertise_refs", ["https://example.invalid/ref"]),
+        ("external_bool", "external_expertise_refs", [True]),
+    ):
+        yield name, valid | {field: value}
+    yield "extra", valid | {"private_note": "not permitted"}
+
+
 async def project_role_cases(drill, manager, contributor, project, manager_id):
     """Issue exact-project grants, observe actual access, then revoke it."""
     actor = await drill.call("role_target_identity", "GET", "/api/v1/actors/me", token=contributor)
     route = "/api/v1/projects/{project_id}/role-grants"
     path = f'/api/v1/projects/{project["id"]}/role-grants'
+    qualification = {
+        "skills_snapshot": {"availability": "available", "reference_ids": ["x" * 120] + ["skill:" + str(i) for i in range(19)],
+                            "unavailable_reason": None},
+        "reputation_snapshot": {"availability": "available", "reference_ids": ["x" * 120] + ["rep:" + str(i) for i in range(19)],
+                                "unavailable_reason": None},
+        "prior_project_work_refs": [str(uuid4()) for _ in range(20)],
+        "external_expertise_refs": ["x" * 120] + ["expertise:" + str(i) for i in range(19)],
+    }
+    recovery_key = {"Idempotency-Key": str(uuid4())}
+    await drill.call("qualification_empty_baseline", "GET", route,
+        path=path, token=manager, values={"items": [], "next_cursor": None})
+    for name, invalid in qualification_invalids(qualification):
+        try:
+            await drill.call("qualification_" + name, "POST", route, path=path, token=manager,
+                payload={"target_actor_profile_id": actor["actor_profile_id"], "role": "submitter",
+                         "qualification": invalid, "reason": "Invalid qualification probe"},
+                headers=recovery_key, expected=422, fields=("body.qualification",))
+        except ProbeFailure:
+            pass
+        await drill.call("qualification_unchanged_" + name, "GET", route,
+            path=path, token=manager, values={"items": [], "next_cursor": None})
+    for role in ("submitter", "reviewer"):
+        before = await drill.call("qualification_before_limits_" + role, "GET", route,
+            path=path, token=manager)
+        try:
+            boundary = await drill.call("qualification_combined_limits_" + role, "POST", route,
+                path=path, token=manager, headers={"Idempotency-Key": str(uuid4())},
+                payload={"target_actor_profile_id": actor["actor_profile_id"], "role": role,
+                         "qualification": qualification, "reason": "Exact project contribution role"},
+                expected=201, values={"role": role, "status": "active", "version": 1},
+                checks={"id": uuid_value})
+        except ProbeFailure:
+            await drill.call("qualification_failed_state_" + role, "GET", route,
+                path=path, token=manager, values=before)
+            await drill.call("qualification_failed_access_" + role, "GET", "/api/v1/projects/{project_id}",
+                path=f'/api/v1/projects/{project["id"]}', token=contributor, expected=404)
+            continue
+        await drill.call("qualification_limits_readback_" + role, "GET", route + "/{grant_id}",
+            path=path + "/" + boundary["id"], token=manager,
+            values={"qualification_snapshot." + field: value for field, value in qualification.items()})
+        await drill.call("qualification_limits_revoke_" + role, "POST", route + "/{grant_id}/revoke",
+            path=path + "/" + boundary["id"] + "/revoke", token=manager,
+            payload={"reason": "End combined-boundary probe"}, values={"status": "revoked", "version": 2})
+    populated = deepcopy(qualification)
+    for field in ("skills_snapshot", "reputation_snapshot"):
+        populated[field]["reference_ids"] = populated[field]["reference_ids"][:1]
+    for field in ("prior_project_work_refs", "external_expertise_refs"):
+        populated[field] = populated[field][:1]
+    control = await drill.call("qualification_populated_control", "POST", route, path=path,
+        token=manager, payload={"target_actor_profile_id": actor["actor_profile_id"], "role": "submitter",
+                               "qualification": populated, "reason": "Independent populated field control"},
+        expected=201, checks={"id": uuid_value}, values={"status": "active", "role": "submitter"})
+    await drill.call("qualification_populated_readback", "GET", route + "/{grant_id}",
+        path=path + "/" + control["id"], token=manager,
+        values={"qualification_snapshot." + field: value for field, value in populated.items()})
+    await drill.call("qualification_populated_revoke", "POST", route + "/{grant_id}/revoke",
+        path=path + "/" + control["id"] + "/revoke", token=manager,
+        payload={"reason": "End independent field control"}, values={"status": "revoked", "version": 2})
+    # Preserve independent small positive/replay/lifecycle controls even if a
+    # combined maximum exposes a product defect. Never lower its expected 201.
     qualification = {
         "skills_snapshot": {"availability": "available", "reference_ids": ["skill:drill"],
                             "unavailable_reason": None},
@@ -594,7 +777,7 @@ async def project_role_cases(drill, manager, contributor, project, manager_id):
     for role in ("submitter", "reviewer"):
         body = {"target_actor_profile_id": actor["actor_profile_id"], "role": role,
                 "qualification": qualification, "reason": "Exact project contribution role"}
-        key = {"Idempotency-Key": str(uuid4())}
+        key = recovery_key if role == "submitter" else {"Idempotency-Key": str(uuid4())}
         try:
             result = await drill.call("issue_project_" + role, "POST", route, path=path, token=manager,
                 payload=body, headers=key, expected=201,
@@ -620,8 +803,8 @@ async def project_role_cases(drill, manager, contributor, project, manager_id):
                     "qualification_snapshot.requested_role": role,
                     "qualification_snapshot.skills_snapshot": qualification["skills_snapshot"],
                     "qualification_snapshot.reputation_snapshot": qualification["reputation_snapshot"],
-                    "qualification_snapshot.prior_project_work_refs": [],
-                    "qualification_snapshot.external_expertise_refs": ["expertise:drill"],
+                    "qualification_snapshot.prior_project_work_refs": qualification["prior_project_work_refs"],
+                    "qualification_snapshot.external_expertise_refs": qualification["external_expertise_refs"],
                     "revoked_by_actor_profile_id": None, "revoked_at": None, "revoked_reason": None},
             checks={"granted_at": timestamp_value, "granted_by_admin_role_grant_id": uuid_value,
                     "qualification_snapshot.captured_at": timestamp_value})

@@ -1006,6 +1006,16 @@ changing product state.
 Authority-changing APIs require canonical request hashing and idempotency keys.
 An exact replay returns the committed result; a mismatched replay is rejected.
 
+Canonical authority mutation requests retain a 2,048-byte serialized envelope
+limit except for strictly admitted project-role issuance. That operation allows
+9 KiB because its existing qualification contract includes three collections of
+up to twenty 120-character ASCII references and twenty canonical UUID references;
+the largest current serialized request is 8,626 bytes. The larger budget is
+selected from the validated request type, never an unvalidated discriminator.
+All field, role, scope and availability constraints still apply. Qualification
+content stays in its immutable snapshot; idempotency stores the request digest
+and audit events use bounded projections, not the full qualification body.
+
 Authority events are append-only and include, when applicable:
 
 - schema/event version;

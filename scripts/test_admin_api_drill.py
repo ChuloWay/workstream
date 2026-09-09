@@ -27,6 +27,17 @@ def ambiguous_boundary(count):
 
 
 class EvidenceTests(unittest.IsolatedAsyncioTestCase):
+    def test_duplicate_setup_grant_cannot_shrink_expected_pagination_truth(self):
+        instance = module.AuthorityDrill(SimpleNamespace(results=[]), None, {})
+        rows = {}
+        key = str(module.uuid4())
+        instance.remember_grant("first", rows, key, {"role": "submitter"})
+        for bad in (key, "not-a-uuid", None):
+            with self.subTest(key=bad), self.assertRaises(module.ProbeFailure):
+                instance.remember_grant("duplicate", rows, bad, {"role": "reviewer"})
+            self.assertEqual(rows, {key: {"role": "submitter"}})
+            self.assertEqual(instance.drill.results[-1]["result"], "failed")
+
     def test_guard_failure_report_preserves_only_allowlisted_codes(self):
         cases = [(ValueError(code), code) for code in guard_probe.FAILURE_CODES]
         cases += [(module.ProbeFailure("isolation_required"), "isolation_required"),

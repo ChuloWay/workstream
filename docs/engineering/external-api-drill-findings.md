@@ -2,12 +2,16 @@
 
 ## Purpose and sequence
 
-This is the human-requested handoff of observed defects, not a finished API
-catalogue or an MCP readiness report. Another agent should repair these issues
-together in a bounded change, with coordination around the product builder's
-owned files. Then the orchestrator reruns the real HTTP drill on the merged
-repair and completes the remaining field checks. Only then is the verified
-endpoint-and-field list handed to the MCP adapter agent.
+This preserves the human-requested repair handoff and original reproductions,
+not a finished API catalogue or an MCP readiness report. PR #392 repaired the
+five defects below. Both original drills passed on merged main `c681b51f`, with
+226 external-client cases and 352 administrator checks, without unexpected
+failures. The administrator run included twenty distinct actors and detected
+all three intentional last-admin guard mutants. These counts include negative
+and local evidence cases; they are not endpoint or exhaustive field counts.
+The orchestrator is extending the remaining client field checks before handing
+the verified endpoint-and-field list to the MCP adapter agent. The descriptions
+below remain historical observations, not claims that repaired defects persist.
 
 Human-confirmed v0.1 project roles are **submitter** and **reviewer**.
 Adjudication is deferred. Do not implement adjudicator functionality, widen an
@@ -179,11 +183,57 @@ These are harness repairs, not additional product defects for the other agent:
   alone is not claimed as proof of current state.
 - Request pacing retains the server's existing mutation limits.
 
+## New finding: API-DRILL-006 — valid qualification exceeds internal admission limit
+
+**Repaired by the operation-specific admission change; original evidence below.**
+The extended drill at `cf5e4633` against unchanged product main `c681b51f`
+observed HTTP **500**, `error.code=internal_error`, for both submitter and
+reviewer grants with valid populated qualification fields.
+
+- Route: `POST /api/v1/projects/{project_id}/role-grants`.
+- Setup: active system Project Manager; separate active, linked human target;
+  HTTP-created draft project; no existing active exact-role grant; valid fresh
+  UUID `Idempotency-Key` and reason `Exact project contribution role`.
+- Qualification: each skills/reputation snapshot is `available`, with null
+  `unavailable_reason` and twenty references: one 120-character `x` token plus
+  nineteen short `skill:<n>` or `rep:<n>` tokens. Supply twenty distinct canonical
+  UUID strings in `prior_project_work_refs`. External expertise contains one
+  120-character `x` token plus nineteen `expertise:<n>` tokens (`n` from 0 to 18).
+- Every field passes `ProjectRoleGrantIssueBody`; lists are at the advertised
+  twenty-item limit and tokens at or below 120 characters. Canonical request
+  serialization is 2,250 bytes for submitter (2,249 for reviewer) in this recipe.
+- `parse_authority_request` in `authorization/schemas.py` rejects canonical
+  requests above 2,048 bytes with `TypeError("invalid authority mutation request")`.
+  `ProjectRoleGrantMutationService.reserve` reaches this check before completing
+  the grant. A direct schema/admission probe reproduces the rejection without a
+  database; the real HTTP cases reproduce the external 500.
+- Repair: strictly validated project-role issuance uses a 9 KiB canonical
+  envelope, sufficient for its actual largest permitted request (8,626 bytes).
+  Every other authority mutation retains 2,048 bytes. Public field constraints,
+  authorization, idempotency, snapshots and bounded audit projections remain
+  unchanged. Selection occurs after validation of the closed request union.
+- Retest: `qualification_combined_limits_submitter` and
+  `qualification_combined_limits_reviewer` must return 201, read back every
+  supplied reference and revoke normally. Keep independent smaller positive,
+  replay and lifecycle controls; malformed cases must still reject without any
+  new grant history. Add focused product-level regression and safe-bound tests.
+
+The same PR now includes public-maximum parser and PostgreSQL regressions for
+both roles: exact persisted references/readback, replay, mismatch and conflict
+without another snapshot, and unauthorized refusal without grant, snapshot,
+idempotency or audit residue. Envelope-edge tests retain bounded admission and
+generic errors without rejected input in parser-owned traceback locals. Caller
+frames and unrelated process memory are outside that diagnostic guarantee.
+Both complete drills must pass on the repaired
+candidate; the original failed runs are historical and remain unchanged outside
+Git. This repair does not certify every other API field or deployed provider.
+
 ## Retest and handoff criteria
 
 Use the [new external-client drill](external-api-drill.md), not the older seeded
-API drill. Keep the failures above red until product repairs actually satisfy
-them. Run the applicable full hosted tests and coverage for the repair; this
+API drill. Keep unresolved failures red until product repairs actually satisfy
+them; preserve the passing regressions for repaired defects. Run the applicable
+full hosted tests and coverage for the repair; this
 drill supplements those tests rather than replacing them.
 
 After the repair merges, run against that exact main head with a fresh isolated

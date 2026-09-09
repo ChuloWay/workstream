@@ -163,7 +163,9 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
             await probe.call("assert_enabled", "POST", "/items", payload={},
                              headers={"Idempotency-Key": None}, values={"enabled": True})
             self.assertEqual(report["operations"]["POST /items"]["field_cases"],
-                             {"response.200.enabled": ["assert_enabled"]})
+                             {"response.200.enabled": ["assert_enabled"],
+                              "header.X-Request-ID": ["assert_enabled"],
+                              "header.X-Correlation-ID": ["assert_enabled"]})
             with self.assertRaisesRegex(drill.ProbeFailure, "duplicate_case_name"):
                 await probe.call("assert_enabled", "POST", "/items", payload={})
 
@@ -183,6 +185,117 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(report["cases"][-1]["result"], "failed")
             await probe.call("later_valid_denial", "GET", "/items", expected=403)
             self.assertEqual(report["operations"]["GET /items"]["status"], "failed")
+
+    async def test_field_evidence_separates_annotations_shape_predicates_and_values(self):
+        def handler(request):
+            return httpx.Response(200, json={"items": [{"enabled": True}], "empty": [], "count": 1},
+                headers={name: request.headers[name] for name in ("X-Request-ID", "X-Correlation-ID")})
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://127.0.0.1") as client:
+            report = {}
+            probe = drill.Drill(client, {"paths": {"/items": {"get": {}}}}, report)
+            await probe.call("proof", "GET", "/items", values={"items": [{"enabled": True}], "empty": []},
+                checks={"count": lambda value: type(value) is int}, exact_fields=("items", "empty", "count"),
+                fields=("body.unchecked",))
+            operation = report["operations"]["GET /items"]
+            self.assertIn("response.200.items[].enabled", operation["field_cases"])
+            self.assertIn("response.200.empty", operation["field_cases"])
+            for field in ("response.200.empty[]", "body.unchecked", "response.200.count"):
+                self.assertNotIn(field, operation["field_cases"])
+            self.assertEqual(operation["request_cases"], {"body.unchecked": ["proof"]})
+            self.assertEqual(operation["predicate_cases"], {"response.200.count": ["proof"]})
+            self.assertIn("response.200.count", operation["shape_cases"])
+            with self.assertRaises(drill.ProbeFailure):
+                await probe.call("defective", "GET", "/items", values={"items": [{"enabled": False}]})
+            self.assertEqual(report["cases"][-1]["asserted_fields"], [])
+            self.assertEqual(operation["field_cases"]["response.200.items[].enabled"], ["proof"])
+            with self.assertRaisesRegex(drill.ProbeFailure, "invalid_request_field_annotation"):
+                await probe.call("misindexed", "GET", "/items", fields=("response.200.count",))
+            self.assertNotIn("response.200.count", operation["request_cases"])
+            self.assertEqual(report["cases"][-1]["asserted_fields"], [])
+
+    async def test_qualification_denial_detects_a_forbidden_revoked_history_row(self):
+        await self._assert_forbidden_qualification_history(422)
+
+    async def test_failed_valid_boundary_detects_a_forbidden_revoked_history_row(self):
+        await self._assert_forbidden_qualification_history(500)
+
+    async def _assert_forbidden_qualification_history(self, mutation_status):
+        mutated = False
+        route = "/api/v1/projects/{project_id}/role-grants"
+        def handler(request):
+            nonlocal mutated
+            status = 200
+            if request.url.path == "/api/v1/actors/me":
+                body = {"actor_profile_id": "target"}
+            elif request.method == "POST":
+                mutated = True
+                status, body = mutation_status, {"error": {"code": "probe_error"}}
+            else:
+                body = {"items": [{"id": "rogue", "status": "revoked"}]
+                        if mutated and request.url.params.get("status") != "active" else [],
+                        "next_cursor": None}
+            return httpx.Response(status, json=body, headers={name: request.headers[name]
+                for name in ("X-Request-ID", "X-Correlation-ID")})
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://127.0.0.1") as client:
+            report = {}
+            probe = drill.Drill(client, {"paths": {"/api/v1/actors/me": {"get": {}},
+                                                route: {"get": {}, "post": {}}}}, report)
+            with self.assertRaisesRegex(drill.ProbeFailure, "response_value_mismatch"):
+                if mutation_status == 500:
+                    with patch.object(drill, "qualification_invalids", return_value=()):
+                        await drill.project_role_cases(probe, None, None, {"id": "project"}, "manager")
+                else:
+                    await drill.project_role_cases(probe, None, None, {"id": "project"}, "manager")
+            self.assertEqual(report["cases"][-1]["name"], "qualification_failed_state_submitter"
+                             if mutation_status == 500 else "qualification_unchanged_missing_skills_snapshot")
+            self.assertEqual(report["cases"][-1]["result"], "failed")
+
+    async def test_pagination_detects_missing_duplicate_foreign_and_nonterminating_pages(self):
+        good = [{"items": [{"id": "a", "role": "submitter"}], "next_cursor": "next"},
+                {"items": [{"id": "b", "role": "reviewer"}], "next_cursor": None}]
+        variants = {
+            "valid": good,
+            "missing": [good[0] | {"next_cursor": None}],
+            "duplicate": [good[0], good[1] | {"items": good[0]["items"]}],
+            "foreign": [good[0] | {"items": [{"id": "foreign", "role": "submitter"}]}],
+            "wrong_role": [good[0] | {"items": [{"id": "a", "role": "reviewer"}]}],
+            "empty_continuation": [good[0] | {"items": []}],
+            "repeat_cursor": [good[0], good[1] | {"next_cursor": "next"}],
+            "extra_continuation": [good[0], good[1] | {"next_cursor": "third"}],
+        }
+        for label, bodies in variants.items():
+            responses = iter(bodies)
+            requests = []
+            def handler(request):
+                requests.append(request)
+                return httpx.Response(200, json=next(responses), headers={
+                    name: request.headers[name] for name in ("X-Request-ID", "X-Correlation-ID")})
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://127.0.0.1") as client:
+                report = {}
+                probe = drill.Drill(client, {"paths": {"/items": {"get": {}}}}, report)
+                async def run():
+                    return await drill.page_cases(probe, "pages", "/items", "/items", None,
+                        {"a": {"role": "submitter"}, "b": {"role": "reviewer"}}, identity="id")
+                with self.subTest(label=label):
+                    if label == "valid":
+                        self.assertEqual(await run(), "next")
+                        self.assertEqual(requests[1].url.params["cursor"], "next")
+                    else:
+                        with self.assertRaises(drill.ProbeFailure):
+                            await run()
+                        self.assertEqual(report["operations"]["GET /items"]["status"], "failed")
+                        self.assertEqual(report["cases"][-1]["asserted_fields"], [])
+
+    def test_qualification_mutations_are_independent_and_include_boundaries(self):
+        valid = {"skills_snapshot": {"availability": "available", "reference_ids": ["skill:1"], "unavailable_reason": None},
+                 "reputation_snapshot": {"availability": "available", "reference_ids": ["rep:1"], "unavailable_reason": None},
+                 "prior_project_work_refs": [], "external_expertise_refs": []}
+        original = json.loads(json.dumps(valid))
+        cases = dict(drill.qualification_invalids(valid))
+        self.assertEqual(valid, original)
+        self.assertEqual(len(cases["skills_snapshot_too_many"]["skills_snapshot"]["reference_ids"]), 21)
+        self.assertEqual(len(cases["external_too_long"]["external_expertise_refs"][0]), 121)
+        self.assertNotIn("unavailable_reason", cases["missing_reputation_snapshot_unavailable_reason"]["reputation_snapshot"])
 
     async def test_success_cannot_erase_prior_failure(self):
         def handler(request):

@@ -387,9 +387,16 @@ AuthorityMutationRequest = Annotated[
 ]
 _REQUEST_ADAPTER = TypeAdapter(AuthorityMutationRequest)
 
+# Scalar mutations retain their original envelope. Project-role issuance also
+# carries three <=20-item ASCII reference lists (<=120 chars each) and <=20
+# UUID references. Its largest current canonical envelope is 8,626 bytes;
+# 9 KiB admits that public contract without widening unrelated operations.
+_AUTHORITY_REQUEST_MAX_BYTES = 2048
+_PROJECT_ROLE_ISSUE_MAX_BYTES = 9 * 1024
+
 
 def parse_authority_request(value: object) -> AuthorityMutationRequest:
-    """Readmit an untrusted request without retaining rejected input."""
+    """Readmit input without exposing it in errors or this frame's locals."""
     admitted = None
     try:
         candidate = dict(value) if isinstance(value, Mapping) else None
@@ -399,11 +406,17 @@ def parse_authority_request(value: object) -> AuthorityMutationRequest:
             sort_keys=True,
             separators=(",", ":"),
         ).encode()
-        if len(encoded) > 2048:
+        limit = (_PROJECT_ROLE_ISSUE_MAX_BYTES
+                 if isinstance(admitted, ProjectRoleGrantIssueRequest)
+                 else _AUTHORITY_REQUEST_MAX_BYTES)
+        if len(encoded) > limit:
             admitted = None
     except Exception:  # noqa: BLE001 - Mapping and rejected values are untrusted
         admitted = None
     if admitted is None:
+        # Diagnostic collectors may capture traceback locals. Drop rejected
+        # payloads from this frame as well as suppressing validation exceptions.
+        value = candidate = encoded = None
         raise TypeError("invalid authority mutation request")
     return admitted
 
