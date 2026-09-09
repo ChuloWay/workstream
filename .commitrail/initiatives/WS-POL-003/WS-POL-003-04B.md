@@ -64,11 +64,11 @@ compatibility fallbacks. Historical sparse catalogues are never enriched.
 5. Update current capability/navigation and prepare one PR with final-head hosted
    evidence and focused internal reviews.
 
-The request composition uses existing `prepare_request` and immediately closes
-its handle inside a short transaction for fresh request/recovery admission.
-The AUTH kernel locks the current actor/link and exact project-scoped PM grant.
-This is not a second request consumption or a new persisted request event.
-The existing request service remains the sole reservation/consumption owner.
+Request replay revalidates current PM authority inside the existing request
+service transaction, including concurrency recovery, while AUTH actor/link/grant
+locks remain held through receipt classification. Extend the existing typed
+AUTH request port with replay validation that closes its fresh handle without
+creating another request event. Remove the draft out-of-transaction precheck.
 Execution facts, hashes, and predecessor selectors come from server-owned rows;
 the HTTP caller supplies only exact lineage selectors and an idempotency key.
 
@@ -107,7 +107,7 @@ Worker ordering: existing exact finalization -> authorized finalizer replay;
 otherwise require queued/queued and exact deterministic task identity -> existing
 executor -> for persisted results, sufficiency projection -> artifact projection
 only for ready outcomes -> finalizer. Unknown/invalid outcomes never project.
-An early delivery reports retryable/no-I/O. Queue payload is attempt ID only.
+An early dispatch-pending delivery raises a typed transient result and the Celery task retries with bounded delay; it is never acknowledged as successful lost work. Permanent stale states fail closed without retries or model I/O. Queue payload is attempt ID only.
 Remove automatic and acknowledgement inference redispatch. Physically remove the
 old pre/post setup task functions, their queue functions and the three runtime
 methods/prompts. Trace PROJECTS sufficiency/submission-policy mutation services,
@@ -179,3 +179,31 @@ The selected next boundary after this chunk remains POL-05A, AUTH-12F4, POL-05B,
 then POL-06A, AUTH-12G, POL-06B, and POL-07. CP06/CP07 follow that selected sequence.
 Implementation feasibility review must resolve request/generation custody before
 the live wiring is written; this is review evidence, not another permission gate.
+
+## Plan-review refinements
+
+Explicit additional allowed files: PROJECTS `service.py`, `repository.py` for
+dead inference queries, `schemas.py` only for obsolete inference-only schemas;
+`authorization/api/project_guide_compilation.py` and
+`authorization/guide_compilation.py` for same-transaction replay admission;
+existing guide-compilation `service.py` and direct AUTH/request tests. No new
+permission, action, fixed-service grant or audit bypass is introduced.
+
+Remove the old post-policy correction route/service, whose sole outcome is
+another model call. Retain independent policy read/approval operations and their
+guards; existing submission-policy approval and activation must reject unified
+compilation projections until POL-05 provides exact downstream custody.
+Remove obsolete agent-only provenance branches without permitting other unknown
+policy provenance. Preserve required current manual policy paths and canonical
+policy validation consumed by unified projections. AUTH's existing closed
+sufficiency/derivation action identifiers and persisted audit/resource schemas
+remain shared consumers pending their owner reconciliation; no callable old
+inference route or runtime implementation is retained for them.
+
+The existing active CHECKERS pre-submission processor and catalogue remain the
+intake owner. Setup reads that catalogue's immutable capability projection, not
+a second checker implementation. Material schemas remain shared ART/PROJECTS
+inputs. All superseded runtime methods, prompts, service inference operations,
+queue functions, registered tasks and their preservation-only tests are removed.
+Test replacements must cover current material custody, manager revocation,
+replay, one-attempt dispatch, no-write denials and immutable finalization.
