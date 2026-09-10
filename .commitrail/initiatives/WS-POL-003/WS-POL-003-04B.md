@@ -54,12 +54,22 @@ extraction usage; the new contract must bind original document versions instead.
 ### 1. Document upload and readiness
 
 Reuse the existing authorized guide upload route, committed-source preparation,
-ArtifactStore provider boundary and immutable source snapshot. Keep ingress
-permission, declared/observed size bounds, format allowlist and content checksum
-computed during upload. Store the source once and record its exact committed
+ArtifactStore provider boundary and immutable source snapshot. New snapshot items use only `source_kind=document`,
+`ingestion_adapter=upload` and required PDF/DOCX/PPTX media types. Keep ingress
+permission, declared/observed size bounds and checksum computed during upload.
+Reuse GuideFormatDetector and existing OOXML/ZIP safety against prepared bytes
+before admission; require actual type to match the persisted declaration, reject
+macro/binary-PPT substitutions, and never use request headers as format authority. Store the source once and record its exact committed
 object identity. No mandatory post-upload download/classification/extraction.
 
-Guide storage completion has an explicit document-stored outcome. It must not
+A new setup run starts `awaiting_documents`. Guide `object_confirmed` has an
+explicit `document_stored` receipt outcome and zero verification jobs. The final
+exact upload atomically claims `dispatch_pending`; queued/eager worker handling
+keeps the existing deterministic task identity. Concurrent, out-of-order and
+replayed uploads must publish at most that one logical task. Late storage
+completion for a stale snapshot may remain retained evidence, but cannot dispatch
+or satisfy the latest run. This guide-specific exception updates ADR 0013 and
+the ART specification in this change. It must not
 mark a shared artifact replica verified or mint a fake verification receipt.
 Submission/checker artifact verification remains unchanged, including when bytes
 are shared with a guide. Readiness requires every assigned item in the manifest
@@ -77,12 +87,24 @@ and exact committed storage identity for server use. The model-facing projection
 contains opaque document handles and safe generated names; it excludes storage
 coordinates. Manifest hashing is deterministic and contains no document body.
 
-ART owns a typed run-scoped document byte capability, composed by the worker.
-It is constructed from persisted run identity and the committed manifest after
-the existing execute fence. Each open resolves an opaque handle in that grant,
+`app.adapters.artifacts` constructs the ART-owned typed document byte grant
+using the existing store/scratch roots; `app.adapters.projects` injects its
+public port into the coordinator. `app.workers.project_setup` remains a thin
+public-composition consumer. Reuse fixed ARTIFACT_GUIDE_READER and
+artifact.guide_source.read; do not add a reader identity/action. Replace old
+verification facts with attempt/manifest, exact item/ingest/put/replica, project,
+guide/snapshot/generation, namespace, checksum, size and media facts.
+The manifest is bound before the fence; the runtime receives its already-fenced
+opaque grant. Losing/replayed deliveries perform zero OpenAI I/O. Each open resolves an opaque handle in that grant,
 checks exact ownership/version/current authority and streams only the resolved
 object through ArtifactStore. No caller-supplied bucket/key/URL is accepted.
-Closure/cancellation/expiry invalidates the grant; a new run cannot reuse it.
+Before any provider file upload, each requested object is fully staged into
+bounded scratch and its checksum/size matched to the committed document receipt.
+No corrupt bytes are streamed onwards before that check; this read does not mark
+the shared replica verified. Closure/cancellation/expiry invalidates the grant;
+a new run cannot reuse it. Fixed-service/source denial at tool time aborts the
+run, rather than becoming recoverable tool text. Original PM consent retains
+POL-04B1 semantics; later PM role changes are not retroactive consent withdrawal.
 Any local temporary staging uses ArtifactScratchManager with aggregate bounds.
 
 ### 3. Runtime workspace and configuration
@@ -94,13 +116,27 @@ uses existing supported DOCX/PDF/PPTX inspection rather than rebuilding a
 Workstream extraction pipeline. Before committing this choice, prove the pinned
 SDK/provider supports the required container isolation and document controls.
 
-The trusted adapter uploads only separately granted documents, uses generated
-source-item filenames, creates a fresh explicit container, disables its network,
-and supplies exactly that run's provider file IDs. No automatic container reuse,
-shared conversation, File Search/vector store, MCP, S3 credentials or general
-storage API is exposed. Code Interpreter operates only on staged files and its
-own temporary notes. A later Deep Agents adapter can consume the same document
-and output ports; no speculative second adapter is installed now.
+After winning the fence, the trusted adapter creates a fresh explicit empty
+container with network_policy disabled. Its local `open_guide_document(handle)`
+tool resolves one authorized source, verifies its staged bytes, uploads it with
+purpose=user_data and bounded expiry, records the provider ID, and attaches it
+to that exact container. Filenames are generated from source-item UUID plus
+trusted extension. The returned model-facing value contains its workspace path
+and source-version reference, never an S3 coordinate or provider-file selector.
+Repeated opens validate the grant but stage the same document at most once.
+No automatic container reuse, shared conversation, previous-response reuse,
+File Search/vector store, MCP, S3 credentials or general storage API is exposed.
+Only explicitly opened assigned files are mounted. Code Interpreter supplies
+inspection and temporary notes; its output is not saved as source content.
+
+OpenAI + Responses + hosted Code Interpreter is the sole current adapter
+combination. Reject/remove the unmerged chat-completions and openai-compatible
+execution branches; another adapter can implement an explicitly supported
+provider later. Set ModelSettings(store=False) on all Responses requests and
+use input-based, non-stored compaction when applicable. Provider Files and
+containers still have application-state retention: deletion/expiry are cleanup
+controls, not a claim of immediate erasure or zero-data-retention. No transcript,
+raw tool output, source bytes or notes go into PostgreSQL or application logs.
 
 Expose immutable limits for file count/bytes, model turns, wall time, tool work,
 context compaction and temporary workspace lifetime. Use supported SDK/provider
@@ -109,11 +145,24 @@ Reject unsupported provider/API/tool combinations before execution; do not
 silently downgrade to one-shot inference. Model and instructions remain explicit
 in .env.example and independently configurable.
 
-File/container staging has explicit cleanup on success, invalid output, timeout
-and cancellation, plus provider expiry for process loss. Record content-free
-cleanup custody where required to retry cleanup without rerunning inference.
-Provider creation/cleanup uncertainty must not accidentally create an additional
-agent run. Do not treat a cleanup attempt as authorization to delete S3 originals.
+Provider resource custody is mandatory and owned by the compilation attempt.
+Persist each allocation operation and each returned file/container ID with its
+exact manifest mapping, state, cleanup deadline and runtime identity. Use a
+public typed custody port composed through PROJECTS, not direct ORM imports in
+the SDK adapter. The allocation capability is issued by the winning fence and
+cannot record another attempt's resources. Cleanup authority is limited to those
+allocated resources and remains usable after project/source access is revoked.
+
+On exit perform bounded cancellation-shielded container-first then uploaded-file
+deletion. An exact-ID cleanup reconciler retries recorded resources without
+listing the OpenAI project's Files or Containers. Set bounded file/container
+expiry at creation for process loss and unknown-create windows. Unknown
+allocation is recorded as uncertain; it cannot be guessed successful, rediscovered
+by global listing or retried as another agent run. Cleanup failure must not erase
+a known valid/invalid result, change its classification or clear provider
+uncertainty. Never persist generated container files or delete S3 originals as
+part of this cleanup. All OpenAI creation/upload/model operations occur after
+the fence; unknown staging/model outcomes remain provider-uncertain.
 
 ### 4. Result, evidence and projections
 
@@ -124,7 +173,11 @@ receipts prove the files made available to the run; model-authored page/section
 references remain untrusted proposal evidence, not independent proof of semantic
 correctness. Do not claim a retrieved hit proves full-guide comprehension.
 
-Bind the immutable manifest and content-free run file-access evidence into
+Require at least one successful document-open receipt before accepting a
+compilation, and require every cited source to belong to the manifest and opened
+set. Ready output must account for every assigned document; unavailable/unread
+material cannot silently disappear from the findings. Bind the immutable
+manifest and content-free run file-access evidence into
 accepted-result custody and downstream projection checks. Adapt current
 sufficiency/report and submission-policy provenance consumers together. Keep
 fresh action-bound projection authority, locked lineage, atomic acceptance,
@@ -141,6 +194,65 @@ extraction tables/rows are retained for references, make that retention explicit
 there must be no live fallback reader or new writes preserving the old flow.
 Use a reviewed migration for current contracts, without fabricated backfills or
 deletion of retained source/evidence data. Update schema/ORM/API parity together.
+
+## Canonical metadata and retained-data disposition
+
+The sole document-version source is GuideSourceSnapshotItem +
+GuideSourceArtifactIngest + its exact object_confirmed ArtifactPutAttempt +
+ArtifactReplica, with receipt, checksum, size and media. Do not create a second
+corpus/document-version table. Add only attempt-bound provider allocation,
+access and cleanup custody. Projection `_add_source_usages`, current report
+validation/source refs, submission-policy mutation, AUTH material facts and
+finalizer checks all switch together to this manifest/access owner.
+
+Keep prior extraction/binding/content/usage rows and their necessary ORM metadata
+read-only; new execution/reports/derivation/activation never consume them.
+Retained extraction-backed reports are not eligible for new actions. Existing
+locked task/policy facts remain intact; no fallback or fabricated backfill makes
+old reports eligible. Guard retained tables against new writes after cutover.
+
+Remove content_markdown from current guide create/update/response, assignments,
+source/hash logic and docs. PATCH remains for bounded change_summary metadata
+only. Rename the physical column to retained_content_markdown, preserving values,
+make it nullable, retain only the same-name nullable ORM retention mapping, and
+add database guards: new INSERT requires NULL and UPDATE cannot change it.
+There is no current API/read/inference path or empty-string fallback for it.
+Migration tests prove preservation and rejection of new writes/direct SQL edits.
+
+## Test replacement map and precise guard boundaries
+
+Replace guide setup/extraction material tests in test_guide_setup.py and
+relevant test_guide_bindings.py sections. Retain/adapt test_guide_artifacts.py
+PREP/admission/lineage/replay/concurrency, provider ownership and scratch cleanup,
+plus submission verification coverage. Delete extractor-specific PDF/DOCX/PPTX
+and general extraction tests only with their production consumers. Supported
+format proof becomes actual ingress fixtures plus opt-in hosted read fixtures.
+Automatic request/context/projection fixtures use committed-document/access
+lineage. Preserve eager dispatch_pending/queued delivery, crash and replay tests.
+
+Initial preflight rejects an invalid manifest before any OpenAI request. A forged
+model-called handle is rejected before S3/scratch/provider staging for that call;
+it does not erase the earlier model/container activity. Same-size corruption,
+truncation or missing bytes discovered during an authorized open cause zero
+provider-file creation for those bytes and no subsequent model continuation,
+while exact cleanup calls remain permitted. Direct capability and whole-runtime
+probes report these different boundaries honestly.
+
+Use two valid projects/runs/generations and same-content items, mutate one
+selector at a time, and test namespace/ref/hash/size drift separately from
+permission. Same content/replica never grants another item's access. The live
+isolation probe leaves an unrelated provider File in the same OpenAI project,
+tries a foreign-ID substitution at the trusted staging boundary, lists only the
+run's explicit container to verify its assigned file set, and tests actual
+outbound network denial and absent OpenAI/S3 credentials. Clean up probe-owned
+foreign fixtures too. Stage crashes, partial uploads, allocation-before-receipt,
+delete failures and cancellation must preserve exact cleanup/replay custody.
+
+Scripted SDK/model tests prove tool/config serialization, multiple turns, limits,
+ephemeral state and compaction wiring. Only the paid probe establishes actual
+hosted file inspection, note use and within-run compaction. Required fixtures are
+DOCX + PDF, and PPTX before advertising it; no 429 or mocked tool execution is
+reported as successful live-agent proof.
 
 ## Allowed files and boundaries
 
@@ -176,7 +288,7 @@ repository-wide cleanup; deletion of retained data; unrelated dependency updates
    followed by submission of the same content as a discriminating control.
 3. Two projects and two runs with distinct sentinel files prove exact-file
    isolation: foreign/forged/stale handles and key/URL substitution fail before
-   provider I/O; expired/closed grants and traversal attempts cannot read bytes.
+   the attempted file read or provider staging; expired/closed grants and traversal attempts cannot read bytes.
 4. Real SDK tool configuration admits only a fresh container with the assigned
    files and disabled network. Cleanup and cancellation tests cover every
    allocated resource, including partial staging/provider uncertainty.
