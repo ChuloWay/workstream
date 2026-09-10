@@ -97,5 +97,3 @@ class ProjectGuideSourceSnapshotMutationResourceContext(BaseModel):
         if (self.predecessor_snapshot_id is None) != (self.predecessor_snapshot_hash is None):
             raise ValueError("source snapshot predecessor facts must be bound together")
         return self
-
-

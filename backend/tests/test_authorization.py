@@ -3582,6 +3582,9 @@ async def test_guide_metadata_preparation_denies_wrong_scope_missing_grant_and_s
             "guide_id": str(guide_id),
             "target_resource_id": str(guide_id),
             "operation_id": str(uuid4()),
+            "request_digest": "sha256:" + "1" * 64,
+            "task_examples_hash": "sha256:" + "2" * 64,
+            "task_examples_count": 1,
         },
     )
 

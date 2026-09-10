@@ -23,6 +23,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from fastapi import HTTPException
 from sqlalchemy.schema import CreateIndex
 
+from project_create_fixtures import guide_example_columns, guide_snapshot_columns, seed_guide_snapshot_rows
+
 from app.core.config import get_settings
 from app.core.hashing import canonical_json_hash
 from app.db import session as db_session
@@ -3175,6 +3177,7 @@ async def test_guide_source_metadata_database_rejects_unattributed_and_mismatche
     async with db_session.get_session_factory()() as session:
         session.add(
             ProjectGuide(
+                **guide_example_columns(),
                 id=str(uuid4()),
                 project_id=project["id"],
                 version="unattributed",
@@ -3183,7 +3186,8 @@ async def test_guide_source_metadata_database_rejects_unattributed_and_mismatche
                 created_by=str(uuid4()),
             )
         )
-        with pytest.raises(IntegrityError):
+        await session.flush()
+        with pytest.raises(IntegrityError, match="new guides require mutation authority"):
             await session.commit()
         await session.rollback()
 
@@ -4250,7 +4254,8 @@ async def test_submission_artifact_policy_replay_postgres_converges_exact_reserv
     """The real partial index makes concurrent exact human reservations converge."""
     engine = create_async_engine(isolated_database_env)
     ids = {name: str(uuid4()) for name in ("actor", "link", "project", "guide", "snapshot")}
-    digest = sha256_hash("submission-policy-replay")
+    snapshot = guide_snapshot_columns(ids["snapshot"])
+    digest = snapshot["bundle_hash"]
     try:
         async with engine.begin() as connection:
             await connection.execute(
@@ -4283,26 +4288,15 @@ async def test_submission_artifact_policy_replay_postgres_converges_exact_reserv
             )
             for table, trigger in (
                 ("project_guides", "guide_mutation_product_custody"),
+                ("project_guides", "guide_task_examples_create_custody"),
                 ("guide_source_snapshots", "source_snapshot_product_custody"),
             ):
                 await connection.execute(text(f"alter table {table} disable trigger {trigger}"))
-            await connection.execute(
-                text(
-                    "insert into project_guides(id,project_id,version,status,"
-                    "created_by) values(:guide,:project,'v1','draft','test')"
-                ),
-                ids,
-            )
-            await connection.execute(
-                text(
-                    "insert into guide_source_snapshots(id,project_id,guide_id,guide_version,"
-                    "manifest_schema_version,manifest_json,bundle_hash,captured_by) values("
-                    ":snapshot,:project,:guide,'v1','1','{}'::json,:digest,'test')"
-                ),
-                {**ids, "digest": digest},
-            )
+            await seed_guide_snapshot_rows(connection, project_id=ids["project"], guide_id=ids["guide"],
+                                          version="v1", snapshot_id=ids["snapshot"])
             for table, trigger in (
                 ("project_guides", "guide_mutation_product_custody"),
+                ("project_guides", "guide_task_examples_create_custody"),
                 ("guide_source_snapshots", "source_snapshot_product_custody"),
             ):
                 await connection.execute(text(f"alter table {table} enable trigger {trigger}"))

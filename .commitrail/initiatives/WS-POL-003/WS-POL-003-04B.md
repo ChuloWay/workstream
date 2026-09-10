@@ -685,3 +685,21 @@ before document upload without adding another public route or permission.
 POL04B-EX-QA002 requires independent exact-prompt transfer and no-Task assertions,
 Unicode/escaping byte-bound cases, and a complete-guide/minimal-example smoke;
 API acceptance alone never asserts semantic readiness.
+
+
+Review repair disposition: keep task examples at project scope. Setup proposes
+one guide policy across the project task set; it cannot demand selection of one
+example or defer to per-task policy compilation. Genuine absent project-wide
+intake limits may still block and must be identified precisely, without invented
+values or copying one task's budget into universal rules. The same two PaperBench
+PDFs and two assigned examples must be replayed after this instruction correction;
+mechanically persisted findings alone are not semantic acceptance proof.
+
+Affected downstream test prerequisites use current normalized examples and
+snapshot commitments. Their explicit fixture-only authorization suspension does
+not claim guide-creation proof. Negative tests supply valid earlier inputs and
+assert their intended custody error; the example hash guard has a wrong-hash
+valid-shape case. Large text cases use short test IDs without changing values.
+Canonical data-model, adopted guide ADRs and authorization runbook/specification
+are in this repair's documentation scope; remove their current claims about the
+superseded Markdown, URL ingestion and extraction path together.

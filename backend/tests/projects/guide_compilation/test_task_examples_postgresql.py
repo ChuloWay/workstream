@@ -76,7 +76,7 @@ async def test_example_sql_shape_hash_and_immutability_have_valid_control(projec
             "project_guide_task_examples_hash(cast(:examples as jsonb))"
         ), {"examples": json.dumps(examples)})).one()
         assert row == (True, guide["task_examples_hash"])
-    for bad in [None, [], [{"content": "\u2003", "title": None, "labels": []}],
+    for bad in [None, [], examples, [{"content": "\u2003", "title": None, "labels": []}],
                 [{"content": "Valid", "title": None, "labels": [], "extra": True}]]:
         async with get_session_factory()() as session, session.begin():
             with pytest.raises(DBAPIError, match="guide task examples are invalid"):
@@ -84,7 +84,7 @@ async def test_example_sql_shape_hash_and_immutability_have_valid_control(projec
                     "insert into project_guides(id,project_id,version,status,created_by,task_examples,task_examples_hash) "
                     "values(:id,:project,:version,'draft','test',cast(:examples as json),:hash)"
                 ), {"id": str(uuid4()), "project": project["id"], "version": str(uuid4()),
-                    "examples": json.dumps(bad), "hash": guide["task_examples_hash"]})
+                    "examples": json.dumps(bad), "hash": "sha256:" + "0" * 64 if bad == examples else guide["task_examples_hash"]})
     for sql in ["update project_guides set task_examples='[]'::json where id=:id",
                 "update project_guides set task_examples_hash=null where id=:id",
                 "delete from project_guides where id=:id", "truncate project_guides cascade"]:

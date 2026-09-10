@@ -7,9 +7,10 @@ Accepted
 ## Context
 
 Project guides are human-facing. They explain the project, task expectations,
-examples, reviewer rubric, and quality bar. A guide can be markdown, imported
-documentation, URL-backed docs, repository docs, examples, rubrics, task
-instructions, or other project-specific source material.
+examples, reviewer rubric, and quality bar. Current v0.1 guide files are uploaded
+PDF/DOCX/PPTX originals stored through ArtifactStore/S3. PostgreSQL stores guide
+metadata and a required ordered list of ordinary-text task examples. Markdown
+bodies and URL/repository ingestion are not current input paths.
 
 Submission intake needs a deterministic machine contract. If artifact requirements live only as guide prose, each project can drift into a different interpretation of what a valid submission packet must contain.
 
@@ -37,12 +38,14 @@ Project owners provide open-ended project material in plain language. Workstream
 must not force every project owner through one universal intake checklist.
 
 Workstream binds all downstream setup records to the exact guide source
-snapshot, not only to `guide_version`. `GuideSourceSnapshot` v2 records include
+snapshot, not only to `guide_version`. The current
+`guide_source_snapshot.task_examples` manifest includes the guide-owned example
+hash and count. `GuideSourceSnapshot` records include
 the guide id, server-owned generation, canonical manifest JSON, bundle hash, and
 capture timestamp. Snapshot items record server-owned item identity/order and
 non-authoritative source kind, sanitized label, ingestion adapter, and media
-type. Exact byte identity comes only from verified ART bindings and extraction
-usage provenance. The bundle hash is
+type. Exact byte identity comes from committed original-document ART custody;
+current compilation does not consume retained binding/extraction usages. The bundle hash is
 `sha256(canonical_json(manifest_json))`. Canonical JSON uses UTF-8, sorted
 object keys and no insignificant whitespace. Caller hashes, content ids,
 excerpts, provider references, capture timestamps, and transient fetch locators
@@ -50,26 +53,25 @@ are excluded. Non-finite numbers such as `NaN` or `Infinity` are rejected before
 hashing. The manifest builder rejects duplicate `(source_kind, source_label)`
 pairs before hashing and assigns server-owned item IDs and orders. Integrity
 validation and database constraints reject duplicate IDs or orders later.
-Changing the declared source-item set or any verified bound
-content creates a new setup generation. Changing any document, example, rubric,
-repository doc, representative task excerpt, task sample, or inline guide body
-creates a new snapshot and invalidates prior sufficiency reports, derived
+Changing the declared document set creates a new snapshot and setup generation.
+Task examples are immutable for their guide version; changing them requires a
+new guide version. Replacing document material or examples invalidates prior
+sufficiency reports, derived
 policies, effective policies, checker specs, checker bundles, acknowledgements,
 and approvals for activation.
-Representative task excerpts and task samples are source material for project
-the unified guide compiler only. They help its one inference evaluate whether the project guide is
+Task examples are PostgreSQL inputs to the project-level unified guide compiler. They help its one inference evaluate whether the project guide is
 usable across the project task set; they do not create task-scoped policy or
 task-scoped checker generation.
 A new guide-source snapshot invalidates prior setup records for new activation
 and unlocked tasks only. Tasks already locked to an earlier snapshot retain
 that policy context unless an explicit audited rebase occurs.
 
-Retrieval adapters may use temporary locators to fetch legitimate source
-material, but locators never enter snapshot authority. Workstream persists only
-the sanitized, non-authoritative source label and adapter/media metadata there;
-verified ART bindings provide exact byte identity. Query strings, signed URLs,
-credentials, token-bearing references, local paths, and provider locations are
-never durable source-item identity.
+Current guide ingestion accepts original-document uploads only. Snapshot labels
+and metadata are non-authoritative. Scoped document tools expose only the exact
+originals assigned to that run; storage keys, credentials, signed URLs and
+private paths never become agent-controlled source selectors. Binding and
+extraction rows retained from superseded development behavior remain read-only
+evidence and are not a parallel execution path.
 
 The unified guide compiler evaluates guide sufficiency and proposes distinct
 pre-submission intake and post-submission evaluation policies in one inference.

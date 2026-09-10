@@ -1,6 +1,8 @@
 """Retained attempts survive the additive configuration migration unchanged."""
 
 import asyncio
+import json
+from project_create_fixtures import guide_example_columns
 from uuid import uuid4
 
 from alembic import command
@@ -46,9 +48,11 @@ async def test_upgrade_preserves_unconfigured_attempt_and_refuses_dispatch(isola
         for statement, params in (
             ("update project_guides set retained_content_markdown='replacement' where id=:id",
              {"id": str(values["guide"])}),
-            ("insert into project_guides(id,project_id,version,status,retained_content_markdown,created_by) "
-             "values(:id,:project,'new-guide','draft','new inline body','fixture')",
-             {"id": str(uuid4()), "project": str(values["project"])}),
+            ("insert into project_guides(id,project_id,version,status,retained_content_markdown,created_by,task_examples,task_examples_hash) "
+             "values(:id,:project,'new-guide','draft','new inline body','fixture',cast(:examples as json),:examples_hash)",
+             {"id": str(uuid4()), "project": str(values["project"]),
+              "examples": json.dumps(guide_example_columns()["task_examples"]),
+              "examples_hash": guide_example_columns()["task_examples_hash"]}),
         ):
             async with engine.begin() as connection:
                 with pytest.raises(DBAPIError, match="retained guide content is read only") as error:

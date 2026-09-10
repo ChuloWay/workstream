@@ -19,7 +19,14 @@ Provide at least one nonblank task example in the guide-create request's
 labels are optional. Examples need not repeat this guide's deliverables or
 acceptance criteria. Workstream stores the list with guide metadata in PostgreSQL
 and supplies all examples to the setup agent alongside the uploaded guide files.
-Uploaded guide files are stored in ArtifactStore/S3.
+Uploaded guide files are stored in ArtifactStore/S3. Examples do not create
+Workstream Tasks or select one assignment. The agent proposes project-wide
+policy from the guide and the examples together.
+
+The list accepts 1–100 examples, each with up to 65,536 content characters, an
+optional title of up to 500 characters, and up to 20 labels of 1–100 characters
+each. The full canonical UTF-8 JSON list must fit within 128 KiB. Examples are
+immutable for that guide version; a correction uses a new guide version.
 
 ```json
 {"task_examples": [{"content": "Repair intermittent memory faults in the claims processing service."}]}

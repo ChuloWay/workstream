@@ -134,7 +134,7 @@ def test_task_example_commitment_includes_order_content_title_and_labels():
         assert task_examples_hash(validate_task_examples(changed)) != digest
 
 
-@pytest.mark.parametrize("content", ["雪" * 50_000, "\n" * 65_535 + "x"])
+@pytest.mark.parametrize("content", ["雪" * 50_000, "\n" * 65_535 + "x"], ids=("multibyte_utf8", "json_escaping"))
 def test_task_example_aggregate_budget_counts_utf8_and_json_escaping(content):
     with pytest.raises(ValidationError, match="aggregate byte limit"):
         ProjectGuideCreate.model_validate({"version": "v0.1", "task_examples": [{"content": content}]})

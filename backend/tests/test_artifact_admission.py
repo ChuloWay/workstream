@@ -1,7 +1,10 @@
 """PostgreSQL proofs for atomic durable-byte admission before provider I/O."""
 
 # pyright: reportArgumentType=false, reportAttributeAccessIssue=false
+
 from __future__ import annotations
+
+from project_create_fixtures import guide_example_columns, guide_snapshot_columns
 
 import asyncio
 from collections.abc import Iterator
@@ -285,10 +288,11 @@ async def _seed_guide(
     async with suspend_historical_product_custody(
         session,
         table="project_guides",
-        triggers=("guide_mutation_product_custody",),
+        triggers=("guide_mutation_product_custody", "guide_task_examples_create_custody"),
     ):
         session.add(
             ProjectGuide(
+                **guide_example_columns(),
                 id=guide_id,
                 project_id=project_id,
                 version="v1",
@@ -308,9 +312,7 @@ async def _seed_guide(
                 project_id=project_id,
                 guide_id=guide_id,
                 guide_version="v1",
-                manifest_schema_version="v1",
-                manifest_json={"items": [item_id]},
-                bundle_hash=canonical_json_hash({"items": [item_id]}),
+                **guide_snapshot_columns(snapshot_id, items=[item_id]),
                 captured_by=captured_by,
             )
         )
@@ -353,7 +355,7 @@ async def _seed_checker_output_relationships(session) -> tuple[str, str, str]:
     contributor_link_id = str(uuid4())
     checker_run_id = str(uuid4())
     guide_version = "v1"
-    snapshot_hash = canonical_json_hash({"items": []})
+    snapshot_hash = guide_snapshot_columns(snapshot_id)["bundle_hash"]
     submission_policy_body = {"required_artifacts": []}
     submission_policy_hash = canonical_json_hash(submission_policy_body)
     effective_policy_body = {"required_artifacts": [], "artifact_hash_algorithm": "sha256"}
@@ -390,10 +392,11 @@ async def _seed_checker_output_relationships(session) -> tuple[str, str, str]:
     async with suspend_historical_product_custody(
         session,
         table="project_guides",
-        triggers=("guide_mutation_product_custody",),
+        triggers=("guide_mutation_product_custody", "guide_task_examples_create_custody"),
     ):
         session.add(
             ProjectGuide(
+                **guide_example_columns(),
                 id=guide_id,
                 project_id=project_id,
                 version=guide_version,
@@ -415,9 +418,7 @@ async def _seed_checker_output_relationships(session) -> tuple[str, str, str]:
                 project_id=project_id,
                 guide_id=guide_id,
                 guide_version=guide_version,
-                manifest_schema_version="v1",
-                manifest_json={"items": []},
-                bundle_hash=snapshot_hash,
+                **guide_snapshot_columns(snapshot_id),
                 captured_by="setup-actor",
             )
         )

@@ -1164,10 +1164,14 @@ setup-run queue intent; broker dispatch happens only after commit and never
 carries the prepared handle.
 
 Guide create/update no longer accept embedded review, revision, retired
-payout/economic, or contribution-record configuration fields. Guide source markdown
-may change before the first source snapshot, becomes immutable after capture,
-and bounded metadata such as `change_summary` remains editable while the guide
-is draft. Exact committed retries return the recorded response without another
+payout/economic, or contribution-record configuration fields. Guide create
+requires task examples stored as immutable PostgreSQL JSON with the guide
+metadata. AUTH receives the request digest, example hash and count; the guide
+and exact replay response are committed together. Document/upload snapshots
+bind that commitment and receive original PDF/DOCX/PPTX files through ART.
+Inline Markdown and URL/repository ingestion are unavailable. Only bounded
+metadata such as `change_summary` remains editable while the guide is draft.
+Exact committed retries return the recorded response without another
 mutation, setup run, or dispatch. Changed, concurrent-pending, cross-project,
 stale-lineage, revoked, wrong-action, wrong-resource, or wrong-transaction use
 fails closed with no product write.

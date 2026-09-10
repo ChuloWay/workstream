@@ -26,6 +26,8 @@ from sqlalchemy.ext.asyncio import (  # type: ignore[import-not-found]
 )
 from sqlalchemy.schema import CreateIndex
 
+from projects.guide_fixtures import complete_guide_payload
+
 from app.adapters.auth.dev import actor_id_from_external_identity
 from app.core.config import get_settings
 from app.core.hashing import canonical_json_hash
@@ -945,13 +947,6 @@ async def fetch_legacy_actor_rows(
             )
         ).all()
     return identity, list(profiles)
-
-
-def complete_guide_payload(version: str = "v1") -> dict:
-    return {
-        "version": version,
-        "change_summary": f"Initial {version}",
-    }
 
 
 def sha256_hash(seed: str) -> str:

@@ -27,6 +27,45 @@ from app.modules.authorization.runtime import (
 from app.modules.projects.models import Project, ProjectGuide, ProjectCreateIdempotencyRecord
 
 
+def guide_example_columns() -> dict:
+    """Current valid guide input for downstream fixtures, without creation authority."""
+    from app.modules.projects.api.task_examples import task_examples_hash, validate_task_examples
+    examples = validate_task_examples([{"content": "Review a claim using the project guide."}])
+    return {"task_examples": [item.model_dump(mode="json") for item in examples],
+            "task_examples_hash": task_examples_hash(examples)}
+
+
+def guide_snapshot_columns(snapshot_id: str, *, items: list | None = None) -> dict:
+    """Current snapshot commitment for tests that seed downstream prerequisites."""
+    from app.modules.projects.service import GUIDE_SOURCE_SNAPSHOT_SCHEMA_VERSION
+    examples = guide_example_columns()
+    manifest = {"schema_version": GUIDE_SOURCE_SNAPSHOT_SCHEMA_VERSION,
+                "snapshot_id": str(snapshot_id), "generation": 1, "items": items or [],
+                "task_examples_hash": examples["task_examples_hash"], "task_examples_count": 1}
+    return {"manifest_schema_version": GUIDE_SOURCE_SNAPSHOT_SCHEMA_VERSION,
+            "manifest_json": manifest, "bundle_hash": canonical_json_hash(manifest)}
+
+
+async def seed_guide_snapshot_rows(connection, *, project_id: str, guide_id: str,
+                                   version: str, snapshot_id: str) -> None:
+    """Seed current inputs inside a caller's explicit downstream custody fixture."""
+    import json
+    examples, snapshot = guide_example_columns(), guide_snapshot_columns(snapshot_id)
+    params = {"project": project_id, "guide": guide_id, "version": version, "snapshot": snapshot_id,
+              "examples": json.dumps(examples["task_examples"]), "examples_hash": examples["task_examples_hash"],
+              "manifest": json.dumps(snapshot["manifest_json"]), "schema": snapshot["manifest_schema_version"],
+              "hash": snapshot["bundle_hash"]}
+    await connection.execute(text(
+        "insert into project_guides(id,project_id,version,status,created_by,task_examples,task_examples_hash) "
+        "values(:guide,:project,:version,'draft','test',cast(:examples as json),:examples_hash)"
+    ), params)
+    await connection.execute(text(
+        "insert into guide_source_snapshots(id,project_id,guide_id,guide_version,manifest_schema_version,"
+        "manifest_json,bundle_hash,captured_by) values(:snapshot,:project,:guide,:version,:schema,"
+        "cast(:manifest as json),:hash,'test')"
+    ), params)
+
+
 _ISOLATED_DATABASE_RE = re.compile(r"workstream_test_([a-f0-9]{12})")
 _ISOLATED_ROLE_RE = re.compile(r"workstream_role_([a-f0-9]{12})")
 
@@ -42,6 +81,7 @@ async def suspend_historical_product_custody(
     allowed = {
         "project_guides": {
             "guide_mutation_product_custody",
+            "guide_task_examples_create_custody",
             "guide_lineage_lifecycle_guard",
         },
         "guide_source_snapshots": {"source_snapshot_product_custody"},

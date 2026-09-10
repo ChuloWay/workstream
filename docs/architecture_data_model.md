@@ -221,6 +221,8 @@ Fields:
 - `status`
 - `activation_sequence` (nullable only while draft; immutable after allocation)
 - `retained_content_markdown` (read-only retained data; excluded from current APIs)
+- `task_examples` (required ordered JSON list on new guide versions)
+- `task_examples_hash` (domain-separated canonical commitment to that list)
 - `change_summary`
 - `approved_by`
 - `effective_at`
@@ -235,10 +237,19 @@ Fields:
 - `selected_revision_policy_generation`
 - `selected_revision_policy_hash`
 
-The guide is versioned and human-facing. Its persisted body is the project
-guide material itself, usually markdown or imported source material. The source
-snapshot may include URL-backed docs, repository docs, examples, rubrics, task
-instructions, reviewer guidance, or other project-specific source material.
+The guide is versioned and human-facing. Uploaded PDF/DOCX/PPTX originals live
+in private ArtifactStore/S3 objects; PostgreSQL stores their metadata and the
+ordinary task-example text. The examples are representative inference inputs,
+not selected assignments, and do not create Workstream Tasks. One project-level
+policy proposal covers the project task set.
+
+New guide versions require 1–100 examples with nonblank `content` (at most 65,536
+characters), optional `title` (500 characters), and optional `labels` (at most
+20, each 1–100 characters). The complete canonical UTF-8 JSON list is bounded at
+128 KiB. Content, order and optional metadata are preserved. The list and its
+hash are immutable; corrections require a new guide version. Retained null
+inputs remain stored but cannot start new inference. No document bodies are
+extracted into PostgreSQL.
 `approved_by` and `effective_at` are server-written activation provenance, not
 request-body fields and not contributor-facing guide content.
 
@@ -290,10 +301,8 @@ Fields:
 - `captured_by`
 
 `GuideSourceSnapshot` is the immutable bundle binding for guide material. It
-captures the exact guide/source material Workstream evaluated as a canonical
-manifest. A guide can point at markdown, imported documents, URL-backed docs,
-repository docs, examples, or rubric material, but downstream records do not
-trust a mutable URL or mutable draft guide body. They bind to
+captures uploaded-document declarations and the owning guide's task-example
+commitment. It accepts document/upload items only. Downstream records bind to
 `source_snapshot_id` and a server-derived `source_snapshot_hash` copied from
 `GuideSourceSnapshot.bundle_hash`.
 
@@ -304,7 +313,8 @@ sha256(canonical_json(manifest_json))
 ```
 
 Canonical JSON uses UTF-8, sorted object keys, and no insignificant whitespace.
-The v2 manifest contains the server-owned snapshot id and generation plus each
+The `guide_source_snapshot.task_examples` manifest contains the example hash
+and count, the server-owned snapshot id and generation plus each
 server-owned item id/order and its non-authoritative source metadata. Caller
 hashes, content identifiers, excerpts, provider references, and fetch locators
 are excluded. Changing a declaration creates a new snapshot and setup generation.
@@ -322,26 +332,14 @@ Fields:
 - `media_type`
 - `created_at`
 
-`GuideSourceSnapshotItem` records each material item included in the guide
-bundle. `source_kind` distinguishes inline markdown, URL-backed documentation,
-repository docs, examples, rubrics, imported files, and other approved source
-types. `source_label` is display metadata, not content identity or a fetch
-locator. Exact bytes become authoritative only through
-`GuideSourceArtifactIngest -> ArtifactContent -> GuideSourceArtifactBinding ->
-GuideSourceExtractionUsage`; provider object references remain replica details.
-
-Guide ingestion keeps temporary retrieval inputs separate from durable facts:
-
-- temporary fetch locator: used only by an approved retrieval adapter
-- snapshot declaration: server-owned item identity/order plus a sanitized,
-  non-authoritative source label
-- durable byte identity: exact verified `ArtifactContent` bound through ART
-
-Ordinary URL query parameters can be used by approved adapters when fetching
-legitimate documentation. Query strings are temporary fetch inputs only.
-Workstream must not persist query strings, signed URLs, credentials,
-token-bearing locators, local filesystem paths, or private storage paths as
-durable source identity.
+`GuideSourceSnapshotItem` records each uploaded document in the guide bundle.
+Its current `source_kind` is `document` and `ingestion_adapter` is `upload`;
+`source_label` is display metadata, never a fetch locator. Exact original bytes
+are bound by committed `GuideSourceArtifactIngest` document custody and
+`ArtifactContent`. The setup agent receives only scoped opaque handles, not S3
+keys or credentials. No URL fetching, Markdown body, or extraction continuation
+is part of this path. File access and provider allocations retain exact original
+identity under the runtime custody contracts below.
 
 Any guide or source-material change creates a new source snapshot. That
 invalidates prior sufficiency reports, derived policies, effective policies,
@@ -352,7 +350,7 @@ that policy context unless an explicit audited rebase occurs.
 
 ## ProjectSetupRun
 
-The field and status inventory below includes retained legacy multi-agent
+The field and status inventory below includes retained superseded setup
 setup diagnostics, not instructions to implement those continuations again.
 The unified path uses the compilation/projection/finalization contracts below:
 after its finalization receipt exists, the run and its output references are
@@ -506,8 +504,10 @@ Blocking gaps stop at findings; sufficient guides stop at draft policy review.
 The deterministic sufficiency projector creates the report from the persisted
 `ProjectGuideCompilation`, with server-owned agent identity. Provider-returned
 names and versions never establish provenance. The exact source snapshot hash,
-setup generation, canonical material hash/byte count and normalized
-`GuideSufficiencyReportSourceUsage` rows bind its verified source evidence.
+setup generation, canonical material hash/byte count, document access evidence
+and compilation identity bind the current original-document source evidence.
+The compilation input additionally binds the exact task-example list through
+its canonical input hash; source snapshots commit its hash and count.
 
 Manual reports use their separately authorized API and persist null agent name
 and version. They do not execute inference or supply compilation provenance.
@@ -537,7 +537,8 @@ Fields:
 - `setup_generation`
 - `canonical_output_sha256`
 
-Each row proves which exact verified ART binding and extraction lineage supplied
+This table is retained read-only evidence; current compilation writes no rows
+here. Each retained row records which exact ART binding and extraction lineage supplied
 one ordered source item to a sufficiency report. Composite foreign keys prevent
 mixing source items, content, extraction attempts, setup runs, or generations.
 A report cannot consume the same extraction usage twice or assign two items the

@@ -1129,9 +1129,12 @@ serialized state. If broker dispatch fails, inspect the exact setup run for
 `enqueue_failed` and use its bounded recovery path. Retrying the original HTTP
 request returns its recorded response and must not dispatch again.
 
-Source markdown can be corrected only until the first snapshot exists. After
-capture, source changes correctly return 409 while bounded draft metadata may
-still be updated. Embedded review, revision, retired payout/economic, and
+Guide creation requires the ordered task-example list. It is stored with guide
+metadata in PostgreSQL and cannot be edited in place; corrections require a new
+guide version. Upload-only document declarations form the separate immutable
+source snapshot, and original document bytes live in ArtifactStore/S3. Inline
+Markdown and URL/repository ingestion are unavailable. Bounded draft metadata
+such as `change_summary` may still be updated. Embedded review, revision, retired payout/economic, and
 contribution-record configuration fields correctly return 422; do not reintroduce a
 compatibility payload or direct product-service authorization path.
 

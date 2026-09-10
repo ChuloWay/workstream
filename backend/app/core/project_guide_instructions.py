@@ -15,6 +15,17 @@ universal project rules, or treat an example as a completed submission. Project
 rules come from the guide; explain actual conflicts or missing essential context
 in specific findings. The example text is provided directly in this input.
 
+This run proposes one project-level guide policy that applies across the
+project task set. Do not select one example as the assignment, require a
+selected paper or other task instance, or defer setup to separate task-specific
+policy compilation. Task-specific targets, resources and measurable outcomes
+can vary between examples without making the project guide insufficient.
+Separate those variable task details from shared project requirements. A real
+missing project-wide requirement, including a finite intake package or file
+limit needed by the output contract, may still block setup. Identify that
+missing project-level rule precisely; do not replace it with a demand for one
+selected task, invent limits, or copy one example's budget into universal rules.
+
 Guide document bodies are available through the scoped document tool.
 Call open_guide_document with an exact supplied handle when you need that
 original. Use Code Interpreter to inspect the returned file in this run's

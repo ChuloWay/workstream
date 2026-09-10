@@ -251,11 +251,10 @@ def test_compilation_context_requires_task_examples_and_preserves_all_input() ->
     import json
 
     payload = _context().model_dump(mode="json")
-    examples = [{"content": "A starting idea."}, {"content": "  修復 worker\n", "title": "Second"}]
+    examples = [{"content": "A starting idea."}, {"content": "  修復 worker\n", "title": "Second", "labels": ["research", "repair"]}]
     context = ProjectGuideCompilationContext.model_validate(payload | {"task_examples": examples})
     sent = json.loads(project_guide_compilation_prompt_bytes(context))
-    assert [item["content"] for item in sent["task_examples"]] == [item["content"] for item in examples]
-    assert sent["task_examples"][1]["title"] == "Second"
+    assert sent["task_examples"] == [item.model_dump(mode="json") for item in context.task_examples]
     del payload["task_examples"]
     with pytest.raises(ValidationError, match="task_examples"):
         ProjectGuideCompilationContext.model_validate(payload)
