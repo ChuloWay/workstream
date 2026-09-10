@@ -405,7 +405,7 @@ Set `WORKSTREAM_PROJECT_AGENT_MODEL=gpt-5.4-mini` (or your chosen supported mode
 and `OPENAI_API_KEY` in ignored `backend/.env`. Runtime, provider/API protocol,
 model and instructions are separate settings in `backend/.env.example`.
 Start backing services using the port settings in that same file, then install
-the agent runtime and load the environment into API and worker:
+the agent runtime and load the environment into API and Celery worker:
 
 ```bash
 docker compose --env-file backend/.env up -d --wait postgres redis minio
@@ -413,7 +413,7 @@ cd backend
 uv sync --locked --extra dev --extra agents
 uv run --env-file .env uvicorn app.main:app --reload
 # In another terminal, from backend/:
-uv run --env-file .env celery -A app.workers.celery_app worker --loglevel=info
+uv run --env-file .env celery -A app.workers.celery_app worker --beat --loglevel=info
 ```
 
 The model key must be in the process environment; `--env-file` supplies it without
@@ -486,24 +486,8 @@ postgresql+asyncpg://workstream:workstream@localhost:5433/workstream_test
 
 One project-guide compilation proposes sufficiency findings and separate
 pre-submission and post-submission policies through the OpenAI Agents SDK adapter.
-Install the backend agent extra and set the model explicitly before running
-automatic project setup:
-
-```bash
-cd backend
-.venv/bin/pip install -e ".[agents]"
-```
-
-```text
-WORKSTREAM_PROJECT_AGENT_RUNTIME=openai_agents_sdk
-WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER=openai
-WORKSTREAM_PROJECT_AGENT_MODEL=<approved-model>
-WORKSTREAM_PROJECT_AGENT_MODEL_API=responses
-WORKSTREAM_PROJECT_AGENT_RUN_TIMEOUT_SECONDS=1800
-WORKSTREAM_PROJECT_AGENT_MAX_PROMPT_BYTES=2000000
-OPENAI_API_KEY=<runtime-secret>
-WORKSTREAM_CELERY_BROKER_URL=redis://localhost:6379/0
-```
+Use the locked installation and environment-loading commands in
+[Native Unified Guide Inference](#native-unified-guide-inference).
 
 The Celery worker captures runtime, model provider, model, API, instructions,
 timeout and prompt limit on the attempt before execution. Credentials stay in
@@ -519,18 +503,7 @@ result records both policy proposals and stops at a draft; an insufficient guide
 stops with findings. Automatic compilation ends without approving the proposals.
 Project Manager proposal editing, explicit reruns and approval are the remaining
 POL-05 boundary. The separate post-submission Celery worker evaluates submitted work.
-Run Celery and Beat before creating guide sources:
-
-```bash
-cd backend
-WORKSTREAM_DATABASE_URL=postgresql+asyncpg://workstream:workstream@localhost:5433/workstream \
-WORKSTREAM_AUTH_PROVIDER=flow \
-WORKSTREAM_ENVIRONMENT=local \
-WORKSTREAM_PROJECT_AGENT_MODEL=<approved-model> \
-OPENAI_API_KEY=<runtime-secret> \
-WORKSTREAM_CELERY_BROKER_URL=redis://localhost:6379/0 \
-.venv/bin/celery -A app.workers.celery_app.celery_app worker --beat --loglevel=INFO
-```
+The local Celery command above includes Beat; start it before creating guide sources.
 
 The Beat scheduler must run alongside the Celery execution processes so
 artifact pending-work and verified guide-continuation scans can recover

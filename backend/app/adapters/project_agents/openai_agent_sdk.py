@@ -22,6 +22,9 @@ from app.interfaces.project_agents import (
 )
 
 
+_INVALID_SCHEMA_OUTPUT = object()
+
+
 class OpenAIAgentSdkProjectGuideRuntime:
     """Execute a configured, tool-free structured run without SDK leakage."""
 
@@ -75,6 +78,8 @@ class OpenAIAgentSdkProjectGuideRuntime:
             raise
         except Exception:
             raise ProjectAgentRuntimeError("project guide run failed") from None
+        if output is _INVALID_SCHEMA_OUTPUT:
+            raise ProjectGuideCompilationInvalidOutputError("schema_invalid") from None
         try:
             if isinstance(output, ProjectGuideCompilationResult):
                 result = output
@@ -105,15 +110,19 @@ class OpenAIAgentSdkProjectGuideRuntime:
         from agents.exceptions import ModelBehaviorError
         from openai import AsyncOpenAI
 
+        parser_rejected = False
+
         class CompilationOutputSchema(AgentOutputSchema):
-            """Translate rejection at the SDK parser boundary, even with redacted errors."""
+            """Identify parser rejection while preserving the SDK error boundary."""
 
             def validate_json(self, json_str: str):
                 """Use the SDK parser; never infer failure type from provider error text."""
+                nonlocal parser_rejected
                 try:
                     return super().validate_json(json_str)
                 except ModelBehaviorError:
-                    raise ProjectGuideCompilationInvalidOutputError("schema_invalid") from None
+                    parser_rejected = True
+                    raise
 
         configuration = self._configuration
         async with AsyncOpenAI(
@@ -135,13 +144,21 @@ class OpenAIAgentSdkProjectGuideRuntime:
                 tools=[],
                 handoffs=[],
             )
-            result = await Runner.run(
-                agent,
-                prompt,
-                max_turns=1,
-                run_config=RunConfig(tracing_disabled=True, trace_include_sensitive_data=False),
-            )
-            return result.final_output
+            try:
+                result = await Runner.run(
+                    agent,
+                    prompt,
+                    max_turns=1,
+                    run_config=RunConfig(tracing_disabled=True, trace_include_sensitive_data=False),
+                )
+            except ModelBehaviorError:
+                if not parser_rejected:
+                    raise
+            else:
+                return result.final_output
+            # Discard the SDK exception and its payload-bearing frames before the
+            # public adapter method constructs a sanitized domain error.
+            return _INVALID_SCHEMA_OUTPUT
 
 
 def _invalid_compilation_failure_code(

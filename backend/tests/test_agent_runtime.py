@@ -351,3 +351,44 @@ async def test_unclassified_sdk_behavior_error_remains_unresolved(monkeypatch):
     monkeypatch.setattr(Runner, "run", run)
     with pytest.raises(ProjectAgentRuntimeError, match="project guide run failed"):
         await OpenAIAgentSdkProjectGuideRuntime(runtime_configuration()).compile_project_guide(context(ids()))
+
+
+async def _capture_parser_error(runtime):
+    """Capture outside the payload-owning test frame, as a runtime caller would."""
+    try:
+        await runtime.compile_project_guide(context(ids()))
+    except ProjectGuideCompilationInvalidOutputError as error:
+        return error
+    pytest.fail("invalid SDK output did not raise")
+
+
+@pytest.mark.parametrize("redacted", [True, False])
+async def test_sdk_parser_error_drops_payload_tracebacks(monkeypatch, redacted):
+    """A diagnostic collector must not recover rejected output through the error graph."""
+    from agents import Runner, _debug
+
+    marker = "private-parser-output-79436"
+    payload = result().model_dump(mode="json")
+    payload["findings"] = [{"severity": "info", "code": "bad", "message": f"token={marker}"}]
+    raw = json.dumps(payload)
+    monkeypatch.setattr(_debug, "DONT_LOG_MODEL_DATA", redacted)
+
+    async def run(agent, *args, **kwargs):
+        return SimpleNamespace(final_output=agent.output_type.validate_json(raw))
+
+    monkeypatch.setattr(Runner, "run", run)
+    error = await _capture_parser_error(OpenAIAgentSdkProjectGuideRuntime(runtime_configuration()))
+    assert error.failure_code == "schema_invalid"
+    pending = [error]
+    seen = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        assert marker not in str(current)
+        traceback = current.__traceback__
+        while traceback is not None:
+            assert marker not in repr(traceback.tb_frame.f_locals)
+            traceback = traceback.tb_next
+        pending.extend(link for link in (current.__cause__, current.__context__) if link is not None)

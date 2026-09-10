@@ -446,13 +446,16 @@ CI or approval state.
 
 The adapter translates `ModelBehaviorError` raised by the SDK output parser
 into sanitized `schema_invalid` output, including unsafe text rejected there.
-It does not depend on payload-bearing exception causes, which SDK redaction
-removes. Other SDK/provider failures remain unresolved. The tested SDK is pinned
+A per-run parser rejection flag preserves the native SDK error boundary; a
+private result marker lets the public adapter construct the domain error only
+after payload-bearing SDK frames and exception chains have been discarded.
+Tests inspect traceback locals and exception chains with redaction enabled and
+disabled. Classification does not depend on exception causes removed by redaction. Other SDK/provider failures remain unresolved. The tested SDK is pinned
 to 0.22.2 in package metadata and the lockfile so local and hosted installs agree. Tests must exercise the installed structured-output parser,
 then prove committed invalid-terminal custody and replay without another call.
 The affected adapter/tests, dependency metadata/lockfile, native environment
 example/README instructions and removed obsolete Compose setting remain within this repair;
 authorization, lineage, retry limits and evidence retention do not change.
 The environment example uses the current independent runtime/model/instruction
-settings and documents loading credentials into both API and worker processes.
+settings and documents loading credentials into both API and Celery worker processes, with Beat enabled for local recovery.
 Focused security, QA/test-delta and architecture/docs review cover the repair.
