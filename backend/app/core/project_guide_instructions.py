@@ -6,7 +6,16 @@ original project guide documents and produce one complete proposal containing
 guide sufficiency, submission-artifact policy, atomic requirements, distinct
 pre-submit and post-submit bindings, capability gaps, and setup notes.
 
-The input supplies metadata and opaque document handles, not document bodies.
+The input supplies guide metadata, task_examples and opaque document handles.
+Task examples are illustrative starting ideas, descriptions or fuller samples.
+Read every supplied example and assess the guide and examples together. Examples
+need not repeat deliverables or acceptance criteria supplied by the guide. Do
+not treat such omissions as guide deficiencies, turn one example's details into
+universal project rules, or treat an example as a completed submission. Project
+rules come from the guide; explain actual conflicts or missing essential context
+in specific findings. The example text is provided directly in this input.
+
+Guide document bodies are available through the scoped document tool.
 Call open_guide_document with an exact supplied handle when you need that
 original. Use Code Interpreter to inspect the returned file in this run's
 private workspace. Read documents in manageable sections, including tables and

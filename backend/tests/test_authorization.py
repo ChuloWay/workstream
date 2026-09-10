@@ -10,6 +10,8 @@ from tests.authorization.runtime_support import (
     _DecisionEvidence,
     _runtime_service,
     _PreparedTestSession,
+    _GuideMutationAuthorityFacts,
+    _guide_mutation_resources,
 )
 
 
@@ -1846,30 +1848,7 @@ def test_project_mutation_resources_and_prepared_scopes_are_closed() -> None:
         requested_project_id=requested_project_id,
         operation_generation=1,
     )
-    guide_resources = {
-        ActionId.PROJECT_GUIDE_CREATE: ProjectGuideMutationResourceContext(
-            resource_type="project_guide_mutation",
-            resource_id=guide_id,
-            operation_id=operation_id,
-            scope_project_id=project_id,
-            guide_id=guide_id,
-            target_kind="create",
-            guide_exists=False,
-            operation_generation=1,
-        ),
-        ActionId.PROJECT_GUIDE_UPDATE: ProjectGuideMutationResourceContext(
-            resource_type="project_guide_mutation",
-            resource_id=guide_id,
-            operation_id=operation_id,
-            scope_project_id=project_id,
-            guide_id=guide_id,
-            target_kind="update",
-            guide_exists=True,
-            guide_status="draft",
-            guide_version="1",
-            operation_generation=1,
-        ),
-    }
+    guide_resources = _guide_mutation_resources(project_id, guide_id, operation_id, DIGEST)
     source_resource = ProjectGuideSourceSnapshotMutationResourceContext(
         resource_type="project_guide_source_snapshot_mutation",
         resource_id=snapshot_id,
@@ -3366,52 +3345,6 @@ class _ProjectCreateAuthorityFacts:
         return self.grant
 
 
-class _GuideMutationAuthorityFacts:
-    def __init__(
-        self,
-        context: HumanAuthorizationContext,
-        *,
-        grant=None,
-        permission_id: PermissionId = PermissionId.PROJECT_GUIDE_MANAGE,
-    ) -> None:
-        self.context = context
-        self.grant = grant
-        self.permission_id = permission_id
-
-    async def lock_request_actor(self, identity_link_id, actor_profile_id):
-        assert identity_link_id == self.context.identity_link_id
-        assert actor_profile_id == self.context.actor_profile_id
-        return (
-            SimpleNamespace(
-                id=str(identity_link_id),
-                actor_profile_id=str(actor_profile_id),
-                status="active",
-            ),
-            SimpleNamespace(id=str(actor_profile_id), actor_kind="human", status="active"),
-        )
-
-    async def find_effective_grant(
-        self,
-        actor_profile_id,
-        permission_id,
-        *,
-        scope_project_id,
-        for_update,
-        allowed_roles,
-        exact_project_scope=False,
-    ):
-        assert actor_profile_id == self.context.actor_profile_id
-        assert permission_id is self.permission_id
-        assert scope_project_id is not None
-        assert for_update is True
-        assert allowed_roles == frozenset({AdminRole.PROJECT_MANAGER})
-        if self.grant is None or self.grant.scope_project_id not in {None, scope_project_id}:
-            return None
-        if exact_project_scope and self.grant.scope_project_id != scope_project_id:
-            return None
-        return self.grant
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "action_id,target_kind,resource_type",
@@ -3460,6 +3393,8 @@ async def test_guide_source_metadata_authority_uses_exact_single_use_project_han
             "guide_id": str(guide_id),
             "target_resource_id": str(target_resource_id),
             "operation_id": str(operation_id),
+            **({"request_digest": DIGEST, "task_examples_hash": DIGEST, "task_examples_count": 1}
+               if action_id is ActionId.PROJECT_GUIDE_CREATE else {}),
         },
     )
     scope = PreparedAuthorityScope(
@@ -3492,7 +3427,17 @@ async def test_guide_source_metadata_authority_uses_exact_single_use_project_han
             guide_status="draft" if target_kind == "update" else None,
             guide_version="v1" if target_kind == "update" else None,
             operation_generation=1,
+            **({"request_digest": DIGEST, "task_examples_hash": DIGEST, "task_examples_count": 1}
+               if target_kind == "create" else {}),
         )
+    if action_id is ActionId.PROJECT_GUIDE_CREATE:
+        for field, changed in {
+            "request_digest": "sha256:" + "0" * 64,
+            "task_examples_hash": "sha256:" + "0" * 64,
+            "task_examples_count": 2,
+        }.items():
+            with pytest.raises(PreparedAuthorizationHandleInvalid):
+                await prepared.consume(handle, action_id, caller, resource.model_copy(update={field: changed}))
     if resource_type == "snapshot":
         wrong_id = uuid4()
         wrong_resource = resource.model_copy(

@@ -21,6 +21,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.modules.projects.api.task_examples import ProjectGuideTaskExamples
 from app.modules.checkers.api import PostSubmitCatalogue, PostSubmitDefinition
 from app.modules.checkers.api.pre_submit_catalogue import (
     PreSubmissionCapabilityDefinition,
@@ -107,30 +108,6 @@ class RequirementDisposition(StrEnum):
     PROJECT_LIFECYCLE_POLICY = "project_lifecycle_policy"
     GUIDE_BLOCKER = "guide_blocker"
     INFORMATIONAL = "informational"
-
-
-class RepresentativeTaskPolicyContext(BaseModel):
-    """Bounded server-redacted task shape; never task or actor content."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    task_kind: str = Field(max_length=100)
-    deliverable_kinds: tuple[str, ...] = Field(default=(), max_length=20)
-    required_evidence_kinds: tuple[str, ...] = Field(default=(), max_length=20)
-
-    @field_validator("task_kind")
-    @classmethod
-    def validate_task_kind(cls, value: str) -> str:
-        """Require a canonical redacted task-kind identifier."""
-        return _validated_identifier(value)
-
-    @field_validator("deliverable_kinds", "required_evidence_kinds")
-    @classmethod
-    def validate_task_identifiers(cls, values: tuple[str, ...]) -> tuple[str, ...]:
-        """Require unique canonical task policy identifiers."""
-        if len(values) != len(set(values)):
-            raise ValueError("task policy identifiers must be unique")
-        return tuple(_validated_identifier(value) for value in values)
 
 
 class GuideEvidenceRef(BaseModel):
@@ -353,7 +330,7 @@ class ProjectGuideCompilationContext(BaseModel):
     runtime_configuration: ProjectGuideRuntimeConfiguration
     pre_submission_capabilities: PreSubmissionCapabilityProjection
     post_submission_capabilities: PostSubmitCatalogue
-    representative_task: RepresentativeTaskPolicyContext | None = None
+    task_examples: ProjectGuideTaskExamples
 
     @model_validator(mode="after")
     def validate_instruction_configuration(self) -> ProjectGuideCompilationContext:

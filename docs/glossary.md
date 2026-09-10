@@ -180,7 +180,14 @@ A future external task source that can submit tasks into Workstream through an a
 
 ## Project Guide
 
-The human-facing operating guide for a project. It contains the project instructions, quality bar, task examples, reviewer rubric, common rejection reasons, and links or summaries for the approved policies. A project guide may be markdown, an imported document, or a URL-backed guide, but runtime enforcement uses approved machine-readable policies attached to the guide version.
+The human-facing operating guide for a project. Uploaded PDF, DOCX or supported
+PPTX files contain project instructions, quality requirements and review rules.
+ArtifactStore/S3 holds those originals; PostgreSQL holds their metadata and the
+guide version's required task-example list. At least one nonblank example is
+required. An example may be a starting idea or fuller description and need not
+repeat requirements supplied by the guide. Unified setup examines both together;
+runtime enforcement uses approved machine-readable policies attached to the guide
+version.
 
 ## Guide Sufficiency Report
 

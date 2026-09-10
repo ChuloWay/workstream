@@ -21,6 +21,7 @@ from app.modules.checkers.api.post_submit_catalogue import (
     PostSubmitCatalogue,
 )
 from app.modules.projects.models import GuideSourceSnapshot, ProjectGuide
+from app.modules.projects.api.task_examples import require_task_example_commitment
 
 from .contracts import CompilationAttemptIdentity, CompilationExecutionState
 from .repository import GuideCompilationIntegrityError
@@ -109,7 +110,14 @@ def compilation_context_from_material(
         or loaded.setup_generation != setup_generation
     ):
         raise GuideCompilationIntegrityError("compilation manifest lineage mismatch")
+    try:
+        examples = require_task_example_commitment(
+            guide.task_examples, guide.task_examples_hash, manifest=snapshot.manifest_json,
+        )
+    except ValueError:
+        raise GuideCompilationIntegrityError("guide task examples are unavailable") from None
     context = ProjectGuideCompilationContext(
+        task_examples=examples,
         material=loaded,
         setup_run_id=setup_run_id,
         setup_generation=setup_generation,

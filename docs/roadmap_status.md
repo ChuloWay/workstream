@@ -209,7 +209,10 @@ cannot be reused as post-submission review-gate evidence. See the
 - Project Managers can authorize guide-source ingestion for projects they are
   permitted to manage.
 - Guide originals remain immutable in ArtifactStore; PostgreSQL holds metadata,
-  versions and custody. Upload admission checks bounded format, digest and size.
+  versions, custody and the required task-example list. Guide creation requires
+  at least one nonblank example; a starting idea is sufficient and optional
+  example fields do not repeat requirements from the guide. Each snapshot/run
+  binds the exact version's examples. Upload admission checks bounded format, digest and size.
   Committed originals do not bypass the separate verification required for
   submission ZIPs. Inline markdown setup and extractors are removed.
 - Committed original-document readiness automatically runs one unified compilation
@@ -218,7 +221,8 @@ cannot be reused as post-submission review-gate evidence. See the
   components and atomically finalizes the setup at draft output. A blocked guide
   ends at findings. Runtime, model/provider and instructions are independently
   configured and bound to the attempt. The agent opens assigned files on demand
-  in an isolated workspace; exact grants exclude other projects and runs. Known
+  in an isolated workspace and assesses them with every supplied task example;
+  exact grants exclude other projects and runs. Known
   invalid output ends terminally, and replay never starts a second inference.
   Transient pre-send retries use bounded backoff and a circuit breaker; the
   default request timeout is 300 seconds, separate from the whole-run timeout.
@@ -228,7 +232,9 @@ cannot be reused as post-submission review-gate evidence. See the
   MinIO, the Celery handler and PostgreSQL proved both blocked findings and ready
   draft policy outcomes, with exact replay and provider cleanup. Broker delivery
   was scripted in these drills; live Celery transport and broad semantic accuracy
-  are not established by them. The dormant activation command is removed; active
+  are not established by them. Earlier probes omitted task examples and establish
+  execution mechanics only; complete guide-plus-example provider proof is required
+  for the current input contract. The dormant activation command is removed; active
   guide reads and locked policy consumers remain, with activation deferred to
   AUTH-12H.
 - Contributor ZIP preparation uses one verified byte lineage from scratch

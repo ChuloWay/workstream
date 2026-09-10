@@ -151,7 +151,7 @@ SECRET_ARTIFACT_SINGLE_TOKENS = {
     "token",
     "tokens",
 }
-GUIDE_SOURCE_SNAPSHOT_SCHEMA_VERSION = "guide_source_snapshot.v2"
+GUIDE_SOURCE_SNAPSHOT_SCHEMA_VERSION = "guide_source_snapshot.task_examples"
 EFFECTIVE_POLICY_SCHEMA_VERSION = "effective_project_submission_artifact_policy.v1"
 MERGE_ALGORITHM_VERSION = "workstream_default_merge.v1"
 PLATFORM_HASH_ALGORITHM = "sha256"
@@ -812,7 +812,10 @@ class ProjectService:
             fail()
         if snapshot.manifest_schema_version != GUIDE_SOURCE_SNAPSHOT_SCHEMA_VERSION:
             fail()
-        if set(manifest) != {"schema_version", "snapshot_id", "generation", "items"}:
+        if set(manifest) != {
+            "schema_version", "snapshot_id", "generation", "items",
+            "task_examples_hash", "task_examples_count",
+        }:
             fail()
         if manifest.get("schema_version") != GUIDE_SOURCE_SNAPSHOT_SCHEMA_VERSION:
             fail()
@@ -1677,8 +1680,19 @@ def build_guide_source_snapshot_manifest(
     *,
     snapshot_id: str,
     generation: int,
+    task_examples: object,
+    expected_task_examples_hash: str | None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Compose a v2 declaration whose byte identity comes only from ART."""
+    """Bind document declarations and the owning guide's immutable task examples."""
+    from app.modules.projects.api.task_examples import (
+        GuideTaskExampleInputError, task_examples_hash, require_task_example_commitment,
+    )
+
+    try:
+        examples = require_task_example_commitment(task_examples, expected_task_examples_hash)
+    except GuideTaskExampleInputError as exc:
+        raise SourceSnapshotInvalid(exc.code) from None
+    examples_hash = task_examples_hash(examples)
     declared_items: list[dict[str, Any]] = []
     seen_labels: set[tuple[str, str]] = set()
     for item in payload.items:
@@ -1709,6 +1723,8 @@ def build_guide_source_snapshot_manifest(
         "schema_version": GUIDE_SOURCE_SNAPSHOT_SCHEMA_VERSION,
         "snapshot_id": snapshot_id,
         "generation": generation,
+        "task_examples_hash": examples_hash,
+        "task_examples_count": len(examples),
         "items": sorted_items,
     }, sorted_items
 

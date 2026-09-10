@@ -38,6 +38,7 @@ def _execute(sql: str) -> None:
 def upgrade() -> None:
     """Preserve retained evidence while closing superseded write/execution paths."""
     _retain_source_columns()
+    _task_example_custody()
     _runtime_configuration_guard()
     _resource_tables()
     _resource_guards()
@@ -122,6 +123,135 @@ def _retain_source_columns() -> None:
         "new.content_markdown is distinct from old.content_markdown\n                    or new.change_summary is distinct from old.change_summary",
         "new.change_summary is distinct from old.change_summary",
     ),))
+
+
+def _task_example_custody() -> None:
+    """Store ordinary example text with guide metadata and bind its exact source chain."""
+    op.add_column("project_guides", sa.Column("task_examples", sa.JSON(), nullable=True))
+    op.add_column("project_guides", sa.Column("task_examples_hash", sa.String(71), nullable=True))
+    op.create_check_constraint(op.f("ck_project_guides_task_examples_commitment_shape"), "project_guides",
+        "(task_examples is null and task_examples_hash is null) or "
+        "(task_examples is not null and task_examples_hash is not null and "
+        "task_examples_hash ~ '^sha256:[0-9a-f]{64}$')")
+    _execute("""
+      create function project_guide_task_examples_valid(examples jsonb) returns boolean
+      language plpgsql immutable as $$
+      declare item jsonb; label jsonb; whitespace text;
+      begin
+        if examples is null or jsonb_typeof(examples) is distinct from 'array' then return false; end if;
+        if jsonb_array_length(examples) not between 1 and 100
+           or octet_length(convert_to(project_guide_projection_canonical_json(examples),'UTF8')) > 131072
+           then return false; end if;
+        select string_agg(chr(code),'') into whitespace from unnest(array[
+          9,10,11,12,13,28,29,30,31,32,133,160,5760,8192,8193,8194,8195,8196,
+          8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288]) code;
+        for item in select value from jsonb_array_elements(examples) loop
+          if jsonb_typeof(item) is distinct from 'object'
+             or not (item ?& array['content','title','labels'])
+             or item - array['content','title','labels'] <> '{}'::jsonb
+             or jsonb_typeof(item->'content') is distinct from 'string'
+             or length(item->>'content') not between 1 and 65536
+             or btrim(item->>'content',whitespace) = ''
+             or (item->'title' <> 'null'::jsonb and (
+                jsonb_typeof(item->'title') is distinct from 'string' or length(item->>'title') > 500))
+             or jsonb_typeof(item->'labels') is distinct from 'array'
+             then return false; end if;
+          if jsonb_array_length(item->'labels') > 20 then return false; end if;
+          for label in select value from jsonb_array_elements(item->'labels') loop
+            if jsonb_typeof(label) is distinct from 'string'
+               or length(label #>> '{}') not between 1 and 100 then return false; end if;
+          end loop;
+        end loop;
+        return true;
+      end $$;
+      create function project_guide_task_examples_hash(examples jsonb) returns text
+      language sql immutable as $$
+        select 'sha256:' || encode(sha256(convert_to(project_guide_projection_canonical_json(
+          jsonb_build_object('domain','workstream.project_guide.task_examples','task_examples',examples)
+        ),'UTF8')),'hex')
+      $$;
+      create function guard_project_guide_task_examples() returns trigger language plpgsql as $$
+      begin
+        if tg_op in ('DELETE','TRUNCATE') then
+          raise exception 'guide source evidence cannot be deleted' using errcode='55000';
+        end if;
+        if tg_op='UPDATE' then
+          if new.task_examples::jsonb is distinct from old.task_examples::jsonb
+             or new.task_examples_hash is distinct from old.task_examples_hash then
+            raise exception 'guide task examples are immutable' using errcode='23514';
+          end if;
+          return new;
+        end if;
+        if not project_guide_task_examples_valid(new.task_examples::jsonb)
+           or new.task_examples_hash is distinct from project_guide_task_examples_hash(new.task_examples::jsonb) then
+          raise exception 'guide task examples are invalid' using errcode='23514';
+        end if;
+        return new;
+      end $$;
+      create trigger project_guide_task_examples_guard before insert or update or delete on project_guides
+        for each row execute function guard_project_guide_task_examples();
+      create trigger project_guide_task_examples_truncate_guard before truncate on project_guides
+        for each statement execute function guard_project_guide_task_examples();
+
+      create function validate_guide_task_examples_create_custody() returns trigger language plpgsql as $$
+      declare reservation guide_mutation_idempotency_records%rowtype; resource jsonb; expected text;
+      begin
+        select * into reservation from guide_mutation_idempotency_records
+          where resource_id=new.id and action_id='project.guide.create' and operation_generation=1
+            and status='committed';
+        if reservation.id is null then
+          raise exception 'guide example creation custody missing' using errcode='23514';
+        end if;
+        resource := jsonb_build_object(
+          'resource_type','project_guide_mutation','resource_id',new.id,
+          'operation_id',reservation.operation_id,'scope_project_id',new.project_id,
+          'guide_id',new.id,'target_kind','create','guide_exists',false,'operation_generation',1,
+          'request_digest',reservation.request_digest,'task_examples_hash',new.task_examples_hash,
+          'task_examples_count',jsonb_array_length(new.task_examples::jsonb));
+        expected := 'sha256:' || encode(sha256(convert_to(project_guide_projection_canonical_json(
+          jsonb_build_object('resource_context',resource)),'UTF8')),'hex');
+        if reservation.resource_context_digest is distinct from expected
+           or reservation.response_json::jsonb->'task_examples' is distinct from new.task_examples::jsonb
+           or reservation.response_json::jsonb->>'task_examples_hash' is distinct from new.task_examples_hash then
+          raise exception 'guide example creation commitment mismatch' using errcode='23514';
+        end if;
+        return null;
+      end $$;
+      create constraint trigger guide_task_examples_create_custody after insert on project_guides
+        deferrable initially deferred for each row execute function validate_guide_task_examples_create_custody();
+
+      create function validate_guide_task_example_source_custody() returns trigger language plpgsql as $$
+      declare source_guide project_guides%rowtype; source_snapshot guide_source_snapshots%rowtype; manifest jsonb;
+      begin
+        if tg_table_name='guide_source_snapshots' then
+          if tg_op='UPDATE' then return new; end if;
+          select * into source_guide from project_guides
+            where id=new.guide_id and project_id=new.project_id and version=new.guide_version;
+          manifest := new.manifest_json::jsonb;
+          if source_guide.id is null or not project_guide_task_examples_valid(source_guide.task_examples::jsonb)
+             or new.manifest_schema_version is distinct from 'guide_source_snapshot.task_examples'
+             or manifest->>'schema_version' is distinct from new.manifest_schema_version
+             or manifest->>'task_examples_hash' is distinct from source_guide.task_examples_hash
+             or manifest->'task_examples_count' is distinct from to_jsonb(jsonb_array_length(source_guide.task_examples::jsonb))
+             or new.bundle_hash is distinct from ('sha256:' || encode(sha256(convert_to(
+                project_guide_projection_canonical_json(manifest),'UTF8')),'hex')) then
+            raise exception 'guide snapshot task example lineage mismatch' using errcode='23514';
+          end if;
+        else
+          select * into source_snapshot from guide_source_snapshots where id=new.source_snapshot_id;
+          if source_snapshot.id is null or
+             (source_snapshot.project_id,source_snapshot.guide_id,source_snapshot.guide_version,source_snapshot.bundle_hash)
+             is distinct from (new.project_id,new.guide_id,new.guide_version,new.source_snapshot_hash) then
+            raise exception 'guide setup snapshot ownership mismatch' using errcode='23514';
+          end if;
+        end if;
+        return new;
+      end $$;
+      create trigger guide_snapshot_task_examples_guard before insert on guide_source_snapshots
+        for each row execute function validate_guide_task_example_source_custody();
+      create trigger guide_setup_snapshot_ownership_guard before insert or update on project_setup_runs
+        for each row execute function validate_guide_task_example_source_custody();
+    """)
 
 
 def _runtime_configuration_guard() -> None:

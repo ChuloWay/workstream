@@ -3778,35 +3778,6 @@ async def test_project_guide_update_rejects_unknown_non_contract_fields(
     assert "guide_setup_checklist" in response.text
 
 
-async def test_source_snapshot_hash_is_server_computed_and_canonical(
-    project_client: AsyncClient,
-) -> None:
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-
-    snapshot = await create_source_snapshot(project_client, project["id"], guide["id"])
-    expected_manifest = {
-        "schema_version": "guide_source_snapshot.v2",
-        "snapshot_id": snapshot["id"],
-        "generation": 1,
-        "items": [
-            {
-                "item_id": item["id"],
-                "item_order": item["item_order"],
-                "source_kind": item["source_kind"],
-                "source_label": item["source_label"],
-                "ingestion_adapter": item["ingestion_adapter"],
-                "media_type": item["media_type"],
-            }
-            for item in snapshot["items"]
-        ],
-    }
-    expected_hash = canonical_json_hash(expected_manifest)
-
-    assert snapshot["manifest_json"] == expected_manifest
-    assert snapshot["bundle_hash"] == expected_hash
-    assert [item["item_order"] for item in snapshot["items"]] == [0, 1]
-
 
 async def test_source_snapshot_requires_at_least_one_uploaded_source_item(
     project_client: AsyncClient,

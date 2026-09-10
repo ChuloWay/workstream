@@ -242,3 +242,45 @@ async def test_provider_must_confirm_requested_resource_expiry(workspace, target
     await instance.close()
     assert grant.closed
     assert custody.deleted == set(custody.known)
+
+
+@pytest.mark.asyncio
+async def test_cleanup_already_missing_provider_objects_confirms_owned_deletion(workspace):
+    instance, client, _grant, custody = workspace
+    await instance.start()
+    await instance.open_document(instance.manifest.handle_for(instance.manifest.documents[0]))
+    client.containers.delete.side_effect = missing
+    client.files.delete.side_effect = missing
+    await cleanup_owned_resources(client, custody)
+    assert custody.deleted == set(custody.known)
+    assert not custody.failed
+    client.containers.delete.assert_awaited_once_with('cntr_owned')
+    client.files.delete.assert_awaited_once_with('file-owned')
+    client.containers.retrieve.assert_awaited_once_with('cntr_owned')
+    client.files.retrieve.assert_awaited_once_with('file-owned')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fault', ['wrong_id', 'not_deleted', 'still_present'])
+async def test_file_cleanup_requires_exact_receipt_and_absence_before_persisting(workspace, fault):
+    instance, client, _grant, custody = workspace
+    await instance.start()
+    await instance.open_document(instance.manifest.handle_for(instance.manifest.documents[0]))
+    file = next(row for row in custody.known.values() if row.kind == 'file')
+    if fault == 'wrong_id':
+        client.files.delete.return_value.id = 'file-foreign'
+    elif fault == 'not_deleted':
+        client.files.delete.return_value.deleted = False
+    else:
+        client.files.retrieve.side_effect = None
+        client.files.retrieve.return_value = SimpleNamespace(id='file-owned')
+    await cleanup_owned_resources(client, custody)
+    assert file.allocation_id in custody.failed
+    assert file.allocation_id not in custody.deleted
+    assert {row.kind for key, row in custody.known.items() if key in custody.deleted} == {'container', 'attachment'}
+    client.files.delete.return_value = SimpleNamespace(id='file-owned', deleted=True)
+    client.files.retrieve.side_effect = missing
+    await cleanup_owned_resources(client, custody)
+    assert custody.deleted == set(custody.known)
+    assert client.files.delete.await_count == 2
+    client.containers.delete.assert_awaited_once()

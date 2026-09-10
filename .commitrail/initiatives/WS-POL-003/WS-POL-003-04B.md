@@ -142,7 +142,9 @@ provider later. Set ModelSettings(store=False) on all Responses requests and
 use input-based, non-stored compaction when applicable. Provider Files and
 containers still have application-state retention: deletion/expiry are cleanup
 controls, not a claim of immediate erasure or zero-data-retention. No transcript,
-raw tool output, source bytes or notes go into PostgreSQL or application logs.
+raw tool output, guide-document bodies or workspace notes go into PostgreSQL or
+application logs. Ordinary task-example text is stored with guide metadata in
+PostgreSQL, as specified in the required-example contract below.
 
 Expose immutable limits for file count/bytes, model turns, wall time, tool work,
 context compaction and temporary workspace lifetime. Use supported SDK/provider
@@ -555,3 +557,131 @@ probe. The unmerged UUIDv5 implementation is replaced outright. The manifest sti
 defines the complete assigned set; ready acceptance requires all originals opened
 and cited. A shared test-owned migration helper reconciles affected current-head
 and retained-guard scenarios without weakening production downgrade protections.
+
+### Required task-example context (creator correction)
+
+Guide sufficiency must be assessed with project rules and representative task
+examples together. The creator requires `task_examples` to contain at least one
+non-empty example before guide creation is accepted and before inference starts.
+An example may be a starting idea, task description, skeleton, or richer sample;
+a title, labels and additional context are optional. Do not require deliverables,
+acceptance criteria, a completed solution or benchmark-specific fields on each
+example. The guide supplies project-wide requirements. Preserve every supplied
+example in the same immutable version/run context. Examples illustrate intended
+work; they do not silently add universal rules or override the guide. Missing
+input is an admission error, not an agent `sufficiency_blocked` judgment.
+
+Replace the unused optional single `RepresentativeTaskPolicyContext` and its
+exclusive tests. Do not add a second optional/fallback inference input. Keep original uploaded guide documents in ArtifactStore/S3. Store task-example
+text in PostgreSQL, explicitly authorized by the creator: these are ordinary
+structured text inputs, not uploaded documents. Bind them to the guide version
+and exact inference context. Reuse guide creation, source capture, authorization
+and idempotency owners rather than adding a separate task-setup subsystem. Example inputs do
+not create Workstream Tasks.
+
+This correction extends the allowed affected schema/context, guide create/source
+capture, runtime instructions and current documentation
+paths already listed above. It does not authorize checker execution, policy
+approval/activation, broader storage access, or deletion of retained evidence.
+Required proof includes missing/empty rejection before provider or persisted
+creation effects, one minimal example accepted, multiple diverse examples carried
+without loss, immutable source binding, foreign/stale substitution rejection,
+and real guide-plus-example inference with specific persisted findings. Earlier
+no-example provider probes establish mechanics only, not completion of this
+corrected input contract.
+
+Observed input controls: the creator's Terminus Claims example is a starting
+idea with title, description, languages and optional inspiration. The local
+PaperBench submission snapshots' `static_document.static_document` entries are
+paper-oriented examples with caption, reproduction target, compute guidance and
+caveats. These are project inputs, not completed submission packages. Do not use
+a contributor's finished `tasks/*/instruction.md` as a substitute for the
+assigned example in the acceptance smoke. The common requirement is meaningful
+example content, not any benchmark's field set. Optional metadata must remain
+optional; at least one example is mandatory.
+
+#### Required-example implementation contract
+
+The existing guide-create request requires an ordered `task_examples` list.
+Each example has nonblank `content`; `title` and `labels` are optional. Initial
+operational bounds are 1–100 examples, 65,536 characters per content field,
+500 characters per title, 20 labels of at most 100 characters each, and 128 KiB
+for the complete canonical UTF-8 JSON list. The aggregate budget reserves space
+for guide metadata and checker capabilities within the default 256,000-byte
+provider prompt limit and existing 1,000,000-byte full context limit. A maximum
+input fixture must prove both bounds with the default runtime configuration. Bounds limit input size, not task
+subject matter. Preserve content and order; use whitespace stripping only to
+detect empty input. No deliverable, acceptance-criteria, solution, language or
+benchmark field is required. Additional prose belongs in content.
+
+Store the list as PostgreSQL JSON on the owning guide version. It is an immutable
+setup input for that version; no optional fallback or manufactured example fills
+missing data. Existing retained guide records are not rewritten with invented
+examples. They cannot start new inference without satisfying the current input
+contract. No new S3 object, ART admission, source kind, initialization state,
+external-I/O transaction or separate task-example table is needed. Uploaded
+PDF/DOCX/PPTX guide documents continue through the existing S3 custody path.
+
+Use the example commitment/count in the guide-create AUTH projection and replay
+hash, not raw text. Include the exact example list in the bounded compilation
+context and bind its digest to immutable snapshot/run provenance. Reconstruct
+from the owning guide version and reject absent, changed or foreign context
+before provider construction. Replace `RepresentativeTaskPolicyContext` and
+`representative_task` outright. Preserve the current guide/source ownership and
+transactional authorization; final plan review must trace the database guards
+and request/execution identity so the digest cannot be omitted or substituted.
+
+Instructions distinguish guide requirements from illustrative examples. They
+must assess both together and must not infer a guide deficiency merely because
+an example omits requirements supplied by the guide. Missing examples are an
+input error, never a model sufficiency judgment. Task examples do not create
+Workstream Tasks. Manager correction/manual rerun remains the planned POL-05
+boundary; this change must preserve immutable evidence rather than silently
+editing an existing run's examples.
+
+Required proof: missing/empty/whitespace-only rejection before guide creation;
+one minimal example; diverse multiple examples and exact PostgreSQL roundtrip;
+content-sensitive same-key replay conflict; immutable example binding across
+snapshot/request/execution; foreign/stale/missing rejection before provider I/O;
+and original guide plus actual assigned PaperBench examples through the real
+provider. Retain sanitized outcome findings for the smoke so a blocked result
+can be explained. Scope and required review tracks remain those of this change.
+
+Owner review adopts the existing single guide-create transaction and separate
+snapshot operation. Add guide-owned example JSON and its domain-separated hash;
+nullable columns preserve retained data only, while new insert guards require
+valid input. The sole new public snapshot shape is identified by
+`guide_source_snapshot.task_examples`; retain no older execution validator.
+Snapshot metadata binds example hash/count, not duplicate example bodies.
+Extend create-resource AUTH binding with the request digest and example
+commitment/count, and prove those facts against the persisted guide and replay
+reservation in database custody. Direct SQL must enforce example shape/hash,
+new insert requirements, immutable updates, and snapshot/guide commitment parity.
+Automatic and explicit execution share the existing context constructor and
+canonical input hash; ART document grants and material hashes stay document-only.
+Validation tests claim zero guide/snapshot/setup/provider effects, rather than
+zero actor provisioning effects from unrelated request dependencies.
+
+Plan-review dispositions: SEC-TASKEX-PLAN-001 is accepted; extend setup custody
+to compare its snapshot's project/guide/version/hash as one ownership chain,
+including a foreign fixture with identical example text/hash. POL04B-EX-QA001
+uses the equivalent exact chain above: immutable guide examples -> manifest
+commitment -> snapshot hash -> existing setup/request/attempt/finalization
+source binding and canonical input hash. Do not duplicate example columns on
+every downstream row.
+
+For POL04B-EX-OPS001, reject snapshot creation for missing examples before new
+snapshot/run rows. For retained unfinished runs, expose a read-only
+`setup_input_invalid` diagnostic with stable `task_examples_missing` and require
+a fresh guide version containing examples. A delivery returns that bounded
+input failure before provider construction, without transport retries or a
+fabricated model judgment. Preserve already finalized receipts. No retained
+evidence is edited or discarded to perform this recovery.
+
+For POL04B-EX-OPS002, the authorized guide-create response and its exact replay
+return the persisted example list/hash. Existing guide responses use the same
+projection; retained rows truthfully return null. This supplies confirmation
+before document upload without adding another public route or permission.
+POL04B-EX-QA002 requires independent exact-prompt transfer and no-Task assertions,
+Unicode/escaping byte-bound cases, and a complete-guide/minimal-example smoke;
+API acceptance alone never asserts semantic readiness.

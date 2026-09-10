@@ -6,6 +6,7 @@ from app.modules.checkers.catalogue import project_guide_pre_submission_capabili
 
 from dataclasses import replace
 import hashlib
+import json
 from uuid import UUID, uuid4
 
 from sqlalchemy import text
@@ -108,6 +109,7 @@ def context(values: dict[str, UUID], *, generation: int = 1) -> ProjectGuideComp
         ),),
     )
     return ProjectGuideCompilationContext(
+        task_examples=({"content": "Review a claim using the project guide."},),
         runtime_configuration=runtime_configuration(),
         material=material,
         setup_run_id=values[f"setup_{generation}"],
@@ -222,7 +224,16 @@ def persistence_facts(
 async def _seed_project_rows(
     engine: AsyncEngine, values: dict[str, UUID], generations: int
 ) -> None:
+    from app.modules.projects.api.task_examples import task_examples_hash, validate_task_examples
+
     sql_values = {name: str(value) for name, value in values.items()}
+    examples = validate_task_examples([{"content": "Review a claim using the project guide."}])
+    example_hash = task_examples_hash(examples)
+    sql_values.update(
+        examples=json.dumps([item.model_dump(mode="json") for item in examples]),
+        examples_hash=example_hash,
+        example_manifest=json.dumps({"task_examples_hash": example_hash, "task_examples_count": len(examples)}),
+    )
     async with engine.begin() as connection:
         await connection.execute(text("alter table projects disable trigger user"))
         await connection.execute(
@@ -254,7 +265,7 @@ async def _seed_project_rows(
         await connection.execute(
             text(
                 "insert into project_guides(id,project_id,version,status,"
-                "created_by) values(:guide,:project,'v1','draft','test')"
+                "created_by,task_examples,task_examples_hash) values(:guide,:project,'v1','draft','test',cast(:examples as json),:examples_hash)"
             ),
             sql_values,
         )
@@ -262,7 +273,7 @@ async def _seed_project_rows(
             text(
                 "insert into guide_source_snapshots(id,project_id,guide_id,guide_version,"
                 "manifest_schema_version,manifest_json,bundle_hash,captured_by) values"
-                "(:snapshot,:project,:guide,'v1','guide_source_snapshot.v1','{}'::json,"
+                "(:snapshot,:project,:guide,'v1','guide_source_snapshot.task_examples',cast(:example_manifest as json),"
                 ":hash,'test')"
             ),
             {**sql_values, "hash": SHA256},

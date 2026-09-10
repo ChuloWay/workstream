@@ -13,6 +13,7 @@ from app.modules.projects.models import (
     ProjectGuide, ProjectSetupRun,
 )
 from .models import ProjectGuideCompilationAttempt
+from app.modules.projects.api.task_examples import require_task_example_commitment
 
 
 class SqlAlchemyProjectGuideDocumentScope:
@@ -25,7 +26,8 @@ class SqlAlchemyProjectGuideDocumentScope:
         """Lock exact current draft ownership and return no ORM or source bodies."""
         header = (await self._session.execute(
             select(ProjectGuide, GuideSourceSnapshot, ProjectSetupRun)
-            .options(load_only(ProjectGuide.id, ProjectGuide.project_id, ProjectGuide.version, ProjectGuide.status))
+            .options(load_only(ProjectGuide.id, ProjectGuide.project_id, ProjectGuide.version,
+                               ProjectGuide.status, ProjectGuide.task_examples, ProjectGuide.task_examples_hash))
             .join(GuideSourceSnapshot, GuideSourceSnapshot.guide_id == ProjectGuide.id)
             .join(ProjectSetupRun, ProjectSetupRun.guide_id == ProjectGuide.id)
             .where(
@@ -46,6 +48,12 @@ class SqlAlchemyProjectGuideDocumentScope:
         if header is None:
             raise GuideDocumentUnavailable("guide_source_stale")
         guide, snapshot, setup = header
+        try:
+            require_task_example_commitment(
+                guide.task_examples, guide.task_examples_hash, manifest=snapshot.manifest_json,
+            )
+        except ValueError:
+            raise GuideDocumentUnavailable("guide_task_examples_unavailable") from None
         latest_generation = await self._session.scalar(
             select(func.max(ProjectSetupRun.setup_generation))
             .where(ProjectSetupRun.guide_id == guide.id)

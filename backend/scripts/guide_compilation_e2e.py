@@ -43,13 +43,16 @@ class E2EProjectGuideRuntime:
         expires = datetime.now(timezone.utc) + timedelta(minutes=20)
         container_id = "cntr_scripted_" + uuid4().hex
         allocations = []
-        async def allocate(kind, handle=None, parent=None):
+        async def allocate(kind, handle=None, parent=None, source_file=None, container=None):
             identifier = await custody.begin_allocation(
                 kind=kind, document_handle=handle, parent_provider_id=parent, expires_at=expires,
+                source_file_allocation_id=source_file,
+                container_allocation_id=container,
             )
             await custody.record_allocated(identifier, container_id if kind == "container" else {"file": "file-", "attachment": "cfile_"}[kind] + "scripted_" + uuid4().hex)
             allocations.append(identifier)
-        await allocate("container")
+            return identifier
+        container_allocation = await allocate("container")
         refs = []
         try:
             for document in context.material.documents:
@@ -58,8 +61,8 @@ class E2EProjectGuideRuntime:
                     body = opened.reader.read()
                     assert len(body) == document.byte_count
                     assert "sha256:" + hashlib.sha256(body).hexdigest() == document.sha256
-                await allocate("file", handle)
-                await allocate("attachment", handle, container_id)
+                file_allocation = await allocate("file", handle)
+                await allocate("attachment", handle, container_id, file_allocation, container_allocation)
                 await custody.record_document_open(handle)
                 refs.append(GuideEvidenceRef(source_item_id=document.source_item_id,
                     document_version_id=document.ingest_id, sha256=document.sha256))

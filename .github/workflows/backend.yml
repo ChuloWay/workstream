@@ -516,6 +516,9 @@ jobs:
             app/core/project_guide_instructions.py \
             app/interfaces/project_guide_runtime.py \
             app/modules/projects/api/guide_documents.py \
+            app/modules/projects/api/task_examples.py \
+            app/modules/authorization/domain/guide_mutations.py \
+            app/modules/authorization/domain/prepared_guide_mutations.py \
             app/modules/artifacts/guide_document_access.py \
             app/modules/artifacts/guide_documents.py \
             app/modules/checkers/api/pre_submit_catalogue.py \

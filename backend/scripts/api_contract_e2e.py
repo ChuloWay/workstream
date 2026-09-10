@@ -15,7 +15,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import httpx
 from alembic import command
@@ -392,6 +392,37 @@ async def exercise_rate_control_contract(env: dict[str, str]) -> None:
         await session.commit()
 
 
+def acknowledge_guide_delivery(*, args, task_id):
+    """Script only the guide broker acknowledgement; keep dispatch owners real."""
+    from types import SimpleNamespace
+
+    from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDelivery
+    from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
+
+    if len(args) != 5:
+        raise ValueError("guide delivery requires its exact five arguments")
+    project_id, guide_id, snapshot_id, run_id, generation = args
+    ProjectGuideCompilationDelivery(
+        project_id=project_id, guide_id=guide_id, source_snapshot_id=snapshot_id,
+        setup_run_id=run_id, setup_generation=generation, task_id=task_id,
+    )
+    if task_id != project_guide_compilation_task_id(run_id, generation):
+        raise ValueError("guide delivery task identity mismatch")
+    return SimpleNamespace(id=task_id)
+
+
+def create_api_contract_app():
+    """Use real API owners with an explicitly scripted guide broker boundary."""
+    from app.main import create_app
+    from app.workers.project_setup import run_project_guide_compilation
+
+    # Only this subprocess's guide task is intercepted. Submission/checker
+    # tasks retain eager execution. The parent explicitly delivers guide work
+    # through compile_live_guide and its scripted external inference runtime.
+    run_project_guide_compilation.apply_async = acknowledge_guide_delivery
+    return create_app()
+
+
 def start_api_server(port: int, env: dict[str, str]) -> tuple[subprocess.Popen, Path]:
     """Start a real uvicorn server process.
 
@@ -409,7 +440,9 @@ def start_api_server(port: int, env: dict[str, str]) -> tuple[subprocess.Popen, 
             sys.executable,
             "-m",
             "uvicorn",
-            "app.main:create_app",
+            "api_contract_e2e:create_api_contract_app",
+            "--app-dir",
+            str(project_root() / "scripts"),
             "--factory",
             "--host",
             "127.0.0.1",
@@ -711,6 +744,10 @@ def guide_payload(run_id: str) -> dict:
     return {
         "version": "v1",
         "change_summary": "Initial real API guide",
+        "task_examples": [
+            {"content": "Review a claim using the project guide."},
+            {"content": "Explain how a second claim should be handled.", "title": "Second example"},
+        ],
     }
 
 
@@ -893,49 +930,25 @@ async def exercise_guide_setup_contract(
             content=payload,
         )
         ensure(upload.status_code == 202, f"guide source upload failed: {upload.text}")
-    # The hosted contract drill intentionally has no broker-backed worker.
-    # Drive the canonical async worker adapters on this process's event loop so
-    # SQLAlchemy connections never cross loops. Each adapter still consumes
-    # its exact fixed-service authority and provider-neutral ART boundary.
-    from app.adapters.artifacts.internal_workers import (
-        continue_guide_setup_after_stored_document,
-        run_artifact_internal_operation,
-        scan_artifact_pending_work,
-    )
-
-    async def publish_put_attempt(attempt_id: str) -> None:
-        await run_artifact_internal_operation("put", UUID(attempt_id))
-        await continue_guide_setup_after_stored_document(UUID(attempt_id))
-
-    async def publish_verification_job(job_id: str) -> None:
-        identifier = UUID(job_id)
-        await run_artifact_internal_operation("verification", identifier)
-
-    from unittest.mock import patch
-
-    # Emulate broker acknowledgement, not eager execution. The live guide is
-    # delivered below with its deterministic runtime; both deliveries use the explicit scripted runtime.
-    with patch(
-        "app.modules.projects.setup_queue.enqueue_project_guide_compilation",
-        side_effect=lambda **kwargs: kwargs["task_id"],
-    ):
-        published_work = 0
-        for _ in range(8):
-            published_generation = await scan_artifact_pending_work(
-                publish_put_attempt,
-                publish_verification_job,
-            )
-            published_work += published_generation
-            if published_generation == 0:
-                break
-        else:
-            raise AssertionError("guide artifact worker did not drain bounded committed work")
-    ensure(published_work > 0, "guide artifact worker found no committed work")
+    # Successful original uploads already commit document readiness. The guide
+    # has no verifier/extractor work to drain. Deliver its queued compilation
+    # below through the explicit scripted runtime used by this API drill.
     queued_setup = await request_json(
         client,
         "GET",
         f"/api/v1/projects/{project_id}/guides/{guide_id}/setup-runs/latest",
         diagnostic_reader_token,
+    )
+    ensure(queued_setup["documents_ready_at"] is not None, "guide originals are not committed")
+    from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
+
+    ensure(queued_setup["status"] == "queued", "guide compilation was not queued")
+    ensure(queued_setup["current_step"] == "queued", "guide dispatch did not finish")
+    ensure(
+        queued_setup["celery_task_id"] == project_guide_compilation_task_id(
+            queued_setup["id"], queued_setup["setup_generation"],
+        ),
+        "guide compilation delivery identity changed",
     )
     from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDelivery
     from guide_compilation_e2e import compile_live_guide, project_task_fixture_sufficiency
@@ -1788,7 +1801,6 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             "project.contributor_candidate.list",
             "project.guide_sufficiency_report.list",
             "project.guide_sufficiency_report.read",
-            "project.post_submit_checker_policy_setup.read",
             "project.read",
             "project.setup_run.read",
             "project.submission_artifact_policy.list",

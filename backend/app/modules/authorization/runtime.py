@@ -16,6 +16,10 @@ from app.modules.authorization.domain.audit import AuthorizationDecisionResource
 from app.modules.authorization.domain.contribution_policies import ContributionPolicyReadResourceContext, ContributionPolicyMutationResourceContext
 from app.modules.authorization.domain.adapter_bindings import AdapterBindingMutationResourceContext, AdapterBindingReadResourceContext
 from app.modules.authorization.domain.project_create import ProjectCreateResourceContext
+from app.modules.authorization.domain.guide_mutations import (
+    ProjectGuideMutationResourceContext, ProjectGuideMutationPrepareDenialResourceContext,
+    ProjectGuideSourceSnapshotMutationResourceContext,
+)
 from app.modules.actors.service_identities import ServiceIdentity
 from app.modules.authorization.catalogue import ActionId, PermissionId
 from app.modules.authorization.schemas import AdminRole, AdminScope, ProjectRole
@@ -452,90 +456,6 @@ class ProjectActiveGuideReadResourceContext(BaseModel):
             )
         ):
             raise ValueError("missing active-guide target cannot carry policy facts")
-        return self
-
-
-class ProjectGuideMutationResourceContext(BaseModel):
-    """Canonical draft-guide facts for create or update."""
-
-    model_config = _STRICT_FROZEN
-
-    resource_type: Literal["project_guide_mutation"]
-    resource_id: UUID
-    operation_id: UUID
-    scope_project_id: UUID
-    guide_id: UUID
-    target_kind: Literal["create", "update"]
-    guide_exists: bool
-    guide_status: str | None = None
-    guide_version: str | None = None
-    predecessor_snapshot_id: UUID | None = None
-    predecessor_snapshot_hash: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
-    operation_generation: int = Field(ge=1)
-
-    @model_validator(mode="after")
-    def require_guide_identity(self):
-        """Reject cross-resource and partial guide lineage."""
-        if self.resource_id != self.guide_id:
-            raise ValueError("guide mutation resource must match guide")
-        if self.guide_exists != (self.guide_status is not None and self.guide_version is not None):
-            raise ValueError("guide mutation lifecycle facts are inconsistent")
-        if self.guide_exists != (self.target_kind == "update"):
-            raise ValueError("guide mutation operation and existence are inconsistent")
-        if (self.predecessor_snapshot_id is None) != (self.predecessor_snapshot_hash is None):
-            raise ValueError("guide mutation predecessor facts must be bound together")
-        if self.target_kind == "create" and self.predecessor_snapshot_id is not None:
-            raise ValueError("guide creation cannot bind predecessor source lineage")
-        return self
-
-
-class ProjectGuideMutationPrepareDenialResourceContext(BaseModel):
-    """Requested guide target used only to evidence a prepare-time denial."""
-
-    model_config = _STRICT_FROZEN
-
-    resource_type: Literal["project_guide_mutation_request"]
-    resource_id: UUID
-    scope_project_id: UUID
-    requested_guide_id: UUID | None = None
-    requested_target_kind: Literal["guide_create", "guide_update", "source_snapshot_create"]
-
-    @model_validator(mode="after")
-    def require_requested_target(self):
-        """Bind creates to the project and existing-guide requests to a guide id."""
-        if self.requested_target_kind == "guide_create":
-            if self.resource_id != self.scope_project_id or self.requested_guide_id is not None:
-                raise ValueError("guide-create denial must identify only the project")
-        elif self.requested_guide_id is None or self.resource_id != self.requested_guide_id:
-            raise ValueError("guide mutation denial must identify the requested guide")
-        return self
-
-
-class ProjectGuideSourceSnapshotMutationResourceContext(BaseModel):
-    """Canonical guide and source-snapshot lineage for snapshot creation."""
-
-    model_config = _STRICT_FROZEN
-
-    resource_type: Literal["project_guide_source_snapshot_mutation"]
-    resource_id: UUID
-    operation_id: UUID
-    scope_project_id: UUID
-    guide_id: UUID
-    guide_version: str
-    guide_status: str
-    source_snapshot_id: UUID
-    source_snapshot_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    predecessor_snapshot_id: UUID | None = None
-    predecessor_snapshot_hash: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
-    operation_generation: int = Field(ge=1)
-
-    @model_validator(mode="after")
-    def require_snapshot_identity(self):
-        """Reject copied snapshot selectors and partial predecessor facts."""
-        if self.resource_id != self.source_snapshot_id:
-            raise ValueError("source snapshot resource must match snapshot")
-        if (self.predecessor_snapshot_id is None) != (self.predecessor_snapshot_hash is None):
-            raise ValueError("source snapshot predecessor facts must be bound together")
         return self
 
 

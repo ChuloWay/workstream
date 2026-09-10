@@ -13,6 +13,24 @@ sys.path.insert(0, str(SCRIPTS))
 MODULES = [importlib.import_module("api_contract_e2e")]
 
 
+def test_scripted_guide_broker_acknowledgement_binds_exact_delivery() -> None:
+    """The API drill cannot acknowledge a different generation or task ID."""
+    from uuid import uuid4
+
+    from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
+
+    args = [str(uuid4()) for _ in range(4)] + [1]
+    task_id = project_guide_compilation_task_id(args[3], args[4])
+    acknowledge = MODULES[0].acknowledge_guide_delivery
+    assert acknowledge(args=args, task_id=task_id).id == task_id
+    with pytest.raises(ValueError):
+        acknowledge(args=[*args[:4], 2], task_id=task_id)
+    with pytest.raises(ValueError):
+        acknowledge(args=args, task_id=str(uuid4()))
+    with pytest.raises(ValueError):
+        acknowledge(args=args[:4], task_id=task_id)
+
+
 @pytest.mark.parametrize("module", MODULES)
 @pytest.mark.parametrize(
     "name", ["workstream_test", "test_workstream", "workstream_test_012345abcdef"]
@@ -176,3 +194,20 @@ async def test_api_drill_seeds_one_canonical_post_submit_policy(
     assert policy.pre_submit_checker_policy_id == pre.id
     session.scalar.assert_awaited_once()
     session.commit.assert_awaited_once()
+
+
+def test_api_drill_action_expectations_use_current_catalogue():
+    """Retired actions cannot remain in the drill's independent exact inventories."""
+    import ast
+    from app.modules.authorization.catalogue import ActionId
+
+    source = ast.parse(Path(MODULES[0].__file__).read_text())
+    inventories = [node.comparators[0] for node in ast.walk(source)
+        if isinstance(node, ast.Compare) and isinstance(node.left, ast.Subscript)
+        and isinstance(node.left.slice, ast.Constant)
+        and node.left.slice.value == "effective_action_ids"
+        and isinstance(node.comparators[0], ast.List)]
+    assert inventories
+    current_actions = {action.value for action in ActionId}
+    for inventory in inventories:
+        assert set(ast.literal_eval(inventory)) <= current_actions

@@ -163,7 +163,9 @@ canonical local actors and authorization, project guides and task records,
 submission packets, immutable artifact storage, automated checker execution,
 and the pre-review gate. Project-guide ingestion stores original documents,
 records immutable metadata and provides authorized exact-file reads to the
-unified setup agent. Findings and policy proposals retain document-access evidence.
+unified setup agent. Guide metadata in PostgreSQL also holds at least one required
+task example; the agent assesses the examples with the uploaded guide documents.
+Findings and policy proposals retain document-access evidence.
 
 Active work is connecting those foundations into the remaining production
 lifecycle: the remaining artifact custody chain, review and revision,

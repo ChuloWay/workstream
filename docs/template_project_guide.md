@@ -12,6 +12,19 @@ Describe what this project produces and why it matters.
 
 - `<task type>`
 
+## Task Examples Supplied With This Guide
+
+Provide at least one nonblank task example in the guide-create request's
+`task_examples` list. A starting idea or short description is enough; title and
+labels are optional. Examples need not repeat this guide's deliverables or
+acceptance criteria. Workstream stores the list with guide metadata in PostgreSQL
+and supplies all examples to the setup agent alongside the uploaded guide files.
+Uploaded guide files are stored in ArtifactStore/S3.
+
+```json
+{"task_examples": [{"content": "Repair intermittent memory faults in the claims processing service."}]}
+```
+
 ## Business Terms Summary
 
 Describe compensation expectations in plain language when useful for project

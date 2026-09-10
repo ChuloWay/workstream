@@ -3,7 +3,8 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.projects.models import ProjectSetupRun
+from app.modules.projects.models import GuideSourceSnapshot, ProjectGuide, ProjectSetupRun
+from app.modules.projects.api.task_examples import GuideTaskExampleInputError, require_task_example_commitment
 from app.modules.projects.schemas import ProjectSetupRunResponse
 from .models import ProjectGuideCompilationAttempt, ProjectGuideSetupFinalization
 
@@ -35,6 +36,20 @@ async def compilation_setup_response(
             ProjectGuideCompilationAttempt.source_snapshot_hash == setup.source_snapshot_hash,
         )
     )
+    if attempt is None or attempt.status == "compilation_reserved":
+        guide = await session.get(ProjectGuide, setup.guide_id)
+        source = await session.get(GuideSourceSnapshot, setup.source_snapshot_id)
+        if guide is not None and source is not None:
+            try:
+                require_task_example_commitment(
+                    guide.task_examples, guide.task_examples_hash, manifest=source.manifest_json,
+                )
+            except GuideTaskExampleInputError as exc:
+                response.status = "setup_input_invalid"
+                response.current_step = "input_validation"
+                response.error_code = exc.code
+                response.error_summary = "Create a new guide version with at least one task example."
+                return response
     if attempt is None:
         return response
     response.status = {

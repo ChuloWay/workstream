@@ -8,6 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.modules.projects.api.guide_documents import GuideDocumentManifestPort
+from app.modules.projects.api.task_examples import (
+    GuideTaskExampleInputError, require_task_example_commitment,
+)
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.authorization.api import (
     ActorIdentityFacts,
@@ -75,7 +78,13 @@ class LiveGuideCompilationCoordinator:
 
     async def run(self, delivery: ProjectGuideCompilationDelivery) -> dict:
         """Admit the exact delivery and finish only its existing immutable generation."""
-        finalization, has_attempt, snapshot = await self._admit(delivery)
+        try:
+            finalization, has_attempt, snapshot = await self._admit(delivery)
+        except GuideTaskExampleInputError as exc:
+            return {
+                "status": "setup_input_invalid", "error_code": exc.code,
+                "error_summary": "Create a new guide version with at least one task example.",
+            }
         if finalization is not None:
             return await self._finalize(finalization)
         if has_attempt and snapshot is None:
@@ -196,6 +205,9 @@ class LiveGuideCompilationCoordinator:
                     True,
                     None,
                 )
+            require_task_example_commitment(
+                guide.task_examples, guide.task_examples_hash, manifest=source.manifest_json,
+            )
             if setup.status == "dispatch_pending" and setup.current_step == "dispatch":
                 setup.status = "queued"
                 setup.current_step = "queued"

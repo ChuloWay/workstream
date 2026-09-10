@@ -17,6 +17,7 @@ def complete_guide_payload(version: str = "v1") -> dict:
     return {
         "version": version,
         "change_summary": f"Initial {version}",
+        "task_examples": [{"content": "Review a claim using the project guide."}],
     }
 
 

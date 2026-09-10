@@ -22,7 +22,6 @@ from app.interfaces.project_agents import (
     PlatformCoverageRef,
     ProjectGuideCompilationContext,
     ProjectGuideCompilationResult,
-    RepresentativeTaskPolicyContext,
     SubmissionArtifactPolicyProposal,
     validate_project_guide_compilation_result,
 )
@@ -54,6 +53,7 @@ def _context() -> ProjectGuideCompilationContext:
         ),),
     )
     return ProjectGuideCompilationContext(
+        task_examples=({"content": "Review a claim using the project guide."},),
         material=material,
         setup_run_id=setup_id,
         setup_generation=1,
@@ -246,13 +246,52 @@ def test_model_produced_text_allows_safe_security_policy_language(safe: str) -> 
     assert suggestion.rationale == safe
 
 
-def test_representative_task_context_is_optional_and_rejects_pii_fields() -> None:
+def test_compilation_context_requires_task_examples_and_preserves_all_input() -> None:
+    from app.interfaces.project_agents import project_guide_compilation_prompt_bytes
+    import json
+
+    payload = _context().model_dump(mode="json")
+    examples = [{"content": "A starting idea."}, {"content": "  修復 worker\n", "title": "Second"}]
+    context = ProjectGuideCompilationContext.model_validate(payload | {"task_examples": examples})
+    sent = json.loads(project_guide_compilation_prompt_bytes(context))
+    assert [item["content"] for item in sent["task_examples"]] == [item["content"] for item in examples]
+    assert sent["task_examples"][1]["title"] == "Second"
+    del payload["task_examples"]
+    with pytest.raises(ValidationError, match="task_examples"):
+        ProjectGuideCompilationContext.model_validate(payload)
+    with pytest.raises(ValidationError, match="task_examples"):
+        ProjectGuideCompilationContext.model_validate(payload | {"task_examples": []})
+
+
+def test_maximum_examples_and_documents_fit_default_runtime_input_budgets() -> None:
+    """Admission's largest text list fits real catalogue and maximum file metadata."""
+    import json
+    from app.interfaces.project_agents import (
+        MAXIMUM_PROJECT_GUIDE_COMPILATION_PROMPT_BYTES,
+        canonical_project_guide_compilation_context_bytes,
+        project_guide_compilation_prompt_bytes,
+    )
+    from app.modules.projects.api.task_examples import MAXIMUM_TASK_EXAMPLE_BYTES
+
     context = _context()
-    assert context.representative_task is None
-    with pytest.raises(ValidationError):
-        RepresentativeTaskPolicyContext.model_validate(
-            {"task_kind": "code_review", "actor_id": str(uuid4())}
-        )
+    examples = [{"content": "x" * 65_536, "title": None, "labels": []},
+                {"content": "", "title": None, "labels": []}]
+    overhead = len(json.dumps(examples, sort_keys=True, separators=(",", ":")).encode())
+    examples[1]["content"] = "y" * (MAXIMUM_TASK_EXAMPLE_BYTES - overhead)
+    assert len(json.dumps(examples, sort_keys=True, separators=(",", ":")).encode()) == MAXIMUM_TASK_EXAMPLE_BYTES
+    prototype = context.material.documents[0].model_dump(mode="json")
+    documents = [prototype | {
+        "source_item_id": str(uuid4()), "ingest_id": str(uuid4()),
+        "put_attempt_id": str(uuid4()), "item_order": index,
+    } for index in range(100)]
+    material = context.material.model_dump(mode="json") | {"documents": documents, "guide_version": "g" * 50}
+    largest = ProjectGuideCompilationContext.model_validate(
+        context.model_dump(mode="json") | {"task_examples": examples, "material": material},
+    )
+    assert len(largest.task_examples) == 2
+    assert len(largest.material.documents) == 100
+    assert len(project_guide_compilation_prompt_bytes(largest)) <= largest.runtime_configuration.maximum_manifest_bytes
+    assert len(canonical_project_guide_compilation_context_bytes(largest)) <= MAXIMUM_PROJECT_GUIDE_COMPILATION_PROMPT_BYTES
 
 
 def test_unified_result_accepts_exact_stage_capability_and_closed_parameters() -> None:

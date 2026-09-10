@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.modules.projects.api.guide_documents import GuideDocumentMediaType
+from app.modules.projects.api.task_examples import ProjectGuideTaskExamples
 
 from datetime import datetime
 from decimal import Decimal
@@ -474,12 +475,13 @@ class ContributorProjectResponse(BaseModel):
 
 
 class ProjectGuideCreate(BaseModel):
-    """Request schema for draft guide material only."""
+    """Create guide metadata with at least one illustrative task example."""
 
     model_config = ConfigDict(extra="forbid")
 
     version: str = Field(max_length=50)
     change_summary: str | None = Field(default=None, max_length=1000)
+    task_examples: ProjectGuideTaskExamples
 
 
 class ProjectGuideUpdate(BaseModel):
@@ -500,6 +502,8 @@ class ProjectGuideResponse(BaseModel):
     version: str
     status: str
     change_summary: str | None
+    task_examples: ProjectGuideTaskExamples | None
+    task_examples_hash: str | None
     approved_by: str | None
     effective_at: datetime | None
     created_by: str

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 from app.core.hashing import canonical_json_hash
+from app.modules.projects.api.task_examples import task_examples_hash, validate_task_examples
 from app.modules.actors.service import ResolvedActor
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.runtime import (
@@ -83,6 +84,12 @@ class GuideMutationService:
         target_resource_id: UUID,
         operation_id: UUID,
     ) -> tuple[PreparedAuthorizationInput, str]:
+        body_value = body.model_dump(mode="json", exclude_unset=True)
+        if action is ActionId.PROJECT_GUIDE_CREATE:
+            examples = validate_task_examples(body.task_examples)
+            body_value.pop("task_examples")
+            body_value["task_examples_hash"] = task_examples_hash(examples)
+            body_value["task_examples_count"] = len(examples)
         replay_request = {
             "action_id": action.value,
             "route": route,
@@ -91,7 +98,7 @@ class GuideMutationService:
             "idempotency_key": str(key),
             "project_id": str(project_id),
             "guide_id": str(guide_id) if guide_id is not None else None,
-            "body": body.model_dump(mode="json", exclude_unset=True),
+            "body": body_value,
         }
         digest = canonical_json_hash(
             {"domain": "workstream.guide_mutation.idempotency.v1", **replay_request}
@@ -102,6 +109,12 @@ class GuideMutationService:
             "target_resource_id": str(target_resource_id),
             "operation_id": str(operation_id),
         }
+        if action is ActionId.PROJECT_GUIDE_CREATE:
+            request.update(
+                request_digest=digest,
+                task_examples_hash=body_value["task_examples_hash"],
+                task_examples_count=body_value["task_examples_count"],
+            )
         return PreparedAuthorizationInput(idempotency_key=key, request_value=request), digest
 
     async def _existing(self, resolved, action, key, digest, response_type):
@@ -171,6 +184,8 @@ class GuideMutationService:
         self, resolved, prepared, key: UUID, project_id: UUID, payload: ProjectGuideCreate
     ) -> GuideMutationOutcome:
         action = ActionId.PROJECT_GUIDE_CREATE
+        examples = validate_task_examples(payload.task_examples)
+        examples_hash = task_examples_hash(examples)
         guide_id, operation_id = uuid4(), uuid4()
         caller, digest = self._input(
             action,
@@ -213,6 +228,9 @@ class GuideMutationService:
             target_kind="create",
             guide_exists=False,
             operation_generation=1,
+            request_digest=digest,
+            task_examples_hash=examples_hash,
+            task_examples_count=len(examples),
         )
         decision = await prepared.consume(handle, action, caller, resource)
         self._prove(decision, project_id)
@@ -236,6 +254,8 @@ class GuideMutationService:
             project_id=str(project_id),
             version=payload.version,
             status="draft",
+            task_examples=[item.model_dump(mode="json") for item in examples],
+            task_examples_hash=examples_hash,
             change_summary=payload.change_summary,
             created_by=resolved.profile.id,
             mutation_generation=1,
@@ -305,6 +325,8 @@ class GuideMutationService:
             payload,
             snapshot_id=str(snapshot_id),
             generation=generation,
+            task_examples=guide.task_examples,
+            expected_task_examples_hash=guide.task_examples_hash,
         )
         try:
             snapshot_hash = canonical_json_hash(manifest)
