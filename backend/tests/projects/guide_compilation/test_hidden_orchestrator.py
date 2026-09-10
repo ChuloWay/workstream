@@ -437,3 +437,41 @@ async def test_cleanup_failure_preserves_known_result_without_second_inference(i
         assert "persist" not in backend.calls
     else:
         assert backend.calls[-2:] == ["record_accepted", "persist"]
+
+
+@pytest.mark.parametrize('operation,fault,code', [
+    ('load', 'missing', 'attempt_unavailable'),
+    ('load', 'storage', 'storage_unavailable'),
+    ('context', 'material', 'context_unavailable'),
+    ('context', 'integrity', 'context_unavailable'),
+    ('context', 'storage', 'storage_unavailable'),
+])
+async def test_execution_backend_sanitizes_owner_failures(monkeypatch, operation, fault, code):
+    from unittest.mock import AsyncMock
+    from sqlalchemy.exc import SQLAlchemyError
+    from app.modules.projects.api import ProjectGuideCompilationExecutionError
+    from app.modules.projects.api.guide_documents import GuideDocumentUnavailable
+    from app.modules.projects.guide_compilation.repository import GuideCompilationIntegrityError
+    from app.modules.projects.guide_compilation.service import CompilationExecutionStateUnavailable
+    from .test_hidden_orchestrator_postgresql import _backend
+
+    @asynccontextmanager
+    async def sessions():
+        yield object()
+
+    errors = {
+        'missing': CompilationExecutionStateUnavailable('attempt_unavailable'),
+        'storage': SQLAlchemyError('private database details'),
+        'material': GuideDocumentUnavailable('private source details'),
+        'integrity': GuideCompilationIntegrityError('private lineage details'),
+    }
+    called = AsyncMock(side_effect=errors[fault])
+    owner = 'app.modules.projects.guide_compilation.orchestrator.'
+    monkeypatch.setattr(owner + ('load_compilation_execution_state' if operation == 'load'
+        else 'build_project_guide_compilation_context'), called)
+    backend = _backend(sessions)
+    with pytest.raises(ProjectGuideCompilationExecutionError) as failure:
+        await getattr(backend, operation)(uuid4())
+    assert failure.value.code == code
+    assert 'private' not in str(failure.value)
+    called.assert_awaited_once()

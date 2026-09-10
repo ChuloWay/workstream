@@ -203,3 +203,57 @@ async def test_context_enforces_the_canonical_prompt_limit(
                 )
     finally:
         await engine.dispose()
+
+
+@pytest.mark.parametrize('fault', ['manifest_lineage', 'missing_examples', 'changed_examples'])
+def test_context_constructor_rejects_input_drift_after_valid_control(fault):
+    from types import SimpleNamespace
+    from app.modules.projects.guide_compilation.context import compilation_context_from_material
+    from app.modules.projects.api.task_examples import task_examples_hash
+    from .helpers import ids
+
+    expected = context(ids())
+    examples = [item.model_dump(mode='json') for item in expected.task_examples]
+    guide = SimpleNamespace(id=str(expected.material.guide_id),
+        project_id=str(expected.material.project_id), version=expected.material.guide_version,
+        task_examples=examples, task_examples_hash=task_examples_hash(expected.task_examples))
+    snapshot = SimpleNamespace(id=str(expected.material.source_snapshot_id),
+        bundle_hash=expected.material.source_snapshot_hash,
+        manifest_json={'task_examples_hash': guide.task_examples_hash,
+                       'task_examples_count': len(examples)})
+    values = dict(guide=guide, snapshot=snapshot, loaded=expected.material,
+        setup_run_id=expected.setup_run_id, setup_generation=expected.setup_generation,
+        pre_submission_capabilities=expected.pre_submission_capabilities,
+        post_submission_capabilities=expected.post_submission_capabilities,
+        runtime_configuration=expected.runtime_configuration)
+    assert compilation_context_from_material(**values) == expected
+    if fault == 'manifest_lineage':
+        snapshot.id = str(uuid4())
+        message = 'manifest lineage mismatch'
+    else:
+        guide.task_examples = None if fault == 'missing_examples' else [{'content': 'Changed task'}]
+        message = 'task examples are unavailable'
+    with pytest.raises(GuideCompilationIntegrityError, match=message):
+        compilation_context_from_material(**values)
+
+
+async def test_setup_repository_reads_preserve_scope_without_fabricating_policy(clean_postgres_database):
+    from app.modules.projects.repository import ProjectRepository
+
+    values = await seed_database(clean_postgres_database)
+    engine = create_async_engine(clean_postgres_database)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with sessions() as session, session.begin():
+            repository = ProjectRepository(session)
+            setup = await repository.get_project_setup_run(str(values['setup_1']))
+            assert setup is not None
+            assert await repository.get_latest_project_setup_run(str(values['project']), str(values['guide'])) is setup
+            assert await repository.get_latest_project_setup_run(str(uuid4()), str(values['guide'])) is None
+            assert await repository.next_project_setup_generation(str(values['guide'])) == setup.setup_generation + 1
+            assert await repository.get_project_setup_run(str(uuid4())) is None
+            assert await repository.get_pre_submit_checker_policy_for_effective_policy(str(uuid4())) is None
+            assert await repository.lock_compiled_pre_submit_checker_policy(str(uuid4())) is None
+            assert await repository.lock_post_submit_checker_policy_for_guide(str(values['project']), setup.guide_version) is None
+    finally:
+        await engine.dispose()

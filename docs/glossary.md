@@ -27,9 +27,10 @@ published contribution policy, and queue.
 ## Project Owner
 
 The external or internal organization that provides open-ended project material
-and business terms. That material can be markdown, URL-backed documentation,
-repository docs, examples, rubrics, task instructions, compensation business
-terms, or other project-specific source material. The project owner
+and business terms, including rubrics, task instructions and compensation
+expectations. Current guide inputs are uploaded PDF/DOCX/PPTX originals, plus
+at least one ordinary-text task example stored with guide metadata in PostgreSQL.
+The project owner
 does not author or approve Workstream's machine-readable internal policy schema.
 
 ## ContributionPolicy

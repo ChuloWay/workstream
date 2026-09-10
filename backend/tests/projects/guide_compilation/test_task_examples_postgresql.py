@@ -201,3 +201,39 @@ async def test_retained_missing_examples_are_visible_and_never_invoke_provider(p
     async with get_session_factory()() as session:
         assert await session.scalar(text("select count(*) from project_guide_compilation_attempts")) == 0
         assert await session.scalar(text("select count(*) from guide_source_snapshots where guide_id=:id"), {"id": guide["id"]}) == 1
+
+
+@pytest.mark.parametrize('missing', [False, True])
+async def test_unfinished_setup_diagnostic_validates_examples_without_finalization(clean_postgres_database, missing):
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from app.modules.projects.models import ProjectSetupRun
+    from app.modules.projects.guide_compilation.diagnostics import compilation_setup_response
+    from .helpers import seed_database
+
+    values = await seed_database(clean_postgres_database)
+    engine = create_async_engine(clean_postgres_database)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with sessions() as session, session.begin():
+            assert await session.scalar(text('select count(*) from project_guide_setup_finalizations')) == 0
+            assert await session.scalar(text('select count(*) from project_guide_compilation_attempts')) == 0
+            if missing:
+                # Emulate retained pre-example data in an isolated rolled-back fixture.
+                await session.execute(text('alter table project_guides disable trigger project_guide_task_examples_guard'))
+                await session.execute(text('update project_guides set task_examples=null, task_examples_hash=null where id=:id'),
+                                      {'id': str(values['guide'])})
+                await session.execute(text('set constraints all immediate'))
+                await session.execute(text('alter table project_guides enable trigger project_guide_task_examples_guard'))
+            setup = await session.get(ProjectSetupRun, str(values['setup_1']))
+            before = setup.status
+            response = await compilation_setup_response(session, setup)
+            assert response.status == ('setup_input_invalid' if missing else before)
+            if missing:
+                assert response.error_code == 'task_examples_missing'
+                assert response.current_step == 'input_validation'
+                assert 'new guide version' in response.error_summary
+            assert setup.status == before
+            assert await session.scalar(text('select count(*) from project_guide_compilation_attempts')) == 0
+            await session.rollback()
+    finally:
+        await engine.dispose()

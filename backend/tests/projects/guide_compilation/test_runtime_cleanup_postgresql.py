@@ -207,3 +207,54 @@ async def test_cleanup_excludes_existing_other_attempt_allocations(clean_postgre
             assert len(await pending_runtime_resource_cleanup(session, limit=1)) == 1
     finally:
         await engine.dispose()
+
+
+@pytest.mark.parametrize('fault', [None, 'identity', 'construction', 'cleanup'])
+async def test_cleanup_composition_uses_retained_configuration_and_closes_runtime(grant_case, fault):
+    from app.adapters.projects import cleanup_project_guide_runtime_resources
+
+    grant, _, _, _, context = grant_case
+    _, identifiers = await resources(grant, context)
+    async with grant._sessions() as session, session.begin():
+        await GuideCompilationRepository(session).mark_invalid_terminal(
+            attempt_id=grant._attempt_id, failure_code='schema_invalid')
+    before = await persisted_states(grant)
+    constructed, cleaned, closed = [], [], []
+
+    class Runtime:
+        identity = 'wrong-runtime' if fault == 'identity' else runtime_configuration().adapter_identity
+
+        async def cleanup_resources(self, custody):
+            rows = await custody.cleanup_resources()
+            assert {row.allocation_id for row in rows} == identifiers
+            cleaned.append(custody)
+            if fault == 'cleanup':
+                raise RuntimeError('provider unavailable')
+            for row in rows:
+                await custody.record_deleted(row.allocation_id)
+            return True
+
+        async def aclose(self):
+            closed.append(self)
+
+    runtime = Runtime()
+
+    def factory(configuration):
+        constructed.append(configuration)
+        if fault == 'construction':
+            raise RuntimeError('runtime unavailable')
+        return runtime
+
+    result = await cleanup_project_guide_runtime_resources(grant._sessions, runtime_factory=factory)
+    assert result == {'selected': 1, 'completed': int(fault is None)}
+    assert constructed == [runtime_configuration()]
+    assert len(cleaned) == int(fault in (None, 'cleanup'))
+    assert closed == ([] if fault == 'construction' else [runtime])
+    if fault is not None:
+        assert await persisted_states(grant) == before
+    else:
+        assert all(state == 'deleted' and timestamp is not None
+            for state, timestamp in (await persisted_states(grant)).values())
+        assert await cleanup_project_guide_runtime_resources(grant._sessions, runtime_factory=factory) == {
+            'selected': 0, 'completed': 0}
+        assert constructed == [runtime_configuration()]

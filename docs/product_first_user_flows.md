@@ -28,12 +28,14 @@ below describes the target lifecycle, not a claim that those surfaces are live.
 
 1. A system-scoped Project Manager creates the project.
 2. Project owner provides open-ended guide material and business terms.
-3. An authorized covered Project Manager adds the guide.
+3. An authorized covered Project Manager adds guide metadata with at least one
+   ordinary-text task example in PostgreSQL and uploads the assigned
+   PDF/DOCX/PPTX guide originals to ArtifactStore/S3.
 4. Once ART commits every assigned original guide document,
    Workstream automatically queues its authorized unified compilation in Celery.
 5. One unified compilation assesses sufficiency and proposes artifact,
    pre-submission and post-submission policy components from the exact guide
-   and catalogue snapshots.
+   and catalogue snapshots together with every supplied task example.
 6. Blocking sufficiency gaps stop the setup pipeline and create clarification requests for the project owner.
 7. An authorized covered Project Manager acknowledges non-blocking sufficiency warnings.
 8. Workstream finalizes the exact compilation and its permitted projections.

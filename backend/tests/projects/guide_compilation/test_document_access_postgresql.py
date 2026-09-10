@@ -341,10 +341,8 @@ async def test_attempt_transition_waits_for_scoped_original_staging(grant_case):
         await asyncio.gather(reader, writer, return_exceptions=True)
 
 
-@pytest.mark.parametrize("payload", [SOURCE_BYTES[:-1], SOURCE_BYTES + b"x"], ids=["truncated", "overrun"])
-async def test_post_verification_stream_drift_never_yields_bytes_and_closes_scratch(grant_case, payload):
-    """Even a corrupted scratch stream after successful preparation cannot escape ART."""
-    grant, store, authority, manager, compilation = grant_case
+def _replace_prepared_stream(grant, payload):
+    """Inject drift only after the canonical preparation has verified its source."""
     original = grant._preparation
     prepared_results = []
 
@@ -358,8 +356,55 @@ async def test_post_verification_stream_drift_never_yields_bytes_and_closes_scra
             committed_source=SimpleNamespace(stream=altered_stream), close=prepared.close)
 
     grant._preparation = SimpleNamespace(prepare=prepare)
+    return prepared_results
+
+
+@pytest.mark.parametrize("payload", [SOURCE_BYTES[:-1], SOURCE_BYTES + b"x", b"x" * len(SOURCE_BYTES)],
+                         ids=["truncated", "overrun", "same_size"])
+async def test_post_verification_stream_drift_never_yields_bytes_and_closes_scratch(grant_case, payload):
+    """Even a corrupted scratch stream after successful preparation cannot escape ART."""
+    grant, store, authority, manager, compilation = grant_case
+    prepared_results = _replace_prepared_stream(grant, payload)
     with pytest.raises(GuideDocumentUnavailable, match="guide_document_integrity_mismatch"):
         async with grant.open(compilation.material.handle_for(compilation.material.documents[0])):
             pytest.fail("changed scratch stream escaped the grant")
     assert len(prepared_results) == len(authority.facts) == store.closed == 1
+    assert (await manager.usage()).reservation_count == 0
+
+
+async def test_second_stream_digest_guard_mutant_exposes_same_size_substitution(grant_case, monkeypatch):
+    """Removing only the second digest comparison admits the identical corrupted fixture."""
+    import ast
+    import inspect
+    import textwrap
+    from app.modules.artifacts import guide_document_access as owner
+
+    grant, store, _authority, manager, compilation = grant_case
+    payload = b"x" * len(SOURCE_BYTES)
+    assert payload != SOURCE_BYTES
+    _replace_prepared_stream(grant, payload)
+    handle = compilation.material.handle_for(compilation.material.documents[0])
+    with pytest.raises(GuideDocumentUnavailable, match="guide_document_integrity_mismatch"):
+        async with grant.open(handle):
+            pytest.fail("intact second-stream guard yielded corrupted bytes")
+    assert (await manager.usage()).reservation_count == 0
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(owner.ScopedGuideDocumentGrant.open.__wrapped__)))
+    comparisons = [node for node in ast.walk(tree) if isinstance(node, ast.Compare)
+                   and any(isinstance(child, ast.Attribute) and child.attr == "hexdigest" for child in ast.walk(node))]
+    assert len(comparisons) == 1
+
+    class RemoveDigestComparison(ast.NodeTransformer):
+        def visit_Compare(self, node):
+            if node is comparisons[0]:
+                return ast.copy_location(ast.Constant(False), node)
+            return self.generic_visit(node)
+
+    mutated = ast.fix_missing_locations(RemoveDigestComparison().visit(tree))
+    namespace = dict(vars(owner))
+    exec(compile(mutated, "<second-stream-digest-mutant>", "exec"), namespace)
+    monkeypatch.setattr(owner.ScopedGuideDocumentGrant, "open", namespace["open"])
+    async with grant.open(handle) as opened:
+        assert opened.reader.read() == payload
+    assert store.closed == 2
     assert (await manager.usage()).reservation_count == 0

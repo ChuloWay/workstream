@@ -233,8 +233,12 @@ cannot be reused as post-submission review-gate evidence. See the
   draft policy outcomes, with exact replay and provider cleanup. Broker delivery
   was scripted in these drills; live Celery transport and broad semantic accuracy
   are not established by them. Earlier probes omitted task examples and establish
-  execution mechanics only; complete guide-plus-example provider proof is required
-  for the current input contract. The dormant activation command is removed; active
+  execution mechanics only. A subsequent real Terra run with two PaperBench PDFs
+  and two task examples proved exact example delivery, original access, persisted
+  findings, cleanup and replay. It correctly stopped for absent project-wide
+  file/archive size limits, without demanding one selected paper. This proves
+  that bounded blocked-result flow; it does not establish a ready policy for
+  those inputs or broad semantic accuracy. The dormant activation command is removed; active
   guide reads and locked policy consumers remain, with activation deferred to
   AUTH-12H.
 - Contributor ZIP preparation uses one verified byte lineage from scratch

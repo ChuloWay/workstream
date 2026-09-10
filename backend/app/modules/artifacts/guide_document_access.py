@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from collections.abc import Callable
 from sqlalchemy.ext.asyncio import AsyncSession
 from io import BytesIO
+from hashlib import sha256
 from time import monotonic
 from uuid import UUID, uuid4
 
@@ -108,11 +109,13 @@ class ScopedGuideDocumentGrant:
             # The entire object has already passed checksum and size verification in
             # canonical scratch. One bounded per-document multipart buffer is transient.
             memory = BytesIO()
+            digest = sha256()
             async for block in prepared.committed_source.stream():
                 if memory.tell() + len(block) > document.byte_count:
                     raise GuideDocumentUnavailable("guide_document_integrity_mismatch")
+                digest.update(block)
                 memory.write(block)
-            if memory.tell() != document.byte_count:
+            if memory.tell() != document.byte_count or "sha256:" + digest.hexdigest() != document.sha256:
                 raise GuideDocumentUnavailable("guide_document_integrity_mismatch")
             memory.seek(0)
             self._require_live(handle)

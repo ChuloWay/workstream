@@ -28,7 +28,8 @@ Target v0.1 checklist before releasing tasks. The
 remaining setup/activation work:
 
 - project name and slug exist
-- project guide imported
+- project guide metadata created with at least one ordinary-text task example
+- every assigned PDF/DOCX/PPTX guide original uploaded to ArtifactStore/S3
 - guide source snapshot captured
 - project owner setup material captured
 - latest project setup run visible through covered Project Manager or authorized

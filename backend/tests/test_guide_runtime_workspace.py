@@ -284,3 +284,86 @@ async def test_file_cleanup_requires_exact_receipt_and_absence_before_persisting
     assert custody.deleted == set(custody.known)
     assert client.files.delete.await_count == 2
     client.containers.delete.assert_awaited_once()
+
+
+@pytest.mark.parametrize('fault', [None, 'provider', 'overflow', 'continuation', 'exhausted'])
+async def test_sdk_model_turn_enforces_compaction_and_hosted_work_budget(monkeypatch, fault):
+    from agents import Runner, OpenAIResponsesModel
+    from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
+    from app.interfaces.project_agents import ProjectAgentRuntimeError
+    from tests.test_agent_runtime import _compile
+
+    monkeypatch.setenv('OPENAI_API_KEY', 'unit-test-only')
+    compilation = context(ids())
+    config = compilation.runtime_configuration
+    observed = []
+
+    class Workspace:
+        container_id = 'cntr_owned'
+        async def start(self):
+            pass
+        async def close(self):
+            pass
+
+    monkeypatch.setattr('app.adapters.project_agents.openai_agent_sdk.OpenAIGuideWorkspace',
+                        lambda *_: Workspace())
+
+    async def response(self, instructions, supplied, settings, *args, **kwargs):
+        observed.append((supplied, settings.extra_args))
+        if fault == 'provider':
+            raise RuntimeError('provider unavailable')
+        count = config.maximum_hosted_tool_calls + 1 if fault == 'overflow' else 1
+        return SimpleNamespace(output=[SimpleNamespace(type='code_interpreter_call')] * count)
+
+    monkeypatch.setattr(OpenAIResponsesModel, 'get_response', response)
+
+    async def run(agent, prompt, **kwargs):
+        if fault == 'exhausted':
+            agent.model.hosted_calls = config.maximum_hosted_tool_calls
+        supplied = [{'type': 'message', 'content': 'old'}, {'type': 'compaction'},
+                    {'type': 'message', 'content': 'current'}]
+        await agent.model.get_response(agent.instructions, supplied, agent.model_settings,
+            agent.tools, agent.output_type, [], None,
+            previous_response_id='foreign' if fault == 'continuation' else None)
+        assert agent.model.hosted_calls == 1
+        from tests.projects.guide_compilation.helpers import result
+        return SimpleNamespace(final_output=result())
+
+    monkeypatch.setattr(Runner, 'run', run)
+    runtime = OpenAIAgentSdkProjectGuideRuntime(config)
+    if fault is None:
+        await _compile(runtime, compilation)
+    else:
+        with pytest.raises(ProjectAgentRuntimeError, match='project guide run failed'):
+            await _compile(runtime, compilation)
+    if fault in ('continuation', 'exhausted'):
+        assert observed == []
+    else:
+        assert observed == [([{'type': 'compaction'}, {'type': 'message', 'content': 'current'}],
+                             {'max_tool_calls': config.maximum_hosted_tool_calls})]
+
+
+@pytest.mark.parametrize('failed', [False, True])
+async def test_sdk_cleanup_uses_owned_receipts_without_inference_admission(monkeypatch, workspace, failed):
+    from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
+
+    instance, client, grant, custody = workspace
+    await instance.start()
+    await instance.open_document(instance.manifest.handle_for(instance.manifest.documents[0]))
+    if failed:
+        client.files.delete.side_effect = RuntimeError('provider unavailable')
+    configurations = []
+
+    @asynccontextmanager
+    async def open_client(**values):
+        configurations.append(values)
+        yield client
+
+    monkeypatch.setenv('OPENAI_API_KEY', 'unit-test-only')
+    monkeypatch.setattr('openai.AsyncOpenAI', open_client)
+    runtime = OpenAIAgentSdkProjectGuideRuntime(instance.configuration)
+    assert await runtime.cleanup_resources(custody) is not failed
+    assert runtime._admission is None
+    assert configurations == [{'max_retries': 0, 'timeout': instance.configuration.request_timeout_seconds}]
+    assert bool(await custody.cleanup_resources()) is failed
+    await grant.close()

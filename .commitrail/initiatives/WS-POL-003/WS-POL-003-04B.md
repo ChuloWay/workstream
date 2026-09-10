@@ -709,3 +709,28 @@ ART checks for identity mismatches after scope resolution and stream drift
 after successful scratch verification. These tests preserve the current
 coverage floors and join the canonical lane inventory; they introduce no
 production compatibility path or expanded storage permission.
+
+Final review adopts SEC-04B-009 / QA005 / TEST-04B-001: hash the exact second
+stream while copying to the bounded buffer, then compare digest and size before
+yielding. Same-size substitution must fail without releasing bytes or leaking
+scratch; a test-of-test removes only that second digest comparison and observes
+the same altered fixture become readable. This remains inside the ART grant.
+DOC-003/004 reconcile remaining current guide-entry pages, the artifact spec and
+the roadmap's bounded guide-plus-example provider evidence in this PR.
+
+The existing runtime-cleanup composition is included in verification scope: prove
+that retained configuration selects the runtime, exact cleanup custody supplies
+only owned resources, construction/identity/provider failures preserve retryable
+evidence, and constructed runtimes close. Completed deletion must not select
+that attempt again or enter inference. Keep every hosted coverage floor intact.
+
+The same proof batch exercises the existing SDK model-turn work budget,
+compaction boundary, exact cleanup and independent admission, context manifest
+and example drift, and sanitized owner errors. These tests cover required
+behavior in the affected owners without changing their contracts or CI floors.
+
+The unfinished diagnostic proof must use no finalization and no attempt, so
+missing examples reach input validation instead of replaying a persisted result.
+Repository verification covers exact setup lookup, foreign-project exclusion,
+next generation, and absent compiled policy reads during setup. These current
+shared readers remain required by task and authorized diagnostic consumers.
