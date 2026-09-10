@@ -50,9 +50,9 @@ gRPC, or asynchronous transport without changing product authority semantics.
 
 It contains no Workstream product role or permission. Email, display name,
 skills, reputation, and relationship metadata are never authorization keys.
-During the compatibility period, `/api/v1/auth/me` and actor registration do
-not copy issuer email or display name, and those response fields remain null.
-Canonical profile metadata is owned by the later actor-profile migration.
+Canonical self-read is `GET /api/v1/actors/me`. Actor admission does not copy
+issuer email or display name. Human-owned profile metadata is updated through
+`PATCH /api/v1/actors/me`; verified issuer claims do not grant product roles.
 
 Human first access may create a canonical human profile and identity link.
 Unknown service subjects, agents, and Spaces are denied without implicit

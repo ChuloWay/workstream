@@ -107,12 +107,11 @@ python3 scripts/check_markdown_links.py
 git diff --check
 ```
 
-During the compatibility period, `/api/v1/auth/me` uses only the verified
-issuer/subject plus bounded legacy roles. It does not copy issuer email or
-display name into actor storage or responses, so both response fields remain
-`null`. Consumers must not treat token identity metadata or legacy workflow
-eligibility as profile or authorization truth. Human-owned display data is
-written only through `PATCH /api/v1/actors/me`.
+Use `GET /api/v1/actors/me` for canonical actor self-read. The duplicate
+`GET /api/v1/auth/me` endpoint is removed. Actor admission does not copy issuer
+email or display name into the profile. Consumers must not treat token identity
+metadata or workflow eligibility as profile or authorization truth. Human-owned
+display data is written only through `PATCH /api/v1/actors/me`.
 
 ## Request And Error Context
 

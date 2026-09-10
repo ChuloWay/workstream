@@ -864,7 +864,7 @@ async def task_client(task_database_env: str) -> AsyncIterator[AsyncClient]:
         transport=ASGITransport(app=app),
         base_url="http://testserver",
     ) as client:
-        admission = await client.get("/api/v1/auth/me", headers=auth_headers())
+        admission = await client.get("/api/v1/actors/me", headers=auth_headers())
         assert admission.status_code == 200, admission.text
         async with db_session.get_session_factory()() as session:
             await grant_system_project_manager(

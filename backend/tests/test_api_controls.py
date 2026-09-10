@@ -437,16 +437,16 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         for method, operation in path_item.items()
         if method in methods and operation.get("security")
     )
-    assert len(route_inventory) == 73
+    assert len(route_inventory) == 72
     assert sha256("\n".join(route_inventory).encode()).hexdigest() == (
-        "58e52a93a0f081691e5dff6f6226d2a45f843a3ddc9df10d560e83dc1ee9439a"
+        "ba8e7485e78ba825d7bfff3c21270925178206fcba768adc8faf1aebb3acb8db"
     )
-    assert len(protected_inventory) == 71
+    assert len(protected_inventory) == 70
     assert sha256("\n".join(protected_inventory).encode()).hexdigest() == (
-        "588b760470932011dc1d2c669e700891e31120df2674d50f60163032aa349ac8"
+        "e8e419673c618c9ad8015e28e9e5823de72cb132fe59591de4307a0d3c00c4ad"
     )
     assert set(schema["paths"]["/health"]["get"]["responses"]) == {"200", "400", "500"}
-    assert {"401", "403", "503"} <= set(schema["paths"]["/api/v1/auth/me"]["get"]["responses"])
+    assert {"401", "403", "503"} <= set(schema["paths"]["/api/v1/actors/me"]["get"]["responses"])
     service_actor_responses = schema["paths"]["/api/v1/service-actors"]["post"]["responses"]
     assert "409" in service_actor_responses
     assert service_actor_responses["409"]["content"]["application/json"]["schema"] == {

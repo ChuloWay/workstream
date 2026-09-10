@@ -67,7 +67,7 @@ async def review_lease_client(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as client:
-        response = await client.get("/api/v1/auth/me", headers=auth_headers())
+        response = await client.get("/api/v1/actors/me", headers=auth_headers())
         assert response.status_code == 200, response.text
         async with db_session.get_session_factory()() as session:
             await grant_system_project_manager(

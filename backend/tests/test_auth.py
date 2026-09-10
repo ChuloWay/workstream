@@ -213,7 +213,7 @@ def test_legacy_compatibility_dependency_has_fixed_consumer_allowlist() -> None:
     }
 
 
-async def test_valid_dev_token_resolves_actor_context(
+async def test_valid_dev_token_resolves_canonical_profile(
     monkeypatch: pytest.MonkeyPatch,
     auth_database_env: str,
 ) -> None:
@@ -233,25 +233,20 @@ async def test_valid_dev_token_resolves_actor_context(
         base_url="http://testserver",
     ) as client:
         response = await client.get(
-            "/api/v1/auth/me",
+            "/api/v1/actors/me",
             headers={"Authorization": "Bearer local-token"},
         )
 
     assert response.status_code == 200
     body = response.json()
-    assert body["actor_id"]
-    assert body["external_subject"] == "flow-subject-1"
-    assert body["external_issuer"] == "flow-dev-issuer"
-    assert body["email"] is None
+    assert body["actor_profile_id"]
+    assert body["actor_kind"] == "human"
+    assert body["status"] == "active"
+    assert body["domains"] == ["contributor"]
+    assert body["admin_roles"] == []
+    assert body["contact_email"] is None
     assert body["display_name"] is None
-    assert body["roles"] == ["contributor", "reviewer"]
-    assert body["auth_source"] == "dev_mock"
-    assert body["is_dev_auth"] is True
-    assert body["audit_context"]["actor_id"] == body["actor_id"]
-    assert body["audit_context"]["external_subject"] == "flow-subject-1"
-    assert body["audit_context"]["external_issuer"] == "flow-dev-issuer"
-    assert body["audit_context"]["auth_source"] == "dev_mock"
-    assert body["audit_context"]["is_dev_auth"] is True
+    assert not {"roles", "external_subject", "external_issuer", "audit_context"} & body.keys()
 
 
 async def test_signed_flow_token_authorizes_actor_self_read_and_update(
@@ -724,7 +719,6 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
 
         for path, expected_code in (
             ("/api/v1/actors/me", "permission_not_granted"),
-            ("/api/v1/auth/me", "service_actor_not_provisioned"),
         ):
             service_denial = await client.get(path, headers=service_headers)
             assert service_denial.status_code == 403
@@ -1444,7 +1438,7 @@ async def test_service_actor_provisioning_failure_and_authority_races_are_atomic
     await db_session.dispose_engine()
 
 
-async def test_auth_me_maps_actor_registry_failure_to_service_unavailable(
+async def test_actor_self_maps_actor_registry_failure_to_service_unavailable(
     monkeypatch: pytest.MonkeyPatch,
     auth_database_env: str,
 ) -> None:
@@ -1467,7 +1461,7 @@ async def test_auth_me_maps_actor_registry_failure_to_service_unavailable(
         base_url="http://testserver",
     ) as client:
         response = await client.get(
-            "/api/v1/auth/me",
+            "/api/v1/actors/me",
             headers={"Authorization": "Bearer local-token"},
         )
 
@@ -3870,7 +3864,8 @@ async def test_no_local_login_password_or_session_routes() -> None:
         "sessions",
     }
 
-    assert "/api/v1/auth/me" in paths
+    assert "/api/v1/actors/me" in paths
+    assert "/api/v1/auth/me" not in paths
     assert "/api/v1/demo/worker-profile" not in paths
     assert not any(
         segment in forbidden_segments for path in paths for segment in path.strip("/").split("/")

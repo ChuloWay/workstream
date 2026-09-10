@@ -6890,7 +6890,7 @@ async def test_project_create_copied_key_cannot_cross_actor_namespace(
     second_subject = f"copied-key-actor-{uuid4()}"
     monkeypatch.setenv("WORKSTREAM_DEV_AUTH_SUBJECT", second_subject)
     get_settings.cache_clear()
-    admitted = await project_client.get("/api/v1/auth/me", headers=auth_headers())
+    admitted = await project_client.get("/api/v1/actors/me", headers=auth_headers())
     assert admitted.status_code == 200
     grantor_id, _, grantor_grant_id = await ensure_access_administrator_bootstrap()
     async with db_session.get_session_factory()() as session:

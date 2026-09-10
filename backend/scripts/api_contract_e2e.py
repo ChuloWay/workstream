@@ -1485,21 +1485,16 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             ]
             == "project_role_grant.revoke"
         )
-        await request_json(client, "GET", "/api/v1/auth/me", expected_status=401)
-        await request_json(client, "GET", "/api/v1/auth/me", invalid_token, expected_status=401)
+        await request_json(client, "GET", "/api/v1/actors/me", expected_status=401)
+        await request_json(client, "GET", "/api/v1/actors/me", invalid_token, expected_status=401)
         await request_json(
-            client, "GET", "/api/v1/auth/me", wrong_issuer_token, expected_status=401
+            client, "GET", "/api/v1/actors/me", wrong_issuer_token, expected_status=401
         )
         await request_json(
-            client, "GET", "/api/v1/auth/me", wrong_audience_token, expected_status=401
+            client, "GET", "/api/v1/actors/me", wrong_audience_token, expected_status=401
         )
-        await request_json(client, "GET", "/api/v1/auth/me", expired_token, expected_status=401)
-        await request_json(client, "GET", "/api/v1/auth/me", future_nbf_token, expected_status=401)
-        manager = await request_json(client, "GET", "/api/v1/auth/me", manager_token)
-        assert manager["auth_source"] == "flow"
-        assert manager["is_dev_auth"] is False
-        assert manager["roles"] == ["project_manager"]
-
+        await request_json(client, "GET", "/api/v1/actors/me", expired_token, expected_status=401)
+        await request_json(client, "GET", "/api/v1/actors/me", future_nbf_token, expected_status=401)
         manager_profile = await request_json(
             client,
             "GET",
@@ -2029,8 +2024,6 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             {"reason": "real API release"},
         )
 
-        worker = await request_json(client, "GET", "/api/v1/auth/me", worker_token)
-        assert worker["roles"] == ["worker"]
         canonical_actor = await request_json(
             client,
             "GET",
