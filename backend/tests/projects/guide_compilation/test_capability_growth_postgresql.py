@@ -75,15 +75,10 @@ async def test_handoff_persistence_and_terminal_replay(automatic_source, monkeyp
                 "from project_guide_setup_finalizations"
             ))).one()
             assert tuple(final) == (None, None, None)
-        for table in ("submission_artifact_policies", "effective_project_submission_artifact_policies",
-                      "pre_submit_checker_policies"):
-            assert await session.scalar(text(f"select count(*) from {table}")) == 0
+        await _assert_projection_state(session, setup_id, oversized)
         for table in ("project_guide_compilations", "project_guide_component_projection_operations",
                       "project_guide_setup_finalizations"):
             assert await session.scalar(text(f"select count(*) from {table}")) == (0 if oversized else 1)
-        assert await session.scalar(text(
-            "select output_submission_artifact_policy_id from project_setup_runs where id=:id"
-        ), {"id": str(setup_id)}) is None
 
     def forbidden(*args):
         pytest.fail("terminal replay constructed a provider runtime")
@@ -94,6 +89,7 @@ async def test_handoff_persistence_and_terminal_replay(automatic_source, monkeyp
     assert runtime.calls == 1
     async with factory() as session:
         assert await session.scalar(text("select count(*) from audit_events")) == before
+        await _assert_projection_state(session, setup_id, oversized)
 
 
 async def test_driver_json_byte_measure_matches_postgresql(automatic_source):
@@ -106,3 +102,26 @@ async def test_driver_json_byte_measure_matches_postgresql(automatic_source):
         for payload in payloads:
             actual = await session.scalar(statement, {"payload": payload})
             assert actual == len(json.dumps(payload, ensure_ascii=True, allow_nan=False).encode("utf-8"))
+
+
+async def _assert_projection_state(session, setup_id, oversized):
+    """Observe both checker stages and the exact sole sufficiency output before/after replay."""
+    for table in ("submission_artifact_policies", "effective_project_submission_artifact_policies",
+                  "pre_submit_checker_policies", "checker_policies"):
+        assert await session.scalar(text(f"select count(*) from {table}")) == 0
+    outputs = (await session.execute(text(
+        "select output_sufficiency_report_id, output_submission_artifact_policy_id, "
+        "output_post_submit_checker_policy_id from project_setup_runs where id=:id"
+    ), {"id": str(setup_id)})).one()
+    assert outputs.output_submission_artifact_policy_id is None
+    assert outputs.output_post_submit_checker_policy_id is None
+    reports = (await session.execute(text("select id from guide_sufficiency_reports"))).scalars().all()
+    projections = (await session.execute(text(
+        "select component,report_id,policy_id from project_guide_component_projection_operations"
+    ))).all()
+    if oversized:
+        assert reports == [] and projections == []
+        assert outputs.output_sufficiency_report_id is None
+    else:
+        assert reports == [outputs.output_sufficiency_report_id]
+        assert projections == [("guide_sufficiency", outputs.output_sufficiency_report_id, None)]

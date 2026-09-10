@@ -166,9 +166,10 @@ proposal approval:
 - `POST /api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies/{policy_id}/approve`
 
 Unified post-submit setup, approval and correction routes are unavailable.
-The current compilation proposal and outcome are visible through the latest
-setup run; PM proposal decisions belong to POL-05 and post-submit policy
-projection belongs to POL-06.
+The latest setup run exposes bounded outcome/status diagnostics and output IDs.
+Complete compilation proposals and the catalogue-growth handoff are not exposed
+there. Their manager-facing visibility, review, correction, approval and manual
+rerun belong to POL-05; post-submit policy projection belongs to POL-06.
 
 The two policy `PUT` routes require a UUID `Idempotency-Key` and a quoted
 `If-Match` value. Use `"no-current-policy"` for the first version and the quoted

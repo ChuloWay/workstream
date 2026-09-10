@@ -186,3 +186,19 @@ def test_blocked_handoff_cannot_include_artifact_policy():
         validate_project_guide_compilation_result(context(ids()), report.model_copy(update={
             "submission_artifact_policy": result().submission_artifact_policy,
         }))
+
+
+@pytest.mark.parametrize("field", ["requirements", "capability_suggestions",
+                                    "pre_submit_bindings", "post_submit_bindings"])
+def test_each_collection_ceiling_rejects_independently(field):
+    """Schema proof keeps every other collection within bounds, before semantic checks."""
+    payload = growth_report().model_dump(mode="json")
+    item = payload[field][0]
+    payload[field] = [item] * 200
+    ProjectGuideCompilationResult.model_validate(payload)
+    payload[field] = [item] * 201
+    with pytest.raises(ValidationError) as error:
+        ProjectGuideCompilationResult.model_validate(payload)
+    assert [(entry["loc"], entry["type"]) for entry in error.value.errors()] == [
+        ((field,), "too_long"),
+    ]
