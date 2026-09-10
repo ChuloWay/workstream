@@ -4,6 +4,7 @@ import pytest
 
 from app.interfaces.project_agents import (
     AtomicGuideRequirement,
+    CapabilitySuggestion,
     PostSubmissionBindingProposal,
     CapabilityParameter,
     ProjectGuideCompilationContext,
@@ -13,7 +14,7 @@ from app.interfaces.project_agents import (
 from app.modules.checkers.api.post_submit_catalogue import (
     PostSubmitCatalogue,
 )
-from tests.test_project_guide_compilation_contracts import _artifact_policy, _context
+from tests.test_project_guide_compilation_contracts import _artifact_policy, _context, _evidence
 from tests.checkers.post_submit.support import altered_catalogue, catalogue
 
 
@@ -37,8 +38,14 @@ def proposal(disposition, *, binding=False):
                 requirement_id="quality",
                 statement="Evaluate the submitted analysis.",
                 disposition=disposition,
+                evidence_refs=(_evidence(),),
             ),
         ),
+        capability_suggestions=(CapabilitySuggestion(
+            requirement_id="quality", stage="post_submit", title="Required automated analysis check",
+            rationale="Engineering must provide the unavailable automated analysis evaluator.",
+            evidence_refs=(_evidence(),),
+        ),) if gap else (),
         post_submit_bindings=(
             PostSubmissionBindingProposal(
                 requirement_id="quality",
@@ -71,8 +78,10 @@ def test_requirement_disposition_is_preserved():
 
 @pytest.mark.parametrize("disposition", ("human_review", "post_submit_capability_gap"))
 def test_unbound_dispositions_cannot_acquire_a_binding(disposition):
-    with pytest.raises(ValueError, match="binding is invalid|blocked guide cannot publish"):
-        validate_project_guide_compilation_result(context(), proposal(disposition, binding=True))
+    source = context()
+    validate_project_guide_compilation_result(source, proposal(disposition))
+    with pytest.raises(ValueError, match="compilation capability binding is invalid"):
+        validate_project_guide_compilation_result(source, proposal(disposition, binding=True))
 
 
 def test_supported_binding_is_valid_and_roundtrips():
