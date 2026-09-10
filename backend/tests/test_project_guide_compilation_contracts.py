@@ -13,20 +13,20 @@ from pydantic import ValidationError
 
 from app.interfaces.project_agents import (
     AtomicGuideRequirement,
-    CapabilityBindingProposal,
+    PreSubmissionBindingProposal,
+    PostSubmissionBindingProposal,
     CapabilityParameter,
     CapabilitySuggestion,
     CompilationFinding,
     GuideEvidenceRef,
-    GuideSourceMaterial,
     PlatformCoverageRef,
     ProjectGuideCompilationContext,
     ProjectGuideCompilationResult,
     RepresentativeTaskPolicyContext,
     SubmissionArtifactPolicyProposal,
-    VerifiedGuideMaterialSnapshot,
     validate_project_guide_compilation_result,
 )
+from app.modules.projects.api.guide_documents import GuideDocumentManifest, GuideDocumentVersion
 from app.modules.checkers.catalogue import (
     PreSubmissionCheckerClassification,
     build_pre_submission_checker_catalogue,
@@ -37,31 +37,25 @@ from app.modules.projects.post_submit_policy import DEFAULT_DURABLE_CHECKERS
 
 SHA256 = "sha256:" + "a" * 64
 SOURCE_ITEM_ID = UUID("11111111-1111-1111-1111-111111111111")
-EXTRACTION_USAGE_ID = UUID("22222222-2222-2222-2222-222222222222")
+DOCUMENT_VERSION_ID = UUID("22222222-2222-2222-2222-222222222222")
 
 
 def _context() -> ProjectGuideCompilationContext:
-    material = GuideSourceMaterial(
-        project_id=str(uuid4()),
-        guide_id=str(uuid4()),
-        guide_version="v1",
-        source_snapshot_id=str(uuid4()),
-        source_snapshot_hash=SHA256,
-        guide_material={"content_markdown": "Canonical project guide."},
-        verified_artifact_material=True,
-        source_items=[
-            {
-                "source_kind": "uploaded_file",
-                "ingestion_adapter": "artifact_store",
-                "source_item_id": str(SOURCE_ITEM_ID),
-                "extraction_usage_id": str(EXTRACTION_USAGE_ID),
-                "canonical_output_sha256": SHA256,
-            }
-        ],
+    setup_id = uuid4()
+    material = GuideDocumentManifest(
+        project_id=uuid4(), guide_id=uuid4(), guide_version="v1",
+        source_snapshot_id=uuid4(), source_snapshot_hash=SHA256,
+        setup_run_id=setup_id, setup_generation=1,
+        documents=(GuideDocumentVersion(
+            source_item_id=SOURCE_ITEM_ID, ingest_id=DOCUMENT_VERSION_ID, item_order=0,
+            put_attempt_id=uuid4(), content_id=uuid4(), replica_id=uuid4(),
+            storage_namespace_id="primary", namespace_fingerprint=SHA256,
+            sha256=SHA256, byte_count=100, media_type="application/pdf",
+        ),),
     )
     return ProjectGuideCompilationContext(
-        material=VerifiedGuideMaterialSnapshot.from_material(material),
-        setup_run_id=uuid4(),
+        material=material,
+        setup_run_id=setup_id,
         setup_generation=1,
         instruction_version="v1",
         agent_identity="project-guide-compilation-agent-v1",
@@ -77,10 +71,10 @@ def _context() -> ProjectGuideCompilationContext:
 def _evidence() -> GuideEvidenceRef:
     return GuideEvidenceRef(
         source_item_id=SOURCE_ITEM_ID,
-        extraction_usage_id=EXTRACTION_USAGE_ID,
-        canonical_output_sha256=SHA256,
-        start_ordinal=0,
-        end_ordinal=10,
+        document_version_id=DOCUMENT_VERSION_ID,
+        sha256=SHA256,
+        start_page=1,
+        end_page=10,
     )
 
 
@@ -204,10 +198,10 @@ def test_guide_evidence_ref_rejects_non_lineage_fields(payload: dict[str, str], 
         GuideEvidenceRef.model_validate(
             {
                 "source_item_id": str(uuid4()),
-                "extraction_usage_id": str(uuid4()),
-                "canonical_output_sha256": SHA256,
-                "start_ordinal": 0,
-                "end_ordinal": 1,
+                "document_version_id": str(uuid4()),
+                "sha256": SHA256,
+                "start_page": 1,
+                "end_page": 1,
                 **payload,
             }
         )
@@ -283,16 +277,15 @@ def test_unified_result_accepts_exact_stage_capability_and_closed_parameters() -
             ),
         ),
         pre_submit_bindings=(
-            CapabilityBindingProposal(
+            PreSubmissionBindingProposal(
                 requirement_id="requirement.packet",
                 capability_id="policy.file_size.limit",
                 capability_version="v1",
                 stage="pre_submit",
-                parameters=(CapabilityParameter(name="maximum_file_size_bytes", value=1_000),),
             ),
         ),
         post_submit_bindings=(
-            CapabilityBindingProposal(
+            PostSubmissionBindingProposal(
                 requirement_id="requirement.acceptance",
                 capability_id="check_acceptance_criteria_present",
                 capability_version="v0.1",
@@ -329,7 +322,8 @@ def test_unified_result_rejects_default_unknown_stale_and_wrong_stage_bindings(
 ) -> None:
     context = _context()
     disposition = "supported_post_submit" if stage == "post_submit" else "supported_pre_submit"
-    binding = CapabilityBindingProposal(
+    binding_type = PreSubmissionBindingProposal if stage == "pre_submit" else PostSubmissionBindingProposal
+    binding = binding_type(
         requirement_id="requirement.one",
         capability_id=capability_id,
         capability_version=version,
@@ -359,7 +353,7 @@ def test_unified_result_rejects_open_nested_or_executable_configuration() -> Non
     with pytest.raises(ValidationError):
         CapabilityParameter(name="required_packet_fields", value="import subprocess")
     with pytest.raises(ValidationError):
-        CapabilityBindingProposal(
+        PreSubmissionBindingProposal(
             requirement_id="requirement.packet",
             capability_id="policy.submission_packet.validate",
             capability_version="https://unsafe.invalid",
@@ -381,10 +375,10 @@ def test_unified_result_rejects_open_nested_or_executable_configuration() -> Non
     with pytest.raises(ValidationError):
         GuideEvidenceRef(
             source_item_id=SOURCE_ITEM_ID,
-            extraction_usage_id=EXTRACTION_USAGE_ID,
-            canonical_output_sha256=SHA256,
-            start_ordinal="0",
-            end_ordinal=1,
+            document_version_id=DOCUMENT_VERSION_ID,
+            sha256=SHA256,
+            start_page="0",
+            end_page=1,
         )
 
 
@@ -394,68 +388,36 @@ def test_pre_submission_projection_resource_budget_is_deeply_frozen() -> None:
         projection.definitions[0].resource_budget.maximum_results = 99
 
 
-def test_context_rejects_unverified_or_unredacted_legacy_material() -> None:
-    base = {
-        "project_id": str(uuid4()),
-        "guide_id": str(uuid4()),
-        "guide_version": "v1",
-        "source_snapshot_id": str(uuid4()),
-        "source_snapshot_hash": SHA256,
-        "guide_material": {"content_markdown": "Guide."},
-    }
-    with pytest.raises(ValueError, match="ART-verified"):
-        VerifiedGuideMaterialSnapshot.from_material(GuideSourceMaterial(**base))
+@pytest.mark.parametrize("field", ["canonical_content", "content_markdown", "provider_url"])
+def test_manifest_rejects_document_bodies_and_untrusted_storage_coordinates(field):
+    body = _context().material.model_dump(mode="python")
+    with pytest.raises(ValidationError, match=field):
+        GuideDocumentManifest.model_validate(body | {field: "untrusted content"})
 
-    with pytest.raises(ValueError, match="representative-task"):
-        VerifiedGuideMaterialSnapshot.from_material(
-            GuideSourceMaterial(
-                **base,
-                verified_artifact_material=True,
-                representative_task_material={
-                    "items": [{"source_kind": "task", "ingestion_adapter": "legacy"}]
-                },
-            )
-        )
 
-    with pytest.raises(ValueError, match="must be text"):
-        VerifiedGuideMaterialSnapshot.from_material(
-            GuideSourceMaterial(
-                **{**base, "guide_material": {"content_markdown": {"command": "sh"}}},
-                verified_artifact_material=True,
-            )
-        )
-
-    with pytest.raises(ValueError, match="complete source lineage"):
-        VerifiedGuideMaterialSnapshot.from_material(
-            GuideSourceMaterial(**base, verified_artifact_material=True)
-        )
-
-    with pytest.raises(ValueError, match="complete source lineage"):
-        VerifiedGuideMaterialSnapshot.from_material(
-            GuideSourceMaterial(
-                **base,
-                verified_artifact_material=True,
-                source_items=[
-                    {
-                        "source_kind": "uploaded_file",
-                        "ingestion_adapter": "artifact_store",
-                        "source_item_id": str(SOURCE_ITEM_ID),
-                    }
-                ],
-            )
-        )
+@pytest.mark.parametrize("field", ["source_item_id", "ingest_id", "put_attempt_id", "replica_id", "sha256"])
+def test_manifest_requires_exact_document_identity(field):
+    body = _context().material.model_dump(mode="python")
+    document = dict(body["documents"][0])
+    del document[field]
+    body["documents"] = [document]
+    with pytest.raises(ValidationError, match=field):
+        GuideDocumentManifest.model_validate(body)
 
 
 def test_compilation_material_snapshot_cannot_drift_after_validation() -> None:
     snapshot = _context().material
     with pytest.raises(ValidationError):
-        snapshot.source_lineage = ()
+        snapshot.documents = ()
     with pytest.raises(TypeError):
-        snapshot.source_lineage[0] = snapshot.source_lineage[0]
-    with pytest.raises(ValidationError, match="hash is invalid"):
-        VerifiedGuideMaterialSnapshot.model_validate(
-            {**snapshot.model_dump(mode="python"), "canonical_payload": b"changed"}
-        )
+        snapshot.documents[0] = snapshot.documents[0]
+    with pytest.raises(ValidationError):
+        snapshot.documents[0].sha256 = "sha256:" + "b" * 64
+    body = snapshot.model_dump(mode="python")
+    document = dict(body["documents"][0])
+    document["sha256"] = "sha256:" + "b" * 64
+    changed = GuideDocumentManifest.model_validate(body | {"documents": [document]})
+    assert changed.sha256 != snapshot.sha256
 
 
 def test_unified_result_rejects_unresolved_evidence_lineage() -> None:
@@ -470,10 +432,10 @@ def test_unified_result_rejects_unresolved_evidence_lineage() -> None:
                 evidence_refs=(
                     GuideEvidenceRef(
                         source_item_id=uuid4(),
-                        extraction_usage_id=EXTRACTION_USAGE_ID,
-                        canonical_output_sha256=SHA256,
-                        start_ordinal=0,
-                        end_ordinal=1,
+                        document_version_id=DOCUMENT_VERSION_ID,
+                        sha256=SHA256,
+                        start_page=1,
+                        end_page=1,
                     ),
                 ),
             ),
@@ -503,17 +465,13 @@ def test_supported_requirement_requires_exactly_one_binding() -> None:
         validate_project_guide_compilation_result(context, result)
 
 
-@pytest.mark.parametrize("stage", ["pre_submit", "post_submit"])
-def test_capability_binding_rejects_unowned_parameters(stage: str) -> None:
+def test_post_submission_binding_rejects_unowned_parameters() -> None:
     context = _context()
-    is_pre = stage == "pre_submit"
-    binding = CapabilityBindingProposal(
+    binding = PostSubmissionBindingProposal(
         requirement_id="requirement.one",
-        capability_id=(
-            "policy.submission_packet.validate" if is_pre else "check_acceptance_criteria_present"
-        ),
-        capability_version="v1" if is_pre else "v0.1",
-        stage=stage,
+        capability_id="check_acceptance_criteria_present",
+        capability_version="v0.1",
+        stage="post_submit",
         parameters=(CapabilityParameter(name="unowned_parameter", value=True),),
     )
     result = ProjectGuideCompilationResult(
@@ -523,14 +481,13 @@ def test_capability_binding_rejects_unowned_parameters(stage: str) -> None:
             AtomicGuideRequirement(
                 requirement_id="requirement.one",
                 statement="Validate one requirement.",
-                disposition=("supported_pre_submit" if is_pre else "supported_post_submit"),
+                disposition="supported_post_submit",
             ),
         ),
-        pre_submit_bindings=(binding,) if is_pre else (),
-        post_submit_bindings=() if is_pre else (binding,),
+        post_submit_bindings=(binding,),
         agent_version="v1",
     )
-    with pytest.raises(ValueError, match="parameters" if is_pre else "Extra inputs"):
+    with pytest.raises(ValueError, match="Extra inputs"):
         validate_project_guide_compilation_result(context, result)
 
 
@@ -728,35 +685,14 @@ def test_blocked_result_cannot_publish_policy_or_bindings() -> None:
         validate_project_guide_compilation_result(context, result)
 
 
-@pytest.mark.parametrize("value", [True, False, 1_000.0, "1000", 0, -1, 999, 1_001])
-def test_pre_binding_rejects_wrong_type_or_conflicting_policy_value(value) -> None:
-    """A valid surrounding proposal cannot hide a different bound intake limit."""
-    proposal = ProjectGuideCompilationResult(
-        status="draft_ready",
-        findings=(),
-        submission_artifact_policy=_artifact_policy(),
-        requirements=(
-            AtomicGuideRequirement(
-                requirement_id="requirement.size",
-                statement="Limit file size.",
-                disposition="supported_pre_submit",
-            ),
-        ),
-        pre_submit_bindings=(
-            CapabilityBindingProposal(
-                requirement_id="requirement.size",
-                capability_id="policy.file_size.limit",
-                capability_version="v1",
-                stage="pre_submit",
-                parameters=(CapabilityParameter(name="maximum_file_size_bytes", value=value),),
-            ),
-        ),
-        post_submit_bindings=(),
-        capability_suggestions=(),
-        agent_version="v1",
-    )
-    with pytest.raises(ValueError, match="integer|greater than|conflict"):
-        validate_project_guide_compilation_result(_context(), proposal)
+@pytest.mark.parametrize("parameters", [[], [{"name": "maximum_file_size_bytes", "value": 1000}]])
+def test_pre_submission_binding_rejects_duplicate_policy_configuration(parameters):
+    """The sole intake configuration is the artifact policy, never a second copy."""
+    with pytest.raises(ValidationError, match="Extra inputs"):
+        PreSubmissionBindingProposal(
+            requirement_id="requirement.size", capability_id="policy.file_size.limit",
+            capability_version="v1", stage="pre_submit", parameters=parameters,
+        )
 
 
 def test_context_rejects_instruction_version_separate_from_snapshot() -> None:

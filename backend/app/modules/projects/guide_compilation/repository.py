@@ -485,8 +485,10 @@ class GuideCompilationRepository:
         result: ProjectGuideCompilationResult,
     ) -> ProjectGuideCompilationAttempt:
         """Store one revalidated canonical result before compilation insertion."""
+        from .runtime_resources import require_compilation_document_access
         attempt = await self._lock_attempt(attempt_id)
         try:
+            await require_compilation_document_access(self._session, attempt_id, context.material, result)
             identity = identity_from_attempt(attempt)
             accepted = accepted_compilation_result(result)
             validate_accepted_compilation_result(
@@ -499,13 +501,12 @@ class GuideCompilationRepository:
                 raise GuideCompilationIntegrityError("accepted result mismatch")
             return attempt
         if attempt.status not in {
-            "compilation_reserved",
             "compilation_provider_uncertain",
         }:
             raise GuideCompilationIntegrityError("invalid accepted transition")
         await self._transition(
             attempt_id,
-            expected=("compilation_reserved", "compilation_provider_uncertain"),
+            expected=("compilation_provider_uncertain",),
             status="provider_result_accepted",
             canonical_result=accepted.canonical_result,
             result_hash=accepted.result_hash,
@@ -564,12 +565,17 @@ class GuideCompilationRepository:
         authorization_decision_event_id: UUID,
     ) -> ProjectGuideCompilation:
         """CAS-insert one immutable compilation and finish its attempt."""
+        from .runtime_resources import require_compilation_document_access
         attempt = await self._lock_attempt(attempt_id)
         existing = await self._compilation_for_attempt(attempt_id)
         if attempt.status not in {"provider_result_accepted", "compilation_persisted"}:
             raise GuideCompilationIntegrityError("attempt is not ready for persistence")
         try:
             accepted = accepted_from_attempt(attempt)
+            await require_compilation_document_access(
+                self._session, attempt_id, context.material,
+                ProjectGuideCompilationResult.model_validate(accepted.canonical_result),
+            )
             identity = identity_from_attempt(attempt)
             validate_accepted_compilation_result(
                 identity=identity, context=context, accepted=accepted

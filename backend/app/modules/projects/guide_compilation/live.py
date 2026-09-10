@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.interfaces.artifact_operations import GuideSufficiencyMaterialPort
+from app.modules.projects.api.guide_documents import GuideDocumentManifestPort
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.authorization.api import (
     ActorIdentityFacts,
@@ -54,7 +54,7 @@ class LiveGuideCompilationCoordinator:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         *,
-        material_factory: Callable[[AsyncSession], GuideSufficiencyMaterialPort],
+        material_factory: Callable[[AsyncSession], GuideDocumentManifestPort],
         pre_capabilities: PreSubmissionCapabilityProjection,
         post_capabilities: PostSubmitCatalogue,
         request_authority: RequestAuthority,

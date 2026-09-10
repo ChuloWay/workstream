@@ -151,8 +151,8 @@ Adds protected v1 routes:
 
 These routes require an actor role allowed to manage project setup.
 
-Verified source readiness dispatches the sole unified project-guide compilation
-through Celery. Source metadata without verified ART material remains pending;
+Committed original-document readiness dispatches the sole unified project-guide compilation
+through Celery. Source metadata without committed original uploads remains pending;
 ART readiness resumes the same generation. Guide creation alone does not invoke
 the provider. One authorized attempt proposes sufficiency findings and separate
 pre-submission and post-submission checker policies. A blocked guide records
@@ -162,9 +162,13 @@ The old sufficiency-run route and three inference methods are removed. The fixed
 `workstream.project.setup` service requests, executes, projects and finalizes the
 same attempt under fresh authority at each boundary. Runtime configuration is
 immutable attempt evidence. Recovery never repeats an uncertain provider call.
-Manual reports remain human-authored diagnostics and cannot occupy the verified
-compilation report slot. Each verified report binds exact extraction usages.
+Manual reports remain human-authored diagnostics and cannot occupy the
+compilation report slot. Each compilation report binds exact original-document
+accesses from its fenced attempt.
 New projected artifact policies use `unified_compilation` provenance.
+
+The superseded post-submit setup read, approval and correction APIs are removed.
+Current outcomes remain visible through the latest setup run.
 
 Project Manager proposal reads, correction, fresh-generation reruns and approval
 remain POL-05. Existing generic approval rejects unified compilation drafts before
@@ -256,3 +260,12 @@ The active guide response becomes the future source for task-owned locked guide 
 - security/auth
 - product/ops
 - architecture/docs/reuse/test-delta/CI reviewers when the chunk touches those surfaces
+
+
+Unified setup records expose current sufficiency and submission-policy draft
+outputs. The retired post-submit setup-step response fields and dormant activation
+command are removed. Pre-submit capability references do not duplicate intake
+settings: `submission_artifact_policy` is the sole configuration proposal.
+Post-submit capability references retain their evaluator-owned configuration.
+POL-05/POL-06 and AUTH-12H own the remaining approval, projection and activation
+boundaries; current active-guide reads continue validating locked policy lineage.

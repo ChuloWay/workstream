@@ -5,16 +5,13 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.interfaces.artifact_operations import (
-    GuideSufficiencyMaterialPort,
-    GuideSufficiencyMaterialRequest,
-)
+
+from app.modules.projects.api.guide_documents import GuideDocumentManifestPort, GuideDocumentManifestRequest
 from app.interfaces.project_agents import (
     MAXIMUM_PROJECT_GUIDE_COMPILATION_PROMPT_BYTES,
     PROJECT_GUIDE_COMPILATION_AGENT_IDENTITY,
     PROJECT_GUIDE_COMPILATION_AGENT_VERSION,
     ProjectGuideCompilationContext,
-    VerifiedGuideMaterialSnapshot,
     canonical_project_guide_compilation_context_bytes,
 )
 from app.modules.checkers.api.pre_submit_catalogue import (
@@ -24,7 +21,6 @@ from app.modules.checkers.api.post_submit_catalogue import (
     PostSubmitCatalogue,
 )
 from app.modules.projects.models import GuideSourceSnapshot, ProjectGuide
-from app.modules.projects.service import build_verified_guide_sufficiency_material
 
 from .contracts import CompilationAttemptIdentity, CompilationExecutionState
 from .repository import GuideCompilationIntegrityError
@@ -35,7 +31,7 @@ async def build_project_guide_compilation_context(
     session: AsyncSession,
     *,
     state: CompilationExecutionState,
-    material: GuideSufficiencyMaterialPort,
+    material: GuideDocumentManifestPort,
     pre_submission_capabilities: PreSubmissionCapabilityProjection,
     post_submission_capabilities: PostSubmitCatalogue,
 ) -> ProjectGuideCompilationContext:
@@ -68,7 +64,7 @@ async def build_project_guide_compilation_context(
         if guide is None or snapshot is None:
             raise GuideCompilationIntegrityError("compilation context lineage is unavailable")
         loaded = await material.load(
-            GuideSufficiencyMaterialRequest(
+            GuideDocumentManifestRequest(
                 project_id=identity.project_id,
                 guide_id=identity.guide_id,
                 guide_source_snapshot_id=identity.source_snapshot_id,
@@ -103,11 +99,18 @@ def compilation_context_from_material(
     runtime_configuration: ProjectGuideRuntimeConfiguration,
 ) -> ProjectGuideCompilationContext:
     """Build the one bounded context used by both request and execution."""
-    verified = VerifiedGuideMaterialSnapshot.from_material(
-        build_verified_guide_sufficiency_material(guide, snapshot, loaded.source_items)
-    )
+    if (
+        str(loaded.project_id) != guide.project_id
+        or str(loaded.guide_id) != guide.id
+        or loaded.guide_version != guide.version
+        or str(loaded.source_snapshot_id) != snapshot.id
+        or loaded.source_snapshot_hash != snapshot.bundle_hash
+        or loaded.setup_run_id != setup_run_id
+        or loaded.setup_generation != setup_generation
+    ):
+        raise GuideCompilationIntegrityError("compilation manifest lineage mismatch")
     context = ProjectGuideCompilationContext(
-        material=verified,
+        material=loaded,
         setup_run_id=setup_run_id,
         setup_generation=setup_generation,
         instruction_version=runtime_configuration.instruction_version,

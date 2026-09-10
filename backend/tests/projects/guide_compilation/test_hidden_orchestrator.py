@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import asdict, replace
+from contextlib import asynccontextmanager
 from uuid import UUID, uuid4
 
 from tests.projects.guide_compilation.helpers import runtime_configuration
@@ -70,6 +71,10 @@ class _Backend:
         self.calls: list[str] = []
         self.dispatch_permitted = True
         self.state_after_fence: CompilationExecutionState | None = None
+
+    @asynccontextmanager
+    async def capabilities(self, state, context):
+        yield object()
 
     async def load(self, attempt_id):
         self.calls.append("load")
@@ -138,7 +143,13 @@ class _Runtime:
         self.outcome = outcome
         self.calls = 0
 
-    async def compile_project_guide(self, _context):
+    def admit_execution(self):
+        pass
+
+    async def aclose(self):
+        pass
+
+    async def compile_project_guide(self, _context, _capabilities):
         self.calls += 1
         if isinstance(self.outcome, BaseException):
             raise self.outcome
@@ -398,3 +409,31 @@ async def test_runtime_composition_failure_precedes_dispatch_fence(failure) -> N
     assert error.value.code == "runtime_unavailable"
     assert backend.calls == ["load", "context"]
     assert runtime.calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid", [False, True])
+async def test_cleanup_failure_preserves_known_result_without_second_inference(invalid):
+    """An ART scope-close failure cannot erase a committed known provider outcome."""
+    state = _state(ids(), CompilationRecoveryClassification.RESERVED)
+    backend = _Backend(state)
+    runtime = _Runtime(ProjectGuideCompilationInvalidOutputError("schema_invalid") if invalid else result())
+
+    @asynccontextmanager
+    async def failing_close(_state, _context):
+        yield object()
+        raise RuntimeError("scratch cleanup unavailable")
+
+    backend.capabilities = failing_close
+    receipt = await GuideCompilationOrchestrator(backend, lambda configuration: runtime).execute(
+        ProjectGuideCompilationExecutionCommand(attempt_id=state.preflight_facts.attempt_id)
+    )
+    expected = (ProjectGuideCompilationExecutionClassification.INVALID_TERMINAL if invalid
+                else ProjectGuideCompilationExecutionClassification.PERSISTED)
+    assert receipt.classification is expected
+    assert runtime.calls == 1
+    if invalid:
+        assert "record_invalid:schema_invalid" in backend.calls
+        assert "persist" not in backend.calls
+    else:
+        assert backend.calls[-2:] == ["record_accepted", "persist"]

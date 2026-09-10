@@ -28,7 +28,6 @@ PROJECT_DIAGNOSTIC_TARGET_KIND_BY_ACTION = {
     ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_READ: "sufficiency_report",
     ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_LIST: "submission_artifact_policy_collection",
     ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_READ: "submission_artifact_policy",
-    ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_SETUP_READ: ("post_submit_checker_policy_setup"),
 }
 PROJECT_POLICY_READ_TARGET_KIND_BY_ACTION = {
     ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ: "effective_policy",
@@ -260,7 +259,6 @@ class ProjectDiagnosticReadResourceContext(BaseModel):
         "sufficiency_report",
         "submission_artifact_policy_collection",
         "submission_artifact_policy",
-        "post_submit_checker_policy_setup",
     ]
     project_exists: bool
     guide_exists: bool
@@ -1375,34 +1373,8 @@ class ArtifactPendingWorkResourceContext(BaseModel):
         return self
 
 
-class GuideSourceBindingResourceContext(BaseModel):
-    """Exact verified guide-source lineage authorized for one binding write."""
-
-    model_config = _STRICT_FROZEN
-    resource_type: Literal["guide_source_binding"]
-    resource_id: UUID
-    project_id: UUID
-    guide_id: UUID
-    guide_source_snapshot_id: UUID
-    guide_source_item_id: UUID
-    project_setup_run_id: UUID
-    setup_generation: int = Field(gt=0)
-    content_id: UUID
-    verified_replica_id: UUID
-    sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    byte_count: int = Field(ge=0)
-    logical_role: Literal["guide_source_original"]
-
-    @model_validator(mode="after")
-    def bind_source_item(self):
-        """Use the exact source item as the prepared resource selector."""
-        if self.resource_id != self.guide_source_item_id:
-            raise ValueError("guide binding resource must match source item")
-        return self
-
-
 class GuideSourceReadResourceContext(BaseModel):
-    """Exact verified binding and replica facts authorized for one provider read."""
+    """Exact committed-document facts for one fenced setup-agent provider read."""
 
     model_config = _STRICT_FROZEN
     resource_type: Literal["guide_source_read"]
@@ -1413,22 +1385,23 @@ class GuideSourceReadResourceContext(BaseModel):
     guide_source_item_id: UUID
     project_setup_run_id: UUID
     setup_generation: int = Field(gt=0)
-    binding_id: UUID
+    compilation_attempt_id: UUID
+    manifest_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    document_version_id: UUID
+    put_attempt_id: UUID
     content_id: UUID
-    verified_replica_id: UUID
+    replica_id: UUID
     storage_namespace_id: str = Field(min_length=1, max_length=255)
     namespace_fingerprint: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    verification_receipt_id: UUID
-    verification_generation: int = Field(ge=0)
     sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     byte_count: int = Field(ge=0)
     media_type: str = Field(min_length=1, max_length=255)
 
     @model_validator(mode="after")
-    def bind_artifact_binding(self):
-        """Use the exact immutable binding as the prepared resource selector."""
-        if self.resource_id != self.binding_id:
-            raise ValueError("guide read resource must match binding")
+    def bind_source_item(self):
+        """Use the exact assigned source item as the prepared resource selector."""
+        if self.resource_id != self.guide_source_item_id:
+            raise ValueError("guide read resource must match source item")
         return self
 
 
@@ -1513,7 +1486,6 @@ AuthorizationResourceContext = (
     | ArtifactPutAttemptResourceContext
     | ArtifactVerificationJobResourceContext
     | ArtifactPendingWorkResourceContext
-    | GuideSourceBindingResourceContext
     | GuideSourceReadResourceContext
     | SubmissionCreationResourceContext | SubmissionBindingResourceContext
     | PreSubmitCheckerInputResourceContext

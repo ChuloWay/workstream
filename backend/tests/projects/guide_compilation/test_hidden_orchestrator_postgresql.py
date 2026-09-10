@@ -14,8 +14,8 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.modules.artifacts.guide_sufficiency_material import (
-    SqlAlchemyGuideSufficiencyMaterialAdapter,
+from app.adapters.artifacts import (
+    guide_document_manifest_port,
 )
 from app.interfaces.project_agents import (
     ProjectAgentRuntimeError,
@@ -49,6 +49,7 @@ from app.modules.checkers.catalogue import (
 from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
 
 from .helpers import context, identity, result, seed_database
+from .runtime_fixtures import document_access, record_scripted_document_access
 from .test_authorized_request_service import _authorized_service, _request, _seed_human
 
 
@@ -60,8 +61,15 @@ class _Runtime:
         self.delay = delay
         self.calls = 0
 
-    async def compile_project_guide(self, _context):
+    def admit_execution(self):
+        pass
+
+    async def aclose(self):
+        pass
+
+    async def compile_project_guide(self, _context, capabilities):
         self.calls += 1
+        await record_scripted_document_access(_context, capabilities)
         if self.delay:
             await asyncio.sleep(self.delay)
         if isinstance(self.outcome, BaseException):
@@ -102,7 +110,8 @@ class _DelayedFence:
 def _backend(factory):
     return SqlAlchemyGuideCompilationExecutionBackend(
         factory,
-        material_factory=SqlAlchemyGuideSufficiencyMaterialAdapter,
+        material_factory=guide_document_manifest_port,
+        document_access_factory=document_access,
         pre_submission_capabilities=project_guide_pre_submission_capabilities(
             build_pre_submission_checker_catalogue()
         ),
@@ -114,7 +123,8 @@ def _backend(factory):
 def _port(factory, runtime):
     return project_guide_compilation_execution_port(
         factory,
-        material_factory=SqlAlchemyGuideSufficiencyMaterialAdapter,
+        material_factory=guide_document_manifest_port,
+        document_access_factory=document_access,
         pre_submission_capabilities=project_guide_pre_submission_capabilities(
             build_pre_submission_checker_catalogue()
         ),
@@ -541,7 +551,8 @@ async def test_unavailable_authority_returns_only_the_safe_public_code(
     try:
         port = project_guide_compilation_execution_port(
             factory,
-            material_factory=SqlAlchemyGuideSufficiencyMaterialAdapter,
+            material_factory=guide_document_manifest_port,
+        document_access_factory=document_access,
             pre_submission_capabilities=project_guide_pre_submission_capabilities(
                 build_pre_submission_checker_catalogue()
             ),
@@ -590,6 +601,23 @@ async def test_sdk_parser_rejection_persists_terminal_without_reinvocation(
         return SimpleNamespace(final_output=agent.output_type.validate_json(raw))
 
     monkeypatch.setattr(Runner, "run", run)
+
+    class ScriptedWorkspace:
+        container_id = "cntr_scripted"
+
+        def __init__(self, client, configuration, manifest, capabilities):
+            self.context = SimpleNamespace(material=manifest)
+            self.capabilities = capabilities
+
+        async def start(self):
+            await record_scripted_document_access(self.context, self.capabilities)
+
+        async def close(self):
+            await self.capabilities.documents.close()
+
+    monkeypatch.setattr(
+        "app.adapters.project_agents.openai_agent_sdk.OpenAIGuideWorkspace", ScriptedWorkspace,
+    )
     values = await seed_database(clean_postgres_database)
     requested = await _authorized_attempt(clean_postgres_database, values)
     engine = create_async_engine(clean_postgres_database)

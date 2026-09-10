@@ -133,8 +133,8 @@ cannot be reused as post-submission review-gate evidence. See the
 | --- | --- | --- | --- |
 | Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls | Final end-to-end operational and conformance proof |
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
-| Project Guide source custody | **Live foundation** | Project Manager ingestion; immutable snapshots; verified binding and reads; PDF, DOCX, PPTX, XLSX and image handling; bounded extraction | Carry the same immutable source generation through manager approval and guide activation |
-| Unified Project Guide compilation | **Live automatic draft/findings setup** | Verified source readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization | Verify real provider inference; add manager proposal review, correction, approval and manual rerun; add deterministic post-submit projection and one checker-service port |
+| Project Guide source custody | **Live foundation** | Project Manager original-document uploads; immutable metadata snapshots; exact run-scoped reads; S3-backed originals and isolated agent document inspection | Carry the same document generation through manager approval and guide activation; prove each enabled document reader |
+| Unified Project Guide compilation | **Live automatic draft/findings setup** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization | Add manager proposal review, correction, approval and manual rerun; add deterministic post-submit projection and one checker-service port |
 | Contribution policy administration | **Hidden and proven** | Finance Authority adapter-binding lifecycle; ContributionPolicy read/create/update/publish/retire with exact Finance Authority; immutable operation and event history | Expose selected-policy validation, bind one published complete version to the active guide generation |
 | Task readiness and claim | **Foundation plus planned replacement** | Task records, lifecycle guards, assignments, locked work context, public owner facts | A task must inherit the guide-bound ContributionPolicyVersion before `READY`; claim copies the prepared task context into TaskAssignment without a current-policy lookup; activate exact task authority |
 | Contributor artifact preparation | **Hidden and proven** | One outer ZIP; bounded scratch inspection; canonical manifest; platform and project prechecks; unchanged-work rejection; durable put intent; verification; capacity-charged ready admission | Connect only the active unified guide/checker lineage and complete the later public admission-only cutover |
@@ -188,7 +188,7 @@ cannot be reused as post-submission review-gate evidence. See the
   deployed identity-provider certification or exhaustive API-field coverage.
 - The [five API drill defects](engineering/external-api-drill-findings.md) are
   repaired: project name/slug and guide version enforce existing storage limits,
-  guide PATCH rejects explicit null content while preserving omission, and
+  guide PATCH now excludes the superseded inline-content field, and
   unsupported project-role input is rejected before mutation. Both original
   drills passed again on merged main after that repair. The extended drill adds
   populated pagination/cursor checks, nested qualification boundary probes and
@@ -199,7 +199,7 @@ cannot be reused as post-submission review-gate evidence. See the
   accommodates the existing public qualification maxima; other authority
   mutations retain their original limit. Full-max parser/PostgreSQL regressions
   cover both roles, persistence, replay, conflict and unauthorized rollback.
-- Guide ingestion, guide binding/read, artifact verification/recovery,
+- Guide ingestion and exact document reads, artifact verification/recovery,
   contributor preparation, Submission consumption/binding, unified compilation
   request/execute, and deterministic projection authority are implemented at
   their current hidden or live boundaries.
@@ -208,16 +208,29 @@ cannot be reused as post-submission review-gate evidence. See the
 
 - Project Managers can authorize guide-source ingestion for projects they are
   permitted to manage.
-- Original bytes are immutable and verified before binding. Classification and
-  extraction occur asynchronously from stored bytes; extracted content never
-  replaces the original artifact.
-- Verified guide-source readiness automatically runs one unified compilation
+- Guide originals remain immutable in ArtifactStore; PostgreSQL holds metadata,
+  versions and custody. Upload admission checks bounded format, digest and size.
+  Committed originals do not bypass the separate verification required for
+  submission ZIPs. Inline markdown setup and extractors are removed.
+- Committed original-document readiness automatically runs one unified compilation
   through Celery. It persists sufficiency findings and separate pre-submit and
   post-submit proposals, then projects the sufficiency and artifact-policy
   components and atomically finalizes the setup at draft output. A blocked guide
   ends at findings. Runtime, model/provider and instructions are independently
-  configured and bound to the attempt; replay never starts a second inference.
+  configured and bound to the attempt. The agent opens assigned files on demand
+  in an isolated workspace; exact grants exclude other projects and runs. Known
+  invalid output ends terminally, and replay never starts a second inference.
+  Transient pre-send retries use bounded backoff and a circuit breaker; the
+  default request timeout is 300 seconds, separate from the whole-run timeout.
   Project Manager proposal review, correction and manual rerun remain POL-05.
+  Superseded post-submit setup/approval/correction routes are removed; POL-06
+  owns the remaining post-submit projection. Real Terra runs through API upload,
+  MinIO, the Celery handler and PostgreSQL proved both blocked findings and ready
+  draft policy outcomes, with exact replay and provider cleanup. Broker delivery
+  was scripted in these drills; live Celery transport and broad semantic accuracy
+  are not established by them. The dormant activation command is removed; active
+  guide reads and locked policy consumers remain, with activation deferred to
+  AUTH-12H.
 - Contributor ZIP preparation uses one verified byte lineage from scratch
   inspection through durable admission and eventual Submission binding.
 

@@ -236,7 +236,6 @@ class GuideMutationService:
             project_id=str(project_id),
             version=payload.version,
             status="draft",
-            content_markdown=payload.content_markdown,
             change_summary=payload.change_summary,
             created_by=resolved.profile.id,
             mutation_generation=1,
@@ -378,8 +377,8 @@ class GuideMutationService:
             source_snapshot_id=snapshot.id,
             source_snapshot_hash=snapshot.bundle_hash,
             setup_generation=setup_generation,
-            status="queued",
-            current_step="queued",
+            status="awaiting_documents",
+            current_step="awaiting_documents",
             created_by=resolved.profile.id,
             authorized_by_actor_profile_id=resolved.profile.id,
             authorized_via_identity_link_id=resolved.identity_link.id,
@@ -449,10 +448,6 @@ class GuideMutationService:
             str(project_id), guide.id, guide.version
         )
         changes = payload.model_dump(exclude_unset=True)
-        if predecessor is not None and "content_markdown" in changes:
-            raise GuideEditBlocked(
-                "guide source material cannot change after a source snapshot exists"
-            )
         generation = (guide.mutation_generation or 0) + 1
         resource = ProjectGuideMutationResourceContext(
             resource_type="project_guide_mutation",

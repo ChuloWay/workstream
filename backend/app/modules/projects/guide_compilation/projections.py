@@ -5,22 +5,17 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Literal
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.hashing import canonical_json_hash
-from app.interfaces.artifact_operations import (
-    GuideSufficiencyMaterialPort,
-    GuideSufficiencyMaterialRequest,
-    GuideSufficiencyMaterialResult,
-    GuideSufficiencyMaterialUnavailable,
-)
+
+from app.modules.projects.api.guide_documents import GuideDocumentManifestPort, GuideDocumentManifestRequest, GuideDocumentUnavailable
 from app.interfaces.project_agents import (
     ProjectGuideCompilationResult,
-    VerifiedGuideMaterialSnapshot,
 )
 from app.modules.authorization.api import (
     ArtifactPolicyProjectionAuthorizationPort,
@@ -47,7 +42,6 @@ from app.modules.projects.api import (
 )
 from app.modules.projects.models import (
     GuideSufficiencyReport,
-    GuideSufficiencyReportSourceUsage,
     SubmissionArtifactPolicy,
 )
 from app.modules.projects.repository import ProjectRepository
@@ -56,7 +50,6 @@ from app.modules.projects.schemas import (
 )
 from app.modules.projects.service import (
     PolicySetupBlocked,
-    build_verified_guide_sufficiency_material,
 )
 from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
 
@@ -126,7 +119,7 @@ class GuideCompilationProjectionService:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         *,
-        material_factory: Callable[[AsyncSession], GuideSufficiencyMaterialPort],
+        material_factory: Callable[[AsyncSession], GuideDocumentManifestPort],
         sufficiency_authorization_factory: Callable[
             [AsyncSession], GuideSufficiencyProjectionAuthorizationPort
         ]
@@ -266,7 +259,7 @@ class GuideCompilationProjectionService:
             PreparedAuthorizationInvalid,
         ):
             raise ProjectGuideProjectionError("service_authority_denied") from None
-        except GuideSufficiencyMaterialUnavailable:
+        except GuideDocumentUnavailable:
             raise ProjectGuideProjectionError("source_state_unavailable") from None
         except GuideCompilationIntegrityError:
             raise ProjectGuideProjectionError("source_state_unavailable") from None
@@ -302,7 +295,7 @@ class GuideCompilationProjectionService:
             PreparedAuthorizationInvalid,
         ):
             raise ProjectGuideProjectionError("service_authority_denied") from None
-        except GuideSufficiencyMaterialUnavailable:
+        except GuideDocumentUnavailable:
             raise ProjectGuideProjectionError("source_state_unavailable") from None
         except GuideCompilationIntegrityError:
             raise ProjectGuideProjectionError("source_state_unavailable") from None
@@ -348,7 +341,6 @@ class GuideCompilationProjectionService:
         _require_authority(authority, seed, identity, facts, "guide_sufficiency")
         report = _new_report(seed, locked, identity, authority, seed.report_payload)
         session.add(report)
-        _add_source_usages(session, report.id, seed, locked.material)
         await session.flush()
         session.add(
             _new_operation(
@@ -445,7 +437,7 @@ class GuideCompilationProjectionService:
         if not _seed_matches(attempt, request, seed):
             raise ProjectGuideProjectionError("source_state_unavailable")
         material = await self._material_factory(session).load(
-            GuideSufficiencyMaterialRequest(
+            GuideDocumentManifestRequest(
                 project_id=seed.project_id,
                 guide_id=seed.guide_id,
                 guide_source_snapshot_id=seed.source_snapshot_id,
@@ -476,16 +468,13 @@ class GuideCompilationProjectionService:
             expected_task,
         ):
             raise ProjectGuideProjectionError("source_state_unavailable")
-        verified = VerifiedGuideMaterialSnapshot.from_material(
-            build_verified_guide_sufficiency_material(guide, snapshot, material.source_items)
-        )
-        if verified.canonical_payload_sha256 != attempt.guide_material_hash:
+        if material.sha256 != attempt.guide_material_hash:
             raise ProjectGuideProjectionError("source_state_unavailable")
         state = _source_state(guide, snapshot, setup)
         return _LockedProjection(
             material=material,
-            material_sha256=verified.canonical_payload_sha256,
-            material_byte_count=len(verified.canonical_payload),
+            material_sha256=material.sha256,
+            material_byte_count=len(material.model_dump_json().encode("utf-8")),
             celery_task_id=UUID(expected_task),
             source_state_digest=canonical_json_hash(
                 {
@@ -579,32 +568,6 @@ def _new_policy(
         creation_action_id="project.submission_artifact_policy.derive",
         creation_decision_event_id=str(authority.decision_event_id),
     )
-
-
-def _add_source_usages(
-    session: AsyncSession,
-    report_id: str,
-    seed: _ProjectionSeed,
-    material: GuideSufficiencyMaterialResult,
-) -> None:
-    """Persist ordered ART provenance for the new report."""
-    for item in material.provenance:
-        session.add(
-            GuideSufficiencyReportSourceUsage(
-                id=str(uuid4()),
-                report_id=report_id,
-                item_order=item.item_order,
-                source_item_id=str(item.source_item_id),
-                binding_id=str(item.binding_id),
-                content_id=str(item.content_id),
-                extraction_usage_id=str(item.extraction_usage_id),
-                extraction_attempt_id=str(item.extraction_attempt_id),
-                extracted_content_id=str(item.extracted_content_id),
-                project_setup_run_id=str(seed.setup_run_id),
-                setup_generation=seed.setup_generation,
-                canonical_output_sha256=item.canonical_output_sha256,
-            )
-        )
 
 
 def _new_operation(

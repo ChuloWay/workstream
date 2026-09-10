@@ -73,6 +73,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/projects/guide_compilation/test_automatic_request.py",
             "tests/projects/guide_compilation/test_contracts.py",
             "tests/projects/guide_compilation/test_context_builder.py",
+            "tests/projects/guide_compilation/test_document_access_postgresql.py",
             "tests/projects/guide_compilation/test_database_guards.py",
             "tests/projects/guide_compilation/test_durable_dispatch_handoff.py",
             "tests/projects/guide_compilation/test_hidden_call_graph.py",

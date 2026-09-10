@@ -36,6 +36,40 @@ def model_credentials(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "unit-test-only")
 
 
+@pytest.fixture(autouse=True)
+def scripted_workspace(monkeypatch):
+    """Keep these SDK/parser tests network-free; workspace access has separate proof."""
+    from app.adapters.project_agents import openai_agent_sdk
+
+    class Workspace:
+        container_id = "cntr_test_owned"
+
+        def __init__(self, *args):
+            pass
+
+        async def start(self):
+            pass
+
+        async def close(self):
+            pass
+
+    monkeypatch.setattr(openai_agent_sdk, "OpenAIGuideWorkspace", Workspace)
+
+
+async def _compile(runtime, compilation_context):
+    """Supply scripted prior document access and always release circuit admission."""
+    async def opened_handles():
+        return frozenset(compilation_context.material.handle_for(document)
+                         for document in compilation_context.material.documents)
+
+    capabilities = SimpleNamespace(resources=SimpleNamespace(opened_handles=opened_handles))
+    runtime.admit_execution()
+    try:
+        return await runtime.compile_project_guide(compilation_context, capabilities)
+    finally:
+        await runtime.aclose()
+
+
 def test_unified_compilation_instructions_preserve_untrusted_and_lifecycle_boundaries():
     for text in ("untrusted", "pre-submit", "post-submit", "ProjectGuideCompilationAgent"):
         assert text in PROJECT_GUIDE_INSTRUCTIONS
@@ -66,24 +100,10 @@ def test_configuration_concerns_are_independent_and_secret_free():
     "patch",
     [
         {"instructions_sha256": "sha256:" + "0" * 64},
-        {"api_key": "not-allowed"},
-        {"timeout_seconds": True},
-        {"timeout_seconds": 0},
-        {"maximum_prompt_bytes": 16 * 1024 * 1024 + 1},
-        {"model": ""},
-        {"model_provider": "uninstalled"},
-        {"model_provider": "openai_compatible", "model_endpoint": None},
-        {"model_endpoint": "https://example.test"},
-        {"model_provider": "openai_compatible", "model_endpoint": "http://example.test"},
-        {
-            "model_provider": "openai_compatible",
-            "model_endpoint": "https://user:secret@example.test",
-        },
-        {
-            "model_provider": "openai_compatible",
-            "model_endpoint": "https://example.test?key=secret",
-        },
-        {"model_provider": "openai_compatible", "model_endpoint": "https://example.test#secret"},
+        {"api_key": "not-allowed"}, {"timeout_seconds": True}, {"timeout_seconds": 0},
+        {"maximum_manifest_bytes": 1_000_001}, {"maximum_documents": 101},
+        {"request_timeout_seconds": 0}, {"maximum_retries": 6}, {"retry_jitter": 1},
+        {"model": ""}, {"model_provider": "uninstalled"},
     ],
 )
 def test_runtime_snapshot_rejects_invalid_or_secret_bearing_shapes(patch):
@@ -110,15 +130,13 @@ def test_snapshot_changes_identity_but_is_absent_from_provider_user_prompt():
     ) == project_guide_compilation_prompt_bytes(changed)
     prompt = json.loads(project_guide_compilation_prompt_bytes(original))
     assert "runtime_configuration" not in prompt
-    assert isinstance(prompt["material"]["canonical_payload"], dict)
+    assert isinstance(prompt["material"]["documents"], list)
+    assert "namespace_fingerprint" not in json.dumps(prompt)
+    assert "provider_object_ref" not in json.dumps(prompt)
 
 
-@pytest.mark.parametrize("api", ["responses", "chat_completions"])
-@pytest.mark.parametrize("provider", ["openai", "openai_compatible"])
-async def test_unified_compilation_is_one_strict_tool_free_validated_call(
-    monkeypatch, api, provider
-):
-    from agents import Runner
+async def test_unified_compilation_uses_scoped_tools_and_strict_output(monkeypatch):
+    from agents import Runner, CodeInterpreterTool, FunctionTool
     import openai
 
     clients = []
@@ -130,43 +148,36 @@ async def test_unified_compilation_is_one_strict_tool_free_validated_call(
         return client
 
     monkeypatch.setattr(openai, "AsyncOpenAI", create_client)
-
-    configuration = runtime_configuration().model_copy(
-        update={
-            "model_api": api,
-            "model_provider": provider,
-            "model_endpoint": "https://models.example.test/v1"
-            if provider == "openai_compatible"
-            else None,
-        }
-    )
-    compilation_context = context(ids()).model_copy(update={"runtime_configuration": configuration})
+    configuration = runtime_configuration()
+    compilation_context = context(ids())
     calls = []
 
     async def run(agent, prompt, **kwargs):
         calls.append((agent, prompt, kwargs))
         assert agent.instructions == configuration.instructions
-        assert agent.tools == [] and agent.handoffs == []
+        assert len(agent.tools) == 2 and agent.handoffs == []
+        assert isinstance(agent.tools[0], FunctionTool)
+        assert agent.tools[0].name == "open_guide_document"
+        assert isinstance(agent.tools[1], CodeInterpreterTool)
+        assert agent.tools[1].tool_config["container"] == "cntr_test_owned"
         assert agent.model.model == configuration.model
         assert agent.output_type.is_strict_json_schema() is True
-        assert kwargs["max_turns"] == 1
+        assert kwargs["max_turns"] == configuration.maximum_turns
         assert kwargs["run_config"].tracing_disabled is True
         assert kwargs["run_config"].trace_include_sensitive_data is False
+        assert agent.model_settings.store is False
+        assert agent.model_settings.parallel_tool_calls is False
+        assert agent.model_settings.retry.max_retries == configuration.maximum_retries
         assert "runtime_configuration" not in json.loads(prompt)
         return SimpleNamespace(final_output=result())
 
     monkeypatch.setattr(Runner, "run", run)
-    output = await OpenAIAgentSdkProjectGuideRuntime(configuration).compile_project_guide(
-        compilation_context
-    )
+    output = await _compile(OpenAIAgentSdkProjectGuideRuntime(configuration), compilation_context)
     assert output == result()
-    assert len(calls) == 1
-    assert len(clients) == 1
-    assert clients[0].max_retries == 0
-    assert clients[0].is_closed()
-    assert str(clients[0].base_url).rstrip("/") == (
-        configuration.model_endpoint or "https://api.openai.com/v1"
-    )
+    assert len(calls) == len(clients) == 1
+    assert clients[0].max_retries == 0 and clients[0].is_closed()
+    assert clients[0].timeout == min(configuration.request_timeout_seconds, configuration.timeout_seconds)
+    assert str(clients[0].base_url).rstrip("/") == "https://api.openai.com/v1"
 
 
 @pytest.mark.parametrize("kind", ["mapping", "json", "model"])
@@ -185,7 +196,7 @@ async def test_unified_runtime_accepts_complete_sdk_output(monkeypatch, kind):
 
     runtime = OpenAIAgentSdkProjectGuideRuntime(runtime_configuration())
     monkeypatch.setattr(runtime, "_run", run)
-    assert await runtime.compile_project_guide(context(ids())) == output
+    assert await _compile(runtime, context(ids())) == output
 
 
 @pytest.mark.parametrize(
@@ -203,7 +214,7 @@ async def test_unified_runtime_rejects_invalid_provider_output(monkeypatch, patc
     runtime = OpenAIAgentSdkProjectGuideRuntime(runtime_configuration())
     monkeypatch.setattr(runtime, "_run", run)
     with pytest.raises(ProjectGuideCompilationInvalidOutputError):
-        await runtime.compile_project_guide(context(ids()))
+        await _compile(runtime, context(ids()))
 
 
 async def test_unified_runtime_rejects_omitted_output_member(monkeypatch):
@@ -218,11 +229,11 @@ async def test_unified_runtime_rejects_omitted_output_member(monkeypatch):
     with pytest.raises(
         ProjectGuideCompilationInvalidOutputError, match="invalid structured output"
     ):
-        await runtime.compile_project_guide(context(ids()))
+        await _compile(runtime, context(ids()))
 
 
 async def test_oversized_prompt_is_rejected_before_sdk_execution(monkeypatch):
-    configuration = runtime_configuration().model_copy(update={"maximum_prompt_bytes": 1024})
+    configuration = runtime_configuration().model_copy(update={"maximum_manifest_bytes": 1024})
     runtime = OpenAIAgentSdkProjectGuideRuntime(configuration)
 
     async def forbidden(*args):
@@ -230,7 +241,7 @@ async def test_oversized_prompt_is_rejected_before_sdk_execution(monkeypatch):
 
     monkeypatch.setattr(runtime, "_run", forbidden)
     with pytest.raises(ProjectAgentRuntimeError, match="size limit"):
-        await runtime.compile_project_guide(
+        await _compile(runtime,
             context(ids()).model_copy(update={"runtime_configuration": configuration})
         )
 
@@ -248,7 +259,7 @@ async def test_runtime_rejects_context_configuration_substitution(monkeypatch):
         }
     )
     with pytest.raises(ProjectAgentRuntimeConfigurationError, match="configuration mismatch"):
-        await runtime.compile_project_guide(changed)
+        await _compile(runtime, changed)
 
 
 @pytest.mark.parametrize(
@@ -262,7 +273,7 @@ async def test_runtime_failure_is_sanitized(monkeypatch, error):
 
     monkeypatch.setattr(runtime, "_run", run)
     with pytest.raises(ProjectAgentRuntimeError) as caught:
-        await runtime.compile_project_guide(context(ids()))
+        await _compile(runtime, context(ids()))
     assert "private" not in str(caught.value)
     assert caught.value.__suppress_context__
 
@@ -276,7 +287,7 @@ async def test_unified_compilation_propagates_caller_cancellation(monkeypatch):
         await asyncio.Event().wait()
 
     monkeypatch.setattr(runtime, "_run", run)
-    task = asyncio.create_task(runtime.compile_project_guide(context(ids())))
+    task = asyncio.create_task(_compile(runtime, context(ids())))
     await started.wait()
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -299,7 +310,7 @@ async def test_runtime_internal_cancellation_is_sanitized(monkeypatch):
 
     monkeypatch.setattr(runtime, "_run", run)
     with pytest.raises(ProjectAgentRuntimeError, match="project guide run cancelled") as caught:
-        await runtime.compile_project_guide(context(ids()))
+        await _compile(runtime, context(ids()))
     assert "private" not in str(caught.value)
     assert caught.value.__suppress_context__
 
@@ -330,10 +341,10 @@ async def test_actual_sdk_parser_preserves_known_invalid_output(monkeypatch, kin
     monkeypatch.setattr(Runner, "run", run)
     runtime = OpenAIAgentSdkProjectGuideRuntime(runtime_configuration())
     if expected is None:
-        assert await runtime.compile_project_guide(context(ids())) == result()
+        assert await _compile(runtime, context(ids())) == result()
     else:
         with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
-            await runtime.compile_project_guide(context(ids()))
+            await _compile(runtime, context(ids()))
         assert caught.value.failure_code == expected
         assert "secret123" not in str(caught.value)
         assert caught.value.__suppress_context__
@@ -350,13 +361,13 @@ async def test_unclassified_sdk_behavior_error_remains_unresolved(monkeypatch):
 
     monkeypatch.setattr(Runner, "run", run)
     with pytest.raises(ProjectAgentRuntimeError, match="project guide run failed"):
-        await OpenAIAgentSdkProjectGuideRuntime(runtime_configuration()).compile_project_guide(context(ids()))
+        await _compile(OpenAIAgentSdkProjectGuideRuntime(runtime_configuration()), context(ids()))
 
 
 async def _capture_parser_error(runtime):
     """Capture outside the payload-owning test frame, as a runtime caller would."""
     try:
-        await runtime.compile_project_guide(context(ids()))
+        await _compile(runtime, context(ids()))
     except ProjectGuideCompilationInvalidOutputError as error:
         return error
     pytest.fail("invalid SDK output did not raise")
@@ -392,3 +403,101 @@ async def test_sdk_parser_error_drops_payload_tracebacks(monkeypatch, redacted):
             assert marker not in repr(traceback.tb_frame.f_locals)
             traceback = traceback.tb_next
         pending.extend(link for link in (current.__cause__, current.__context__) if link is not None)
+
+
+async def _capture_runtime_failure(runtime):
+    try:
+        await _compile(runtime, context(ids()))
+    except ProjectAgentRuntimeError as error:
+        return error
+    pytest.fail("runtime failure did not raise")
+
+
+@pytest.mark.parametrize("boundary", ["provider", "post_parser_validation"])
+async def test_sanitized_error_graph_drops_provider_and_invalid_values(monkeypatch, boundary):
+    marker = "private-runtime-output-78219"
+    runtime = OpenAIAgentSdkProjectGuideRuntime(runtime_configuration())
+
+    async def run(*args):
+        if boundary == "provider":
+            raise RuntimeError(marker)
+        payload = result().model_dump(mode="json")
+        payload["setup_notes"] = ["token=" + marker]
+        return payload
+
+    monkeypatch.setattr(runtime, "_run", run)
+    error = (await _capture_runtime_failure(runtime) if boundary == "provider"
+             else await _capture_parser_error(runtime))
+    pending, seen = [error], set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        assert marker not in str(current)
+        frame = current.__traceback__
+        while frame is not None:
+            assert marker not in repr(frame.tb_frame.f_locals)
+            frame = frame.tb_next
+        pending.extend(link for link in (current.__cause__, current.__context__) if link is not None)
+
+
+def test_sdk_output_schema_exposes_the_identifier_rule_to_the_model():
+    """The provider sees the same bounded lowercase rule that parsing enforces."""
+    import re
+    from agents import AgentOutputSchema
+    from app.interfaces.project_agents import ProjectGuideCompilationResult
+
+    schema = AgentOutputSchema(ProjectGuideCompilationResult).json_schema()
+    for owner, field in (
+        ("AtomicGuideRequirement", "requirement_id"),
+        ("PreSubmissionBindingProposal", "requirement_id"),
+        ("PreSubmissionBindingProposal", "capability_id"),
+        ("PreSubmissionBindingProposal", "capability_version"),
+        ("PlatformCoverageRef", "capability_id"),
+        ("PlatformCoverageRef", "capability_version"),
+        ("CapabilityParameter", "name"),
+        ("CompilationFinding", "code"),
+    ):
+        pattern = schema["$defs"][owner]["properties"][field]["pattern"]
+        assert re.fullmatch(pattern, "r001")
+        assert not re.fullmatch(pattern, "R001")
+        assert not re.fullmatch(pattern, "r" * 101)
+        assert not re.fullmatch(pattern, "r/001")
+
+
+def test_sdk_output_schema_has_one_intake_configuration_and_separate_post_parameters():
+    """Actual SDK schema cannot ask the model for two conflicting intake policies."""
+    from agents import AgentOutputSchema
+    from app.interfaces.project_agents import ProjectGuideCompilationResult
+
+    schema = AgentOutputSchema(ProjectGuideCompilationResult).json_schema()
+    pre = schema["$defs"]["PreSubmissionBindingProposal"]
+    post = schema["$defs"]["PostSubmissionBindingProposal"]
+    assert pre["additionalProperties"] is False
+    assert "parameters" not in pre["properties"]
+    assert "parameters" in post["properties"]
+    parameter_values = schema["$defs"]["CapabilityParameter"]["properties"]["value"]["anyOf"]
+    array = next(item for item in parameter_values if item.get("type") == "array")
+    assert array["minItems"] == 1
+    assert array["maxItems"] == 50
+
+
+def test_default_instructions_advertise_contextual_output_constraints():
+    """Keep rules the JSON schema cannot express visible to the model."""
+    from app.core.project_guide_instructions import PROJECT_GUIDE_INSTRUCTIONS
+
+    instructions = " ".join(PROJECT_GUIDE_INSTRUCTIONS.split())
+    for rule in (
+        "Only supported_pre_submit and supported_post_submit have executable bindings",
+        "platform_coverage must be null unless the disposition is platform_covered",
+        "post_submit_empty_configuration requires parameters: []",
+        "they do not require an automated judge",
+        "or guide_blocker requirement also requires guide_blocked",
+        "Supply both start_page and end_page together",
+        "for a single page use that same number at both ends",
+        "Paraphrase section headings using the same safe plain-prose rules",
+        "Required and forbidden policy lists must not overlap",
+        "maximum file size must not exceed the maximum package size",
+    ):
+        assert rule in instructions

@@ -1,6 +1,7 @@
 """Celery composition for automatic unified project-guide compilation."""
 
 from celery.utils.log import get_task_logger
+from functools import partial
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.adapters.project_agents import create_project_guide_runtime
@@ -18,9 +19,7 @@ from app.adapters.auth import (
 )
 from app.adapters.projects import project_guide_compilation_delivery_port
 from app.adapters.checkers import project_guide_pre_submission_catalogue
-from app.modules.artifacts.guide_sufficiency_material import (
-    SqlAlchemyGuideSufficiencyMaterialAdapter,
-)
+from app.adapters.artifacts import guide_document_manifest_port, guide_document_access_runtime
 from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
 from app.modules.projects.api.guide_compilation import (
     ProjectGuideCompilationDelivery,
@@ -37,7 +36,8 @@ def _coordinator(session_factory):
     """Compose owner ports and the sole registered runtime at the worker boundary."""
     return project_guide_compilation_delivery_port(
         session_factory,
-        material_factory=SqlAlchemyGuideSufficiencyMaterialAdapter,
+        material_factory=guide_document_manifest_port,
+        document_access_factory=partial(guide_document_access_runtime, session_factory),
         pre_capabilities=project_guide_pre_submission_catalogue(),
         post_capabilities=current_post_submit_catalogue(),
         request_authority=guide_compilation_request_authority,
@@ -95,5 +95,25 @@ async def _run_project_guide_compilation(delivery: ProjectGuideCompilationDelive
             "status": "compilation_unavailable",
             "error_code": "project_guide_compilation_unavailable",
         }
+    finally:
+        await engine.dispose()
+
+
+@celery_app.task(name="workstream.project_setup.cleanup_runtime_resources")
+def cleanup_guide_runtime_resources():
+    """Recover exact provider-resource deletion without delivering a setup attempt."""
+    return run_async_task(_cleanup_guide_runtime_resources)
+
+
+async def _cleanup_guide_runtime_resources():
+    """Keep SDK and PROJECTS internals behind their public composition boundaries."""
+    from app.adapters.projects import cleanup_project_guide_runtime_resources
+
+    engine = create_async_engine(get_database_url(), pool_pre_ping=True)
+    try:
+        return await cleanup_project_guide_runtime_resources(
+            async_sessionmaker(engine, expire_on_commit=False),
+            runtime_factory=create_project_guide_runtime,
+        )
     finally:
         await engine.dispose()

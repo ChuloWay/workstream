@@ -105,7 +105,6 @@ grants are non-authoritative for these reads:
 - `GET /api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports/{report_id}`
 - `GET /api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies`
 - `GET /api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies/{policy_id}`
-- `GET /api/v1/projects/{project_id}/guides/{guide_id}/post-submit-checker-policy/setup`
 
 Guide-sufficiency mutations are separate Project Manager operations and require
 a UUID `Idempotency-Key` on every request:
@@ -160,12 +159,15 @@ The active review/revision policy setup endpoints are:
 - `PUT /api/v1/projects/{project_id}/guides/{guide_id}/review-policy`
 - `PUT /api/v1/projects/{project_id}/guides/{guide_id}/revision-policy`
 
-Other policy mutation endpoints follow their separately owned activation
-chunks:
+The manual submission-policy approval endpoint remains separate from unified
+proposal approval:
 
 - `POST /api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies/{policy_id}/approve`
-- `POST /api/v1/projects/{project_id}/guides/{guide_id}/post-submit-checker-policy/approve`
-- `POST /api/v1/projects/{project_id}/guides/{guide_id}/post-submit-checker-policy/request-correction`
+
+Unified post-submit setup, approval and correction routes are unavailable.
+The current compilation proposal and outcome are visible through the latest
+setup run; PM proposal decisions belong to POL-05 and post-submit policy
+projection belongs to POL-06.
 
 The two policy `PUT` routes require a UUID `Idempotency-Key` and a quoted
 `If-Match` value. Use `"no-current-policy"` for the first version and the quoted

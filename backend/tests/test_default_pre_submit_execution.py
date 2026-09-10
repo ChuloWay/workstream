@@ -516,9 +516,8 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
             )
             await connection.execute(
                 text(
-                    "insert into project_guides "
-                    "(id,project_id,version,status,content_markdown,created_by) values "
-                    "(:guide,:project,'1','draft','# Guide','test')"
+                    "insert into project_guides (id,project_id,version,status,created_by) values "
+                    "(:guide,:project,'1','draft','test')"
                 ),
                 params,
             )
@@ -692,7 +691,7 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                 namespace_descriptor={"test": "submission-bundle"},
                 namespace_fingerprint=canonical_json_hash({"test": "submission-bundle"}),
             )
-            admission_settings = Settings(
+            admission_settings = Settings(_env_file=None,
                 **artifact_admission_limit_settings(1024 * 1024),
                 environment="test",
                 artifact_store_backend="local",

@@ -4,7 +4,7 @@ import pytest
 
 from app.interfaces.project_agents import (
     AtomicGuideRequirement,
-    CapabilityBindingProposal,
+    PostSubmissionBindingProposal,
     CapabilityParameter,
     ProjectGuideCompilationContext,
     ProjectGuideCompilationResult,
@@ -40,7 +40,7 @@ def proposal(disposition, *, binding=False):
             ),
         ),
         post_submit_bindings=(
-            CapabilityBindingProposal(
+            PostSubmissionBindingProposal(
                 requirement_id="quality",
                 capability_id="check_acceptance_criteria_present",
                 capability_version="v0.1",
@@ -90,12 +90,13 @@ def test_supported_binding_is_valid_and_roundtrips():
         ({"capability_id": "check_submission_packet"}, "binding is invalid"),
         ({"stage": "pre_submit"}, "binding is invalid"),
         ({"parameters": (CapabilityParameter(name="arbitrary", value="data"),)}, "Extra inputs"),
+        ({"parameters": (CapabilityParameter(name="supported_claim", value="criteria_presence"),)}, "Extra inputs"),
     ],
 )
 def test_binding_rejects_exact_invalid_property(change, message):
     valid = proposal("supported_post_submit", binding=True)
     binding = valid.post_submit_bindings[0]
-    invalid = CapabilityBindingProposal(**{**binding.model_dump(), **change})
+    invalid = PostSubmissionBindingProposal(**{**binding.model_dump(), **change})
     with pytest.raises(ValueError, match=message):
         validate_project_guide_compilation_result(
             context(), valid.model_copy(update={"post_submit_bindings": (invalid,)})

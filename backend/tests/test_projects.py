@@ -29,13 +29,6 @@ from app.db import session as db_session
 from app.db.base import Base
 from app.main import create_app
 from app.modules.actors.models import ActorIdentityLink, ActorProfile, LegacyActorIdentity
-from app.interfaces.project_agents import (
-    GuideSourceItemMaterial,
-    canonical_guide_source_material_bytes,
-)
-from app.interfaces.artifact_operations import (
-    GuideSufficiencySourceItem,
-)
 from app.modules.projects.models import (
     EffectiveProjectSubmissionArtifactPolicy,
     GuideMutationIdempotencyRecord,
@@ -99,7 +92,6 @@ from app.modules.projects.schemas import (
     ProjectGuideUpdate,
     ProjectResponse,
     ProjectSetupRunResponse,
-    PostSubmitCheckerPolicyCorrectionRequest,
     SubmissionArtifactPolicyApprove,
     SubmissionArtifactPolicyInput,
 )
@@ -117,11 +109,12 @@ from app.modules.projects.service import (
     ProjectServiceError,
 )
 from project_create_fixtures import (
-    activate_guide_for_downstream_test,
+    seed_active_guide_for_downstream_test,
     seed_historical_project,
 )
-from verified_guide_fixtures import (
-    create_verified_report_fixture,
+from committed_guide_fixtures import (
+    create_committed_document_fixture,
+    create_compiled_report_fixture,
 )
 from projects.client_fixtures import (
     auth_headers,
@@ -146,8 +139,7 @@ from projects.submission_policy_fixtures import (
     load_pre_submit_checker_policy,
 )
 from projects.post_submit_fixtures import (
-    create_generated_post_submit_setup_output,
-    approve_post_submit_checker_policy,
+    seed_post_submit_policy_for_downstream_tests,
 )
 from projects.policy_bundle_fixtures import (
     create_approved_policy_bundle,
@@ -375,7 +367,7 @@ async def test_submission_policy_approval_builds_fresh_effective_and_checker_cha
         source_snapshot_id=snapshot_id,
         source_snapshot_hash=snapshot.bundle_hash,
         lifecycle_status="draft",
-        derivation_source="manual",
+        derivation_source="manual_admin_derivation",
         policy_body=policy_body,
         policy_hash=canonical_json_hash(policy_body),
         change_summary="draft summary",
@@ -461,90 +453,6 @@ async def test_submission_policy_approval_builds_fresh_effective_and_checker_cha
     assert added_checker[0].effective_policy_id == added_effective[0].id
     assert session.commits == 1
     assert session.refreshed == [added_effective[0], added_checker[0]]
-
-
-@pytest.mark.asyncio
-async def test_post_submit_policy_correction_supersedes_without_inference(monkeypatch) -> None:
-    project_id, guide_id, snapshot_id = (str(uuid4()) for _ in range(3))
-    guide = SimpleNamespace(id=guide_id, project_id=project_id, version="v1", status="draft")
-    policy = SimpleNamespace(
-        id=str(uuid4()),
-        lifecycle_status="compiled",
-        effective_policy_id="effective-1",
-        pre_submit_checker_policy_id="pre-submit-1",
-    )
-    setup_run = SimpleNamespace(
-        id=str(uuid4()),
-        source_snapshot_id=snapshot_id,
-        output_post_submit_checker_policy_id=policy.id,
-        status="post_submit_policy_compiled",
-        current_step="post_submit_checker_policy_compilation",
-        post_submit_derivation_summary={"status": "compiled"},
-        error_code=None,
-        error_summary=None,
-        finished_at=None,
-    )
-    refreshed_run = SimpleNamespace(id=setup_run.id)
-    refreshed_policy = SimpleNamespace(id="replacement-policy")
-    enqueued: list[dict[str, str]] = []
-
-    class Repository:
-        async def get_latest_project_setup_run(self, *_args: Any) -> Any:
-            return setup_run
-
-        async def lock_post_submit_checker_policy(self, _policy_id: str) -> Any:
-            return policy
-
-        async def get_project_setup_run(self, _setup_run_id: str) -> Any:
-            return refreshed_run
-
-    session = _RecordingSession()
-    service = ProjectService(cast(Any, session))
-    service._repo = cast(Any, Repository())
-
-    async def get_guide(*_args: Any) -> Any:
-        return guide
-
-    async def no_op(*_args: Any, **_kwargs: Any) -> None:
-        return None
-
-    async def enqueue(**facts: str) -> None:
-        enqueued.append(facts)
-
-    async def load_policy(_run: Any) -> Any:
-        return refreshed_policy
-
-    async def response(run: Any, current_policy: Any) -> dict[str, Any]:
-        return {"run": run, "policy": current_policy}
-
-    service._lock_project_guide_for_setup = get_guide
-    service._validate_current_post_submit_policy_setup = no_op
-    monkeypatch.setattr(project_setup_queue_module, "enqueue_project_guide_compilation", enqueue)
-    service._post_submit_policy_from_setup_run = load_policy
-    service._post_submit_policy_setup_response = response
-
-    result = await service.request_post_submit_checker_policy_correction(
-        _project_manager_actor(),
-        project_id,
-        guide_id,
-        PostSubmitCheckerPolicyCorrectionRequest(correction_reason="Checker policy is too broad."),
-    )
-
-    assert result == {"run": refreshed_run, "policy": refreshed_policy}
-    assert policy.lifecycle_status == "superseded"
-    assert policy.supersession_kind == "correction_requested"
-    assert policy.supersession_reason == "Checker policy is too broad."
-    assert policy.superseded_by_actor == "actor-1"
-    assert policy.superseded_by_role == "project_manager"
-    assert setup_run.status == "post_submit_setup_blocked"
-    assert setup_run.current_step == "post_submit_checker_policy_approval"
-    assert setup_run.output_post_submit_checker_policy_id is None
-    assert setup_run.error_code == "post_submit_policy_correction_requested"
-    assert setup_run.error_summary == "post-submit checker policy correction requested"
-    assert setup_run.post_submit_derivation_summary["reason"] == "Checker policy is too broad."
-    assert session.commits == 1
-    assert session.refreshed == [setup_run]
-    assert enqueued == []
 
 
 def test_project_setup_queue_enqueues_exact_task_payload(
@@ -703,133 +611,6 @@ async def test_project_setup_dispatch_reuses_exact_queued_task_without_republish
 
     assert result == expected
     repository.lock_project_setup_run.assert_awaited_once_with("run-1")
-
-
-@pytest.mark.asyncio
-async def test_post_submit_derivation_summary_projects_verified_setup_inputs() -> None:
-    setup_run = SimpleNamespace(
-        project_id="project-1",
-        guide_id="guide-1",
-        guide_version="v1",
-        source_snapshot_id="snapshot-1",
-        source_snapshot_hash=f"sha256:{'a' * 64}",
-        output_sufficiency_report_id="report-1",
-        output_submission_artifact_policy_id="submission-1",
-    )
-    report = SimpleNamespace(status="passed", findings=[{"code": "one"}])
-    effective = SimpleNamespace(
-        id="effective-1",
-        effective_policy_hash=f"sha256:{'b' * 64}",
-        effective_policy={
-            "required_artifacts": [{"name": "packet"}],
-            "required_evidence": [{"name": "proof"}, {"name": "tests"}],
-            "forbidden_artifacts": [{"pattern": "*.key"}],
-        },
-    )
-    pre_submit = SimpleNamespace(
-        id="checker-1",
-        source_snapshot_id="snapshot-1",
-        source_snapshot_hash=setup_run.source_snapshot_hash,
-        compiled_bundle_hash=f"sha256:{'c' * 64}",
-        checker_names=["check_hash", "check_manifest"],
-    )
-    policy = SimpleNamespace(
-        effective_policy_id="effective-from-policy",
-        effective_policy_hash=f"sha256:{'d' * 64}",
-        pre_submit_checker_policy_id="checker-from-policy",
-        pre_submit_checker_bundle_hash=f"sha256:{'e' * 64}",
-    )
-
-    class Repository:
-        async def get_guide_sufficiency_report(self, _id: str) -> Any:
-            return report
-
-        async def get_effective_submission_artifact_policy(self, *_args: Any) -> Any:
-            return effective
-
-        async def get_pre_submit_checker_policy_for_effective_policy(self, _id: str) -> Any:
-            return pre_submit
-
-    service = ProjectService(cast(Any, _RecordingSession()))
-    service._repo = cast(Any, Repository())
-    service._is_project_setup_run_output_match = cast(Any, lambda *_: True)
-
-    summary = await service._post_submit_derivation_input_summary(
-        cast(Any, setup_run), cast(Any, policy)
-    )
-
-    assert summary["source_snapshot_hash_redacted"] is True
-    assert summary["sufficiency_status"] == "passed"
-    assert summary["sufficiency_finding_count"] == 1
-    assert summary["effective_policy_required_artifact_count"] == 1
-    assert summary["effective_policy_required_evidence_count"] == 2
-    assert summary["effective_policy_forbidden_artifact_count"] == 1
-    assert summary["pre_submit_checker_names"] == ["check_hash", "check_manifest"]
-    assert summary["pre_submit_checker_count"] == 2
-    assert summary["effective_policy_id"] == "effective-from-policy"
-    assert summary["pre_submit_checker_policy_id"] == "checker-from-policy"
-
-
-@pytest.mark.asyncio
-async def test_post_submit_correction_history_returns_bounded_attributable_records() -> None:
-    setup_run = SimpleNamespace(
-        project_id="project-1",
-        guide_id="guide-1",
-        guide_version="v1",
-        source_snapshot_id="snapshot-1",
-        source_snapshot_hash=f"sha256:{'a' * 64}",
-    )
-    effective = SimpleNamespace(
-        id="effective-1",
-        source_snapshot_hash=setup_run.source_snapshot_hash,
-        effective_policy_hash=f"sha256:{'b' * 64}",
-    )
-    pre_submit = SimpleNamespace(
-        id="checker-1",
-        source_snapshot_id=setup_run.source_snapshot_id,
-        source_snapshot_hash=setup_run.source_snapshot_hash,
-        compiled_bundle_hash=f"sha256:{'c' * 64}",
-    )
-    corrected_at = datetime.now(UTC)
-    corrected = SimpleNamespace(
-        id="post-policy-1",
-        policy_hash=f"sha256:{'d' * 64}",
-        required_checkers=["check_hash"],
-        warning_checkers=["check_metadata"],
-        blocking_severities=["high"],
-        supersession_reason="Policy required correction.",
-        superseded_by_role="project_manager",
-        superseded_by_actor="actor-1",
-        superseded_at=corrected_at,
-    )
-
-    class Repository:
-        async def get_effective_submission_artifact_policy(self, *_args: Any) -> Any:
-            return effective
-
-        async def get_pre_submit_checker_policy_for_effective_policy(self, _id: str) -> Any:
-            return pre_submit
-
-        async def list_superseded_post_submit_checker_policies(self, *_args: Any) -> list[Any]:
-            return [corrected] * 101
-
-    service = ProjectService(cast(Any, _RecordingSession()))
-    service._repo = cast(Any, Repository())
-
-    history = await service._post_submit_policy_correction_history(cast(Any, setup_run))
-
-    assert len(history) == 100
-    assert history[0].model_dump() == {
-        "policy_id": "post-policy-1",
-        "policy_hash": corrected.policy_hash,
-        "required_checkers": ["check_hash"],
-        "warning_checkers": ["check_metadata"],
-        "blocking_severities": ["high"],
-        "correction_reason": "Policy required correction.",
-        "correction_requested_by_role": "project_manager",
-        "correction_requested_by_actor": "actor-1",
-        "correction_requested_at": corrected_at,
-    }
 
 
 @pytest.mark.asyncio
@@ -1502,8 +1283,6 @@ def test_policy_models_do_not_enforce_mutable_current_uniqueness() -> None:
 def test_setup_mutations_use_locked_guide_helper() -> None:
     locked_methods = [
         "approve_submission_artifact_policy",
-        "approve_current_post_submit_checker_policy",
-        "request_post_submit_checker_policy_correction",
         "activate_guide",
     ]
     for method_name in locked_methods:
@@ -2026,7 +1805,10 @@ def test_project_setup_queue_syncs_all_setup_task_settings(
     get_settings.cache_clear()
 
     from app.workers.project_setup import run_project_guide_compilation
+    from app.workers import task_settings
+    from app.core.config import Settings
     from app.workers.task_settings import sync_task_settings
+    monkeypatch.setattr(task_settings, "get_settings", lambda: Settings(_env_file=None))
 
     tasks = tuple(cast(Any, task) for task in (run_project_guide_compilation,))
     original_config = {
@@ -2200,7 +1982,7 @@ async def test_project_identity_and_context_follow_exact_grant_and_lifecycle(
         assert denied.status_code == 404
 
 
-async def test_create_source_snapshot_waits_for_verified_material_before_enqueue(
+async def test_create_source_snapshot_waits_for_committed_documents_before_enqueue(
     project_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2249,11 +2031,11 @@ async def test_create_source_snapshot_waits_for_verified_material_before_enqueue
     assert persisted_guide is not None
     assert snapshot is not None
     assert setup_run is not None
-    assert setup_run.status == "queued"
+    assert setup_run.status == "awaiting_documents"
     assert setup_run.celery_task_id is None
 
 
-async def test_create_source_snapshot_waits_for_verified_material_before_broker_dispatch(
+async def test_create_source_snapshot_waits_for_committed_documents_before_broker_dispatch(
     project_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2287,12 +2069,12 @@ async def test_create_source_snapshot_waits_for_verified_material_before_broker_
         )
 
     assert setup_run is not None
-    assert setup_run.status == "queued"
+    assert setup_run.status == "awaiting_documents"
     assert setup_run.error_code is None
     assert setup_run.celery_task_id is None
 
 
-async def test_create_source_snapshot_does_not_run_agents_before_verified_material(
+async def test_create_source_snapshot_does_not_run_agents_before_committed_documents(
     project_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2329,32 +2111,7 @@ async def test_create_source_snapshot_does_not_run_agents_before_verified_materi
     assert pre_submit_checker_policy is None
 
 
-async def test_thin_guide_snapshot_still_waits_for_verified_material(
-    project_client: AsyncClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("WORKSTREAM_CELERY_TASK_ALWAYS_EAGER", "true")
-    get_settings.cache_clear()
-
-    project = await create_project(project_client)
-    blocked_payload = complete_guide_payload()
-    blocked_payload["content_markdown"] = "Too thin."
-    guide = await create_guide(project_client, project["id"], blocked_payload)
-    await create_source_snapshot(project_client, project["id"], guide["id"])
-
-    async with db_session.get_session_factory()() as session:
-        report = await session.scalar(
-            select(GuideSufficiencyReport).where(GuideSufficiencyReport.guide_id == guide["id"])
-        )
-        policy = await session.scalar(
-            select(SubmissionArtifactPolicy).where(SubmissionArtifactPolicy.guide_id == guide["id"])
-        )
-
-    assert report is None
-    assert policy is None
-
-
-async def test_create_source_snapshot_autostart_waits_for_verified_material(
+async def test_create_source_snapshot_autostart_waits_for_committed_documents(
     project_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2484,10 +2241,10 @@ async def test_guide_source_metadata_authority_records_exact_provenance_and_repl
     updated = await project_client.patch(
         f"/api/v1/projects/{project['id']}/guides/{guide['id']}",
         headers=auth_headers() | {"Idempotency-Key": update_key},
-        json={"content_markdown": f"{payload['content_markdown']}\n\nExpanded."},
+        json={"change_summary": "Expanded metadata."},
     )
     assert updated.status_code == 200, updated.text
-    assert updated.json()["content_markdown"].endswith("Expanded.")
+    assert updated.json()["change_summary"] == "Expanded metadata."
 
     snapshot_key = str(uuid4())
     snapshot_headers = auth_headers() | {"Idempotency-Key": snapshot_key}
@@ -2516,7 +2273,7 @@ async def test_guide_source_metadata_authority_records_exact_provenance_and_repl
         headers=auth_headers(),
         json={"change_summary": "Clarified without replacing source"},
     )
-    assert blocked.status_code == 409
+    assert blocked.status_code == 422
     assert metadata_update.status_code == 200, metadata_update.text
 
     async with db_session.get_session_factory()() as session:
@@ -3362,7 +3119,7 @@ async def test_guide_source_metadata_replay_cannot_cross_project_or_guide(
     assert crossed_snapshot.json()["error"]["code"] == "idempotency_mismatch"
 
 
-async def test_guide_source_metadata_snapshot_replay_stays_queued_for_verified_bytes(
+async def test_guide_source_metadata_snapshot_replay_waits_for_committed_documents(
     project_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -3408,7 +3165,7 @@ async def test_guide_source_metadata_snapshot_replay_stays_queued_for_verified_b
         ).all()
         assert len(runs) == 1
         assert runs[0].celery_task_id is None
-        assert runs[0].status == "queued"
+        assert runs[0].status == "awaiting_documents"
 
 
 async def test_guide_source_metadata_database_rejects_unattributed_and_mismatched_custody(
@@ -3423,7 +3180,6 @@ async def test_guide_source_metadata_database_rejects_unattributed_and_mismatche
                 project_id=project["id"],
                 version="unattributed",
                 status="draft",
-                content_markdown="# Missing custody",
                 change_summary=None,
                 created_by=str(uuid4()),
             )
@@ -3436,7 +3192,7 @@ async def test_guide_source_metadata_database_rejects_unattributed_and_mismatche
     async with db_session.get_session_factory()() as session:
         persisted = await session.get(ProjectGuide, guide["id"])
         assert persisted is not None
-        persisted.content_markdown = "# Changed without fresh custody"
+        persisted.change_summary = "Changed without fresh custody"
         with pytest.raises(IntegrityError):
             await session.commit()
         await session.rollback()
@@ -3498,11 +3254,9 @@ def test_project_setup_run_status_constraint_metadata() -> None:
         assert status in constraint_sql
 
 
-def test_project_setup_visibility_exposes_bounded_continuation_evidence() -> None:
-    assert {
-        "continuation_verification_job_id",
-        "continuation_started_at",
-    }.issubset(ProjectSetupRunResponse.model_fields)
+def test_project_setup_visibility_exposes_document_readiness() -> None:
+    assert "documents_ready_at" in ProjectSetupRunResponse.model_fields
+    assert not {"continuation_verification_job_id", "continuation_started_at"} & ProjectSetupRunResponse.model_fields.keys()
 
 
 def test_project_setup_error_summary_redacts_sensitive_diagnostics() -> None:
@@ -3564,21 +3318,18 @@ async def test_project_setup_waits_for_verified_guide_material_before_outputs(
 
     assert setup_run_response.status_code == 200, setup_run_response.text
     setup_run = setup_run_response.json()
-    assert setup_run["status"] == "queued"
-    assert setup_run["current_step"] == "queued"
+    assert setup_run["status"] == "awaiting_documents"
+    assert setup_run["current_step"] == "awaiting_documents"
     assert setup_run["celery_task_id"] is None
     assert setup_run["output_sufficiency_report_id"] is None
     assert setup_run["output_submission_artifact_policy_id"] is None
-    assert setup_run["continuation_verification_job_id"] is None
-    assert setup_run["continuation_started_at"] is None
+    assert setup_run["documents_ready_at"] is None
+    assert "continuation_verification_job_id" not in setup_run
+    assert "continuation_started_at" not in setup_run
     assert reports_response.status_code == 200
     assert reports_response.json() == []
     assert policies_response.status_code == 200
     assert policies_response.json() == []
-
-
-async def test_verified_guide_material_is_the_only_post_submit_agent_source():
-    assert not hasattr(GuideSourceItemMaterial, "content_excerpt")
 
 
 async def test_pre_submit_visibility_requires_compiled_policy(
@@ -3601,7 +3352,7 @@ async def test_pre_submit_visibility_requires_compiled_policy(
     assert response.status_code == 404
 
 
-async def test_verified_setup_enqueue_failure_is_sanitized_and_retryable(
+async def test_document_ready_setup_enqueue_failure_is_sanitized_and_retryable(
     project_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -3630,13 +3381,14 @@ async def test_verified_setup_enqueue_failure_is_sanitized_and_retryable(
             select(ProjectSetupRun).where(ProjectSetupRun.guide_id == guide["id"])
         )
         assert run is not None
-        await project_setup_queue_module.dispatch_project_guide_compilation_after_commit(
-            session,
-            project_id=run.project_id,
-            guide_id=run.guide_id,
-            source_snapshot_id=run.source_snapshot_id,
-            setup_run_id=run.id,
-            setup_generation=run.setup_generation,
+        source_snapshot_id = run.source_snapshot_id
+        await session.commit()
+        await create_committed_document_fixture(source_snapshot_id)
+        from app.modules.projects.guide_setup_continuation import continue_setup_after_stored_guide_item
+        from app.adapters.artifacts import guide_document_manifest_port
+        await continue_setup_after_stored_guide_item(
+            UUID(source_snapshot_id), session_factory=db_session.get_session_factory(),
+            manifest_factory=guide_document_manifest_port,
         )
 
     response = await project_client.get(
@@ -3827,15 +3579,9 @@ async def test_project_setup_visibility_apis_require_active_local_grant(
         guide["id"],
         setup_run["source_snapshot_id"],
     )
-    verified_report_id = await create_verified_report_fixture(
+    verified_report_id = await create_compiled_report_fixture(
         diagnostic["id"], setup_run["source_snapshot_id"]
     )
-    async with db_session.get_session_factory()() as session:
-        persisted_run = await session.get(ProjectSetupRun, setup_run["id"])
-        assert persisted_run is not None
-        persisted_run.output_sufficiency_report_id = verified_report_id
-        persisted_run.output_submission_artifact_policy_id = policy["id"]
-        await session.commit()
     setup_run["output_sufficiency_report_id"] = verified_report_id
     setup_run["output_submission_artifact_policy_id"] = policy["id"]
 
@@ -3847,7 +3593,6 @@ async def test_project_setup_visibility_apis_require_active_local_grant(
         f"/api/v1/projects/{project['id']}/guides/{guide['id']}/submission-artifact-policies",
         f"/api/v1/projects/{project['id']}/guides/{guide['id']}/submission-artifact-policies/"
         f"{setup_run['output_submission_artifact_policy_id']}",
-        f"/api/v1/projects/{project['id']}/guides/{guide['id']}/post-submit-checker-policy/setup",
     ]
     monkeypatch.setenv("WORKSTREAM_DEV_AUTH_ROLES", "admin")
     get_settings.cache_clear()
@@ -3946,7 +3691,6 @@ async def test_draft_guide_can_be_created(project_client: AsyncClient) -> None:
             "project_id",
             "version",
             "status",
-            "content_markdown",
             "created_by",
             "approved_by",
             "effective_at",
@@ -4574,8 +4318,8 @@ async def test_submission_artifact_policy_replay_postgres_converges_exact_reserv
                 await connection.execute(text(f"alter table {table} disable trigger {trigger}"))
             await connection.execute(
                 text(
-                    "insert into project_guides(id,project_id,version,status,content_markdown,"
-                    "created_by) values(:guide,:project,'v1','draft','# guide','test')"
+                    "insert into project_guides(id,project_id,version,status,"
+                    "created_by) values(:guide,:project,'v1','draft','test')"
                 ),
                 ids,
             )
@@ -4644,89 +4388,6 @@ async def test_submission_artifact_policy_replay_postgres_converges_exact_reserv
         await engine.dispose()
 
 
-async def test_agent_material_includes_verified_representative_task_context(
-    project_client: AsyncClient,
-) -> None:
-    """Verified example extractions remain available as representative tasks."""
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    payload = source_snapshot_payload()
-    payload["items"].append(
-        {
-            "source_kind": "example",
-            "source_label": "Representative STEM task",
-            "ingestion_adapter": "manual_import",
-            "media_type": "application/json",
-        }
-    )
-    snapshot = await create_source_snapshot(
-        project_client,
-        project["id"],
-        guide["id"],
-        payload=payload,
-    )
-    source_item_id, binding_id, content_id = uuid4(), uuid4(), uuid4()
-    extraction_attempt_id, extraction_usage_id, extracted_content_id = (
-        uuid4(),
-        uuid4(),
-        uuid4(),
-    )
-    canonical_output_sha256 = sha256_hash("verified representative task")
-    verified_item = GuideSufficiencySourceItem(
-        source_kind="example",
-        ingestion_adapter="manual_import",
-        source_item_id=source_item_id,
-        item_order=1,
-        binding_id=binding_id,
-        content_id=content_id,
-        artifact_sha256=sha256_hash("representative-task"),
-        artifact_byte_count=80,
-        media_type="application/json",
-        classification_id=uuid4(),
-        detected_format="json",
-        extraction_attempt_id=extraction_attempt_id,
-        extraction_usage_id=extraction_usage_id,
-        extracted_content_id=extracted_content_id,
-        extractor_name="workstream.json",
-        extractor_version="1",
-        extraction_policy_version="1",
-        canonical_output_sha256=canonical_output_sha256,
-        omission_facts={},
-        canonical_content=(
-            "Representative task: solve a STEM prompt and submit a reasoned answer."
-        ),
-        structural_metadata={"kind": "representative_task"},
-    )
-    async with db_session.get_session_factory()() as session:
-        guide_row = await session.get(ProjectGuide, guide["id"])
-        snapshot_row = await session.get(GuideSourceSnapshot, snapshot["id"])
-        assert guide_row is not None
-        assert snapshot_row is not None
-        material = project_service_module.build_verified_guide_sufficiency_material(
-            guide_row,
-            snapshot_row,
-            (verified_item,),
-        )
-    assert material.verified_artifact_material is True
-    assert material.representative_task_material.items == []
-    assert any(item.source_item_id == str(source_item_id) for item in material.source_items)
-    serialized = canonical_guide_source_material_bytes(material)
-    assert b"inline:/examples/tasks/stem/sample-1" not in serialized
-    assert b"Representative task: solve a STEM prompt" in serialized
-    async with db_session.get_session_factory()() as session:
-        authoritative = await ProjectRepository(session).get_sufficiency_report_for_snapshot(
-            snapshot["id"]
-        )
-        diagnostic_count = await session.scalar(
-            select(func.count(GuideSufficiencyReport.id)).where(
-                GuideSufficiencyReport.source_snapshot_id == snapshot["id"]
-            )
-        )
-
-    assert authoritative is None
-    assert diagnostic_count == 0
-
-
 async def test_source_snapshot_manifest_cannot_be_rewritten_for_legacy_shape(
     project_client: AsyncClient,
 ) -> None:
@@ -4755,12 +4416,12 @@ def test_project_agent_timeout_is_loaded_from_environment(monkeypatch) -> None:
 
     monkeypatch.setenv("WORKSTREAM_PROJECT_AGENT_MODEL", "test-model")
     monkeypatch.setenv("WORKSTREAM_PROJECT_AGENT_RUN_TIMEOUT_SECONDS", "42")
-    monkeypatch.setenv("WORKSTREAM_PROJECT_AGENT_MAX_PROMPT_BYTES", "12345")
+    monkeypatch.setenv("WORKSTREAM_PROJECT_AGENT_MAX_MANIFEST_BYTES", "12345")
     get_settings.cache_clear()
     try:
         configuration = project_guide_runtime_configuration(get_settings())
         assert configuration.timeout_seconds == 42
-        assert configuration.maximum_prompt_bytes == 12345
+        assert configuration.maximum_manifest_bytes == 12345
         assert configuration.model == "test-model"
     finally:
         get_settings.cache_clear()
@@ -4929,47 +4590,6 @@ async def test_submission_artifact_policy_removed_agent_route_performs_no_runtim
         ).all()
 
     assert policies == []
-
-
-async def test_activation_revalidates_agent_derived_policy_provenance(
-    project_client: AsyncClient,
-) -> None:
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    snapshot = await create_source_snapshot(project_client, project["id"], guide["id"])
-    diagnostic = await create_sufficiency_report(
-        project_client, project["id"], guide["id"], snapshot["id"]
-    )
-    await create_verified_report_fixture(diagnostic["id"], snapshot["id"])
-    policy = await create_submission_artifact_policy(
-        project_client,
-        project["id"],
-        guide["id"],
-        snapshot["id"],
-    )
-    await approve_submission_artifact_policy(
-        project_client,
-        project["id"],
-        guide["id"],
-        policy["id"],
-    )
-    async with db_session.get_session_factory()() as session:
-        persisted = await session.get(SubmissionArtifactPolicy, policy["id"])
-        assert persisted is not None
-        persisted.derivation_source = "agent_derivation"
-        persisted.policy_version = f"agent-{snapshot['bundle_hash'].removeprefix('sha256:')[:24]}"
-        persisted.derivation_agent_name = "ProviderControlledAgent"
-        persisted.derivation_agent_version = "provider-v0"
-        await session.commit()
-
-    response = await activate_guide_for_downstream_test(
-        db_session.get_session_factory(),
-        project_id=project["id"],
-        guide_id=guide["id"],
-    )
-
-    assert response.status_code == 422
-    assert "runtime provenance is not server-owned" in response.json()["detail"]
 
 
 async def test_submission_artifact_policy_approval_persists_effective_policy_hash(
@@ -5156,7 +4776,7 @@ async def test_submission_artifact_policy_create_rejects_unacknowledged_warning_
         snapshot["id"],
         status="passed_with_warnings",
     )
-    await create_verified_report_fixture(diagnostic["id"], snapshot["id"])
+    await create_compiled_report_fixture(diagnostic["id"], snapshot["id"])
     response = await project_client.post(
         f"/api/v1/projects/{project['id']}/guides/{guide['id']}/submission-artifact-policies",
         headers=auth_headers(),
@@ -5180,7 +4800,7 @@ async def test_submission_artifact_policy_create_exact_idempotency_replay_is_sta
     diagnostic = await create_sufficiency_report(
         project_client, project["id"], guide["id"], snapshot["id"]
     )
-    await create_verified_report_fixture(diagnostic["id"], snapshot["id"])
+    await create_compiled_report_fixture(diagnostic["id"], snapshot["id"])
     headers = auth_headers()
     payload = {
         "source_snapshot_id": snapshot["id"],
@@ -5219,7 +4839,7 @@ async def test_submission_artifact_policy_create_fault_rolls_back_atomic_boundar
     diagnostic = await create_sufficiency_report(
         project_client, project["id"], guide["id"], snapshot["id"]
     )
-    await create_verified_report_fixture(diagnostic["id"], snapshot["id"])
+    await create_compiled_report_fixture(diagnostic["id"], snapshot["id"])
 
     if fault_point == "replay_reserved":
         original = SubmissionPolicyMutationService.reserve_replay
@@ -5995,7 +5615,7 @@ async def test_concurrent_policy_approvals_do_not_fork_current_chain(
     )
 
 
-async def test_material_guide_edit_after_source_snapshot_is_blocked(
+async def test_inline_guide_body_is_rejected_after_source_snapshot(
     project_client: AsyncClient,
 ) -> None:
     project = await create_project(project_client)
@@ -6008,8 +5628,8 @@ async def test_material_guide_edit_after_source_snapshot_is_blocked(
         json={"content_markdown": "# Drift after snapshot"},
     )
 
-    assert response.status_code == 409
-    assert "source material" in response.json()["detail"]
+    assert response.status_code == 422
+    assert "content_markdown" in response.text
 
 
 async def test_removed_payment_policy_edit_after_source_snapshot_is_rejected(
@@ -6038,45 +5658,6 @@ async def test_removed_payment_policy_edit_after_source_snapshot_is_rejected(
     assert "payment_policy" in response.text
 
 
-async def test_activation_rejects_policy_bound_to_stale_source_snapshot(
-    project_client: AsyncClient,
-) -> None:
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    first_snapshot = await create_source_snapshot(project_client, project["id"], guide["id"])
-    await create_sufficiency_report(
-        project_client, project["id"], guide["id"], first_snapshot["id"]
-    )
-    policy = await create_submission_artifact_policy(
-        project_client,
-        project["id"],
-        guide["id"],
-        first_snapshot["id"],
-    )
-    await approve_submission_artifact_policy(
-        project_client,
-        project["id"],
-        guide["id"],
-        policy["id"],
-    )
-    newer_payload = source_snapshot_payload(source_label="guide-v2.md")
-    newer_response = await project_client.post(
-        f"/api/v1/projects/{project['id']}/guides/{guide['id']}/source-snapshots",
-        headers=auth_headers(),
-        json=newer_payload,
-    )
-    assert newer_response.status_code == 201, newer_response.text
-
-    response = await activate_guide_for_downstream_test(
-        db_session.get_session_factory(),
-        project_id=project["id"],
-        guide_id=guide["id"],
-    )
-
-    assert response.status_code == 422
-    assert "stale" in response.json()["detail"]
-
-
 async def test_draft_policy_cannot_be_approved_after_guide_activation(
     project_client: AsyncClient,
 ) -> None:
@@ -6091,7 +5672,7 @@ async def test_draft_policy_cannot_be_approved_after_guide_activation(
     )
     report = {
         **report,
-        "id": await create_verified_report_fixture(report["id"], snapshot["id"]),
+        "id": await create_compiled_report_fixture(report["id"], snapshot["id"]),
     }
     first_policy = await create_submission_artifact_policy(
         project_client,
@@ -6114,21 +5695,18 @@ async def test_draft_policy_cannot_be_approved_after_guide_activation(
         first_policy["id"],
     )
     pre_submit_checker_policy = await load_pre_submit_checker_policy(effective)
-    await create_generated_post_submit_setup_output(
+    await seed_post_submit_policy_for_downstream_tests(
         project_id=project["id"],
         guide_id=guide["id"],
         source_snapshot=snapshot,
-        sufficiency_report=report,
-        submission_artifact_policy=first_policy,
         pre_submit_checker_policy=pre_submit_checker_policy,
     )
-    await approve_post_submit_checker_policy(project_client, project["id"], guide["id"])
-    activation = await activate_guide_for_downstream_test(
+
+    await seed_active_guide_for_downstream_test(
         db_session.get_session_factory(),
         project_id=project["id"],
         guide_id=guide["id"],
     )
-    assert activation.status_code == 200, activation.text
 
     response = await project_client.post(
         f"/api/v1/projects/{project['id']}/guides/{guide['id']}/submission-artifact-policies/"
@@ -6639,7 +6217,7 @@ async def test_sufficiency_warnings_require_acknowledgement(
     diagnostic_report_id = report["id"]
     report = {
         **report,
-        "id": await create_verified_report_fixture(report["id"], snapshot["id"]),
+        "id": await create_compiled_report_fixture(report["id"], snapshot["id"]),
     }
 
     blocked = await project_client.post(
@@ -6703,22 +6281,19 @@ async def test_sufficiency_warnings_require_acknowledgement(
         policy["id"],
     )
     pre_submit_checker_policy = await load_pre_submit_checker_policy(effective)
-    await create_generated_post_submit_setup_output(
+    await seed_post_submit_policy_for_downstream_tests(
         project_id=project["id"],
         guide_id=guide["id"],
         source_snapshot=snapshot,
-        sufficiency_report=report,
-        submission_artifact_policy=policy,
         pre_submit_checker_policy=pre_submit_checker_policy,
     )
-    await approve_post_submit_checker_policy(project_client, project["id"], guide["id"])
 
-    activated = await activate_guide_for_downstream_test(
+
+    await seed_active_guide_for_downstream_test(
         db_session.get_session_factory(),
         project_id=project["id"],
         guide_id=guide["id"],
     )
-    assert activated.status_code == 200, activated.text
 
 
 async def test_sufficiency_warning_acknowledgement_requires_setup_role_for_policy_approval(
@@ -6736,7 +6311,7 @@ async def test_sufficiency_warning_acknowledgement_requires_setup_role_for_polic
     )
     report = {
         **report,
-        "id": await create_verified_report_fixture(report["id"], snapshot["id"]),
+        "id": await create_compiled_report_fixture(report["id"], snapshot["id"]),
     }
 
     async with db_session.get_session_factory()() as session:
@@ -6760,67 +6335,6 @@ async def test_sufficiency_warning_acknowledgement_requires_setup_role_for_polic
 
     assert response.status_code == 422
     assert "authorized Project Manager acknowledgement" in response.json()["detail"]
-
-
-async def test_activation_revalidates_sufficiency_warning_acknowledgement_provenance(
-    project_client: AsyncClient,
-) -> None:
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    snapshot = await create_source_snapshot(project_client, project["id"], guide["id"])
-    report = await create_sufficiency_report(
-        project_client,
-        project["id"],
-        guide["id"],
-        snapshot["id"],
-        status="passed_with_warnings",
-    )
-    diagnostic_report_id = report["id"]
-    report = {
-        **report,
-        "id": await create_verified_report_fixture(report["id"], snapshot["id"]),
-    }
-    acknowledgement = await project_client.post(
-        f"/api/v1/projects/{project['id']}/guides/{guide['id']}/sufficiency-reports/"
-        f"{report['id']}/acknowledge-warnings",
-        headers=auth_headers(),
-        json={"acknowledgement_note": "Accepted with known thin examples."},
-    )
-    assert acknowledgement.status_code == 200, acknowledgement.text
-    diagnostic_acknowledgement = await project_client.post(
-        f"/api/v1/projects/{project['id']}/guides/{guide['id']}/sufficiency-reports/"
-        f"{diagnostic_report_id}/acknowledge-warnings",
-        headers=auth_headers(),
-        json={"acknowledgement_note": "Accepted with known thin examples."},
-    )
-    assert diagnostic_acknowledgement.status_code == 200, diagnostic_acknowledgement.text
-    policy = await create_submission_artifact_policy(
-        project_client,
-        project["id"],
-        guide["id"],
-        snapshot["id"],
-    )
-    await approve_submission_artifact_policy(
-        project_client,
-        project["id"],
-        guide["id"],
-        policy["id"],
-    )
-
-    async with db_session.get_session_factory()() as session:
-        persisted = await session.get(GuideSufficiencyReport, report["id"])
-        assert persisted is not None
-        persisted.warnings_acknowledged_by_role = None
-        await session.commit()
-
-    response = await activate_guide_for_downstream_test(
-        db_session.get_session_factory(),
-        project_id=project["id"],
-        guide_id=guide["id"],
-    )
-
-    assert response.status_code == 422
-    assert "warnings require admin/project_manager acknowledgement" in response.json()["detail"]
 
 
 async def test_sufficiency_warning_acknowledgement_rejects_unknown_fields(
@@ -6875,301 +6389,6 @@ async def test_worker_cannot_approve_submission_artifact_policy(
     assert response.status_code == 403
 
 
-async def test_activation_requires_submission_artifact_policy(project_client: AsyncClient) -> None:
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    snapshot = await create_source_snapshot(project_client, project["id"], guide["id"])
-    await create_sufficiency_report(project_client, project["id"], guide["id"], snapshot["id"])
-
-    response = await activate_guide_for_downstream_test(
-        db_session.get_session_factory(),
-        project_id=project["id"],
-        guide_id=guide["id"],
-    )
-
-    assert response.status_code == 422
-    assert "approved submission artifact policy" in response.json()["detail"]
-
-
-async def test_activation_uses_policy_bundle_without_guide_owned_artifact_fields(
-    project_client: AsyncClient,
-) -> None:
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    await create_approved_policy_bundle(project_client, project["id"], guide["id"])
-
-    response = await activate_guide_for_downstream_test(
-        db_session.get_session_factory(),
-        project_id=project["id"],
-        guide_id=guide["id"],
-    )
-
-    assert response.status_code == 200, response.text
-
-
-async def test_activation_requires_generated_post_submit_setup_output(
-    project_client: AsyncClient,
-) -> None:
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    await create_approved_policy_bundle(
-        project_client,
-        project["id"],
-        guide["id"],
-        compile_post_submit_checker=False,
-    )
-
-    response = await activate_guide_for_downstream_test(
-        db_session.get_session_factory(),
-        project_id=project["id"],
-        guide_id=guide["id"],
-    )
-
-    assert response.status_code == 422
-    assert "post-submit checker policy" in response.json()["detail"]
-
-
-async def test_activation_rejects_compiled_post_submit_checker_policy_before_approval(
-    project_client: AsyncClient,
-) -> None:
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    await create_approved_policy_bundle(
-        project_client,
-        project["id"],
-        guide["id"],
-        approve_post_submit_checker=False,
-    )
-
-    response = await activate_guide_for_downstream_test(
-        db_session.get_session_factory(),
-        project_id=project["id"],
-        guide_id=guide["id"],
-    )
-
-    assert response.status_code == 422
-    assert "approved post-submit checker policy" in response.json()["detail"]
-
-
-async def test_post_submit_setup_visibility_redacts_source_hash_and_policy_body(
-    project_client: AsyncClient,
-) -> None:
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    bundle = await create_approved_policy_bundle(
-        project_client,
-        project["id"],
-        guide["id"],
-        approve_post_submit_checker=False,
-    )
-
-    response = await project_client.get(
-        f"/api/v1/projects/{project['id']}/guides/{guide['id']}/post-submit-checker-policy/setup",
-        headers=auth_headers(),
-    )
-
-    assert response.status_code == 200, response.text
-    body = response.json()
-    policy = body["post_submit_checker_policy"]
-    assert policy["id"] == bundle["post_submit_checker_policy"]["id"]
-    assert policy["source_snapshot_id"] == bundle["source_snapshot"]["id"]
-    assert policy["source_snapshot_hash_redacted"] is True
-    assert policy["lifecycle_status"] == "compiled"
-    assert policy["policy_hash"].startswith("sha256:")
-    assert body["derivation_input_summary"]["source_snapshot_id"] == bundle["source_snapshot"]["id"]
-    assert body["derivation_input_summary"]["source_snapshot_hash_redacted"] is True
-    assert body["derivation_input_summary"]["sufficiency_status"] == "passed"
-    assert body["derivation_input_summary"]["effective_policy_required_artifact_count"] == 1
-    assert body["derivation_input_summary"]["pre_submit_checker_count"] >= 1
-    assert "check_required_files" in body["derivation_input_summary"]["pre_submit_checker_names"]
-    assert body["derivation_input_summary"]["registered_post_submit_checker_count"] >= 1
-    assert "policy_body" not in response.text
-    assert bundle["source_snapshot"]["bundle_hash"] not in response.text
-    for item in bundle["source_snapshot"]["items"]:
-        assert item["source_label"] not in response.text
-        assert "content_hash" not in item
-    assert "Contributors submit a complete project packet" not in response.text
-
-
-async def test_post_submit_checker_policy_approval_uses_server_provenance(
-    project_client: AsyncClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    bundle = await create_approved_policy_bundle(
-        project_client,
-        project["id"],
-        guide["id"],
-        approve_post_submit_checker=False,
-    )
-
-    approved = await approve_post_submit_checker_policy(
-        project_client,
-        project["id"],
-        guide["id"],
-    )
-
-    assert approved["id"] == bundle["post_submit_checker_policy"]["id"]
-    assert approved["lifecycle_status"] == "approved"
-    assert approved["approved_by_role"] == "project_manager"
-    assert approved["approved_by_actor"] == bundle["submission_artifact_policy"]["created_by"]
-    assert approved["approved_at"] is not None
-
-    monkeypatch.setenv("WORKSTREAM_DEV_AUTH_ROLES", "admin")
-    get_settings.cache_clear()
-    retry = await project_client.post(
-        f"/api/v1/projects/{project['id']}/guides/{guide['id']}/post-submit-checker-policy/approve",
-        headers=auth_headers(),
-        json={},
-    )
-
-    assert retry.status_code == 200, retry.text
-    retried_policy = retry.json()["post_submit_checker_policy"]
-    assert retried_policy["approved_by_role"] == "project_manager"
-    assert retried_policy["approved_by_actor"] == approved["approved_by_actor"]
-    assert retried_policy["approved_at"] == approved["approved_at"]
-
-
-async def test_post_submit_checker_policy_correction_preserves_audit_without_inference(
-    project_client: AsyncClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    bundle = await create_approved_policy_bundle(
-        project_client,
-        project["id"],
-        guide["id"],
-        approve_post_submit_checker=False,
-    )
-    whitespace_reason = await project_client.post(
-        f"/api/v1/projects/{project['id']}/guides/{guide['id']}/"
-        "post-submit-checker-policy/request-correction",
-        headers=auth_headers(),
-        json={"correction_reason": "   \n  "},
-    )
-    assert whitespace_reason.status_code == 422
-
-    response = await project_client.post(
-        f"/api/v1/projects/{project['id']}/guides/{guide['id']}/"
-        "post-submit-checker-policy/request-correction",
-        headers=auth_headers(),
-        json={
-            "correction_reason": ("Regenerate without sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-        },
-    )
-
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["setup_run"]["status"] == "post_submit_setup_blocked"
-    assert body["setup_run"]["output_post_submit_checker_policy_id"] is None
-    correction_summary = body["setup_run"]["post_submit_derivation_summary"]
-    assert correction_summary["status"] == "correction_requested"
-    assert correction_summary["reason"] == "redacted"
-    assert (
-        correction_summary["post_submit_checker_policy_id"]
-        == (bundle["post_submit_checker_policy"]["id"])
-    )
-    assert correction_summary["correction_requested_by_role"] == "project_manager"
-    assert (
-        correction_summary["correction_requested_by_actor"]
-        == (bundle["submission_artifact_policy"]["created_by"])
-    )
-    assert correction_summary["correction_requested_at"]
-    assert body["post_submit_checker_policy"] is None
-    assert len(body["correction_history"]) == 1
-    correction_history = body["correction_history"][0]
-    assert correction_history["policy_id"] == bundle["post_submit_checker_policy"]["id"]
-    assert correction_history["policy_hash"] == bundle["post_submit_checker_policy"]["policy_hash"]
-    assert (
-        correction_history["required_checkers"]
-        == bundle["post_submit_checker_policy"]["required_checkers"]
-    )
-    assert correction_history["warning_checkers"] == []
-    assert correction_history["blocking_severities"] == ["critical", "high"]
-    assert correction_history["correction_reason"] == "redacted"
-    assert correction_history["correction_requested_by_role"] == "project_manager"
-    assert (
-        correction_history["correction_requested_by_actor"]
-        == bundle["submission_artifact_policy"]["created_by"]
-    )
-    assert correction_history["correction_requested_at"]
-    async with db_session.get_session_factory()() as session:
-        superseded_policy = await session.get(
-            PostSubmitCheckerPolicy,
-            bundle["post_submit_checker_policy"]["id"],
-        )
-        assert superseded_policy is not None
-        assert superseded_policy.lifecycle_status == "superseded"
-        assert superseded_policy.supersession_reason == "redacted"
-        assert superseded_policy.supersession_kind == "correction_requested"
-        assert superseded_policy.policy_body is not None
-        assert superseded_policy.policy_hash == bundle["post_submit_checker_policy"]["policy_hash"]
-
-
-async def test_post_submit_checker_policy_mutations_still_require_legacy_setup_role(
-    project_client: AsyncClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    await create_approved_policy_bundle(
-        project_client,
-        project["id"],
-        guide["id"],
-        approve_post_submit_checker=False,
-    )
-    diagnostic = await project_client.get(
-        f"/api/v1/projects/{project['id']}/guides/{guide['id']}/post-submit-checker-policy/setup",
-        headers=auth_headers(),
-    )
-    assert diagnostic.status_code == 200, diagnostic.text
-    endpoints = [
-        (
-            "post",
-            f"/api/v1/projects/{project['id']}/guides/{guide['id']}/"
-            "post-submit-checker-policy/approve",
-            {},
-        ),
-        (
-            "post",
-            f"/api/v1/projects/{project['id']}/guides/{guide['id']}/"
-            "post-submit-checker-policy/request-correction",
-            {"correction_reason": "forged"},
-        ),
-    ]
-
-    for role in ("worker", "reviewer", "finance", "auditor"):
-        monkeypatch.setenv("WORKSTREAM_DEV_AUTH_ROLES", role)
-        get_settings.cache_clear()
-        for method, endpoint, payload in endpoints:
-            response = await getattr(project_client, method)(
-                endpoint,
-                headers=auth_headers(),
-                json=payload,
-            )
-            assert response.status_code == 403
-
-
-async def test_approved_post_submit_checker_policy_cannot_request_correction(
-    project_client: AsyncClient,
-) -> None:
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    await create_approved_policy_bundle(project_client, project["id"], guide["id"])
-
-    response = await project_client.post(
-        f"/api/v1/projects/{project['id']}/guides/{guide['id']}/"
-        "post-submit-checker-policy/request-correction",
-        headers=auth_headers(),
-        json={"correction_reason": "Change after approval."},
-    )
-
-    assert response.status_code == 409
-    assert "immutable" in response.json()["detail"]
-
-
 async def test_database_rejects_post_submit_checker_approved_by_non_setup_role(
     project_client: AsyncClient,
 ) -> None:
@@ -7200,7 +6419,6 @@ async def test_database_rejects_superseded_post_submit_policy_without_correction
         project_client,
         project["id"],
         guide["id"],
-        approve_post_submit_checker=False,
     )
     async with db_session.get_session_factory()() as session:
         policy = await session.get(
@@ -7232,57 +6450,6 @@ async def test_guide_payload_rejects_manual_post_submit_checker_policy(
 
     assert response.status_code == 422
     assert "post_submit_checker_policy" in response.text
-
-
-async def test_activation_requires_review_policy(project_client: AsyncClient) -> None:
-    project = await create_project(project_client)
-    payload = complete_guide_payload()
-    payload["review_policy"] = None
-    guide = await create_guide(project_client, project["id"], payload)
-    await create_approved_policy_bundle(project_client, project["id"], guide["id"])
-
-    response = await activate_guide_for_downstream_test(
-        db_session.get_session_factory(),
-        project_id=project["id"],
-        guide_id=guide["id"],
-    )
-
-    assert response.status_code == 422
-    assert "review and revision policy selections" in response.json()["detail"]
-
-
-async def test_activation_requires_payment_policy(project_client: AsyncClient) -> None:
-    project = await create_project(project_client)
-    payload = complete_guide_payload()
-    payload["payment_policy"] = None
-    guide = await create_guide(project_client, project["id"], payload)
-    await create_approved_policy_bundle(project_client, project["id"], guide["id"])
-
-    response = await activate_guide_for_downstream_test(
-        db_session.get_session_factory(),
-        project_id=project["id"],
-        guide_id=guide["id"],
-    )
-
-    assert response.status_code == 422
-    assert "payment policy is required" in response.json()["detail"]
-
-
-async def test_activation_requires_revision_policy(project_client: AsyncClient) -> None:
-    project = await create_project(project_client)
-    payload = complete_guide_payload()
-    payload["revision_policy"] = None
-    guide = await create_guide(project_client, project["id"], payload)
-    await create_approved_policy_bundle(project_client, project["id"], guide["id"])
-
-    response = await activate_guide_for_downstream_test(
-        db_session.get_session_factory(),
-        project_id=project["id"],
-        guide_id=guide["id"],
-    )
-
-    assert response.status_code == 422
-    assert "review and revision policy selections" in response.json()["detail"]
 
 
 async def test_review_policy_rejects_invalid_decision_names(project_client: AsyncClient) -> None:
@@ -7411,28 +6578,6 @@ async def test_activation_rejects_unsupported_revision_resubmission_states(
     assert "revision_policy" in response.text
 
 
-async def test_activation_rejects_pending_pre_submit_checker_policy(
-    project_client: AsyncClient,
-) -> None:
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    await create_approved_policy_bundle(
-        project_client,
-        project["id"],
-        guide["id"],
-        compile_pre_submit_checker=False,
-    )
-
-    response = await activate_guide_for_downstream_test(
-        db_session.get_session_factory(),
-        project_id=project["id"],
-        guide_id=guide["id"],
-    )
-
-    assert response.status_code == 422
-    assert "compiled project pre-submit checker policy" in response.json()["detail"]
-
-
 async def test_database_enforces_compiled_pre_submit_checker_bundle_hash(
     project_client: AsyncClient,
 ) -> None:
@@ -7471,34 +6616,6 @@ async def test_database_rejects_mismatched_post_submit_pre_submit_checker_hash(
             await session.commit()
 
 
-async def test_activation_rejects_mismatched_submission_policy_body_hash(
-    project_client: AsyncClient,
-) -> None:
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    bundle = await create_approved_policy_bundle(project_client, project["id"], guide["id"])
-    async with db_session.get_session_factory()() as session:
-        policy = await session.get(
-            SubmissionArtifactPolicy,
-            bundle["submission_artifact_policy"]["id"],
-        )
-        assert policy is not None
-        policy.policy_body = {
-            **policy.policy_body,
-            "allowed_storage_schemes": ["local"],
-        }
-        await session.commit()
-
-    response = await activate_guide_for_downstream_test(
-        db_session.get_session_factory(),
-        project_id=project["id"],
-        guide_id=guide["id"],
-    )
-
-    assert response.status_code == 422
-    assert "policy body hash mismatch" in response.json()["detail"]
-
-
 async def test_active_guide_read_rejects_mismatched_effective_policy_body_hash(
     project_client: AsyncClient,
 ) -> None:
@@ -7506,12 +6623,11 @@ async def test_active_guide_read_rejects_mismatched_effective_policy_body_hash(
     await add_project_manager_admin_grant(project["id"])
     guide = await create_guide(project_client, project["id"], complete_guide_payload())
     bundle = await create_approved_policy_bundle(project_client, project["id"], guide["id"])
-    activation = await activate_guide_for_downstream_test(
+    await seed_active_guide_for_downstream_test(
         db_session.get_session_factory(),
         project_id=project["id"],
         guide_id=guide["id"],
     )
-    assert activation.status_code == 200, activation.text
     async with db_session.get_session_factory()() as session:
         effective_policy = await session.get(
             EffectiveProjectSubmissionArtifactPolicy,
@@ -7540,12 +6656,11 @@ async def test_active_guide_read_revalidates_policy_context(
     await add_project_manager_admin_grant(project["id"])
     guide = await create_guide(project_client, project["id"], complete_guide_payload())
     bundle = await create_approved_policy_bundle(project_client, project["id"], guide["id"])
-    activation = await activate_guide_for_downstream_test(
+    await seed_active_guide_for_downstream_test(
         db_session.get_session_factory(),
         project_id=project["id"],
         guide_id=guide["id"],
     )
-    assert activation.status_code == 200, activation.text
 
     async with db_session.get_session_factory()() as session:
         pre_submit_checker_policy = await session.scalar(
@@ -7566,13 +6681,13 @@ async def test_active_guide_read_revalidates_policy_context(
     assert response.json()["error"]["code"] == "project_authorization_resource_not_found"
 
 
-async def test_guide_activation_and_active_guide_retrieval(project_client: AsyncClient) -> None:
+async def test_active_guide_retrieval_returns_exact_policy_bundle(project_client: AsyncClient) -> None:
     project = await create_project(project_client)
     await add_project_manager_admin_grant(project["id"])
     guide = await create_guide(project_client, project["id"], complete_guide_payload())
     bundle = await create_approved_policy_bundle(project_client, project["id"], guide["id"])
 
-    activation = await activate_guide_for_downstream_test(
+    activation = await seed_active_guide_for_downstream_test(
         db_session.get_session_factory(),
         project_id=project["id"],
         guide_id=guide["id"],
@@ -7591,7 +6706,6 @@ async def test_guide_activation_and_active_guide_retrieval(project_client: Async
         headers=auth_headers(),
     )
 
-    assert activation.status_code == 200, activation.text
     assert active.status_code == 200, active.text
     assert effective_read.status_code == 200, effective_read.text
     assert checker_read.status_code == 200, checker_read.text
@@ -7650,8 +6764,8 @@ async def test_guide_activation_and_active_guide_retrieval(project_client: Async
     assert active.json()["guide"]["version"] == "v1"
     assert active.json()["guide"]["approved_by"] == guide["created_by"]
     assert active.json()["guide"]["effective_at"] is not None
-    assert activation.json()["guide"]["approved_by"] == guide["created_by"]
-    assert activation.json()["guide"]["effective_at"] == active.json()["guide"]["effective_at"]
+    assert activation["guide"]["approved_by"] == guide["created_by"]
+    assert datetime.fromisoformat(activation["guide"]["effective_at"]) == datetime.fromisoformat(active.json()["guide"]["effective_at"])
     assert active.json()["post_submit_checker_policy"]["required_checkers"] == []
     assert (
         active.json()["guide_source_snapshot"]["bundle_hash"]
@@ -7694,57 +6808,24 @@ async def test_draft_guide_edit_and_active_guide_edit_block(project_client: Asyn
     draft_update = await project_client.patch(
         f"/api/v1/projects/{project['id']}/guides/{guide['id']}",
         headers=auth_headers(),
-        json={"content_markdown": "# Updated draft"},
+        json={"change_summary": "Updated draft"},
     )
     assert draft_update.status_code == 200, draft_update.text
-    assert draft_update.json()["content_markdown"] == "# Updated draft"
+    assert draft_update.json()["change_summary"] == "Updated draft"
     await create_approved_policy_bundle(project_client, project["id"], guide["id"])
 
-    activation = await activate_guide_for_downstream_test(
+    await seed_active_guide_for_downstream_test(
         db_session.get_session_factory(),
         project_id=project["id"],
         guide_id=guide["id"],
     )
-    assert activation.status_code == 200, activation.text
 
     active_update = await project_client.patch(
         f"/api/v1/projects/{project['id']}/guides/{guide['id']}",
         headers=auth_headers(),
-        json={"content_markdown": "# Mutate active"},
+        json={"change_summary": "Mutate active"},
     )
     assert active_update.status_code == 409
-
-
-async def test_new_active_guide_supersedes_prior_without_mutating_content(
-    project_client: AsyncClient,
-) -> None:
-    project = await create_project(project_client)
-    first = await create_guide(project_client, project["id"], complete_guide_payload("v1"))
-    await create_approved_policy_bundle(project_client, project["id"], first["id"])
-    first_activation = await activate_guide_for_downstream_test(
-        db_session.get_session_factory(),
-        project_id=project["id"],
-        guide_id=first["id"],
-    )
-    assert first_activation.status_code == 200, first_activation.text
-
-    second = await create_guide(project_client, project["id"], complete_guide_payload("v2"))
-    await create_approved_policy_bundle(project_client, project["id"], second["id"])
-    second_activation = await activate_guide_for_downstream_test(
-        db_session.get_session_factory(),
-        project_id=project["id"],
-        guide_id=second["id"],
-    )
-
-    assert second_activation.status_code == 200, second_activation.text
-    assert second_activation.json()["guide"]["version"] == "v2"
-
-    async with db_session.get_session_factory()() as session:
-        first_guide = await session.get(ProjectGuide, first["id"])
-
-    assert first_guide is not None
-    assert first_guide.status == "superseded"
-    assert first_guide.content_markdown == complete_guide_payload("v1")["content_markdown"]
 
 
 async def test_database_enforces_single_active_guide_per_project(
@@ -7785,38 +6866,6 @@ async def test_active_guide_lookup_surfaces_duplicate_rows() -> None:
 
     with pytest.raises(ProjectRepositoryIntegrityError, match="multiple active guides"):
         await ProjectRepository(FakeSession()).get_active_guide("project-1")
-
-
-async def test_activation_conflict_returns_conflict_response(
-    project_client: AsyncClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project = await create_project(project_client)
-    first = await create_guide(project_client, project["id"], complete_guide_payload("v1"))
-    await create_approved_policy_bundle(project_client, project["id"], first["id"])
-    first_activation = await activate_guide_for_downstream_test(
-        db_session.get_session_factory(),
-        project_id=project["id"],
-        guide_id=first["id"],
-    )
-    assert first_activation.status_code == 200, first_activation.text
-
-    second = await create_guide(project_client, project["id"], complete_guide_payload("v2"))
-    await create_approved_policy_bundle(project_client, project["id"], second["id"])
-
-    async def hide_active_guides(self: ProjectRepository, project_id: str) -> list[ProjectGuide]:
-        return []
-
-    monkeypatch.setattr(ProjectRepository, "list_active_guides", hide_active_guides)
-
-    response = await activate_guide_for_downstream_test(
-        db_session.get_session_factory(),
-        project_id=project["id"],
-        guide_id=second["id"],
-    )
-
-    assert response.status_code == 409
-    assert "concurrent update" in response.json()["detail"]
 
 
 async def test_worker_cannot_create_project_records(

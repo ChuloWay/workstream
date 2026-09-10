@@ -28,7 +28,8 @@ _REVIEW_POLICY_HEAD_REVISION = "0011_review_policy_human_review"
 _POLICY_AUDIT_HEAD_REVISION = "0012_contribution_policy_audit_resource"
 _REQUEST_ORIGIN_HEAD_REVISION = "0013_compilation_request_origin"
 _PROJECT_ROLE_HEAD_REVISION = "0014_project_role_scope"
-_CURRENT_HEAD_REVISION = "0015_guide_runtime_configuration"
+_RUNTIME_CONFIGURATION_HEAD_REVISION = "0015_guide_runtime_configuration"
+_CURRENT_HEAD_REVISION = "0016_guide_document_runtime"
 _RECREATE_GUIDANCE = (
     "Workstream v0.1 requires a fresh database; recreate this database before "
     "running the 0001_v01_baseline migration"
@@ -69,6 +70,7 @@ def do_run_migrations(connection: Connection) -> None:
             (_POLICY_AUDIT_HEAD_REVISION,),
             (_REQUEST_ORIGIN_HEAD_REVISION,),
             (_PROJECT_ROLE_HEAD_REVISION,),
+            (_RUNTIME_CONFIGURATION_HEAD_REVISION,),
             (_CURRENT_HEAD_REVISION,),
         ):
             raise RuntimeError(_RECREATE_GUIDANCE)

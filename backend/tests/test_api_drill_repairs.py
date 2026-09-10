@@ -192,10 +192,8 @@ def test_api_drill_request_limits_are_exposed_in_openapi() -> None:
     assert project["name"]["maxLength"] == 200
     assert project["slug"]["maxLength"] == 120
     assert guide_create["version"]["maxLength"] == 50
-    assert "content_markdown" not in guide_update_schema.get("required", [])
-    assert guide_update["content_markdown"]["type"] == "string"
-    assert "anyOf" not in guide_update["content_markdown"]
-    assert "default" not in guide_update["content_markdown"]
+    assert "content_markdown" not in guide_create
+    assert "content_markdown" not in guide_update
     assert {item.get("type") for item in guide_update["change_summary"]["anyOf"]} == {
         "null",
         "string",
@@ -347,7 +345,7 @@ async def test_guide_content_null_has_no_state_then_recovery_and_omission_succee
     async with db_session.get_session_factory()() as session:
         persisted = await session.get(ProjectGuide, guide["id"])
         assert persisted is not None
-        assert persisted.content_markdown == guide["content_markdown"]
+        assert persisted.change_summary == guide["change_summary"]
         assert persisted.updated_at == seeded_updated_at
         assert (
             await session.scalar(
@@ -358,14 +356,14 @@ async def test_guide_content_null_has_no_state_then_recovery_and_omission_succee
             == 0
         )
 
-    replacement = f"{guide['content_markdown']}\n\nValid replacement."
+    replacement = "Valid metadata replacement."
     recovered = await project_client.patch(
         path,
         headers=auth_headers() | {"Idempotency-Key": str(key)},
-        json={"content_markdown": replacement},
+        json={"change_summary": replacement},
     )
     assert recovered.status_code == 200, recovered.text
-    assert recovered.json()["content_markdown"] == replacement
+    assert recovered.json()["change_summary"] == replacement
 
     summary_only = await project_client.patch(
         path,
@@ -373,13 +371,13 @@ async def test_guide_content_null_has_no_state_then_recovery_and_omission_succee
         json={"change_summary": None},
     )
     assert summary_only.status_code == 200, summary_only.text
-    assert summary_only.json()["content_markdown"] == replacement
+    assert "content_markdown" not in summary_only.json()
     assert summary_only.json()["change_summary"] is None
 
     async with db_session.get_session_factory()() as session:
         persisted = await session.get(ProjectGuide, guide["id"])
         assert persisted is not None
-        assert persisted.content_markdown == replacement
+        assert persisted.retained_content_markdown is None
         assert persisted.change_summary is None
         record = await session.scalar(
             select(GuideMutationIdempotencyRecord).where(

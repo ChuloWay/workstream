@@ -536,9 +536,6 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         "PATCH /api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies/{policy_id}": (
             "project.submission_artifact_policy.update"
         ),
-        "GET /api/v1/projects/{project_id}/guides/{guide_id}/post-submit-checker-policy/setup": (
-            "project.post_submit_checker_policy_setup.read"
-        ),
         "GET /api/v1/projects/{project_id}/guides/{guide_id}/effective-submission-artifact-policy": (
             "project.effective_submission_artifact_policy.read"
         ),

@@ -193,72 +193,31 @@ async def test_operation_insert_recomputes_referenced_business_content(
 
 
 @pytest.mark.asyncio
-async def test_source_usage_guard_blocks_late_insert_but_preserves_legacy_update(
-    clean_postgres_database: str,
-) -> None:
-    """Seal projected provenance without swallowing unrelated row updates."""
-    values = await seed_database(clean_postgres_database)
-    await _project_both(clean_postgres_database, values)
+@pytest.mark.parametrize("table", [
+    "guide_source_artifact_bindings", "guide_source_format_classifications",
+    "guide_source_extraction_attempts", "guide_source_extraction_retry_budgets",
+    "guide_source_extracted_contents", "guide_source_extraction_usages",
+    "guide_sufficiency_report_source_usages",
+])
+async def test_retained_extraction_tables_reject_every_write(clean_postgres_database, table):
+    """Retained records stay readable, but no extraction writer can resume."""
     connection = await asyncpg.connect(_url(clean_postgres_database))
-    legacy_report_id = str(uuid4())
     try:
-        projected_report_id = await connection.fetchval(
-            "select report_id from project_guide_component_projection_operations "
-            "where component='guide_sufficiency'"
+        before = await connection.fetch(f"select to_jsonb(t) from {table} t")
+        column = await connection.fetchval(
+            "select column_name from information_schema.columns "
+            "where table_schema='public' and table_name=$1 order by ordinal_position limit 1", table
         )
-        with pytest.raises(
-            asyncpg.PostgresError,
-            match="projected source usage is immutable",
+        for statement in (
+            f"insert into {table} select * from {table} where false",
+            f'update {table} set "{column}"="{column}" where false',
+            f"delete from {table} where false",
+            f"truncate {table} cascade",
         ):
-            await connection.execute(
-                "insert into guide_sufficiency_report_source_usages "
-                "select $1,report_id,99,source_item_id,binding_id,content_id,"
-                "extraction_usage_id,extraction_attempt_id,extracted_content_id,"
-                "project_setup_run_id,setup_generation,canonical_output_sha256 "
-                "from guide_sufficiency_report_source_usages where report_id=$2",
-                str(uuid4()),
-                projected_report_id,
-            )
-
-        await connection.execute(
-            "insert into guide_sufficiency_reports(id,project_id,guide_id,guide_version,"
-            "source_snapshot_id,source_snapshot_hash,status,findings,created_by) "
-            "select $1,project_id,guide_id,guide_version,source_snapshot_id,"
-            "source_snapshot_hash,status,findings,'legacy-test' "
-            "from guide_sufficiency_reports where id=$2",
-            legacy_report_id,
-            projected_report_id,
-        )
-        await connection.execute(
-            "insert into guide_sufficiency_report_source_usages "
-            "select $1,$2,item_order,source_item_id,binding_id,content_id,"
-            "extraction_usage_id,extraction_attempt_id,extracted_content_id,"
-            "project_setup_run_id,setup_generation,canonical_output_sha256 "
-            "from guide_sufficiency_report_source_usages where report_id=$3",
-            str(uuid4()),
-            legacy_report_id,
-            projected_report_id,
-        )
-        await connection.execute(
-            "update guide_sufficiency_report_source_usages set item_order=7 where report_id=$1",
-            legacy_report_id,
-        )
-        assert (
-            await connection.fetchval(
-                "select item_order from guide_sufficiency_report_source_usages where report_id=$1",
-                legacy_report_id,
-            )
-            == 7
-        )
-        with pytest.raises(
-            asyncpg.PostgresError,
-            match="projected source usage is immutable",
-        ):
-            await connection.execute(
-                "update guide_sufficiency_report_source_usages set report_id=$1 where report_id=$2",
-                projected_report_id,
-                legacy_report_id,
-            )
+            with pytest.raises(asyncpg.PostgresError, match="retained guide extraction evidence is read only") as error:
+                await connection.execute(statement)
+            assert error.value.sqlstate == "55000"
+            assert await connection.fetch(f"select to_jsonb(t) from {table} t") == before
     finally:
         await connection.close()
 
@@ -273,9 +232,6 @@ async def test_source_usage_guard_blocks_late_insert_but_preserves_legacy_update
         "update guide_sufficiency_reports set summary='changed'",
         "delete from guide_sufficiency_reports",
         "truncate guide_sufficiency_reports",
-        "update guide_sufficiency_report_source_usages set item_order=99",
-        "delete from guide_sufficiency_report_source_usages",
-        "truncate guide_sufficiency_report_source_usages",
         "update submission_artifact_policies set policy_body='{}'::json",
         "delete from submission_artifact_policies",
         "truncate submission_artifact_policies",
@@ -347,13 +303,14 @@ async def test_verified_reports_allow_same_snapshot_across_setup_generations(
 
 
 @pytest.mark.postgres_schema_contract
-def test_empty_projection_migration_downgrades_and_reupgrades(
+def test_projection_migration_installs_and_replays_from_prior_schema(
     isolated_database_env: str,
     migration_lock,
+    migration_schema_at,
 ) -> None:
     clean_postgres_database = isolated_database_env
     with migration_lock():
-        command.downgrade(_config(), "0008_guide_compilation_authorized_persistence")
+        migration_schema_at("0008_guide_compilation_authorized_persistence")
     assert asyncio.run(_version(clean_postgres_database)) == (
         "0008_guide_compilation_authorized_persistence"
     )
@@ -364,7 +321,7 @@ def test_empty_projection_migration_downgrades_and_reupgrades(
 
     with migration_lock():
         command.upgrade(_config(), "head")
-    assert asyncio.run(_version(clean_postgres_database)) == ("0015_guide_runtime_configuration")
+    assert asyncio.run(_version(clean_postgres_database)) == ("0016_guide_document_runtime")
 
 
 def test_populated_projection_migration_refuses_downgrade(

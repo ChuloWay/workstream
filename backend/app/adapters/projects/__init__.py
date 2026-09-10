@@ -1,8 +1,9 @@
 """PROJECT-owned composition adapters."""
 
+from app.modules.projects.api.guide_documents import ProjectGuideDocumentScopePort
 from collections.abc import Callable
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from app.interfaces.artifact_operations import GuideSufficiencyMaterialPort
+from app.modules.projects.api.guide_documents import GuideDocumentManifestPort, GuideDocumentAccessFactory
 from app.interfaces.project_agents import ProjectGuideAgentRuntime
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.checkers.api.pre_submit_catalogue import PreSubmissionCapabilityProjection
@@ -46,7 +47,8 @@ def project_contribution_policy_eligibility_port(
 def project_guide_compilation_delivery_port(
     session_factory: async_sessionmaker[AsyncSession],
     *,
-    material_factory: Callable[[AsyncSession], GuideSufficiencyMaterialPort],
+    material_factory: Callable[[AsyncSession], GuideDocumentManifestPort],
+    document_access_factory: GuideDocumentAccessFactory,
     pre_capabilities: PreSubmissionCapabilityProjection,
     post_capabilities: PostSubmitCatalogue,
     request_authority: RequestAuthority,
@@ -78,6 +80,7 @@ def project_guide_compilation_delivery_port(
             post_submission_capabilities=post_capabilities,
             authorization_context=execution_authority,
             runtime_factory=runtime_factory,
+            document_access_factory=document_access_factory,
         ),
         projections=GuideCompilationProjectionService(
             session_factory,
@@ -87,3 +90,37 @@ def project_guide_compilation_delivery_port(
         ),
         finalization_authorization_factory=finalization_authorization_factory,
     )
+
+
+async def cleanup_project_guide_runtime_resources(session_factory, *, runtime_factory):
+    """Compose exact retained cleanup scopes without source grants or inference admission."""
+    from app.modules.projects.guide_compilation.runtime_resources import (
+        SqlAlchemyGuideRuntimeCleanupCustody, pending_runtime_resource_cleanup,
+    )
+
+    async with session_factory() as session:
+        candidates = await pending_runtime_resource_cleanup(session)
+    completed = 0
+    for attempt_id, manifest_sha256, configuration in candidates:
+        runtime = None
+        try:
+            runtime = runtime_factory(configuration)
+            if runtime.identity != configuration.adapter_identity:
+                raise ValueError("cleanup runtime identity mismatch")
+            custody = SqlAlchemyGuideRuntimeCleanupCustody(
+                session_factory, attempt_id, manifest_sha256, configuration.runtime_key,
+            )
+            completed += bool(await runtime.cleanup_resources(custody))
+        except Exception:
+            # Keep exact-ID custody for the next bounded scan; never re-enter inference.
+            continue
+        finally:
+            if runtime is not None:
+                await runtime.aclose()
+    return {"selected": len(candidates), "completed": completed}
+
+
+def project_guide_document_scope_port(session: AsyncSession) -> ProjectGuideDocumentScopePort:
+    """Bind PROJECTS current document scope independently from ART storage."""
+    from app.modules.projects.guide_compilation.orchestrator import project_guide_document_scope_port as compose_scope
+    return compose_scope(session)

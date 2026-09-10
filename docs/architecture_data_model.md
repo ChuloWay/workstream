@@ -208,6 +208,10 @@ Status:
 
 ## ProjectGuide
 
+Current guide content is the versioned PDF/DOCX/PPTX original-document manifest
+and private ArtifactStore objects. Guide metadata writes do not accept inline
+Markdown; PostgreSQL stores no newly extracted document bodies.
+
 Fields:
 
 - `id`
@@ -216,7 +220,7 @@ Fields:
 - `contribution_policy_version_id`
 - `status`
 - `activation_sequence` (nullable only while draft; immutable after allocation)
-- `content_markdown`
+- `retained_content_markdown` (read-only retained data; excluded from current APIs)
 - `change_summary`
 - `approved_by`
 - `effective_at`
@@ -450,14 +454,14 @@ Fields:
 - `created_by_service`
 - `created_at`
 
-`GuideSourceArtifactBinding` is the immutable, authoritative link from one
-guide-source item and exact setup generation to one independently verified
-`ArtifactContent` and replica. Composite foreign keys preserve the exact
+`GuideSourceArtifactBinding` is retained read-only evidence from the removed
+guide verification flow. Current guide setup uses committed original-document
+metadata and attempt-scoped document access records; it creates no new binding
+or extraction records. The retained binding links a source item and setup
+generation to its recorded `ArtifactContent` and replica. Composite foreign keys preserve the exact
 project, guide, snapshot, item, setup-run, generation, content, and replica
-lineage. One binding may exist per source item and generation. A later
-generation explicitly references the prior binding through
-`supersedes_binding_id`; it never overwrites the earlier fact. Source-item
-metadata alone cannot establish artifact identity.
+lineage. Retained `supersedes_binding_id` references remain intact. Their presence
+does not authorize any current reader or writer.
 
 ## GuideSufficiencyReport
 

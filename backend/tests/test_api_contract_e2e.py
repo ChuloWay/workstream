@@ -123,10 +123,9 @@ async def test_api_drill_seeds_one_canonical_post_submit_policy(
     from app.modules.projects.post_submit_policy import PostSubmitCheckerCompilerError
 
     api_contract = MODULES[0]
-    setup = SimpleNamespace()
     pre = SimpleNamespace(id=str(uuid4()), compiled_bundle_hash="sha256:" + "a" * 64)
     session = SimpleNamespace(
-        scalar=AsyncMock(side_effect=[pre, setup, None]),
+        scalar=AsyncMock(return_value=pre),
         add=Mock(),
         commit=AsyncMock(),
     )
@@ -173,6 +172,7 @@ async def test_api_drill_seeds_one_canonical_post_submit_policy(
     )
     assert set(parsed.default_checkers) == api_contract.EXPECTED_DURABLE_CHECKERS
     assert result == {"id": policy.id, "policy_hash": parsed.policy_hash}
-    assert setup.output_post_submit_checker_policy_id == policy.id
-    assert setup.post_submit_derivation_summary["required_checkers"] == policy.required_checkers
+    assert policy.lifecycle_status == "approved"
+    assert policy.pre_submit_checker_policy_id == pre.id
+    session.scalar.assert_awaited_once()
     session.commit.assert_awaited_once()

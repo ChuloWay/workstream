@@ -106,6 +106,7 @@ def source_view(classification="draft_ready"):
         created_by="fixture",
         created_at=NOW,
         updated_at=NOW,
+        documents_ready_at=NOW,
         celery_task_id=project_guide_compilation_task_id(str(setup), 1),
     )
     s = SimpleNamespace(**state)
@@ -166,7 +167,7 @@ def projected_view(empty, lineage, outcome, actor, link):
             "guide_blocked": "blocked",
             "draft_ready_with_warnings": "passed_with_warnings",
         }[classification],
-        findings=[x.model_dump() for x in outcome.findings],
+        findings=[x.model_dump(mode="json") for x in outcome.findings],
         summary=None,
         agent_name="ProjectGuideCompilationProjection",
         agent_version="v1",

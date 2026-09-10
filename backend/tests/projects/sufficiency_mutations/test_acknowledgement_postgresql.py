@@ -1,6 +1,7 @@
 """Real acknowledgement failure custody; executed on hosted PostgreSQL."""
 
 from unittest.mock import AsyncMock
+from types import SimpleNamespace
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -26,7 +27,7 @@ from projects.guide_fixtures import (
     create_source_snapshot,
 )
 from projects.submission_policy_fixtures import create_sufficiency_report
-from verified_guide_fixtures import create_verified_report_fixture
+from committed_guide_fixtures import create_compiled_report_fixture
 
 
 ACK_ACTION = "project.guide_sufficiency.warnings.acknowledge"
@@ -88,17 +89,14 @@ async def test_acknowledgement_late_conflict_rolls_back(project_client, monkeypa
         snapshot["id"],
         status="passed_with_warnings",
     )
-    report_id = await create_verified_report_fixture(diagnostic["id"], snapshot["id"])
+    report_id = await create_compiled_report_fixture(diagnostic["id"], snapshot["id"])
     headers = auth_headers()
     key = UUID(headers["Idempotency-Key"])
     factory = db_session.get_session_factory()
     async with factory() as session:
-        report = await session.get(GuideSufficiencyReport, report_id)
-        report.setup_generation += 1
-        await session.commit()
         before = await transaction_state(session, report_id, project["id"], key)
     assert before[0]["warnings_acknowledged_at"] is None
-    assert before[0]["setup_generation"] == before[1]["setup_generation"] + 1
+    assert before[0]["setup_generation"] == before[1]["setup_generation"]
     original_lock = ProjectRepository.lock_project_setup_run
     observed = []
 
@@ -110,7 +108,13 @@ async def test_acknowledgement_late_conflict_rolls_back(project_client, monkeypa
         assert staged[1] == before[1]
         assert staged[2:] == (before[2] + 1, before[3] + 1)
         observed.append(setup_run_id)
-        return setup
+        # The report is immutable. Inject a conflicting locked-setup read at
+        # the late boundary instead of corrupting retained report evidence.
+        return SimpleNamespace(
+            id=setup.id, setup_generation=setup.setup_generation + 1,
+            output_sufficiency_report_id=setup.output_sufficiency_report_id,
+            output_submission_artifact_policy_id=setup.output_submission_artifact_policy_id,
+        )
 
     dispatch = AsyncMock(side_effect=AssertionError("denied acknowledgement dispatched work"))
     monkeypatch.setattr(ProjectRepository, "lock_project_setup_run", observe_staged_effects)

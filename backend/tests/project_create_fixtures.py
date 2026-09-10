@@ -7,7 +7,6 @@ import re
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from httpx import Response
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
@@ -25,9 +24,7 @@ from app.modules.authorization.runtime import (
     ProjectCreateResourceContext,
     authorization_resource_digest,
 )
-from app.modules.projects.models import Project, ProjectCreateIdempotencyRecord
-from app.modules.projects.service import ProjectService, ProjectServiceError
-from app.schemas.auth import ActorContext
+from app.modules.projects.models import Project, ProjectGuide, ProjectCreateIdempotencyRecord
 
 
 _ISOLATED_DATABASE_RE = re.compile(r"workstream_test_([a-f0-9]{12})")
@@ -80,54 +77,38 @@ async def suspend_historical_product_custody(
         raise
 
 
-async def activate_guide_for_downstream_test(
-    session_factory,
-    *,
-    project_id: str,
-    guide_id: str,
-) -> Response:
-    """Seed the pre-12H active-guide prerequisite without exposing an API route.
-
-    AUTH-12D deliberately removes the legacy activation endpoint. Downstream
-    subsystem tests still need active historical state until AUTH-12H installs
-    the authorized activation mutation, so this fixture exercises the existing
-    product validation while explicitly suspending the
-    ``guide_mutation_product_custody`` and ``guide_lineage_lifecycle_guard``
-    triggers.
-    """
+async def seed_active_guide_for_downstream_test(
+    session_factory, *, project_id: str, guide_id: str,
+) -> dict:
+    """Seed a downstream prerequisite; no activation or approval flow is exercised."""
     async with session_factory() as session:
-        link = await session.scalar(
-            select(ActorIdentityLink).where(
-                ActorIdentityLink.issuer == "flow-test",
-                ActorIdentityLink.subject == "project-manager-subject",
-            )
-        )
+        link = await session.scalar(select(ActorIdentityLink).where(
+            ActorIdentityLink.issuer == "flow-test",
+            ActorIdentityLink.subject == "project-manager-subject",
+        ))
         if link is None:
-            raise RuntimeError("downstream activation fixture requires an admitted actor")
-        actor = ActorContext(
-            actor_id=str(link.actor_profile_id),
-            external_subject=link.subject,
-            external_issuer=link.issuer,
-            roles=("project_manager",),
-            claim_snapshot={},
-            auth_source="dev_mock",
-            is_dev_auth=True,
-        )
-        try:
-            async with suspend_historical_product_custody(
-                session,
-                table="project_guides",
-                triggers=(
-                    "guide_mutation_product_custody",
-                    "guide_lineage_lifecycle_guard",
-                ),
-            ):
-                result = await ProjectService(session).activate_guide(actor, project_id, guide_id)
-            await session.commit()
-            return Response(status_code=200, json=result.model_dump(mode="json"))
-        except ProjectServiceError as exc:
-            await session.rollback()
-            return Response(status_code=exc.status_code, json={"detail": str(exc)})
+            raise RuntimeError("downstream guide fixture requires an admitted actor")
+        guide = await session.get(ProjectGuide, guide_id)
+        project = await session.get(Project, project_id)
+        assert guide is not None and project is not None and guide.project_id == project.id
+        now = datetime.now(UTC)
+        async with suspend_historical_product_custody(session, table="project_guides",
+            triggers=("guide_mutation_product_custody", "guide_lineage_lifecycle_guard")):
+            for prior in await session.scalars(select(ProjectGuide).where(
+                ProjectGuide.project_id == project_id, ProjectGuide.status == "active")):
+                prior.status = "superseded"
+                prior.superseded_at = now
+            await session.flush()
+            guide.status = "active"
+            guide.approved_by = link.actor_profile_id
+            guide.effective_at = now
+            project.status = "active"
+            await session.flush()
+        seeded = {"guide": {"id": guide.id, "version": guide.version,
+            "status": guide.status, "approved_by": guide.approved_by,
+            "effective_at": guide.effective_at.isoformat()}}
+        await session.commit()
+        return seeded
 
 
 async def grant_system_project_manager(

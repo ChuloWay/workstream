@@ -4,15 +4,12 @@ from app.modules.projects.models import ProjectSetupRun
 
 
 def is_compilation_source_setup(setup: ProjectSetupRun, expected_task: str) -> bool:
-    """Require untouched outputs and a consistent ART continuation pair."""
+    """Require untouched outputs and committed original-document readiness."""
     return (
         setup.status == "queued"
         and setup.current_step == "queued"
         and setup.celery_task_id == expected_task
-        and (
-            (setup.continuation_verification_job_id is None)
-            == (setup.continuation_started_at is None)
-        )
+        and setup.documents_ready_at is not None
         and all(
             getattr(setup, field) is None
             for field in (

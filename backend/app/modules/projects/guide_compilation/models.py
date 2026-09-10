@@ -716,3 +716,50 @@ class ProjectGuideSetupFinalization(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.transaction_timestamp()
     )
+
+
+class ProjectGuideRuntimeAllocation(Base):
+    """Bounded exact-ID cleanup custody; never source bytes or provider transcripts."""
+
+    __tablename__ = "project_guide_runtime_allocations"
+    __table_args__ = (
+        UniqueConstraint("attempt_id", "kind", "document_handle",
+                         name="uq_guide_runtime_allocation_slot", postgresql_nulls_not_distinct=True),
+        CheckConstraint("kind in ('container','file','attachment')", name="ck_guide_resource_kind"),
+        CheckConstraint("state in ('allocating','allocated','uncertain','cleanup_failed','deleted')",
+                        name="ck_guide_resource_state"),
+        CheckConstraint("(kind='container' and document_handle is null and parent_provider_id is null) or "
+                        "(kind='file' and document_handle is not null and parent_provider_id is null) or "
+                        "(kind='attachment' and document_handle is not null and parent_provider_id is not null)",
+                        name="ck_guide_resource_scope"),
+        CheckConstraint("state in ('allocating','uncertain') or provider_id is not null",
+                        name="ck_guide_resource_identity"),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    attempt_id: Mapped[UUID] = mapped_column(ForeignKey("project_guide_compilation_attempts.id"), index=True)
+    manifest_sha256: Mapped[str] = mapped_column(String(71))
+    runtime_key: Mapped[str] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(String(16))
+    state: Mapped[str] = mapped_column(String(20))
+    document_handle: Mapped[UUID | None] = mapped_column(Uuid())
+    provider_id: Mapped[str | None] = mapped_column(String(128))
+    parent_provider_id: Mapped[str | None] = mapped_column(String(128))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ProjectGuideDocumentAccess(Base):
+    """Immutable successful original-file access evidence for an exact fenced run."""
+
+    __tablename__ = "project_guide_document_accesses"
+    __table_args__ = (UniqueConstraint("attempt_id", "source_item_id", name="uq_guide_document_access"),)
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    attempt_id: Mapped[UUID] = mapped_column(ForeignKey("project_guide_compilation_attempts.id"), index=True)
+    source_item_id: Mapped[str] = mapped_column(ForeignKey("guide_source_snapshot_items.id"))
+    document_version_id: Mapped[str] = mapped_column(ForeignKey("guide_source_artifact_ingests.id"))
+    attachment_allocation_id: Mapped[UUID] = mapped_column(ForeignKey("project_guide_runtime_allocations.id"))
+    manifest_sha256: Mapped[str] = mapped_column(String(71))
+    sha256: Mapped[str] = mapped_column(String(71))
+    document_handle: Mapped[UUID] = mapped_column(Uuid())
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

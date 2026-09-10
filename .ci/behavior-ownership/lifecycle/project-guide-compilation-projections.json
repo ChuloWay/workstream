@@ -13,7 +13,6 @@
     "app.modules.projects.guide_compilation.projections.GuideCompilationProjectionService.project_submission_artifact_policy",
     "app.modules.projects.guide_compilation.projections._UnavailablePolicyAuthorization.prepare_artifact_policy_projection",
     "app.modules.projects.guide_compilation.projections._UnavailableSufficiencyAuthorization.prepare_sufficiency_projection",
-    "app.modules.projects.guide_compilation.projections._add_source_usages",
     "app.modules.projects.guide_compilation.projections._is_exact_projection_source_state",
     "app.modules.projects.guide_compilation.projections._new_operation",
     "app.modules.projects.guide_compilation.projections._new_policy",

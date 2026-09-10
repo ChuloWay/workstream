@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
 from app.modules.actors.models import ActorProfile, ActorIdentityLink
-from app.modules.artifacts.guide_sufficiency_material import (
-    SqlAlchemyGuideSufficiencyMaterialAdapter,
+from app.adapters.artifacts import (
+    guide_document_manifest_port,
 )
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind, AuthorizationDenied
 from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue
@@ -30,7 +30,7 @@ from tests.projects.guide_fixtures import (
     create_source_snapshot,
     complete_guide_payload,
 )
-from tests.verified_guide_fixtures import create_verified_material_fixture
+from tests.committed_guide_fixtures import create_committed_document_fixture
 from .test_authorized_execution_service import _execution_service
 
 
@@ -77,7 +77,7 @@ def acknowledge_automatic_setup(setup):
 
 def automatic_service(session, actor):
     inputs = AutomaticCompilationInputs(
-        SqlAlchemyGuideSufficiencyMaterialAdapter(session),
+        guide_document_manifest_port(session),
         project_guide_pre_submission_capabilities(build_pre_submission_checker_catalogue()),
         current_post_submit_catalogue(),
         runtime_configuration=runtime_configuration(),
@@ -86,14 +86,14 @@ def automatic_service(session, actor):
 
 
 @pytest.mark.asyncio
-async def test_automatic_source_requires_material_then_persists_one_request_and_replays(
+async def test_automatic_source_requires_documents_then_persists_one_request_and_replays(
     automatic_source,
 ):
     factory, actor, setup_id, snapshot = automatic_source
-    from app.interfaces.artifact_operations import GuideSufficiencyMaterialUnavailable
+    from app.modules.projects.guide_compilation.repository import GuideCompilationIntegrityError
 
     async with factory() as session:
-        with pytest.raises(GuideSufficiencyMaterialUnavailable):
+        with pytest.raises(GuideCompilationIntegrityError, match="automatic compilation setup unavailable"):
             await automatic_service(session, actor).request_automatic(
                 actor=actor, setup_run_id=setup_id
             )
@@ -110,7 +110,7 @@ async def test_automatic_source_requires_material_then_persists_one_request_and_
             )
             == 0
         )
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     async with factory() as session:
         first = await automatic_service(session, actor).request_automatic(
             actor=actor, setup_run_id=setup_id
@@ -148,7 +148,7 @@ async def test_automatic_source_requires_material_then_persists_one_request_and_
 @pytest.mark.asyncio
 async def test_revoked_service_cannot_recover_automatic_request(automatic_source):
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     async with factory() as session:
         await automatic_service(session, actor).request_automatic(
             actor=actor, setup_run_id=setup_id
@@ -180,7 +180,7 @@ async def test_concurrent_automatic_callbacks_share_one_attempt(automatic_source
     import asyncio
 
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
 
     async def request():
         async with factory() as session:
@@ -215,7 +215,7 @@ async def test_direct_insert_rejects_forged_source_origin(automatic_source, colu
     )
 
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     async with factory() as session:
         await automatic_service(session, actor).request_automatic(
             actor=actor, setup_run_id=setup_id
@@ -250,7 +250,7 @@ async def test_sql_origin_rejects_each_missing_lineage_selector(automatic_source
     )
 
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     async with factory() as session, session.begin():
         facts, _identity, origin = await automatic_service(
             session, actor
@@ -299,7 +299,7 @@ async def test_direct_automatic_insert_requires_exact_authority_and_content(
     )
 
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     async with factory() as session:
         await automatic_service(session, actor).request_automatic(
             actor=actor, setup_run_id=setup_id
@@ -327,7 +327,7 @@ async def test_original_manager_revocation_does_not_rewrite_source_consent(
     automatic_source, authority
 ):
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     async with factory() as session, session.begin():
         setup = await session.get(ProjectSetupRun, str(setup_id))
         if authority == "identity_link":
@@ -375,7 +375,7 @@ async def test_retained_automatic_evidence_prevents_configuration_downgrade(
     from alembic.config import Config
 
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     async with factory() as session:
         await automatic_service(session, actor).request_automatic(
             actor=actor, setup_run_id=setup_id
@@ -385,16 +385,14 @@ async def test_retained_automatic_evidence_prevents_configuration_downgrade(
         with migration_lock():
             command.downgrade(Config("alembic.ini"), "0012_contribution_policy_audit_resource")
 
-    from sqlalchemy.exc import DBAPIError
-
     with pytest.raises(
-        DBAPIError, match="cannot remove retained compilation runtime configuration"
+        RuntimeError, match="guide document runtime downgrade would discard retained evidence"
     ):
         await asyncio.to_thread(downgrade)
     async with factory() as session:
         assert (
             await session.scalar(text("select version_num from alembic_version"))
-            == "0015_guide_runtime_configuration"
+            == "0016_guide_document_runtime"
         )
         assert (
             await session.scalar(
@@ -417,7 +415,7 @@ async def test_concurrent_request_recovery_rechecks_current_authority(
     from .test_authorized_request_service import _authorized_service
 
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     async with factory() as session, session.begin():
         facts, identity, origin = await automatic_service(session, actor)._automatic_inputs.resolve(
             session, setup_id
@@ -540,8 +538,8 @@ async def test_stored_foreign_source_is_rejected_by_repository_and_insert(
     other_snapshot = await create_source_snapshot(
         project_client, other_project["id"], other_guide["id"]
     )
-    await create_verified_material_fixture(snapshot["id"])
-    await create_verified_material_fixture(other_snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
+    await create_committed_document_fixture(other_snapshot["id"])
     async with factory() as session, session.begin():
         other_setup = await session.scalar(
             select(ProjectSetupRun).where(
@@ -636,7 +634,7 @@ async def test_direct_insert_checks_exact_authority_digest(automatic_source, eve
     )
 
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     async with factory() as session:
         await automatic_service(session, actor).request_automatic(
             actor=actor, setup_run_id=setup_id
@@ -686,7 +684,7 @@ async def test_new_source_invalidates_unrequested_older_source(automatic_source,
     )
 
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     async with factory() as session, session.begin():
         facts, _, origin = await automatic_service(session, actor)._automatic_inputs.resolve(
             session, setup_id
@@ -723,7 +721,7 @@ async def test_automatic_replay_holds_authority_until_receipt_classification(
     from app.modules.projects.guide_compilation import service as service_module
 
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     entered, release, revoke_started = asyncio.Event(), asyncio.Event(), asyncio.Event()
     original = service_module._request_receipt
 

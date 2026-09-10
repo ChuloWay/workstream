@@ -120,7 +120,7 @@ def require_source_shape(view: LockedFinalization) -> str:
     if (
         s.status != "queued"
         or s.current_step != "queued"
-        or (s.continuation_verification_job_id is None) != (s.continuation_started_at is None)
+        or s.documents_ready_at is None
     ):
         deny()
     for name in (

@@ -62,7 +62,6 @@ from app.modules.authorization.runtime import (
     ArtifactPendingWorkResourceContext,
     ArtifactPutAttemptResourceContext,
     ArtifactVerificationJobResourceContext,
-    GuideSourceBindingResourceContext,
     GuideSourceReadResourceContext,
     SubmissionBindingResourceContext,
     SubmissionCreationResourceContext,
@@ -144,10 +143,6 @@ class PreparedAuthorizationHandle:
 _HANDLE_CONSTRUCTOR_TOKEN = object()
 
 _EXACT_ARTIFACT_RESOURCE_BY_ACTION = {
-    ActionId.ARTIFACT_GUIDE_SOURCE_BINDING_CREATE: (
-        "guide_source_binding",
-        GuideSourceBindingResourceContext,
-    ),
     ActionId.ARTIFACT_GUIDE_SOURCE_READ: (
         "guide_source_read",
         GuideSourceReadResourceContext,

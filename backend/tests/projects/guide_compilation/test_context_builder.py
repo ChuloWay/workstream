@@ -13,8 +13,8 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.modules.artifacts.guide_sufficiency_material import (
-    SqlAlchemyGuideSufficiencyMaterialAdapter,
+from app.adapters.artifacts import (
+    guide_document_manifest_port,
 )
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.checkers.catalogue import (
@@ -32,7 +32,7 @@ from app.modules.projects.guide_compilation.service import (
 )
 from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
 
-from .helpers import context, identity, seed_database
+from .helpers import context, identity, seed_database, DOCUMENT_VERSION_ID, PUT_ATTEMPT_ID
 from .test_authorized_request_service import _authorized_service, _request, _seed_human
 
 
@@ -60,7 +60,7 @@ async def test_context_rebuilds_the_exact_authorized_art_backed_identity(
             rebuilt = await build_project_guide_compilation_context(
                 session,
                 state=state,
-                material=SqlAlchemyGuideSufficiencyMaterialAdapter(session),
+                material=guide_document_manifest_port(session),
                 pre_submission_capabilities=project_guide_pre_submission_capabilities(
                     build_pre_submission_checker_catalogue()
                 ),
@@ -69,7 +69,8 @@ async def test_context_rebuilds_the_exact_authorized_art_backed_identity(
 
         assert rebuilt == context(values)
         assert CompilationAttemptIdentity.from_context(rebuilt) == state.identity
-        assert rebuilt.material.source_lineage[0].extraction_usage_id is not None
+        assert rebuilt.material.documents[0].ingest_id == DOCUMENT_VERSION_ID
+        assert rebuilt.material.documents[0].put_attempt_id == PUT_ATTEMPT_ID
     finally:
         await engine.dispose()
 
@@ -103,7 +104,7 @@ async def test_context_drift_fails_before_dispatch(
                 await build_project_guide_compilation_context(
                     session,
                     state=state,
-                    material=SqlAlchemyGuideSufficiencyMaterialAdapter(session),
+                    material=guide_document_manifest_port(session),
                     pre_submission_capabilities=project_guide_pre_submission_capabilities(
                         drifted_catalogue
                     ),
@@ -142,7 +143,7 @@ async def test_context_requires_fresh_session_and_current_lineage(
                 await build_project_guide_compilation_context(
                     session,
                     state=state,
-                    material=SqlAlchemyGuideSufficiencyMaterialAdapter(session),
+                    material=guide_document_manifest_port(session),
                     pre_submission_capabilities=capabilities,
                     post_submission_capabilities=post_capabilities,
                 )
@@ -155,7 +156,7 @@ async def test_context_requires_fresh_session_and_current_lineage(
                 await build_project_guide_compilation_context(
                     session,
                     state=missing,
-                    material=SqlAlchemyGuideSufficiencyMaterialAdapter(session),
+                    material=guide_document_manifest_port(session),
                     pre_submission_capabilities=capabilities,
                     post_submission_capabilities=post_capabilities,
                 )
@@ -194,7 +195,7 @@ async def test_context_enforces_the_canonical_prompt_limit(
                 await build_project_guide_compilation_context(
                     session,
                     state=state,
-                    material=SqlAlchemyGuideSufficiencyMaterialAdapter(session),
+                    material=guide_document_manifest_port(session),
                     pre_submission_capabilities=project_guide_pre_submission_capabilities(
                         build_pre_submission_checker_catalogue()
                     ),

@@ -33,16 +33,15 @@ from app.modules.api_controls.service import (
 )
 from app.modules.projects.models import (
     PaymentPolicy,
+    Project,
+    ProjectGuide,
     PostSubmitCheckerPolicy,
     PreSubmitCheckerPolicy,
-    ProjectSetupRun,
 )
 from app.modules.projects.post_submit_policy import (
     build_project_post_submit_checker_spec,
     compile_project_post_submit_checker_spec,
 )
-from app.modules.projects.service import ProjectService
-from app.schemas.auth import ActorContext
 from run_isolated_tests import NAME_RE as DERIVED_DATABASE_NAME
 from bootstrap_access_administrator import _run as run_admin_bootstrap
 
@@ -99,34 +98,33 @@ async def seed_active_guide_for_pre_12h_e2e(
         )
         if link is None:
             raise RuntimeError("pre-12H activation seed requires an admitted actor")
-        actor = ActorContext(
-            actor_id=str(link.actor_profile_id),
-            external_subject=link.subject,
-            external_issuer=link.issuer,
-            roles=("project_manager",),
-            claim_snapshot={},
-            auth_source="flow",
-            is_dev_auth=False,
-        )
-        await session.execute(
-            text("alter table project_guides disable trigger guide_mutation_product_custody")
-        )
-        await session.execute(
-            text("alter table project_guides disable trigger guide_lineage_lifecycle_guard")
-        )
-        await session.commit()
+        guide = await session.get(ProjectGuide, guide_id)
+        project = await session.get(Project, project_id)
+        ensure(guide is not None and project is not None and guide.project_id == project.id,
+               "active guide fixture requires exact project lineage")
+        triggers = ("guide_mutation_product_custody", "guide_lineage_lifecycle_guard")
         try:
-            result = await ProjectService(session).activate_guide(actor, project_id, guide_id)
-            return result.model_dump(mode="json")
-        finally:
-            await session.rollback()
-            await session.execute(
-                text("alter table project_guides enable trigger guide_lineage_lifecycle_guard")
-            )
-            await session.execute(
-                text("alter table project_guides enable trigger guide_mutation_product_custody")
-            )
+            for trigger in triggers:
+                await session.execute(text(f"alter table project_guides disable trigger {trigger}"))
+            now = datetime.now(UTC)
+            for prior in await session.scalars(select(ProjectGuide).where(
+                    ProjectGuide.project_id == project_id, ProjectGuide.status == "active")):
+                prior.status = "superseded"
+                prior.superseded_at = now
+            await session.flush()
+            guide.status = "active"
+            guide.approved_by = link.actor_profile_id
+            guide.effective_at = now
+            project.status = "active"
+            await session.flush()
+            seeded = {"guide": {"id": guide.id, "version": guide.version}}
+            for trigger in reversed(triggers):
+                await session.execute(text(f"alter table project_guides enable trigger {trigger}"))
             await session.commit()
+            return seeded
+        except BaseException:
+            await session.rollback()
+            raise
 
 
 DEFAULT_FLOW_ISSUER = "https://auth.flow.local/e2e"
@@ -712,12 +710,6 @@ def guide_payload(run_id: str) -> dict:
     """
     return {
         "version": "v1",
-        "content_markdown": (
-            f"# Real API Guide {run_id}\n\n"
-            "Complete the real API task. Submit an artifact manifest and "
-            "reviewable evidence. Do not include credentials or private source "
-            "data."
-        ),
         "change_summary": "Initial real API guide",
     }
 
@@ -877,10 +869,10 @@ async def exercise_guide_setup_contract(
         {
             "items": [
                 {
-                    "source_kind": "inline_markdown",
-                    "source_label": f"guide-{run_id}.md",
-                    "ingestion_adapter": "manual_import",
-                    "media_type": "text/markdown",
+                    "source_kind": "document",
+                    "source_label": f"guide-{run_id}.pdf",
+                    "ingestion_adapter": "upload",
+                    "media_type": "application/pdf",
                 }
             ]
         },
@@ -888,11 +880,8 @@ async def exercise_guide_setup_contract(
         idempotency_key=str(uuid4()),
     )
     for item in snapshot["items"]:
-        payload = (
-            json.dumps({"guide_source": item["source_label"]}, sort_keys=True).encode()
-            if item["media_type"] == "application/json"
-            else f"# {item['source_label']}\nBounded verified guide material.\n".encode()
-        )
+        from guide_compilation_e2e import guide_pdf_bytes
+        payload = guide_pdf_bytes()
         upload = await client.post(
             f"/api/v1/projects/{project_id}/guides/{guide_id}/source-snapshots/"
             f"{snapshot['id']}/items/{item['id']}/artifact",
@@ -909,23 +898,23 @@ async def exercise_guide_setup_contract(
     # SQLAlchemy connections never cross loops. Each adapter still consumes
     # its exact fixed-service authority and provider-neutral ART boundary.
     from app.adapters.artifacts.internal_workers import (
-        continue_guide_setup_after_verification,
+        continue_guide_setup_after_stored_document,
         run_artifact_internal_operation,
         scan_artifact_pending_work,
     )
 
     async def publish_put_attempt(attempt_id: str) -> None:
         await run_artifact_internal_operation("put", UUID(attempt_id))
+        await continue_guide_setup_after_stored_document(UUID(attempt_id))
 
     async def publish_verification_job(job_id: str) -> None:
         identifier = UUID(job_id)
         await run_artifact_internal_operation("verification", identifier)
-        await continue_guide_setup_after_verification(identifier)
 
     from unittest.mock import patch
 
     # Emulate broker acknowledgement, not eager execution. The live guide is
-    # delivered below with its deterministic runtime; the task fixture never runs inference.
+    # delivered below with its deterministic runtime; both deliveries use the explicit scripted runtime.
     with patch(
         "app.modules.projects.setup_queue.enqueue_project_guide_compilation",
         side_effect=lambda **kwargs: kwargs["task_id"],
@@ -949,7 +938,7 @@ async def exercise_guide_setup_contract(
         diagnostic_reader_token,
     )
     from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDelivery
-    from guide_compilation_e2e import compile_live_guide, attach_verified_task_fixture_material
+    from guide_compilation_e2e import compile_live_guide, project_task_fixture_sufficiency
 
     delivery = ProjectGuideCompilationDelivery(
         project_id=project_id,
@@ -976,7 +965,7 @@ async def exercise_guide_setup_contract(
             expected_status=201,
             idempotency_key=str(uuid4()),
         )
-        fixture_report_id = await attach_verified_task_fixture_material(
+        fixture_report_id = await project_task_fixture_sufficiency(
             delivery, manual_report["id"]
         )
         setup_run = {**queued_setup, "output_sufficiency_report_id": fixture_report_id}
@@ -1240,7 +1229,7 @@ async def _seed_task_fixture_post_policy(
     """Seed the canonical approved policy prerequisite for the API contract drill.
 
     The real compiler builds the policy after API-created prerequisites. This
-    fixture supplies approval and setup-ledger state without external agent
+    fixture supplies an approved policy row without external agent
     credentials so the drill can exercise task/submission/checker APIs. It does
     not prove live unified setup or guide-activation authority; those require
     their separately governed product paths.
@@ -1290,33 +1279,6 @@ async def _seed_task_fixture_post_policy(
         approved_at=datetime.now(UTC),
         created_by=manager_subject,
     )
-    setup_run = await session.scalar(
-        select(ProjectSetupRun).where(
-            ProjectSetupRun.project_id == project_id,
-            ProjectSetupRun.guide_id == guide_id,
-            ProjectSetupRun.source_snapshot_id == source_snapshot["id"],
-        )
-    )
-    finalized = await session.scalar(
-        text("select 1 from project_guide_setup_finalizations where guide_id=:guide"),
-        {"guide": guide_id},
-    )
-    ensure(finalized is None, "task fixture refuses finalized guide")
-    ensure(setup_run is not None, "verified project setup run was not created")
-    setup_run.status = "post_submit_policy_compiled"
-    setup_run.current_step = "post_submit_checker_policy_compilation"
-    setup_run.output_sufficiency_report_id = sufficiency_report["id"]
-    setup_run.output_submission_artifact_policy_id = submission_artifact_policy["id"]
-    setup_run.output_post_submit_checker_policy_id = post_submit_policy.id
-    setup_run.post_submit_derivation_summary = {
-        "status": "compiled",
-        "post_submit_checker_policy_id": post_submit_policy.id,
-        "required_checkers": post_submit_policy.required_checkers,
-        "warning_checkers": post_submit_policy.warning_checkers,
-        "blocking_severities": post_submit_policy.blocking_severities,
-    }
-    setup_run.error_code = None
-    setup_run.error_summary = None
     session.add(post_submit_policy)
     await session.commit()
     return {"id": post_submit_policy.id, "policy_hash": post_submit_policy.policy_hash}

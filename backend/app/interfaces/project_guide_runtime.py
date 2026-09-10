@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from typing import Literal
-from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
 
 from app.core.hashing import canonical_json_hash
 from app.interfaces.external_services import ExternalServiceAdapterIdentity
@@ -24,46 +22,45 @@ class ProjectGuideRuntimeConfiguration(BaseModel):
 
     capability_key: Literal["project_guide_compilation"] = "project_guide_compilation"
     runtime_key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
-    model_provider: Literal["openai", "openai_compatible"]
+    model_provider: Literal["openai"]
     model: str = Field(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$")
-    model_api: Literal["responses", "chat_completions"]
-    model_endpoint: str | None = Field(default=None, max_length=500)
+    model_api: Literal["responses"]
     instruction_id: Literal["project_guide_compilation"] = "project_guide_compilation"
     instruction_version: str = Field(min_length=1, max_length=100)
     instructions: str = Field(min_length=1, max_length=16_000)
     instructions_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     timeout_seconds: StrictInt = Field(ge=1, le=7200)
-    maximum_prompt_bytes: StrictInt = Field(ge=1024, le=16 * 1024 * 1024)
-
-    @field_validator("model_endpoint")
-    @classmethod
-    def validate_endpoint(cls, value: str | None) -> str | None:
-        """Allow only a trusted HTTPS base endpoint without secret URL parts."""
-        if value is not None:
-            parsed = urlsplit(value)
-            if (
-                re.fullmatch(r"https://[a-zA-Z0-9.-]+(:[0-9]{1,5})?(/[^?#@\s]*)?", value) is None
-                or parsed.scheme != "https"
-                or not parsed.hostname
-                or parsed.username is not None
-                or parsed.password is not None
-                or parsed.query
-                or parsed.fragment
-                or any(character.isspace() for character in value)
-            ):
-                raise ValueError("model endpoint must be a credential-free HTTPS base URL")
-        return value
+    request_timeout_seconds: StrictInt = Field(default=300, ge=1, le=1800)
+    maximum_retries: StrictInt = Field(default=2, ge=0, le=5)
+    retry_backoff_multiplier: StrictInt = Field(default=2, ge=1, le=4)
+    retry_jitter: StrictBool = True
+    retry_initial_delay_seconds: StrictInt = Field(default=1, ge=1, le=30)
+    retry_max_delay_seconds: StrictInt = Field(default=30, ge=1, le=120)
+    circuit_failure_threshold: StrictInt = Field(default=3, ge=1, le=20)
+    circuit_cooldown_seconds: StrictInt = Field(default=60, ge=1, le=600)
+    maximum_manifest_bytes: StrictInt = Field(default=256_000, ge=1024, le=1_000_000)
+    maximum_documents: StrictInt = Field(default=100, ge=1, le=100)
+    maximum_document_bytes: StrictInt = Field(default=64 * 1024 * 1024, ge=1, le=512 * 1024 * 1024)
+    maximum_total_document_bytes: StrictInt = Field(default=512 * 1024 * 1024, ge=1)
+    maximum_turns: StrictInt = Field(default=40, ge=3, le=100)
+    maximum_hosted_tool_calls: StrictInt = Field(default=80, ge=3, le=200)
+    compaction_threshold_tokens: StrictInt = Field(default=32_000, ge=1000, le=100_000)
+    container_expiry_minutes: StrictInt = Field(default=20, ge=10, le=60)
+    file_expiry_seconds: StrictInt = Field(default=3600, ge=3600, le=7200)
+    cleanup_timeout_seconds: StrictInt = Field(default=30, ge=5, le=120)
 
     @model_validator(mode="after")
     def validate_snapshot(self) -> ProjectGuideRuntimeConfiguration:
-        """Bind exact instruction bytes and require an explicit provider endpoint."""
+        """Bind exact instructions and coherent document limits."""
         if (
             self.instructions_sha256
             != "sha256:" + hashlib.sha256(self.instructions.encode("utf-8")).hexdigest()
         ):
             raise ValueError("project guide instruction hash mismatch")
-        if (self.model_provider == "openai_compatible") != (self.model_endpoint is not None):
-            raise ValueError("model provider and endpoint do not match")
+        if self.maximum_document_bytes > self.maximum_total_document_bytes:
+            raise ValueError("document byte limit exceeds the run total")
+        if self.retry_initial_delay_seconds > self.retry_max_delay_seconds:
+            raise ValueError("initial retry delay exceeds maximum")
         return self
 
     @property

@@ -260,10 +260,30 @@ hosted file inspection, note use and within-run compaction. Required fixtures ar
 DOCX + PDF, and PPTX before advertising it; no 429 or mocked tool execution is
 reported as successful live-agent proof.
 
+## Real project-guide acceptance fixture
+
+The user explicitly selected the two top-level PaperBench+ guide PDFs from their
+local workspace for the real guide test: the Expert Contributor Guidelines and
+From Beaver to PaperBench+ What Changed. Use only those assigned documents,
+through the same authorized upload/manifest/runtime flow as a project manager.
+Do not import that workspace's tasks, private evidence, credentials or submission
+archives. Do not commit the source PDFs or extracted contents into Workstream.
+Record content-free file identity and test outcomes. Synthetic foreign-file,
+corruption and SDK-parser probes remain separate discriminating controls.
+
+The realistic run must distinguish sufficiency from currently executable checker
+capability. A complex ML task guide can produce supported structural pre/post
+proposals, human-review requirements and explicit capability gaps. A blocked
+result may be correct; do not invent live model judges or weaken validation to
+force a ready result. Inspect grounded findings and both stage classifications,
+then verify persistence, replay, exact-file isolation and resource cleanup.
+
 ## Allowed files and boundaries
 
 - `backend/app/interfaces/project_agents.py`, `project_guide_runtime.py`,
-  `artifact_operations.py` and a focused guide-document port module if needed.
+  `artifact_operations.py`; consumer-owned guide document contracts in
+  `backend/app/modules/projects/api/guide_documents.py` and their focused
+  PROJECTS scope implementation.
 - `backend/app/adapters/project_agents/`, affected artifact composition and
   `backend/app/core/project_agents.py`, `project_guide_instructions.py`, config.
 - Guide-only ART source/binding/materialization/extraction/preparation paths,
@@ -278,7 +298,32 @@ reported as successful live-agent proof.
   guide/ART/agent specs, roadmap, affected initiative navigation and local exports.
 - Affected focused tests/fixtures, API/MinIO drill and an explicit opt-in live
   agent probe. CI metadata may change only for accurate ownership/selection;
-  no reduction in checks, floors, assertions or required test execution.
+  no reduction in required behavior checks, floors or test execution. Remove the
+  extractor-only dependency gate/allowlist and image/PDF decoder packages together
+  with their deleted consumers; keep pinned defusedxml for bounded OOXML ingress
+  and replace parser-confinement assertions with the current runtime/ingress boundary.
+
+Affected API cleanup removes the superseded post-submit setup read, approval
+and correction routes, their exclusive schemas/service helpers and the retired
+setup-read AUTH action. Keep current diagnostic reads, explicitly manual
+sufficiency and policy operations, and planned POL-06 action vocabulary. Manual
+approval admits only its canonical manual lineage; retained separate-agent
+policies cannot enter new approval or activation. Shared post-submit stored
+records and locked-policy consumers remain readable. Downstream test fixtures
+must identify seeded prerequisites honestly and cannot claim public approval
+proof. Route-registration/OpenAPI absence tests replace obsolete route tests.
+
+The shared verifier and Operator recovery stay active for submission-bundle and
+checker-output producers. Their scanner, claim, direct execution and recovery
+replay must exclude retained guide jobs by originating put producer; a shared
+replica never makes a valid submission job ineligible. Current retry requests
+require project/task scope, while retained read models preserve nullable history.
+Remove the redundant recovery service entry and route tests through its canonical
+retry port. Keep the PostgreSQL clock and checker-lineage repository helpers,
+which still have shared consumers. Generic verifier tests use current checker
+outputs; adversarial retained-guide rows prove zero dispatch, read or recovery.
+Upload acknowledgement and successful exact-generation observation are distinct
+valid custody receipts, both accepted by current manifest and SQL access guards.
 
 Prohibited: frontend work; PM approval/rerun APIs belonging to POL-05; automatic
 acceptance; checker evaluation; compensation/reputation; changes to submission
@@ -320,6 +365,20 @@ repository-wide cleanup; deletion of retained data; unrelated dependency updates
    full lanes/coverage/Agent Gates without skips/deselections. Perform stale
    wording and markdown-link checks; reconcile roadmap/navigation after main.
 
+## Traced assigned-task consumer
+
+The existing task work-context response also reads inline guide markdown. This
+cutover removes that field while retaining the exact locked guide ID/version,
+change summary, effective time, policy requirements and lifecycle guards. The
+locked policy-context port remains a policy-lineage capability.
+
+Assigned contributors still require a separate bounded guide-document delivery
+capability before the complete guide-to-task loop is usable. It must authorize
+the current assignment against the task-stamped guide snapshot and stream only
+those originals through ART. Record this in the remaining guide work; do not
+reuse the setup fixed-service grant, expose storage coordinates, or add a retained
+markdown reader. This is an explicit dependency, not delivered document access.
+
 ## Reviews and human focus
 
 Architecture and security review this concrete plan before product edits. QA/
@@ -341,3 +400,132 @@ separate draft policies; manager approval pause; no duplicated run on replay.
 - [OpenAI SDK tools](https://openai.github.io/openai-agents-python/tools/)
 - [OpenAI file inputs](https://developers.openai.com/api/docs/guides/file-inputs)
 - [OpenAI Code Interpreter](https://developers.openai.com/api/docs/guides/tools-code-interpreter)
+
+### Runtime model selection
+
+Use `gpt-5.6-terra` through `WORKSTREAM_PROJECT_AGENT_MODEL` for the real
+guide acceptance run. Luna and Terra were both retrieved successfully using
+the configured OpenAI account. Earlier GPT-5.4-mini probes remain evidence
+of those earlier executions, not Terra verification. Changing models does
+not change the runtime adapter; each selected model still needs a smoke test.
+
+Terra is also the code default when the model setting is omitted. Keep the
+single `backend/.env.example` aligned with supported settings and code defaults;
+remove obsolete settings when their implementation is replaced. Credentials
+remain required operator input and are never supplied as runtime defaults.
+
+The first Terra PaperBench+ platform probe opened both assigned PDFs but ended
+with `APITimeoutError` at the provider boundary. It is not a passing guide
+execution. All receipt-owned container/file deletion calls completed; final
+product integration and Terra guide-result verification remain required.
+
+### Transient provider recovery (creator-requested)
+
+Keep Terra as the default. Add bounded transient-request recovery inside one
+already-fenced runtime attempt, not another Runner execution or setup generation.
+Allowed additions remain the SDK adapter, immutable runtime configuration,
+composition, affected migration/config/docs and focused runtime tests.
+
+The transport policy has one owner; disable hidden SDK retries. Configure request
+timeout, maximum attempts, exponential backoff with jitter, capped Retry-After,
+and circuit failure threshold/cooldown. A worker-local provider circuit prevents
+repeated calls during an outage and admits one half-open probe after cooldown;
+it is explicitly not a distributed provider health authority. Keep cleanup calls
+available while the inference circuit is open. Record only sanitized outcomes.
+
+Retry connection failures proven to occur before transmission, explicit transient
+rate limits, and idempotent reads/deletes. Never retry authentication, billing
+quota, bad request, validation, denied file access or cancellation. For model
+read timeouts and server failures after possible dispatch, first establish how
+ongoing hosted execution is reconciled: blindly replaying the request can run
+Code Interpreter twice against the same workspace. Reviewer proof must resolve
+that boundary before enabling such replay. Resource creates with unknown outcomes
+retain allocation custody and expiry; no guessed IDs, list/discovery or retry.
+A known response ID may be polled/retrieved with retry without creating another
+inference. Overall runtime deadline and hosted-work limits include recovery.
+
+Verification must discriminate success after transient failure, retry exhaustion,
+Retry-After/jitter bounds, permanent failures and cancellation without retry,
+circuit open/half-open recovery and concurrent probe exclusion, cleanup while
+open, and no duplicate local tool execution or setup attempt. Actual SDK boundary
+tests must preserve invalid-terminal persistence and no-invocation replay proof.
+Architecture and security review the recovery boundary before implementation;
+QA/test-delta review the resulting proof alongside the existing required tracks.
+
+The creator selected a 300-second configurable per-request timeout through
+`WORKSTREAM_PROJECT_AGENT_REQUEST_TIMEOUT_SECONDS`, independently bounded by
+the 1,800-second default whole-run deadline, including retries and backoff.
+
+Use native Agents SDK `ModelSettings.retry` with a strict application policy,
+not a second model retry engine. Defaults: two retries after the first request,
+one-second initial backoff, thirty-second maximum backoff with jitter; honor
+Retry-After only within that bound, otherwise defer rather than retry early.
+The worker-local model circuit defaults to three transient failures and sixty
+seconds cooldown, with one half-open probe and epoch-protected completion.
+Preserve SDK response-started/replay-unsafe vetoes and never approve unsafe
+replay. Explicit provider replay-safe advice can permit a transient retry;
+status alone cannot. The observed Terra read timeout remains unresolved rather
+than being represented as safely replayed. A fresh test run uses the configured
+300-second request timeout. Recovery does not silently switch the selected model.
+
+The subsequent Terra PaperBench+ SDK probe passed with request timeout 300s:
+three model requests, eighteen Code Interpreter calls, ten compaction items,
+44 pages across the two assigned PDFs, and separate pre/post proposal shapes.
+Usage was 35,510 input and 5,350 output tokens. All receipt-owned container/file
+deletion calls succeeded. No transient error occurred in this run, so it is not
+live retry evidence. The 37 native-SDK/circuit tests pass (92% resilience-module
+statement coverage); a broad provider-suggested timeout-retry mutant fails the
+one-invocation assertion. These are bounded SDK proofs, not product end-to-end
+or semantic-accuracy completion. Original PDF bytes/tool transcripts remain out
+of the repository and PostgreSQL. Pin the directly consumed OpenAI3.11.0 and
+httpx2 2.12.0 alongside Agents SDK0.22.2 so transport classification is explicit.
+
+
+### Final document-runtime and affected-path reconciliation
+
+The affected scope includes retiring the dormant role-only guide activation
+service, its exclusive response schema/helpers, and tests of that superseded
+command. Public activation remains absent and AUTH-12H remains planned; draft
+setup cannot activate a guide. Keep active-guide read validation, policy models,
+locked TASK consumers and retained setup evidence. Downstream tests seed coherent
+approved policy and active-guide prerequisites explicitly, without pretending to
+exercise future approval or activation commands.
+
+Pre-submit bindings now carry capability identity only. Intake configuration has
+one owner in `submission_artifact_policy`; remove the duplicated binding parameter
+copy and its exclusive validator/tests. Post-submit bindings retain independent
+evaluator configuration. SDK schemas expose identifier and array bounds; runtime
+instructions state the contextual disposition, citation, prose and configuration
+rules. Invalid model output remains terminal; no retry attempts to repair it.
+
+Real-provider verification exercised two product outcomes with Terra. Two original
+PaperBench PDFs produced `sufficiency_blocked`; a complete synthetic two-document
+DOCX guide produced `policy_draft_ready`. Each used actual API upload, MinIO
+originals, the production async worker handler/coordinator, OpenAI Agents SDK and
+PostgreSQL: one attempt, one compilation, one finalization, two document accesses,
+and five provider allocations deleted. Replay with runtime construction disabled
+returned the identical outcome. Broker acknowledgement was scripted and delivery
+was invoked directly; this does not establish live Celery broker transport or
+semantic accuracy across arbitrary guides. Earlier invalid-output probes remain
+failures and demonstrated terminal persistence without replay invocation.
+
+A separate hosted workspace probe extracted assigned DOCX/PPTX sentinels, excluded
+an unassigned provider file, checked absence of exact application credential names,
+and verified network denial and resource deletion. It did not establish the
+provenance of unrelated provider-managed environment names or inspect their values.
+Retained guide text preservation and write rejection are tested in PostgreSQL;
+the all-document citation guard has a valid-transition control and a transactional
+mutant proving the missing-citation assertion detects removal of that exact guard.
+
+
+Document contracts belong to the PROJECTS consumer API, not a new shared-interface
+namespace. PROJECTS locks the exact current draft guide, snapshot, generation,
+ingest and execution fence; ART independently verifies its committed receipts,
+replicas, namespace and bytes. Adapter composition binds both ports to the same
+session, retaining their locks through authorized staging. The scope query does
+not select retained guide text. A PostgreSQL race observes the attempt writer
+blocked on that lock and proves terminal attempts cannot reacquire source bytes.
+The public dependency graph remains acyclic and the frozen private-import ledger
+shrinks without new edges. ORM allocation/access declarations use the existing
+model-only metadata registration path. The recovery dispatch predicate has one
+PROJECTS continuation owner shared by dispatch and scanning.

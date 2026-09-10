@@ -753,170 +753,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pillow"
-version = "12.3.0"
-source = { url = "https://files.pythonhosted.org/packages/25/27/ac8f99618ffd3dde21db0f4d4b1d2ab00c0880595bfd17df103f7f39fd0c/pillow-12.3.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl" }
-resolution-markers = [
-    "python_full_version >= '3.12' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/25/27/ac8f99618ffd3dde21db0f4d4b1d2ab00c0880595bfd17df103f7f39fd0c/pillow-12.3.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:d9c7f76c0673154f044e9d78c8655fb4213f6ca31a836df48b40fe5d187717b9" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "arro3-compute", marker = "extra == 'test-arrow'" },
-    { name = "arro3-core", marker = "extra == 'test-arrow'" },
-    { name = "coverage", marker = "extra == 'tests'", specifier = ">=7.4.2" },
-    { name = "defusedxml", marker = "extra == 'tests'" },
-    { name = "defusedxml", marker = "extra == 'xmp'" },
-    { name = "furo", marker = "extra == 'docs'" },
-    { name = "markdown2", marker = "extra == 'tests'" },
-    { name = "nanoarrow", marker = "extra == 'test-arrow'" },
-    { name = "olefile", marker = "extra == 'docs'" },
-    { name = "olefile", marker = "extra == 'fpx'" },
-    { name = "olefile", marker = "extra == 'mic'" },
-    { name = "olefile", marker = "extra == 'tests'" },
-    { name = "packaging", marker = "extra == 'tests'" },
-    { name = "pyarrow", marker = "extra == 'test-arrow'" },
-    { name = "pytest", marker = "extra == 'tests'" },
-    { name = "pytest-cov", marker = "extra == 'tests'" },
-    { name = "pytest-timeout", marker = "extra == 'tests'" },
-    { name = "pytest-xdist", marker = "extra == 'tests'" },
-    { name = "setuptools", marker = "extra == 'tests'" },
-    { name = "sphinx", marker = "extra == 'docs'", specifier = ">=8.2" },
-    { name = "sphinx-autobuild", marker = "extra == 'docs'" },
-    { name = "sphinx-copybutton", marker = "extra == 'docs'" },
-    { name = "sphinx-inline-tabs", marker = "extra == 'docs'" },
-    { name = "sphinxext-opengraph", marker = "extra == 'docs'" },
-    { name = "trove-classifiers", marker = "extra == 'tests'", specifier = ">=2024.10.12" },
-]
-provides-extras = ["docs", "fpx", "mic", "test-arrow", "tests", "xmp"]
-
-[[package]]
-name = "pillow"
-version = "12.3.0"
-source = { url = "https://files.pythonhosted.org/packages/3b/2d/ede717bc1144f63886c21fd349bb95860b0d1a21149ff16f2bb362b612b6/pillow-12.3.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" }
-resolution-markers = [
-    "python_full_version < '3.12' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3b/2d/ede717bc1144f63886c21fd349bb95860b0d1a21149ff16f2bb362b612b6/pillow-12.3.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:23d27a3e0307ec2244cc51e7287b919aa68d097504ebe19df4e76a98a3eea5bd" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "arro3-compute", marker = "extra == 'test-arrow'" },
-    { name = "arro3-core", marker = "extra == 'test-arrow'" },
-    { name = "coverage", marker = "extra == 'tests'", specifier = ">=7.4.2" },
-    { name = "defusedxml", marker = "extra == 'tests'" },
-    { name = "defusedxml", marker = "extra == 'xmp'" },
-    { name = "furo", marker = "extra == 'docs'" },
-    { name = "markdown2", marker = "extra == 'tests'" },
-    { name = "nanoarrow", marker = "extra == 'test-arrow'" },
-    { name = "olefile", marker = "extra == 'docs'" },
-    { name = "olefile", marker = "extra == 'fpx'" },
-    { name = "olefile", marker = "extra == 'mic'" },
-    { name = "olefile", marker = "extra == 'tests'" },
-    { name = "packaging", marker = "extra == 'tests'" },
-    { name = "pyarrow", marker = "extra == 'test-arrow'" },
-    { name = "pytest", marker = "extra == 'tests'" },
-    { name = "pytest-cov", marker = "extra == 'tests'" },
-    { name = "pytest-timeout", marker = "extra == 'tests'" },
-    { name = "pytest-xdist", marker = "extra == 'tests'" },
-    { name = "setuptools", marker = "extra == 'tests'" },
-    { name = "sphinx", marker = "extra == 'docs'", specifier = ">=8.2" },
-    { name = "sphinx-autobuild", marker = "extra == 'docs'" },
-    { name = "sphinx-copybutton", marker = "extra == 'docs'" },
-    { name = "sphinx-inline-tabs", marker = "extra == 'docs'" },
-    { name = "sphinxext-opengraph", marker = "extra == 'docs'" },
-    { name = "trove-classifiers", marker = "extra == 'tests'", specifier = ">=2024.10.12" },
-]
-provides-extras = ["docs", "fpx", "mic", "test-arrow", "tests", "xmp"]
-
-[[package]]
-name = "pillow"
-version = "12.3.0"
-source = { url = "https://files.pythonhosted.org/packages/84/21/a35af28dcc61f37ed850a2d64c65c701321dfbf25085e469d5559360cbbf/pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" }
-resolution-markers = [
-    "python_full_version >= '3.12' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/84/21/a35af28dcc61f37ed850a2d64c65c701321dfbf25085e469d5559360cbbf/pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:78cb2c6865a35ab8ff8b75fd122f6033b92a62c82801110e48ddd6c936a45d91" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "arro3-compute", marker = "extra == 'test-arrow'" },
-    { name = "arro3-core", marker = "extra == 'test-arrow'" },
-    { name = "coverage", marker = "extra == 'tests'", specifier = ">=7.4.2" },
-    { name = "defusedxml", marker = "extra == 'tests'" },
-    { name = "defusedxml", marker = "extra == 'xmp'" },
-    { name = "furo", marker = "extra == 'docs'" },
-    { name = "markdown2", marker = "extra == 'tests'" },
-    { name = "nanoarrow", marker = "extra == 'test-arrow'" },
-    { name = "olefile", marker = "extra == 'docs'" },
-    { name = "olefile", marker = "extra == 'fpx'" },
-    { name = "olefile", marker = "extra == 'mic'" },
-    { name = "olefile", marker = "extra == 'tests'" },
-    { name = "packaging", marker = "extra == 'tests'" },
-    { name = "pyarrow", marker = "extra == 'test-arrow'" },
-    { name = "pytest", marker = "extra == 'tests'" },
-    { name = "pytest-cov", marker = "extra == 'tests'" },
-    { name = "pytest-timeout", marker = "extra == 'tests'" },
-    { name = "pytest-xdist", marker = "extra == 'tests'" },
-    { name = "setuptools", marker = "extra == 'tests'" },
-    { name = "sphinx", marker = "extra == 'docs'", specifier = ">=8.2" },
-    { name = "sphinx-autobuild", marker = "extra == 'docs'" },
-    { name = "sphinx-copybutton", marker = "extra == 'docs'" },
-    { name = "sphinx-inline-tabs", marker = "extra == 'docs'" },
-    { name = "sphinxext-opengraph", marker = "extra == 'docs'" },
-    { name = "trove-classifiers", marker = "extra == 'tests'", specifier = ">=2024.10.12" },
-]
-provides-extras = ["docs", "fpx", "mic", "test-arrow", "tests", "xmp"]
-
-[[package]]
-name = "pillow"
-version = "12.3.0"
-source = { url = "https://files.pythonhosted.org/packages/c8/98/766667a4be768150a202836acd9fad19c06824ca86c4286d3cf6b274964e/pillow-12.3.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl" }
-resolution-markers = [
-    "python_full_version < '3.12' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c8/98/766667a4be768150a202836acd9fad19c06824ca86c4286d3cf6b274964e/pillow-12.3.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:bcb46e2f9feff8d06323983bd83ed00c201fdcab3d74973e7072a889b3979fcd" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "arro3-compute", marker = "extra == 'test-arrow'" },
-    { name = "arro3-core", marker = "extra == 'test-arrow'" },
-    { name = "coverage", marker = "extra == 'tests'", specifier = ">=7.4.2" },
-    { name = "defusedxml", marker = "extra == 'tests'" },
-    { name = "defusedxml", marker = "extra == 'xmp'" },
-    { name = "furo", marker = "extra == 'docs'" },
-    { name = "markdown2", marker = "extra == 'tests'" },
-    { name = "nanoarrow", marker = "extra == 'test-arrow'" },
-    { name = "olefile", marker = "extra == 'docs'" },
-    { name = "olefile", marker = "extra == 'fpx'" },
-    { name = "olefile", marker = "extra == 'mic'" },
-    { name = "olefile", marker = "extra == 'tests'" },
-    { name = "packaging", marker = "extra == 'tests'" },
-    { name = "pyarrow", marker = "extra == 'test-arrow'" },
-    { name = "pytest", marker = "extra == 'tests'" },
-    { name = "pytest-cov", marker = "extra == 'tests'" },
-    { name = "pytest-timeout", marker = "extra == 'tests'" },
-    { name = "pytest-xdist", marker = "extra == 'tests'" },
-    { name = "setuptools", marker = "extra == 'tests'" },
-    { name = "sphinx", marker = "extra == 'docs'", specifier = ">=8.2" },
-    { name = "sphinx-autobuild", marker = "extra == 'docs'" },
-    { name = "sphinx-copybutton", marker = "extra == 'docs'" },
-    { name = "sphinx-inline-tabs", marker = "extra == 'docs'" },
-    { name = "sphinxext-opengraph", marker = "extra == 'docs'" },
-    { name = "trove-classifiers", marker = "extra == 'tests'", specifier = ">=2024.10.12" },
-]
-provides-extras = ["docs", "fpx", "mic", "test-arrow", "tests", "xmp"]
-
-[[package]]
 name = "pluggy"
 version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1040,42 +876,6 @@ wheels = [
 crypto = [
     { name = "cryptography", marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux')" },
 ]
-
-[[package]]
-name = "pypdf"
-version = "6.15.0"
-source = { url = "https://files.pythonhosted.org/packages/af/72/ce3067ac31e214a66388159f8462ddb8c13dd00170f24d555a1f1ae8ee91/pypdf-6.15.0-py3-none-any.whl" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/af/72/ce3067ac31e214a66388159f8462ddb8c13dd00170f24d555a1f1ae8ee91/pypdf-6.15.0-py3-none-any.whl", hash = "sha256:14e001d6504822cb1ca9c7ed9a69bccb320f59b320730f55af804361abe4d5ee" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "arabic-reshaper", marker = "extra == 'full'" },
-    { name = "arabic-reshaper", marker = "extra == 'rtl-text'" },
-    { name = "cryptography", marker = "extra == 'crypto'", specifier = ">3.0" },
-    { name = "cryptography", marker = "extra == 'full'", specifier = ">3.0" },
-    { name = "flit", marker = "extra == 'dev'" },
-    { name = "fonttools", marker = "extra == 'fonts'" },
-    { name = "fonttools", marker = "extra == 'full'" },
-    { name = "myst-parser", marker = "extra == 'docs'" },
-    { name = "pillow", marker = "extra == 'full'", specifier = ">=8.0.0" },
-    { name = "pillow", marker = "extra == 'image'", specifier = ">=8.0.0" },
-    { name = "pip-tools", marker = "extra == 'dev'" },
-    { name = "pre-commit", marker = "extra == 'dev'" },
-    { name = "pycryptodome", marker = "extra == 'cryptodome'" },
-    { name = "pytest-cov", marker = "extra == 'dev'" },
-    { name = "pytest-socket", marker = "extra == 'dev'" },
-    { name = "pytest-timeout", marker = "extra == 'dev'" },
-    { name = "pytest-xdist", marker = "extra == 'dev'" },
-    { name = "python-bidi", marker = "extra == 'full'" },
-    { name = "python-bidi", marker = "extra == 'rtl-text'" },
-    { name = "sphinx", marker = "extra == 'docs'" },
-    { name = "sphinx-rtd-theme", marker = "extra == 'docs'" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.0" },
-    { name = "wheel", marker = "extra == 'dev'" },
-]
-provides-extras = ["crypto", "cryptodome", "dev", "docs", "fonts", "full", "image", "rtl-text"]
 
 [[package]]
 name = "pytest"
@@ -1501,19 +1301,16 @@ dependencies = [
     { name = "defusedxml", marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux')" },
     { name = "fastapi", marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux')" },
     { name = "httpx", marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux')" },
-    { name = "pillow", version = "12.3.0", source = { url = "https://files.pythonhosted.org/packages/25/27/ac8f99618ffd3dde21db0f4d4b1d2ab00c0880595bfd17df103f7f39fd0c/pillow-12.3.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl" }, marker = "python_full_version >= '3.12' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
-    { name = "pillow", version = "12.3.0", source = { url = "https://files.pythonhosted.org/packages/3b/2d/ede717bc1144f63886c21fd349bb95860b0d1a21149ff16f2bb362b612b6/pillow-12.3.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" }, marker = "python_full_version < '3.12' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
-    { name = "pillow", version = "12.3.0", source = { url = "https://files.pythonhosted.org/packages/84/21/a35af28dcc61f37ed850a2d64c65c701321dfbf25085e469d5559360cbbf/pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" }, marker = "python_full_version >= '3.12' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
-    { name = "pillow", version = "12.3.0", source = { url = "https://files.pythonhosted.org/packages/c8/98/766667a4be768150a202836acd9fad19c06824ca86c4286d3cf6b274964e/pillow-12.3.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl" }, marker = "python_full_version < '3.12' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
     { name = "pydantic-settings", marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux')" },
     { name = "pyjwt", extra = ["crypto"], marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux')" },
-    { name = "pypdf", marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux')" },
     { name = "sqlalchemy", extra = ["asyncio"], marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux')" },
     { name = "uvicorn", extra = ["standard"], marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux')" },
 ]
 
 [package.optional-dependencies]
 agents = [
+    { name = "httpx2", marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux')" },
+    { name = "openai", marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux')" },
     { name = "openai-agents", marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux')" },
 ]
 dev = [
@@ -1536,15 +1333,12 @@ requires-dist = [
     { name = "docstr-coverage", marker = "extra == 'dev'", specifier = ">=2.3,<3.0" },
     { name = "fastapi", specifier = ">=0.115,<1.0" },
     { name = "httpx", specifier = ">=0.27,<1.0" },
+    { name = "httpx2", marker = "extra == 'agents'", specifier = "==2.12.0" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = "==4.26.0" },
+    { name = "openai", marker = "extra == 'agents'", specifier = "==3.11.0" },
     { name = "openai-agents", marker = "extra == 'agents'", specifier = "==0.22.2" },
-    { name = "pillow", marker = "python_full_version == '3.11.*' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'", url = "https://files.pythonhosted.org/packages/c8/98/766667a4be768150a202836acd9fad19c06824ca86c4286d3cf6b274964e/pillow-12.3.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl" },
-    { name = "pillow", marker = "python_full_version == '3.12.*' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'", url = "https://files.pythonhosted.org/packages/25/27/ac8f99618ffd3dde21db0f4d4b1d2ab00c0880595bfd17df103f7f39fd0c/pillow-12.3.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl" },
-    { name = "pillow", marker = "python_full_version == '3.11.*' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'", url = "https://files.pythonhosted.org/packages/3b/2d/ede717bc1144f63886c21fd349bb95860b0d1a21149ff16f2bb362b612b6/pillow-12.3.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" },
-    { name = "pillow", marker = "python_full_version == '3.12.*' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'", url = "https://files.pythonhosted.org/packages/84/21/a35af28dcc61f37ed850a2d64c65c701321dfbf25085e469d5559360cbbf/pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" },
     { name = "pydantic-settings", specifier = ">=2.6,<3.0" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.13,<3.0" },
-    { name = "pypdf", url = "https://files.pythonhosted.org/packages/af/72/ce3067ac31e214a66388159f8462ddb8c13dd00170f24d555a1f1ae8ee91/pypdf-6.15.0-py3-none-any.whl" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.3,<10.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.4,<2.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = "==7.1.0" },

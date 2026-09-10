@@ -12,7 +12,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.hashing import canonical_json_hash
-from app.interfaces.artifact_operations import GuideSufficiencyMaterialPort
 from app.modules.actors.service import ResolvedActor
 from app.modules.authorization.prepared import PreparedAuthorizationService
 from app.modules.authorization.runtime import (
@@ -111,14 +110,12 @@ class SubmissionPolicyMutationService:
     def __init__(
         self,
         session: AsyncSession,
-        *,
-        material: GuideSufficiencyMaterialPort | None = None,
     ) -> None:
         self._session = session
         self._replay = SubmissionPolicyMutationReplayRepository(session)
         self._projects = ProjectRepository(session)
         self._admin = AdminAuthorizationRepository(session)
-        self._validation = ProjectService(session, guide_sufficiency_material=material)
+        self._validation = ProjectService(session)
 
     @staticmethod
     def _stable_uuid(*parts: object) -> UUID:

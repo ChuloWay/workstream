@@ -108,14 +108,30 @@ class Settings(BaseSettings):
     token_introspection_pool_timeout_seconds: float = Field(default=1.0, ge=0.1, le=10.0)
     token_introspection_total_timeout_seconds: float = Field(default=5.0, ge=0.5, le=15.0)
     project_agent_runtime: str = "openai_agents_sdk"
-    project_agent_model_provider: Literal["openai", "openai_compatible"] = "openai"
-    project_agent_model: str | None = None
-    project_agent_model_api: Literal["responses", "chat_completions"] = "responses"
-    project_agent_model_endpoint: str | None = None
+    project_agent_model_provider: Literal["openai"] = "openai"
+    project_agent_model: str = "gpt-5.6-terra"
+    project_agent_model_api: Literal["responses"] = "responses"
     project_agent_instructions: str | None = None
     project_agent_instruction_version: str = "v1"
     project_agent_run_timeout_seconds: int = Field(default=1800, ge=1, le=7200)
-    project_agent_max_prompt_bytes: int = Field(default=2_000_000, ge=1024, le=16 * 1024 * 1024)
+    project_agent_request_timeout_seconds: int = Field(default=300, ge=1, le=1800)
+    project_agent_max_retries: int = Field(default=2, ge=0, le=5)
+    project_agent_retry_backoff_multiplier: int = Field(default=2, ge=1, le=4)
+    project_agent_retry_jitter: bool = True
+    project_agent_retry_initial_delay_seconds: int = Field(default=1, ge=1, le=30)
+    project_agent_retry_max_delay_seconds: int = Field(default=30, ge=1, le=120)
+    project_agent_circuit_failure_threshold: int = Field(default=3, ge=1, le=20)
+    project_agent_circuit_cooldown_seconds: int = Field(default=60, ge=1, le=600)
+    project_agent_max_manifest_bytes: int = Field(default=256_000, ge=1024, le=1_000_000)
+    project_agent_max_documents: int = Field(default=100, ge=1, le=100)
+    project_agent_max_document_bytes: int = Field(default=64 * 1024 * 1024, ge=1, le=512 * 1024 * 1024)
+    project_agent_max_total_document_bytes: int = Field(default=512 * 1024 * 1024, ge=1)
+    project_agent_max_turns: int = Field(default=40, ge=3, le=100)
+    project_agent_max_hosted_tool_calls: int = Field(default=80, ge=3, le=200)
+    project_agent_compaction_threshold_tokens: int = Field(default=32_000, ge=1000, le=100_000)
+    project_agent_container_expiry_minutes: int = Field(default=20, ge=10, le=60)
+    project_agent_file_expiry_seconds: int = Field(default=3600, ge=3600, le=7200)
+    project_agent_cleanup_timeout_seconds: int = Field(default=30, ge=5, le=120)
     celery_broker_url: str | None = None
     celery_result_backend_url: str | None = None
     celery_task_always_eager: bool = False

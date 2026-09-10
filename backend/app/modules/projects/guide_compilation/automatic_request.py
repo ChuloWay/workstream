@@ -6,10 +6,8 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.interfaces.artifact_operations import (
-    GuideSufficiencyMaterialPort,
-    GuideSufficiencyMaterialRequest,
-)
+
+from app.modules.projects.api.guide_documents import GuideDocumentManifestPort, GuideDocumentManifestRequest
 from app.modules.checkers.api.pre_submit_catalogue import (
     PreSubmissionCapabilityProjection,
 )
@@ -39,7 +37,7 @@ from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguratio
 class AutomaticCompilationInputs:
     """Composition supplies material access and canonical CHECKERS projections, never a runtime."""
 
-    material: GuideSufficiencyMaterialPort
+    material: GuideDocumentManifestPort
     pre_submission_capabilities: PreSubmissionCapabilityProjection
     post_submission_capabilities: PostSubmitCatalogue
     runtime_configuration: ProjectGuideRuntimeConfiguration | None
@@ -85,7 +83,7 @@ class AutomaticCompilationInputs:
             source_authorization_decision_event_id=UUID(setup.authorization_decision_event_id),
         )
         loaded = await self.material.load(
-            GuideSufficiencyMaterialRequest(
+            GuideDocumentManifestRequest(
                 project_id=UUID(setup.project_id),
                 guide_id=UUID(setup.guide_id),
                 guide_source_snapshot_id=UUID(setup.source_snapshot_id),

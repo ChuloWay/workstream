@@ -36,8 +36,10 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - POL-04B1 binds automatic source-ready requests to committed source consent
   and current setup-service authority. Human and service replay hold current
   authority through receipt classification.
-- POL-04B runs one automatic compilation when ART verifies the guide, using an
-  immutable runtime/model/instructions snapshot. It replaces all three earlier
+- POL-04B runs one automatic compilation when ART commits all assigned originals, using an
+  immutable runtime/model/instructions snapshot and scoped on-demand document
+  access. Original bytes stay in ArtifactStore; extracted bodies are not stored
+  in PostgreSQL. It replaces all three earlier
   inference methods and stops at findings and draft pre/post proposals. Unknown
   provider outcomes are visible and cannot trigger a second invocation.
 

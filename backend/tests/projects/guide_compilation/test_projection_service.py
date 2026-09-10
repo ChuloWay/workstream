@@ -15,8 +15,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.interfaces.project_agents import SubmissionArtifactPolicyProposal
-from app.modules.artifacts.guide_sufficiency_material import (
-    SqlAlchemyGuideSufficiencyMaterialAdapter,
+from app.adapters.artifacts import (
+    guide_document_manifest_port,
 )
 from app.modules.authorization.api import AuthorizationDenied
 from app.modules.projects.api import (
@@ -52,7 +52,7 @@ class _CountingMaterial:
 class _CountingSqlMaterial:
     def __init__(self, session: AsyncSession) -> None:
         self.calls = 0
-        self._inner = SqlAlchemyGuideSufficiencyMaterialAdapter(session)
+        self._inner = guide_document_manifest_port(session)
 
     async def load(self, request):
         self.calls += 1
@@ -102,7 +102,7 @@ def _service(
     factory,
     values: dict[str, UUID],
     *,
-    material_factory=SqlAlchemyGuideSufficiencyMaterialAdapter,
+    material_factory=guide_document_manifest_port,
     authorization_factory=None,
 ):
     if authorization_factory is None:

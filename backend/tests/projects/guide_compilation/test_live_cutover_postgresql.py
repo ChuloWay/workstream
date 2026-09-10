@@ -1,6 +1,6 @@
-"""The real automatic worker reaches both projections through one invocation."""
+"""Real coordinator/custody with scripted document and model-provider ports."""
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
@@ -8,13 +8,22 @@ from sqlalchemy import text
 from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDelivery
 from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
 from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDeliveryError
-from tests.verified_guide_fixtures import create_verified_material_fixture
+from tests.committed_guide_fixtures import create_committed_document_fixture
 from tests.projects.client_fixtures import (
     project_client as project_client,
     project_database_env as project_database_env,
 )
 from .test_automatic_request import automatic_source as automatic_source
 from .helpers import runtime_configuration, result
+from .runtime_fixtures import document_access, record_scripted_document_access
+from app.interfaces.project_agents import GuideEvidenceRef
+
+
+@pytest.fixture(autouse=True)
+def scripted_document_port(monkeypatch):
+    from app.workers import project_setup as worker
+    monkeypatch.setattr(worker, "guide_document_access_runtime",
+                        lambda sessions, *args: document_access(*args))
 
 
 async def _delivery(factory, setup_id):
@@ -49,11 +58,25 @@ class Runtime:
     identity = runtime_configuration().adapter_identity
     calls = 0
 
-    async def compile_project_guide(self, context):
+    def admit_execution(self):
+        pass
+
+    async def aclose(self):
+        pass
+
+    async def compile_project_guide(self, context, capabilities):
         self.calls += 1
+        await record_scripted_document_access(context, capabilities)
         if isinstance(self.outcome, Exception):
             raise self.outcome
-        return self.outcome
+        refs = tuple(GuideEvidenceRef(source_item_id=item.source_item_id,
+                     document_version_id=item.ingest_id, sha256=item.sha256)
+                     for item in context.material.documents)
+        return self.outcome.model_copy(update={
+            field: tuple(item.model_copy(update={"evidence_refs": refs})
+                         for item in getattr(self.outcome, field))
+            for field in ("findings", "requirements", "capability_suggestions")
+        })
 
 
 @pytest.mark.parametrize("status", ["draft_ready", "draft_ready_with_warnings", "guide_blocked"])
@@ -67,7 +90,7 @@ async def test_pending_exact_delivery_compiles_once_and_replays_finalization(
     from app.workers import project_setup as worker
 
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     delivery = await _delivery(factory, setup_id)
     runtime = Runtime()
     if status != "draft_ready":
@@ -175,7 +198,7 @@ async def test_stale_delivery_rejects_before_any_compilation_effect(
     from app.workers import project_setup as worker
 
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     delivery = await _delivery(factory, setup_id)
 
     def forbidden(*args):
@@ -216,7 +239,7 @@ async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_
     from app.workers import project_setup as worker
 
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     delivery = await _delivery(factory, setup_id)
     runtime = Runtime()
     runtime.outcome = (
@@ -291,7 +314,7 @@ async def test_finalized_receipt_excludes_every_recovery_shape(automatic_source,
     from app.workers import project_setup as worker
 
     factory, _actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     delivery = await _delivery(factory, setup_id)
     runtime = Runtime()
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
@@ -317,7 +340,6 @@ async def test_finalized_receipt_excludes_every_recovery_shape(automatic_source,
 
 
 async def _assert_terminal_not_reclaimable(factory, delivery, monkeypatch, *, finalized=False):
-    from app.modules.projects.guide_setup_continuation import retryable_source_snapshot_ids
 
     from app.modules.projects import setup_queue
 
@@ -355,9 +377,7 @@ async def _assert_terminal_not_reclaimable(factory, delivery, monkeypatch, *, fi
                     await session.execute(
                         text(f"alter table project_setup_runs enable trigger {trigger}")
                     )
-        assert delivery.source_snapshot_id not in await retryable_source_snapshot_ids(
-            factory, page_size=10
-        ), (status, task)
+        assert delivery.source_snapshot_id not in await _published_continuation_snapshots(factory), (status, task)
         async with factory() as session:
             before = await session.scalar(
                 text("select to_jsonb(s) from project_setup_runs s where id=:id"),
@@ -394,7 +414,7 @@ async def test_publisher_acknowledgement_cannot_overwrite_worker_finalization(
     from app.workers import project_setup as worker
 
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     delivery = await _delivery(factory, setup_id)
     async with factory() as session, session.begin():
         await session.execute(
@@ -470,7 +490,7 @@ async def test_phase_crash_recovers_same_attempt_without_reinference(
     from app.workers import project_setup as worker
 
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     delivery = await _delivery(factory, setup_id)
     runtime = Runtime()
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
@@ -500,7 +520,6 @@ async def test_phase_crash_recovers_same_attempt_without_reinference(
         await coordinator.run(delivery)
     if boundary == "retained_unconfigured":
         await _remove_retained_runtime_configuration(factory)
-        from app.modules.projects.guide_setup_continuation import retryable_source_snapshot_ids
 
         async with factory() as session, session.begin():
             await session.execute(
@@ -509,9 +528,7 @@ async def test_phase_crash_recovers_same_attempt_without_reinference(
                 ),
                 {"id": str(setup_id)},
             )
-        assert delivery.source_snapshot_id not in await retryable_source_snapshot_ids(
-            factory, page_size=10
-        )
+        assert delivery.source_snapshot_id not in await _published_continuation_snapshots(factory)
         from app.modules.projects.guide_compilation.repository import GuideCompilationIntegrityError
 
         with pytest.raises(
@@ -570,7 +587,7 @@ async def test_each_phase_rechecks_service_authority_and_restoration_reuses_atte
     from app.workers import project_setup as worker
 
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     delivery = await _delivery(factory, setup_id)
     runtime = Runtime()
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
@@ -662,16 +679,16 @@ async def test_concurrent_live_deliveries_share_one_provider_and_finalization(
     from app.workers import project_setup as worker
 
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     delivery = await _delivery(factory, setup_id)
     entered, release = asyncio.Event(), asyncio.Event()
     runtime = Runtime()
     original = runtime.compile_project_guide
 
-    async def blocked_provider(context):
+    async def blocked_provider(context, capabilities):
         entered.set()
         await release.wait()
-        return await original(context)
+        return await original(context, capabilities)
 
     monkeypatch.setattr(runtime, "compile_project_guide", blocked_provider)
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda config: runtime)
@@ -747,14 +764,13 @@ async def test_stale_queued_configuration_failure_is_reclaimed_and_finishes_same
     automatic_source, monkeypatch
 ):
     from app.core.config import get_settings
-    from app.modules.projects.guide_setup_continuation import retryable_source_snapshot_ids
 
     monkeypatch.setenv("WORKSTREAM_CELERY_TASK_ALWAYS_EAGER", "true")
     get_settings.cache_clear()
     from app.workers import project_setup as worker
 
     factory, actor, setup_id, snapshot = automatic_source
-    await create_verified_material_fixture(snapshot["id"])
+    await create_committed_document_fixture(snapshot["id"])
     delivery = await _delivery(factory, setup_id)
 
     def unavailable(settings):
@@ -779,9 +795,7 @@ async def test_stale_queued_configuration_failure_is_reclaimed_and_finishes_same
     assert first["status"] == "policy_draft_ready"
     assert await worker._coordinator(factory).run(delivery) == first
     assert runtime.calls == 1
-    assert delivery.source_snapshot_id not in await retryable_source_snapshot_ids(
-        factory, page_size=10
-    )
+    assert delivery.source_snapshot_id not in await _published_continuation_snapshots(factory)
 
 
 async def _remove_retained_runtime_configuration(factory):
@@ -852,7 +866,6 @@ async def _reclaim_exact_delivery(factory, delivery, monkeypatch):
 
 
 async def _select_stale_delivery(factory, delivery):
-    from app.modules.projects.guide_setup_continuation import retryable_source_snapshot_ids
 
     async with factory() as session, session.begin():
         await session.execute(
@@ -861,4 +874,31 @@ async def _select_stale_delivery(factory, delivery):
             ),
             {"id": str(delivery.setup_run_id)},
         )
-    assert delivery.source_snapshot_id in await retryable_source_snapshot_ids(factory, page_size=10)
+    assert delivery.source_snapshot_id in await _published_continuation_snapshots(factory)
+
+
+async def _published_continuation_snapshots(factory):
+    """Exercise the current upload scanner and resolve its actual published puts."""
+    from app.adapters.artifacts.internal_workers import scan_guide_setup_continuations
+
+    published = []
+
+    async def publish(put_id):
+        published.append(str(put_id))
+
+    from unittest.mock import patch
+
+    with patch("app.adapters.artifacts.internal_workers.get_session_factory", return_value=factory):
+        count = await scan_guide_setup_continuations(publish)
+    assert count == len(published)
+    snapshots = set()
+    async with factory() as session:
+        for put_id in published:
+            snapshot_id = await session.scalar(text(
+                "select i.source_snapshot_id from artifact_put_attempts p "
+                "join guide_source_snapshot_items i on i.id=p.guide_source_item_id "
+                "where p.id=:id"
+            ), {"id": put_id})
+            assert snapshot_id is not None
+            snapshots.add(UUID(snapshot_id))
+    return snapshots
