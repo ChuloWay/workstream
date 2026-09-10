@@ -32,7 +32,7 @@ include = ["app*"]
 
 [project.optional-dependencies]
 agents = [
-  "openai-agents>=0.17,<1.0",
+  "openai-agents==0.22.2",
 ]
 
 dev = [

@@ -399,6 +399,30 @@ curl --fail http://127.0.0.1:8000/api/v1/health
 local-development values; replace those values when specifically testing key
 rotation, and never reuse them in a shared or hosted environment.
 
+### Native Unified Guide Inference
+
+Set `WORKSTREAM_PROJECT_AGENT_MODEL=gpt-5.4-mini` (or your chosen supported model)
+and `OPENAI_API_KEY` in ignored `backend/.env`. Runtime, provider/API protocol,
+model and instructions are separate settings in `backend/.env.example`.
+Start backing services using the port settings in that same file, then install
+the agent runtime and load the environment into API and worker:
+
+```bash
+docker compose --env-file backend/.env up -d --wait postgres redis minio
+cd backend
+uv sync --locked --extra dev --extra agents
+uv run --env-file .env uvicorn app.main:app --reload
+# In another terminal, from backend/:
+uv run --env-file .env celery -A app.workers.celery_app worker --loglevel=info
+```
+
+The model key must be in the process environment; `--env-file` supplies it without
+shell-exporting or printing it. For connected guide testing, start Postgres,
+Redis and MinIO, create the private bucket as described below, and enable the
+S3-compatible settings in `.env`. The disabled-store first-run profile does not
+support guide artifact ingestion. Verified source readiness runs one compilation
+and stops at findings and draft proposals; manager review/approval remains separate.
+
 ### Logs, Shutdown, And Reset
 
 ```bash

@@ -563,7 +563,7 @@ async def test_unavailable_authority_returns_only_the_safe_public_code(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind, failure_code", [
-    ("malformed", "schema_invalid"), ("schema", "schema_invalid"), ("unsafe", "unsafe_text"),
+    ("malformed", "schema_invalid"), ("schema", "schema_invalid"), ("unsafe", "schema_invalid"),
 ])
 async def test_sdk_parser_rejection_persists_terminal_without_reinvocation(
     clean_postgres_database, monkeypatch, kind, failure_code,
@@ -574,6 +574,8 @@ async def test_sdk_parser_rejection_persists_terminal_without_reinvocation(
     from agents import Runner
     from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
 
+    from agents import _debug
+    monkeypatch.setattr(_debug, "DONT_LOG_MODEL_DATA", True)
     monkeypatch.setenv("OPENAI_API_KEY", "unit-test-only")
     payload = result().model_dump(mode="json")
     if kind == "schema":

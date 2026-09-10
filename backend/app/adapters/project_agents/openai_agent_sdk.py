@@ -105,6 +105,16 @@ class OpenAIAgentSdkProjectGuideRuntime:
         from agents.exceptions import ModelBehaviorError
         from openai import AsyncOpenAI
 
+        class CompilationOutputSchema(AgentOutputSchema):
+            """Translate rejection at the SDK parser boundary, even with redacted errors."""
+
+            def validate_json(self, json_str: str):
+                """Use the SDK parser; never infer failure type from provider error text."""
+                try:
+                    return super().validate_json(json_str)
+                except ModelBehaviorError:
+                    raise ProjectGuideCompilationInvalidOutputError("schema_invalid") from None
+
         configuration = self._configuration
         async with AsyncOpenAI(
             base_url=configuration.model_endpoint or "https://api.openai.com/v1",
@@ -119,27 +129,18 @@ class OpenAIAgentSdkProjectGuideRuntime:
                 name="ProjectGuideCompilationAgent",
                 instructions=configuration.instructions,
                 model=model_type(model=configuration.model, openai_client=client),
-                output_type=AgentOutputSchema(
+                output_type=CompilationOutputSchema(
                     ProjectGuideCompilationResult, strict_json_schema=True
                 ),
                 tools=[],
                 handoffs=[],
             )
-            try:
-                result = await Runner.run(
-                    agent,
-                    prompt,
-                    max_turns=1,
-                    run_config=RunConfig(tracing_disabled=True, trace_include_sensitive_data=False),
-                )
-            except ModelBehaviorError as exc:
-                # The SDK wraps its structured-output parser's ValidationError.
-                # Other model-behavior failures do not establish a validated outcome.
-                if isinstance(exc.__cause__, ValidationError):
-                    raise ProjectGuideCompilationInvalidOutputError(
-                        _invalid_compilation_failure_code(exc.__cause__)
-                    ) from None
-                raise
+            result = await Runner.run(
+                agent,
+                prompt,
+                max_turns=1,
+                run_config=RunConfig(tracing_disabled=True, trace_include_sensitive_data=False),
+            )
             return result.final_output
 
 

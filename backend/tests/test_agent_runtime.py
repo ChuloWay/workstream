@@ -306,12 +306,15 @@ async def test_runtime_internal_cancellation_is_sanitized(monkeypatch):
 
 @pytest.mark.parametrize("kind, expected", [
     ("valid", None), ("malformed", "schema_invalid"),
-    ("schema", "schema_invalid"), ("unsafe", "unsafe_text"),
+    ("schema", "schema_invalid"), ("unsafe", "schema_invalid"),
 ])
-async def test_actual_sdk_parser_preserves_known_invalid_output(monkeypatch, kind, expected):
+@pytest.mark.parametrize("redacted", [True, False])
+async def test_actual_sdk_parser_preserves_known_invalid_output(monkeypatch, kind, expected, redacted):
     """Exercise the installed SDK parser before the adapter receives any result."""
     from agents import Runner
 
+    from agents import _debug
+    monkeypatch.setattr(_debug, "DONT_LOG_MODEL_DATA", redacted)
     payload = result().model_dump(mode="json")
     if kind == "schema":
         payload["status"] = "not-a-status"

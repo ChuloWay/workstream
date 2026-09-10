@@ -444,11 +444,14 @@ CI or approval state.
 
 ### SDK parser outcome correction
 
-The adapter translates SDK `ModelBehaviorError` with a `ValidationError` cause
-into the sanitized invalid-output classification; other SDK/provider failures
-remain unresolved. Tests must exercise the installed structured-output parser,
+The adapter translates `ModelBehaviorError` raised by the SDK output parser
+into sanitized `schema_invalid` output, including unsafe text rejected there.
+It does not depend on payload-bearing exception causes, which SDK redaction
+removes. Other SDK/provider failures remain unresolved. The tested SDK is pinned
+to 0.22.2 in package metadata and the lockfile so local and hosted installs agree. Tests must exercise the installed structured-output parser,
 then prove committed invalid-terminal custody and replay without another call.
-The affected adapter/tests and `backend/.env.example` remain within this repair;
+The affected adapter/tests, dependency metadata/lockfile, native environment
+example/README instructions and removed obsolete Compose setting remain within this repair;
 authorization, lineage, retry limits and evidence retention do not change.
 The environment example uses the current independent runtime/model/instruction
 settings and documents loading credentials into both API and worker processes.
