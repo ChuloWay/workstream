@@ -264,13 +264,11 @@ reported as successful live-agent proof.
 
 ## Real project-guide acceptance fixture
 
-The user explicitly selected the two top-level PaperBench+ guide PDFs from their
-local workspace for the real guide test: the Expert Contributor Guidelines and
-From Beaver to PaperBench+ What Changed. Use only those assigned documents,
-through the same authorized upload/manifest/runtime flow as a project manager.
-Do not import that workspace's tasks, private evidence, credentials or submission
-archives. Do not commit the source PDFs or extracted contents into Workstream.
-Record content-free file identity and test outcomes. Synthetic foreign-file,
+Use only the creator-authorized private documents and examples through the same
+authorized upload, manifest and runtime flow as a project manager. Keep source
+identities, titles, paths, contents and detailed receipts private and outside Git
+and the PR. Public verification notes report generic behavior and aggregate
+results only. Do not import unrelated workspace material. Synthetic foreign-file,
 corruption and SDK-parser probes remain separate discriminating controls.
 
 The realistic run must distinguish sufficiency from currently executable checker
@@ -422,7 +420,7 @@ single `backend/.env.example` aligned with supported settings and code defaults;
 remove obsolete settings when their implementation is replaced. Credentials
 remain required operator input and are never supplied as runtime defaults.
 
-The first Terra PaperBench+ platform probe opened both assigned PDFs but ended
+The first Terra platform probe opened both assigned PDFs but ended
 with `APITimeoutError` at the provider boundary. It is not a passing guide
 execution. All receipt-owned container/file deletion calls completed; final
 product integration and Terra guide-result verification remain required.
@@ -476,9 +474,9 @@ status alone cannot. The observed Terra read timeout remains unresolved rather
 than being represented as safely replayed. A fresh test run uses the configured
 300-second request timeout. Recovery does not silently switch the selected model.
 
-The subsequent Terra PaperBench+ SDK probe passed with request timeout 300s:
+The subsequent Terra SDK probe passed with request timeout 300s:
 three model requests, eighteen Code Interpreter calls, ten compaction items,
-44 pages across the two assigned PDFs, and separate pre/post proposal shapes.
+all pages across the assigned documents, and separate pre/post proposal shapes.
 Usage was 35,510 input and 5,350 output tokens. All receipt-owned container/file
 deletion calls succeeded. No transient error occurred in this run, so it is not
 live retry evidence. The 37 native-SDK/circuit tests pass (92% resilience-module
@@ -507,7 +505,7 @@ instructions state the contextual disposition, citation, prose and configuration
 rules. Invalid model output remains terminal; no retry attempts to repair it.
 
 Real-provider verification exercised two product outcomes with Terra. Two original
-PaperBench PDFs produced `sufficiency_blocked`; a complete synthetic two-document
+PDFs produced `sufficiency_blocked`; a complete synthetic two-document
 DOCX guide produced `policy_draft_ready`. Each used actual API upload, MinIO
 originals, the production async worker handler/coordinator, OpenAI Agents SDK and
 PostgreSQL: one attempt, one compilation, one finalization, two document accesses,
@@ -590,15 +588,11 @@ and real guide-plus-example inference with specific persisted findings. Earlier
 no-example provider probes establish mechanics only, not completion of this
 corrected input contract.
 
-Observed input controls: the creator's Terminus Claims example is a starting
-idea with title, description, languages and optional inspiration. The local
-PaperBench submission snapshots' `static_document.static_document` entries are
-paper-oriented examples with caption, reproduction target, compute guidance and
-caveats. These are project inputs, not completed submission packages. Do not use
-a contributor's finished `tasks/*/instruction.md` as a substitute for the
-assigned example in the acceptance smoke. The common requirement is meaningful
-example content, not any benchmark's field set. Optional metadata must remain
-optional; at least one example is mandatory.
+Observed input controls: examples may be starting ideas or fuller descriptions
+with optional titles, labels, targets and caveats. They are project inputs, not
+completed submission packages. Use only explicitly assigned examples. The common
+requirement is meaningful example content, not a particular source's field set.
+Optional metadata remains optional; at least one example is mandatory.
 
 #### Required-example implementation contract
 
@@ -643,7 +637,7 @@ Required proof: missing/empty/whitespace-only rejection before guide creation;
 one minimal example; diverse multiple examples and exact PostgreSQL roundtrip;
 content-sensitive same-key replay conflict; immutable example binding across
 snapshot/request/execution; foreign/stale/missing rejection before provider I/O;
-and original guide plus actual assigned PaperBench examples through the real
+and original guide plus actual assigned examples through the real
 provider. Retain sanitized outcome findings for the smoke so a blocked result
 can be explained. Scope and required review tracks remain those of this change.
 
@@ -734,3 +728,61 @@ missing examples reach input validation instead of replaying a persisted result.
 Repository verification covers exact setup lookup, foreign-project exclusion,
 next generation, and absent compiled policy reads during setup. These current
 shared readers remain required by task and authorized diagnostic consumers.
+
+### Catalogue growth through project requirements
+
+The creator clarified that setup must help grow the checker catalogue from real
+project needs. Match existing capabilities first; do not invent gaps when the
+catalogue already covers the guide. For every required unsupported pre-submit
+or post-submit automated requirement, return an actionable non-executable
+capability suggestion linked to that exact requirement and stage, with rationale
+and guide evidence. A manager reviews the report and requests engineering work;
+engineering implements, tests and registers the capability, deploys it, and a
+fresh authorized setup run can select it. Suggestions never register, execute,
+approve or activate capabilities. Required gaps keep setup blocked. Human-review
+requirements remain human review, not fabricated automated gaps. Optional ideas
+may be setup notes; the capability-gap report describes required missing checks.
+A mature catalogue may correctly produce zero capability suggestions.
+
+Allowed files for this bounded clarification: the existing compilation result
+contract, default instructions, their tests and current guide/setup docs in this
+PR. Add explicit requirement/stage references to the existing suggestion shape;
+replace its affected callers and tests together, without parallel schemas or
+compatibility defaults. Validate exact gap coverage, references and evidence;
+prove a valid blocked report persists and replays without provider reinvocation,
+and prove fully covered requirements need no suggestions. Preserve immutable
+result hashes and existing canonical persistence; no new persistence owner or
+migration. Risk remains L1. Review: architecture/reuse, security, QA/product-ops,
+test-delta, docs and CI integrity. Human focus: useful engineering handoff without
+invented executable capability or unnecessary project blockage. POL-05 retains
+manager review/correction/approval and fresh rerun ownership. A manager feedback
+loop and catalogue engineering UI are explicitly deferred, not added here.
+
+Plan-review resolutions: mixed blocked reports retain existing exact supported
+binding proposals as catalogue-match evidence in canonical custody. They still
+contain no submission artifact policy. Keep exact catalogue ID, version, stage,
+selectability and parameter validation; no bare unsupported assertion of a
+supported match. Existing blocked-status projection and finalization gates must
+produce only sufficiency evidence, zero policy/checker rows and null policy
+output pointers. No new match-reference subsystem is needed.
+
+Align each stage's binding limit and the suggestion limit with the existing
+200-requirement cap; cover 50/51, 100/101 and 200/201 boundaries. Enforce the
+existing PostgreSQL JSON envelope ceiling of 4,194,304 bytes in the current
+result validator before acceptance and during stored-result revalidation.
+Measure the default driver JSON serialization (ASCII escaping, default spaces,
+UTF-8 byte count); preserve the canonical hash serializer and SQL constraints.
+Prove serializer parity against persisted PostgreSQL JSON, multibyte threshold
+cases, and terminal invalid-output classification without another provider call.
+
+Verification includes mixed exact pre/post matches plus both gap stages, missing,
+orphan, duplicate, wrong-stage and empty/foreign-evidence suggestions, invalid
+catalogue matches, and a fully supported empty-suggestion control. A fresh private
+real-provider drill uses authorized originals and examples with an explicitly
+separate synthetic test addendum requiring unsupported checking in both stages.
+A separate synthetic supported control proves exact catalogue selection without
+unnecessary suggestions. Keep private source identities, contents and detailed
+receipts out of Git and the PR; publish aggregate evidence only. This chunk
+creates the immutable structured handoff inside canonical compilation custody;
+it does not claim that today's public diagnostic response exposes suggestions.
+POL-05 owns that manager-facing review surface. The feedback loop remains deferred.

@@ -233,7 +233,7 @@ cannot be reused as post-submission review-gate evidence. See the
   draft policy outcomes, with exact replay and provider cleanup. Broker delivery
   was scripted in these drills; live Celery transport and broad semantic accuracy
   are not established by them. Earlier probes omitted task examples and establish
-  execution mechanics only. A subsequent real Terra run with two PaperBench PDFs
+  execution mechanics only. A subsequent real Terra run with assigned private documents
   and two task examples proved exact example delivery, original access, persisted
   findings, cleanup and replay. It correctly stopped for absent project-wide
   file/archive size limits, without demanding one selected paper. This proves
