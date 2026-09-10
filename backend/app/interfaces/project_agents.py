@@ -39,8 +39,9 @@ from app.modules.projects.api.guide_documents import GuideRuntimeCleanupCustody,
 MAXIMUM_PROJECT_GUIDE_COMPILATION_PROMPT_BYTES = 1_000_000
 MAXIMUM_COMPILATION_FINDINGS = 100
 MAXIMUM_COMPILATION_REQUIREMENTS = 200
-MAXIMUM_COMPILATION_BINDINGS = 100
-MAXIMUM_COMPILATION_SUGGESTIONS = 50
+MAXIMUM_COMPILATION_BINDINGS = MAXIMUM_COMPILATION_REQUIREMENTS
+MAXIMUM_COMPILATION_SUGGESTIONS = MAXIMUM_COMPILATION_REQUIREMENTS
+MAXIMUM_COMPILATION_RESULT_STORAGE_BYTES = 4_194_304
 MAXIMUM_COMPILATION_NOTES = 20
 MAXIMUM_EVIDENCE_REFS = 20
 PROJECT_GUIDE_COMPILATION_AGENT_IDENTITY = "project-guide-compilation-agent-v1"
@@ -256,7 +257,8 @@ class AtomicGuideRequirement(BaseModel):
         "Use human_review for work assigned to an authorized human reviewer. "
         "Use a capability gap only for required unsupported automated evaluation. "
         "Any guide_blocker, pre_submit_capability_gap or post_submit_capability_gap "
-        "requires the overall guide_blocked status and no draft policy or bindings."
+        "requires guide_blocked and no artifact policy. Exact supported binding "
+        "proposals may remain as catalogue-match evidence without being projected."
     ))
     platform_coverage: PlatformCoverageRef | None = None
     evidence_refs: tuple[GuideEvidenceRef, ...] = Field(
@@ -306,12 +308,15 @@ class CapabilitySuggestion(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    requirement_id: str = Field(json_schema_extra={"pattern": _SAFE_IDENTIFIER.pattern})
+    stage: CompilationStage
     title: ModelProse
     rationale: ModelProse
     evidence_refs: tuple[GuideEvidenceRef, ...] = Field(
-        default=(), max_length=MAXIMUM_EVIDENCE_REFS
+        min_length=1, max_length=MAXIMUM_EVIDENCE_REFS
     )
 
+    _requirement_id = field_validator("requirement_id")(_validated_identifier)
     _title = field_validator("title")(_validated_safe_model_text)
     _rationale = field_validator("rationale")(_validated_safe_model_text)
 
@@ -425,18 +430,17 @@ def validate_project_guide_compilation_result(
     result: ProjectGuideCompilationResult,
 ) -> None:
     """Fail closed when an untrusted result diverges from canonical capability truth."""
+    if project_guide_compilation_result_storage_bytes(result) > MAXIMUM_COMPILATION_RESULT_STORAGE_BYTES:
+        raise ValueError("compilation result exceeds storage byte limit")
     if not context.pre_submission_capabilities.available:
         raise ValueError("pre-submit capability projection is unavailable")
     requirements = {item.requirement_id: item for item in result.requirements}
     if len(requirements) != len(result.requirements):
         raise ValueError("compilation requirements must be unique")
     _validate_status_consistency(result)
+    _validate_capability_suggestions(result.capability_suggestions, requirements)
     if result.status == "guide_blocked":
-        if (
-            result.submission_artifact_policy
-            or result.pre_submit_bindings
-            or result.post_submit_bindings
-        ):
+        if result.submission_artifact_policy is not None:
             raise ValueError("blocked guide cannot publish policy proposals")
     elif result.submission_artifact_policy is None:
         raise ValueError("draft-ready compilation requires artifact policy")
@@ -477,6 +481,34 @@ def validate_project_guide_compilation_result(
     }
     if pre_bound_requirements != expected_pre or post_bound_requirements != expected_post:
         raise ValueError("supported compilation requirements must have one binding")
+
+
+def project_guide_compilation_result_storage_bytes(result: ProjectGuideCompilationResult) -> int:
+    """Measure the default SQLAlchemy PostgreSQL JSON representation, not hash encoding."""
+    return len(json.dumps(result.model_dump(mode="json"), ensure_ascii=True,
+                          allow_nan=False).encode("utf-8"))
+
+
+def _validate_capability_suggestions(
+    suggestions: tuple[CapabilitySuggestion, ...],
+    requirements: dict[str, AtomicGuideRequirement],
+) -> None:
+    """Require one evidence-backed engineering handoff for each exact staged gap."""
+    stages = {
+        RequirementDisposition.PRE_SUBMIT_CAPABILITY_GAP: CompilationStage.PRE_SUBMIT,
+        RequirementDisposition.POST_SUBMIT_CAPABILITY_GAP: CompilationStage.POST_SUBMIT,
+    }
+    gaps = {key: stages[item.disposition] for key, item in requirements.items()
+            if item.disposition in stages}
+    seen: set[str] = set()
+    for suggestion in suggestions:
+        if (suggestion.requirement_id in seen
+                or gaps.get(suggestion.requirement_id) != suggestion.stage
+                or not suggestion.evidence_refs):
+            raise ValueError("compilation capability suggestion is invalid")
+        seen.add(suggestion.requirement_id)
+    if seen != set(gaps):
+        raise ValueError("capability gaps must have exactly one suggestion")
 
 
 def _validate_status_consistency(result: ProjectGuideCompilationResult) -> None:

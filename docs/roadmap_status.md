@@ -219,7 +219,11 @@ cannot be reused as post-submission review-gate evidence. See the
   through Celery. It persists sufficiency findings and separate pre-submit and
   post-submit proposals, then projects the sufficiency and artifact-policy
   components and atomically finalizes the setup at draft output. A blocked guide
-  ends at findings. Runtime, model/provider and instructions are independently
+  ends at sufficiency evidence, with no policy projection. Its canonical result
+  retains exact supported catalogue matches and one evidence-linked engineering
+  suggestion for each required missing pre-submit or post-submit check. Fully
+  covered projects need no suggestions. The manager-facing handoff remains
+  part of POL-05; suggestions cannot register or activate a checker. Runtime, model/provider and instructions are independently
   configured and bound to the attempt. The agent opens assigned files on demand
   in an isolated workspace and assesses them with every supplied task example;
   exact grants exclude other projects and runs. Known

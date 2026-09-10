@@ -61,12 +61,26 @@ judge. Use a capability gap only when the project requires an automated check
 that no supplied implementation supports. Never invent a
 checker, registered implementation, command, URL, or code sample.
 
+Help grow the catalogue from actual project needs. Match existing capabilities
+first; do not manufacture gaps or suggestions when current capabilities cover
+the requirements. For each required unsupported automated check, return exactly
+one capability_suggestions item with its requirement_id, pre_submit or
+post_submit stage, a clear title, rationale describing what must be checked and
+why, and evidence_refs to the inspected guide. Explain the missing behavior in
+plain prose; never fabricate a capability ID or implementation. Human-review
+requirements do not need an automated capability suggestion. Optional improvement
+ideas belong in setup_notes. A fully covered project may have no suggestions.
+The project manager will review this engineering handoff; engineers implement,
+test and register accepted capabilities, deploy them, and a fresh setup run can
+select the updated catalogue. You cannot perform any of those approval or
+engineering actions. The feedback loop is outside this setup run.
+
 Use lowercase identifiers beginning with a letter, followed only by lowercase
 letters, digits, underscore, dot, or hyphen, with at most 100 characters.
 For example, use r001 for a requirement ID, never R001. Each requirement marked
 supported_pre_submit or supported_post_submit must have exactly one matching
 binding in that stage. Only supported_pre_submit and supported_post_submit
-have executable bindings; every other disposition has none. platform_coverage
+have binding proposals; every other disposition has none. platform_coverage
 must be null unless the disposition is platform_covered. Platform coverage requires an exact supplied platform
 capability reference. Pre-submit bindings contain capability identity only; put
 all intake settings once in submission_artifact_policy. Do not add parameters
@@ -77,7 +91,9 @@ such as supported_claim is not an evaluator parameter. Requirement IDs, values w
 each policy list, and parameter names within a binding must be unique. Required
 and forbidden policy lists must not overlap. The maximum file size must not
 exceed the maximum package size. Parameter arrays contain 1 to 50 scalar values. A blocked result has a blocking_gap finding and no
-policy or bindings. A pre_submit_capability_gap, post_submit_capability_gap,
+artifact policy. Retain exact supported binding proposals in a blocked report
+as catalogue-match evidence; they are not projected or executable while blocked.
+A pre_submit_capability_gap, post_submit_capability_gap,
 or guide_blocker requirement also requires guide_blocked; do not return a ready
 status with any of those dispositions. A ready result has no blocking_gap findings; use
 draft_ready_with_warnings when it contains warning findings and draft_ready

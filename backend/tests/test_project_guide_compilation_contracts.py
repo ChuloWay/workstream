@@ -230,7 +230,8 @@ def test_guide_evidence_ref_rejects_non_lineage_fields(payload: dict[str, str], 
 )
 def test_model_produced_text_rejects_unsafe_shapes(unsafe: str) -> None:
     with pytest.raises(ValidationError):
-        CapabilitySuggestion(title="new checker", rationale=unsafe)
+        CapabilitySuggestion(requirement_id="r001", stage="pre_submit",
+                             title="new checker", rationale=unsafe, evidence_refs=(_evidence(),))
 
 
 @pytest.mark.parametrize(
@@ -242,7 +243,8 @@ def test_model_produced_text_rejects_unsafe_shapes(unsafe: str) -> None:
     ],
 )
 def test_model_produced_text_allows_safe_security_policy_language(safe: str) -> None:
-    suggestion = CapabilitySuggestion(title="security guidance", rationale=safe)
+    suggestion = CapabilitySuggestion(requirement_id="r001", stage="pre_submit",
+                                      title="security guidance", rationale=safe, evidence_refs=(_evidence(),))
     assert suggestion.rationale == safe
 
 
