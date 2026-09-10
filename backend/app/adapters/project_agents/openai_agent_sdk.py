@@ -71,6 +71,8 @@ class OpenAIAgentSdkProjectGuideRuntime:
             raise ProjectAgentRuntimeError("project guide run cancelled") from None
         except TimeoutError:
             raise ProjectAgentRuntimeError("project guide run timed out") from None
+        except ProjectGuideCompilationInvalidOutputError:
+            raise
         except Exception:
             raise ProjectAgentRuntimeError("project guide run failed") from None
         try:
@@ -100,6 +102,7 @@ class OpenAIAgentSdkProjectGuideRuntime:
             RunConfig,
             Runner,
         )
+        from agents.exceptions import ModelBehaviorError
         from openai import AsyncOpenAI
 
         configuration = self._configuration
@@ -122,12 +125,21 @@ class OpenAIAgentSdkProjectGuideRuntime:
                 tools=[],
                 handoffs=[],
             )
-            result = await Runner.run(
-                agent,
-                prompt,
-                max_turns=1,
-                run_config=RunConfig(tracing_disabled=True, trace_include_sensitive_data=False),
-            )
+            try:
+                result = await Runner.run(
+                    agent,
+                    prompt,
+                    max_turns=1,
+                    run_config=RunConfig(tracing_disabled=True, trace_include_sensitive_data=False),
+                )
+            except ModelBehaviorError as exc:
+                # The SDK wraps its structured-output parser's ValidationError.
+                # Other model-behavior failures do not establish a validated outcome.
+                if isinstance(exc.__cause__, ValidationError):
+                    raise ProjectGuideCompilationInvalidOutputError(
+                        _invalid_compilation_failure_code(exc.__cause__)
+                    ) from None
+                raise
             return result.final_output
 
 

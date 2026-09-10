@@ -302,3 +302,49 @@ async def test_runtime_internal_cancellation_is_sanitized(monkeypatch):
         await runtime.compile_project_guide(context(ids()))
     assert "private" not in str(caught.value)
     assert caught.value.__suppress_context__
+
+
+@pytest.mark.parametrize("kind, expected", [
+    ("valid", None), ("malformed", "schema_invalid"),
+    ("schema", "schema_invalid"), ("unsafe", "unsafe_text"),
+])
+async def test_actual_sdk_parser_preserves_known_invalid_output(monkeypatch, kind, expected):
+    """Exercise the installed SDK parser before the adapter receives any result."""
+    from agents import Runner
+
+    payload = result().model_dump(mode="json")
+    if kind == "schema":
+        payload["status"] = "not-a-status"
+    if kind == "unsafe":
+        payload["findings"] = [{"severity": "info", "code": "bad", "message": "token=secret123"}]
+    raw = "{invalid" if kind == "malformed" else json.dumps(payload)
+    calls = []
+
+    async def run(agent, *args, **kwargs):
+        calls.append(1)
+        return SimpleNamespace(final_output=agent.output_type.validate_json(raw))
+
+    monkeypatch.setattr(Runner, "run", run)
+    runtime = OpenAIAgentSdkProjectGuideRuntime(runtime_configuration())
+    if expected is None:
+        assert await runtime.compile_project_guide(context(ids())) == result()
+    else:
+        with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
+            await runtime.compile_project_guide(context(ids()))
+        assert caught.value.failure_code == expected
+        assert "secret123" not in str(caught.value)
+        assert caught.value.__suppress_context__
+    assert calls == [1]
+
+
+async def test_unclassified_sdk_behavior_error_remains_unresolved(monkeypatch):
+    """A generic SDK behavior error is not proof of structured-output rejection."""
+    from agents import Runner
+    from agents.exceptions import ModelBehaviorError
+
+    async def run(*args, **kwargs):
+        raise ModelBehaviorError("private provider detail")
+
+    monkeypatch.setattr(Runner, "run", run)
+    with pytest.raises(ProjectAgentRuntimeError, match="project guide run failed"):
+        await OpenAIAgentSdkProjectGuideRuntime(runtime_configuration()).compile_project_guide(context(ids()))

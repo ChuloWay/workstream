@@ -440,3 +440,16 @@ paths. The named tests and replacement mapping above identify those boundaries.
 The PR owns executed command results, exact-head reviewer freshness, hosted
 coverage and remaining verification; this record does not duplicate transient
 CI or approval state.
+
+
+### SDK parser outcome correction
+
+The adapter translates SDK `ModelBehaviorError` with a `ValidationError` cause
+into the sanitized invalid-output classification; other SDK/provider failures
+remain unresolved. Tests must exercise the installed structured-output parser,
+then prove committed invalid-terminal custody and replay without another call.
+The affected adapter/tests and `backend/.env.example` remain within this repair;
+authorization, lineage, retry limits and evidence retention do not change.
+The environment example uses the current independent runtime/model/instruction
+settings and documents loading credentials into both API and worker processes.
+Focused security, QA/test-delta and architecture/docs review cover the repair.

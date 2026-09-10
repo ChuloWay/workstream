@@ -559,3 +559,52 @@ async def test_unavailable_authority_returns_only_the_safe_public_code(
         assert runtime.calls == 0
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind, failure_code", [
+    ("malformed", "schema_invalid"), ("schema", "schema_invalid"), ("unsafe", "unsafe_text"),
+])
+async def test_sdk_parser_rejection_persists_terminal_without_reinvocation(
+    clean_postgres_database, monkeypatch, kind, failure_code,
+):
+    """Real SDK rejection persists its exact terminal class and replay makes no call."""
+    import json
+    from types import SimpleNamespace
+    from agents import Runner
+    from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
+
+    monkeypatch.setenv("OPENAI_API_KEY", "unit-test-only")
+    payload = result().model_dump(mode="json")
+    if kind == "schema":
+        payload["status"] = "not-a-status"
+    if kind == "unsafe":
+        payload["findings"] = [{"severity": "info", "code": "bad", "message": "token=secret123"}]
+    raw = "{invalid" if kind == "malformed" else json.dumps(payload)
+    calls = []
+
+    async def run(agent, *args, **kwargs):
+        calls.append(1)
+        return SimpleNamespace(final_output=agent.output_type.validate_json(raw))
+
+    monkeypatch.setattr(Runner, "run", run)
+    values = await seed_database(clean_postgres_database)
+    requested = await _authorized_attempt(clean_postgres_database, values)
+    engine = create_async_engine(clean_postgres_database)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    command = ProjectGuideCompilationExecutionCommand(attempt_id=requested.attempt_id)
+    try:
+        port = _port(factory, OpenAIAgentSdkProjectGuideRuntime(runtime_configuration()))
+        first = await port.execute(command)
+        assert first.classification is ProjectGuideCompilationExecutionClassification.INVALID_TERMINAL
+        assert await port.execute(command) == first
+        assert calls == [1]
+        async with factory() as session:
+            row = (await session.execute(text(
+                "select status,failure_code,canonical_result, "
+                "(select count(*) from project_guide_compilations) "
+                "from project_guide_compilation_attempts where id=:id"
+            ), {"id": requested.attempt_id})).one()
+        assert row == ("compilation_invalid_terminal", failure_code, None, 0)
+    finally:
+        await engine.dispose()
