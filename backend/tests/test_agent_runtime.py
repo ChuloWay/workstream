@@ -489,8 +489,11 @@ def test_default_instructions_advertise_contextual_output_constraints():
 
     instructions = " ".join(PROJECT_GUIDE_INSTRUCTIONS.split())
     for rule in (
-        "Only supported_pre_submit and supported_post_submit have executable bindings",
+        "Only supported_pre_submit and supported_post_submit have binding proposals",
         "platform_coverage must be null unless the disposition is platform_covered",
+        "they are not projected or executable while blocked",
+        "return exactly one capability_suggestions item with its requirement_id",
+        "A fully covered project may have no suggestions",
         "post_submit_empty_configuration requires parameters: []",
         "they do not require an automated judge",
         "or guide_blocker requirement also requires guide_blocked",
