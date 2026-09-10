@@ -439,15 +439,15 @@ async def project_cases(drill, admin, manager, outsider, manager_id):
     await drill.call("ungranted_project_denied", "GET", route, path=path, token=outsider, expected=404)
     guide_route = route + "/guides"
     guide = await drill.call("create_guide", "POST", guide_route, path=path + "/guides",
-        token=manager, expected=201, payload={"version": "initial", "content_markdown": "# Task guide",
+        token=manager, expected=201, payload={"version": "initial",
                                             "change_summary": "Initial draft"},
-        values={"version": "initial", "content_markdown": "# Task guide", "status": "draft"},
-        fields=("body.version", "body.content_markdown", "body.change_summary"))
+        values={"version": "initial", "status": "draft"},
+        fields=("body.version", "body.change_summary"))
     gpath, groute = path + "/guides/" + guide["id"], guide_route + "/{guide_id}"
     await drill.call("patch_guide", "PATCH", groute, path=gpath, token=manager,
-        payload={"content_markdown": "# Updated guide", "change_summary": "Updated"},
-        values={"content_markdown": "# Updated guide", "change_summary": "Updated"},
-        fields=("body.content_markdown", "body.change_summary"))
+        payload={"change_summary": "Updated"},
+        values={"change_summary": "Updated"},
+        fields=("body.change_summary",))
     await policy_cases(drill, manager, groute, gpath)
     await project_field_cases(drill, manager, outsider, project, guide, manager_id)
     await project_role_cases(drill, manager, outsider, project, manager_id)
@@ -558,14 +558,14 @@ async def project_field_cases(drill, manager, outsider, project, guide, manager_
         path=route + "/" + limit_project["id"], token=manager, values=limit_project)
     groute = route + "/{project_id}/guides"
     gpath = f'{route}/{project["id"]}/guides'
-    gbody = {"version": "v" * 50, "content_markdown": "# Boundary guide"}
+    gbody = {"version": "v" * 50}
     boundary_guide = await drill.call("guide_maximum_version", "POST", groute,
         path=gpath, token=manager, payload=gbody, expected=201,
         values=gbody | {"project_id": project["id"], "status": "draft", "change_summary": None,
                        "approved_by": None, "effective_at": None, "superseded_at": None,
                        "created_by": manager_id},
         checks={"id": uuid_value, "created_at": timestamp_value, "updated_at": timestamp_value},
-        exact_fields=("id", "project_id", "version", "status", "content_markdown", "change_summary",
+        exact_fields=("id", "project_id", "version", "status", "change_summary",
                       "approved_by", "effective_at", "superseded_at", "created_by", "created_at", "updated_at"))
     for field in gbody:
         await drill.call("guide_" + field + "_missing", "POST", groute, path=gpath, token=manager,
@@ -574,7 +574,7 @@ async def project_field_cases(drill, manager, outsider, project, guide, manager_
     # Never alter the expected 422 to match an observed server error.
     for field, maximum in (("name", 200), ("slug", 120), ("version", 50)):
         body = ({"name": "Overflow", "slug": "overflow-" + uuid4().hex}
-                if field != "version" else {"version": "overflow", "content_markdown": "# Overflow"})
+                if field != "version" else {"version": "overflow"})
         failed_key = {"Idempotency-Key": str(uuid4())}
         try:
             await drill.call("overflow_" + field, "POST", route if field != "version" else groute,
@@ -592,21 +592,21 @@ async def project_field_cases(drill, manager, outsider, project, guide, manager_
         values={key: value for key, value in boundary_guide.items() if key != "updated_at"})
     await drill.call("guide_foreign_actor_patch", "PATCH", groute + "/{guide_id}",
         path=gpath + "/" + guide["id"], token=outsider,
-        payload={"content_markdown": "Unauthorized replacement"}, expected=403)
+        payload={"change_summary": "Unauthorized replacement"}, expected=403)
     await drill.call("guide_foreign_actor_patch_unchanged", "PATCH", groute + "/{guide_id}",
         path=gpath + "/" + guide["id"], token=manager, payload={},
         values={"id": guide["id"], "project_id": project["id"], "version": "initial",
-                "status": "draft", "content_markdown": "# Updated guide", "change_summary": "Updated",
+                "status": "draft", "change_summary": "Updated",
                 "created_by": manager_id, "created_at": guide["created_at"]})
     try:
-        await drill.call("guide_null_content", "PATCH", groute + "/{guide_id}",
+        await drill.call("guide_rejects_removed_inline_body", "PATCH", groute + "/{guide_id}",
             path=gpath + "/" + guide["id"], token=manager,
             payload={"content_markdown": None}, expected=422)
     except ProbeFailure:
         pass
-    await drill.call("guide_null_content_unchanged", "PATCH", groute + "/{guide_id}",
+    await drill.call("guide_rejected_body_unchanged", "PATCH", groute + "/{guide_id}",
         path=gpath + "/" + guide["id"], token=manager, payload={},
-        values={"content_markdown": "# Updated guide", "change_summary": "Updated"})
+        values={"change_summary": "Updated"})
 
 
 async def authority_cases(drill, admin, manager, outsider, manager_id, project):
