@@ -1,9 +1,73 @@
 # POL-04B — Live unified setup cutover
 
-- Durable disposition: Complete
+- Durable disposition: Planned
 
 Dependencies: complete 04A/04A3/04A2 and AUTH-12I/12J/12B2,
 plus POL-04B1 automatic request custody and [ARCH-04A consolidation](../WS-ARCH-001/WS-ARCH-001-04A.md). Risk: L1.
+
+## Current runtime intent — agent-led document investigation
+
+The creator's clarified intent supersedes this record's earlier tool-free,
+single-prompt, single-model-turn execution assumptions. Those assumptions do
+not satisfy project guides comprising many documents larger than model context.
+The existing implementation requires reconciliation before this boundary is
+complete; successful single-request inference alone is not its acceptance proof.
+
+One authorized setup attempt owns an agent run with multiple model/tool turns.
+Worker replay must not start a duplicate agent run. That fence must not prohibit
+legitimate calls within the original run. Unknown execution outcomes remain
+explicitly unresolved until recovery of that same run is proven.
+
+The agent receives a reference to the immutable, authorized guide snapshot and
+a bounded inventory, then chooses which documents/ranges to read or search.
+Tools must resolve through Workstream-owned artifact/material ports: S3 remains
+behind ArtifactStore, and any physical ephemeral workspace uses
+ArtifactScratchManager. Credentials and unrestricted bucket/host access are not
+model inputs. Required document coverage, exact citations, extracted-content
+omissions and unread material must be visible; a search hit or summary is not
+proof that the guide was completely understood.
+
+The runtime needs working notes and bounded context management so gradual reads
+do not merely accumulate into another oversized prompt. Runtime harness,
+model/provider, trusted instructions, tool permissions and execution budgets
+remain separate configuration concerns. Study OmniCoreAgent and LangChain Deep
+Agents as concrete harness references; this clarification does not select a
+replacement library merely by naming it. Replace superseded affected paths and
+tests together rather than retaining a one-shot fallback.
+
+The output remains sufficiency findings plus distinct pre/post policy proposals,
+followed by the existing deterministic validation and authorized persistence.
+Insufficiency ends with findings; a ready proposal still waits for manager
+review/correction/approval. No approval or checker execution authority moves into
+the agent. The amended bounded file list, tool contracts, context/recovery
+semantics, tests and focused architecture/security review must be settled before
+implementing this replacement.
+
+Read-only discovery establishes that originals already reside behind
+ArtifactStore, while ART stores canonical extracted content in one PostgreSQL
+row per source item. Current preparation reads whole items (32 MiB input and
+4 MiB canonical output limits), then PROJECTS loads the entire guide into a
+12 MiB aggregate snapshot. A tool wrapper over that aggregate would preserve
+the wrong memory boundary. The revised corpus must load individual items or
+segments and avoid assembling the whole guide. Existing canonical rows are a
+possible initial backing; moving them into S3 is a separate storage decision,
+not a prerequisite merely to expose document tools. Image extraction currently
+provides structural facts without OCR or visual understanding.
+
+Define actual segment/range semantics before relying on evidence ordinals, and
+validate final citations against the exact content returned to the run. Tools
+must return server-minted references so the model need not invent hashes or
+lineage. The installed OpenAI SDK supports tool loops and Responses context
+compaction; its default tool-output trimmer counts user-message turns, which
+alone does not bound one long autonomous run. Context reduction must be tested
+inside a single run. OpenAI remains the first candidate adapter; a Deep Agents
+adapter is optional and must not duplicate Workstream's tool or policy owners.
+
+References inspected:
+- [OmniCoreAgent](https://github.com/omnirexflora-labs/omnicoreagent)
+- [Deep Agents context management](https://docs.langchain.com/oss/python/deepagents/context-engineering)
+- [Deep Agents storage backends](https://docs.langchain.com/oss/python/deepagents/backends)
+- [OpenAI SDK agent loop](https://openai.github.io/openai-agents-python/running_agents/)
 
 ## Intent
 
