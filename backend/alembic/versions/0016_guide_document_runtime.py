@@ -198,6 +198,18 @@ def _resource_tables() -> None:
         sa.Column("document_handle", sa.Uuid()),
         sa.Column("provider_id", sa.String(128)),
         sa.Column("parent_provider_id", sa.String(128)),
+        sa.Column("source_file_allocation_id", sa.Uuid(), sa.ForeignKey("project_guide_runtime_allocations.id")),
+        sa.Column("container_allocation_id", sa.Uuid(), sa.ForeignKey("project_guide_runtime_allocations.id")),
+        sa.Column("source_item_id", sa.String(36), sa.ForeignKey("guide_source_snapshot_items.id")),
+        sa.Column("document_version_id", sa.String(36), sa.ForeignKey("guide_source_artifact_ingests.id")),
+        sa.Column("put_attempt_id", sa.String(36), sa.ForeignKey("artifact_put_attempts.id")),
+        sa.Column("content_id", sa.String(36), sa.ForeignKey("artifact_contents.id")),
+        sa.Column("replica_id", sa.String(36), sa.ForeignKey("artifact_replicas.id")),
+        sa.Column("storage_namespace_id", sa.String(20), sa.ForeignKey("artifact_storage_namespaces.id")),
+        sa.Column("namespace_fingerprint", sa.String(71)),
+        sa.Column("sha256", sa.String(71)),
+        sa.Column("byte_count", sa.BigInteger()),
+        sa.Column("media_type", sa.String(255)),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True)),
@@ -207,6 +219,7 @@ def _resource_tables() -> None:
         sa.CheckConstraint("(kind='container' and document_handle is null and parent_provider_id is null) or "
                            "(kind='file' and document_handle is not null and parent_provider_id is null) or "
                            "(kind='attachment' and document_handle is not null and parent_provider_id is not null)", name="ck_guide_resource_scope"),
+        sa.CheckConstraint("((kind='file' and num_nonnulls(source_item_id,document_version_id,put_attempt_id,content_id,replica_id,storage_namespace_id,namespace_fingerprint,sha256,byte_count,media_type)=10) or (kind in ('container','attachment') and num_nonnulls(source_item_id,document_version_id,put_attempt_id,content_id,replica_id,storage_namespace_id,namespace_fingerprint,sha256,byte_count,media_type)=0)) and ((kind='attachment' and source_file_allocation_id is not null and container_allocation_id is not null) or (kind in ('container','file') and source_file_allocation_id is null and container_allocation_id is null))", name="ck_guide_resource_document_shape"),
         sa.CheckConstraint("state in ('allocating','uncertain') or provider_id is not null", name="ck_guide_resource_identity"))
     op.create_index("ix_project_guide_runtime_allocations_attempt_id", "project_guide_runtime_allocations", ["attempt_id"])
     op.create_table("project_guide_document_accesses",
@@ -225,6 +238,11 @@ def _resource_tables() -> None:
 
 def _resource_guards() -> None:
     _execute("""
+      create function canonical_guide_document_handle(run_id uuid, source_id uuid, ingest_id uuid)
+      returns uuid language sql immutable strict parallel safe as $$
+        select encode(substring(sha256(convert_to('workstream.guide-document-handle.v1:' ||
+          run_id::text || ':' || source_id::text || ':' || ingest_id::text, 'UTF8')) from 1 for 16), 'hex')::uuid
+      $$;
       create function guard_guide_runtime_allocation() returns trigger language plpgsql as $$
       declare attempt project_guide_compilation_attempts%rowtype;
       begin
@@ -243,9 +261,55 @@ def _resource_guards() -> None:
              or not (attempt.runtime_configuration::jsonb ? 'maximum_documents') then
             raise exception 'guide runtime allocation requires fenced intent' using errcode='23514';
           end if;
+          if new.kind='file' then
+            if new.document_handle is distinct from canonical_guide_document_handle(
+                attempt.setup_run_id::uuid, new.source_item_id::uuid, new.document_version_id::uuid) then
+              raise exception 'guide runtime canonical handle mismatch' using errcode='23514';
+            end if;
+            if not exists(select 1 from guide_source_snapshot_items item
+              join guide_source_artifact_ingests ingest on ingest.source_item_id=item.id
+              join artifact_put_attempts put on put.id=new.put_attempt_id
+              join artifact_replicas replica on replica.id=put.replica_id
+              join artifact_contents content on content.id=replica.content_id
+              join artifact_storage_namespaces namespace on namespace.id=replica.storage_namespace_id
+              where item.id=new.source_item_id and item.source_snapshot_id=attempt.source_snapshot_id
+                and item.source_kind='document' and item.ingestion_adapter='upload' and item.media_type=new.media_type
+                and ingest.id=new.document_version_id and ingest.sha256=new.sha256
+                and ingest.byte_count=new.byte_count and ingest.media_type=new.media_type
+                and put.guide_source_item_id=item.id and put.project_id=attempt.project_id
+                and put.producer_request_type='guide' and put.logical_role is null and put.status='object_confirmed'
+                and put.sha256=new.sha256 and put.byte_count=new.byte_count and put.media_type=new.media_type
+                and put.storage_namespace_id=new.storage_namespace_id and put.namespace_fingerprint=new.namespace_fingerprint
+                and replica.id=new.replica_id and replica.content_id=new.content_id
+                and replica.storage_namespace_id=new.storage_namespace_id and replica.namespace_fingerprint=new.namespace_fingerprint
+                and replica.integrity_state <> 'invalid' and replica.availability_state in ('unknown','available')
+                and content.sha256=new.sha256 and content.byte_count=new.byte_count and content.media_type=new.media_type
+                and namespace.namespace_fingerprint=new.namespace_fingerprint
+                and namespace.adapter=replica.adapter and namespace.provider_profile=replica.provider_profile
+                and (
+                  (put.terminal_result_code='document_stored' and exists(
+                    select 1 from artifact_operation_receipts receipt
+                    where receipt.id=put.receipt_id and receipt.put_attempt_id=put.id
+                      and receipt.guide_source_item_id=item.id and receipt.replica_id=replica.id
+                      and receipt.request_digest=put.request_digest
+                      and receipt.provider_object_ref=replica.provider_object_ref and receipt.outcome='document_stored'))
+                  or (put.terminal_result_code='document_stored_observed' and put.receipt_id is null and exists(
+                    select 1 from artifact_put_observation_receipts receipt
+                    where receipt.put_attempt_id=put.id and receipt.execution_generation=put.execution_generation
+                      and receipt.outcome='observed_confirmed'
+                      and receipt.expected_sha256=put.sha256 and receipt.observed_sha256=put.sha256
+                      and receipt.expected_byte_count=put.byte_count and receipt.observed_byte_count=put.byte_count))
+                )) then
+              raise exception 'guide runtime file source lineage mismatch' using errcode='23514';
+            end if;
+          end if;
           if new.kind='attachment' and not exists(select 1 from project_guide_runtime_allocations parent
-              where parent.attempt_id=new.attempt_id and parent.kind='container'
-                and parent.provider_id=new.parent_provider_id and parent.state='allocated') then
+              join project_guide_runtime_allocations file on file.id=new.source_file_allocation_id
+              where parent.id=new.container_allocation_id and parent.attempt_id=new.attempt_id
+                and parent.manifest_sha256=new.manifest_sha256 and parent.kind='container'
+                and parent.provider_id=new.parent_provider_id and parent.state='allocated'
+                and file.attempt_id=new.attempt_id and file.manifest_sha256=new.manifest_sha256
+                and file.kind='file' and file.state='allocated' and file.document_handle=new.document_handle) then
             raise exception 'guide runtime attachment parent mismatch' using errcode='23514';
           end if;
           return new;
@@ -291,30 +355,17 @@ def _resource_guards() -> None:
         if not found or attempt.status <> 'compilation_provider_uncertain'
            or new.manifest_sha256 is distinct from attempt.guide_material_hash
            or not exists(select 1 from project_guide_runtime_allocations resource
+             join project_guide_runtime_allocations file on file.id=resource.source_file_allocation_id
+             join project_guide_runtime_allocations container on container.id=resource.container_allocation_id
              where resource.id=new.attachment_allocation_id and resource.attempt_id=new.attempt_id
                and resource.manifest_sha256=new.manifest_sha256 and resource.kind='attachment'
-               and resource.document_handle=new.document_handle and resource.state='allocated')
-           or not exists(select 1 from guide_source_snapshot_items item
-             join guide_source_artifact_ingests ingest on ingest.source_item_id=item.id
-             join artifact_put_attempts put on put.guide_source_item_id=item.id
-             where item.id=new.source_item_id and item.source_snapshot_id=attempt.source_snapshot_id
-               and ingest.id=new.document_version_id and ingest.sha256=new.sha256
-               and put.producer_request_type='guide' and put.status='object_confirmed'
-               and put.terminal_result_code in ('document_stored','document_stored_observed')
-               and put.sha256=new.sha256
-               and (
-                 (put.terminal_result_code='document_stored' and exists(
-                   select 1 from artifact_operation_receipts receipt
-                   where receipt.id=put.receipt_id and receipt.put_attempt_id=put.id
-                     and receipt.guide_source_item_id=item.id and receipt.replica_id=put.replica_id
-                     and receipt.request_digest=put.request_digest and receipt.outcome='document_stored'))
-                 or (put.terminal_result_code='document_stored_observed' and put.receipt_id is null
-                   and exists(select 1 from artifact_put_observation_receipts receipt
-                     where receipt.put_attempt_id=put.id and receipt.execution_generation=put.execution_generation
-                       and receipt.outcome='observed_confirmed'
-                       and receipt.expected_sha256=put.sha256 and receipt.observed_sha256=put.sha256
-                       and receipt.expected_byte_count=put.byte_count and receipt.observed_byte_count=put.byte_count))
-               )) then
+               and resource.document_handle=new.document_handle and resource.state='allocated'
+               and file.attempt_id=new.attempt_id and file.manifest_sha256=new.manifest_sha256
+               and file.kind='file' and file.state='allocated' and file.document_handle=new.document_handle
+               and file.source_item_id=new.source_item_id and file.document_version_id=new.document_version_id
+               and file.sha256=new.sha256
+               and container.attempt_id=new.attempt_id and container.kind='container' and container.state='allocated'
+               and container.provider_id=resource.parent_provider_id) then
           raise exception 'guide document access lineage is invalid' using errcode='23514';
         end if;
         return new;

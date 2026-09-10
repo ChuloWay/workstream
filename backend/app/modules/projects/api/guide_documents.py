@@ -6,7 +6,8 @@ from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
 from typing import BinaryIO, Literal, Protocol
-from uuid import UUID, uuid5
+from uuid import UUID
+import hashlib
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
@@ -22,6 +23,12 @@ DOCUMENT_EXTENSIONS: dict[str, str] = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
 }
+
+
+def guide_document_handle(run_id: UUID, source_item_id: UUID, ingest_id: UUID) -> UUID:
+    """Derive the sole run-scoped opaque selector, mirrored by the SQL custody guard."""
+    payload = f"workstream.guide-document-handle.v1:{run_id}:{source_item_id}:{ingest_id}"
+    return UUID(bytes=hashlib.sha256(payload.encode("ascii")).digest()[:16])
 
 
 class GuideDocumentVersion(BaseModel):
@@ -81,7 +88,7 @@ class GuideDocumentManifest(BaseModel):
         """Mint an opaque selector meaningful only inside this run's exact grant."""
         if document not in self.documents:
             raise ValueError("document is not assigned to this manifest")
-        return str(uuid5(self.setup_run_id, f"{document.source_item_id}:{document.ingest_id}"))
+        return str(guide_document_handle(self.setup_run_id, document.source_item_id, document.ingest_id))
 
     def agent_projection(self) -> dict[str, object]:
         """Expose version references and handles, excluding server storage identities."""
@@ -178,6 +185,8 @@ class GuideRuntimeResourceCustody(GuideRuntimeCleanupCustody, Protocol):
         document_handle: str | None,
         parent_provider_id: str | None,
         expires_at: datetime,
+        source_file_allocation_id: UUID | None = None,
+        container_allocation_id: UUID | None = None,
     ) -> UUID: ...
 
     async def record_allocated(self, allocation_id: UUID, provider_id: str) -> None: ...

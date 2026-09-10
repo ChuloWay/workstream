@@ -122,5 +122,5 @@ async def cleanup_project_guide_runtime_resources(session_factory, *, runtime_fa
 
 def project_guide_document_scope_port(session: AsyncSession) -> ProjectGuideDocumentScopePort:
     """Bind PROJECTS current document scope independently from ART storage."""
-    from app.modules.projects.guide_compilation.orchestrator import project_guide_document_scope_port as compose_scope
-    return compose_scope(session)
+    from app.modules.projects.guide_compilation.document_scope import SqlAlchemyProjectGuideDocumentScope
+    return SqlAlchemyProjectGuideDocumentScope(session)

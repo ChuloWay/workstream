@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from app.core.cancellation import await_completion_preserving_cancellation
 from app.modules.projects.api.guide_documents import (
@@ -24,12 +25,14 @@ class OpenAIGuideWorkspace:
         self.manifest = manifest
         self.capabilities = capabilities
         self.container_id: str | None = None
+        self.container_allocation_id: UUID | None = None
         self._known: list[GuideRuntimeResource] = []
         self._opened: dict[str, dict[str, str]] = {}
         self._locks = {manifest.handle_for(document): asyncio.Lock()
                        for document in manifest.documents}
 
-    async def _allocate(self, *, kind, create, document_handle=None, parent_provider_id=None):
+    async def _allocate(self, *, kind, create, document_handle=None, parent_provider_id=None,
+                        source_file_allocation_id=None, container_allocation_id=None):
         """Record intent before I/O and retain returned identity before another provider call."""
         seconds = (self.configuration.container_expiry_minutes * 60 if kind == "container"
                    else self.configuration.file_expiry_seconds)
@@ -37,6 +40,7 @@ class OpenAIGuideWorkspace:
         allocation = await self.capabilities.resources.begin_allocation(
             kind=kind, document_handle=document_handle,
             parent_provider_id=parent_provider_id, expires_at=expires_at,
+            source_file_allocation_id=source_file_allocation_id, container_allocation_id=container_allocation_id,
         )
         try:
             value = await create()
@@ -46,7 +50,7 @@ class OpenAIGuideWorkspace:
                 expires_at=expires_at,
             ))
             await self.capabilities.resources.record_allocated(allocation, value.id)
-            return value
+            return allocation, value
         except BaseException:
             # A failed create/receipt never licenses a second provider attempt.
             try:
@@ -57,7 +61,7 @@ class OpenAIGuideWorkspace:
 
     async def start(self) -> None:
         """Create a fresh empty container with no network or inherited conversation."""
-        container = await self._allocate(
+        self.container_allocation_id, container = await self._allocate(
             kind="container",
             create=lambda: self.client.containers.create(
                 name="workstream-guide-" + str(self.manifest.setup_run_id),
@@ -90,7 +94,7 @@ class OpenAIGuideWorkspace:
                     raise RuntimeError("guide document version mismatch")
                 if handle in self._opened:
                     return self._opened[handle]
-                uploaded = await self._allocate(
+                file_allocation_id, uploaded = await self._allocate(
                     kind="file", document_handle=handle,
                     create=lambda: self.client.files.create(
                         file=(expected.filename, opened.reader, expected.media_type),
@@ -103,9 +107,11 @@ class OpenAIGuideWorkspace:
                         or not isinstance(uploaded.expires_at, int)
                         or uploaded.expires_at - uploaded.created_at != self.configuration.file_expiry_seconds):
                     raise RuntimeError("guide file expiry was not confirmed")
-                attachment = await self._allocate(
+                _, attachment = await self._allocate(
                     kind="attachment", document_handle=handle,
                     parent_provider_id=self.container_id,
+                    container_allocation_id=self.container_allocation_id,
+                    source_file_allocation_id=file_allocation_id,
                     create=lambda: self.client.containers.files.create(
                         self.container_id, file_id=uploaded.id,
                     ),

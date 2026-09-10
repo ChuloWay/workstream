@@ -21,6 +21,10 @@ from app.interfaces.project_agents import GuideEvidenceRef
 
 @pytest.fixture(autouse=True)
 def scripted_document_port(monkeypatch):
+    monkeypatch.setenv("WORKSTREAM_CELERY_BROKER_URL", "memory://")
+    monkeypatch.setenv("WORKSTREAM_CELERY_RESULT_BACKEND", "cache+memory://")
+    from app.core.config import get_settings
+    get_settings.cache_clear()
     from app.workers import project_setup as worker
     monkeypatch.setattr(worker, "guide_document_access_runtime",
                         lambda sessions, *args: document_access(*args))
@@ -722,7 +726,7 @@ async def test_concurrent_live_deliveries_share_one_provider_and_finalization(
         ("error_summary", "stale"),
         ("started_at", "2026-01-01T00:00:00+00:00"),
         ("finished_at", "2026-01-01T00:00:00+00:00"),
-        ("continuation_started_at", "2026-01-01T00:00:00+00:00"),
+        ("documents_ready_at", None),
         ("post_submit_derivation_summary", {"status": "stale"}),
     ],
 )
@@ -741,7 +745,7 @@ async def test_dirty_setup_rejects_before_request_or_provider(
     delivery = await _delivery(factory, setup_id)
     async with factory() as session, session.begin():
         setup = await session.get(ProjectSetupRun, str(setup_id))
-        setattr(setup, field, datetime.fromisoformat(value) if field.endswith("_at") else value)
+        setattr(setup, field, datetime.fromisoformat(value) if field.endswith("_at") and value else value)
 
     def forbidden(*args):
         pytest.fail("dirty setup reached configuration or provider")

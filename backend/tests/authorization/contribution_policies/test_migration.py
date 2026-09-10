@@ -1,12 +1,9 @@
 """Exact audit vocabulary migration and direct-SQL privacy regression proof."""
 
-import asyncio
 import json
 from pathlib import Path
 from uuid import uuid4
 
-from alembic import command
-from alembic.config import Config
 import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
@@ -14,10 +11,12 @@ from sqlalchemy.exc import DBAPIError
 from app.db import session as db_session
 from app.modules.tasks.models import AuditEvent
 from .postgresql_support import world, snapshot
+from tests.migration_fixtures import current_schema_revision, run_guarded_revision_downgrade, run_alembic_revision
 
 PRIOR = "0011_review_policy_human_review"
 OWN = "0012_contribution_policy_audit_resource"
-CURRENT_HEAD = "0015_guide_runtime_configuration"
+
+CURRENT_HEAD = current_schema_revision()
 TOKEN = ", ('contribution_policy'::character varying)::text"
 CONSTRAINTS = (
     "ck_audit_events_authority_privacy_bounds",
@@ -52,17 +51,22 @@ async def definition():
 async def migrate(direction, revision, migration_lock):
     """Run actual Alembic under the canonical schema-owner lock."""
     await db_session.dispose_engine()
-    config = Config(Path(__file__).resolve().parents[3] / "alembic.ini")
     with migration_lock():
-        await asyncio.to_thread(getattr(command, direction), config, revision)
+        await run_alembic_revision(direction, revision)
+
+
+@pytest.fixture
+def prior_audit_schema(auth_database_env, migration_lock, migration_schema_at):
+    """Create the scenario before the async test starts, without a production downgrade."""
+    with migration_lock():
+        migration_schema_at(PRIOR)
 
 
 @pytest.mark.asyncio
 @pytest.mark.postgres_schema_contract
 async def test_audit_resource_migration_roundtrip_preserves_every_other_clause(
-    auth_database_env, migration_lock
+    prior_audit_schema, migration_lock
 ):
-    await migrate("downgrade", PRIOR, migration_lock)
     before = await definition()
     assert TOKEN not in before[CONSTRAINTS[0]]
     await migrate("upgrade", OWN, migration_lock)
@@ -132,7 +136,8 @@ async def test_audit_resource_downgrade_preserves_retained_policy_evidence(
             )
     before, constraint = await snapshot(target.project), await definition()
     with pytest.raises(RuntimeError, match="ContributionPolicy audit history prevents downgrade"):
-        await migrate("downgrade", PRIOR, migration_lock)
+        with migration_lock():
+            await run_guarded_revision_downgrade(db_session.get_engine().url.render_as_string(hide_password=False), OWN)
     assert await snapshot(target.project) == before
     assert await definition() == constraint
     assert await schema_value("select version_num from alembic_version") == CURRENT_HEAD

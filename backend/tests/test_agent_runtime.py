@@ -501,3 +501,45 @@ def test_default_instructions_advertise_contextual_output_constraints():
         "maximum file size must not exceed the maximum package size",
     ):
         assert rule in instructions
+
+
+async def test_whole_run_deadline_cancels_once_and_closes_without_reinvocation(monkeypatch):
+    """The whole-run budget interrupts an outstanding request before its own timeout."""
+    from agents import Runner
+    from app.adapters.project_agents import openai_agent_sdk
+
+    events = []
+
+    class Workspace:
+        container_id = "cntr_deadline_probe"
+
+        def __init__(self, *args):
+            pass
+
+        async def start(self):
+            events.append("start")
+
+        async def close(self):
+            events.append("close")
+
+    async def blocked_run(*args, **kwargs):
+        events.append("run")
+        try:
+            await asyncio.Event().wait()
+        finally:
+            events.append("cancelled")
+
+    monkeypatch.setattr(openai_agent_sdk, "OpenAIGuideWorkspace", Workspace)
+    monkeypatch.setattr(Runner, "run", blocked_run)
+    config = runtime_configuration().model_copy(update={"timeout_seconds": 1, "request_timeout_seconds": 300})
+    assert config.request_timeout_seconds == 300
+    runtime = OpenAIAgentSdkProjectGuideRuntime(config)
+    started = asyncio.get_running_loop().time()
+    try:
+        with pytest.raises(ProjectAgentRuntimeError, match="project guide run timed out") as caught:
+            await _compile(runtime, context(ids()).model_copy(update={"runtime_configuration": config}))
+        assert 0.8 <= asyncio.get_running_loop().time() - started < 5
+        assert events == ["start", "run", "cancelled", "close"]
+        assert caught.value.__suppress_context__
+    finally:
+        await runtime.aclose()

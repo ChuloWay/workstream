@@ -732,6 +732,7 @@ class ProjectGuideRuntimeAllocation(Base):
                         "(kind='file' and document_handle is not null and parent_provider_id is null) or "
                         "(kind='attachment' and document_handle is not null and parent_provider_id is not null)",
                         name="ck_guide_resource_scope"),
+        CheckConstraint("((kind='file' and num_nonnulls(source_item_id,document_version_id,put_attempt_id,content_id,replica_id,storage_namespace_id,namespace_fingerprint,sha256,byte_count,media_type)=10) or (kind in ('container','attachment') and num_nonnulls(source_item_id,document_version_id,put_attempt_id,content_id,replica_id,storage_namespace_id,namespace_fingerprint,sha256,byte_count,media_type)=0)) and ((kind='attachment' and source_file_allocation_id is not null and container_allocation_id is not null) or (kind in ('container','file') and source_file_allocation_id is null and container_allocation_id is null))", name="ck_guide_resource_document_shape"),
         CheckConstraint("state in ('allocating','uncertain') or provider_id is not null",
                         name="ck_guide_resource_identity"),
     )
@@ -744,6 +745,18 @@ class ProjectGuideRuntimeAllocation(Base):
     document_handle: Mapped[UUID | None] = mapped_column(Uuid())
     provider_id: Mapped[str | None] = mapped_column(String(128))
     parent_provider_id: Mapped[str | None] = mapped_column(String(128))
+    source_file_allocation_id: Mapped[UUID | None] = mapped_column(ForeignKey("project_guide_runtime_allocations.id"))
+    container_allocation_id: Mapped[UUID | None] = mapped_column(ForeignKey("project_guide_runtime_allocations.id"))
+    source_item_id: Mapped[str | None] = mapped_column(ForeignKey("guide_source_snapshot_items.id"))
+    document_version_id: Mapped[str | None] = mapped_column(ForeignKey("guide_source_artifact_ingests.id"))
+    put_attempt_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_put_attempts.id"))
+    content_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_contents.id"))
+    replica_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_replicas.id"))
+    storage_namespace_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_storage_namespaces.id"))
+    namespace_fingerprint: Mapped[str | None] = mapped_column(String(71))
+    sha256: Mapped[str | None] = mapped_column(String(71))
+    byte_count: Mapped[int | None] = mapped_column(BigInteger)
+    media_type: Mapped[str | None] = mapped_column(String(255))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

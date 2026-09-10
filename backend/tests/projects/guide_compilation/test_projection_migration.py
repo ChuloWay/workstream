@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.modules.projects.repository import ProjectRepository
 
-from .test_migration_authorized_persistence import run_guarded_revision_downgrade
+from tests.migration_fixtures import current_schema_revision, run_guarded_revision_downgrade
 from .helpers import seed_database
 from .test_projection_postgresql import _project_both
 
@@ -321,7 +321,7 @@ def test_projection_migration_installs_and_replays_from_prior_schema(
 
     with migration_lock():
         command.upgrade(_config(), "head")
-    assert asyncio.run(_version(clean_postgres_database)) == ("0016_guide_document_runtime")
+    assert asyncio.run(_version(clean_postgres_database)) == current_schema_revision()
 
 
 def test_populated_projection_migration_refuses_downgrade(
@@ -338,4 +338,4 @@ def test_populated_projection_migration_refuses_downgrade(
         asyncio.run(
             run_guarded_revision_downgrade(clean_postgres_database, "0009_guide_compilation_projections")
         )
-    assert asyncio.run(_version(clean_postgres_database)) == ("0015_guide_runtime_configuration")
+    assert asyncio.run(_version(clean_postgres_database)) == current_schema_revision()

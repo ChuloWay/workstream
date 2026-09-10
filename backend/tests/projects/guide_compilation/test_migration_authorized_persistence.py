@@ -5,6 +5,7 @@ from __future__ import annotations
 from tests.projects.guide_compilation.helpers import runtime_configuration
 
 import asyncio
+from tests.migration_fixtures import current_schema_revision, run_guarded_revision_downgrade
 from pathlib import Path
 
 from alembic import command
@@ -19,7 +20,7 @@ from .helpers import context, identity, seed_database
 
 pytestmark = pytest.mark.postgres_schema_contract
 OWN_REVISION = "0008_guide_compilation_authorized_persistence"
-CURRENT_HEAD = "0016_guide_document_runtime"
+CURRENT_HEAD = current_schema_revision()
 
 
 def _config() -> Config:
@@ -76,24 +77,6 @@ async def _seed_attempt(database_url: str) -> None:
         await engine.dispose()
 
 
-async def run_guarded_revision_downgrade(database_url: str, revision: str) -> None:
-    """Exercise a retained-data guard directly, without earlier guards masking it."""
-    from alembic.migration import MigrationContext
-    from alembic.operations import Operations
-    from alembic.script import ScriptDirectory
-
-    downgrade = ScriptDirectory.from_config(_config()).get_revision(revision).module.downgrade
-    engine = create_async_engine(database_url)
-
-    def run(connection):
-        with Operations.context(MigrationContext.configure(connection)):
-            downgrade()
-
-    try:
-        async with engine.begin() as connection:
-            await connection.run_sync(run)
-    finally:
-        await engine.dispose()
 
 
 def test_0008_refuses_downgrade_with_compilation_custody(

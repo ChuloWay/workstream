@@ -29,7 +29,7 @@ below describes the target lifecycle, not a claim that those surfaces are live.
 1. A system-scoped Project Manager creates the project.
 2. Project owner provides open-ended guide material and business terms.
 3. An authorized covered Project Manager adds the guide.
-4. Once ART verifies and prepares the immutable guide-source material,
+4. Once ART commits every assigned original guide document,
    Workstream automatically queues its authorized unified compilation in Celery.
 5. One unified compilation assesses sufficiency and proposes artifact,
    pre-submission and post-submission policy components from the exact guide

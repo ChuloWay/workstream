@@ -41,7 +41,8 @@ class Custody:
     async def record_allocated(self, identifier, provider_id):
         if self.reject_receipt:
             raise RuntimeError("receipt unavailable")
-        self.known[identifier] = GuideRuntimeResource(allocation_id=identifier, provider_id=provider_id, **self.intents[identifier])
+        self.known[identifier] = GuideRuntimeResource(allocation_id=identifier, provider_id=provider_id, **{key: value for key, value in self.intents[identifier].items()
+                if key in GuideRuntimeResource.__dataclass_fields__})
 
     async def record_uncertain(self, identifier):
         self.uncertain.add(identifier)

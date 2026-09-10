@@ -49,7 +49,7 @@ changing the SDK adapter or placing tools over the PostgreSQL text aggregate
 would leave the wrong design operational. Current source evidence references
 extraction usage; the new contract must bind original document versions instead.
 
-## Bounded implementation plan
+## Bounded change
 
 ### 1. Document upload and readiness
 
@@ -330,7 +330,7 @@ acceptance; checker evaluation; compensation/reputation; changes to submission
 verification; unrestricted storage/network tools; parallel runtime paths;
 repository-wide cleanup; deletion of retained data; unrelated dependency updates.
 
-## Acceptance and verification
+## Acceptance criteria
 
 1. Uploading supported files stores originals and metadata only; setup starts
    after all assigned uploads commit, without extraction or verification jobs.
@@ -379,7 +379,7 @@ those originals through ART. Record this in the remaining guide work; do not
 reuse the setup fixed-service grant, expose storage coordinates, or add a retained
 markdown reader. This is an explicit dependency, not delivered document access.
 
-## Reviews and human focus
+## Risk and review routing
 
 Architecture and security review this concrete plan before product edits. QA/
 test-delta review the real guard reachability and paid-test design. After shared
@@ -393,7 +393,13 @@ Human focus: exact-file isolation; originals versus temporary data; no extracted
 content database; a real tool-using run; correct source-version grounding;
 separate draft policies; manager approval pause; no duplicated run on replay.
 
-## References
+## Evidence
+
+The following provider references and execution observations support the bounded
+verification strategy above. Failed probes remain identified alongside later
+results; execution custody and limits are stated for each.
+
+### References
 
 - [OmniCoreAgent](https://github.com/omnirexflora-labs/omnicoreagent)
 - [Deep Agents context management](https://docs.langchain.com/oss/python/deepagents/context-engineering)
@@ -529,3 +535,23 @@ The public dependency graph remains acyclic and the frozen private-import ledger
 shrinks without new edges. ORM allocation/access declarations use the existing
 model-only metadata registration path. The recovery dispatch predicate has one
 PROJECTS continuation owner shared by dispatch and scanning.
+
+### Exact provider-file custody repair
+
+The file allocation is the immutable pre-upload mapping for one selected original:
+exact source item, ingest, put, content, replica, namespace, hash, size and media.
+Database guards reconstruct that chain from committed ART evidence. Attachment
+rows reference exact file and container allocations; accesses follow the attachment
+back to its file. Container and attachment rows cannot duplicate document facts.
+Cleanup changes only allocation lifecycle fields. No separate grant lifecycle or
+second corpus is introduced. Architecture and security assessed this bounded
+repair design; implementation remains subject to final review and verification.
+
+The sole opaque-handle derivation is SHA-256 over lowercase UUID text in
+`workstream.guide-document-handle.v1:<run>:<source>:<ingest>`, truncated to 16 bytes
+as a UUID without changing variant/version bits. Python/SQL parity and independent
+identity-substitution probes protect the canonical chain, including a removed-guard
+probe. The unmerged UUIDv5 implementation is replaced outright. The manifest still
+defines the complete assigned set; ready acceptance requires all originals opened
+and cited. A shared test-owned migration helper reconciles affected current-head
+and retained-guard scenarios without weakening production downgrade protections.

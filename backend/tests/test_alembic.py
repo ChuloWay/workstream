@@ -24,7 +24,9 @@ from scripts.schema_baseline_manifest import (
 )
 from scripts.schema_baseline_sql import split_sql_statements
 
-HEAD_REVISION = "0015_guide_runtime_configuration"
+from tests.migration_fixtures import current_schema_revision
+
+HEAD_REVISION = current_schema_revision()
 BASELINE_REVISION = "0001_v01_baseline"
 RECREATE_GUIDANCE = "Workstream v0.1 requires a fresh database; recreate this database"
 pytestmark = pytest.mark.postgres_schema_contract
@@ -84,6 +86,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0015_guide_runtime_configuration",
         "0014_project_role_scope",
         "0013_compilation_request_origin",
         "0012_contribution_policy_audit_resource",
@@ -539,7 +542,7 @@ def test_root_downgrade_refuses_without_mutation(
 ) -> None:
     config = _alembic_config()
     before = asyncio.run(_database_snapshot(isolated_database_env))
-    with migration_lock(), pytest.raises(RuntimeError, match="cannot be downgraded"):
+    with migration_lock(), pytest.raises(RuntimeError, match="guide document runtime downgrade would discard retained evidence"):
         command.downgrade(config, "base")
     after = asyncio.run(_database_snapshot(isolated_database_env))
     assert before == after

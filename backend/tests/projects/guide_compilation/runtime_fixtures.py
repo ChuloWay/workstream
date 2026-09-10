@@ -41,6 +41,17 @@ async def record_scripted_document_access(context, capabilities):
             assert opened.reader.read() == SOURCE_BYTES
         file = await resources.begin_allocation(kind="file", document_handle=handle, parent_provider_id=None, expires_at=expires_at)
         await resources.record_allocated(file, "file-" + uuid4().hex)
-        attachment = await resources.begin_allocation(kind="attachment", document_handle=handle, parent_provider_id=container_id, expires_at=expires_at)
+        attachment = await resources.begin_allocation(kind="attachment", document_handle=handle, parent_provider_id=container_id, expires_at=expires_at,
+            source_file_allocation_id=file, container_allocation_id=container)
         await resources.record_allocated(attachment, "cfile_" + uuid4().hex)
         await resources.record_document_open(handle)
+
+
+async def record_attempt_document_access(sessions, attempt_id, context):
+    """Arrange real pre-upload/allocation/access custody after a committed fence."""
+    from app.modules.projects.api.guide_documents import GuideRuntimeCapabilities
+    from app.modules.projects.guide_compilation.runtime_resources import SqlAlchemyGuideRuntimeCustody
+    async with document_access(attempt_id, context.material, context.runtime_configuration) as documents:
+        resources = SqlAlchemyGuideRuntimeCustody(sessions, attempt_id, context.material,
+                                                   context.runtime_configuration.runtime_key)
+        await record_scripted_document_access(context, GuideRuntimeCapabilities(documents=documents, resources=resources))

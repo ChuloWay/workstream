@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from app.modules.projects.api.guide_documents import ProjectGuideDocumentScopePort
-
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Protocol
@@ -388,9 +386,3 @@ def _receipt_result(
             receipt.compilation_id if isinstance(receipt, CompilationPersistenceReceipt) else None
         ),
     )
-
-
-def project_guide_document_scope_port(session: AsyncSession) -> ProjectGuideDocumentScopePort:
-    """Compose the attempt's public document-scope port on an existing transaction."""
-    from .document_scope import SqlAlchemyProjectGuideDocumentScope
-    return SqlAlchemyProjectGuideDocumentScope(session)

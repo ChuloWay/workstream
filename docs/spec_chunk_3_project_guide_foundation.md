@@ -146,7 +146,6 @@ Adds protected v1 routes:
 - `POST /api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies`
 - `PATCH /api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies/{policy_id}`
 - `POST /api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies/{policy_id}/approve`
-- `POST /api/v1/projects/{project_id}/guides/{guide_id}/activate`
 - `GET /api/v1/projects/{project_id}/active-guide`
 
 These routes require an actor role allowed to manage project setup.

@@ -19,6 +19,8 @@ from app.modules.projects.guide_compilation.repository import (
     GuideCompilationStorageError,
 )
 
+from .runtime_fixtures import record_attempt_document_access
+
 from .helpers import (
     context,
     identity,
@@ -38,7 +40,10 @@ async def _accepted_attempt(factory, values, *, generation: int = 1):
         _, attempt = await repository.reserve_attempt(
             attempt_identity, runtime_configuration=runtime_configuration()
         )
-        await repository.accept_result(
+        await repository.mark_provider_uncertain(attempt.id)
+    await record_attempt_document_access(factory, attempt.id, compilation_context)
+    async with factory() as session, session.begin():
+        await GuideCompilationRepository(session).accept_result(
             attempt_id=attempt.id, context=compilation_context, result=result()
         )
     return attempt, attempt_identity, compilation_context

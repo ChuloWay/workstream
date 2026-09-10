@@ -9,6 +9,7 @@ from dataclasses import asdict, replace
 from uuid import UUID, uuid4
 
 import pytest
+from .runtime_fixtures import record_attempt_document_access
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -102,6 +103,7 @@ async def test_authorized_execution_fences_accepts_and_persists_atomically(
             )
         assert fenced.classification is CompilationRecoveryClassification.PROVIDER_UNCERTAIN
         assert fenced.dispatch_permitted is True
+        await record_attempt_document_access(factory, requested.attempt_id, context(values))
         async with factory() as session:
             accepted = await _execution_service(session, service).record_accepted_result(
                 actor=service, facts=facts, context=context(values), result=result()
@@ -336,6 +338,7 @@ async def test_execution_rechecks_setup_lineage_for_outcome_and_persistence(
         facts = _preflight(values, requested.attempt_id)
         async with factory() as session:
             await _execution_service(session, service).fence_dispatch(actor=service, facts=facts)
+        await record_attempt_document_access(factory, requested.attempt_id, context(values))
         async with factory() as session, session.begin():
             await session.execute(
                 text("update project_setup_runs set status='failed' where id=:setup"),
@@ -416,7 +419,10 @@ async def test_accepted_result_replay_requires_exact_canonical_result(
             _outcome, attempt = await repository.reserve_attempt(
                 identity(compilation_context), runtime_configuration=runtime_configuration()
             )
-            accepted = await repository.accept_result(
+            await repository.mark_provider_uncertain(attempt.id)
+        await record_attempt_document_access(factory, attempt.id, compilation_context)
+        async with factory() as session, session.begin():
+            accepted = await GuideCompilationRepository(session).accept_result(
                 attempt_id=attempt.id,
                 context=compilation_context,
                 result=result(),

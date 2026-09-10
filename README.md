@@ -412,7 +412,7 @@ The model key must be in the process environment; `--env-file` supplies it witho
 shell-exporting or printing it. For connected guide testing, start Postgres,
 Redis and MinIO, create the private bucket as described below, and enable the
 S3-compatible settings in `.env`. The disabled-store first-run profile does not
-support guide artifact ingestion. Verified source readiness runs one compilation
+support guide artifact ingestion. Committed original-document readiness runs one compilation
 and stops at findings and draft proposals; manager review/approval remains separate.
 
 ### Logs, Shutdown, And Reset

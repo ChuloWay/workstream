@@ -116,8 +116,8 @@ a UUID `Idempotency-Key` on every request:
 
 Issuer role claims, contributor grants, and service tokens cannot invoke these
 public routes. A manual report is not an agent-run replay and does not occupy
-the authoritative verified-report slot. Automatic verified-material readiness dispatches one unified compilation under
-the fixed setup service. Its verified report binds canonical ART material; a
+the authoritative verified-report slot. Committed original-document readiness dispatches one unified compilation under
+the fixed setup service. Its report binds exact opened document versions; a
 manual diagnostic report is neither reused nor linked as compilation output.
 The three former inference steps and sufficiency-run endpoint are removed.
 

@@ -1283,7 +1283,6 @@ def test_policy_models_do_not_enforce_mutable_current_uniqueness() -> None:
 def test_setup_mutations_use_locked_guide_helper() -> None:
     locked_methods = [
         "approve_submission_artifact_policy",
-        "activate_guide",
     ]
     for method_name in locked_methods:
         source = inspect.getsource(getattr(ProjectService, method_name))
@@ -4555,8 +4554,10 @@ async def test_agent_derived_policy_approval_revalidates_server_owned_provenance
         json={"approval_note": "Should revalidate agent provenance."},
     )
 
-    assert response.status_code == 409
-    assert "runtime provenance is not server-owned" in response.json()["detail"]
+    assert response.status_code == 422
+    assert "manual policy lineage is required" in response.json()["detail"]
+    async with db_session.get_session_factory()() as session:
+        assert (await session.get(SubmissionArtifactPolicy, spoofed_policy.id)).lifecycle_status == "draft"
 
 
 async def test_submission_artifact_policy_removed_agent_route_performs_no_runtime_calls(
@@ -4637,7 +4638,7 @@ async def test_submission_artifact_policy_approval_persists_effective_policy_has
     assert persisted_policy.derivation_source == "manual_admin_derivation"
     assert len(persisted_policy.source_material_refs) == len(snapshot["items"])
     assert all(
-        ref.startswith("artifact-content:") and "#extraction-usage:" in ref
+        ref.startswith("guide-document:") and "#sha256:" in ref
         for ref in persisted_policy.source_material_refs
     )
     assert pre_submit_checker_policy is not None
@@ -6201,99 +6202,42 @@ async def test_blocking_sufficiency_report_prevents_policy_creation(
     assert "authoritative guide sufficiency report is required" in response.json()["detail"]
 
 
-async def test_sufficiency_warnings_require_acknowledgement(
+async def test_unified_warnings_do_not_use_the_manual_report_acknowledgement_path(
     project_client: AsyncClient,
 ) -> None:
     project = await create_project(project_client)
     guide = await create_guide(project_client, project["id"], complete_guide_payload())
     snapshot = await create_source_snapshot(project_client, project["id"], guide["id"])
-    report = await create_sufficiency_report(
-        project_client,
-        project["id"],
-        guide["id"],
-        snapshot["id"],
-        status="passed_with_warnings",
-    )
-    diagnostic_report_id = report["id"]
-    report = {
-        **report,
-        "id": await create_compiled_report_fixture(report["id"], snapshot["id"]),
-    }
+    diagnostic = await create_sufficiency_report(project_client, project["id"], guide["id"],
+        snapshot["id"], status="passed_with_warnings")
+    compiled_id = await create_compiled_report_fixture(diagnostic["id"], snapshot["id"])
+    base = f"/api/v1/projects/{project['id']}/guides/{guide['id']}"
+    blocked = await project_client.post(f"{base}/sufficiency-reports/{compiled_id}/acknowledge-warnings",
+        headers=auth_headers(), json={"acknowledgement_note": "Requires complete proposal review."})
+    assert blocked.status_code == 409, blocked.text
+    assert blocked.json()["error"]["code"] == "project_setup_run_context_mismatch"
+    async with db_session.get_session_factory()() as session:
+        compiled = await session.get(GuideSufficiencyReport, compiled_id)
+        assert compiled.warnings_acknowledged_at is None
+        assert compiled.warnings_acknowledged_by_actor_profile_id is None
+        assert await session.scalar(select(SubmissionArtifactPolicy.id)) is None
 
-    blocked = await project_client.post(
-        f"/api/v1/projects/{project['id']}/guides/{guide['id']}/submission-artifact-policies",
-        headers=auth_headers(),
-        json={
-            "source_snapshot_id": snapshot["id"],
-            "policy_version": "v1",
-            "policy_body": project_submission_artifact_policy_body(),
-            "change_summary": "Requires acknowledgement first.",
-        },
-    )
-    assert blocked.status_code == 422
-    assert "authorized Project Manager acknowledgement" in blocked.json()["detail"]
-
-    acknowledgement_headers = auth_headers()
-    acknowledgement = await project_client.post(
-        f"/api/v1/projects/{project['id']}/guides/{guide['id']}/sufficiency-reports/"
-        f"{report['id']}/acknowledge-warnings",
-        headers=acknowledgement_headers,
-        json={"acknowledgement_note": "Accepted with known thin examples."},
-    )
-    assert acknowledgement.status_code == 200, acknowledgement.text
-    assert acknowledgement.json()["warnings_acknowledged_by_role"] == "project_manager"
-    replayed_acknowledgement = await project_client.post(
-        f"/api/v1/projects/{project['id']}/guides/{guide['id']}/sufficiency-reports/"
-        f"{report['id']}/acknowledge-warnings",
-        headers=acknowledgement_headers,
-        json={"acknowledgement_note": "Accepted with known thin examples."},
-    )
-    assert replayed_acknowledgement.status_code == 200, replayed_acknowledgement.text
-    assert replayed_acknowledgement.json() == acknowledgement.json()
-    duplicate_acknowledgement = await project_client.post(
-        f"/api/v1/projects/{project['id']}/guides/{guide['id']}/sufficiency-reports/"
-        f"{report['id']}/acknowledge-warnings",
-        headers=auth_headers(),
-        json={"acknowledgement_note": "Accepted with known thin examples."},
-    )
-    assert duplicate_acknowledgement.status_code == 409
-    assert duplicate_acknowledgement.json()["error"]["code"] == (
-        "sufficiency_warnings_already_acknowledged"
-    )
-    diagnostic_acknowledgement = await project_client.post(
-        f"/api/v1/projects/{project['id']}/guides/{guide['id']}/sufficiency-reports/"
-        f"{diagnostic_report_id}/acknowledge-warnings",
-        headers=auth_headers(),
-        json={"acknowledgement_note": "Accepted with known thin examples."},
-    )
-    assert diagnostic_acknowledgement.status_code == 200, diagnostic_acknowledgement.text
-
-    policy = await create_submission_artifact_policy(
-        project_client,
-        project["id"],
-        guide["id"],
-        snapshot["id"],
-    )
-    effective = await approve_submission_artifact_policy(
-        project_client,
-        project["id"],
-        guide["id"],
-        policy["id"],
-    )
-    pre_submit_checker_policy = await load_pre_submit_checker_policy(effective)
-    await seed_post_submit_policy_for_downstream_tests(
-        project_id=project["id"],
-        guide_id=guide["id"],
-        source_snapshot=snapshot,
-        pre_submit_checker_policy=pre_submit_checker_policy,
-    )
-
-
-    await seed_active_guide_for_downstream_test(
-        db_session.get_session_factory(),
-        project_id=project["id"],
-        guide_id=guide["id"],
-    )
+    headers = auth_headers()
+    route = f"{base}/sufficiency-reports/{diagnostic['id']}/acknowledge-warnings"
+    payload = {"acknowledgement_note": "Human diagnostic acknowledged."}
+    acknowledged = await project_client.post(route, headers=headers, json=payload)
+    assert acknowledged.status_code == 200, acknowledged.text
+    assert acknowledged.json()["warnings_acknowledged_by_role"] == "project_manager"
+    replay = await project_client.post(route, headers=headers, json=payload)
+    assert replay.status_code == 200 and replay.json() == acknowledged.json()
+    duplicate = await project_client.post(route, headers=auth_headers(), json=payload)
+    assert duplicate.status_code == 409
+    assert duplicate.json()["error"]["code"] == "sufficiency_warnings_already_acknowledged"
+    policy = await project_client.post(f"{base}/submission-artifact-policies", headers=auth_headers(),
+        json={"source_snapshot_id": snapshot["id"], "policy_version": "v1",
+              "policy_body": project_submission_artifact_policy_body(), "change_summary": "Still blocked."})
+    assert policy.status_code == 422
+    assert "authorized Project Manager acknowledgement" in policy.json()["detail"]
 
 
 async def test_sufficiency_warning_acknowledgement_requires_setup_role_for_policy_approval(

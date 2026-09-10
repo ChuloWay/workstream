@@ -8,6 +8,7 @@ from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 from dataclasses import replace
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 import pytest
+from .runtime_fixtures import record_attempt_document_access
 
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.projects.guide_compilation.contracts import (
@@ -128,6 +129,7 @@ async def test_repeated_terminal_transitions_preserve_one_attempt(
             assert await repository.recovery_classification(attempt.id) == (
                 "provider_outcome_unresolved"
             )
+        await record_attempt_document_access(factory, attempt.id, context(values))
         async with factory() as session, session.begin():
             repository = GuideCompilationRepository(session)
             terminal = await repository.mark_invalid_terminal(

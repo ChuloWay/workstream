@@ -253,7 +253,7 @@ async def test_projects_both_components_once_and_replays_without_new_effects(
                     text(
                         "select "
                         "(select count(*) from guide_sufficiency_reports),"
-                        "(select count(*) from guide_sufficiency_report_source_usages),"
+                        "(select count(*) from project_guide_document_accesses),"
                         "(select count(*) from submission_artifact_policies),"
                         "(select count(*) from project_guide_component_projection_operations),"
                         "(select count(*) from audit_events where action_id="

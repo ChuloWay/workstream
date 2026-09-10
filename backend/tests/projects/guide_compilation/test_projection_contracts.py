@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import cast
 from uuid import UUID, uuid4
 
@@ -295,15 +296,23 @@ def test_missing_replay_outputs_never_have_a_canonical_digest() -> None:
         "output_sufficiency_report_id",
         "output_submission_artifact_policy_id",
         "output_post_submit_checker_policy_id",
-        "continuation_started_at",
-        "continuation_verification_job_id",
     ],
 )
 def test_compilation_source_shape_rejects_each_independently_populated_field(field):
     from app.modules.projects.models import ProjectSetupRun
     from app.modules.projects.guide_compilation.source_state import is_compilation_source_setup
 
-    setup = ProjectSetupRun(status="queued", current_step="queued", celery_task_id="task")
+    setup = ProjectSetupRun(status="queued", current_step="queued", celery_task_id="task", documents_ready_at=datetime.now(timezone.utc))
     assert is_compilation_source_setup(setup, "task")
     setattr(setup, field, "populated")
+    assert not is_compilation_source_setup(setup, "task")
+
+
+def test_compilation_source_requires_committed_documents():
+    from app.modules.projects.models import ProjectSetupRun
+    from app.modules.projects.guide_compilation.source_state import is_compilation_source_setup
+    setup = ProjectSetupRun(status="queued", current_step="queued", celery_task_id="task",
+                            documents_ready_at=datetime.now(timezone.utc))
+    assert is_compilation_source_setup(setup, "task")
+    setup.documents_ready_at = None
     assert not is_compilation_source_setup(setup, "task")

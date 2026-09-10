@@ -74,6 +74,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/projects/guide_compilation/test_contracts.py",
             "tests/projects/guide_compilation/test_context_builder.py",
             "tests/projects/guide_compilation/test_document_access_postgresql.py",
+            "tests/projects/guide_compilation/test_document_file_custody_postgresql.py",
             "tests/projects/guide_compilation/test_database_guards.py",
             "tests/projects/guide_compilation/test_durable_dispatch_handoff.py",
             "tests/projects/guide_compilation/test_hidden_call_graph.py",
@@ -534,3 +535,28 @@ def test_finalization_tests_are_all_in_project_lanes():
                 (root / "projects/guide_compilation/finalization").glob("test_*.py")}
     assert expected
     assert expected <= set(PROJECT_MODULES)
+
+
+def test_document_runtime_coverage_keeps_each_new_owner_above_ninety():
+    """Splitting runtime code cannot move it below the existing per-file floor."""
+    source = (runner.ROOT.parent / ".github/workflows/backend.yml").read_text()
+    step = source.split("      - name: POL-04B document runtime per-file coverage\n", 1)[1].split("      - name:", 1)[0]
+    command = step.split("        run: |\n", 1)[1]
+    assert shlex.split(command.replace("\\\n", " ")) == [
+        "set", "-euo", "pipefail", "for", "source", "in",
+        'app/adapters/project_agents/openai_workspace.py',
+        'app/adapters/project_agents/provider_resilience.py',
+        'app/core/project_guide_instructions.py',
+        'app/interfaces/project_guide_runtime.py',
+        'app/modules/projects/api/guide_documents.py',
+        'app/modules/artifacts/guide_document_access.py',
+        'app/modules/artifacts/guide_documents.py',
+        'app/modules/checkers/api/pre_submit_catalogue.py',
+        'app/modules/projects/guide_compilation/diagnostics.py',
+        'app/modules/projects/guide_compilation/document_scope.py',
+        'app/modules/projects/guide_compilation/live.py',
+        'app/modules/projects/guide_compilation/runtime_resources.py',
+        'app/modules/projects/guide_compilation/source_state.py',
+        "do", "coverage", "report", "--include=${source}",
+        "--precision=2", "--fail-under=90", "done",
+    ]

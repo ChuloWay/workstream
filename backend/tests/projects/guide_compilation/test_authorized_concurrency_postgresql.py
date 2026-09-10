@@ -8,6 +8,7 @@ from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 import asyncio
 
 import pytest
+from .runtime_fixtures import record_attempt_document_access
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -82,6 +83,7 @@ async def test_concurrent_finalization_commits_one_compilation_and_event(
         async with factory() as session:
             execution = _execution_service(session, service)
             await execution.fence_dispatch(actor=service, facts=facts)
+        await record_attempt_document_access(factory, requested.attempt_id, context(values))
         async with factory() as session:
             await _execution_service(session, service).record_accepted_result(
                 actor=service, facts=facts, context=context(values), result=result()

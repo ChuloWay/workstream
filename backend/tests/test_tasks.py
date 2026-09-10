@@ -870,16 +870,6 @@ async def task_client(task_database_env: str) -> AsyncIterator[AsyncClient]:
                 issuer="flow-test",
                 subject="project-manager-subject",
             )
-            # The downstream guide prerequisite now runs the unified compiler
-            # under its real fixed-service authority. This is actor fixture
-            # setup, not proof of the separate provisioning API.
-            setup_actor, setup_link = str(uuid4()), str(uuid4())
-            session.add(ActorProfile(id=setup_actor, actor_kind="service", status="active",
-                provisioning_method="manual_service_provisioning",
-                service_identity="workstream.project.setup", created_by="task-fixture"))
-            session.add(ActorIdentityLink(id=setup_link, actor_profile_id=setup_actor,
-                issuer="workstream-internal", subject="workstream.project.setup",
-                subject_kind="service", status="active", linked_by="task-fixture"))
             await session.commit()
         yield client
 

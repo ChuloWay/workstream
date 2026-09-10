@@ -11,7 +11,7 @@ import hashlib
 from sqlalchemy import select
 
 from app.db import session as db_session
-from app.modules.actors.models import ActorProfile
+from app.modules.actors.models import ActorProfile, ActorIdentityLink
 from app.modules.artifacts.models import ArtifactContent, ArtifactReplica, ArtifactStorageNamespace, ArtifactPutAttempt, ArtifactOperationReceipt
 from app.modules.projects.models import GuideSourceSnapshot, GuideSourceSnapshotItem, GuideSourceArtifactIngest, ProjectSetupRun, GuideSufficiencyReport
 from app.adapters.artifacts import guide_document_manifest_port
@@ -68,6 +68,23 @@ async def create_committed_document_fixture(source_snapshot_id: str):
         return await guide_document_manifest_port(session).load(GuideDocumentManifestRequest(project_id=UUID(snapshot.project_id), guide_id=UUID(snapshot.guide_id), guide_source_snapshot_id=UUID(snapshot.id), project_setup_run_id=UUID(setup.id), setup_generation=setup.setup_generation))
 
 
+async def seed_setup_service_for_compiled_fixture(sessions):
+    """Arrange the shared service prerequisite without reactivating retained actors."""
+    async with sessions() as session, session.begin():
+        actor = await session.scalar(select(ActorProfile).where(
+            ActorProfile.service_identity == "workstream.project.setup"))
+        if actor is not None:
+            assert actor.actor_kind == "service" and actor.status == "active"
+            return
+        actor_id = str(uuid4())
+        session.add(ActorProfile(id=actor_id, actor_kind="service", status="active",
+            provisioning_method="manual_service_provisioning",
+            service_identity="workstream.project.setup", created_by="compiled-guide-fixture"))
+        session.add(ActorIdentityLink(id=str(uuid4()), actor_profile_id=actor_id,
+            issuer="workstream-internal", subject="workstream.project.setup",
+            subject_kind="service", status="active", linked_by="compiled-guide-fixture"))
+
+
 async def create_compiled_report_fixture(report_id: str, source_snapshot_id: str) -> str:
     """Project a scripted unified result under real service authority and custody."""
     from app.adapters.auth import guide_compilation_request_authority, guide_compilation_execution_authority, guide_sufficiency_projection_authorization, artifact_policy_projection_authorization
@@ -82,6 +99,7 @@ async def create_compiled_report_fixture(report_id: str, source_snapshot_id: str
     from app.interfaces.project_agents import CompilationFinding, GuideEvidenceRef
 
     sessions = db_session.get_session_factory()
+    await seed_setup_service_for_compiled_fixture(sessions)
     async with sessions() as session:
         report = await session.scalar(select(GuideSufficiencyReport).where(GuideSufficiencyReport.source_snapshot_id == source_snapshot_id, GuideSufficiencyReport.project_setup_run_id.is_not(None)))
         if report is not None:
