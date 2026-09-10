@@ -110,11 +110,12 @@ Any local temporary staging uses ArtifactScratchManager with aggregate bounds.
 ### 3. Runtime workspace and configuration
 
 Keep ADR 0014's typed ProjectGuideAgentRuntime factory and separate immutable
-runtime/model/instruction configuration. First implementation candidate is the
-existing OpenAI SDK with a dedicated hosted Code Interpreter container. This
+runtime/model/instruction configuration. The sole current implementation is the existing OpenAI SDK with a dedicated
+hosted Code Interpreter container. This
 uses existing supported DOCX/PDF/PPTX inspection rather than rebuilding a
-Workstream extraction pipeline. Before committing this choice, prove the pinned
-SDK/provider supports the required container isolation and document controls.
+Workstream extraction pipeline. Prove the pinned SDK/provider supports the required container isolation and
+document controls before implementing the wider cutover. If that probe fails,
+revise the plan rather than shipping an unsupported or fallback path.
 
 After winning the fence, the trusted adapter creates a fresh explicit empty
 container with network_policy disabled. Its local `open_guide_document(handle)`
@@ -123,7 +124,12 @@ purpose=user_data and bounded expiry, records the provider ID, and attaches it
 to that exact container. Filenames are generated from source-item UUID plus
 trusted extension. The returned model-facing value contains its workspace path
 and source-version reference, never an S3 coordinate or provider-file selector.
-Repeated opens validate the grant but stage the same document at most once.
+Set parallel_tool_calls=False and serialize duplicate opens with a bounded
+per-handle lock. Repeated opens validate the grant but stage the same document
+at most once. Known ART denial, missing/corrupt bytes or stale authority aborts
+Runner with no subsequent model turn and no retry; SDK tool-error formatting
+must not convert these failures to recoverable text. After an initial model
+call, conservative provider-uncertain classification remains explicit.
 No automatic container reuse, shared conversation, previous-response reuse,
 File Search/vector store, MCP, S3 credentials or general storage API is exposed.
 Only explicitly opened assigned files are mounted. Code Interpreter supplies
@@ -290,11 +296,14 @@ repository-wide cleanup; deletion of retained data; unrelated dependency updates
    isolation: foreign/forged/stale handles and key/URL substitution fail before
    the attempted file read or provider staging; expired/closed grants and traversal attempts cannot read bytes.
 4. Real SDK tool configuration admits only a fresh container with the assigned
-   files and disabled network. Cleanup and cancellation tests cover every
+   opened assigned files and disabled network. Cleanup and cancellation tests cover every
    allocated resource, including partial staging/provider uncertainty.
-5. A scripted multi-turn SDK run reads multiple documents, preserves working
-   notes through within-run context reduction and returns the canonical result.
-   A one-shot/max-turn-one mutant fails that test; valid controls still pass.
+5. Scripted SDK/model tests exercise multiple document-open turns, stable
+   run/container identity, limits, ephemeral context and compaction request
+   serialization. A max-turn-one mutant fails sequencing while valid controls
+   pass. Concurrent duplicate opens produce one staged upload/attachment and
+   exact cleanup custody. Hosted reads, note use and actual compaction are
+   established only by the paid probe in item 8.
 6. Actual SDK parser rejection remains sanitized invalid-terminal, including
    redaction on/off and exception traceback custody. PostgreSQL replay proves
    that invalid/uncertain/complete outcomes do not start another agent run.
