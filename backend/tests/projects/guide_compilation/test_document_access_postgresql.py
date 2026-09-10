@@ -339,3 +339,27 @@ async def test_attempt_transition_waits_for_scoped_original_staging(grant_case):
             if not task.done():
                 task.cancel()
         await asyncio.gather(reader, writer, return_exceptions=True)
+
+
+@pytest.mark.parametrize("payload", [SOURCE_BYTES[:-1], SOURCE_BYTES + b"x"], ids=["truncated", "overrun"])
+async def test_post_verification_stream_drift_never_yields_bytes_and_closes_scratch(grant_case, payload):
+    """Even a corrupted scratch stream after successful preparation cannot escape ART."""
+    grant, store, authority, manager, compilation = grant_case
+    original = grant._preparation
+    prepared_results = []
+
+    async def altered_stream():
+        yield payload
+
+    async def prepare(*args, **kwargs):
+        prepared = await original.prepare(*args, **kwargs)
+        prepared_results.append(prepared)
+        return SimpleNamespace(commitment=prepared.commitment,
+            committed_source=SimpleNamespace(stream=altered_stream), close=prepared.close)
+
+    grant._preparation = SimpleNamespace(prepare=prepare)
+    with pytest.raises(GuideDocumentUnavailable, match="guide_document_integrity_mismatch"):
+        async with grant.open(compilation.material.handle_for(compilation.material.documents[0])):
+            pytest.fail("changed scratch stream escaped the grant")
+    assert len(prepared_results) == len(authority.facts) == store.closed == 1
+    assert (await manager.usage()).reservation_count == 0

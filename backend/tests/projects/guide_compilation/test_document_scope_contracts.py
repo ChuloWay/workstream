@@ -93,3 +93,32 @@ async def test_example_lineage_failure_prevents_issuing_a_document_grant(fault):
         snapshot.manifest_json["task_examples_count"] = 2
     with pytest.raises(GuideDocumentUnavailable, match="guide_task_examples_unavailable"):
         await resolve(request, header, [item], ingest)
+
+
+@pytest.mark.parametrize("defect", ["digest", "document_id"])
+async def test_art_manifest_rejects_inconsistent_resolved_identity_after_valid_control(defect):
+    """Exercise ART's independent identity check after PROJECTS grants the lineage."""
+    from app.modules.artifacts.guide_documents import SqlAlchemyGuideDocumentManifest
+    from .helpers import context, ids
+    material = context(ids()).material
+    document = material.documents[0]
+    request = GuideDocumentManifestRequest(project_id=material.project_id, guide_id=material.guide_id,
+        guide_source_snapshot_id=material.source_snapshot_id, project_setup_run_id=material.setup_run_id,
+        setup_generation=material.setup_generation)
+    attempt = SimpleNamespace(id=str(document.put_attempt_id), sha256=document.sha256,
+        byte_count=document.byte_count, media_type=document.media_type,
+        storage_namespace_id=document.storage_namespace_id, namespace_fingerprint=document.namespace_fingerprint)
+    replica = SimpleNamespace(id=str(document.replica_id), storage_namespace_id=document.storage_namespace_id,
+        namespace_fingerprint=document.namespace_fingerprint)
+    content = SimpleNamespace(id=str(document.content_id), sha256=document.sha256,
+        byte_count=document.byte_count, media_type=document.media_type)
+    session = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(one_or_none=lambda: (attempt, replica, content))))
+    scope = SimpleNamespace(lock_manifest_source=AsyncMock(return_value=material))
+    port = SqlAlchemyGuideDocumentManifest(session, scope)
+    assert await port.load(request) == material
+    if defect == "digest":
+        content.sha256 = "sha256:" + "0" * 64
+    else:
+        content.id = "not-a-document-uuid"
+    with pytest.raises(GuideDocumentUnavailable, match="guide_document_identity_mismatch"):
+        await port.load(request)

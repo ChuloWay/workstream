@@ -703,3 +703,9 @@ valid-shape case. Large text cases use short test IDs without changing values.
 Canonical data-model, adopted guide ADRs and authorization runbook/specification
 are in this repair's documentation scope; remove their current claims about the
 superseded Markdown, URL ingestion and extraction path together.
+
+The final proof repair adds independent malformed guide-AUTH fact cases and
+ART checks for identity mismatches after scope resolution and stream drift
+after successful scratch verification. These tests preserve the current
+coverage floors and join the canonical lane inventory; they introduce no
+production compatibility path or expanded storage permission.
