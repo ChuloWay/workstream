@@ -362,7 +362,7 @@ async def test_sdk_cleanup_uses_owned_receipts_without_inference_admission(monke
     monkeypatch.setenv('OPENAI_API_KEY', 'unit-test-only')
     monkeypatch.setattr('openai.AsyncOpenAI', open_client)
     runtime = OpenAIAgentSdkProjectGuideRuntime(instance.configuration)
-    assert await runtime.cleanup_resources(custody) is not failed
+    assert await runtime.cleanup_resources(custody) is (not failed)
     assert runtime._admission is None
     assert configurations == [{'max_retries': 0, 'timeout': instance.configuration.request_timeout_seconds}]
     assert bool(await custody.cleanup_resources()) is failed

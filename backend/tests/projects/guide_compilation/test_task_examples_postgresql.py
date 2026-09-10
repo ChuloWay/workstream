@@ -233,6 +233,7 @@ async def test_unfinished_setup_diagnostic_validates_examples_without_finalizati
                 assert response.current_step == 'input_validation'
                 assert 'new guide version' in response.error_summary
             assert setup.status == before
+            assert await session.scalar(text('select count(*) from project_guide_setup_finalizations')) == 0
             assert await session.scalar(text('select count(*) from project_guide_compilation_attempts')) == 0
             await session.rollback()
     finally:

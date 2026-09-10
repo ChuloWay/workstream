@@ -374,9 +374,9 @@ their expected actions, and handles never enter route schemas, outbox/Celery
 payloads, provider interfaces, or serialized contracts.
 
 `GuideArtifactIngestRequest` contains prepared authority, exact project, guide,
-guide-source snapshot and item IDs, logical role, media type, and authorized
-byte source. It accepts no caller digest, size, content ID, or provider
-reference. The guide manifest resolves committed original-document metadata for
+guide-source snapshot and item IDs, logical role, and authorized byte source.
+The service resolves the server-bound media type from the locked snapshot item.
+Callers supply no media type, digest, size, content ID, or provider reference. The guide manifest resolves committed original-document metadata for
 one exact project/guide/snapshot/setup generation. Its opaque `GuideDocumentGrant`
 opens only assigned document handles, rechecks fixed-reader authority and current
 source custody, and releases verified bytes through bounded scratch. The final
