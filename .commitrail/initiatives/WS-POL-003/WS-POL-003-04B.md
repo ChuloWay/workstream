@@ -685,8 +685,8 @@ Review repair disposition: keep task examples at project scope. Setup proposes
 one guide policy across the project task set; it cannot demand selection of one
 example or defer to per-task policy compilation. Genuine absent project-wide
 intake limits may still block and must be identified precisely, without invented
-values or copying one task's budget into universal rules. The same two PaperBench
-PDFs and two assigned examples must be replayed after this instruction correction;
+values or copying one task's budget into universal rules. The same assigned private
+documents and examples must be replayed after this instruction correction;
 mechanically persisted findings alone are not semantic acceptance proof.
 
 Affected downstream test prerequisites use current normalized examples and
