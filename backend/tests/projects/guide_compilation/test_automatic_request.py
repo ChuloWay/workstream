@@ -27,7 +27,7 @@ from tests.projects.client_fixtures import (
 from tests.projects.guide_fixtures import (
     create_project,
     create_guide,
-    create_source_snapshot,
+    read_guide_source_snapshot,
     complete_guide_payload,
 )
 from tests.committed_guide_fixtures import create_committed_document_fixture
@@ -39,7 +39,7 @@ async def automatic_source(project_client, project_database_env, monkeypatch):  
     get_settings.cache_clear()
     project = await create_project(project_client)
     guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    snapshot = await create_source_snapshot(project_client, project["id"], guide["id"])
+    snapshot = await read_guide_source_snapshot(project["id"], guide["id"])
     engine = create_async_engine(project_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
@@ -535,9 +535,7 @@ async def test_stored_foreign_source_is_rejected_by_repository_and_insert(
     factory, actor, setup_id, snapshot = automatic_source
     other_project = await create_project(project_client)
     other_guide = await create_guide(project_client, other_project["id"], complete_guide_payload())
-    other_snapshot = await create_source_snapshot(
-        project_client, other_project["id"], other_guide["id"]
-    )
+    other_snapshot = await read_guide_source_snapshot(other_project["id"], other_guide["id"])
     await create_committed_document_fixture(snapshot["id"])
     await create_committed_document_fixture(other_snapshot["id"])
     async with factory() as session, session.begin():
@@ -676,40 +674,6 @@ async def test_direct_insert_checks_exact_authority_digest(automatic_source, eve
         )
 
 
-@pytest.mark.asyncio
-async def test_new_source_invalidates_unrequested_older_source(automatic_source, project_client):  # noqa: F811
-    from app.modules.projects.guide_compilation.repository import (
-        GuideCompilationIntegrityError,
-        GuideCompilationRepository,
-    )
-
-    factory, actor, setup_id, snapshot = automatic_source
-    await create_committed_document_fixture(snapshot["id"])
-    async with factory() as session, session.begin():
-        facts, _, origin = await automatic_service(session, actor)._automatic_inputs.resolve(
-            session, setup_id
-        )
-    newer = await create_source_snapshot(project_client, str(facts.project_id), str(facts.guide_id))
-    assert newer["id"] != snapshot["id"]
-    async with factory() as session:
-        with pytest.raises(GuideCompilationIntegrityError, match="origin unavailable"):
-            async with session.begin():
-                await GuideCompilationRepository(session).require_automatic_request_origin(
-                    facts, origin
-                )
-        for table in (
-            "project_guide_compilation_request_operations",
-            "project_guide_compilation_attempts",
-        ):
-            assert await session.scalar(text(f"select count(*) from {table}")) == 0
-        assert (
-            await session.scalar(
-                text(
-                    "select count(*) from audit_events where action_id='project.guide_compilation.request_automatic'"
-                )
-            )
-            == 0
-        )
 
 
 @pytest.mark.asyncio

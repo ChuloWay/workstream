@@ -439,11 +439,11 @@ def test_openapi_documents_request_error_and_response_context() -> None:
     )
     assert len(route_inventory) == 72
     assert sha256("\n".join(route_inventory).encode()).hexdigest() == (
-        "ba8e7485e78ba825d7bfff3c21270925178206fcba768adc8faf1aebb3acb8db"
+        "3e02f6e0db236810bfc57079a0af8cccf2f1c6801ab74ee14cf3e50939a5472e"
     )
     assert len(protected_inventory) == 70
     assert sha256("\n".join(protected_inventory).encode()).hexdigest() == (
-        "e8e419673c618c9ad8015e28e9e5823de72cb132fe59591de4307a0d3c00c4ad"
+        "bd26e8319056bb3f270052692d2833c6f8e13b666e3b1590e6690397baa9631d"
     )
     assert set(schema["paths"]["/health"]["get"]["responses"]) == {"200", "400", "500"}
     assert {"401", "403", "503"} <= set(schema["paths"]["/api/v1/actors/me"]["get"]["responses"])
@@ -507,8 +507,8 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         "PUT /api/v1/projects/{project_id}/guides/{guide_id}/revision-policy": (
             "project.revision_policy.update"
         ),
-        "POST /api/v1/projects/{project_id}/guides/{guide_id}/source-snapshots": (
-            "project.guide_source_snapshot.create"
+        "POST /api/v1/projects/{project_id}/guides/{guide_id}/documents/{document_id}/content": (
+            "artifact.guide_source.ingest"
         ),
         "POST /api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports": (
             "project.guide_sufficiency_report.create"
@@ -601,7 +601,7 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         ("/api/v1/projects/{project_id}/guides", "post"),
         ("/api/v1/projects/{project_id}/guides/{guide_id}", "patch"),
         (
-            "/api/v1/projects/{project_id}/guides/{guide_id}/source-snapshots",
+            "/api/v1/projects/{project_id}/guides/{guide_id}/documents/{document_id}/content",
             "post",
         ),
     ):

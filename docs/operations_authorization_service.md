@@ -1113,25 +1113,33 @@ Project Manager grants cannot create projects.
 
 ## Draft guide and source-metadata authorization
 
-`POST /api/v1/projects/{project_id}/guides`, its draft-guide `PATCH`, and the
-source-snapshot metadata `POST` each require a UUID `Idempotency-Key` and an
-active system or exact-project Project Manager grant. A 403 for an existing
-project is expected when that local grant is absent, revoked, stale, or scoped
-to another project; do not restore access from token roles or issuer claims.
-Use the request/correlation IDs to inspect the bounded denial event.
+`POST /api/v1/projects/{project_id}/guides` and its draft-guide `PATCH`
+require a UUID `Idempotency-Key` and an active system or exact-project Project
+Manager grant. A 403 for an existing project is expected when that local grant
+is absent, revoked, stale, or scoped to another project; do not restore access
+from token roles or issuer claims. Use request/correlation IDs to inspect the
+bounded denial event.
 
-Guide creation must not create source snapshots, policy rows, or setup runs.
-Source-snapshot creation is the separate boundary that may atomically commit
-one setup-run queue intent. Celery receives identifiers only after commit; a
-prepared authorization handle must never appear in task arguments, logs, or
-serialized state. If broker dispatch fails, inspect the exact setup run for
-`enqueue_failed` and use its bounded recovery path. Retrying the original HTTP
-request returns its recorded response and must not dispatch again.
+Guide creation commits guide metadata, the complete declared document set and
+one `awaiting_documents` setup together. Its transaction consumes distinct
+internal guide-create and source-consent decisions and commits their paired
+replay records using the same external key. There is no public source-snapshot
+creation operation. Exact create replay rechecks current authority for both
+decisions and returns the original document IDs and initial setup response.
 
-Guide creation requires the ordered task-example list. It is stored with guide
-metadata in PostgreSQL and cannot be edited in place; corrections require a new
-guide version. Upload-only document declarations form the separate immutable
-source snapshot, and original document bytes live in ArtifactStore/S3. Inline
+Upload each declared document through
+`POST /api/v1/projects/{project_id}/guides/{guide_id}/documents/{document_id}/content`
+with its declared content type and a UUID replay key. Exact membership and
+current ingest authority are checked before reading bytes. Only committed
+readiness of every declared document can dispatch setup. Celery receives
+identifiers after commit; prepared authorization handles must never appear in
+task arguments, logs or serialized state. The existing bounded continuation
+and dispatch recovery paths handle post-commit failures without another upload
+or compilation attempt.
+
+The ordered task-example list and document declarations are immutable guide
+metadata in PostgreSQL; changes require a new guide version. Original document
+bytes live in ArtifactStore/S3. Inline
 Markdown and URL/repository ingestion are unavailable. Bounded draft metadata
 such as `change_summary` may still be updated. Embedded review, revision, retired payout/economic, and
 contribution-record configuration fields correctly return 422; do not reintroduce a

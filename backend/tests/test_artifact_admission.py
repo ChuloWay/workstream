@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from project_create_fixtures import guide_example_columns, guide_snapshot_columns
+from project_create_fixtures import guide_example_columns, guide_snapshot_columns, seed_guide_snapshot_rows
 
 import asyncio
 from collections.abc import Iterator
@@ -288,7 +288,7 @@ async def _seed_guide(
     async with suspend_historical_product_custody(
         session,
         table="project_guides",
-        triggers=("guide_mutation_product_custody", "guide_task_examples_create_custody"),
+        triggers=("guide_mutation_product_custody", "guide_task_examples_create_custody", "require_document_creation_pair"),
     ):
         session.add(
             ProjectGuide(
@@ -304,7 +304,7 @@ async def _seed_guide(
     async with suspend_historical_product_custody(
         session,
         table="guide_source_snapshots",
-        triggers=("source_snapshot_product_custody",),
+        triggers=("source_snapshot_product_custody", "require_document_creation_pair"),
     ):
         session.add(
             GuideSourceSnapshot(
@@ -390,38 +390,21 @@ async def _seed_checker_output_relationships(session) -> tuple[str, str, str]:
     )
     await session.flush()
     async with suspend_historical_product_custody(
-        session,
-        table="project_guides",
-        triggers=("guide_mutation_product_custody", "guide_task_examples_create_custody"),
+        session, table="project_guides",
+        triggers=("guide_mutation_product_custody", "guide_task_examples_create_custody", "require_document_creation_pair"),
+    ), suspend_historical_product_custody(
+        session, table="guide_source_snapshots",
+        triggers=("source_snapshot_product_custody", "require_document_creation_pair"),
     ):
-        session.add(
-            ProjectGuide(
-                **guide_example_columns(),
-                id=guide_id,
-                project_id=project_id,
-                version=guide_version,
-                status="draft",
-                approved_by="setup-actor",
-                effective_at=now,
-                created_by="setup-actor",
-            )
+        await seed_guide_snapshot_rows(
+            session, project_id=project_id, guide_id=guide_id,
+            version=guide_version, snapshot_id=snapshot_id,
         )
-        await session.flush()
-    async with suspend_historical_product_custody(
-        session,
-        table="guide_source_snapshots",
-        triggers=("source_snapshot_product_custody",),
-    ):
-        session.add(
-            GuideSourceSnapshot(
-                id=snapshot_id,
-                project_id=project_id,
-                guide_id=guide_id,
-                guide_version=guide_version,
-                **guide_snapshot_columns(snapshot_id),
-                captured_by="setup-actor",
-            )
-        )
+        guide = await session.get(ProjectGuide, guide_id)
+        guide.approved_by = guide.created_by = "setup-actor"
+        guide.effective_at = now
+        snapshot = await session.get(GuideSourceSnapshot, snapshot_id)
+        snapshot.captured_by = "setup-actor"
         await session.flush()
     session.add(
         SubmissionArtifactPolicy(
