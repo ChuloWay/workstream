@@ -172,7 +172,6 @@ def test_legacy_compatibility_dependency_has_fixed_consumer_allowlist() -> None:
 
     assert {path for path, source in sources.items() if "get_registered_actor" in source} == {
         "api/deps/auth.py",
-        "api/routes/auth.py",
         "modules/checkers/router.py",
         "modules/projects/router.py",
         "modules/tasks/router.py",

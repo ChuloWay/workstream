@@ -86,6 +86,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0016_guide_document_runtime",
         "0015_guide_runtime_configuration",
         "0014_project_role_scope",
         "0013_compilation_request_origin",
@@ -536,13 +537,24 @@ def test_root_upgrade_refuses_nonempty_unstamped_schema_before_product_ddl(
     assert ("r", "projects") not in snapshot["objects"]
 
 
-def test_root_downgrade_refuses_without_mutation(
+@pytest.mark.parametrize("revision,message", [
+    (BASELINE_REVISION, "0001_v01_baseline cannot be downgraded; recreate the database"),
+    (HEAD_REVISION, "guide document creation custody cannot be downgraded"),
+])
+def test_downgrade_refuses_without_mutation(
     isolated_database_env: str,
     migration_lock,
+    revision: str,
+    message: str,
 ) -> None:
     config = _alembic_config()
+    with migration_lock():
+        asyncio.run(_execute(isolated_database_env, "drop schema public cascade; create schema public"))
+        command.upgrade(config, revision)
+        command.upgrade(config, revision)  # Current installed revision remains a valid no-op target.
     before = asyncio.run(_database_snapshot(isolated_database_env))
-    with migration_lock(), pytest.raises(RuntimeError, match="guide document runtime downgrade would discard retained evidence"):
+    assert before["versions"] == [revision]
+    with migration_lock(), pytest.raises(RuntimeError, match=message):
         command.downgrade(config, "base")
     after = asyncio.run(_database_snapshot(isolated_database_env))
     assert before == after

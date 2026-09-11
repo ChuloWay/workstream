@@ -146,7 +146,7 @@
     },
     {
       "capability": "unassigned_legacy_auth",
-      "content_sha256": "19b6d0ee9f96f559c6e746e959621c727db30851f7357a29c55195145ec410e3",
+      "content_sha256": "d0d9b85c3733d9b983ae7e715ec1b6133d83f6f77cdc3a30cca4ce36ccc3da43",
       "end_line": 3130,
       "hard_limit": 1200,
       "kind": "test_file",
@@ -170,11 +170,11 @@
     },
     {
       "capability": "unassigned_legacy_auth",
-      "content_sha256": "54e9522f425542cf51aea9e64556e97a9ab62220afe7364e784cb0a9cb454bc4",
-      "end_line": 3872,
+      "content_sha256": "be2e6fcd7c0742117f85f74e9ddab72f4f2df8ae83b111ef932a45a9b62b7ae0",
+      "end_line": 3871,
       "hard_limit": 1200,
       "kind": "test_file",
-      "observed_lines": 3872,
+      "observed_lines": 3871,
       "path": "backend/tests/test_auth.py",
       "qualified_symbol": null,
       "removal_chunk": "WS-AUTH-003-CLOSE",
@@ -254,7 +254,7 @@
     },
     {
       "capability": "unassigned_legacy_auth",
-      "content_sha256": "379ac4f3a04d2c16de034ce53b048dbafe6b1f57f6357fe1589ca736adaf9d22",
+      "content_sha256": "806568477e80800a617003d1e7e764ab62e95e35ece20ed8a96213bdf92e7b02",
       "end_line": 2352,
       "hard_limit": 120,
       "kind": "test_function",
@@ -351,74 +351,74 @@
     {
       "capability": "unassigned_legacy_auth",
       "content_sha256": "9df08af6d7d3193c9112ac885fbe242b0f6ef072dfe9536f91980a61d14a7b4c",
-      "end_line": 3851,
+      "end_line": 3850,
       "hard_limit": 120,
       "kind": "test_function",
       "observed_lines": 879,
       "path": "backend/tests/test_auth.py",
       "qualified_symbol": "test_actor_identity_link_lifecycle_real_postgres_concurrency",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 2973
+      "start_line": 2972
     },
     {
       "capability": "unassigned_legacy_auth",
       "content_sha256": "15c7147c11fa1802f43480b38a3678ac1a2586320ae2f0013622f1d63b2a3806",
-      "end_line": 2528,
+      "end_line": 2527,
       "hard_limit": 120,
       "kind": "test_function",
       "observed_lines": 535,
       "path": "backend/tests/test_auth.py",
       "qualified_symbol": "test_actor_identity_link_lifecycle_real_postgres_matrix",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 1994
+      "start_line": 1993
     },
     {
       "capability": "unassigned_legacy_auth",
       "content_sha256": "188db6b76b3f6dbe4077dbbb724bc9fe7529058b099cc7409bc5a443686a096a",
-      "end_line": 2970,
+      "end_line": 2969,
       "hard_limit": 120,
       "kind": "test_function",
       "observed_lines": 440,
       "path": "backend/tests/test_auth.py",
       "qualified_symbol": "test_actor_profile_lifecycle_real_postgres_concurrency",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 2531
+      "start_line": 2530
     },
     {
       "capability": "unassigned_legacy_auth",
       "content_sha256": "eca9eeff229ee37c103188f9a31e278773a69e96f2fd354662723f840cf8f16a",
-      "end_line": 1991,
+      "end_line": 1990,
       "hard_limit": 120,
       "kind": "test_function",
       "observed_lines": 482,
       "path": "backend/tests/test_auth.py",
       "qualified_symbol": "test_actor_profile_lifecycle_real_postgres_matrix",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 1510
+      "start_line": 1509
     },
     {
       "capability": "unassigned_legacy_auth",
       "content_sha256": "8d3b64ef2e322ce21f5709350b61cf84bca0afef6ef67b504f2757db9852f1f5",
-      "end_line": 1027,
+      "end_line": 1026,
       "hard_limit": 120,
       "kind": "test_function",
       "observed_lines": 646,
       "path": "backend/tests/test_auth.py",
       "qualified_symbol": "test_controlled_service_actor_provisioning_includes_project_setup_and_is_atomic",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 382
+      "start_line": 381
     },
     {
       "capability": "unassigned_legacy_auth",
       "content_sha256": "d26732dd125f8c2062b5a4b45b59fbccd283ee04939a9da7be1576235524292f",
-      "end_line": 1438,
+      "end_line": 1437,
       "hard_limit": 120,
       "kind": "test_function",
       "observed_lines": 409,
       "path": "backend/tests/test_auth.py",
       "qualified_symbol": "test_service_actor_provisioning_failure_and_authority_races_are_atomic",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 1030
+      "start_line": 1029
     },
     {
       "capability": "unassigned_legacy_auth",
@@ -686,15 +686,15 @@
     },
     {
       "capability": "unassigned_legacy_auth",
-      "content_sha256": "946a0d82ad3324a948b26dfe7628f772661884e02dbc5f17707506e24addf5ad",
+      "content_sha256": "b1c6806227df3d6a7739197b79c40dda06599167414e747c2dea90f09bb205bc",
       "end_line": 674,
       "hard_limit": 100,
       "kind": "test_helper",
-      "observed_lines": 334,
+      "observed_lines": 333,
       "path": "backend/tests/test_artifact_admission.py",
       "qualified_symbol": "_seed_checker_output_relationships",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 341
+      "start_line": 342
     },
     {
       "capability": "unassigned_legacy_auth",

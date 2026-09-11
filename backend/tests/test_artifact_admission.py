@@ -64,6 +64,7 @@ from app.modules.artifacts.schemas import (
     GuideArtifactAdmissionRequest,
 )
 from app.modules.artifacts.service import (
+    ArtifactAdmissionConflictError,
     ArtifactAdmissionRelationshipError,
     ArtifactAdmissionService,
     ArtifactStorageNamespaceSpec,
@@ -400,9 +401,6 @@ async def _seed_checker_output_relationships(session) -> tuple[str, str, str]:
             session, project_id=project_id, guide_id=guide_id,
             version=guide_version, snapshot_id=snapshot_id,
         )
-        guide = await session.get(ProjectGuide, guide_id)
-        guide.approved_by = guide.created_by = "setup-actor"
-        guide.effective_at = now
         snapshot = await session.get(GuideSourceSnapshot, snapshot_id)
         snapshot.captured_by = "setup-actor"
         await session.flush()
@@ -551,6 +549,8 @@ async def _seed_checker_output_relationships(session) -> tuple[str, str, str]:
         guide.selected_revision_policy_generation = 1
         guide.selected_revision_policy_hash = revision_hash
         guide.status = "active"
+        guide.approved_by = guide.created_by = "setup-actor"
+        guide.effective_at = now
         await session.flush()
     session.add(
         WorkstreamTask(
@@ -2284,7 +2284,7 @@ async def test_guide_admission_derives_three_scopes_without_provider_evidence(
                 media_type="application/pdf",
             ) as wrong_source:
                 with pytest.raises(
-                    ArtifactAdmissionRelationshipError,
+                    ArtifactAdmissionConflictError,
                     match="guide source ingest conflicts with prepared bytes",
                 ):
                     wrong_prepared = _AllowGuidePreparedAuthorization(context.actor_profile_id)

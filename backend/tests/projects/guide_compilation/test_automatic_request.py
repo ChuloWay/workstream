@@ -367,12 +367,13 @@ async def test_original_manager_revocation_does_not_rewrite_source_consent(
 
 @pytest.mark.asyncio
 @pytest.mark.postgres_schema_contract
-async def test_retained_automatic_evidence_prevents_configuration_downgrade(
+async def test_retained_automatic_evidence_prevents_guide_creation_downgrade(
     automatic_source, migration_lock
 ):
     import asyncio
     from alembic import command
     from alembic.config import Config
+    from tests.migration_fixtures import current_schema_revision
 
     factory, actor, setup_id, snapshot = automatic_source
     await create_committed_document_fixture(snapshot["id"])
@@ -381,18 +382,21 @@ async def test_retained_automatic_evidence_prevents_configuration_downgrade(
             actor=actor, setup_run_id=setup_id
         )
 
+    async with factory() as session:
+        assert await session.scalar(text("select version_num from alembic_version")) == current_schema_revision()
+
     def downgrade():
         with migration_lock():
             command.downgrade(Config("alembic.ini"), "0012_contribution_policy_audit_resource")
 
     with pytest.raises(
-        RuntimeError, match="guide document runtime downgrade would discard retained evidence"
+        RuntimeError, match="guide document creation custody cannot be downgraded"
     ):
         await asyncio.to_thread(downgrade)
     async with factory() as session:
         assert (
             await session.scalar(text("select version_num from alembic_version"))
-            == "0016_guide_document_runtime"
+            == current_schema_revision()
         )
         assert (
             await session.scalar(
