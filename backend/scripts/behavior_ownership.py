@@ -310,6 +310,15 @@ V01_BASELINE_ADDED_TARGETS = frozenset(
         "backend/scripts/schema_baseline_sql.py",
     }
 )
+TASK_PROJECT_AUTHORITY_TARGETS = frozenset(
+    {
+        "backend/app/modules/authorization/domain/task_authority.py",
+        "backend/app/modules/authorization/task_authorization.py",
+        "backend/app/modules/tasks/api/authorization.py",
+        "backend/app/modules/tasks/api/transition_audit.py",
+        "backend/app/modules/tasks/authorized_commands.py",
+    }
+)
 
 
 class BehaviorOwnershipError(RuntimeError):
@@ -485,6 +494,7 @@ def _validate_additive_partition_transition(
         | ARCH_04A_POST_SUBMIT_TARGETS
         | ARCH_CP05_POLICY_AUTH_TARGETS
         | V01_BASELINE_ADDED_TARGETS
+        | TASK_PROJECT_AUTHORITY_TARGETS
     )
     expected_additions = (approved_additions & additions) - set(trusted_targets)
     if POL_03A_DECLARATIVE_MODEL_TARGET in additions:

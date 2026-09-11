@@ -122,6 +122,20 @@ def test_fresh_database_matches_committed_manifest(
     assert actual == expected
 
 
+def test_repeated_upgrade_head_preserves_current_database(
+    isolated_database_env: str, migration_lock
+) -> None:
+    """An already-current database stays usable without recreation or data loss."""
+    config = _alembic_config()
+    with migration_lock():
+        before = asyncio.run(_database_snapshot(isolated_database_env))
+        assert before["versions"] == [HEAD_REVISION]
+        command.upgrade(config, "head")
+        command.upgrade(config, "head")
+        after = asyncio.run(_database_snapshot(isolated_database_env))
+    assert after == before
+
+
 def test_current_head_installs_submission_lineage_contract(
     isolated_database_env: str, migration_lock
 ) -> None:

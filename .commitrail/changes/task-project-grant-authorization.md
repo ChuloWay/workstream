@@ -413,6 +413,14 @@ tests, races, deterministic checks and final reviews remain required.
 
 ## Reconciliation
 
+- Migration preflight recognizes both the preceding guide-document revision and
+  this change's head. Repeated `upgrade head` must preserve an already-current
+  database. Register the five new Python owners in the existing behavior
+  partition with exact-path additive approval and neighbor-rejection proof;
+  preserve existing assignments, protected-base custody and fail-closed checks.
+  Partition completeness must be checked after new source files are tracked,
+  because its inventory deliberately uses Git-tracked targets.
+
 - Review repairs: preserve the complete Alembic chain in the graph assertion,
   including `0016_guide_document_runtime`; remove outdated rollout/eligibility
   claims from the AUTH runbook; distinguish target contribution-policy locks,
