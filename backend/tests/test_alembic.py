@@ -572,3 +572,31 @@ def test_seeded_sequences_advance_past_singleton_rows(isolated_database_env: str
             await connection.close()
 
     assert asyncio.run(read_next_values()) == (2, 2)
+
+
+def test_immediate_predecessor_upgrades_to_current_guide_creation_custody(
+    isolated_database_env: str,
+    migration_lock,
+    migration_schema_at,
+) -> None:
+    with migration_lock():
+        migration_schema_at("0016_guide_document_runtime")
+    before = asyncio.run(_database_snapshot(isolated_database_env))
+    assert before["versions"] == ["0016_guide_document_runtime"]
+    with migration_lock():
+        command.upgrade(_alembic_config(), HEAD_REVISION)
+    after = asyncio.run(_database_snapshot(isolated_database_env))
+    assert after["versions"] == [HEAD_REVISION]
+    assert after["reference_rows"] == before["reference_rows"]
+
+    async def creation_guards() -> int:
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        try:
+            return await connection.fetchval(
+                "select count(*) from pg_trigger where tgname='require_document_creation_pair' "
+                "and not tgisinternal and tgdeferrable and tginitdeferred"
+            )
+        finally:
+            await connection.close()
+
+    assert asyncio.run(creation_guards()) == 3
