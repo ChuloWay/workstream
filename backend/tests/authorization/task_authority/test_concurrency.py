@@ -4,6 +4,7 @@ import asyncio
 from uuid import UUID, uuid4
 
 import pytest
+from auth_concurrency_support import wait_for_named_database_lock
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
@@ -26,7 +27,7 @@ from tests.test_tasks import (
     task_database_env as task_database_env,
     task_client as task_client,
     create_active_project, create_ready_task, admit_and_grant_project_submitter,
-    set_dev_actor, auth_headers, _wait_for_task_database_lock,
+    set_dev_actor, auth_headers,
 )
 
 
@@ -164,7 +165,7 @@ async def test_project_grant_revocation_serializes_with_claim(
         pending.append(asyncio.create_task(first()))
         await asyncio.wait_for(locked.wait(), timeout=30)
         pending.append(asyncio.create_task(second()))
-        await asyncio.wait_for(_wait_for_task_database_lock(
+        await asyncio.wait_for(wait_for_named_database_lock(
             task_database_env, claim_name if ordering == "revoke_first" else revoke_name,
         ), timeout=30)
         release.set()

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 import pytest
+from auth_concurrency_support import wait_for_named_database_lock
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_engine
 
@@ -40,7 +41,6 @@ from tests.test_tasks import (
     create_active_project,
     create_ready_task,
     create_started_task,
-    _wait_for_task_database_lock,
 )
 
 
@@ -510,7 +510,7 @@ async def test_lifecycle_change_before_contributor_operation_denies_without_effe
     await task_entered.wait()
     lock_error: AssertionError | None = None
     try:
-        await _wait_for_task_database_lock(task_database_env, race.task_application_name)
+        await wait_for_named_database_lock(task_database_env, race.task_application_name)
     except AssertionError as exc:
         lock_error = exc
     finally:
@@ -609,7 +609,7 @@ async def test_contributor_operation_commits_before_lifecycle_change(
     await lifecycle_entered.wait()
     lock_error = None
     try:
-        await _wait_for_task_database_lock(task_database_env, race.lifecycle_application_name)
+        await wait_for_named_database_lock(task_database_env, race.lifecycle_application_name)
     except AssertionError as exc:
         lock_error = exc
     finally:

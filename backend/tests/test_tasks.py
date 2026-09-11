@@ -21,11 +21,11 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (  # type: ignore[import-not-found]
     AsyncSession,
-    create_async_engine,
 )
 from sqlalchemy.schema import CreateIndex
 
 from projects.guide_fixtures import complete_guide_payload
+from auth_concurrency_support import wait_for_named_database_lock
 from tests.submission_fixtures import seed_finalized_submission_for_checker_test
 
 from app.adapters.auth.dev import actor_id_from_external_identity
@@ -1333,31 +1333,6 @@ async def seed_task_test_actor(subject: str, *, stored_role: str = "worker") -> 
     return worker_actor_id
 
 
-async def _wait_for_task_database_lock(
-    database_url: str,
-    application_name: str,
-) -> None:
-    """Wait until one named race participant is blocked on a PostgreSQL lock."""
-    engine = create_async_engine(database_url)
-    try:
-        async with engine.connect() as connection:
-            for _ in range(5000):
-                waiting = await connection.scalar(
-                    text(
-                        "select exists(select 1 from pg_stat_activity where "
-                        "application_name = :application_name "
-                        "and wait_event_type = 'Lock')"
-                    ),
-                    {"application_name": application_name},
-                )
-                if waiting:
-                    return
-                await asyncio.sleep(0)
-    finally:
-        await engine.dispose()
-    raise AssertionError(f"{application_name} never reached the PostgreSQL lock")
-
-
 async def _submission_context_request_for_started_task(
     task_id: str,
     contributor_id: str,
@@ -1540,7 +1515,7 @@ async def test_task_repository_postgresql_submission_context_lock_serializes_rac
         contender_call = asyncio.create_task(
             TaskRepository(contender).lock_submission_context(request)
         )
-        await _wait_for_task_database_lock(task_database_env, contender_name)
+        await wait_for_named_database_lock(task_database_env, contender_name)
         assert not contender_call.done()
         await holder.rollback()
         contender_facts = await contender_call
