@@ -16,6 +16,12 @@ phase receives only a strict `workstream_test_<12 lowercase hex>` database and a
 
 ## Local PostgreSQL diagnostic
 
+Use PostgreSQL 16, matching Backend CI, for reset-schema fingerprint checks.
+Catalog identity rendering can differ across major versions even when the
+schema is equivalent. A changed fingerprint requires comparing the actual
+schema objects on the CI engine; never bypass the check or accept an additional
+hash merely to make a different local engine pass.
+
 This legacy sequential command checks PostgreSQL provisioning and cleanup. It
 is not complete full-suite proof because it does not start or bind a MinIO
 provider. Use the hosted semantic-lane workflow below for authoritative

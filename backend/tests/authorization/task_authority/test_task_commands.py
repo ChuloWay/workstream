@@ -9,6 +9,9 @@ from sqlalchemy.exc import OperationalError
 from app.db import session as db_session
 from app.modules.actors.models import ActorIdentityLink, ActorProfile, LegacyWorkflowEligibility
 from app.modules.authorization.models import AdminRoleGrant, AuthorityControl, ProjectRoleGrant
+from app.modules.authorization.runtime import AuthorizationEvidenceUnavailable
+from app.modules.authorization.task_authorization import PreparedTaskAuthorization
+from app.modules.tasks.api import TaskAuthorityDenied
 from app.modules.audit.service import LifecycleAuditParticipant
 from app.modules.tasks.models import AuditEvent, TaskAssignment, WorkstreamTask
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
@@ -183,6 +186,8 @@ async def test_task_command_routes_preserve_structured_errors(task_client, monke
         (TaskServiceError("bounded task failure"), 400, "invalid_request", False),
         (OperationalError("injected", None, RuntimeError("unavailable")),
          503, "task_authority_unavailable", True),
+        (AuthorizationEvidenceUnavailable("injected authority evidence failure"),
+         503, "task_authority_unavailable", True),
     ]:
         async def fail(*args, **kwargs):
             raise exception
@@ -199,6 +204,26 @@ async def test_task_command_routes_preserve_structured_errors(task_client, monke
             assert error["code"] == code
             assert error["retryable"] is retryable
             assert error["correlation_id"] == response.headers["x-correlation-id"]
+
+
+async def test_task_denial_evidence_failure_is_structured_unavailable(task_client, monkeypatch):
+    """Unavailable denial evidence must not become a bare 500 or successful denial."""
+    async def deny(*args, **kwargs):
+        raise TaskAuthorityDenied("injected task denial")
+
+    async def evidence_unavailable(*args, **kwargs):
+        raise AuthorizationEvidenceUnavailable("injected denial evidence failure")
+
+    monkeypatch.setattr(AuthorizedTaskCommands, "claim", deny)
+    monkeypatch.setattr(PreparedTaskAuthorization, "restage_denial", evidence_unavailable)
+    response = await task_client.post(
+        f"/api/v1/tasks/{uuid4()}/claim", headers=auth_headers(), json={}
+    )
+    assert response.status_code == 503, response.text
+    error = response.json()["error"]
+    assert error["code"] == "task_authority_unavailable"
+    assert error["retryable"] is True
+    assert error["correlation_id"] == response.headers["x-correlation-id"]
 
 
 async def test_claim_rolls_back_if_transition_evidence_fails(task_client, monkeypatch):

@@ -139,7 +139,7 @@ async def get_task_commands(
         try:
             if await authority.restage_denial(exc):
                 await session.commit()
-        except SQLAlchemyError as evidence_error:
+        except (AuthorizationEvidenceUnavailable, SQLAlchemyError) as evidence_error:
             await session.rollback()
             raise StructuredHTTPException(
                 status_code=503,
@@ -154,7 +154,7 @@ async def get_task_commands(
             error_code="permission_not_granted",
             error_message="Task authority denied",
         ) from exc
-    except SQLAlchemyError as exc:
+    except (AuthorizationEvidenceUnavailable, SQLAlchemyError) as exc:
         await session.rollback()
         raise StructuredHTTPException(
             status_code=503,

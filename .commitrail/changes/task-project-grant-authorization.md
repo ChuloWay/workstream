@@ -413,6 +413,24 @@ tests, races, deterministic checks and final reviews remain required.
 
 ## Reconciliation
 
+- AUTH evidence-storage failures on both command and denial-restaging paths
+  return the structured retryable TASK 503 response. Service actors reach the
+  existing fixed-service matrix and canonical denial staging, rather than being
+  rejected by an unaudited adapter type check. Actor-ID substitution remains
+  rejected; no service TASK action is enabled. The full fixed-service/operation
+  negative matrix checks exact denial evidence and rollback restaging.
+- Reconcile retained test expectations with the activated TASK action set and
+  the discovered current migration head. Keep exact action-set comparison and
+  failed-downgrade rollback assertions. Replace a stale prose census assertion
+  with the documented non-activation invariant; independent ART custody and
+  permission mappings remain fully checked.
+
+- Reset-schema fingerprint uses the same PostgreSQL 16 engine as Backend CI.
+  Fresh 16/17 schema captures each contained 4,806 rows; only three namespace
+  function identities differed (`pg_catalog.json` versus `json`). All remaining
+  captured objects matched. Keep a single CI-engine fingerprint, not a relaxed
+  multi-hash guard or a normalization that could conceal object changes.
+
 - Migration preflight recognizes both the preceding guide-document revision and
   this change's head. Repeated `upgrade head` must preserve an already-current
   database. Register the five new Python owners in the existing behavior

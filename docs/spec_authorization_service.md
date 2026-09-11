@@ -284,7 +284,10 @@ producing 111 rows with 61 active and 50 planned actions. AUTH-12B2 then
 activates exact setup finalization, yielding 62 active and 49 planned
 actions without adding a row. CP05 activates the five existing ContributionPolicy
 actions, yielding 67 active and 44 planned actions. POL-04B1 adds the automatic compilation
-request action, making the current totals 112 actions: 68 active and 44 planned. Only active human
+request action, historically making 112 actions: 68 active and 44 planned.
+These are activation-history counts, not the current registry census. The
+current typed catalogue also includes the TASK project-authority cutover.
+Only active human
 Finance Authority with system or exact-project scope is eligible. The explicit
 CON adapter uses serialized reads and transaction-bound PREP for mutations;
 committed replay requires fresh read authority. Registration custody remains

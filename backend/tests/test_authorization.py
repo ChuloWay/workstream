@@ -2424,9 +2424,8 @@ def test_art_custody_documentation_matches_the_independent_activation_fixture() 
     assert "v0.1 baseline.\nThe REV transfer adds no migration." in operations
     assert "does not grant Operator" in operations
     assert "verification retry remains independently gated" in operations
-    assert (
-            "73 PermissionIds, 112 ActionIds, 68 active actions, and\n44 planned actions" in operations
-    )
+    assert "Catalogue entries and explicit runtime composition determine availability" in operations
+    assert "a planned action is not activated by its presence in the catalogue" in operations
 
 
 def test_rev_custody_documentation_matches_the_independent_catalogue_fixture() -> None:

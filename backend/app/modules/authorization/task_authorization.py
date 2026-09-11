@@ -13,7 +13,6 @@ from app.modules.authorization.repository import AdminAuthorizationRepository
 from app.modules.authorization.runtime import (
     AuthorizationContext,
     AuthorizationDenied,
-    HumanAuthorizationContext,
     PreparedAuthorizationHandleInvalid,
     PreparedAuthorizationInput,
     PreparedAuthorizationUnsupported,
@@ -32,10 +31,10 @@ class PreparedTaskAuthorization:
         self._kernel = AuthorizationService(session, context, admin_repository=self._repository)
 
     def _resource(self, facts: TaskAuthorityFacts) -> TaskAuthorityResourceContext:
-        if not isinstance(self._context, HumanAuthorizationContext) or (
-            facts.actor_profile_id != self._context.actor_profile_id
-        ):
+        if facts.actor_profile_id != self._context.actor_profile_id:
             raise TaskAuthorityDenied("task authority denied")
+        # Service actors reach the canonical fixed-service matrix denial so
+        # their rejected request retains the same AUTH audit custody as humans.
         return TaskAuthorityResourceContext(
             resource_id=facts.task_id,
             scope_project_id=facts.project_id,

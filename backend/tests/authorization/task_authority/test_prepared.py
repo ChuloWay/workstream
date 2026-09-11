@@ -7,6 +7,9 @@ from uuid import uuid4
 import pytest
 
 from app.modules.authorization.catalogue import ActionId
+from app.modules.actors.api import ServiceIdentity
+from app.modules.authorization.task_authorization import PreparedTaskAuthorization
+from app.modules.tasks.api import TaskAuthorityDenied, TaskAuthorityFacts, TaskAuthorityOperation
 from app.modules.authorization.domain.task_authority import TaskAuthorityResourceContext
 from app.modules.authorization.kernel import AuthorizationService
 from app.modules.authorization.prepared import PreparedAuthorizationService
@@ -15,6 +18,7 @@ from app.modules.authorization.runtime import (
     ActorKind,
     ActorStatus,
     HumanAuthorizationContext,
+    ServiceAuthorizationContext,
     IdentityLinkStatus,
     AuthorizationDenied,
     PreparedAuthorizationHandleInvalid,
@@ -286,3 +290,40 @@ async def test_commit_invalidates_prepared_task_authority():
         assert evidence.events == []
     finally:
         prepared.close()
+
+
+@pytest.mark.parametrize("identity", list(ServiceIdentity))
+@pytest.mark.parametrize("operation", list(TaskAuthorityOperation))
+async def test_service_task_denials_have_canonical_restageable_evidence(identity, operation):
+    """Every fixed service remains denied with exact AUTH evidence, not a silent guard."""
+    context = ServiceAuthorizationContext(
+        actor_profile_id=uuid4(), actor_kind=ActorKind.SERVICE,
+        actor_status=ActorStatus.ACTIVE, identity_link_id=uuid4(),
+        identity_link_status=IdentityLinkStatus.ACTIVE, service_identity=identity,
+        request_id=uuid4(), correlation_id=uuid4(),
+    )
+    authority = PreparedTaskAuthorization(Session(), context)
+    evidence = Evidence()
+    authority._kernel._audit = evidence
+    facts = TaskAuthorityFacts(
+        operation=operation, task_id=uuid4(), project_id=uuid4(),
+        actor_profile_id=context.actor_profile_id, task_status="ready",
+        assigned_to=None, assignment_id=None, assignment_contributor_id=None,
+        locked_context_hash="sha256:" + "a" * 64,
+    )
+    with pytest.raises(TaskAuthorityDenied) as caught:
+        await authority.prepare(facts)
+    assert isinstance(caught.value.__cause__, AuthorizationDenied)
+    decision = caught.value.__cause__.decision
+    assert decision.allowed is False
+    assert decision.action_id.value == operation.value
+    assert decision.denial_code.value == "permission_not_granted"
+    assert len(evidence.events) == 1
+    first = evidence.events[0]
+    assert first.project_id == str(facts.project_id)
+    assert first.after_facts["resource_context_digest"].startswith("sha256:")
+    evidence.events.clear()  # Simulate discarding the command transaction's stage.
+    assert await authority.restage_denial(caught.value) is True
+    assert len(evidence.events) == 1
+    assert evidence.events[0].after_facts == first.after_facts
+    assert evidence.events[0].project_id == first.project_id
