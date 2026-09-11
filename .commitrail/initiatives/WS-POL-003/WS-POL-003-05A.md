@@ -54,7 +54,8 @@ manual HTTP approval route is removed.
   Reconcile existing packet validation with the canonical policy’s required
   `artifact_hash_manifest`, supplied and identity-checked from inspected bytes;
   this adds no checker capability or execution activation.
-- Affected tests and shared fixtures, API/schema inventories, ownership records,
+- Affected tests and shared fixtures, the standalone API contract drill and its
+  scripted guide runtime, API/schema inventories, ownership records,
   structural inventory, current specifications and POL navigation/roadmap.
 
 ### Not allowed
@@ -270,3 +271,10 @@ pointers so an earlier digest mismatch cannot mask shape validation. Queue
 repair tests restore the read fault rather than changing retained policy data.
 The public OpenAPI inventory removes the obsolete manual approval route, and
 migration fixtures use the shared manifest's actual digest.
+
+The standalone API drill must also use full unified worker finalization and the
+shared hidden approval fixture. Remove its separate partial sufficiency pipeline
+and manual approval calls; reuse the existing post-policy fixture for the
+not-yet-live downstream prerequisite. HTTP assertions continue to prove that
+approval is not publicly exposed. Run the complete real HTTP drill locally and
+in hosted CI; do not replace it with the passing lane suite.

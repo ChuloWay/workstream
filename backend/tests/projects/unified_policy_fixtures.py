@@ -35,7 +35,7 @@ from app.modules.projects.schemas import (
     EffectiveProjectSubmissionArtifactPolicyResponse,
     SubmissionArtifactPolicyResponse,
 )
-from committed_guide_fixtures import create_compiled_report_fixture
+from tests.committed_guide_fixtures import create_compiled_report_fixture
 from tests.projects.guide_compilation.finalization.pg_support import finalize
 from tests.projects.guide_compilation.proposals.pg_support import ProposalAuthority
 
