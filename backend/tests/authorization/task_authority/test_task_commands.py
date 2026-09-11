@@ -8,6 +8,7 @@ from sqlalchemy.exc import OperationalError
 
 from app.db import session as db_session
 from app.modules.actors.models import ActorIdentityLink, ActorProfile, LegacyWorkflowEligibility
+from app.modules.actors.service import ActorService, IdentityLinkRevoked
 from app.modules.authorization.models import AdminRoleGrant, AuthorityControl, ProjectRoleGrant
 from app.modules.authorization.runtime import AuthorizationEvidenceUnavailable
 from app.modules.authorization.task_authorization import PreparedTaskAuthorization
@@ -224,6 +225,61 @@ async def test_task_denial_evidence_failure_is_structured_unavailable(task_clien
     assert error["code"] == "task_authority_unavailable"
     assert error["retryable"] is True
     assert error["correlation_id"] == response.headers["x-correlation-id"]
+
+
+@pytest.mark.parametrize("failure_kind", ["identity_revoked", "database_unavailable"])
+async def test_actor_resolution_failure_cannot_reach_task_command(
+    task_client, task_database_env, monkeypatch, failure_kind,
+):
+    """Registry failure rolls back its read transaction before any TASK command."""
+    project = await create_active_project(task_client)
+    task = await create_ready_task(task_client, project["id"])
+    await admit_and_grant_project_submitter(
+        task_client, monkeypatch, project["id"], "resolution-failure-submitter"
+    )
+    before = await _read_task_contributor_race_snapshot(task_database_env, task["id"])
+    original = ActorService.find_actor_for_authorization
+    resolved_sessions = []
+    rollback_observations = []
+    command_calls = []
+
+    async def fail_after_lookup(service, token):
+        assert await original(service, token) is not None
+        assert service._session.in_transaction()
+        resolved_sessions.append(service._session)
+        rollback = service._session.rollback
+
+        async def observe_rollback():
+            was_active = service._session.in_transaction()
+            await rollback()
+            rollback_observations.append((was_active, service._session.in_transaction()))
+
+        monkeypatch.setattr(service._session, "rollback", observe_rollback)
+        if failure_kind == "identity_revoked":
+            raise IdentityLinkRevoked("Identity link is revoked")
+        raise OperationalError("injected registry failure", None, RuntimeError("unavailable"))
+
+    async def forbidden_command(*args, **kwargs):
+        command_calls.append(True)
+        raise AssertionError("Actor resolution failure reached TASK")
+
+    monkeypatch.setattr(ActorService, "find_actor_for_authorization", fail_after_lookup)
+    monkeypatch.setattr(AuthorizedTaskCommands, "claim", forbidden_command)
+    response = await task_client.post(
+        f"/api/v1/tasks/{task['id']}/claim", headers=auth_headers(), json={}
+    )
+    unavailable = failure_kind == "database_unavailable"
+    assert response.status_code == (503 if unavailable else 403), response.text
+    error = response.json()["error"]
+    assert error["code"] == ("service_unavailable" if unavailable else "identity_link_revoked")
+    assert error["retryable"] is unavailable
+    assert error["correlation_id"] == response.headers["x-correlation-id"]
+    assert "injected" not in response.text
+    assert len(resolved_sessions) == 1
+    assert rollback_observations == [(True, False)]
+    assert not resolved_sessions[0].in_transaction()
+    assert command_calls == []
+    assert await _read_task_contributor_race_snapshot(task_database_env, task["id"]) == before
 
 
 async def test_claim_rolls_back_if_transition_evidence_fails(task_client, monkeypatch):
