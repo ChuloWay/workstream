@@ -2309,15 +2309,9 @@ async def test_guide_admission_derives_three_scopes_without_provider_evidence(
                     GuideSourceArtifactIngest.source_item_id == item_id
                 )
             )
-            scopes = (
-                (
-                    await session.execute(
-                        select(ArtifactAdmissionScope).order_by(ArtifactAdmissionScope.scope_type)
-                    )
-                )
-                .scalars()
-                .all()
-            )
+            scopes = (await session.scalars(
+                select(ArtifactAdmissionScope).order_by(ArtifactAdmissionScope.scope_type)
+            )).all()
             assert attempt is not None
             assert staged is not None
             assert staged.sha256 == expected_sha256
@@ -2336,9 +2330,8 @@ async def test_guide_admission_derives_three_scopes_without_provider_evidence(
             }
             assert len(result.charge_ids) == 3
             assert await _count(session, ArtifactPutAttempt) == 1
-            assert await _count(session, ArtifactContent) == 0
-            assert await _count(session, ArtifactReplica) == 0
-            assert await _count(session, ArtifactOperationReceipt) == 0
+            await _assert_no_admission_rows(
+                session, ArtifactContent, ArtifactReplica, ArtifactOperationReceipt)
             with pytest.raises(DBAPIError):
                 await session.execute(
                     text(
