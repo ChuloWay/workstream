@@ -22,7 +22,7 @@ from app.api.deps.authorization import (
     prepared_authorization_service,
 )
 from app.core.permissions import PermissionDenied
-from app.core.api_controls import StructuredHTTPException
+from app.core.api_controls import ApiErrorResponse, StructuredHTTPException
 from app.db.session import get_db_session
 from app.interfaces.artifacts import ArtifactLimitExceededError, ArtifactInputMismatchError, ArtifactStoreError
 from app.interfaces.artifact_operations import (
@@ -263,11 +263,11 @@ def guide_document_upload_command(
             for media_type in DOCUMENT_EXTENSIONS
         }},
     },
-    responses={404: {"description": "Document unavailable"},
-               409: {"description": "Upload conflicts with committed document"},
-               413: {"description": "Document exceeds configured byte limit"},
-               422: {"description": "Invalid upload metadata or bytes"},
-               503: {"description": "Artifact storage unavailable"}},
+    responses={404: {"model": ApiErrorResponse, "description": "Document unavailable"},
+               409: {"model": ApiErrorResponse, "description": "Upload conflicts with committed document"},
+               413: {"model": ApiErrorResponse, "description": "Document exceeds configured byte limit"},
+               422: {"model": ApiErrorResponse, "description": "Invalid upload metadata or bytes"},
+               503: {"model": ApiErrorResponse, "description": "Artifact storage unavailable"}},
 )
 async def upload_guide_document(
     project_id: UUID,

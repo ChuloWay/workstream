@@ -770,6 +770,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/projects/document_upload.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/projects/guide_compilation/automatic_request.py"
     },
     {
@@ -1093,7 +1097,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "ddf6c3e0221d3e8caddc9b7f556dd75616f5880272552976bbd7b04b167b72f9",
+  "authority_digest": "868b3fe3a0448e4bb7bcffffc01cbc95974c1f3b8e98f7f7c77cbbcd8ee382d3",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

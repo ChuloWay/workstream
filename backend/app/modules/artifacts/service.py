@@ -22,6 +22,7 @@ from app.interfaces.artifacts import (
     ArtifactCommitment,
     ArtifactIntegrityError,
     ArtifactLimitExceededError,
+    ArtifactInputMismatchError,
     ArtifactStoreError,
     ArtifactStoreUnavailableError,
     ArtifactObjectMissingError,
@@ -60,7 +61,7 @@ from app.modules.artifacts.metrics import (
     ArtifactAdmissionMetrics,
     artifact_admission_metrics,
 )
-from app.modules.artifacts.repository import ArtifactRepository
+from app.modules.artifacts.repository import ArtifactRepository, GuideSourceIngestConflict
 from app.modules.artifacts.authorization import (
     GuideArtifactPreparedAuthorization,
     guide_ingest_prepared_request_digest,
@@ -246,7 +247,7 @@ class GuideArtifactIngestService:
             ))
             if (classification.status != "classified"
                     or classification.detected_format != DOCUMENT_EXTENSIONS[media_type]):
-                raise ArtifactAdmissionRelationshipError("guide document format is invalid")
+                raise ArtifactInputMismatchError("guide document format is invalid")
             admission = await admission_service.admit(
                 GuideArtifactAdmissionRequest(
                     project_id=request.project_id,
@@ -353,9 +354,10 @@ class PreparedGuideArtifactIngestCommand(GuideArtifactIngestCommand):
             )
             locked = await self._targets.resolve(project_id, guide_id, source_item_id, for_update=True)
             if (locked is None or (locked.snapshot_id, locked.setup_id, locked.setup_generation, locked.media_type)
-                    != (target.snapshot_id, target.setup_id, target.setup_generation, target.media_type)
-                    or content_type != locked.media_type):
+                    != (target.snapshot_id, target.setup_id, target.setup_generation, target.media_type)):
                 raise ArtifactAdmissionRelationshipError("guide document metadata does not match")
+            if content_type != locked.media_type:
+                raise ArtifactInputMismatchError("guide document content type does not match")
             limit = min(self._maximum_document_bytes, self._maximum_total_bytes - locked.other_document_bytes)
             if limit <= 0 or (content_length is not None and (content_length < 0 or content_length > limit)):
                 raise ArtifactLimitExceededError("guide document exceeds maximum bytes")
@@ -1954,6 +1956,8 @@ class ArtifactAdmissionService:
                         byte_count=commitment.byte_count,
                         media_type=commitment.media_type,
                     )
+                except GuideSourceIngestConflict as exc:
+                    raise ArtifactAdmissionConflictError(str(exc)) from exc
                 except ValueError as exc:
                     raise ArtifactAdmissionRelationshipError(str(exc)) from exc
             submission_facts: _AdmissionFacts | None = None
@@ -2005,6 +2009,8 @@ class ArtifactAdmissionService:
             request_digest = canonical_json_hash(
                 {
                     "operation_identity": facts.operation_identity,
+                    **({"guide_ingest_request_digest": request.request_digest}
+                       if type(request) is GuideArtifactAdmissionRequest else {}),
                     "request_type": facts.request_type,
                     "producer_type": facts.producer_type,
                     "producer_ref": facts.producer_ref,

@@ -164,3 +164,27 @@ def test_guide_create_authorization_projection_contains_commitments_not_example_
     assert caller.request_value["request_digest"] == digest
     assert caller.request_value["task_examples_count"] == 1
     assert caller.request_value["task_examples_hash"].startswith("sha256:")
+
+
+def test_document_upload_openapi_binary_body_and_bounded_responses():
+    from app.core.config import Settings
+    from app.main import create_app
+    document = create_app(Settings(environment="test")).openapi()
+    operation = document["paths"]["/api/v1/projects/{project_id}/guides/{guide_id}/documents/{document_id}/content"]["post"]
+    body = operation["requestBody"]
+    assert body["required"] is True
+    assert set(body["content"]) == {
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    }
+    assert all(value["schema"] == {"type": "string", "format": "binary"} for value in body["content"].values())
+    responses = operation["responses"]
+    assert responses["202"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/GuideArtifactIngestResponse"}
+    schema = document["components"]["schemas"]["GuideArtifactIngestResponse"]
+    assert set(schema["properties"]) == {"document_id", "sha256", "byte_count", "status", "replayed"}
+    for code in ("404", "409", "413", "422", "503"):
+        assert responses[code]["description"]
+        assert responses[code]["content"]["application/json"]["schema"] == {
+            "$ref": "#/components/schemas/ApiErrorResponse"}
