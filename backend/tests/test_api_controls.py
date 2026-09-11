@@ -439,12 +439,17 @@ def test_openapi_documents_request_error_and_response_context() -> None:
     )
     assert len(route_inventory) == 73
     assert sha256("\n".join(route_inventory).encode()).hexdigest() == (
-        "58e52a93a0f081691e5dff6f6226d2a45f843a3ddc9df10d560e83dc1ee9439a"
+        "23b90006282444310fe13a34fab947c8cff7284b288a2fe26e2ddb9780f8691f"
     )
     assert len(protected_inventory) == 71
     assert sha256("\n".join(protected_inventory).encode()).hexdigest() == (
-        "588b760470932011dc1d2c669e700891e31120df2674d50f60163032aa349ac8"
+        "286149aa75927259d4659eee97400b53e41623ae234a3cf1f5657647edfd269d"
     )
+    assert "/api/v1/workers/me/profile" not in schema["paths"]
+    assert "post" not in schema["paths"]["/api/v1/tasks/{task_id}/submissions"]
+    assert "GET /api/v1/tasks/{task_id}/submissions" in protected_inventory
+    assert "POST /api/v1/operations/tasks/{task_id}/start" in protected_inventory
+    assert "GET /api/v1/projects/{project_id}/tasks/{task_id}/work-context" in protected_inventory
     assert set(schema["paths"]["/health"]["get"]["responses"]) == {"200", "400", "500"}
     assert {"401", "403", "503"} <= set(schema["paths"]["/api/v1/auth/me"]["get"]["responses"])
     service_actor_responses = schema["paths"]["/api/v1/service-actors"]["post"]["responses"]
@@ -463,6 +468,13 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         if method in methods and "x-workstream-action-id" in operation
     }
     assert action_declarations == {
+        "POST /api/v1/tasks/{task_id}/claim": "task.claim",
+        "POST /api/v1/tasks/{task_id}/start": "task.start",
+        "GET /api/v1/tasks/{task_id}/work-context": "task.work_context.read",
+        "POST /api/v1/operations/tasks/{task_id}/start": "operations.task.start_override",
+        "GET /api/v1/projects/{project_id}/tasks/{task_id}/work-context": (
+            "project.task.work_context.read"
+        ),
         "GET /api/v1/actors/me": "actor.profile.read_self",
         "PATCH /api/v1/actors/me": "actor.profile.update_self",
         "GET /api/v1/actors/me/authorization-context": ("actor.authorization_context.read"),

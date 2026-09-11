@@ -74,6 +74,19 @@ WORKSTREAM_DATABASE_URL='postgresql+asyncpg://USER:PASSWORD@localhost:5433/works
 
 Do not use `WORKSTREAM_ALLOW_NONLOCAL_E2E_DATABASE` for ordinary proof.
 
+The public task portion of this drill ends at project-authorized claim/start.
+It checks that revoked grants deny work and explicitly issues fresh authority
+before continuing. The self-activated eligibility endpoint and JSON-packet
+submission POST are removed. A passing drill does not certify hidden
+admission-backed Submission creation, finalization or post-submit routing.
+Those owners require their own bounded integration evidence.
+
+Checker, finalization and review persistence tests may use the explicit stored
+Submission fixture in `backend/tests/submission_fixtures.py`. It seeds retained
+packet prerequisites and runs the existing finalization/enqueue owners; it is
+not a public API or ART-admission success simulation. Tests of new Submission
+creation must use the real admission-backed command, not this fixture.
+
 If provisioning fails, confirm the local PostgreSQL provisioning credential can create/drop databases and roles, terminate owned sessions, and reach the named admin database. Diagnostics omit credentials.
 
 ## Hosted semantic-lane full-suite proof

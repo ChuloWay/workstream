@@ -107,12 +107,14 @@ python3 scripts/check_markdown_links.py
 git diff --check
 ```
 
-During the compatibility period, `/api/v1/auth/me` uses only the verified
-issuer/subject plus bounded legacy roles. It does not copy issuer email or
-display name into actor storage or responses, so both response fields remain
-`null`. Consumers must not treat token identity metadata or legacy workflow
-eligibility as profile or authorization truth. Human-owned display data is
-written only through `PATCH /api/v1/actors/me`.
+Use `/api/v1/actors/me` for canonical actor profiles and
+`PATCH /api/v1/actors/me` for human-owned display data. The still-present
+`/api/v1/auth/me` route is obsolete and is being removed by the separate guide
+work; it is not an alternative profile or authority contract. Task
+claim/start/work-context require current canonical authority and the applicable
+exact project grant. Token claims and eligibility rows are not authority.
+The API drill now ends its task journey at that supported
+public boundary; hidden submission creation has separate proof.
 
 ## Request And Error Context
 
@@ -247,13 +249,20 @@ rejects a missing profile with SQLSTATE `23503` and a service profile with
 `23514`. Suspended and deactivated human profiles remain valid historical
 references. The v0.1 baseline has no downgrade path.
 
-Claim and submission also revalidate current identity inside their mutation
-transaction in lock order ActorProfile, exact issuer/subject identity link,
-task, active assignment. An inactive or non-human identity returns HTTP 403
-`active_contributor_required`. Missing, mismatched, database-unavailable, or
-lock-failed canonical identity state rolls back and returns retryable HTTP 503
-`contributor_identity_unavailable`. These responses are identity eligibility,
-not permission decisions; grant and resource authorization remain separate.
+Claim, start and work-context use canonical AUTH. TASK locks the task and
+active assignment before AUTH locks the current ActorProfile, exact identity
+link and applicable grant; mutation locks remain held through the transaction.
+Contributor commands require an active exact-project Submitter grant, not a
+token role or an eligibility row. The separate Operator start override
+requires its explicit permission and a reason. AUTH denials return HTTP 403
+`permission_not_granted`; database failures roll back with retryable HTTP 503
+`task_authority_unavailable`. Initial identity resolution may reject a request
+before command execution under its own identity-error contract.
+
+Admission-backed Submission creation remains hidden and uses its existing
+TASK-first context/assignment and AUTH transaction participants. The old public
+packet POST and self-activated contributor-profile endpoint are removed. Stored
+contributor references and retained submission reads are preserved.
 
 ## PostgreSQL Rate Controls
 
