@@ -374,7 +374,6 @@ async def test_retained_automatic_evidence_prevents_guide_creation_downgrade(
     import asyncio
     from alembic import command
     from alembic.config import Config
-    from tests.migration_fixtures import current_schema_revision
 
     factory, actor, setup_id, snapshot = automatic_source
     await create_committed_document_fixture(snapshot["id"])
