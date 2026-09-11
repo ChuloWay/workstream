@@ -181,7 +181,7 @@ def _plan(catalogue):
     lineage = EffectivePreSubmissionPlanLineage(
         project_id=uuid4(),
         guide_id=uuid4(),
-        guide_version=1,
+        guide_version="1",
         source_snapshot_id=snapshot_id,
         source_snapshot_hash=guide_snapshot_columns(str(snapshot_id))["bundle_hash"],
         effective_policy_id=uuid4(),

@@ -542,7 +542,7 @@ ACTION_DEFINITIONS = (
     ),
     _planned(
         ActionId.PROJECT_GUIDE_COMPILATION_REVIEW_PACKAGE_READ,
-        PermissionId.PROJECT_SETUP_DIAGNOSTIC_READ,
+        PermissionId.PROJECT_GUIDE_MANAGE,
         ActionOwner.AUTH_12F,
     ),
     _planned(

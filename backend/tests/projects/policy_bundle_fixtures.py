@@ -22,6 +22,11 @@ async def create_approved_policy_bundle(
     guide_id: str,
     *,
     sufficiency_status: str = "passed",
+    artifact_proposal=None,
+    request_headers=None,
+    post_submit_required_checkers=None,
+    post_submit_warning_checkers=None,
+    post_submit_blocking_severities=None,
 ) -> dict:
     snapshot = await read_guide_source_snapshot(project_id, guide_id)
     report = await create_sufficiency_report(
@@ -30,8 +35,9 @@ async def create_approved_policy_bundle(
         guide_id,
         snapshot["id"],
         status=sufficiency_status,
+        request_headers=request_headers,
     )
-    policy = await create_unified_submission_policy(report["id"], snapshot["id"])
+    policy = await create_unified_submission_policy(report["id"], snapshot["id"], proposal=artifact_proposal)
     from app.db import session as db_session
     from app.modules.projects.models import ProjectSetupRun
     from sqlalchemy import select
@@ -51,6 +57,9 @@ async def create_approved_policy_bundle(
     post_submit_checker_policy = await seed_post_submit_policy_for_downstream_tests(
         project_id=project_id, guide_id=guide_id, source_snapshot=snapshot,
         pre_submit_checker_policy=compiled_pre_submit_checker,
+        required_checkers=post_submit_required_checkers,
+        warning_checkers=post_submit_warning_checkers,
+        blocking_severities=post_submit_blocking_severities,
     )
     return {
         "source_snapshot": snapshot,

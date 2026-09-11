@@ -50,7 +50,6 @@ from app.modules.projects.models import (
     PostSubmitCheckerPolicy,
     PreSubmitCheckerPolicy,
     ProjectGuide,
-    ProjectSetupRun,
     SubmissionArtifactPolicy,
 )
 from app.modules.projects.post_submit_policy import (
@@ -72,12 +71,10 @@ from app.modules.tasks.models import (
     TaskAssignment,
     WorkstreamTask,
 )
-from projects.post_submit_fixtures import seed_post_submit_policy_for_downstream_tests
 from project_create_fixtures import (
     seed_active_guide_for_downstream_test,
     grant_system_project_manager,
 )
-from committed_guide_fixtures import create_compiled_report_fixture
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.submission_composition import build_submission
 from app.modules.tasks.schemas import TaskCreate
@@ -932,43 +929,23 @@ def generated_post_submit_output_for_pre_submit(
     )
 
 
-def policy_body_for_task_tests() -> dict:
-    return {
-        "required_artifacts": [
-            {
-                "key": "answer",
-                "path": "answer.md",
-                "hash_required": True,
-                "required": True,
-                "description": "Main task answer.",
-            }
-        ],
-        "required_evidence": [
-            {
-                "key": "checker_log",
-                "label": "checker log",
-                "hash_required": True,
-                "required": True,
-                "description": "Evidence used by the reviewer.",
-            }
-        ],
-        "forbidden_artifacts": [],
-        "attestation_terms": ["task_test_originality"],
-        "manifest_required": True,
-        "artifact_hash_required": True,
-        "artifact_hash_algorithm": "sha256",
-        "allowed_storage_schemes": ["local", "s3", "r2"],
-        "maximum_file_size_bytes": 1_000_000,
-        "maximum_package_size_bytes": 5_000_000,
-        "packaging": {"package_required": False},
-    }
+def task_artifact_proposal():
+    from app.interfaces.project_agents import SubmissionArtifactPolicyProposal
+
+    return SubmissionArtifactPolicyProposal(
+        maximum_file_size_bytes=1_000_000,
+        maximum_package_size_bytes=5_000_000,
+        required_artifacts=("answer.md",),
+        required_evidence=("checker_log",),
+        attestation_terms=("task_test_originality",),
+    )
 
 
 async def create_policy_bundle_for_guide(
     client: AsyncClient,
     project_id: str,
     guide_id: str,
-    policy_body: dict | None = None,
+    artifact_proposal=None,
     *,
     post_submit_required_checkers: list[str] | None = None,
     post_submit_warning_checkers: list[str] | None = None,
@@ -1026,75 +1003,23 @@ async def create_policy_bundle_for_guide(
         await session.flush()
         await session.commit()
 
-    from projects.guide_fixtures import read_guide_source_snapshot
+    from projects.policy_bundle_fixtures import create_approved_policy_bundle
+    from project_create_fixtures import grant_fixture_admin_role
+    async with db_session.get_session_factory()() as session, session.begin():
+        link = await session.scalar(select(ActorIdentityLink).where(
+            ActorIdentityLink.issuer == "flow-test", ActorIdentityLink.subject == "project-manager-subject",
+        ))
+        assert link is not None
+        await grant_fixture_admin_role(session, link.actor_profile_id, project_id=project_id)
 
-    snapshot = await read_guide_source_snapshot(project_id, guide_id)
-    async with db_session.get_session_factory()() as session:
-        setup = await session.scalar(
-            select(ProjectSetupRun).where(
-                ProjectSetupRun.project_id == project_id,
-                ProjectSetupRun.guide_id == guide_id,
-                ProjectSetupRun.source_snapshot_id == snapshot["id"],
-            )
-        )
-        assert setup is not None
-        assert setup.source_snapshot_hash == snapshot["bundle_hash"]
-        assert setup.setup_generation == 1
-
-    report_response = await client.post(
-        f"/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports",
-        headers=auth_headers(),
-        json={
-            "source_snapshot_id": snapshot["id"],
-            "status": "passed",
-            "findings": [],
-            "summary": "Guide is sufficient for test setup.",
-        },
+    return await create_approved_policy_bundle(
+        client, project_id, guide_id,
+        artifact_proposal=artifact_proposal or task_artifact_proposal(),
+        request_headers=auth_headers(),
+        post_submit_required_checkers=post_submit_required_checkers,
+        post_submit_warning_checkers=post_submit_warning_checkers,
+        post_submit_blocking_severities=post_submit_blocking_severities,
     )
-    assert report_response.status_code == 201, report_response.text
-    verified_report_id = await create_compiled_report_fixture(
-        report_response.json()["id"], snapshot["id"]
-    )
-    verified_report = {**report_response.json(), "id": verified_report_id}
-
-    policy_response = await client.post(
-        f"/api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies",
-        headers=auth_headers(),
-        json={
-            "source_snapshot_id": snapshot["id"],
-            "policy_version": "v1",
-            "policy_body": policy_body or policy_body_for_task_tests(),
-        },
-    )
-    assert policy_response.status_code == 201, policy_response.text
-    policy = policy_response.json()
-
-    effective_response = await client.post(
-        f"/api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies/"
-        f"{policy['id']}/approve",
-        headers=auth_headers(),
-        json={"approval_note": "Approved for test setup."},
-    )
-    assert effective_response.status_code == 200, effective_response.text
-    effective_policy = effective_response.json()
-    compiled_pre_submit_checker = await load_pre_submit_checker_policy(effective_policy)
-    post_submit_checker_policy = await seed_post_submit_policy_for_downstream_tests(
-        project_id=project_id,
-        guide_id=guide_id,
-        source_snapshot=snapshot,
-        pre_submit_checker_policy=compiled_pre_submit_checker,
-        required_checkers=post_submit_required_checkers,
-        warning_checkers=post_submit_warning_checkers,
-        blocking_severities=post_submit_blocking_severities,
-    )
-    return {
-        "source_snapshot": snapshot,
-        "sufficiency_report": verified_report,
-        "submission_artifact_policy": policy,
-        "effective_policy": effective_policy,
-        "pre_submit_checker_policy": compiled_pre_submit_checker,
-        "post_submit_checker_policy": post_submit_checker_policy,
-    }
 
 
 def complete_task_payload() -> dict:
@@ -2450,16 +2375,9 @@ async def test_task_context_apis_use_v1_locked_requirements_after_v2_activation(
         json=complete_guide_payload("v2"),
     )
     assert guide_v2.status_code == 201, guide_v2.text
-    policy_v2 = policy_body_for_task_tests()
-    policy_v2["required_artifacts"] = [
-        {
-            "key": "v2_answer",
-            "path": "v2-answer.md",
-            "hash_required": True,
-            "required": True,
-            "description": "New v2 artifact.",
-        }
-    ]
+    policy_v2 = task_artifact_proposal().model_copy(
+        update={"required_artifacts": ("v2-answer.md",)}
+    )
     await create_policy_bundle_for_guide(
         task_client,
         project["id"],

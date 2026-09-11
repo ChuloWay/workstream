@@ -134,7 +134,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls; canonical `/actors/me` self-read with duplicate `/auth/me` removed | Final end-to-end operational and conformance proof |
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
 | Project Guide source custody | **Live foundation** | Guide creation declares documents and task examples; public document upload; immutable internal metadata snapshots; exact run-scoped reads; S3-backed originals and isolated agent document inspection | Carry the same document generation through manager approval and guide activation; prove each enabled document reader |
-| Unified Project Guide compilation | **Live automatic draft/findings setup** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization | Add manager proposal review, correction, approval and manual rerun; add deterministic post-submit projection and one checker-service port |
+| Unified Project Guide compilation | **Live automatic draft/findings setup** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization | Expose the delivered hidden manager review, correction and pre-submit approval through AUTH-12F4/POL-05B; add post-submit projection and one checker-service port |
 | Contribution policy administration | **Hidden and proven** | Finance Authority adapter-binding lifecycle; ContributionPolicy read/create/update/publish/retire with exact Finance Authority; immutable operation and event history | Expose selected-policy validation, bind one published complete version to the active guide generation |
 | Task readiness and claim | **Foundation with grant-backed contributor commands** | Task records, assignments and locked work context; claim/start/contributor context use exact-project Submitter grants; separate manager context and system-Operator start | Bind the guide's ContributionPolicyVersion before `READY` and carry it through TaskAssignment without a current-policy lookup; finish ready queues, remaining management/read authority and durable assignment invalidation |
 | Contributor artifact preparation | **Hidden and proven** | One outer ZIP; bounded scratch inspection; canonical manifest; platform and project prechecks; unchanged-work rejection; durable put intent; verification; capacity-charged ready admission | Connect only the active unified guide/checker lineage and complete the later public admission-only cutover |
@@ -296,14 +296,15 @@ requires its exact owner-proven prerequisites.
 
 The next dependency-safe product sequence is:
 
-1. **Complete manager proposal review and correction.** Expose the complete
-   unified result and preserve its distinct pre-submit and post-submit proposals.
-   Authorized manual rerun creates a fresh generation through the same compiler.
-2. **Complete guide policy approval.** Project Manager approval consumes the
-   already-produced unified result; it does not run another agent. Persist the
-   effective pre-submit policy and deterministically compiled post-submit
-   policy, activate their narrow AUTH gates, and expose one typed checker-service
-   facade. Approval/projection records reference immutable setup finalization;
+1. **Expose manager proposal review and correction.** AUTH-12F4 and POL-05B
+   authorize and compose the delivered hidden complete result, pre-submit
+   approval and correction operations. Manual dispatch admits a fresh generation
+   through the same unified setup runtime.
+2. **Complete post-submit policy approval.** Pre-submit effective policy and
+   its compiled plan now have hidden approval custody. Persist the post-submit
+   policy through its deterministic compiler, activate its narrow AUTH gate,
+   and expose one typed checker-service facade. Approval consumes the existing
+   result without another agent invocation. Approval/projection records reference immutable setup finalization;
    they cannot reopen or overwrite it.
 3. **Validate and bind the selected ContributionPolicy.** CP05 completes
    authorization for the five hidden policy actions. CP06 supplies selected-policy

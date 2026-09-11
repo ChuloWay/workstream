@@ -63,6 +63,7 @@ async def create_sufficiency_report(
     snapshot_id: str,
     *,
     status: str = "passed",
+    request_headers=None,
 ) -> dict:
     findings = []
     if status == "blocked":
@@ -83,7 +84,7 @@ async def create_sufficiency_report(
         ]
     response = await client.post(
         f"/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports",
-        headers=auth_headers(),
+        headers=request_headers if request_headers is not None else auth_headers(),
         json={
             "source_snapshot_id": snapshot_id,
             "status": status,

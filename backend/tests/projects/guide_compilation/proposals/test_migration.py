@@ -51,3 +51,22 @@ async def test_empty_proposal_migration_round_trip(clean_postgres_database):
         assert await definitions() == before
     finally:
         await engine.dispose()
+
+
+async def test_downgrade_refuses_retained_approval_without_mutation(clean_postgres_database, capfd):
+    import pytest
+    from uuid import uuid4
+    from app.modules.projects.api.guide_proposals import GuideProposalApproval
+    from .pg_support import proposal_case, read_package
+    from .test_postgresql import approve
+
+    async with proposal_case(clean_postgres_database) as (_, factory, command, actor, grant):
+        package = await read_package(factory, command, actor, grant)
+        payload = GuideProposalApproval(target=package.target, idempotency_key=uuid4())
+        receipt = await approve(factory, command, actor, grant, payload)
+        with pytest.raises(RuntimeError, match="isolated migration subprocess failed"):
+            await run_alembic_revision("downgrade", "0018_guide_document_creation")
+        assert "retained guide proposal evidence prevents downgrade" in capfd.readouterr().err
+        async with factory() as session:
+            assert await session.scalar(text("SELECT version_num FROM alembic_version")) == "0019_guide_proposal_review"
+        assert await approve(factory, command, actor, grant, payload) == receipt

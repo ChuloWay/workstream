@@ -49,7 +49,7 @@ async def admit_correction_request(session, inputs, *, actor, facts, identity) -
     )
     if correction is None:
         return
-    if inputs is None or correction.actor_profile_id != str(actor.actor_profile_id):
+    if inputs is None:
         raise GuideCompilationIntegrityError("correction request authority mismatch")
     await session.scalar(
         select(ProjectGuide)

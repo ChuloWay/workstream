@@ -437,7 +437,7 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         for method, operation in path_item.items()
         if method in methods and operation.get("security")
     )
-    assert len(route_inventory) == 72
+    assert len(route_inventory) == 71
     assert sha256("\n".join(route_inventory).encode()).hexdigest() == (
         "467431130a55743092c60339f318af93c526b0e8ccbdb2a2690637b4cb497cd1"
     )

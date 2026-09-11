@@ -24,7 +24,7 @@ from app.modules.projects.api import (
     ProjectGuideSetupFinalizationCommand,
 )
 from app.modules.projects.api.guide_proposals import GuideProposalApproval, GuideProposalSelection
-from app.modules.projects.guide_compilation.models import ProjectGuideCompilation
+from app.modules.projects.guide_compilation.models import ProjectGuideCompilation, ProjectGuideComponentProjectionOperation
 from app.modules.projects.guide_compilation.projections import GuideCompilationProjectionService
 from app.modules.projects.guide_compilation.proposal_service import GuideProposalService
 from app.modules.projects.models import (
@@ -106,32 +106,10 @@ async def create_unified_submission_policy(report_id, snapshot_id, *, proposal=N
         return SubmissionArtifactPolicyResponse.model_validate(policy).model_dump(mode="json")
 
 
-async def approve_unified_submission_policy(project_id, guide_id, policy_id):
+async def approve_unified_submission_policy(project_id, guide_id, policy_id, *, sessions=None):
     """Use strict hidden test authority and the real approval owner; no live route exists."""
-    sessions = db_session.get_session_factory()
-    async with sessions() as session:
-        actor_id, link_id, grant_id = (
-            await session.execute(
-                select(ActorProfile.id, ActorIdentityLink.id, AdminRoleGrant.id)
-                .join(ActorIdentityLink, ActorIdentityLink.actor_profile_id == ActorProfile.id)
-                .join(AdminRoleGrant, AdminRoleGrant.target_actor_profile_id == ActorProfile.id)
-                .where(
-                    AdminRoleGrant.scope_project_id == project_id,
-                    AdminRoleGrant.role == "project_manager",
-                    AdminRoleGrant.status == "active",
-                    ActorIdentityLink.status == "active",
-                ),
-            )
-        ).one()
-        compilation = (
-            await session.scalars(
-                select(ProjectGuideCompilation).where(
-                    ProjectGuideCompilation.project_id == project_id,
-                    ProjectGuideCompilation.guide_id == guide_id,
-                )
-            )
-        ).one()
-    actor = ActorIdentityFacts(UUID(actor_id), UUID(link_id), ActorKind.HUMAN)
+    sessions = sessions or db_session.get_session_factory()
+    actor, grant_id, compilation = await _approval_context(sessions, project_id, guide_id, policy_id)
     async with sessions() as session, session.begin():
         service = GuideProposalService(
             session, ProposalAuthority(session, actor, UUID(project_id), grant_id)
@@ -178,3 +156,102 @@ async def approve_unified_submission_policy(project_id, guide_id, policy_id):
         return EffectiveProjectSubmissionArtifactPolicyResponse.model_validate(
             effective
         ).model_dump(mode="json")
+
+
+async def create_standalone_unified_policy(sessions, namespace):
+    """Arrange canonical setup before a lower-level artifact transaction starts."""
+    from tests.projects.guide_compilation.helpers import context, seed_database
+    from tests.projects.guide_compilation.finalization.pg_prerequisites import compilation_and_projections
+    from app.modules.projects.api.guide_documents import GuideDocumentManifestRequest
+    from app.modules.projects.models import PreSubmitCheckerPolicy
+
+    url = sessions.kw["bind"].url.render_as_string(hide_password=False)
+    values = await seed_database(url, namespace=namespace)
+    async with sessions() as session:
+        manifest = await guide_document_manifest_port(session).load(GuideDocumentManifestRequest(
+            project_id=values["project"], guide_id=values["guide"],
+            guide_source_snapshot_id=values["snapshot"],
+            project_setup_run_id=values["setup_1"], setup_generation=1,
+        ))
+    compilation_context = context(values).model_copy(update={"material": manifest})
+    command = await compilation_and_projections(
+        url, sessions, values, compilation_context=compilation_context,
+    )
+    await finalize(sessions, values, command)
+    async with sessions() as session:
+        policy = (await session.scalars(select(SubmissionArtifactPolicy).where(
+            SubmissionArtifactPolicy.guide_id == str(values["guide"]),
+        ))).one()
+        policy_id = policy.id
+    effective = await approve_unified_submission_policy(
+        str(values["project"]), str(values["guide"]), policy_id, sessions=sessions,
+    )
+    async with sessions() as session:
+        pre = (await session.scalars(select(PreSubmitCheckerPolicy).where(
+            PreSubmitCheckerPolicy.effective_policy_id == effective["id"],
+        ))).one()
+        return values, effective, pre
+
+
+async def _approval_context(sessions, project_id, guide_id, policy_id):
+    async with sessions() as session:
+        actor_id, link_id, grant_id = (
+            await session.execute(
+                select(ActorProfile.id, ActorIdentityLink.id, AdminRoleGrant.id)
+                .join(ActorIdentityLink, ActorIdentityLink.actor_profile_id == ActorProfile.id)
+                .join(AdminRoleGrant, AdminRoleGrant.target_actor_profile_id == ActorProfile.id)
+                .where(
+                    AdminRoleGrant.scope_project_id == project_id,
+                    AdminRoleGrant.role == "project_manager",
+                    AdminRoleGrant.status == "active",
+                    ActorIdentityLink.status == "active",
+                ),
+            )
+        ).one()
+        compilation = (
+            await session.scalars(
+                select(ProjectGuideCompilation).join(
+                    ProjectGuideComponentProjectionOperation,
+                    ProjectGuideComponentProjectionOperation.compilation_id == ProjectGuideCompilation.id,
+                ).where(
+                    ProjectGuideCompilation.project_id == project_id,
+                    ProjectGuideCompilation.guide_id == guide_id,
+                    ProjectGuideComponentProjectionOperation.policy_id == policy_id,
+                )
+            )
+        ).one()
+    actor = ActorIdentityFacts(UUID(actor_id), UUID(link_id), ActorKind.HUMAN)
+    return actor, grant_id, compilation
+
+
+async def supersede_unified_submission_policy(project_id, guide_id, policy_id):
+    """Create a real corrected-generation successor while the guide is still draft."""
+    from app.modules.projects.api.guide_proposals import GuideProposalCorrection
+    from tests.projects.guide_compilation.proposals.pg_support import finalize_corrected_attempt
+
+    sessions = db_session.get_session_factory()
+    actor, grant, compilation = await _approval_context(sessions, project_id, guide_id, policy_id)
+    async with sessions() as session:
+        service_actor, service_link = (await session.execute(
+            select(ActorProfile.id, ActorIdentityLink.id)
+            .join(ActorIdentityLink, ActorIdentityLink.actor_profile_id == ActorProfile.id)
+            .where(ActorProfile.service_identity == "workstream.project.setup", ActorIdentityLink.status == "active")
+        )).one()
+    async with sessions() as session, session.begin():
+        service = GuideProposalService(session, ProposalAuthority(session, actor, UUID(project_id), grant))
+        package = await service.review_package(GuideProposalSelection(
+            project_id=project_id, guide_id=guide_id, compilation_id=compilation.id,
+        ), actor=actor, request_id=uuid4())
+    async with sessions() as session, session.begin():
+        correction = await GuideProposalService(session, ProposalAuthority(session, actor, UUID(project_id), grant)).request_correction(
+            GuideProposalCorrection(target=package.target, idempotency_key=uuid4(), reason="Reconsider the proposal."),
+            actor=actor, request_id=uuid4(),
+        )
+    values = {"project": UUID(project_id), "guide": UUID(guide_id), "actor": UUID(service_actor), "link": UUID(service_link)}
+    next_command = await finalize_corrected_attempt(sessions, values, actor, correction)
+    async with sessions() as session:
+        next_policy_id = (await session.scalars(select(ProjectGuideComponentProjectionOperation.policy_id).where(
+            ProjectGuideComponentProjectionOperation.compilation_id == next_command.compilation_id,
+            ProjectGuideComponentProjectionOperation.component == "submission_artifact_policy",
+        ))).one()
+    return await approve_unified_submission_policy(project_id, guide_id, next_policy_id)

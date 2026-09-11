@@ -7,7 +7,6 @@ from uuid import UUID, uuid4
 from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient
 import pytest
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.session import get_db_session
@@ -145,7 +144,7 @@ async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
                 "producer",
                 "task",
             }
-            attempt = await session.scalar(select(ArtifactPutAttempt))
+            attempt = await session.get(ArtifactPutAttempt, source_job.originating_put_attempt_id)
             assert attempt is not None and attempt.replica_id is not None
             attempt_id = attempt.id
             attempt_sha256 = attempt.sha256

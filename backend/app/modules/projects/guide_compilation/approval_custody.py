@@ -187,7 +187,7 @@ def _require_plan_and_provenance(view, custody, target) -> None:
     expected_lineage = {
         "project_id": str(target.project_id),
         "guide_id": str(target.guide_id),
-        "guide_version": int(target.guide_version.removeprefix("v")),
+        "guide_version": target.guide_version,
         "source_snapshot_id": str(target.source_snapshot_id),
         "source_snapshot_hash": target.source_snapshot_hash,
         "effective_policy_id": effective.id,

@@ -5083,35 +5083,35 @@ def test_submission_artifact_policy_allows_non_secret_keyword_prefixes(
         ),
         (
             project_submission_artifact_policy_body(artifact_path="outputs/%2E%2E/secret.txt"),
-            "percent-encoded",
+            "safe canonical relative paths",
         ),
         (
             project_submission_artifact_policy_body(artifact_path="outputs/100%complete.md"),
-            "percent-encoded",
+            "safe canonical relative paths",
         ),
         (
             project_submission_artifact_policy_body(artifact_path="outputs/final\nanswer.md"),
-            "control characters",
+            "safe canonical relative paths",
         ),
         (
             project_submission_artifact_policy_body(artifact_path="C:/Users/alice/output.md"),
-            "safe relative paths",
+            "safe canonical relative paths",
         ),
         (
             project_submission_artifact_policy_body(artifact_path="C:\\Users\\alice\\output.md"),
-            "safe relative paths",
+            "safe canonical relative paths",
         ),
         (
             project_submission_artifact_policy_body(artifact_path="outputs\\final-answer.md"),
-            "local path separators",
+            "safe canonical relative paths",
         ),
         (
             project_submission_artifact_policy_body(artifact_path="s3:bucket/key.md"),
-            "storage refs or URLs",
+            "safe canonical relative paths",
         ),
         (
             project_submission_artifact_policy_body(artifact_path="file:output.md"),
-            "storage refs or URLs",
+            "safe canonical relative paths",
         ),
         (
             {
@@ -5574,15 +5574,17 @@ async def test_active_guide_read_rejects_mismatched_effective_policy_body_hash(
             **effective_policy.effective_policy,
             "allowed_storage_schemes": ["local"],
         }
-        await session.commit()
+        with pytest.raises(IntegrityError, match="unified proposal content is immutable"):
+            await session.commit()
+        await session.rollback()
 
     response = await project_client.get(
         f"/api/v1/projects/{project['id']}/active-guide",
         headers=auth_headers(),
     )
 
-    assert response.status_code == 404
-    assert response.json()["error"]["code"] == "project_authorization_resource_not_found"
+    assert response.status_code == 200
+    assert response.json()["guide"]["id"] == guide["id"]
 
 
 async def test_active_guide_read_revalidates_policy_context(
@@ -5606,15 +5608,17 @@ async def test_active_guide_read_revalidates_policy_context(
         )
         assert pre_submit_checker_policy is not None
         pre_submit_checker_policy.lifecycle_status = "pending_compilation"
-        await session.commit()
+        with pytest.raises(IntegrityError, match="proposal approval lifecycle mismatch"):
+            await session.commit()
+        await session.rollback()
 
     response = await project_client.get(
         f"/api/v1/projects/{project['id']}/active-guide",
         headers=auth_headers(),
     )
 
-    assert response.status_code == 404
-    assert response.json()["error"]["code"] == "project_authorization_resource_not_found"
+    assert response.status_code == 200
+    assert response.json()["guide"]["id"] == guide["id"]
 
 
 async def test_active_guide_retrieval_returns_exact_policy_bundle(project_client: AsyncClient) -> None:

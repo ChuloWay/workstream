@@ -50,8 +50,11 @@ Existing setup-run and post-policy reads are not a complete review package.
 PROJECTS owns an exact-compilation bounded projection containing sufficiency
 findings, artifact proposal, requirements/dispositions, pre/post bindings,
 capability suggestions, safe notes and component/catalogue/generation lineage.
-No raw guide, model reasoning, credentials, replayable references or hidden
-provider payload is exposed. Approval must name exactly the displayed target
+The package contains guide-derived prose and requires current exact-project
+Project Manager guide-content authority (`project.guide.manage`), not Operator
+or Audit diagnostic authority. It excludes raw document payloads, model
+reasoning, credentials, runtime handles, replayable references and hidden
+provider payloads; prose validation is not a promise of semantic DLP. Approval must name exactly the displayed target
 and hashes; a latest-only diagnostic response is insufficient.
 
 Also implement a hidden setup-wide correction request before any artifact/pre

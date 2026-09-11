@@ -86,9 +86,16 @@ async def approve_proposal(
                 compilation_id=target.compilation_id,
             )
         )
-        if locked.target != target or not locked.current:
+        if locked.target != target:
             raise GuideProposalError("proposal_stale")
         package = await repository.package(locked)
+        existing = await session.get(ProjectGuideProposalApproval, operation_id)
+        if existing is not None:
+            return await _replay_approval(
+                existing, target, request_digest, actor, package, locator, command, prepared
+            )
+        if not locked.current:
+            raise GuideProposalError("proposal_stale")
         _require_catalogues(target, pre_capabilities, post_capabilities)
         if (
             locked.result.status == "guide_blocked"
@@ -96,11 +103,6 @@ async def approve_proposal(
             or command.acknowledged_warning_hashes != package.warning_hashes
         ):
             raise GuideProposalError("approval_blocked")
-        existing = await session.get(ProjectGuideProposalApproval, operation_id)
-        if existing is not None:
-            return await _replay_approval(
-                existing, target, request_digest, actor, package, locator, command, prepared
-            )
         if (
             locked.view.policy.lifecycle_status != "draft"
             or package.current_approval_operation_id
@@ -178,7 +180,7 @@ async def _compile_approval(
         uuid5(operation_id, "effective-policy"),
         uuid5(operation_id, "pre-policy"),
     )
-    version = int(target.guide_version.removeprefix("v"))
+    version = target.guide_version
     plan = planner.compile_effective_plan(
         lineage=EffectivePreSubmissionPlanLineage(
             project_id=target.project_id,
@@ -368,7 +370,6 @@ async def _replay_approval(
         or existing.request_digest != request_digest
         or existing.actor_profile_id != str(actor.actor_profile_id)
         or existing.identity_link_id != str(actor.identity_link_id)
-        or package.current_approval_operation_id != existing.operation_id
     ):
         raise GuideProposalError("operation_conflict")
     receipt = GuideProposalApprovalReceipt.model_validate(existing.receipt_json)

@@ -242,6 +242,11 @@ def _approval_guards() -> None:
             RETURN NULL;
           END IF;
           IF new.derivation_source IS DISTINCT FROM 'unified_compilation' THEN
+            IF tg_op='UPDATE' AND old.lifecycle_status='draft' AND new.lifecycle_status='superseded'
+               AND old.approved_at IS NULL AND new.approved_at IS NULL
+               AND NOT EXISTS(SELECT 1 FROM project_guide_proposal_approvals WHERE artifact_policy_id=new.id) THEN
+              RETURN NULL; -- Existing mutation custody must prove the exact draft replacement.
+            END IF;
             IF tg_op='INSERT' OR old.lifecycle_status IS DISTINCT FROM new.lifecycle_status THEN
               RAISE EXCEPTION 'approval requires a unified proposal' USING ERRCODE='23514';
             END IF;
@@ -328,7 +333,7 @@ def _approval_guards() -> None:
              'expected_previous_approval_output_digest',prior.output_digest))
            OR a.effective_pre_submit_plan::jsonb->'lineage' IS DISTINCT FROM jsonb_build_object(
              'project_id',a.project_id,'guide_id',a.guide_id,
-             'guide_version',regexp_replace(a.target_json->>'guide_version','^v','')::integer,
+             'guide_version',a.target_json->>'guide_version',
              'source_snapshot_id',a.target_json->>'source_snapshot_id',
              'source_snapshot_hash',a.target_json->>'source_snapshot_hash',
              'effective_policy_id',e.id,'effective_policy_hash',e.effective_policy_hash,

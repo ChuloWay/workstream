@@ -45,7 +45,7 @@ class _UnavailableProposalAuthorization:
     @asynccontextmanager
     async def prepare_proposal_operation(self, _locator):
         raise AuthorizationUnavailable("guide proposal authority is unavailable")
-        yield  # pragma: no cover
+        yield
 
 
 class GuideProposalService:

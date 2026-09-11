@@ -1,7 +1,7 @@
 # WS-POL-003-05A — Complete proposal review and pre-submission approval custody
 
 - Initiative: WS-POL-003
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: One hidden PROJECTS operation family reviews an exact finalized unified proposal, records pre-submission approval, and requests a setup-wide correction without changing prior evidence.
 
 ## Intent
@@ -15,14 +15,13 @@ machinery; it does not edit or retry an uncertain provider result.
 This implements the adopted [05A contract](planning/chunks/WS-POL-003-05A-hidden-pre-submit-approval.md).
 Public authorization and exposure follow in AUTH-12F4 and POL-05B.
 
-## Current behavior
+## Replaced behavior
 
-`guide_compilation/` already owns immutable attempts, results, component
+Before this change, `guide_compilation/` owned immutable attempts, results, component
 projections and setup finalization. `ProjectService.approve_submission_artifact_policy`
-instead accepts manual lineage and rejects unified proposals. Its policy merge
-helpers and CHECKERS compilers have shared activation consumers. Existing test
-fixtures call the manual HTTP approval route and must be reconciled with its
-replacement rather than preserving that obsolete route for fixtures.
+accepted manual lineage and rejected unified proposals. Its shared activation
+consumers and downstream fixtures now use unified approval custody; the obsolete
+manual HTTP approval route is removed.
 
 ## Bounded change
 
@@ -49,6 +48,8 @@ replacement rather than preserving that obsolete route for fixtures.
   existing compiler contract (nested relative paths are machine fields, not prose).
 - PROJECTS database models and one successor Alembic migration for append-only
   operation custody, composite ownership and immutable evidence constraints.
+- CHECKERS effective-plan lineage and its PROJECTS, ART and TASK consumers:
+  preserve the existing opaque guide-version string without integer coercion.
 - Affected tests and shared fixtures, API/schema inventories, ownership records,
   structural inventory, current specifications and POL navigation/roadmap.
 
@@ -97,23 +98,23 @@ replacement rather than preserving that obsolete route for fixtures.
 
 ## Acceptance criteria
 
-- [ ] Complete result is reviewable by exact identity with no provider payload,
+- [x] Complete result is reviewable by exact identity with no provider payload,
   raw guide, storage credentials or replayable document references disclosed.
-- [ ] Stale/mixed source, generation, result, component, catalogue and policy
+- [x] Stale/mixed source, generation, result, component, catalogue and policy
   identities fail; every capability gap blocks approval; warnings require exact
   acknowledgment where applicable.
-- [ ] Mandatory platform checks cannot be weakened, repeated, selected or
+- [x] Mandatory platform checks cannot be weakened, repeated, selected or
   reordered; effective policy and pre-plan match the canonical compiler.
-- [ ] Default authority denies reads and writes; authorized operation/replay
+- [x] Default authority denies reads and writes; authorized operation/replay
   remains inside the supplied session/root transaction with no hidden commit.
-- [ ] PostgreSQL proves atomic approval/provenance, immutable finalization,
+- [x] PostgreSQL proves atomic approval/provenance, immutable finalization,
   composite ownership, rollback and exact replay.
   `test_unified_approval_postgresql_requires_reservation_and_operation` must
   independently remove each relation from an otherwise valid transaction and
   prove rejection, alongside a successful complete control.
-- [ ] Correction produces one successor on replay, binds bounded feedback, and
+- [x] Correction produces one successor on replay, binds bounded feedback, and
   cannot restart uncertain provider work or mutate previous evidence.
-- [ ] Removed manual approval callers/tests are replaced with required behavior
+- [x] Removed manual approval callers/tests are replaced with required behavior
   coverage; current API inventory and docs describe the resulting exposure.
 
 ## Risk and review routing
@@ -126,12 +127,14 @@ replacement rather than preserving that obsolete route for fixtures.
 
 ## Evidence
 
-Plan feasibility review precedes implementation. Focused tests will use real
-PostgreSQL transactions and actual compiler controls; negative cases must reach
-the intended guard and have a valid control. Run the affected API, migration,
-project lifecycle and compilation tests, lint and repository contract gates
-before the clean-candidate review wave. Hosted CI supplies the full test and
-coverage result. No execution result is claimed yet.
+Focused tests use real PostgreSQL transactions and the canonical compiler.
+Named controls cover each independently missing reservation/approval relation,
+opaque guide versions, exact warning acknowledgement, immutable projection and
+finalization, correction and approval replay, current manager authority, foreign
+project grants, full nonempty proposal sections and active-guide exclusion.
+Migration tests cover empty roundtrip and refusal with retained approval evidence.
+Hosted CI supplies full-suite and coverage evidence; current command results,
+review targets and external checks belong to the PR trust summary.
 
 ## Reconciliation
 
@@ -139,9 +142,9 @@ coverage result. No execution result is claimed yet.
   canonical project-role task authorization; the unrelated submission denial
   audit gap remains outside this change.
 - Next usable boundary: AUTH-12F4, then POL-05B.
-- Remaining risks: manual approval test fixtures have downstream consumers;
-  successor generation must retain exact original-document custody without a
-  second artifact access path. Trace both before implementation.
+- Remaining dependencies: AUTH-12F4 supplies live exact manager authority;
+  POL-05B exposes review/approval/correction and manual dispatch. Post-submit
+  policy approval and guide activation retain their separate adopted boundaries.
 
 ## Plan review disposition
 
@@ -187,3 +190,48 @@ The coherent diff spans these shared callers and their tests because removing
 manual approval while retaining its fixtures/read assumptions would leave a
 broken product path. This is one approval/correction boundary, not an additional
 authorization or post-policy implementation chunk.
+
+## Implementation review corrections
+
+- Preserve opaque guide versions in the one effective-plan contract and every
+  affected PROJECTS, ART and TASK caller. PostgreSQL approval controls include
+  `v0.1` and a nonnumeric version.
+- Replace remaining TASK and ART hand-built manual approval prerequisites with
+  canonical unified compilation, finalization and approval fixture custody.
+- Current exact-project managers may admit a correction created by another
+  manager through the existing human request authority. Retain the original
+  correction creator's provenance separately from the admitting request.
+- Exact approval retries validate retained custody before currentness gates,
+  including after correction allocation or supersession; no new outputs or
+  authorization events are written by replay.
+- Complete proposal prose is guide-derived content, not a DLP-filtered public
+  diagnostic. The planned package-read action uses existing Project Manager
+  `project.guide.manage` authority. Raw document payloads, runtime/provider
+  details, storage handles and replayable references remain excluded. Public
+  AUTH-12F4 must enforce current exact-project manager/content authority.
+- Extend the existing 90 percent compilation coverage surface to its proposal
+  API contracts. Preserve all existing CI thresholds, inventory and isolation
+  guards; repair stale migration and route inventories rather than bypassing them.
+- Manual draft replacement remains a governed draft operation. It cannot create
+  approval evidence; the original reservation guard still proves its successor.
+
+The removed persisted-invalid-path projection case is replaced by the existing
+result-boundary invalid-machine-field cases and defensive projection validation
+in `test_projection_policy.py`; the blocked-result service case remains. Active
+read corruption tests now prove the database rejects altered approved content
+or a return to pending, then verify the unchanged active-guide read. Locked
+historical-policy tests create actual corrected approvals before activation
+instead of hand-writing superseded rows or a parallel effective policy.
+
+Downstream authority prerequisites now reuse canonical bootstrap/grant database
+custody, allowing real grant revocation rather than seeding impossible bootstrap
+manager rows. Only source-creation and not-yet-live activation prerequisites use
+the explicitly bounded existing test fixture; proposal/approval constraints stay
+enabled. The active-guide approval guard test stages activation drift in a
+rollback-only transaction and forces that exact deferred constraint.
+
+Shared artifact fixtures finish canonical guide setup before minting short-lived
+checker-output bytes; existing source leases and retry limits remain unchanged.
+Corrected-result fixtures cite every document in the exact manifest, including
+multi-document guides. Operator inspection selects the checker output’s exact
+originating put attempt rather than the earlier guide-upload record.
