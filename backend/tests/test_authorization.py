@@ -5008,7 +5008,7 @@ async def test_real_prepared_materializer_binds_preflight_and_final_evidence() -
         "assignment_id": uuid4(),
         "project_id": uuid4(),
         "guide_id": uuid4(),
-        "guide_version": "1",
+        "guide_version": "v0.1",
         "source_snapshot_id": uuid4(),
         "source_snapshot_hash": "sha256:" + "1" * 64,
         "submission_artifact_policy_id": uuid4(),
@@ -5023,6 +5023,7 @@ async def test_real_prepared_materializer_binds_preflight_and_final_evidence() -
         "storage_scheme": "s3",
     }
     preflight = PreSubmitCheckerInputPreparationContext(**common)
+    assert preflight.guide_version == common["guide_version"]
     final = PreSubmitCheckerInputResourceContext(
         **common,
         semantic_manifest_sha256="sha256:" + "7" * 64,

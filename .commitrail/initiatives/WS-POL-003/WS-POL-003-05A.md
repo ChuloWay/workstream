@@ -49,14 +49,18 @@ manual HTTP approval route is removed.
 - PROJECTS database models and one successor Alembic migration for append-only
   operation custody, composite ownership and immutable evidence constraints.
 - CHECKERS effective-plan lineage and its PROJECTS, ART and TASK consumers:
-  preserve the existing opaque guide-version string without integer coercion.
+  preserve the existing opaque guide-version string without integer coercion,
+  including the AUTH pre-submit materialization resource schema.
+  Reconcile existing packet validation with the canonical policy’s required
+  `artifact_hash_manifest`, supplied and identity-checked from inspected bytes;
+  this adds no checker capability or execution activation.
 - Affected tests and shared fixtures, API/schema inventories, ownership records,
   structural inventory, current specifications and POL navigation/roadmap.
 
 ### Not allowed
 
 - Public action activation, public live approval/correction, provider invocation,
-  post-policy approval/projection, checker execution, public guide activation operations/routes/state transitions,
+  post-policy approval/projection, new checker execution activation, public guide activation operations/routes/state transitions,
   unrelated AUTH/ART audit cleanup, alternate compilers or compatibility routes.
 - Changing finalized setup rows or receipts, weakening tests/gates, deleting
   retained data or embedding private guide material in repository evidence.
@@ -235,3 +239,23 @@ checker-output bytes; existing source leases and retry limits remain unchanged.
 Corrected-result fixtures cite every document in the exact manifest, including
 multi-document guides. Operator inspection selects the checker output’s exact
 originating put attempt rather than the earlier guide-upload record.
+
+The canonical evidence integration exposed a second stale assumption: packet
+validation did not recognize the platform-required `artifact_hash_manifest`.
+The existing processor already validates that manifest against inspected bytes
+before dispatch. Its packet-field mapping must recognize that derived field;
+unknown fields still fail closed and manifest-drift tests retain their guards.
+
+The ART evidence integration now uses actual unified approval and selected
+review/revision policy mutations at opaque guide version `v0.1`. It no longer
+hand-builds manual artifact/effective/pre-policy rows or disables their custody
+triggers. Its submitter-grant fixture reuses canonical bootstrap custody.
+Existing not-yet-live guide activation remains an explicitly bounded test
+prerequisite. Oversized ART test setup is reduced through shared provider
+construction, isolated conflicting-row setup and deduplicated binding creation;
+assertions, structural limits and coverage floors are preserved.
+
+Shared compilation fixtures now calculate their snapshot digest from the actual
+task-example manifest. The evidence repository independently rehashes that
+manifest; an arbitrary placeholder could satisfy earlier setup fixtures while
+failing the real locked-context consumer.

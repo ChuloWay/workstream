@@ -188,28 +188,17 @@ async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
                 assert unbound_replicas.status_code == unbound_job.status_code == 200
                 session.add_all(
                     [
-                        ArtifactBinding(
-                            id=binding_id,
+                        *(ArtifactBinding(
+                            id=item_id,
                             content_id=content_id,
                             project_id=project_id,
                             resource_type="task",
                             resource_id=task_id,
-                            logical_role="submission",
+                            logical_role=role,
                             scope_version=1,
                             actor_id=str(context.actor_profile_id),
                             attribution_type="human",
-                        ),
-                        ArtifactBinding(
-                            id=second_binding_id,
-                            content_id=content_id,
-                            project_id=project_id,
-                            resource_type="task",
-                            resource_id=task_id,
-                            logical_role="diagnostic",
-                            scope_version=1,
-                            actor_id=str(context.actor_profile_id),
-                            attribution_type="human",
-                        ),
+                        ) for item_id, role in ((binding_id, "submission"), (second_binding_id, "diagnostic"))),
                         ArtifactPutObservationReceipt(
                             id=observation_receipt_id,
                             put_attempt_id=attempt_id,

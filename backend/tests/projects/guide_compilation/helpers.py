@@ -44,7 +44,12 @@ from app.modules.projects.guide_compilation.contracts import (
 from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
 from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
 
-SHA256 = "sha256:" + "a" * 64
+from app.core.hashing import canonical_json_hash
+from app.modules.projects.api.task_examples import task_examples_hash, validate_task_examples
+
+TASK_EXAMPLES = validate_task_examples([{"content": "Review a claim using the project guide."}])
+TASK_EXAMPLE_MANIFEST = {"task_examples_hash": task_examples_hash(TASK_EXAMPLES), "task_examples_count": len(TASK_EXAMPLES)}
+SHA256 = canonical_json_hash(TASK_EXAMPLE_MANIFEST)
 SOURCE_ITEM_ID = UUID("11111111-1111-1111-1111-111111111111")
 DOCUMENT_VERSION_ID = UUID("22222222-2222-2222-2222-222222222222")
 PUT_ATTEMPT_ID = UUID("33333333-3333-3333-3333-333333333333")
@@ -224,16 +229,14 @@ def persistence_facts(
 async def _seed_project_rows(
     engine: AsyncEngine, values: dict[str, UUID], generations: int, guide_version: str
 ) -> None:
-    from app.modules.projects.api.task_examples import task_examples_hash, validate_task_examples
-
     sql_values = {name: str(value) for name, value in values.items()}
-    examples = validate_task_examples([{"content": "Review a claim using the project guide."}])
+    examples = TASK_EXAMPLES
     example_hash = task_examples_hash(examples)
     sql_values.update(
         guide_version=guide_version,
         examples=json.dumps([item.model_dump(mode="json") for item in examples]),
         examples_hash=example_hash,
-        example_manifest=json.dumps({"task_examples_hash": example_hash, "task_examples_count": len(examples)}),
+        example_manifest=json.dumps(TASK_EXAMPLE_MANIFEST),
     )
     async with engine.begin() as connection:
         await connection.execute(text("alter table projects disable trigger user"))

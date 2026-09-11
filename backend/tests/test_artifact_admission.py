@@ -2630,60 +2630,7 @@ async def test_checker_output_requires_exact_active_fixed_service_identity(
             await session.commit()
             canonical_task = await session.get(WorkstreamTask, task_id)
             assert canonical_task is not None
-            unrelated_task_id = str(uuid4())
-            session.add(
-                WorkstreamTask(
-                    id=unrelated_task_id,
-                    project_id=project_id,
-                    locked_guide_version=canonical_task.locked_guide_version,
-                    locked_post_submit_checker_policy_id=(
-                        canonical_task.locked_post_submit_checker_policy_id
-                    ),
-                    locked_post_submit_checker_policy_version=(
-                        canonical_task.locked_post_submit_checker_policy_version
-                    ),
-                    locked_post_submit_checker_policy_hash=(
-                        canonical_task.locked_post_submit_checker_policy_hash
-                    ),
-                    locked_post_submit_checker_policy_body=(
-                        canonical_task.locked_post_submit_checker_policy_body
-                    ),
-                    locked_review_policy_id=canonical_task.locked_review_policy_id,
-                    locked_review_policy_generation=(
-                        canonical_task.locked_review_policy_generation
-                    ),
-                    locked_review_policy_hash=canonical_task.locked_review_policy_hash,
-                    locked_revision_policy_id=canonical_task.locked_revision_policy_id,
-                    locked_revision_policy_generation=(
-                        canonical_task.locked_revision_policy_generation
-                    ),
-                    locked_revision_policy_hash=(canonical_task.locked_revision_policy_hash),
-                    locked_payment_policy_version=(canonical_task.locked_payment_policy_version),
-                    locked_guide_source_snapshot_id=(
-                        canonical_task.locked_guide_source_snapshot_id
-                    ),
-                    locked_guide_source_snapshot_hash=(
-                        canonical_task.locked_guide_source_snapshot_hash
-                    ),
-                    locked_effective_project_submission_artifact_policy_id=(
-                        canonical_task.locked_effective_project_submission_artifact_policy_id
-                    ),
-                    locked_effective_project_submission_artifact_policy_hash=(
-                        canonical_task.locked_effective_project_submission_artifact_policy_hash
-                    ),
-                    locked_pre_submit_checker_policy_id=(
-                        canonical_task.locked_pre_submit_checker_policy_id
-                    ),
-                    locked_pre_submit_checker_bundle_hash=(
-                        canonical_task.locked_pre_submit_checker_bundle_hash
-                    ),
-                    title="Unrelated checker task",
-                    description="Must not own the checker output.",
-                    status="draft",
-                    created_by="setup-actor",
-                )
-            )
-            await session.flush()
+            unrelated_task_id = await _unrelated_checker_task(session, canonical_task)
             checker_run = await session.get(CheckerRun, checker_run_id)
             assert checker_run is not None
             checker_run.task_id = unrelated_task_id
@@ -2889,31 +2836,7 @@ async def test_checker_output_put_observation_terminal_outcomes(
                 assert attempt is not None
                 provider_object_ref = attempt.canonical_target
                 if expected_outcome == "existing_replica_conflict":
-                    content_id = str(uuid4())
-                    session.add_all(
-                        [
-                            ArtifactContent(
-                                id=content_id,
-                                sha256=attempt.sha256,
-                                byte_count=attempt.byte_count,
-                                media_type=attempt.media_type,
-                                normalized_display_name=None,
-                            ),
-                            ArtifactReplica(
-                                id=str(uuid4()),
-                                content_id=content_id,
-                                storage_namespace_id=attempt.storage_namespace_id,
-                                namespace_fingerprint=attempt.namespace_fingerprint,
-                                adapter=namespace.adapter,
-                                provider_profile=namespace.provider_profile,
-                                provider_object_ref=provider_object_ref,
-                                verification_state="verified",
-                                availability_state="available",
-                                integrity_state="valid",
-                            ),
-                        ]
-                    )
-                    await session.commit()
+                    await _conflicting_checker_replica(session, attempt, namespace, provider_object_ref)
                 else:
                     await session.rollback()
                 observe = (
@@ -3063,3 +2986,91 @@ async def _seed_verification_scan_jobs(factory, settings, namespace, store, tmp_
         await seed_session.rollback()
 
     return job_ids, prior_audit_ids
+
+
+async def _unrelated_checker_task(session, canonical_task):
+    """Keep the same locked policy tuple on a distinct task for ownership rejection."""
+    unrelated_task_id = str(uuid4())
+    session.add(
+        WorkstreamTask(
+            id=unrelated_task_id,
+            project_id=canonical_task.project_id,
+            locked_guide_version=canonical_task.locked_guide_version,
+            locked_post_submit_checker_policy_id=(
+                canonical_task.locked_post_submit_checker_policy_id
+            ),
+            locked_post_submit_checker_policy_version=(
+                canonical_task.locked_post_submit_checker_policy_version
+            ),
+            locked_post_submit_checker_policy_hash=(
+                canonical_task.locked_post_submit_checker_policy_hash
+            ),
+            locked_post_submit_checker_policy_body=(
+                canonical_task.locked_post_submit_checker_policy_body
+            ),
+            locked_review_policy_id=canonical_task.locked_review_policy_id,
+            locked_review_policy_generation=(
+                canonical_task.locked_review_policy_generation
+            ),
+            locked_review_policy_hash=canonical_task.locked_review_policy_hash,
+            locked_revision_policy_id=canonical_task.locked_revision_policy_id,
+            locked_revision_policy_generation=(
+                canonical_task.locked_revision_policy_generation
+            ),
+            locked_revision_policy_hash=(canonical_task.locked_revision_policy_hash),
+            locked_payment_policy_version=(canonical_task.locked_payment_policy_version),
+            locked_guide_source_snapshot_id=(
+                canonical_task.locked_guide_source_snapshot_id
+            ),
+            locked_guide_source_snapshot_hash=(
+                canonical_task.locked_guide_source_snapshot_hash
+            ),
+            locked_effective_project_submission_artifact_policy_id=(
+                canonical_task.locked_effective_project_submission_artifact_policy_id
+            ),
+            locked_effective_project_submission_artifact_policy_hash=(
+                canonical_task.locked_effective_project_submission_artifact_policy_hash
+            ),
+            locked_pre_submit_checker_policy_id=(
+                canonical_task.locked_pre_submit_checker_policy_id
+            ),
+            locked_pre_submit_checker_bundle_hash=(
+                canonical_task.locked_pre_submit_checker_bundle_hash
+            ),
+            title="Unrelated checker task",
+            description="Must not own the checker output.",
+            status="draft",
+            created_by="setup-actor",
+        )
+    )
+    await session.flush()
+    return unrelated_task_id
+
+
+async def _conflicting_checker_replica(session, attempt, namespace, provider_object_ref):
+    """Arrange an already-known replica for the observation conflict control."""
+    content_id = str(uuid4())
+    session.add_all(
+        [
+            ArtifactContent(
+                id=content_id,
+                sha256=attempt.sha256,
+                byte_count=attempt.byte_count,
+                media_type=attempt.media_type,
+                normalized_display_name=None,
+            ),
+            ArtifactReplica(
+                id=str(uuid4()),
+                content_id=content_id,
+                storage_namespace_id=attempt.storage_namespace_id,
+                namespace_fingerprint=attempt.namespace_fingerprint,
+                adapter=namespace.adapter,
+                provider_profile=namespace.provider_profile,
+                provider_object_ref=provider_object_ref,
+                verification_state="verified",
+                availability_state="available",
+                integrity_state="valid",
+            ),
+        ]
+    )
+    await session.commit()

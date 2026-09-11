@@ -158,7 +158,7 @@ async def approve_unified_submission_policy(project_id, guide_id, policy_id, *, 
         ).model_dump(mode="json")
 
 
-async def create_standalone_unified_policy(sessions, namespace):
+async def create_standalone_unified_policy(sessions, namespace, *, guide_version="v1", artifact_proposal=None):
     """Arrange canonical setup before a lower-level artifact transaction starts."""
     from tests.projects.guide_compilation.helpers import context, seed_database
     from tests.projects.guide_compilation.finalization.pg_prerequisites import compilation_and_projections
@@ -166,16 +166,20 @@ async def create_standalone_unified_policy(sessions, namespace):
     from app.modules.projects.models import PreSubmitCheckerPolicy
 
     url = sessions.kw["bind"].url.render_as_string(hide_password=False)
-    values = await seed_database(url, namespace=namespace)
+    values = await seed_database(url, namespace=namespace, guide_version=guide_version)
     async with sessions() as session:
         manifest = await guide_document_manifest_port(session).load(GuideDocumentManifestRequest(
             project_id=values["project"], guide_id=values["guide"],
             guide_source_snapshot_id=values["snapshot"],
             project_setup_run_id=values["setup_1"], setup_generation=1,
         ))
-    compilation_context = context(values).model_copy(update={"material": manifest})
+    compilation_context = context(values, guide_version=guide_version).model_copy(update={"material": manifest})
+    from tests.projects.guide_compilation.helpers import result
+    outcome = result()
+    if artifact_proposal is not None:
+        outcome = outcome.model_copy(update={"submission_artifact_policy": artifact_proposal})
     command = await compilation_and_projections(
-        url, sessions, values, compilation_context=compilation_context,
+        url, sessions, values, compilation_context=compilation_context, outcome=outcome,
     )
     await finalize(sessions, values, command)
     async with sessions() as session:

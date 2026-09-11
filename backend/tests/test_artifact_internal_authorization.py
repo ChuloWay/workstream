@@ -906,15 +906,7 @@ async def test_verification_claim_and_terminal_failures_roll_back_both_sides(
     factory = async_sessionmaker(engine, expire_on_commit=False)
     resolver = _service_principal(ServiceIdentity.ARTIFACT_PUT_RESOLVER)
     verifier = _service_principal(ServiceIdentity.ARTIFACT_VERIFIER)
-    assert settings.artifact_local_root is not None
-    bootstrap = LocalStorageBootstrap(LocalStorageAdapter(root=settings.artifact_local_root))
-    store = bootstrap.initialize_after_namespace_claim(
-        ArtifactStoreNamespaceClaim(
-            adapter_identity=bootstrap.identity,
-            namespace_identity=bootstrap.namespace_identity,
-            namespace_fingerprint=namespace.namespace_fingerprint,
-        )
-    )
+    bootstrap, store = _local_store(settings, namespace)
     policy_bundle = await create_standalone_unified_policy(factory, namespace)
     try:
         async with factory() as session:
