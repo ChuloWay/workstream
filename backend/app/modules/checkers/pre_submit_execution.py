@@ -41,9 +41,9 @@ from app.modules.checkers.catalogue import (
     PreSubmissionPlatformCapability,
     PreSubmissionPolicyPrimitive,
 )
+from app.modules.checkers.api.artifact_paths import is_canonical_relative_path
 from app.modules.checkers.pre_submit_defaults import (
     attestation_validation_facts,
-    is_canonical_relative_path,
     matched_low_quality_patterns,
 )
 

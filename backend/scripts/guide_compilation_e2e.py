@@ -130,7 +130,7 @@ async def project_task_fixture_sufficiency(delivery, report_id):
     )
     from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
     from app.modules.projects.api import ProjectGuideCompilationExecutionCommand, ProjectGuideProjectionCommand
-    from app.modules.projects.guide_compilation.automatic_request import AutomaticCompilationInputs, automatic_operation_id
+    from app.modules.projects.guide_compilation.request_inputs import CompilationRequestInputs, automatic_operation_id
     from app.modules.projects.guide_compilation.service import GuideCompilationService
     from app.modules.projects.guide_compilation.orchestrator import project_guide_compilation_execution_port
     from app.modules.projects.guide_compilation.projections import GuideCompilationProjectionService
@@ -149,7 +149,7 @@ async def project_task_fixture_sufficiency(delivery, report_id):
         assert diagnostic.project_setup_run_id is None and diagnostic.agent_name is None
         async with guide_compilation_request_authority(session, automatic_operation_id(delivery.setup_run_id, delivery.setup_generation)) as (authority, actor):
             request = await GuideCompilationService(session, authority,
-                automatic_inputs=AutomaticCompilationInputs(guide_document_manifest_port(session), pre, post, configuration),
+                request_inputs=CompilationRequestInputs(guide_document_manifest_port(session), pre, post, configuration),
             ).request_automatic(actor=actor, setup_run_id=delivery.setup_run_id)
     runtime = E2EProjectGuideRuntime(configuration)
     execution = project_guide_compilation_execution_port(sessions,

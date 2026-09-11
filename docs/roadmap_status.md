@@ -224,15 +224,16 @@ cannot be reused as post-submission review-gate evidence. See the
   ends at sufficiency evidence, with no policy projection. Its canonical result
   retains exact supported catalogue matches and one evidence-linked engineering
   suggestion for each required missing pre-submit or post-submit check. Fully
-  covered projects need no suggestions. The manager-facing handoff remains
-  part of POL-05; suggestions cannot register or activate a checker. Runtime, model/provider and instructions are independently
+  covered projects need no suggestions. POL-05A includes the complete handoff in its hidden review package;
+  public exposure remains AUTH-12F4/POL-05B; suggestions cannot register or activate a checker. Runtime, model/provider and instructions are independently
   configured and bound to the attempt. The agent opens assigned files on demand
   in an isolated workspace and assesses them with every supplied task example;
   exact grants exclude other projects and runs. Known
   invalid output ends terminally, and replay never starts a second inference.
   Transient pre-send retries use bounded backoff and a circuit breaker; the
   default request timeout is 300 seconds, separate from the whole-run timeout.
-  Project Manager proposal review, correction and manual rerun remain POL-05.
+  POL-05A implements hidden review, pre-submission approval custody and
+  correction successors. Public manager review and dispatch remain AUTH-12F4/POL-05B.
   Superseded post-submit setup/approval/correction routes are removed; POL-06
   owns the remaining post-submit projection. Real Terra runs through API upload,
   MinIO, the Celery handler and PostgreSQL proved both blocked findings and ready
@@ -280,8 +281,9 @@ checks for both triggers. POL-04B connects those contracts and unified
 finalization to automatic initial setup execution, replacing the separate
 inference methods and prompts. Runtime adapter, model and instructions are
 independently configured. Compilation stops at findings and draft pre/post
-policies. POL-05A is next: hidden complete-proposal review, correction and pre-policy
-approval custody, followed by AUTH-12F4 and POL-05B live manager review,
+policies. POL-05A adds hidden complete-proposal review, correction and pre-policy
+approval custody, replacing manual artifact-policy approval. AUTH-12F4 is next,
+followed by POL-05B live manager review,
 approval and manual rerun through the same compiler. The reconciled
 [dependency and ownership plan](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
 permits selected-policy validation independently after completed CP05. The
