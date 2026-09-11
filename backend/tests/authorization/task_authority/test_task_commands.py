@@ -13,7 +13,7 @@ from app.modules.authorization.models import AdminRoleGrant, AuthorityControl, P
 from app.modules.authorization.runtime import AuthorizationEvidenceUnavailable
 from app.modules.authorization.task_authorization import PreparedTaskAuthorization
 from app.modules.tasks.api import TaskAuthorityDenied
-from app.modules.audit.service import LifecycleAuditParticipant
+from app.modules.audit.service import AuditService, LifecycleAuditParticipant
 from app.modules.tasks.models import AuditEvent, TaskAssignment, WorkstreamTask
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.service import TaskServiceError
@@ -282,22 +282,35 @@ async def test_actor_resolution_failure_cannot_reach_task_command(
     assert await _read_task_contributor_race_snapshot(task_database_env, task["id"]) == before
 
 
-async def test_claim_rolls_back_if_transition_evidence_fails(task_client, monkeypatch):
+@pytest.mark.parametrize("failure_phase", ["authority", "transition"])
+async def test_claim_rolls_back_and_retries_once_after_evidence_failure(
+    task_client, monkeypatch, failure_phase,
+):
     project = await create_active_project(task_client)
     task = await create_ready_task(task_client, project["id"])
     await admit_and_grant_project_submitter(
         task_client, monkeypatch, project["id"], "rollback-submitter"
     )
-    original = LifecycleAuditParticipant.add_event
+    owner, method = (
+        (AuditService, "add_authority_event")
+        if failure_phase == "authority"
+        else (LifecycleAuditParticipant, "add_event")
+    )
+    original = getattr(owner, method)
     staged = []
 
     async def fail_after_flush(participant, value):
         event = await original(participant, value)
+        if failure_phase == "authority":
+            assert event.action_id == "task.claim"
         staged.append(event.id)
         raise OperationalError("injected audit storage failure", None, RuntimeError("unavailable"))
 
-    monkeypatch.setattr(LifecycleAuditParticipant, "add_event", fail_after_flush)
-    response = await task_client.post(f"/api/v1/tasks/{task['id']}/claim", headers=auth_headers())
+    headers = auth_headers()
+    path = f"/api/v1/tasks/{task['id']}/claim"
+    with monkeypatch.context() as patch:
+        patch.setattr(owner, method, fail_after_flush)
+        response = await task_client.post(path, headers=headers)
     assert response.status_code == 503, response.text
     assert response.json()["error"]["code"] == "task_authority_unavailable"
     assert response.json()["error"]["retryable"] is True
@@ -314,6 +327,37 @@ async def test_claim_rolls_back_if_transition_evidence_fails(task_client, monkey
             await session.scalar(select(AuditEvent).where(AuditEvent.action_id == "task.claim"))
             is None
         )
+
+    # Repeat the identical request, including its key, after storage recovers.
+    retried = await task_client.post(path, headers=headers)
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["task"]["status"] == "claimed"
+    async with db_session.get_session_factory()() as session:
+        assignments = list(await session.scalars(
+            select(TaskAssignment).where(TaskAssignment.task_id == task["id"])
+        ))
+        assert len(assignments) == 1
+        assert assignments[0].id == retried.json()["assignment"]["id"]
+        assert assignments[0].status == "active"
+        claimed = await session.get(WorkstreamTask, task["id"])
+        assert claimed.status == "claimed"
+        assert claimed.assigned_to == assignments[0].contributor_id
+        decisions = list(await session.scalars(
+            select(AuditEvent).where(AuditEvent.action_id == "task.claim")
+        ))
+        transitions = list(await session.scalars(
+            select(AuditEvent).where(
+                AuditEvent.entity_id == task["id"], AuditEvent.to_status == "claimed",
+            )
+        ))
+        assert len(decisions) == len(transitions) == 1
+        decision, transition = decisions[0], transitions[0]
+        assert decision.after_facts["allowed"] is True
+        assert decision.actor_id == transition.actor_id == assignments[0].contributor_id
+        assert decision.project_id == project["id"]
+        assert (transition.from_status, transition.to_status) == ("ready", "claimed")
+        assert transition.event_payload["references"]["authorization_decision_id"] == decision.id
+        assert await session.get(AuditEvent, staged[0]) is None
 
 
 async def test_manager_context_and_system_operator_override_are_distinct(task_client, monkeypatch):
