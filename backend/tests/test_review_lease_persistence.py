@@ -62,7 +62,7 @@ def review_lease_database_env(
 async def review_lease_client(
     review_lease_database_env: str,
 ) -> AsyncIterator[AsyncClient]:
-    """Create only canonical upstream facts through existing test helpers."""
+    """Set up project/task APIs; stored-submission fixtures supply lease prerequisites."""
     app = create_app()
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://testserver"

@@ -209,7 +209,7 @@ async def test_all_documents_stored_dispatches_once_through_minio(
     originals = [b"%PDF-1.7\nGuide fixture\n%%EOF", b"%PDF-1.7\nAppendix fixture\n%%EOF"]
     for index, (document, original) in enumerate(zip(guide["documents"], originals, strict=True)):
         path = f"/api/v1/projects/{project['id']}/guides/{guide['id']}/documents/{document['document_id']}/content"
-        headers = auth_headers() | {"Content-Type": "application/pdf"}
+        headers = auth_headers() | {"Content-Type": ("Application/PDF", "application/pdf; name=appendix.pdf")[index]}
         real_callback = internal_workers.continue_guide_setup_after_stored_document
         if index == 1 and recover_callback:
 
@@ -775,6 +775,8 @@ async def test_upload_rechecks_authority_before_body(project_client, remaining_s
 @pytest.mark.parametrize("fault,mutant", [
     (None, False), ("missing_source", False), ("missing_source", True),
     ("cross_key", False), ("cross_key", True), ("second_set", False), ("second_set", True),
+    *[(fault, mutant) for fault in ("setup_status", "setup_step", "setup_ready_at", "setup_celery")
+      for mutant in (False, True)],
 ])
 async def test_raw_sql_creation_pair_custody(project_client, monkeypatch, fault, mutant):
     from sqlalchemy import text

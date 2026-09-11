@@ -285,7 +285,8 @@ async def upload_guide_document(
         result = await ingest.ingest(
             authorization_context=context, project_id=project_id, guide_id=guide_id,
             source_item_id=document_id, idempotency_key=key,
-            content_type=content_type, content_length=content_length,
+            content_type=content_type.partition(";")[0].strip().lower(),
+            content_length=content_length,
             byte_source=request.stream(),
         )
     except (ArtifactAdmissionRelationshipError, ArtifactAuthorityDeniedError) as exc:

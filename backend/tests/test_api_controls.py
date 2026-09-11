@@ -439,12 +439,17 @@ def test_openapi_documents_request_error_and_response_context() -> None:
     )
     assert len(route_inventory) == 72
     assert sha256("\n".join(route_inventory).encode()).hexdigest() == (
-        "3e02f6e0db236810bfc57079a0af8cccf2f1c6801ab74ee14cf3e50939a5472e"
+        "467431130a55743092c60339f318af93c526b0e8ccbdb2a2690637b4cb497cd1"
     )
     assert len(protected_inventory) == 70
     assert sha256("\n".join(protected_inventory).encode()).hexdigest() == (
-        "bd26e8319056bb3f270052692d2833c6f8e13b666e3b1590e6690397baa9631d"
+        "bd581252ecceda632de3bc8696a6b70e2ff15d2e0c519703138ef9d83c7f1191"
     )
+    assert "/api/v1/workers/me/profile" not in schema["paths"]
+    assert "post" not in schema["paths"]["/api/v1/tasks/{task_id}/submissions"]
+    assert "GET /api/v1/tasks/{task_id}/submissions" in protected_inventory
+    assert "POST /api/v1/operations/tasks/{task_id}/start" in protected_inventory
+    assert "GET /api/v1/projects/{project_id}/tasks/{task_id}/work-context" in protected_inventory
     assert set(schema["paths"]["/health"]["get"]["responses"]) == {"200", "400", "500"}
     assert {"401", "403", "503"} <= set(schema["paths"]["/api/v1/actors/me"]["get"]["responses"])
     service_actor_responses = schema["paths"]["/api/v1/service-actors"]["post"]["responses"]
@@ -463,6 +468,13 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         if method in methods and "x-workstream-action-id" in operation
     }
     assert action_declarations == {
+        "POST /api/v1/tasks/{task_id}/claim": "task.claim",
+        "POST /api/v1/tasks/{task_id}/start": "task.start",
+        "GET /api/v1/tasks/{task_id}/work-context": "task.work_context.read",
+        "POST /api/v1/operations/tasks/{task_id}/start": "operations.task.start_override",
+        "GET /api/v1/projects/{project_id}/tasks/{task_id}/work-context": (
+            "project.task.work_context.read"
+        ),
         "GET /api/v1/actors/me": "actor.profile.read_self",
         "PATCH /api/v1/actors/me": "actor.profile.update_self",
         "GET /api/v1/actors/me/authorization-context": ("actor.authorization_context.read"),

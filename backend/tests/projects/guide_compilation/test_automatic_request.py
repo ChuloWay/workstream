@@ -1,6 +1,7 @@
 """Automatic request proof using real authorized source mutations and ART material."""
 
 from tests.projects.guide_compilation.helpers import runtime_configuration
+from tests.migration_fixtures import current_schema_revision
 
 from uuid import UUID
 

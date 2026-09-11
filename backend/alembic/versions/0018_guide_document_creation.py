@@ -2,8 +2,8 @@
 
 from alembic import op
 
-revision = "0017_guide_document_creation"
-down_revision = "0016_guide_document_runtime"
+revision = "0018_guide_document_creation"
+down_revision = "0017_task_project_authority"
 branch_labels = None
 depends_on = None
 
@@ -63,6 +63,10 @@ def upgrade() -> None:
                               snapshot_row.id,snapshot_row.bundle_hash)
          OR root_row.response_json::jsonb->'setup'->>'id' IS DISTINCT FROM setup_row.id
          OR root_row.response_json::jsonb->'setup'->>'status' IS DISTINCT FROM 'awaiting_documents'
+         OR setup_row.status IS DISTINCT FROM 'awaiting_documents'
+         OR setup_row.current_step IS DISTINCT FROM 'awaiting_documents'
+         OR setup_row.documents_ready_at IS NOT NULL
+         OR setup_row.celery_task_id IS NOT NULL
       THEN
         RAISE EXCEPTION 'guide document creation pair is invalid' USING ERRCODE='23514';
       END IF;

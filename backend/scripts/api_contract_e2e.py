@@ -135,13 +135,6 @@ ASYNC_POSTGRES_SCHEMES = {"postgresql+asyncpg"}
 NONLOCAL_DATABASE_OVERRIDE_VALUE = "I_UNDERSTAND_THIS_WRITES_DATA"
 TEST_MINIO_ACCESS_KEY = "workstream-minio"
 TEST_MINIO_SECRET_KEY = "workstream-minio-secret-key"
-STRONG_ATTESTATION = (
-    "I attest this submission contains no confidential client data, credentials, "
-    "secrets, tokens, passwords, API keys, private source material, source code, "
-    "copied platform artifacts, or copied platform content, and it satisfies "
-    "the original_work, credentials_and_secret_exclusion, real_api_originality, and "
-    "human_accountability_for_agent_assisted_work policy terms."
-)
 
 
 def base64url_json(payload: dict) -> str:
@@ -586,70 +579,6 @@ async def provision_guide_artifact_pipeline_services(
         assert body["actor_status"] == "active"
 
 
-async def wait_for_submission_checker_run(
-    client: httpx.AsyncClient,
-    manager_token: str,
-    submission_id: str,
-) -> dict:
-    """Wait for exactly one automatic checker run after submission lock.
-
-    Args:
-        client: Real HTTP client.
-        manager_token: Project manager Flow token.
-        submission_id: Locked submission id.
-
-    Returns:
-        Completed checker run response.
-    """
-    last_count = 0
-    for _ in range(50):
-        runs = await request_json(
-            client,
-            "GET",
-            f"/api/v1/submissions/{submission_id}/checker-runs",
-            manager_token,
-        )
-        ensure(isinstance(runs, list), "checker run list did not return a list")
-        last_count = len(runs)
-        if len(runs) == 1 and runs[0]["trigger_source"] == "submission_finalized":
-            run = await request_json(
-                client,
-                "GET",
-                f"/api/v1/checker-runs/{runs[0]['id']}",
-                manager_token,
-            )
-            if run["status"] == "completed":
-                return run
-        await asyncio.sleep(0.2)
-    raise AssertionError(f"expected one automatic checker run, got {last_count}")
-
-
-async def wait_for_task_status(
-    client: httpx.AsyncClient,
-    manager_token: str,
-    task_id: str,
-    expected_status: str,
-) -> dict:
-    """Wait for a task to reach an expected status through the API.
-
-    Args:
-        client: Real HTTP client.
-        manager_token: Project manager Flow token.
-        task_id: Task id to poll.
-        expected_status: Expected status token.
-
-    Returns:
-        Task response at the expected status.
-    """
-    task: dict | None = None
-    for _ in range(50):
-        task = await request_json(client, "GET", f"/api/v1/tasks/{task_id}", manager_token)
-        if task["status"] == expected_status:
-            return task
-        await asyncio.sleep(0.2)
-    raise AssertionError(
-        f"expected task status {expected_status}, got {task['status'] if task else None}"
-    )
 
 
 def ensure(condition: bool, message: str) -> None:
@@ -663,34 +592,6 @@ def ensure(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
-def assert_checker_run_result_integrity(checker_run: dict, expected_names: set[str]) -> None:
-    """Assert checker result uniqueness and counters through API-visible data.
-
-    Args:
-        checker_run: Checker run response returned by the HTTP API.
-        expected_names: Exact checker names required for the run.
-    """
-    results = checker_run["results"]
-    names = [result["checker_name"] for result in results]
-    ensure(set(names) == expected_names, f"checker set drifted: {set(names)}")
-    ensure(len(names) == len(set(names)), f"duplicate checker results returned: {names}")
-    ensure(
-        checker_run["warning_count"]
-        == sum(1 for result in results if result["status"] == "warning"),
-        "checker warning count does not match returned results",
-    )
-    ensure(
-        checker_run["failed_count"] == sum(1 for result in results if result["status"] == "failed"),
-        "checker failed count does not match returned results",
-    )
-    ensure(
-        checker_run["blocking_count"] == sum(1 for result in results if result["blocks_review"]),
-        "checker blocking count does not match returned results",
-    )
-    ensure(
-        checker_run["passed_count"] == sum(1 for result in results if result["status"] == "passed"),
-        "checker passed count does not match returned results",
-    )
 
 
 def assert_local_database_url(database_url: str) -> None:
@@ -2058,17 +1959,6 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
         assert updated_actor["display_name"] == "Real API Contributor"
         assert updated_actor["admin_roles"] == []
         assert updated_actor["project_role_grants"] == []
-        worker_profile = await request_json(
-            client,
-            "POST",
-            "/api/v1/workers/me/profile",
-            worker_token,
-            {"skill_tags": ["stem", "proofs"]},
-        )
-        assert worker_profile["external_subject"] == worker_subject
-        assert worker_profile["external_issuer"] == flow_issuer
-        assert worker_profile["status"] == "active"
-        assert set(worker_profile["skill_tags"]) == {"stem", "proofs"}
         role_issue_key = str(uuid4())
         role_issue_body = {
             "target_actor_profile_id": canonical_actor["actor_profile_id"],
@@ -2235,6 +2125,18 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             json={"reason": "Restore API contract contributor identity link"},
         )
         assert repaired_target_link.status_code == 200, repaired_target_link.text
+        await request_json(
+            client, "POST", f"/api/v1/tasks/{task['id']}/claim", worker_token,
+            {"reason": "Revoked authority must not permit task work"}, 403,
+        )
+        renewed_submitter = await client.post(
+            f"/api/v1/projects/{project['id']}/role-grants",
+            headers=auth_headers(project_reader_token) | {"Idempotency-Key": str(uuid4())},
+            json=role_issue_body | {"reason": "Authorize the subsequent task claim/start drill"},
+        )
+        assert renewed_submitter.status_code == 201, renewed_submitter.text
+        assert renewed_submitter.json()["id"] != role_grant_id
+        assert renewed_submitter.json()["status"] == "active"
         removed_project_manager = await client.post(
             f"/api/v1/admin-role-grants/{project_manager_grant.json()['resource_id']}/revoke",
             headers=auth_headers(manager_token) | {"Idempotency-Key": str(uuid4())},
@@ -2377,159 +2279,45 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             worker_token,
         )
         ensure(
-            active_work_context["lifecycle"]["can_submit"] is True,
-            "in-progress worker context did not expose submit readiness",
-        )
-        submission = await request_json(
-            client,
-            "POST",
-            f"/api/v1/tasks/{task['id']}/submissions",
-            worker_token,
-            {
-                "summary": "Real API packet completed.",
-                "package_uri": f"local://packages/token=build-{run_id}.tar.zst",
-                "package_hash": f"sha256:package-{run_id}",
-                "artifact_hash_manifest": [
-                    {
-                        "artifact": "answer.md",
-                        "hash": f"sha256:answer-{run_id}",
-                        "size_bytes": 128,
-                        "notes": "real API artifact",
-                    }
-                ],
-                "worker_attestation": STRONG_ATTESTATION,
-                "evidence_items": [
-                    {
-                        "type": "log",
-                        "label": "real API evidence",
-                        "uri": f"s3://workstream-e2e/reports/user@team-{run_id}.log",
-                        "hash": f"sha256:evidence-{run_id}",
-                        "size_bytes": 256,
-                        "metadata": {
-                            "command": "api_contract_e2e",
-                            "required_evidence_key": "checker_log",
-                        },
-                    }
-                ],
-            },
-            201,
+            active_work_context["lifecycle"]["can_submit"] is False,
+            "hidden submission creation must not be advertised as a public action",
         )
         ensure(
-            submission["contributor_id"] == canonical_actor["actor_profile_id"],
-            "submission did not return canonical contributor attribution",
+            active_work_context["lifecycle"]["can_run_pre_submit_check"] is False,
+            "the current command surface must not advertise hidden intake",
         )
-        for internal_field in (
-            "artifact_hash_manifest",
-            "package_hash",
-            "worker_attestation",
-            "locked_guide_version",
-            "locked_review_policy_id",
-            "locked_review_policy_generation",
-            "locked_review_policy_hash",
-            "locked_revision_policy_id",
-            "locked_revision_policy_generation",
-            "locked_revision_policy_hash",
-            "locked_payment_policy_version",
-            "locked_post_submit_checker_policy_hash",
-        ):
-            assert internal_field not in submission
-        await request_json(
-            client,
-            "POST",
-            f"/api/v1/tasks/{task['id']}/submissions",
-            manager_token,
-            {
-                "summary": "Manager cannot submit for worker.",
-                "package_hash": f"sha256:manager-package-{run_id}",
-                "artifact_hash_manifest": [
-                    {"artifact": "answer.md", "hash": f"sha256:manager-answer-{run_id}"}
-                ],
-                "worker_attestation": STRONG_ATTESTATION,
-                "evidence_items": [],
-            },
-            403,
+        ensure(
+            active_work_context["lifecycle"]["next_actions"] == [],
+            "in-progress context advertised an unavailable public command",
         )
-        await request_json(client, "GET", f"/api/v1/tasks/{task['id']}/submissions", worker_token)
-        await request_json(client, "GET", f"/api/v1/submissions/{submission['id']}", worker_token)
-        await request_json(
-            client,
-            "GET",
-            f"/api/v1/submissions/{submission['id']}",
-            unassigned_worker_token,
-            expected_status=404,
+        # Public packet submission was retired. Do not simulate its success or
+        # expose the hidden admission-backed command to keep this drill running.
+        submissions = await request_json(
+            client, "GET", f"/api/v1/tasks/{task['id']}/submissions", worker_token,
         )
-        locked = await request_json(
-            client,
-            "GET",
-            f"/api/v1/submissions/{submission['id']}",
-            manager_token,
-        )
-        assert locked["finalized_at"] is not None
-        assert locked["locked_guide_version"] == "v1"
-        assert locked["locked_review_policy_id"] == screened["locked_review_policy_id"]
-        assert locked["locked_review_policy_generation"] == 1
-        assert locked["locked_review_policy_hash"] == screened["locked_review_policy_hash"]
-        assert locked["locked_revision_policy_id"] == screened["locked_revision_policy_id"]
-        assert locked["locked_revision_policy_generation"] == 1
-        assert locked["locked_revision_policy_hash"] == screened["locked_revision_policy_hash"]
-        assert locked["locked_payment_policy_version"] == "v1"
-        assert all(
-            item["finalized_at"] == locked["finalized_at"] for item in locked["evidence_items"]
-        )
-        checker_run = await wait_for_submission_checker_run(client, manager_token, submission["id"])
-        assert checker_run["routing_recommendation"] == "allow_review"
-        assert checker_run["triggered_by"] == "workstream-system:pre-review-gate"
-        assert checker_run["triggered_by_subject"] == "workstream-system:pre-review-gate"
-        assert checker_run["triggered_by_issuer"] == "workstream"
-        assert checker_run["trigger_auth_source"] == "workstream_system"
-        assert_checker_run_result_integrity(checker_run, EXPECTED_DURABLE_CHECKERS)
-        await wait_for_task_status(client, manager_token, task["id"], "review_pending")
+        ensure(submissions == [], "claim/start unexpectedly created a Submission")
         audit_events = await request_json(
-            client,
-            "GET",
-            f"/api/v1/tasks/{task['id']}/audit-events",
-            manager_token,
+            client, "GET", f"/api/v1/tasks/{task['id']}/audit-events", manager_token,
         )
         audit_transitions = {
             (event["event_type"], event["from_status"], event["to_status"])
             for event in audit_events
         }
-        for expected_transition in {
+        assert audit_transitions == {
             ("task_created", None, "draft"),
             ("task_status_changed", "draft", "screening"),
             ("task_status_changed", "screening", "ready"),
-            ("task_status_changed", "ready", "claimed"),
-            ("task_status_changed", "claimed", "in_progress"),
-            ("submission_created", "in_progress", "submitted"),
-            ("submission_finalized", "submitted", "submitted"),
-            ("pre_review_gate_started", "submitted", "evaluation_pending"),
-            ("pre_review_gate_passed", "evaluation_pending", "review_pending"),
-        }:
-            assert expected_transition in audit_transitions
-        finalized_event = next(
-            event for event in audit_events if event["event_type"] == "submission_finalized"
-        )
-        assert finalized_event["external_subject"] == worker_subject
-        assert finalized_event["external_issuer"] == flow_issuer
-        assert finalized_event["auth_source"] == "flow"
-        assert (
-            finalized_event["event_payload"]["finalized_at"].replace("+00:00", "Z")
-            == locked["finalized_at"]
-        )
-        requester_actor_id = finalized_event["actor_id"]
-        assert requester_actor_id
-        assert requester_actor_id != "workstream-system:pre-review-gate"
-        for event_type in ("pre_review_gate_started", "pre_review_gate_passed"):
-            gate_event = next(event for event in audit_events if event["event_type"] == event_type)
-            assert gate_event["actor_id"] == "workstream-system:pre-review-gate"
-            assert gate_event["external_subject"] == "workstream-system:pre-review-gate"
-            assert gate_event["external_issuer"] == "workstream"
-            assert gate_event["auth_source"] == "workstream_system"
-            assert gate_event["event_payload"]["requester_actor_id"] == requester_actor_id
-            assert gate_event["event_payload"]["requester_external_subject"] == worker_subject
-            assert gate_event["event_payload"]["requester_external_issuer"] == flow_issuer
-            assert gate_event["event_payload"]["requester_auth_source"] == "flow"
-            assert gate_event["event_payload"]["trigger_source"] == "submission_finalized"
+            ("TaskClaimed", "ready", "claimed"),
+            ("TaskStarted", "claimed", "in_progress"),
+        }
+        for event in audit_events:
+            if event["event_type"] in {"TaskClaimed", "TaskStarted"}:
+                assert event["actor_id"] == canonical_actor["actor_profile_id"]
+                assert event["actor_roles"] == [] and event["claim_snapshot"] == {}
+                references = event["event_payload"]["references"]
+                assert references["task_id"] == task["id"]
+                assert references["assignment_id"] == claim["assignment"]["id"]
+                assert references["authorization_decision_id"]
         worker_audit_events = await request_json(
             client,
             "GET",
@@ -2548,13 +2336,11 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             expected_status=403,
         )
 
-    print("API contract real API e2e passed")
+    print("Public API drill passed through authorized task claim/start; hidden submission not exercised")
     print(f"project_id={project['id']}")
     print(f"guide_id={guide['id']}")
     print(f"task_id={task['id']}")
     print(f"assignment_id={claim['assignment']['id']}")
-    print(f"submission_id={submission['id']}")
-    print(f"submission_finalized_at={locked['finalized_at']}")
 
 
 async def main(env: dict[str, str]) -> None:

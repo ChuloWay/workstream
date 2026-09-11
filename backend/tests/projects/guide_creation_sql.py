@@ -79,6 +79,13 @@ def malformed_graph(control, fault):
         for row in graph["guide_mutation_idempotency_records"]:
             if row["action_id"] == "project.guide_source_snapshot.create":
                 row["idempotency_key"] = uuid4()
+    elif fault in {"setup_status", "setup_step", "setup_ready_at", "setup_celery"}:
+        fields = {"setup_status": ("status", "queued"),
+                  "setup_step": ("current_step", "queued"),
+                  "setup_ready_at": ("documents_ready_at", "2026-09-11T00:00:00+00:00"),
+                  "setup_celery": ("celery_task_id", str(uuid4()))}
+        field, value = fields[fault]
+        graph["project_setup_runs"][0][field] = value
     return graph
 
 
@@ -123,7 +130,17 @@ def second_source_graph(control):
 async def install_predicate_mutant(connection, fault):
     definition = await connection.scalar(text(
         "select pg_get_functiondef('require_guide_document_creation_pair()'::regprocedure)"))
-    if fault == "cross_key":
+    if fault.startswith("setup_"):
+        predicates = {
+            "setup_status": "setup_row.status IS DISTINCT FROM 'awaiting_documents'",
+            "setup_step": "setup_row.current_step IS DISTINCT FROM 'awaiting_documents'",
+            "setup_ready_at": "setup_row.documents_ready_at IS NOT NULL",
+            "setup_celery": "setup_row.celery_task_id IS NOT NULL",
+        }
+        anchor = "         OR " + predicates[fault] + "\n"
+        assert definition.count(anchor) == 1
+        definition = definition.replace(anchor, "")
+    elif fault == "cross_key":
         old = "root_row.actor_profile_id,root_row.identity_link_id,root_row.project_id,root_row.idempotency_key"
         new = "root_row.actor_profile_id,root_row.identity_link_id,root_row.project_id"
         assert definition.count(old) == 1

@@ -446,6 +446,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/domain/task_authority.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/guide_compilation.py"
     },
     {
@@ -547,6 +551,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/submission_preparation.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/task_authorization.py"
     },
     {
       "group": "artifacts",
@@ -938,6 +946,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/authorization.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/submission_command.py"
     },
     {
@@ -946,7 +958,15 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/transition_audit.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/authorization.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/authorized_commands.py"
     },
     {
       "group": "lifecycle",
@@ -1097,7 +1117,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "868b3fe3a0448e4bb7bcffffc01cbc95974c1f3b8e98f7f7c77cbbcd8ee382d3",
+  "authority_digest": "8dd1954cb63c958e7826e20353a7f286a0dd60beff434fe6d978c096626514d6",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
