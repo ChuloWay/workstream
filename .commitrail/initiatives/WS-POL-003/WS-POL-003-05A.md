@@ -259,3 +259,14 @@ Shared compilation fixtures now calculate their snapshot digest from the actual
 task-example manifest. The evidence repository independently rehashes that
 manifest; an arbitrary placeholder could satisfy earlier setup fixtures while
 failing the real locked-context consumer.
+
+Downstream TASK submissions and requirements assertions use the canonical
+projection's generated artifact/evidence keys, ZIP packaging, and omitted
+optional descriptions. Corruption tests do not delete or
+rewrite immutable approval outputs: database tests assert rejection, while
+consumer tests inject detached invalid repository reads after valid canonical
+setup. Hash-consistent consumer probes also supply matching detached task
+pointers so an earlier digest mismatch cannot mask shape validation. Queue
+repair tests restore the read fault rather than changing retained policy data.
+The public OpenAPI inventory removes the obsolete manual approval route, and
+migration fixtures use the shared manifest's actual digest.

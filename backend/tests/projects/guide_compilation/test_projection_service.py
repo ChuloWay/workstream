@@ -31,7 +31,7 @@ from app.modules.projects.guide_compilation.repository import (
     GuideCompilationRepository,
 )
 
-from .helpers import result, seed_database
+from .helpers import SHA256, result, seed_database
 from .test_projection_postgresql import (
     _ProjectionAuthorization,
     _persist_compilation,
@@ -642,7 +642,7 @@ async def test_non_draft_guide_and_stale_generation_fail_closed(
                     "project": str(values["project"]),
                     "guide": str(values["guide"]),
                     "snapshot": str(values["snapshot"]),
-                    "hash": "sha256:" + "a" * 64,
+                    "hash": SHA256,
                     "task": "00000000-0000-0000-0000-000000000007",
                 },
             )

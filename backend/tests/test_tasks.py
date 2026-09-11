@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import (  # type: ignore[import-not-found]
 from sqlalchemy.schema import CreateIndex
 
 from projects.guide_fixtures import complete_guide_payload
+from tests.projects.policy_read_faults import corrupt_locked_policy_reads
 from auth_concurrency_support import wait_for_named_database_lock
 from tests.submission_fixtures import seed_finalized_submission_for_checker_test
 
@@ -50,11 +51,6 @@ from app.modules.projects.models import (
     PostSubmitCheckerPolicy,
     PreSubmitCheckerPolicy,
     ProjectGuide,
-    SubmissionArtifactPolicy,
-)
-from app.modules.projects.post_submit_policy import (
-    build_project_post_submit_checker_spec,
-    compile_project_post_submit_checker_spec,
 )
 from app.modules.tasks.lifecycle import InvalidTaskTransition, ensure_allowed_transition
 from app.modules.tasks.api import (
@@ -870,65 +866,6 @@ async def load_post_submit_checker_policy(project_id: str, guide_version: str = 
         }
 
 
-async def delete_generated_post_submit_output_for_pre_submit(
-    session,
-    pre_submit_checker_policy_id: str,
-) -> None:
-    """Remove generated post-submit output before test-only pre-submit corruption."""
-    post_submit_policy = await session.scalar(
-        select(PostSubmitCheckerPolicy).where(
-            PostSubmitCheckerPolicy.pre_submit_checker_policy_id == pre_submit_checker_policy_id
-        )
-    )
-    if post_submit_policy is None:
-        return
-    await session.delete(post_submit_policy)
-    await session.flush()
-
-
-def generated_post_submit_output_for_pre_submit(
-    *,
-    effective_policy: EffectiveProjectSubmissionArtifactPolicy,
-    pre_submit_checker_policy_id: str,
-    pre_submit_checker_bundle_hash: str,
-) -> PostSubmitCheckerPolicy:
-    """Build generated post-submit output matching a test-only pre-submit row."""
-    spec = build_project_post_submit_checker_spec(
-        project_id=effective_policy.project_id,
-        guide_version=effective_policy.guide_version,
-        required_checkers=[],
-        warning_checkers=[],
-        blocking_severities=["critical", "high"],
-    )
-    compiled = compile_project_post_submit_checker_spec(
-        project_id=effective_policy.project_id,
-        guide_version=effective_policy.guide_version,
-        spec=spec,
-    )
-    return PostSubmitCheckerPolicy(
-        id=str(uuid4()),
-        project_id=effective_policy.project_id,
-        guide_id=effective_policy.guide_id,
-        guide_version=effective_policy.guide_version,
-        source_snapshot_id=effective_policy.source_snapshot_id,
-        source_snapshot_hash=effective_policy.source_snapshot_hash,
-        effective_policy_id=effective_policy.id,
-        effective_policy_hash=effective_policy.effective_policy_hash,
-        pre_submit_checker_policy_id=pre_submit_checker_policy_id,
-        pre_submit_checker_bundle_hash=pre_submit_checker_bundle_hash,
-        required_checkers=compiled.required_checkers,
-        warning_checkers=compiled.warning_checkers,
-        blocking_severities=list(compiled.blocking_severities),
-        policy_hash=compiled.policy_hash,
-        policy_body=compiled.policy_body,
-        lifecycle_status="approved",
-        approved_by_role="project_manager",
-        approved_by_actor="project-manager-subject",
-        approved_at=datetime.now(UTC),
-        created_by="project-manager-subject",
-    )
-
-
 def task_artifact_proposal():
     from app.interfaces.project_agents import SubmissionArtifactPolicyProposal
 
@@ -1041,7 +978,7 @@ def complete_task_payload() -> dict:
 def complete_submission_payload(package_hash: str = "sha256:package-v1") -> dict:
     return {
         "summary": "Completed the proof evaluation.",
-        "package_uri": "local://submissions/proof-evaluation-v1.tar.zst",
+        "package_uri": "local://submissions/proof-evaluation-v1.zip",
         "package_hash": package_hash,
         "artifact_hash_manifest": [
             {
@@ -1064,7 +1001,7 @@ def complete_submission_payload(package_hash: str = "sha256:package-v1") -> dict
                 "uri": "local://evidence/checker.log",
                 "hash": "sha256:log-v1",
                 "size_bytes": 256,
-                "metadata": {"command": "pytest", "policy_key": "checker_log"},
+                "metadata": {"command": "pytest", "policy_key": "required-evidence-001"},
             }
         ],
     }
@@ -1763,44 +1700,18 @@ async def test_screening_maps_ambiguous_active_policy_context_to_controlled_erro
     project = await create_active_project(task_client)
     task = await create_draft_task(task_client, project["id"])
 
-    async with db_session.get_session_factory()() as session:
-        approved_policy = await session.scalar(
-            select(SubmissionArtifactPolicy).where(
-                SubmissionArtifactPolicy.project_id == project["id"],
-                SubmissionArtifactPolicy.guide_version == "v1",
-                SubmissionArtifactPolicy.lifecycle_status == "approved",
+    from app.modules.projects.repository import ProjectRepository
+    from types import SimpleNamespace
+    with pytest.MonkeyPatch.context() as patch:
+        async def ambiguous(repository, *args, **kwargs):
+            return repository._resolve_current_append_only_row(
+                [SimpleNamespace(id=str(uuid4()), predecessor=None) for _ in range(2)],
+                "predecessor", "ambiguous approved policies",
             )
+        patch.setattr(ProjectRepository, "get_current_approved_submission_artifact_policy", ambiguous)
+        response = await task_client.post(
+            f"/api/v1/tasks/{task['id']}/screen", headers=auth_headers(), json={"reason": "screen"},
         )
-        assert approved_policy is not None
-        session.add(
-            SubmissionArtifactPolicy(
-                id=str(uuid4()),
-                project_id=approved_policy.project_id,
-                guide_id=approved_policy.guide_id,
-                guide_version=approved_policy.guide_version,
-                source_snapshot_id=approved_policy.source_snapshot_id,
-                source_snapshot_hash=approved_policy.source_snapshot_hash,
-                policy_version="ambiguous-v2",
-                lifecycle_status="approved",
-                policy_body=approved_policy.policy_body,
-                policy_hash=sha256_hash("ambiguous-approved-policy"),
-                derivation_source="manual_import",
-                source_material_refs=approved_policy.source_material_refs,
-                created_by="test",
-                approved_by_role="project_manager",
-                approved_by_actor=actor_id("project-manager-subject"),
-                approved_at=datetime.now(UTC),
-                change_summary="Creates an ambiguous approved policy state for screening.",
-            )
-        )
-        await session.commit()
-
-    response = await task_client.post(
-        f"/api/v1/tasks/{task['id']}/screen",
-        headers=auth_headers(),
-        json={"reason": "screen"},
-    )
-
     assert response.status_code == 422
     assert "ambiguous" in response.json()["detail"]
 
@@ -2057,24 +1968,22 @@ async def test_task_context_apis_return_worker_requirements_and_operator_provena
     ]
     assert requirements_body["required_artifacts"] == [
         {
-            "key": "answer",
+            "key": "required-artifact-001",
             "path": "answer.md",
             "hash_required": True,
             "required": True,
-            "description": "Main task answer.",
         }
     ]
     assert requirements_body["required_evidence"] == [
         {
-            "key": "checker_log",
-            "label": "checker log",
+            "key": "required-evidence-001",
+            "label": "checker_log",
             "hash_required": True,
             "required": True,
-            "description": "Evidence used by the reviewer.",
         }
     ]
     assert requirements_body["artifact_hash_algorithm"] == "sha256"
-    assert set(requirements_body["allowed_storage_schemes"]) == {"local", "s3", "r2"}
+    assert set(requirements_body["allowed_storage_schemes"]) == {"local", "s3"}
     assert requirements_body["storage_reference_rules"]["credentials_allowed"] is False
     assert requirements_body["storage_reference_rules"]["query_strings_allowed"] is False
     requirements_json = json.dumps(requirements_body, sort_keys=True)
@@ -2262,6 +2171,11 @@ async def test_task_context_apis_fail_closed_on_stale_locked_context_rows(
                 **persisted_task.locked_post_submit_checker_policy_body,
                 "blocking_severities": [],
             }
+        if mutation in {"effective_policy_body", "pre_submit_bundle"}:
+            with pytest.raises(IntegrityError, match="unified proposal content is immutable"):
+                await session.commit()
+            await session.rollback()
+            return
         await session.commit()
 
     response = await task_client.get(context_url, headers=auth_headers())
@@ -2272,78 +2186,12 @@ async def test_task_context_apis_fail_closed_on_stale_locked_context_rows(
 
 async def test_submission_requirements_fail_closed_on_hash_consistent_malformed_policy_shape(
     task_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project = await create_active_project(task_client)
-    async with db_session.get_session_factory()() as session:
-        effective_policy = await session.scalar(
-            select(EffectiveProjectSubmissionArtifactPolicy).where(
-                EffectiveProjectSubmissionArtifactPolicy.project_id == project["id"],
-                EffectiveProjectSubmissionArtifactPolicy.guide_version == "v1",
-                EffectiveProjectSubmissionArtifactPolicy.lifecycle_status == "approved",
-            )
-        )
-        assert effective_policy is not None
-        pre_submit_policy = await session.scalar(
-            select(PreSubmitCheckerPolicy).where(
-                PreSubmitCheckerPolicy.effective_policy_id == effective_policy.id,
-                PreSubmitCheckerPolicy.lifecycle_status == "compiled",
-            )
-        )
-        assert pre_submit_policy is not None
-        replacement_checker_names = list(pre_submit_policy.checker_names)
-        replacement_checker_configs = dict(pre_submit_policy.checker_configs)
-        compiler_version = pre_submit_policy.compiler_version
-        original_compiled_bundle = dict(pre_submit_policy.compiled_bundle)
-        await delete_generated_post_submit_output_for_pre_submit(
-            session,
-            pre_submit_policy.id,
-        )
-        await session.delete(pre_submit_policy)
-        await session.flush()
-
-        malformed_policy = {
-            **effective_policy.effective_policy,
-            "schema_version": ["not", "a", "string"],
-        }
-        malformed_policy_hash = canonical_json_hash(malformed_policy)
-        malformed_bundle = {
-            **original_compiled_bundle,
-            "effective_policy_hash": malformed_policy_hash,
-        }
-        malformed_bundle_hash = canonical_json_hash(malformed_bundle)
-
-        effective_policy.effective_policy = malformed_policy
-        effective_policy.effective_policy_hash = malformed_policy_hash
-        replacement_pre_submit_policy_id = str(uuid4())
-        replacement_pre_submit_policy = PreSubmitCheckerPolicy(
-            id=replacement_pre_submit_policy_id,
-            project_id=effective_policy.project_id,
-            guide_id=effective_policy.guide_id,
-            guide_version=effective_policy.guide_version,
-            source_snapshot_id=effective_policy.source_snapshot_id,
-            source_snapshot_hash=effective_policy.source_snapshot_hash,
-            effective_policy_id=effective_policy.id,
-            effective_policy_hash=malformed_policy_hash,
-            lifecycle_status="compiled",
-            compiler_version=compiler_version,
-            compiled_bundle=malformed_bundle,
-            compiled_bundle_hash=malformed_bundle_hash,
-            checker_names=replacement_checker_names,
-            checker_configs=replacement_checker_configs,
-            created_by="test",
-        )
-        session.add(replacement_pre_submit_policy)
-        await session.flush()
-        session.add(
-            generated_post_submit_output_for_pre_submit(
-                effective_policy=effective_policy,
-                pre_submit_checker_policy_id=replacement_pre_submit_policy_id,
-                pre_submit_checker_bundle_hash=malformed_bundle_hash,
-            )
-        )
-        await session.commit()
 
     ready_task = await create_ready_task(task_client, project["id"])
+    await corrupt_locked_policy_reads(monkeypatch, ready_task["id"], "schema")
     response = await task_client.get(
         f"/api/v1/tasks/{ready_task['id']}/submission-requirements",
         headers=auth_headers(),
@@ -2975,71 +2823,6 @@ async def test_submission_pre_submit_rejects_hash_consistent_malformed_effective
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project = await create_active_project(task_client)
-    async with db_session.get_session_factory()() as session:
-        effective_policy = await session.scalar(
-            select(EffectiveProjectSubmissionArtifactPolicy).where(
-                EffectiveProjectSubmissionArtifactPolicy.project_id == project["id"],
-                EffectiveProjectSubmissionArtifactPolicy.guide_version == "v1",
-                EffectiveProjectSubmissionArtifactPolicy.lifecycle_status == "approved",
-            )
-        )
-        assert effective_policy is not None
-        pre_submit_policy = await session.scalar(
-            select(PreSubmitCheckerPolicy).where(
-                PreSubmitCheckerPolicy.effective_policy_id == effective_policy.id,
-                PreSubmitCheckerPolicy.lifecycle_status == "compiled",
-            )
-        )
-        assert pre_submit_policy is not None
-        replacement_bundle = dict(pre_submit_policy.compiled_bundle)
-        replacement_checker_names = list(pre_submit_policy.checker_names)
-        replacement_checker_configs = dict(pre_submit_policy.checker_configs)
-        compiler_version = pre_submit_policy.compiler_version
-        await delete_generated_post_submit_output_for_pre_submit(
-            session,
-            pre_submit_policy.id,
-        )
-        await session.delete(pre_submit_policy)
-        await session.flush()
-
-        malformed_policy_body = {
-            **effective_policy.effective_policy,
-            "required_evidence": ["bad-shape"],
-        }
-        malformed_policy_hash = canonical_json_hash(malformed_policy_body)
-        effective_policy.effective_policy = malformed_policy_body
-        effective_policy.effective_policy_hash = malformed_policy_hash
-
-        replacement_bundle["effective_policy_hash"] = malformed_policy_hash
-        replacement_bundle_hash = canonical_json_hash(replacement_bundle)
-        replacement_pre_submit_policy_id = str(uuid4())
-        replacement_pre_submit_policy = PreSubmitCheckerPolicy(
-            id=replacement_pre_submit_policy_id,
-            project_id=effective_policy.project_id,
-            guide_id=effective_policy.guide_id,
-            guide_version=effective_policy.guide_version,
-            source_snapshot_id=effective_policy.source_snapshot_id,
-            source_snapshot_hash=effective_policy.source_snapshot_hash,
-            effective_policy_id=effective_policy.id,
-            effective_policy_hash=malformed_policy_hash,
-            lifecycle_status="compiled",
-            compiler_version=compiler_version,
-            compiled_bundle=replacement_bundle,
-            compiled_bundle_hash=replacement_bundle_hash,
-            checker_names=replacement_checker_names,
-            checker_configs=replacement_checker_configs,
-            created_by="test",
-        )
-        session.add(replacement_pre_submit_policy)
-        await session.flush()
-        session.add(
-            generated_post_submit_output_for_pre_submit(
-                effective_policy=effective_policy,
-                pre_submit_checker_policy_id=replacement_pre_submit_policy_id,
-                pre_submit_checker_bundle_hash=replacement_bundle_hash,
-            )
-        )
-        await session.commit()
 
     task = await create_draft_task(task_client, project["id"])
     screen = await task_client.post(
@@ -3048,6 +2831,7 @@ async def test_submission_pre_submit_rejects_hash_consistent_malformed_effective
         json={"reason": "screening checklist passed"},
     )
     assert screen.status_code == 200, screen.text
+    await corrupt_locked_policy_reads(monkeypatch, task["id"], "evidence")
     response = await task_client.post(
         f"/api/v1/tasks/{task['id']}/release",
         headers=auth_headers(),
@@ -3073,71 +2857,6 @@ async def test_submission_pre_submit_rejects_hash_consistent_malformed_packaging
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project = await create_active_project(task_client)
-    async with db_session.get_session_factory()() as session:
-        effective_policy = await session.scalar(
-            select(EffectiveProjectSubmissionArtifactPolicy).where(
-                EffectiveProjectSubmissionArtifactPolicy.project_id == project["id"],
-                EffectiveProjectSubmissionArtifactPolicy.guide_version == "v1",
-                EffectiveProjectSubmissionArtifactPolicy.lifecycle_status == "approved",
-            )
-        )
-        assert effective_policy is not None
-        pre_submit_policy = await session.scalar(
-            select(PreSubmitCheckerPolicy).where(
-                PreSubmitCheckerPolicy.effective_policy_id == effective_policy.id,
-                PreSubmitCheckerPolicy.lifecycle_status == "compiled",
-            )
-        )
-        assert pre_submit_policy is not None
-        replacement_bundle = dict(pre_submit_policy.compiled_bundle)
-        replacement_checker_names = list(pre_submit_policy.checker_names)
-        replacement_checker_configs = dict(pre_submit_policy.checker_configs)
-        compiler_version = pre_submit_policy.compiler_version
-        await delete_generated_post_submit_output_for_pre_submit(
-            session,
-            pre_submit_policy.id,
-        )
-        await session.delete(pre_submit_policy)
-        await session.flush()
-
-        malformed_policy_body = {
-            **effective_policy.effective_policy,
-            "packaging": {"package_required": "yes", "allowed_package_formats": "zip"},
-        }
-        malformed_policy_hash = canonical_json_hash(malformed_policy_body)
-        effective_policy.effective_policy = malformed_policy_body
-        effective_policy.effective_policy_hash = malformed_policy_hash
-
-        replacement_bundle["effective_policy_hash"] = malformed_policy_hash
-        replacement_bundle_hash = canonical_json_hash(replacement_bundle)
-        replacement_pre_submit_policy_id = str(uuid4())
-        replacement_pre_submit_policy = PreSubmitCheckerPolicy(
-            id=replacement_pre_submit_policy_id,
-            project_id=effective_policy.project_id,
-            guide_id=effective_policy.guide_id,
-            guide_version=effective_policy.guide_version,
-            source_snapshot_id=effective_policy.source_snapshot_id,
-            source_snapshot_hash=effective_policy.source_snapshot_hash,
-            effective_policy_id=effective_policy.id,
-            effective_policy_hash=malformed_policy_hash,
-            lifecycle_status="compiled",
-            compiler_version=compiler_version,
-            compiled_bundle=replacement_bundle,
-            compiled_bundle_hash=replacement_bundle_hash,
-            checker_names=replacement_checker_names,
-            checker_configs=replacement_checker_configs,
-            created_by="test",
-        )
-        session.add(replacement_pre_submit_policy)
-        await session.flush()
-        session.add(
-            generated_post_submit_output_for_pre_submit(
-                effective_policy=effective_policy,
-                pre_submit_checker_policy_id=replacement_pre_submit_policy_id,
-                pre_submit_checker_bundle_hash=replacement_bundle_hash,
-            )
-        )
-        await session.commit()
 
     task = await create_draft_task(task_client, project["id"])
     screen = await task_client.post(
@@ -3146,6 +2865,7 @@ async def test_submission_pre_submit_rejects_hash_consistent_malformed_packaging
         json={"reason": "screening checklist passed"},
     )
     assert screen.status_code == 200, screen.text
+    await corrupt_locked_policy_reads(monkeypatch, task["id"], "packaging")
     response = await task_client.post(
         f"/api/v1/tasks/{task['id']}/release",
         headers=auth_headers(),
@@ -3171,46 +2891,6 @@ async def test_submission_pre_submit_rejects_hash_consistent_incomplete_checker_
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project = await create_active_project(task_client)
-    async with db_session.get_session_factory()() as session:
-        effective_policy = await session.scalar(
-            select(EffectiveProjectSubmissionArtifactPolicy).where(
-                EffectiveProjectSubmissionArtifactPolicy.project_id == project["id"],
-                EffectiveProjectSubmissionArtifactPolicy.guide_version == "v1",
-                EffectiveProjectSubmissionArtifactPolicy.lifecycle_status == "approved",
-            )
-        )
-        assert effective_policy is not None
-        pre_submit_policy = await session.scalar(
-            select(PreSubmitCheckerPolicy).where(
-                PreSubmitCheckerPolicy.effective_policy_id == effective_policy.id,
-                PreSubmitCheckerPolicy.lifecycle_status == "compiled",
-            )
-        )
-        assert pre_submit_policy is not None
-        replacement_bundle = {
-            **pre_submit_policy.compiled_bundle,
-            "rules": [
-                rule
-                for rule in pre_submit_policy.compiled_bundle["rules"]
-                if rule["primitive"] != "require_file"
-            ],
-        }
-        replacement_bundle_hash = canonical_json_hash(replacement_bundle)
-        await delete_generated_post_submit_output_for_pre_submit(
-            session,
-            pre_submit_policy.id,
-        )
-        pre_submit_policy.compiled_bundle = replacement_bundle
-        pre_submit_policy.compiled_bundle_hash = replacement_bundle_hash
-        await session.flush()
-        session.add(
-            generated_post_submit_output_for_pre_submit(
-                effective_policy=effective_policy,
-                pre_submit_checker_policy_id=pre_submit_policy.id,
-                pre_submit_checker_bundle_hash=replacement_bundle_hash,
-            )
-        )
-        await session.commit()
 
     task = await create_draft_task(task_client, project["id"])
     screen = await task_client.post(
@@ -3219,6 +2899,7 @@ async def test_submission_pre_submit_rejects_hash_consistent_incomplete_checker_
         json={"reason": "screening checklist passed"},
     )
     assert screen.status_code == 200, screen.text
+    await corrupt_locked_policy_reads(monkeypatch, task["id"], "bundle")
     response = await task_client.post(
         f"/api/v1/tasks/{task['id']}/release",
         headers=auth_headers(),
@@ -3729,7 +3410,7 @@ async def test_finalize_submission_rejects_unsubmitted_submission_row(
     assert "submission must be submitted before repair check" in finalize.json()["detail"]
 
 
-async def test_finalize_submission_rejects_invalid_locked_context(
+async def test_finalization_receipt_replay_does_not_reload_policy(
     task_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -3742,13 +3423,7 @@ async def test_finalize_submission_rejects_invalid_locked_context(
         f"/api/v1/submissions/{stored_id}", headers=auth_headers(),
     )
     assert stored_response.status_code == 200, stored_response.text
-    async with db_session.get_session_factory()() as session:
-        task = await session.get(WorkstreamTask, started_task["id"])
-        assert task is not None
-        policy = await session.get(PreSubmitCheckerPolicy, task.locked_pre_submit_checker_policy_id)
-        assert policy is not None
-        policy.compiled_bundle = {**policy.compiled_bundle, "tampered": True}
-        await session.commit()
+    await corrupt_locked_policy_reads(monkeypatch, started_task["id"], "stale_bundle")
 
     set_dev_actor(monkeypatch, roles="project_manager", subject="project-manager-subject")
     finalize = await task_client.post(
@@ -4806,22 +4481,12 @@ async def test_queued_gate_policy_error_is_failed_and_repairable(
         assert submission is not None
         assert task is not None
         assert queued_run is not None
-        pre_submit_policy = await session.get(
-            PreSubmitCheckerPolicy,
-            submission.locked_pre_submit_checker_policy_id,
-        )
-        assert pre_submit_policy is not None
-        pre_submit_policy.compiled_bundle = {
-            **pre_submit_policy.compiled_bundle,
-            "tampered": True,
-        }
-        await session.commit()
-
-    with pytest.raises(CheckerPolicyInvalid):
-        cast(Any, run_pre_review_gate).run(
-            queued_run.id,
-            expected_worker_requester_provenance(),
-        )
+    with pytest.MonkeyPatch.context() as fault:
+        await corrupt_locked_policy_reads(fault, started_task["id"], "stale_bundle")
+        with pytest.raises(CheckerPolicyInvalid):
+            cast(Any, run_pre_review_gate).run(
+                queued_run.id, expected_worker_requester_provenance(),
+            )
 
     async with db_session.get_session_factory()() as session:
         failed_run = await session.get(db_models.CheckerRun, queued_run.id)
@@ -4846,10 +4511,6 @@ async def test_queued_gate_policy_error_is_failed_and_repairable(
             )
             == 0
         )
-        restored_bundle = dict(pre_submit_policy.compiled_bundle)
-        restored_bundle.pop("tampered", None)
-        pre_submit_policy.compiled_bundle = restored_bundle
-        await session.commit()
 
     monkeypatch.setattr(task_service_module, "enqueue_pre_review_gate", original_enqueue)
     set_dev_actor(monkeypatch, roles="project_manager", subject="project-manager-subject")
