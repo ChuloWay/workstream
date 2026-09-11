@@ -413,3 +413,37 @@ def test_compute_cli_is_read_only_and_stable(tmp_path: Path) -> None:
     result = subprocess.run(command, text=True, capture_output=True, check=False)
     assert result.returncode == 2
     assert result.stderr == "coverage-policy: mode_required\n"
+
+
+def test_backend_coverage_tracks_sqlalchemy_greenlet_resumption(tmp_path: Path) -> None:
+    """Measure resumed async code in its own file after SQLAlchemy greenlet I/O."""
+    from coverage import Coverage
+
+    probe = tmp_path / "greenlet_probe.py"
+    probe.write_text(
+        "import asyncio\n"
+        "from sqlalchemy.util.concurrency import greenlet_spawn, await_only\n"
+        "def database_call():\n"
+        "    await_only(asyncio.sleep(0))\n"
+        "    return 7\n"
+        "async def run():\n"
+        "    result = await greenlet_spawn(database_call)\n"
+        "    assert result == 7\n"
+        "    return result\n"
+        "assert asyncio.run(run()) == 7\n",
+        encoding="utf-8",
+    )
+    data = tmp_path / ".coverage-probe"
+    config = SCRIPTS.parent / "pyproject.toml"
+    result = subprocess.run(
+        [sys.executable, "-m", "coverage", "run", f"--rcfile={config}",
+         f"--data-file={data}", str(probe)],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    measurement = Coverage(data_file=str(data), config_file=False)
+    measurement.load()
+    _, statements, _, missing, _ = measurement.analysis2(str(probe))
+    assert len(statements) == 10
+    assert missing == [], "SQLAlchemy greenlet return lost resumed async execution"
+    assert set(measurement.get_data().lines(str(probe))) == set(statements)

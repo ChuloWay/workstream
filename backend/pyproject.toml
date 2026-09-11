@@ -62,3 +62,7 @@ required-environments = [
   "sys_platform == 'linux' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython'",
   "sys_platform == 'linux' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython'",
 ]
+
+[tool.coverage.run]
+# SQLAlchemy async I/O crosses greenlets; trace each execution context correctly.
+concurrency = ["thread", "greenlet"]
