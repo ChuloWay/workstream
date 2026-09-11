@@ -50,9 +50,9 @@ gRPC, or asynchronous transport without changing product authority semantics.
 
 It contains no Workstream product role or permission. Email, display name,
 skills, reputation, and relationship metadata are never authorization keys.
-During the compatibility period, `/api/v1/auth/me` and actor registration do
-not copy issuer email or display name, and those response fields remain null.
-Canonical profile metadata is owned by the later actor-profile migration.
+Canonical self-read is `GET /api/v1/actors/me`. Actor admission does not copy
+issuer email or display name. Human-owned profile metadata is updated through
+`PATCH /api/v1/actors/me`; verified issuer claims do not grant product roles.
 
 Human first access may create a canonical human profile and identity link.
 Unknown service subjects, agents, and Spaces are denied without implicit
@@ -1156,26 +1156,33 @@ committed custody chain, then returns the original response without new PREP or
 allowed evidence. Later grant revocation denies new or changed creation
 requests but does not rewrite an already committed idempotent response.
 
-Guide create, guide update, and source-snapshot metadata create require an
-active human with an effective system-scoped or exact-project Project Manager
-grant carrying `project.guide.manage`. Each route requires a UUID
-`Idempotency-Key` before actor first-access provisioning and consumes one opaque,
-transaction-bound PREP handle after locking the exact project, draft guide, and
-current source lineage. Guide create produces only a draft guide. Snapshot
-creation separately records the sanitized source manifest and may commit one
-setup-run queue intent; broker dispatch happens only after commit and never
-carries the prepared handle.
+Guide creation and draft metadata updates require an active human with an
+effective system-scoped or exact-project Project Manager grant carrying
+`project.guide.manage`. Each public mutation requires a UUID `Idempotency-Key`
+before actor first-access provisioning. Guide creation consumes distinct,
+transaction-bound guide-create and internal source-consent PREP handles after
+locking the project. It atomically commits the draft guide, complete document
+set, paired same-key replay records and one `awaiting_documents` setup.
+There is no separate public source-snapshot creation operation.
+
+The create response supplies document IDs. The manager uploads each original
+through `POST /api/v1/projects/{project_id}/guides/{guide_id}/documents/{document_id}/content`.
+Exact membership and current ingest authority are checked before body reads.
+Only committed bytes for every declared document can trigger automatic setup.
+Broker dispatch happens after commit and never carries a prepared handle.
+Guide-create replay reauthorizes both original actions against current authority
+and returns the original document IDs and initial setup response.
 
 Guide create/update no longer accept embedded review, revision, retired
 payout/economic, or contribution-record configuration fields. Guide create
-requires task examples stored as immutable PostgreSQL JSON with the guide
-metadata. AUTH receives the request digest, example hash and count; the guide
+requires the complete document declarations and task examples stored as
+immutable PostgreSQL metadata. AUTH receives the request digest, example hash and count; the guide
 and exact replay response are committed together. Document/upload snapshots
 bind that commitment and receive original PDF/DOCX/PPTX files through ART.
 Inline Markdown and URL/repository ingestion are unavailable. Only bounded
 metadata such as `change_summary` remains editable while the guide is draft.
-Exact committed retries return the recorded response without another
-mutation, setup run, or dispatch. Changed, concurrent-pending, cross-project,
+For guide creation and document upload, exact committed retries return the
+recorded response without another mutation, setup run, or dispatch. Changed, concurrent-pending, cross-project,
 stale-lineage, revoked, wrong-action, wrong-resource, or wrong-transaction use
 fails closed with no product write.
 
@@ -1218,7 +1225,7 @@ execution task, calls no provider, and does not make the hidden POL workflow liv
 | `project.create` (active) | `project.create` | `WS-AUTH-001-12C` |
 | `project.guide.create` (active) | `project.guide.manage` | `WS-AUTH-001-12D` |
 | `project.guide.update` (active) | `project.guide.manage` | `WS-AUTH-001-12D` |
-| `project.guide_source_snapshot.create` (active) | `project.guide.manage` | `WS-AUTH-001-12D` |
+| `project.guide_source_snapshot.create` (active internal paired consent) | `project.guide.manage` | `WS-AUTH-001-12D` |
 | `project.review_policy.update` (active) | `project.review_policy.manage` | `WS-XINT-003-02B` |
 | `project.revision_policy.update` (active) | `project.review_policy.manage` | `WS-XINT-003-02B` |
 | `project.guide_sufficiency_report.create` (active) | `project.guide.manage` | `WS-AUTH-001-12E` |

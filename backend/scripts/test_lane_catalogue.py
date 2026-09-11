@@ -201,6 +201,7 @@ PROJECT_MODULES = (
     "tests/projects/guide_compilation/finalization/test_authorization_postgresql.py",
 
     "tests/projects/test_active_guide_repository.py",
+            "tests/test_guide_document_intake.py",
     "tests/projects/guide_compilation/finalization/test_concurrency_postgresql.py",
     "tests/projects/guide_compilation/finalization/test_contracts.py",
     "tests/projects/guide_compilation/finalization/test_guards_postgresql.py",

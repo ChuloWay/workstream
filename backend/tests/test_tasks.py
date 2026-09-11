@@ -1026,22 +1026,9 @@ async def create_policy_bundle_for_guide(
         await session.flush()
         await session.commit()
 
-    snapshot_response = await client.post(
-        f"/api/v1/projects/{project_id}/guides/{guide_id}/source-snapshots",
-        headers=auth_headers(),
-        json={
-            "items": [
-                {
-                    "source_kind": "document",
-                    "source_label": f"guide-{guide_id}.pdf",
-                    "ingestion_adapter": "upload",
-                    "media_type": "application/pdf",
-                }
-            ]
-        },
-    )
-    assert snapshot_response.status_code == 201, snapshot_response.text
-    snapshot = snapshot_response.json()
+    from projects.guide_fixtures import read_guide_source_snapshot
+
+    snapshot = await read_guide_source_snapshot(project_id, guide_id)
     async with db_session.get_session_factory()() as session:
         setup = await session.scalar(
             select(ProjectSetupRun).where(

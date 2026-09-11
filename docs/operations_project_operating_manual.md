@@ -28,9 +28,10 @@ Target v0.1 checklist before releasing tasks. The
 remaining setup/activation work:
 
 - project name and slug exist
-- project guide metadata created with at least one ordinary-text task example
-- every assigned PDF/DOCX/PPTX guide original uploaded to ArtifactStore/S3
-- guide source snapshot captured
+- project guide metadata created with at least one ordinary-text task example and
+  the complete PDF/DOCX/PPTX document list
+- every declared original uploaded to ArtifactStore/S3 using its returned document ID
+- automatic setup starts after all declared documents have committed bytes
 - project owner setup material captured
 - latest project setup run visible through covered Project Manager or authorized
   Operator/Audit projection
@@ -74,7 +75,9 @@ it does not require a human reviewer pool, lease or decision endpoint.
 Unsupported false activation is rejected rather than silently switched to
 true. See the [implementation handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
 
-The guide source snapshot freezes guide/source material only. While the guide is
+Guide creation freezes the declared document set internally; there is no separate
+public source-snapshot creation step. The internal guide source snapshot freezes the declared document metadata and
+the guide task-example hash/count commitment. While the guide is
 still draft, an authorized covered Project Manager may attach or update review
 and revision policy records after snapshot capture because those records are
 activated as separate guide-policy context. Contribution policy is project-level

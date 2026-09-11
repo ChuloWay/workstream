@@ -131,9 +131,9 @@ cannot be reused as post-submission review-gate evidence. See the
 
 | Lifecycle stage | Status on `main` | What is already proven | What remains before v0.1 |
 | --- | --- | --- | --- |
-| Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls | Final end-to-end operational and conformance proof |
+| Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls; canonical `/actors/me` self-read with duplicate `/auth/me` removed | Final end-to-end operational and conformance proof |
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
-| Project Guide source custody | **Live foundation** | Project Manager original-document uploads; immutable metadata snapshots; exact run-scoped reads; S3-backed originals and isolated agent document inspection | Carry the same document generation through manager approval and guide activation; prove each enabled document reader |
+| Project Guide source custody | **Live foundation** | Guide creation declares documents and task examples; public document upload; immutable internal metadata snapshots; exact run-scoped reads; S3-backed originals and isolated agent document inspection | Carry the same document generation through manager approval and guide activation; prove each enabled document reader |
 | Unified Project Guide compilation | **Live automatic draft/findings setup** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization | Add manager proposal review, correction, approval and manual rerun; add deterministic post-submit projection and one checker-service port |
 | Contribution policy administration | **Hidden and proven** | Finance Authority adapter-binding lifecycle; ContributionPolicy read/create/update/publish/retire with exact Finance Authority; immutable operation and event history | Expose selected-policy validation, bind one published complete version to the active guide generation |
 | Task readiness and claim | **Foundation with grant-backed contributor commands** | Task records, assignments and locked work context; claim/start/contributor context use exact-project Submitter grants; separate manager context and system-Operator start | Bind the guide's ContributionPolicyVersion before `READY` and carry it through TaskAssignment without a current-policy lookup; finish ready queues, remaining management/read authority and durable assignment invalidation |
@@ -210,7 +210,9 @@ cannot be reused as post-submission review-gate evidence. See the
   permitted to manage.
 - Guide originals remain immutable in ArtifactStore; PostgreSQL holds metadata,
   versions, custody and the required task-example list. Guide creation requires
-  at least one nonblank example; a starting idea is sufficient and optional
+  at least one nonblank example and the complete nonempty document list. The
+  response supplies document IDs for the public binary upload route; no separate
+  source-snapshot creation call remains. A starting idea is sufficient and optional
   example fields do not repeat requirements from the guide. Each snapshot/run
   binds the exact version's examples. Upload admission checks bounded format, digest and size.
   Committed originals do not bypass the separate verification required for
@@ -457,7 +459,7 @@ reader does not need internal engineering records to understand the roadmap
 above. The main
 remaining trace sequence is:
 
-- Unified guide: `POL-04B1 -> POL-04B -> POL-05A -> AUTH-12F4 -> POL-05B -> POL-06A
+- Unified guide: `POL-04B1 -> POL-04B -> POL-04B2 -> POL-05A -> AUTH-12F4 -> POL-05B -> POL-06A
   -> AUTH-12G -> POL-06B -> POL-07 -> AUTH-12H`. `ARCH-04A` catalogue/schema
   reconciliation precedes approval-eligible `POL-04B` generations, and actual
   selected-capability conformance precedes `POL-07`/activation. POL-05 includes

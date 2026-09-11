@@ -645,6 +645,7 @@ def guide_payload(run_id: str) -> dict:
     return {
         "version": "v1",
         "change_summary": "Initial real API guide",
+        "documents": [{"label": f"guide-{run_id}.pdf", "media_type": "application/pdf"}],
         "task_examples": [
             {"content": "Review a claim using the project guide."},
             {"content": "Explain how a second claim should be handled.", "title": "Second example"},
@@ -780,6 +781,7 @@ async def exercise_guide_setup_contract(
     guide_id: str,
     run_id: str,
     *,
+    documents: list[dict],
     task_fixture: bool = False,
 ) -> dict:
     """Prove unified draft output, reads and manual policy authority through HTTP.
@@ -799,38 +801,20 @@ async def exercise_guide_setup_contract(
     Returns:
         Effective project submission artifact policy response.
     """
-    snapshot = await request_json(
-        client,
-        "POST",
-        f"/api/v1/projects/{project_id}/guides/{guide_id}/source-snapshots",
-        diagnostic_reader_token,
-        {
-            "items": [
-                {
-                    "source_kind": "document",
-                    "source_label": f"guide-{run_id}.pdf",
-                    "ingestion_adapter": "upload",
-                    "media_type": "application/pdf",
-                }
-            ]
-        },
-        201,
-        idempotency_key=str(uuid4()),
-    )
-    for item in snapshot["items"]:
+    for document in documents:
         from guide_compilation_e2e import guide_pdf_bytes
         payload = guide_pdf_bytes()
         upload = await client.post(
-            f"/api/v1/projects/{project_id}/guides/{guide_id}/source-snapshots/"
-            f"{snapshot['id']}/items/{item['id']}/artifact",
+            f"/api/v1/projects/{project_id}/guides/{guide_id}/documents/"
+            f"{document['document_id']}/content",
             headers={
                 "Authorization": f"Bearer {diagnostic_reader_token}",
                 "Idempotency-Key": str(uuid4()),
-                "Content-Type": item["media_type"] or "application/octet-stream",
+                "Content-Type": document["media_type"],
             },
             content=payload,
         )
-        ensure(upload.status_code == 202, f"guide source upload failed: {upload.text}")
+        ensure(upload.status_code == 202, f"guide document upload failed: {upload.text}")
     # Successful original uploads already commit document readiness. The guide
     # has no verifier/extractor work to drain. Deliver its queued compilation
     # below through the explicit scripted runtime used by this API drill.
@@ -840,6 +824,9 @@ async def exercise_guide_setup_contract(
         f"/api/v1/projects/{project_id}/guides/{guide_id}/setup-runs/latest",
         diagnostic_reader_token,
     )
+    # Internal lineage for the explicitly separate downstream fixture below;
+    # the client upload flow uses only document IDs returned by guide creation.
+    snapshot = {"id": queued_setup["source_snapshot_id"]}
     ensure(queued_setup["documents_ready_at"] is not None, "guide originals are not committed")
     from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
 
@@ -899,6 +886,7 @@ async def exercise_guide_setup_contract(
         f"{setup_run['output_sufficiency_report_id']}",
         diagnostic_reader_token,
     )
+    snapshot["bundle_hash"] = report["source_snapshot_hash"]
     reports = await request_json(
         client,
         "GET",
@@ -1386,21 +1374,16 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             ]
             == "project_role_grant.revoke"
         )
-        await request_json(client, "GET", "/api/v1/auth/me", expected_status=401)
-        await request_json(client, "GET", "/api/v1/auth/me", invalid_token, expected_status=401)
+        await request_json(client, "GET", "/api/v1/actors/me", expected_status=401)
+        await request_json(client, "GET", "/api/v1/actors/me", invalid_token, expected_status=401)
         await request_json(
-            client, "GET", "/api/v1/auth/me", wrong_issuer_token, expected_status=401
+            client, "GET", "/api/v1/actors/me", wrong_issuer_token, expected_status=401
         )
         await request_json(
-            client, "GET", "/api/v1/auth/me", wrong_audience_token, expected_status=401
+            client, "GET", "/api/v1/actors/me", wrong_audience_token, expected_status=401
         )
-        await request_json(client, "GET", "/api/v1/auth/me", expired_token, expected_status=401)
-        await request_json(client, "GET", "/api/v1/auth/me", future_nbf_token, expected_status=401)
-        manager = await request_json(client, "GET", "/api/v1/auth/me", manager_token)
-        assert manager["auth_source"] == "flow"
-        assert manager["is_dev_auth"] is False
-        assert manager["roles"] == ["project_manager"]
-
+        await request_json(client, "GET", "/api/v1/actors/me", expired_token, expected_status=401)
+        await request_json(client, "GET", "/api/v1/actors/me", future_nbf_token, expected_status=401)
         manager_profile = await request_json(
             client,
             "GET",
@@ -1779,6 +1762,7 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             project["id"],
             guide["id"],
             run_id,
+            documents=guide["documents"],
         )
         await request_json(
             client,
@@ -1817,6 +1801,7 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             project["id"],
             guide["id"],
             run_id,
+            documents=guide["documents"],
             task_fixture=True,
         )
         active = await seed_active_guide_for_pre_12h_e2e(
@@ -1930,8 +1915,6 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             {"reason": "real API release"},
         )
 
-        worker = await request_json(client, "GET", "/api/v1/auth/me", worker_token)
-        assert worker["roles"] == ["worker"]
         canonical_actor = await request_json(
             client,
             "GET",

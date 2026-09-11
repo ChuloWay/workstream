@@ -249,6 +249,10 @@ POL_04B_PARTITION_TARGETS = frozenset({
     'backend/scripts/guide_compilation_e2e.py',
 })
 
+POL_04B2_PARTITION_TARGETS = frozenset({
+    "backend/app/modules/projects/document_upload.py",
+})
+
 POL_04B_REMOVED_TARGETS = frozenset({
     'backend/app/modules/artifacts/guide_bindings.py',
     'backend/app/modules/artifacts/guide_docx.py',
@@ -478,6 +482,7 @@ def _validate_additive_partition_transition(
         | POL_04A3_PARTITION_TARGETS
         | POL_04B1_PARTITION_TARGETS
         | POL_04B_PARTITION_TARGETS
+        | POL_04B2_PARTITION_TARGETS
 
         | API_DRILL_PARTITION_TARGETS
         | AUTH_12I_TARGETS
