@@ -5,9 +5,11 @@
 This runbook assigns ownership and stop conditions for the staged WS-AUTH-001
 authorization rollout. The verified-token configuration and evidence commands
 are executable contracts. Canonical actor resolution, actor-self authorization,
-one-time bootstrap, and administrative grant APIs are active through AUTH-08;
-later actor lifecycle and project-grant sections remain staged until their
-owning implementation chunks.
+one-time bootstrap, administrative and project grants, and actor/link lifecycle
+controls are implemented. TASK claim, start and work-context operations use
+canonical project authority. Other feature activations remain operation-specific;
+consult `docs/roadmap_status.md` rather than inferring availability from a grant
+or catalogue entry.
 
 ## Ownership
 
@@ -209,17 +211,16 @@ the database and install `0001_v01_baseline`. Operators must never infer a
 service identity from subject syntax, email, display name, token role, or
 adapter provenance.
 
-Git history for the completed AUTH-06 change records the exact deprecated
-compatibility identifier. That temporary,
-enumerated intake route writes only `LegacyWorkflowEligibility` and cannot
-create a grant or change a canonical profile. Its direct compatibility
-consumers are assigned-submitter claim, assigned-submitter start, and submission
-intake. Operator start override does not use the bridge. Current
-ARCH-03B/03C remove the replacement task claim/start consumers and activate
-their exact authority. Canonical admission-backed Submission already has its
-own hidden path; ARCH-02I removes legacy public reachability after its full
-prerequisites, and CP09 removes dead economic schema only after zero consumers.
-Historical broad AUTH-13/14 are not additional implementation lanes.
+The self-activation profile route and TASK eligibility bridge have been
+removed. Claim and start require canonical actor/lifecycle checks and an active
+Submitter grant for the exact project; an authorized Operator start override
+uses its explicit operation and reason. Retained eligibility rows do not grant
+TASK authority and have not been deleted. The old public submission-packet POST
+is also removed. Canonical admission-backed Submission creation remains hidden;
+its command validates current authority, exact assignment and locked policy
+lineage before consuming ART admission in the same transaction. Public creation
+and the remaining management/read-route cutovers remain separate work, not
+capabilities implied by this retirement.
 
 ## Contributor Attribution Runtime Guard
 
@@ -506,8 +507,9 @@ v0.1 baseline.
 The REV transfer adds no migration. The ART transfer does not grant Operator
 authority; its `OPERATOR` suffix denotes only future activation custody, and
 verification retry remains independently gated from read/status actions.
-Catalogue totals are 73 PermissionIds, 112 ActionIds, 68 active actions, and
-44 planned actions. CP01A added four initially unavailable adapter-binding actions under
+Catalogue entries and explicit runtime composition determine availability;
+a planned action is not activated by its presence in the catalogue.
+CP01A added four initially unavailable adapter-binding actions under
 `WS-ARCH-001-CP01A` custody; it adds no evaluator, identity, grant, service
 matrix row, route, or activation. CP01B registered five initially unavailable
 `contribution.policy.*` actions with the same non-activation guarantees. CP05

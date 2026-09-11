@@ -413,6 +413,18 @@ tests, races, deterministic checks and final reviews remain required.
 
 ## Reconciliation
 
+- Review repairs: preserve the complete Alembic chain in the graph assertion,
+  including `0016_guide_document_runtime`; remove outdated rollout/eligibility
+  claims from the AUTH runbook; distinguish target contribution-policy locks,
+  submission handoff and canonical recovery from retained runtime routes in the
+  operating manual. No pending feature is activated by these documentation fixes.
+- Review identified pre-existing database-level Submission ownership debt:
+  assignment and predecessor references have individual rather than composite
+  ownership constraints. This change does not alter those constraints or expose
+  a new writer. Existing TASK/ART command validation enforces exact ownership;
+  database-enforced lineage against privileged direct SQL remains a separate
+  hardening concern, not a claimed guarantee of this change.
+
 Retained-packet integration tests exercise actual checker routing, retry,
 revision-version visibility, audit redaction and locked lineage without calling
 the removed public writer. One audit-read test explicitly seeds historical
