@@ -43,6 +43,9 @@ not weaken it to admit an old JSON packet as an ART-backed Submission.
   wire the existing AUTH and audit implementations through TASK public ports.
   No new private-import debt entry or validator exception is permitted.
 - Catalogue parity migration only if required; no retained-data deletion.
+- Coverage concurrency configuration and its existing contract tests: repair
+  SQLAlchemy greenlet line attribution discovered while verifying this change.
+  No workflow, test-selection, exclusion, dependency or floor weakening.
 
 ### Not allowed
 
@@ -139,6 +142,16 @@ or asynchronous invalidation completion.
   activation; exact-project authority and assignment/lineage preservation.
 
 ## Evidence
+
+Coverage inspection found cross-file line attribution in raw hosted lane data.
+A bounded SQLAlchemy `greenlet_spawn`/`await_only` reproduction showed resumed
+application lines attributed to the caller under default thread-only tracing.
+The repository now declares thread and greenlet concurrency in its existing
+coverage configuration, with an exact-line regression in
+`backend/tests/test_coverage_contract.py`. Earlier percentages measured without
+that setting cannot certify coverage; full hosted measurement must be repeated.
+Test execution outcomes remain distinct from coverage measurement. No threshold
+is reduced and no parallel coverage mechanism is introduced.
 
 The focused proof lives under `backend/tests/authorization/task_authority/`,
 with retained TASK/checker/read tests and current intake/archive owners listed

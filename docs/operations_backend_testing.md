@@ -52,6 +52,14 @@ prevent cleanup; recover manually with the database provisioning credential, tar
 
 ## Candidate coverage floor
 
+All coverage collection uses `backend/pyproject.toml` with
+`concurrency = ["thread", "greenlet"]`. SQLAlchemy async operations switch
+greenlets within a thread; default thread-only tracing can assign executed
+lines to the wrong source file. Do not override that setting in local or
+hosted coverage commands. The coverage-contract suite checks actual line
+attribution across SQLAlchemy async switches using the repository configuration.
+This setting changes measurement, not test selection, exclusions or floors.
+
 `coverage_policy.py --compute-floor` is a read-only preparation command. Point
 `--coverage-json` at temporary complete-app coverage JSON; the command validates
 the application-file inventory and prints the exact statement percentage
