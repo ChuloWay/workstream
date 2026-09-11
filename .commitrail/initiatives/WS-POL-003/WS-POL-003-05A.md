@@ -62,6 +62,11 @@ replacement rather than preserving that obsolete route for fixtures.
 3. Record approval separately from setup finalization, atomically with canonical
    artifact/effective/pre-policy lifecycle writes and authorization evidence.
    Bind operation replay to the exact displayed target and fresh authority.
+   `SubmissionPolicyMutationIdempotencyRecord` remains the existing reservation
+   and replay owner; the immutable approval operation is its committed product
+   provenance, not a second idempotency protocol. Effective/pre-policy custody
+   must require both that reservation and the exact immutable approval operation.
+   Retain manual draft creation custody only for still-supported create/update.
    Approval-aware finalization replay must prove the original draft projection
    digest and the exact authorized lifecycle transition using this provenance;
    coercing arbitrary policy state to draft is not sufficient evidence.
@@ -91,6 +96,9 @@ replacement rather than preserving that obsolete route for fixtures.
   remains inside the supplied session/root transaction with no hidden commit.
 - [ ] PostgreSQL proves atomic approval/provenance, immutable finalization,
   composite ownership, rollback and exact replay.
+  `test_unified_approval_postgresql_requires_reservation_and_operation` must
+  independently remove each relation from an otherwise valid transaction and
+  prove rejection, alongside a successful complete control.
 - [ ] Correction produces one successor on replay, binds bounded feedback, and
   cannot restart uncertain provider work or mutate previous evidence.
 - [ ] Removed manual approval callers/tests are replaced with required behavior
@@ -122,3 +130,16 @@ coverage result. No execution result is claimed yet.
 - Remaining risks: manual approval test fixtures have downstream consumers;
   successor generation must retain exact original-document custody without a
   second artifact access path. Trace both before implementation.
+
+## Plan review disposition
+
+ARC-POL05A-001: retain the existing reservation/replay owner and require a
+separate immutable product provenance relation on all approval outputs, as
+specified above. This resolves the ambiguity without another replay subsystem.
+The other reviewed corrections assign both compilation stages to CHECKERS,
+require approval-aware finalization validation and isolate correction successors
+from automatic source consent. Evidence references in the review package must
+be display-only source labels/locations; runtime document handles are excluded.
+Correction feedback is optional input data, not a new implementation version;
+its canonical encoding omits an absent feedback field and binds a present one.
+This keeps unchanged semantic inputs unchanged without an old/new runtime path.
