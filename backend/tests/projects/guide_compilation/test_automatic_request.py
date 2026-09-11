@@ -1,6 +1,7 @@
 """Automatic request proof using real authorized source mutations and ART material."""
 
 from tests.projects.guide_compilation.helpers import runtime_configuration
+from tests.migration_fixtures import current_schema_revision
 
 from uuid import UUID
 
@@ -392,7 +393,7 @@ async def test_retained_automatic_evidence_prevents_configuration_downgrade(
     async with factory() as session:
         assert (
             await session.scalar(text("select version_num from alembic_version"))
-            == "0016_guide_document_runtime"
+            == current_schema_revision()
         )
         assert (
             await session.scalar(

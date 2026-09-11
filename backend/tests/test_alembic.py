@@ -86,6 +86,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0016_guide_document_runtime",
         "0015_guide_runtime_configuration",
         "0014_project_role_scope",
         "0013_compilation_request_origin",
@@ -119,6 +120,20 @@ def test_fresh_database_matches_committed_manifest(
     actual = canonical_bytes(asyncio.run(build_manifest(isolated_database_env)))
     assert hashlib.sha256(actual).hexdigest() == hashlib.sha256(expected).hexdigest()
     assert actual == expected
+
+
+def test_repeated_upgrade_head_preserves_current_database(
+    isolated_database_env: str, migration_lock
+) -> None:
+    """An already-current database stays usable without recreation or data loss."""
+    config = _alembic_config()
+    with migration_lock():
+        before = asyncio.run(_database_snapshot(isolated_database_env))
+        assert before["versions"] == [HEAD_REVISION]
+        command.upgrade(config, "head")
+        command.upgrade(config, "head")
+        after = asyncio.run(_database_snapshot(isolated_database_env))
+    assert after == before
 
 
 def test_current_head_installs_submission_lineage_contract(

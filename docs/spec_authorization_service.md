@@ -284,7 +284,10 @@ producing 111 rows with 61 active and 50 planned actions. AUTH-12B2 then
 activates exact setup finalization, yielding 62 active and 49 planned
 actions without adding a row. CP05 activates the five existing ContributionPolicy
 actions, yielding 67 active and 44 planned actions. POL-04B1 adds the automatic compilation
-request action, making the current totals 112 actions: 68 active and 44 planned. Only active human
+request action, historically making 112 actions: 68 active and 44 planned.
+These are activation-history counts, not the current registry census. The
+current typed catalogue also includes the TASK project-authority cutover.
+Only active human
 Finance Authority with system or exact-project scope is eligible. The explicit
 CON adapter uses serialized reads and transaction-bound PREP for mutations;
 committed replay requires fresh read authority. Registration custody remains
@@ -1292,16 +1295,23 @@ The two collection routes return and transactionally bind at most the newest
 100 canonical rows in deterministic newest-first order. Older retained records
 remain available only through their exact individually authorized read route.
 
-`WS-AUTH-001-CONTRIBUTOR-FOUNDATION` adds no permission or authorization path.
-It clean-cuts TaskAssignment and Submission attribution to `contributor_id`,
-binds both fields to canonical human ActorProfiles in PostgreSQL, and exposes
-one actor-owned transaction participant for claim and submission. The
-participant locks the exact profile and verified issuer/subject link, requires
-both to be active human identity state, returns no identity or authority data,
-and runs after coarse legacy role admission but before resource locks. A
-non-human or inactive identity returns `active_contributor_required`; missing,
-mismatched, or unavailable canonical identity state returns retryable
-`contributor_identity_unavailable`.
+`WS-AUTH-001-CONTRIBUTOR-FOUNDATION` established TaskAssignment and Submission
+`contributor_id` references to canonical human ActorProfiles in PostgreSQL.
+The task-project-grant authorization change replaces its exclusive write-guard
+wrapper and self-activated eligibility bridge with existing canonical AUTH.
+TASK locks the task and active assignment before AUTH locks the exact current
+profile, identity link and applicable grant. Claim/start/contributor context
+require an active exact-project Submitter grant; manager context and reasoned
+Operator start use their separate canonical permissions. Token role strings
+do not authorize these operations. Command denials use
+`permission_not_granted`; database unavailability rolls back with retryable
+`task_authority_unavailable`. Identity resolution retains its own earlier
+failure contract.
+
+The public JSON packet-creation POST is removed, not aliased or replaced by a
+second authorization path. Existing admission-backed creation stays hidden,
+uses TASK-first locked context and canonical submission authority, and preserves
+atomic ART consumption. Retained contributor data and submission reads remain.
 
 ## Migration And Compatibility
 

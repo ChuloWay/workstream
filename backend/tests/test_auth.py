@@ -84,8 +84,8 @@ def _application_paths(app) -> set[str]:
     return paths
 
 
-def test_legacy_submitter_eligibility_adapter_has_a_shrinking_static_allowlist() -> None:
-    """Confine the temporary bridge to its owner, lifecycle view, and intake gates."""
+def test_retired_submitter_eligibility_bridge_has_no_runtime_consumers() -> None:
+    """Do not reintroduce the removed self-activation authority path."""
     app_root = Path(__file__).resolve().parents[1] / "app"
     compatibility_name = "LegacyWorkflowEligibilityCompatibility"
     consumers: set[str] = set()
@@ -138,20 +138,8 @@ def test_legacy_submitter_eligibility_adapter_has_a_shrinking_static_allowlist()
             }
         )
 
-    assert consumers == {
-        "modules/actors/service.py",
-        "modules/tasks/service.py",
-    }
-    assert sorted(compatibility_calls) == [
-        (
-            "_require_legacy_submitter_eligibility",
-            "get_active_submitter_eligibility",
-        ),
-        ("claim_task", "_require_legacy_submitter_eligibility"),
-        ("create_submission", "_require_legacy_submitter_eligibility"),
-        ("get_task_work_context", "get_active_submitter_eligibility"),
-        ("start_task", "_require_legacy_submitter_eligibility"),
-    ]
+    assert consumers == set()
+    assert compatibility_calls == []
 
 
 def current_task_name() -> str:
