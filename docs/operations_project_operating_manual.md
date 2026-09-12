@@ -193,14 +193,14 @@ project rules using the canonical CHECKERS compiler. Post-submit policy is a
 separate deterministic projection of the same unified result; no evaluator
 runs during setup or approval.
 
-The planned exact-compilation review-package surface uses
+The internally implemented exact-compilation review-package operation uses
 `project.guide_compilation.review_package.read` (AUTH-12F4), requiring
 `project.guide.manage` from a covered Project Manager. Operator/Audit diagnostic
-authority does not grant access to the complete proposal. The separate planned
+authority does not grant access to the complete proposal. The separate implemented
 `project.guide_compilation.correction.request` permits only the covered Project
 Manager to correct the exact known terminal result. These are new object-scoped
-contracts, not capabilities already provided by status-only setup reads.
-POL-05B exposes them before approval; AUTH-12G/POL-06B separately provide the
+contracts with internal AUTH-12F4 authorization; status-only setup reads do not
+provide them. Public API wiring remains POL-05B work; AUTH-12G/POL-06B separately provide the
 exact post-policy draft read before post-policy approval.
 
 The post-submit checker setup read returns only bounded operator summaries:
