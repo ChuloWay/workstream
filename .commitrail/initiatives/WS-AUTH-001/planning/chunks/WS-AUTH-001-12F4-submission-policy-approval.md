@@ -1,6 +1,10 @@
 # Chunk Contract: WS-AUTH-001-12F4 - Unified Pre-Submit Approval Activation
 
-Status: Proposed after hidden WS-POL-003-05A; inactive. Risk: L1.
+Durable disposition: Complete. Risk: L1.
+
+Adopted implementation record: [AUTH-12F4](../../WS-AUTH-001-12F4.md).
+POL-05A is delivered; this contract supplies its authorization prerequisite
+for subsequent POL-05B public composition.
 
 ## Goal
 

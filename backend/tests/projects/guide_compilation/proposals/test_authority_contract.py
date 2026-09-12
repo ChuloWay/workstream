@@ -211,7 +211,7 @@ def test_complete_proposal_read_requires_manager_content_permission():
 
     definition = ACTION_BY_ID[ActionId.PROJECT_GUIDE_COMPILATION_REVIEW_PACKAGE_READ]
     assert definition.permission_id is PermissionId.PROJECT_GUIDE_MANAGE
-    assert definition.availability is ActionAvailability.PLANNED
+    assert definition.availability is ActionAvailability.ACTIVE
     assert definition.permission_id in ADMIN_ROLE_PERMISSIONS[AdminRole.PROJECT_MANAGER]
     for role in (AdminRole.OPERATOR, AdminRole.AUDIT_AUTHORITY):
         assert PermissionId.PROJECT_SETUP_DIAGNOSTIC_READ in ADMIN_ROLE_PERMISSIONS[role]

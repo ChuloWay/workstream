@@ -137,7 +137,7 @@ and retained attempts without runtime configuration are excluded from reclaim. A
 results resume persistence and projection without another model call.
 
 POL-05A supplies hidden complete-proposal review, pre-submission approval and
-setup-wide correction. AUTH-12F4 and POL-05B still own public authorization and
+setup-wide correction. AUTH-12F4 supplies current Project Manager authority; POL-05B still owns public
 manager-facing exposure. The manual artifact-policy approval route is removed. Neither warning acknowledgement nor
 post-submit policy correction dispatches inference. Operators must not invoke
 projectors directly or rewrite retained attempt evidence.
@@ -165,8 +165,7 @@ The active review/revision policy setup endpoints are:
 
 Unified proposal approval and correction have no public route yet. The latest
 setup run exposes bounded diagnostics and output IDs; the hidden review package
-contains the complete pre/post proposal and catalogue-growth handoff. AUTH-12F4
-and POL-05B expose manager review, approval and manual rerun. Post-submit policy
+contains the complete pre/post proposal and catalogue-growth handoff. AUTH-12F4 supplies their authority; POL-05B exposes manager review, approval and manual rerun. Post-submit policy
 projection remains POL-06.
 
 The two policy `PUT` routes require a UUID `Idempotency-Key` and a quoted
@@ -185,7 +184,7 @@ Policy truth remains in the canonical versioned policy rows, not the setup
 ledger. POL-04B owns live unified wiring; POL-05A/05B and POL-06A/06B own separate
 append-only approval/projection/correction operations linked to that receipt.
 The approval/post-policy actions remain unavailable until their exact
-AUTH-12F4/12G activation; this is the target operator flow, not a claim that
+POL-05B public composition and AUTH-12G activation; this is the target operator flow, not a claim that
 those commands are already live.
 
 An authorized Project Manager reviews the complete bounded proposal before
