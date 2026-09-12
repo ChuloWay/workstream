@@ -165,14 +165,21 @@ async def test_real_authority_denial_has_no_product_or_allowed_writes(
         if authority == "revoked":
             await revoke_review_grant(factory, actor, grant)
         elif authority == "foreign":
-            from app.modules.projects.models import Project
+            from project_create_fixtures import seed_authorized_project
 
             other_project = uuid4()
             async with factory() as session, session.begin():
-                session.add(Project(id=str(other_project), name="Other project", slug=str(other_project)))
+                await seed_authorized_project(
+                    session,
+                    project_id=str(other_project),
+                    name="Other project",
+                    slug=str(other_project),
+                )
             actor, _ = await seed_review_actor(factory, other_project)
         elif authority == "system_manager":
-            actor, _ = await seed_review_actor(factory, None, role="project_manager", scope="system")
+            actor, _ = await seed_review_actor(
+                factory, None, role="project_manager", scope="system"
+            )
         else:
             actor, _ = await seed_review_actor(factory, None, role=authority, scope="system")
         with pytest.raises(GuideProposalError, match="authority_unavailable"):

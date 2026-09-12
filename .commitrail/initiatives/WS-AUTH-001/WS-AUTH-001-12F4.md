@@ -167,3 +167,11 @@ active hidden proposal authority from pending POL-05B public composition.
 Database negative fixtures use the actual `project_manager` role with system
 scope and an actual other-project manager grant. Neither case substitutes an
 invalid role token or an unrelated Audit grant for the boundary being tested.
+
+Shared proposal value builders live in a non-test support module. Importing
+collected test modules from the new AUTH tests caused deterministic UUID
+parameter IDs to differ between full collection and individual lane execution.
+Moving the existing builders preserves their single owner and assertions while
+making collection independent of those cross-test imports; the lane runner and
+selection validation are unchanged. Foreign-project fixtures use the existing
+authorized project-creation helper before issuing their Project Manager grant.

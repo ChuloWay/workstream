@@ -12,7 +12,7 @@ from app.modules.authorization.runtime import (
     IdentityLinkStatus,
 )
 from tests.authorization.guide_compilation_projections.support import Session
-from tests.projects.guide_compilation.proposals.test_authority_contract import authority_case
+from tests.projects.guide_compilation.proposals.contract_support import authority_case
 
 
 class Case:

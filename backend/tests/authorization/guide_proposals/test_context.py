@@ -14,7 +14,7 @@ from app.modules.authorization.catalogue import (
 from app.modules.authorization.domain.guide_proposals import proposal_resource
 from app.modules.authorization.catalogue import GUIDE_PROPOSAL_ACTION_IDS
 from app.modules.authorization.runtime import authorization_resource_digest
-from tests.projects.guide_compilation.proposals.test_authority_contract import authority_case
+from tests.projects.guide_compilation.proposals.contract_support import authority_case
 
 
 @pytest.mark.parametrize("action", sorted(GUIDE_PROPOSAL_ACTION_IDS))
