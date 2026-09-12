@@ -100,6 +100,10 @@ check establishes one current approval even if application supersession is
 omitted. Prove that omission independently of the duplicate-root case and keep
 normal replacement valid. Register new tests in the explicit project lane
 catalogue and verify full collection before hosted execution.
+The lifecycle invariant is bidirectional: an approval with an immutable
+successor must remain superseded. Reject direct-SQL reactivation of all three
+predecessor policy rows even when their original approval custody is intact;
+the successor must remain the sole current approval after rollback.
 
 1. Expose a bounded exact-compilation package containing validated findings,
    artifact policy, requirements, separate pre/post bindings, suggestions and

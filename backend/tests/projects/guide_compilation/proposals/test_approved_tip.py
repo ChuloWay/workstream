@@ -86,3 +86,37 @@ async def test_database_rejects_duplicate_approved_tip_and_allows_linked_success
                                         {"id": str(first.artifact_policy_id)}) == "superseded"
             assert await session.scalar(text("SELECT prior_approval_operation_id FROM project_guide_proposal_approvals "
                                              "WHERE operation_id=:id"), {"id": second.operation_id}) == first.operation_id
+        await assert_predecessor_cannot_be_reactivated(factory, first)
+
+
+async def assert_predecessor_cannot_be_reactivated(factory, predecessor):
+    """Retained valid custody cannot authorize a second current tip via direct SQL."""
+    rows = (
+        ("submission_artifact_policies", predecessor.artifact_policy_id, "approved"),
+        ("effective_project_submission_artifact_policies", predecessor.effective_policy_id, "approved"),
+        ("pre_submit_checker_policies", predecessor.pre_submit_policy_id, "compiled"),
+    )
+    async with factory() as session:
+        before = {}
+        for table, identity, _ in rows:
+            before[table] = (await session.execute(text(
+                f"SELECT lifecycle_status,superseded_at FROM {table} WHERE id=:id"),
+                {"id": str(identity)})).one()
+        timestamps = {row.superseded_at for row in before.values()}
+        assert len(timestamps) == 1 and None not in timestamps
+    with pytest.raises(DBAPIError, match="proposal approval lifecycle mismatch"):
+        async with factory() as session, session.begin():
+            for table, identity, status in rows:
+                await session.execute(text(f"UPDATE {table} SET lifecycle_status=:status, superseded_at=NULL WHERE id=:id"),
+                                      {"id": str(identity), "status": status})
+            await session.execute(text("SET CONSTRAINTS guide_proposal_approval_custody IMMEDIATE"))
+    async with factory() as session:
+        for table, identity, _ in rows:
+            assert (await session.execute(text(
+                f"SELECT lifecycle_status,superseded_at FROM {table} WHERE id=:id"),
+                {"id": str(identity)})).one() == before[table]
+        assert await session.scalar(text(
+            "SELECT count(*) FROM project_guide_proposal_approvals a "
+            "JOIN submission_artifact_policies p ON p.id=a.artifact_policy_id "
+            "WHERE a.prior_approval_operation_id=:id AND p.lifecycle_status='approved'"),
+            {"id": predecessor.operation_id}) == 1

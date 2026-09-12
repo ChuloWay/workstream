@@ -347,8 +347,8 @@ def _approval_guards() -> None:
              'manifest_sha256',a.target_json->>'pre_catalogue_manifest_hash') THEN
           RAISE EXCEPTION 'proposal approval request or plan binding mismatch' USING ERRCODE='23514';
         END IF;
+        SELECT * INTO successor FROM project_guide_proposal_approvals WHERE prior_approval_operation_id=a.operation_id;
         IF p.lifecycle_status='superseded' THEN
-          SELECT * INTO successor FROM project_guide_proposal_approvals WHERE prior_approval_operation_id=a.operation_id;
           IF successor.operation_id IS NULL OR successor.project_id<>a.project_id OR successor.guide_id<>a.guide_id
              OR e.lifecycle_status IS DISTINCT FROM 'superseded' OR pre.lifecycle_status IS DISTINCT FROM 'superseded'
              OR p.superseded_at IS NULL OR e.superseded_at IS DISTINCT FROM p.superseded_at
@@ -362,7 +362,7 @@ def _approval_guards() -> None:
             RAISE EXCEPTION 'proposal supersession requires exact successor approval' USING ERRCODE='23514';
           END IF;
         ELSIF p.lifecycle_status IS DISTINCT FROM 'approved' OR e.lifecycle_status IS DISTINCT FROM 'approved'
-           OR pre.lifecycle_status IS DISTINCT FROM 'compiled' THEN
+           OR pre.lifecycle_status IS DISTINCT FROM 'compiled' OR successor.operation_id IS NOT NULL THEN
           RAISE EXCEPTION 'proposal approval lifecycle mismatch' USING ERRCODE='23514';
         END IF;
         SELECT * INTO prior FROM project_guide_proposal_approvals WHERE operation_id=a.prior_approval_operation_id;
