@@ -18,7 +18,6 @@ def _execute(sql: str) -> None:
 def upgrade() -> None:
     _execute(r"""
 
-
 CREATE TABLE project_guide_proposal_approvals (
 	operation_id UUID NOT NULL,
 	project_id VARCHAR(36) NOT NULL,
@@ -107,7 +106,11 @@ CREATE TABLE project_guide_proposal_corrections (
 	CONSTRAINT fk_project_guide_proposal_corrections_authorization_dec_47af FOREIGN KEY(authorization_decision_event_id) REFERENCES audit_events (id)
 )
 
-;    """)
+;
+CREATE UNIQUE INDEX uq_proposal_approval_root_guide
+ON project_guide_proposal_approvals (guide_id)
+WHERE prior_approval_operation_id IS NULL;
+    """)
     _custody()
     _audit_vocabulary()
     _reservation_custody()
@@ -606,7 +609,7 @@ def _audit_vocabulary(*, reverse: bool = False) -> None:
                 " OR (((action_id)::text = 'project.guide_compilation.correction.request'::text) "
                 "AND ((permission_id)::text = 'project.guide_compilation.request'::text))"
                 " OR (((action_id)::text = 'project.guide_compilation.review_package.read'::text) "
-                "AND ((permission_id)::text = 'project.setup_diagnostic.read'::text))"
+                "AND ((permission_id)::text = 'project.guide.manage'::text))"
             )
             if reverse:
                 if definition.count(anchor + addition) != definition.count(anchor):

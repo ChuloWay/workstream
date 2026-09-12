@@ -198,6 +198,19 @@ async def _compile_approval(
     )
     if plan.catalogue_manifest_sha256 != target.pre_catalogue_manifest_hash:
         raise GuideProposalError("approval_blocked")
+    # Catalogue-valid intent is not enforcement: optional policy primitives are
+    # emitted only when the actual merged policy configures them. CHECKERS owns
+    # that configuration validation; reconcile selections with its resulting plan.
+    enforced = {
+        (entry.definition_id, entry.definition_version)
+        for entry in plan.entries
+        if entry.checker_definition_state == "enabled"
+    }
+    if any(
+        (binding.capability_id, binding.capability_version) not in enforced
+        for binding in locked.result.pre_submit_bindings
+    ):
+        raise GuideProposalError("approval_blocked")
     receipt = GuideProposalApprovalReceipt(
         operation_id=operation_id,
         target_digest=target.digest,

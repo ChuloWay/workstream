@@ -814,6 +814,12 @@ class ProjectGuideProposalApproval(Base):
 
     __tablename__ = "project_guide_proposal_approvals"
     __table_args__ = (
+        Index(
+            "uq_proposal_approval_root_guide",
+            "guide_id",
+            unique=True,
+            postgresql_where=text("prior_approval_operation_id IS NULL"),
+        ),
         ForeignKeyConstraint(
             ["compilation_id", "project_id", "guide_id"],
             [

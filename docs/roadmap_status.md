@@ -233,7 +233,10 @@ cannot be reused as post-submission review-gate evidence. See the
   Transient pre-send retries use bounded backoff and a circuit breaker; the
   default request timeout is 300 seconds, separate from the whole-run timeout.
   POL-05A implements hidden review, pre-submission approval custody and
-  correction successors. Public manager review and dispatch remain AUTH-12F4/POL-05B.
+  correction successors. Approval requires selected pre-submit checks to appear
+  in the plan compiled from the actual policy; complete-proposal access requires
+  Project Manager guide-management authority. Public manager review and dispatch
+  remain AUTH-12F4/POL-05B.
   Superseded post-submit setup/approval/correction routes are removed; POL-06
   owns the remaining post-submit projection. Real Terra runs through API upload,
   MinIO, the Celery handler and PostgreSQL proved both blocked findings and ready

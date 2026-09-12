@@ -68,6 +68,32 @@ manual HTTP approval route is removed.
 
 ## Design and decisions
 
+External-review repair within this boundary: approval must reconcile every
+selected pre-submit capability/version with the canonical plan compiled from
+the actual merged policy. A valid catalogue binding alone does not prove that
+its policy configuration emits a check. Reject an absent selection before
+consuming authority or writing approval outputs; preserve unselected platform
+defaults. Test the real validator/compiler with empty and configured evidence
+and artifact requirements, and prove persisted approval or no-write rejection
+in PostgreSQL. Align migration 0019's review-package audit permission and current
+README/manual wording with `project.guide.manage` and Project-Manager-only
+proposal access. Probe duplicate approved chains through direct SQL with valid
+custody; add a narrowly scoped database guard only if the probe demonstrates
+the missing invariant. This remains L1 authorization/policy work, with security,
+architecture, QA/test-delta, CI-integrity and documentation replay before readiness.
+Human focus is selected-check enforcement and consistent database authority;
+public exposure and unrelated cleanup remain excluded.
+
+The database probe confirmed that suppressing only the current-approval lookup
+allowed two fully authorized approved roots for one guide. Add a partial unique
+index on immutable approval operations' `guide_id` where their predecessor is
+null, with matching SQLAlchemy metadata. Combined with existing predecessor
+uniqueness, this permits one root and one successor per operation. Keep policy
+lifecycle sequencing and retained superseded chains intact. Prove rejection with
+complete new approval custody and a suppressed application lookup, plus normal
+corrected-successor and concurrent-approval controls. Update the exact schema
+fingerprint only for the reviewed audit-constraint and index changes.
+
 1. Expose a bounded exact-compilation package containing validated findings,
    artifact policy, requirements, separate pre/post bindings, suggestions and
    safe notes, with all component/source/catalogue/finalization identities.

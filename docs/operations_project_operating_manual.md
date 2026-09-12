@@ -195,8 +195,9 @@ separate deterministic projection of the same unified result; no evaluator
 runs during setup or approval.
 
 The planned exact-compilation review-package surface uses
-`project.guide_compilation.review_package.read` (AUTH-12F4), including covered
-Operator/Audit diagnostic readers with no approval power. The separate planned
+`project.guide_compilation.review_package.read` (AUTH-12F4), requiring
+`project.guide.manage` from a covered Project Manager. Operator/Audit diagnostic
+authority does not grant access to the complete proposal. The separate planned
 `project.guide_compilation.correction.request` permits only the covered Project
 Manager to correct the exact known terminal result. These are new object-scoped
 contracts, not capabilities already provided by status-only setup reads.
