@@ -58,10 +58,18 @@ old multi-file `.agent-loop` process or add a duplicate specification.
 | --- | --- | --- | --- |
 | Current process followed | CONTRIBUTING.md, Commitrail template and planning skill inspection | One overview, one record and one index row | Human agreement remains on the PR |
 | Identity scope distinguished | Both supplied Flow HTML design records | Human baseline and future agent limits recorded | Live issuer integration is unproved |
-| Changes remain planning-only | `git diff --stat origin/main` and `git diff --check` | Required before submission | No runtime execution is claimed |
-| Records and links are valid | `python3 scripts/check_commitrail_records.py --base-ref origin/main`; `python3 scripts/check_markdown_links.py` | Required on committed candidate | Tooling/host limits reported in PR |
+| Changes remain planning-only | `git diff --stat origin/main`; `git diff --check origin/main` | PASS: three planning/navigation files; no whitespace errors | No runtime execution is claimed |
+| Wording follows repository rules | `python3 scripts/check_stale_workstream_wording.py` | PASS: stale wording check passed | Document scan only |
+| Markdown links resolve | `python3 scripts/check_markdown_links.py` | PASS: three changed Markdown files checked | Does not prove remote service availability |
+| Commitrail structure is valid | `/opt/homebrew/Caskroom/miniforge/base/bin/python3.12 scripts/check_commitrail_records.py --base-ref origin/main` | PASS: committed planning records passed validation | Existing macOS tooling uses markdown-it-py 3.0.0, not the pinned Linux environment; hosted Agent Gates remains separate proof |
 
 ## Review findings
+
+CodeRabbit identified evidence cells describing required checks instead of
+their observed outcomes. The table now records the executed check results and
+the local tooling limitation. The overview also restores the fuller review
+document, including examples and test explanations, while retaining the current
+Commitrail structure and main-reconciliation findings.
 
 The initial prose could imply that token exchange was a selected solution.
 The overview now leaves the MCP-to-API credential contract explicitly
