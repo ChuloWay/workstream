@@ -180,3 +180,9 @@ The independent action-owner, active-action and audit-action test inventories
 include exactly the three AUTH-12F4 activations. The superseded proposal-planned
 assertion is replaced by executable-action and exact activation-owner checks;
 all other planned actions remain closed and the catalogue cardinality is retained.
+
+The adopted acceptance contract describes all three completed activations.
+Happy-path tests require the nominal authorization receipt for approval and
+correction, while the read action explicitly returns no receipt. A dropped
+mutation receipt must fail the regression even when audit and one-use behavior
+still succeed.

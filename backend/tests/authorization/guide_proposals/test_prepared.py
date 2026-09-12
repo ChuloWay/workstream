@@ -8,7 +8,8 @@ import pytest
 from app.modules.actors.api import ServiceIdentity
 
 from app.modules.authorization.api import AuthorizationDenied, PreparedAuthorizationInvalid
-from app.modules.authorization.catalogue import GUIDE_PROPOSAL_ACTION_IDS
+from app.modules.authorization.catalogue import ActionId, GUIDE_PROPOSAL_ACTION_IDS
+from app.modules.authorization.api.guide_proposal_review import GuideProposalAuthorityReceipt
 from .support import Case
 
 
@@ -29,7 +30,10 @@ async def test_current_pm_exact_resource_and_one_use(monkeypatch, action):
     assert case.events[0].correlation_id == str(case.facts.locator.operation_id)
     assert case.last_filters["exact_project_scope"] is True
     assert {str(r) for r in case.last_filters["allowed_roles"]} == {"project_manager"}
-    if receipt:
+    if action is ActionId.PROJECT_GUIDE_COMPILATION_REVIEW_PACKAGE_READ:
+        assert receipt is None
+    else:
+        assert isinstance(receipt, GuideProposalAuthorityReceipt)
         assert receipt.admin_role_grant_id == case.grant.id
         assert receipt.resource_context_digest == case.facts.digest
 
