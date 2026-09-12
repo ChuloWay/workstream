@@ -34,7 +34,7 @@ from app.modules.authorization.domain.guide_compilation import (
     ProjectGuideCompilationRequestResourceContext,
 )
 from app.modules.authorization.domain.guide_proposals import (
-    parse_proposal_prepare, proposal_matches,
+    GUIDE_PROPOSAL_RESOURCE_BY_ACTION, parse_proposal_prepare, proposal_matches,
 )
 from app.modules.authorization.domain.prepared_submission_policy import parse_submission_policy_prepare
 from app.modules.authorization.domain.prepared_compilation import prepared_compilation_matches
@@ -884,6 +884,7 @@ class PreparedAuthorizationService:
             return admin_scope
         expected_project_resource = (
             PROJECT_MUTATION_RESOURCE_BY_ACTION.get(action_id)
+            or GUIDE_PROPOSAL_RESOURCE_BY_ACTION.get(action_id)
             or COMPILATION_RESOURCE_BY_ACTION.get(action_id)
             or (TaskAuthorityResourceContext if action_id in TASK_ACTIONS else None)
         )
@@ -900,15 +901,12 @@ class PreparedAuthorizationService:
             ActionId.PROJECT_GUIDE_CREATE,
             ActionId.PROJECT_GUIDE_UPDATE,
             ActionId.PROJECT_GUIDE_SOURCE_SNAPSHOT_CREATE,
-        } and isinstance(resource, ProjectGuideMutationPrepareDenialResourceContext):
-            return PreparedAuthorityScope(
-                kind=PreparedAuthorityScopeKind.PROJECT,
-                project_id=resource.scope_project_id,
-            )
-        if action_id in {
-            ActionId.PROJECT_REVIEW_POLICY_UPDATE,
-            ActionId.PROJECT_REVISION_POLICY_UPDATE,
-        } and isinstance(resource, ProjectPolicyMutationPrepareDenialResourceContext):
+        } and isinstance(resource, ProjectGuideMutationPrepareDenialResourceContext) or (
+            action_id in {
+                ActionId.PROJECT_REVIEW_POLICY_UPDATE,
+                ActionId.PROJECT_REVISION_POLICY_UPDATE,
+            } and isinstance(resource, ProjectPolicyMutationPrepareDenialResourceContext)
+        ):
             return PreparedAuthorityScope(
                 kind=PreparedAuthorityScopeKind.PROJECT,
                 project_id=resource.scope_project_id,

@@ -29,7 +29,7 @@ from app.modules.authorization.domain.guide_mutations import (
     ProjectGuideSourceSnapshotMutationResourceContext,
 )
 from app.modules.actors.service_identities import ServiceIdentity
-from app.modules.authorization.catalogue import ActionId, GUIDE_PROPOSAL_ACTION_IDS
+from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.schemas import AdminRole, AdminScope, ProjectRole
 from app.modules.authorization.submission_preparation import SubmissionBundlePreparationPreflightResourceContext, SubmissionBundlePreparationResourceContext
 from app.modules.authorization.submission_consumption import SubmissionBindingResourceContext, SubmissionCreationResourceContext
@@ -856,7 +856,6 @@ class ProjectGuideActivationResourceContext(BaseModel):
 
 PROJECT_MUTATION_RESOURCE_BY_ACTION = MappingProxyType(
     {
-        **dict.fromkeys(GUIDE_PROPOSAL_ACTION_IDS, GuideProposalResourceContext),
         ActionId.PROJECT_CREATE: ProjectCreateResourceContext,
         ActionId.PROJECT_GUIDE_CREATE: ProjectGuideMutationResourceContext,
         ActionId.PROJECT_GUIDE_UPDATE: ProjectGuideMutationResourceContext,

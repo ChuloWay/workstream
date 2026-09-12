@@ -37,7 +37,10 @@ currently only accepts setup-service projection/finalization resources.
 - AUTH/POL specifications, README, roadmap, current initiative navigation and this
   adopted chunk record. `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json` records
   exact reductions in touched oversized code; boundary inventories only for
-  actual changed edges.
+  actual changed edges. Exact behavior-ownership partition registration, its
+  approved-addition set in `backend/scripts/behavior_ownership.py`, and closed
+  admission regression coverage in `backend/tests/test_behavior_ownership.py`
+  are included; protected base and retained ownership stay unchanged.
 
 ### Not allowed
 
@@ -151,3 +154,16 @@ PostgreSQL driver are accepted, while raw strings still reject.
 - Remaining risks: locked product facts remain PROJECTS-owned; AUTH must validate
   custody without importing private PROJECTS repositories or duplicating compiler
   decisions. Public endpoints and request denial composition remain POL-05B work.
+
+Review reconciliation keeps proposal resources in their own canonical action map,
+composed into the existing kernel and PREP. The established mutation-only map
+remains closed; its existing regression test exposed the incorrect initial
+registration. Exact behavior-ownership registration includes all five new AUTH
+modules while retaining the partition's protected base and every existing owner.
+The admission test rejects undeclared additions, retained-owner changes and
+removal. Current action and operational PREP inventories explicitly distinguish
+active hidden proposal authority from pending POL-05B public composition.
+
+Database negative fixtures use the actual `project_manager` role with system
+scope and an actual other-project manager grant. Neither case substitutes an
+invalid role token or an unrelated Audit grant for the boundary being tested.

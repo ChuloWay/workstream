@@ -1,6 +1,7 @@
 """Deny-by-default request-scoped authorization kernel."""
 
 from __future__ import annotations
+from app.modules.authorization.domain.guide_proposals import GUIDE_PROPOSAL_RESOURCE_BY_ACTION
 from app.modules.authorization.catalogue import GUIDE_PROPOSAL_ACTION_IDS
 
 from collections.abc import Awaitable, Callable
@@ -240,6 +241,7 @@ _ADMIN_EXPECTED_RESOURCES = MappingProxyType(
         **adapter_bindings.ADAPTER_BINDING_RESOURCE_BY_ACTION,
         **contribution_policies.CONTRIBUTION_POLICY_RESOURCE_BY_ACTION,
         **PROJECT_MUTATION_RESOURCE_BY_ACTION,
+        **GUIDE_PROPOSAL_RESOURCE_BY_ACTION,
     }
 )
 

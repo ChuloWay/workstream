@@ -1247,7 +1247,9 @@ execution task, calls no provider, and does not make the hidden POL workflow liv
 | `project.submission_artifact_policy.create` (active) | `project.effective_policy.manage` | `WS-AUTH-001-12F2` |
 | `project.submission_artifact_policy.derive` (active) | `project.effective_policy.manage` | `WS-AUTH-001-12F3` |
 | `project.submission_artifact_policy.update` (active) | `project.effective_policy.manage` | `WS-AUTH-001-12F2` |
-| `project.submission_artifact_policy.approve` | `project.effective_policy.manage` | `WS-AUTH-001-12F4` |
+| `project.guide_compilation.review_package.read` (active) | `project.guide.manage` | `WS-AUTH-001-12F4` |
+| `project.guide_compilation.correction.request` (active) | `project.guide_compilation.request` | `WS-AUTH-001-12F4` |
+| `project.submission_artifact_policy.approve` (active) | `project.effective_policy.manage` | `WS-AUTH-001-12F4` |
 | `project.post_submit_checker_policy.approve` | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
 | `project.post_submit_checker_policy.correction.request` | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
 | `project.post_submit_checker_policy.derive` | `project.effective_policy.manage` | `WS-AUTH-001-12G` |

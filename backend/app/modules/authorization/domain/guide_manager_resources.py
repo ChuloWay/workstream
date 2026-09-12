@@ -3,7 +3,7 @@
 from app.modules.authorization.catalogue import GUIDE_PROPOSAL_ACTION_IDS
 
 from app.modules.authorization.domain.guide_compilation import COMPILATION_RESOURCE_BY_ACTION
-from app.modules.authorization.domain.guide_proposals import GuideProposalResourceContext
+from app.modules.authorization.domain.guide_proposals import GUIDE_PROPOSAL_RESOURCE_BY_ACTION
 from app.modules.authorization.runtime import (
     PROJECT_MUTATION_RESOURCE_BY_ACTION,
     PROJECT_GUIDE_TARGET_KIND_BY_ACTION,
@@ -18,7 +18,7 @@ def guide_manager_resource_denial(action, resource, project_id):
     expected = (
         PROJECT_MUTATION_RESOURCE_BY_ACTION.get(action)
         or COMPILATION_RESOURCE_BY_ACTION.get(action)
-        or (GuideProposalResourceContext if action in GUIDE_PROPOSAL_ACTION_IDS else None)
+        or GUIDE_PROPOSAL_RESOURCE_BY_ACTION.get(action)
     )
     if expected is None or not isinstance(resource, expected):
         return AuthorizationDenialCode.RESOURCE_GUARD_DENIED

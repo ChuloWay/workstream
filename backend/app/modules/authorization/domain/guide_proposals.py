@@ -1,5 +1,6 @@
 """Exact unified proposal resources and request-local preparation selectors."""
 
+from types import MappingProxyType
 from dataclasses import fields
 import re
 from uuid import UUID
@@ -93,6 +94,11 @@ class GuideProposalResourceContext(BaseModel):
         ):
             raise ValueError("proposal resource identity mismatch")
         return self
+
+
+GUIDE_PROPOSAL_RESOURCE_BY_ACTION = MappingProxyType(
+    dict.fromkeys(GUIDE_PROPOSAL_ACTION_IDS, GuideProposalResourceContext)
+)
 
 
 def proposal_resource(facts):

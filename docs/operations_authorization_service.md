@@ -603,9 +603,12 @@ ART foundation actions, Project Manager `artifact.guide_source.ingest`, and the
 fixed-service `artifact.guide_source.binding.create` and
 `artifact.guide_source.read`, contributor `artifact.submission_bundle.prepare`,
 hidden human `submission.create`, and fixed-service
-`artifact.submission.binding.create` actions. Checker, review, generic
-artifact-read, and the public Submission cutover remain planned; no other
-production feature command is cut over. Callers begin and own one root
+`artifact.submission.binding.create` actions. AUTH-12F4 also supports hidden
+Project Manager `project.guide_compilation.review_package.read`,
+`project.submission_artifact_policy.approve`, and
+`project.guide_compilation.correction.request`; these have no public route, with
+POL-05B public composition pending. Checker, review, generic artifact-read, and
+the public Submission cutover remain planned. Callers begin and own one root
 transaction, call `prepare`,
 lock their participant rows, compose final typed facts, call `consume` with the
 independently expected ActionId and the same strict request/idempotency input,
