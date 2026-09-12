@@ -374,6 +374,21 @@ def _approval_guards() -> None:
            OR pre.supersedes_pre_submit_checker_policy_id IS DISTINCT FROM prior.pre_submit_policy_id THEN
           RAISE EXCEPTION 'proposal prior approval mismatch' USING ERRCODE='23514';
         END IF;
+        IF a.prior_approval_operation_id IS NOT NULL AND NOT EXISTS(
+          SELECT 1 FROM submission_artifact_policies prior_policy
+          JOIN effective_project_submission_artifact_policies prior_effective
+            ON prior_effective.id=prior.effective_policy_id
+          JOIN pre_submit_checker_policies prior_pre ON prior_pre.id=prior.pre_submit_policy_id
+          WHERE prior_policy.id=prior.artifact_policy_id
+            AND prior_policy.lifecycle_status='superseded'
+            AND prior_effective.lifecycle_status='superseded'
+            AND prior_pre.lifecycle_status='superseded'
+            AND prior_policy.superseded_at IS NOT NULL
+            AND prior_effective.superseded_at=prior_policy.superseded_at
+            AND prior_pre.superseded_at=prior_policy.superseded_at
+        ) THEN
+          RAISE EXCEPTION 'proposal prior approval is not superseded' USING ERRCODE='23514';
+        END IF;
         IF tg_table_name='project_guide_proposal_approvals' THEN
           IF NOT EXISTS(SELECT 1 FROM project_guides g WHERE g.id=a.guide_id AND g.status='draft')
              OR (SELECT max(setup_generation) FROM project_setup_runs WHERE guide_id=a.guide_id)

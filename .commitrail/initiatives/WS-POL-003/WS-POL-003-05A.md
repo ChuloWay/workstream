@@ -93,6 +93,13 @@ lifecycle sequencing and retained superseded chains intact. Prove rejection with
 complete new approval custody and a suppressed application lookup, plus normal
 corrected-successor and concurrent-approval controls. Update the exact schema
 fingerprint only for the reviewed audit-constraint and index changes.
+The deferred approval guard must also require a linked predecessor's artifact,
+effective and pre-submit policies to be superseded with equal non-null
+timestamps. Root/predecessor uniqueness establishes one chain; this lifecycle
+check establishes one current approval even if application supersession is
+omitted. Prove that omission independently of the duplicate-root case and keep
+normal replacement valid. Register new tests in the explicit project lane
+catalogue and verify full collection before hosted execution.
 
 1. Expose a bounded exact-compilation package containing validated findings,
    artifact policy, requirements, separate pre/post bindings, suggestions and

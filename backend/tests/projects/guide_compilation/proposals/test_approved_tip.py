@@ -4,7 +4,8 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.projects.api.guide_proposals import (
     GuideProposalApproval, GuideProposalCorrection, GuideProposalError,
@@ -14,8 +15,9 @@ from .pg_support import finalize_corrected_attempt, proposal_case, read_package
 from .test_postgresql import approve, correct
 
 
-async def test_database_rejects_duplicate_approved_root_and_allows_linked_successor(
-    clean_postgres_database, monkeypatch,
+@pytest.mark.parametrize("omitted_guard", ["lookup", "supersession"])
+async def test_database_rejects_duplicate_approved_tip_and_allows_linked_successor(
+    clean_postgres_database, monkeypatch, omitted_guard,
 ):
     async with proposal_case(clean_postgres_database) as (values, factory, command, actor, grant):
         package = await read_package(factory, command, actor, grant)
@@ -32,16 +34,38 @@ async def test_database_rejects_duplicate_approved_root_and_allows_linked_succes
         async def omit_current_approval(self, guide_id):
             return None
 
-        # Only the application lookup is removed. Actual authority, reservation,
-        # canonical compiler outputs and database custody remain active.
+        original_flush = AsyncSession.flush
+        prior_states = {str(first.artifact_policy_id): "approved",
+                        str(first.effective_policy_id): "approved",
+                        str(first.pre_submit_policy_id): "compiled"}
+
+        async def omit_prior_supersession(self, objects=None):
+            for row in tuple(self.dirty):
+                if str(getattr(row, "id", "")) in prior_states:
+                    row.lifecycle_status = prior_states[str(row.id)]
+                    row.superseded_at = None
+            return await original_flush(self, objects)
+
+        # Omit only one application behavior. Actual authority, reservation,
+        # compiler outputs and all database guards remain active.
         with monkeypatch.context() as patch:
-            patch.setattr(GuideProposalRepository, "current_approval", omit_current_approval)
-            with pytest.raises(GuideProposalError) as error:
+            if omitted_guard == "lookup":
+                patch.setattr(GuideProposalRepository, "current_approval", omit_current_approval)
+            else:
+                patch.setattr(AsyncSession, "flush", omit_prior_supersession)
+            prior = {} if omitted_guard == "lookup" else dict(
+                expected_previous_approval_operation_id=first.operation_id,
+                expected_previous_approval_output_digest=next_package.current_approval_output_digest)
+            expected_error = GuideProposalError if omitted_guard == "lookup" else DBAPIError
+            with pytest.raises(expected_error) as error:
                 await approve(factory, successor, actor, grant, GuideProposalApproval(
-                    target=next_package.target, idempotency_key=uuid4()))
-            assert error.value.code == "storage_unavailable"
-            assert isinstance(error.value.__cause__, IntegrityError)
-            assert "uq_proposal_approval_root_guide" in str(error.value.__cause__)
+                    target=next_package.target, idempotency_key=uuid4(), **prior))
+            if omitted_guard == "lookup":
+                assert error.value.code == "storage_unavailable"
+                assert isinstance(error.value.__cause__, IntegrityError)
+                assert "uq_proposal_approval_root_guide" in str(error.value.__cause__)
+            else:
+                assert "proposal prior approval is not superseded" in str(error.value)
         async with factory() as session:
             assert await session.scalar(text("SELECT count(*) FROM audit_events")) == audit_count
             for table in ("project_guide_proposal_approvals", "effective_project_submission_artifact_policies",
