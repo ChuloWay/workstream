@@ -175,3 +175,8 @@ Moving the existing builders preserves their single owner and assertions while
 making collection independent of those cross-test imports; the lane runner and
 selection validation are unchanged. Foreign-project fixtures use the existing
 authorized project-creation helper before issuing their Project Manager grant.
+
+The independent action-owner, active-action and audit-action test inventories
+include exactly the three AUTH-12F4 activations. The superseded proposal-planned
+assertion is replaced by executable-action and exact activation-owner checks;
+all other planned actions remain closed and the catalogue cardinality is retained.
