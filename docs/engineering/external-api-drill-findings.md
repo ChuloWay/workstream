@@ -519,6 +519,27 @@ PDFs and failed run are retained, and isolated cleanup completed. This explains
 this run's rejection, not the earlier failures whose rejected fields were not
 captured. A fresh real-provider replay remains necessary.
 
+### Post-POL-05B replay: nested-archive capability gap
+
+At integrated `89a86753` (including merged PR #400), the same original two-PDF
+guide produced `sufficiency_blocked` with
+`nested_archive_intake_check_unavailable`. All 33 HTTP checks met their expected
+outcomes, including upload replay, exact findings lineage and inactive-resolver
+denial. Both stored originals remained byte-identical; database, MinIO, API,
+worker and owned broker cleanup completed. The overall run nevertheless **failed**
+its `expected_complete_guide_draft` assertion; no stored draft-limit proof was
+possible because this outcome created no artifact-policy draft.
+
+The guide prohibits nested archives, not merely archive filename extensions.
+The existing `forbid_artifact` processor matches path patterns; the outer-ZIP
+inspector validates and hashes members but does not classify arbitrary embedded
+archive content. This is an unsupported guide requirement, not a reproduced
+failure of compressed/expanded size enforcement. Earlier model-ready runs do not
+prove that this separate requirement was enforced. Retain the blocked outcome;
+do not remove the requirement or retry until the model overlooks it. Supporting
+content-based nested-archive rejection needs a separately bounded capability
+decision and evidence before claiming this entire guide is executable.
+
 Use the [new external-client drill](external-api-drill.md), not the older seeded
 API drill. Keep unresolved failures red until product repairs actually satisfy
 them; preserve the passing regressions for repaired defects. Run the applicable

@@ -347,3 +347,11 @@ the same locked policy/compiler path. The separate `maximum_archive_size_bytes`
 rule compares the entire compressed ZIP's verified byte count, including archive
 metadata; it does not reuse expanded size. None of these changes exposes hidden intake APIs.
 Fresh real-provider execution must retain its own exact target and results.
+
+The post-POL-05B replay at `89a86753` completed 33 expected HTTP observations but
+failed its draft-readiness assertion: the original guide's nested-archive
+prohibition lacks a content-based intake implementation. See the
+[retained capability finding](external-api-drill-findings.md#post-pol-05b-replay-nested-archive-capability-gap).
+This is not complete-guide success. POL-05B's proposal read, pre-submission
+approval, correction and dispatch are now public; this replay did not exercise
+those four operations and does not add them to the original 29-operation census.

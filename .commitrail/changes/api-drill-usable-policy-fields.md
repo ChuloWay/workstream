@@ -266,6 +266,16 @@ security plus QA/test-delta and documentation, combined proportionately.
 
 ## Evidence
 
+Post-POL-05B integration retains the exact union of both parents' behavior
+ownership. The genuine replay at `89a86753` preserves 33 expected HTTP outcomes
+but fails the complete-draft assertion on the original guide's unsupported
+content-based nested-archive prohibition. The findings document records this
+separate capability gap and completed resource cleanup. No nested-content
+detector, altered guide requirement or hidden-API execution is authorized by
+the existing archive-size repair; do not infer full guide readiness from earlier
+model passes. The four newly public proposal operations remain unexecuted by
+this document-upload pass.
+
 The full rate-paced client run exposed fixture expiry after ten minutes: a later
 revocation conflict received 401 `invalid_token` instead of reaching its intended
 409 assertion. Extend only the ephemeral local issuer's default lifetime to one

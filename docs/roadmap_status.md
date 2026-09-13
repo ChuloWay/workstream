@@ -289,6 +289,10 @@ cannot be reused as post-submission review-gate evidence. See the
   The separate optional `maximum_archive_size_bytes` rule enforces the entire
   compressed ZIP's verified byte count, including archive metadata, independently
   of expanded content size; the same default-floor and locked-plan controls apply.
+  The [post-POL-05B genuine-guide replay](engineering/external-api-drill-findings.md#post-pol-05b-replay-nested-archive-capability-gap)
+  remains blocked by that guide's content-based nested-archive prohibition:
+  path-pattern rejection does not implement arbitrary embedded-archive detection.
+  The passing HTTP observations do not certify complete guide readiness.
   Transient pre-send retries use bounded backoff and a circuit breaker; the
   default request timeout is 300 seconds, separate from the whole-run timeout.
   POL-05B exposes review, pre-submission approval and correction successors
