@@ -548,6 +548,18 @@ valid evidence for the old fixture; the explicit human correction changes the
 next fixture's requirement, not the result of this run. Do not add a nested-archive
 prohibition to the product or treat the old fixture as release authority.
 
+The corrected-input replay at `db6af788` completed 34 expected HTTP checks with
+zero failed cases and reached `policy_draft_ready`, with no sufficiency findings.
+The separately named guide PDF has SHA-256
+`5ee3b974012e67bdd59ba88aa3b352bfa785ddd95fd473d0851d929969d96ad6`;
+the accompanying example is unchanged. Read-only isolated database inspection
+verified draft limits of 10 MiB compressed, 20 MiB expanded, 2 MiB per file and
+100 entries, plus the canonical policy hash. Both uploaded originals remained
+byte-identical before/after denied replay, and all owned resources were cleaned
+up. This is partial public-API and stored-draft evidence, not proof of every field,
+new proposal operations, activation or acceptance. No product code changed to
+produce this result; the old failing inputs and result remain retained.
+
 Use the [new external-client drill](external-api-drill.md), not the older seeded
 API drill. Keep unresolved failures red until product repairs actually satisfy
 them; preserve the passing regressions for repaired defects. Run the applicable

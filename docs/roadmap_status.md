@@ -293,8 +293,9 @@ cannot be reused as post-submission review-gate evidence. See the
   exposed an unrequested nested-archive restriction in the assistant's drill
   guide. The human removed that fixture requirement: members may have any file
   type, including nested archives, subject to existing safety/resource checks.
-  No nested-archive detector is required by this decision. The corrected guide
-  still needs its own replay; the old failed run remains historical evidence.
+  No nested-archive detector is required by this decision. The corrected guide's
+  replay reached draft readiness with 34 expected HTTP checks and independently
+  verified stored limits; the old failed run remains historical evidence.
   Transient pre-send retries use bounded backoff and a circuit breaker; the
   default request timeout is 300 seconds, separate from the whole-run timeout.
   POL-05B exposes review, pre-submission approval and correction successors
