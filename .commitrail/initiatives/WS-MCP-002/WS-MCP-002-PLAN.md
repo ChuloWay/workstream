@@ -16,7 +16,7 @@ Workstream owns authorization and lifecycle behavior through its backend.
 The [roadmap](../../../docs/roadmap_status.md) distinguishes live, hidden and
 planned capabilities. The previous MCP PR is closed. The supplied 27-tool
 design and human/agent identity documents describe intended integrations, not
-live runtime proof. This proposal is reconciled with main `d9a66470`.
+live runtime proof. This proposal is reconciled with main `016061f1`.
 
 ## Bounded change
 
@@ -87,7 +87,7 @@ belong to the PR and must not be inferred from this correction.
 
 ## Reconciliation
 
-- Current-source reconciliation: AUTH proposal authority merged in main; public proposal routes in PR #400 and setup work in PR #395 remain separate owner work. Recheck them before implementation.
+- Current-source reconciliation: main `016061f1` includes PR #400 public proposal review, pre-submission approval, correction and manual dispatch. Account for its API/schema changes in the binding inventory without expanding the agreed 27 tools. Recheck PR #395 and other concurrent owner work before implementation.
 - Roadmap impact: none; this records a proposal without changing any product capability or activating an implementation. No no-op roadmap edit.
 - Next usable boundary: agreed credential contract and a concrete foundation change record.
 - Remaining risks: unresolved resource registration, changing API schemas and unavailable live identity proof. These are questions for review, not accepted runtime risks.

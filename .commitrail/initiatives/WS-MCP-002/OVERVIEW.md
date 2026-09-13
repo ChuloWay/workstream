@@ -3,7 +3,7 @@
 - Disposition: Planned
 - Prepared by: OxVictor
 - Purpose: Review and agreement before implementation
-- Repository baseline reconciled: `d9a66470`
+- Repository baseline reconciled: `016061f1`
 - Current change: [Planning proposal](WS-MCP-002-PLAN.md)
 
 ## 1. What I Understand We Are Building
@@ -26,7 +26,7 @@ The roadmap still distinguishes public capabilities from hidden implementations 
 
 I have also reviewed both complete Flow Identity designs. The architecture walkthrough, dated 10 September 2026, defines a human-only v0.1. The human and agent experience, dated 11 September 2026, defines an agreed future extension. Both are design records; neither claims that the integrations are deployed. I will keep that distinction clear in implementation and tests.
 
-The planning PR was reconciled with main `d9a66470`, which adds hidden proposal authorization. At that reconciliation, PR #400 proposed public guide-review operations and PR #395 changed guide setup behavior. Recheck their current state before implementation; open work is not proof that an API is live.
+The planning PR is reconciled with main `016061f1`, including merged PR #400. Public guide proposal review, pre-submission approval, correction and manual dispatch are now exposed; their authorization, route and schema changes must be included in the pre-implementation inventory. This does not automatically add tools to the agreed 27-tool catalogue. PR #395 was separate setup work at the earlier review; check its current state and other open work before implementation. Open work is not proof that an API is live.
 
 This is a fresh initiative. Closed contributor MCP PR #149 remains historical design evidence. Its runtime and old contribution process are not the implementation baseline. Main risks are API contract drift, the unresolved credential boundary, exposing hidden capabilities, unsafe mutation retries, and treating future agent support as available.
 
