@@ -532,3 +532,11 @@ Resolved proof gaps include complete administrator history custody, exact domain
 conflict codes, service/revoked-link grant targets, and foreign-manager guide
 mutation denial. No coverage floor, workflow, authorization boundary or required
 behavior assertion is weakened to close this finite client-contract matrix.
+
+CodeRabbit identified that actor reason partitions stopped at the first unexpected
+response before reading unchanged state. Reuse the existing identity-link reason
+loop for both lifecycle owners, preserving case names, payloads and same-key
+recovery. A failed response stays red; continue only after exact unchanged-state
+readback. Helper regressions cover actor and link failures, safe continuation,
+single-key reuse and abort on state drift. This changes failure diagnostics, not
+the successful execution sequence or the completed endpoint scope.

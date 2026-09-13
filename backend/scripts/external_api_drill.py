@@ -1130,13 +1130,8 @@ async def authority_cases(drill, admin, manager, outsider, manager_id, project):
                          values={"error.code": "permission_not_granted"})
     for action in ("suspend", "reactivate", "deactivate"):
         mutation_route, mutation_path = actor_route + "/" + action, actor_path + "/" + action
-        key = {"Idempotency-Key": str(uuid4())}
-        for label, invalid in lifecycle_reason_inputs():
-            await drill.call("actor_" + action + "_" + label, "POST", mutation_route,
-                path=mutation_path, token=admin, payload=invalid, headers=key, expected=422,
-                values={"error.code": "invalid_request", "error.retryable": False})
-            await drill.call("actor_" + action + "_" + label + "_unchanged", "GET", actor_route,
-                path=actor_path, token=admin, values=current, exact_fields=current.keys())
+        key = await lifecycle_reason_cases(drill, admin, "actor_" + action,
+            mutation_route, mutation_path, actor_route, actor_path, current)
         await lifecycle_admission_cases(drill, "actor_" + action, mutation_route, mutation_path,
                                         admin, manager)
         await drill.call("actor_" + action + "_admission_unchanged", "GET", actor_route,
@@ -1532,8 +1527,8 @@ async def service_actor_cases(drill, issuer, admin, outsider):
     for action, state in (("revoke", "revoked"), ("reactivate", "active")):
         mutation = "/api/v1/actor-identity-links/{identity_link_id}/" + action
         path = f'/api/v1/actor-identity-links/{link["identity_link_id"]}/{action}'
-        mutation_key = await identity_link_reason_cases(drill, admin, action, mutation, path,
-                                                       actor_route, actor_path, link)
+        mutation_key = await lifecycle_reason_cases(drill, admin, "link_" + action, mutation, path,
+            actor_route + "/identity-links", actor_path + "/identity-links", link)
         await lifecycle_admission_cases(drill, "link_" + action, mutation, path, admin, outsider)
         await drill.call("link_" + action + "_admission_unchanged", "GET", actor_route + "/identity-links",
             path=actor_path + "/identity-links", token=admin, values=link, exact_fields=link.keys())
@@ -1566,18 +1561,18 @@ async def service_actor_cases(drill, issuer, admin, outsider):
             values={"error.code": "identity_link_revoked" if action == "revoke" else "permission_not_granted"})
 
 
-async def identity_link_reason_cases(drill, admin, action, mutation, path, actor_route, actor_path, link):
+async def lifecycle_reason_cases(drill, admin, name, mutation, path, read_route, read_path, current):
     """Retain each failed reason probe and verify state before continuing."""
     key = {"Idempotency-Key": str(uuid4())}
     for label, invalid in lifecycle_reason_inputs():
         try:
-            await drill.call(f"link_{action}_{label}", "POST", mutation, path=path,
+            await drill.call(f"{name}_{label}", "POST", mutation, path=path,
                 token=admin, payload=invalid, headers=key, expected=422,
                 values={"error.code": "invalid_request", "error.retryable": False})
         except ProbeFailure:
             pass
-        await drill.call(f"link_{action}_{label}_unchanged", "GET", actor_route + "/identity-links",
-            path=actor_path + "/identity-links", token=admin, values=link, exact_fields=link.keys())
+        await drill.call(f"{name}_{label}_unchanged", "GET", read_route,
+            path=read_path, token=admin, values=current, exact_fields=current.keys())
     return key
 
 

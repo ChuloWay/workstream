@@ -328,22 +328,29 @@ class ContractTests(unittest.TestCase):
 
 
 class ExecutionTests(unittest.IsolatedAsyncioTestCase):
-    async def test_link_reason_failure_is_retained_and_readback_still_guards_continuation(self):
-        mutation = "/api/v1/actor-identity-links/{identity_link_id}/revoke"
+    async def test_lifecycle_reason_failure_is_retained_and_readback_still_guards_continuation(self):
         actor_route = "/api/v1/actors/{actor_profile_id}"
-        link = {"identity_link_id": "link", "status": "active"}
-        for state_changed in (False, True):
-            with self.subTest(state_changed=state_changed):
+        for kind, state_changed in (("actor", False), ("actor", True), ("link", False), ("link", True)):
+            with self.subTest(kind=kind, state_changed=state_changed):
+                mutation = (actor_route + "/suspend" if kind == "actor"
+                            else "/api/v1/actor-identity-links/{identity_link_id}/revoke")
+                read_route = actor_route + ("" if kind == "actor" else "/identity-links")
+                name = "actor_suspend" if kind == "actor" else "link_revoke"
+                current = {"actor_profile_id" if kind == "actor" else "identity_link_id": kind,
+                           "status": "active"}
                 posts = 0
+                operation_keys = set()
 
                 def handler(request):
                     nonlocal posts
                     if request.method == "POST":
                         posts += 1
+                        operation_keys.add(request.headers["Idempotency-Key"])
                         status = 500 if posts == 1 else 422
                         body = {"error": {"code": "invalid_request", "retryable": False}}
                     else:
-                        status, body = 200, link | ({"status": "revoked"} if state_changed else {})
+                        changed = "suspended" if kind == "actor" else "revoked"
+                        status, body = 200, current | ({"status": changed} if state_changed else {})
                     return httpx.Response(status, json=body, headers={name: request.headers[name]
                         for name in ("X-Request-ID", "X-Correlation-ID")})
 
@@ -351,10 +358,11 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
                                             base_url="http://127.0.0.1") as client:
                     report = {}
                     probe = drill.Drill(client, {"paths": {mutation: {"post": {}},
-                        actor_route + "/identity-links": {"get": {}}}}, report)
-                    operation = drill.identity_link_reason_cases(
-                        probe, None, "revoke", mutation, "/api/v1/actor-identity-links/link/revoke",
-                        actor_route, "/api/v1/actors/actor", link,
+                        read_route: {"get": {}}}}, report)
+                    operation = drill.lifecycle_reason_cases(
+                        probe, None, name, mutation, mutation.replace("{actor_profile_id}", "actor")
+                        .replace("{identity_link_id}", "link"), read_route,
+                        read_route.replace("{actor_profile_id}", "actor"), current,
                     )
                     if state_changed:
                         with self.assertRaisesRegex(drill.ProbeFailure, "response_value_mismatch"):
@@ -362,8 +370,9 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
                     else:
                         await operation
                     self.assertEqual(report["cases"][0]["result"], "failed")
-                    self.assertEqual(report["cases"][1]["name"], "link_revoke_missing_unchanged")
+                    self.assertEqual(report["cases"][1]["name"], name + "_missing_unchanged")
                     self.assertEqual(posts, 1 if state_changed else 11)
+                    self.assertEqual(len(operation_keys), 1)
                     self.assertEqual(len(report["cases"]), 2 if state_changed else 22)
                     self.assertEqual(report["cases"][-1]["result"], "failed" if state_changed else "success")
 

@@ -13,13 +13,18 @@ checks) at `1fb14077`. All met their expected outcomes, with no incomplete
 scenario groups; every disposable database and role was cleaned up.
 
 These are distinct recorded targets, not one execution at the final documentation
-commit. After the external run, its only changes tightened 15 conflict-code
+commit. After the external run, changes tightened 15 conflict-code
 assertions; every expected code was checked against the retained real response,
 and a helper regression rejects the wrong code even when HTTP 409 matches.
 After the full administrator run, the added closing authority group was executed
 separately against the unchanged product implementation. It covers service and
 revoked-link grant targets, cross-project grant substitution, and scoped guide
 and policy writes. Reports remain private, out of tree, at their original hashes.
+Actor and identity-link reasons now share the same failure-continuation helper:
+an unexpected rejection response stays recorded as failed while the next
+unchanged-state read still runs. A changed-state read aborts continuation.
+Focused regressions cover both resource types; successful requests, case names,
+oracles and same-key recovery remain unchanged from the recorded execution.
 
 This is the original client-audit scope, not all registered routes. Paths below
 use `/api/v1`. `E` names cases in `external_api_drill.py`; `A` names cases in
