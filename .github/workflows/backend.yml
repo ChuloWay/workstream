@@ -100,6 +100,7 @@ jobs:
         ports:
           - 5433:5432
         options: >-
+          ${{ matrix.lane != 'schema_contracts' && '--tmpfs /var/lib/postgresql/data:rw,nosuid,nodev,noexec,size=2147483648' || '' }}
           --health-cmd "pg_isready -U workstream -d workstream_test"
           --health-interval 5s
           --health-timeout 5s
@@ -162,6 +163,28 @@ jobs:
           done
           docker logs workstream-minio
           exit 1
+
+      - name: Verify PostgreSQL CI storage and write settings
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+          EXPECTED_PG_STORAGE: ${{ matrix.lane == 'schema_contracts' && 'disk' || 'tmpfs' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          storage=$(docker exec "${POSTGRES_CONTAINER}" stat -f -c '%T %b %S' /var/lib/postgresql/data)
+          read -r filesystem blocks block_size <<< "${storage}"
+          [[ -n "${filesystem}" && "${blocks}" =~ ^[0-9]+$ && "${block_size}" =~ ^[0-9]+$ ]]
+          if [[ "${EXPECTED_PG_STORAGE}" == tmpfs ]]; then
+            [[ "${filesystem}" == tmpfs ]]
+            (( blocks * block_size == 2147483648 ))
+          elif [[ "${EXPECTED_PG_STORAGE}" == disk ]]; then
+            [[ "${filesystem}" != tmpfs ]]
+          else
+            exit 1
+          fi
+          settings=$(docker exec "${POSTGRES_CONTAINER}" psql -U workstream -d workstream_test -At -c "SELECT current_setting('fsync'), current_setting('full_page_writes'), current_setting('synchronous_commit'), current_setting('data_directory')")
+          [[ "${settings}" == 'on|on|on|/var/lib/postgresql/data' ]]
+          echo "PostgreSQL CI storage: ${filesystem}, bytes=$((blocks * block_size)); write settings: ${settings}"
 
       - name: Execute semantic lane ${{ matrix.lane }}
         working-directory: backend

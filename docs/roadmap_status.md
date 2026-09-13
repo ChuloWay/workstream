@@ -169,6 +169,8 @@ cannot be reused as post-submission review-gate evidence. See the
   shared-foundation lanes and one schema lane. Database resets batch trigger
   commands within the existing transaction while retaining full schema checks;
   authorization preflight runs alongside lanes and remains mandatory at fan-in.
+  Ordinary CI databases use bounded private RAM-backed storage with write
+  settings verified; schema-contract and aggregate databases stay disk-backed.
   Hosted runtime remains measured rather than guaranteed.
 
 ### Identity and authorization

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
+import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -202,6 +205,78 @@ class LightweightAgentGateTests(unittest.TestCase):
                         result.returncode == 0,
                         preflight == lanes_result == "success",
                     )
+
+    def test_postgres_storage_is_bounded_and_disk_contracts_remain(self) -> None:
+        workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
+        lane_service = workflow.split("\n  lanes:\n", 1)[1].split("\n    steps:", 1)[0]
+        aggregate_service = workflow.split("\n  test:\n", 1)[1].split("\n    steps:", 1)[0]
+        self.assertIn(
+            "${{ matrix.lane != 'schema_contracts' && "
+            "'--tmpfs /var/lib/postgresql/data:rw,nosuid,nodev,noexec,size=2147483648' || '' }}",
+            lane_service,
+        )
+        self.assertNotIn("--tmpfs", aggregate_service)
+        self.assertLess(
+            workflow.index("- name: Verify PostgreSQL CI storage and write settings"),
+            workflow.index("- name: Execute semantic lane"),
+        )
+
+    def test_postgres_storage_guard_rejects_wrong_mounts_and_write_settings(self) -> None:
+        workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
+        step = workflow.split(
+            "      - name: Verify PostgreSQL CI storage and write settings\n", 1
+        )[1].split("\n      - name:", 1)[0]
+        self.assertIn("POSTGRES_CONTAINER: ${{ job.services.postgres.id }}", step)
+        self.assertIn(
+            "EXPECTED_PG_STORAGE: ${{ matrix.lane == 'schema_contracts' && 'disk' || 'tmpfs' }}",
+            step,
+        )
+        guard = textwrap.dedent(step.split("        run: |\n", 1)[1])
+        settings = "on|on|on|/var/lib/postgresql/data"
+        memory = "tmpfs 524288 4096"
+        disk = "ext2/ext3 524288 4096"
+        cases = [
+            ("tmpfs", memory, settings, "0", True),
+            ("disk", disk, settings, "0", True),
+            ("tmpfs", disk, settings, "0", False),
+            ("disk", memory, settings, "0", False),
+            ("tmpfs", "tmpfs 524287 4096", settings, "0", False),
+            ("tmpfs", "tmpfs 524289 4096", settings, "0", False),
+            ("tmpfs", "", settings, "0", False),
+            ("tmpfs", memory, settings.replace("/data", "/elsewhere"), "0", False),
+            ("unknown", memory, settings, "0", False),
+            ("tmpfs", memory, settings, "1", False),
+        ]
+        for index in range(3):
+            values = settings.split("|")
+            values[index] = "off"
+            cases.append(("tmpfs", memory, "|".join(values), "0", False))
+        with tempfile.TemporaryDirectory() as directory:
+            docker = Path(directory) / "docker"
+            docker.write_text(
+                '#!/bin/sh\n[ "$TEST_DOCKER_STATUS" = 0 ] || exit 1\n'
+                '[ "$1" = exec ] && [ "$2" = probe ] || exit 2\n'
+                'case "$3" in\nstat) printf "%s\\n" "$TEST_STAT";;\n'
+                'psql) printf "%s\\n" "$TEST_SETTINGS";;\n*) exit 2;;\nesac\n',
+                encoding="utf-8",
+            )
+            docker.chmod(0o755)
+            for mode, stat, configuration, status, allowed in cases:
+                with self.subTest(mode=mode, stat=stat, configuration=configuration, status=status):
+                    result = subprocess.run(
+                        ["bash", "-e", "-c", guard],
+                        env={
+                            "PATH": directory + os.pathsep + os.defpath,
+                            "POSTGRES_CONTAINER": "probe",
+                            "EXPECTED_PG_STORAGE": mode,
+                            "TEST_STAT": stat,
+                            "TEST_SETTINGS": configuration,
+                            "TEST_DOCKER_STATUS": status,
+                        },
+                        capture_output=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode == 0, allowed, result.stderr.decode())
 
     def test_retired_behavior_mutation_gate_stays_out_of_required_ci(self) -> None:
         backend = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")

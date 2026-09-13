@@ -120,6 +120,15 @@ Assertion-map validation analyzes each exact historical revision/module once per
 invocation, then checks every referenced node and assertion against that analysis.
 It does not cache current source or reuse analysis across validation calls.
 
+The six ordinary lanes use private, 2 GiB RAM-backed PostgreSQL data directories
+to reduce ephemeral reset I/O. A runtime guard verifies the mount, capacity,
+data directory and enabled `fsync`, `full_page_writes` and `synchronous_commit`
+before tests. Real SQL, transaction, lock, isolation and coverage checks remain.
+The schema-contract lane and aggregate job retain disk-backed databases.
+This is not a production configuration or proof of host-power-loss durability:
+[Docker tmpfs data disappears when the container stops](https://docs.docker.com/engine/storage/tmpfs/).
+An exhausted mount fails the job; it does not silently change storage or skip tests.
+
 The `project_lifecycle_a`, `project_lifecycle_b`, and `project_lifecycle_c` lanes
 partition PROJECT nodes; the single `task_lifecycle` lane owns TASK and checker
 nodes. The single `schema_contracts` lane owns all baseline/PostgreSQL schema, reset and

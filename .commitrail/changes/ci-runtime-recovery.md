@@ -32,6 +32,8 @@ commands per reset. Fingerprinting and real isolation must remain in place.
   recursive inventory, unique node assignment, trusted manifest and evidence.
 - `.github/workflows/backend.yml`: match those seven lanes, downloads and timing
   inventory; overlap preflight and lanes while requiring both at fan-in.
+  Use bounded private RAM-backed PostgreSQL storage for ordinary lanes only,
+  with a runtime mount/settings guard; keep schema and aggregate disk-backed.
   No timeout or required-status changes.
 - `scripts/test_lightweight_agent_gates.py`: reconcile the exact seven-lane
   workflow assertion without reducing its completeness checks.
@@ -83,6 +85,19 @@ historical module for each node. Reuse that analysis only inside one validation
 call, keyed by exact revision and module path. Preserve ancestry, node existence,
 span/hash identity, duplicate detection and complete dispositions. Never reuse
 analysis across validation calls or cache mutable current-source results.
+
+The next hosted run reduced the structural test to 27.29 seconds, but shared B
+still took 18 minutes: CPU-heavy checks were faster while many database setup
+phases took 4–7 seconds. Target that ephemeral database I/O with a private 2 GiB
+tmpfs PGDATA mount on each ordinary lane. Keep real PostgreSQL, WAL, fsync,
+full-page writes, synchronous commit, roles, isolation and every test unchanged.
+The runtime guard checks filesystem capacity, data directory and those settings
+before tests. Schema-contract and aggregate databases remain disk-backed.
+Plan review found no ordinary-lane server/container-restart or host-power-loss
+test; the reset-child termination proof remains in the disk-backed schema lane.
+This is CI-only storage, not production tuning or physical-durability proof:
+tmpfs data disappears when its container stops. Capacity exhaustion must fail,
+not fall back silently to another storage mode or omit tests.
 
 ## Acceptance criteria
 
