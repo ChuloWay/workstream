@@ -29,7 +29,7 @@ from app.modules.authorization.domain.guide_mutations import (
     ProjectGuideSourceSnapshotMutationResourceContext,
 )
 from app.modules.actors.service_identities import ServiceIdentity
-from app.modules.authorization.api.post_policy import ProjectPostSubmitCheckerPolicyMutationResourceContext
+from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.schemas import AdminRole, AdminScope, ProjectRole
 from app.modules.authorization.submission_preparation import SubmissionBundlePreparationPreflightResourceContext, SubmissionBundlePreparationResourceContext
@@ -838,13 +838,13 @@ PROJECT_MUTATION_RESOURCE_BY_ACTION = MappingProxyType(
             ProjectSubmissionArtifactPolicyMutationResourceContext
         ),
         ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_APPROVE: (
-            ProjectPostSubmitCheckerPolicyMutationResourceContext
+            PostPolicyResourceContext
         ),
         ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_CORRECTION_REQUEST: (
-            ProjectPostSubmitCheckerPolicyMutationResourceContext
+            PostPolicyResourceContext
         ),
         ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE: (
-            ProjectPostSubmitCheckerPolicyMutationResourceContext
+            PostPolicyResourceContext
         ),
         ActionId.PROJECT_SETUP_RUN_UPDATE: ProjectSetupFinalizationResourceContext,
         ActionId.PROJECT_GUIDE_ACTIVATE: ProjectGuideActivationResourceContext,
@@ -874,13 +874,6 @@ PROJECT_SUBMISSION_POLICY_TARGET_KIND_BY_ACTION = MappingProxyType(
     }
 )
 
-PROJECT_POST_SUBMIT_POLICY_TARGET_KIND_BY_ACTION = MappingProxyType(
-    {
-        ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_APPROVE: "approve",
-        ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_CORRECTION_REQUEST: "correction_request",
-        ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE: "derive",
-    }
-)
 
 
 class ActorAuthorizationContextResourceContext(BaseModel):
@@ -1271,7 +1264,7 @@ AuthorizationResourceContext = (
     | ProjectRevisionPolicyMutationResourceContext
     | ProjectGuideSufficiencyMutationResourceContext
     | ProjectSubmissionArtifactPolicyMutationResourceContext
-    | ProjectPostSubmitCheckerPolicyMutationResourceContext
+    | PostPolicyResourceContext
     | ProjectSetupRunMutationResourceContext
     | ProjectGuideActivationResourceContext
     | ProjectGuideCompilationRequestResourceContext

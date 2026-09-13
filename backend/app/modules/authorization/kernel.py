@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 from app.modules.authorization.domain.guide_proposals import GUIDE_PROPOSAL_RESOURCE_BY_ACTION
-from app.modules.authorization.catalogue import GUIDE_PROPOSAL_ACTION_IDS
+from app.modules.authorization.catalogue import GUIDE_PROPOSAL_ACTION_IDS, POST_POLICY_HUMAN_ACTION_IDS, POST_POLICY_ACTION_IDS
+from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
 
 from collections.abc import Awaitable, Callable
 from types import MappingProxyType
@@ -44,7 +45,6 @@ from app.modules.authorization.runtime import (
     PROJECT_DIAGNOSTIC_TARGET_KIND_BY_ACTION,
     PROJECT_GUIDE_TARGET_KIND_BY_ACTION,
     PROJECT_MUTATION_RESOURCE_BY_ACTION,
-    PROJECT_POST_SUBMIT_POLICY_TARGET_KIND_BY_ACTION,
     PROJECT_POLICY_READ_TARGET_KIND_BY_ACTION,
     PROJECT_SUBMISSION_POLICY_TARGET_KIND_BY_ACTION,
     PROJECT_SUFFICIENCY_TARGET_KIND_BY_ACTION,
@@ -559,13 +559,13 @@ class AuthorizationService:
             scope_project_id=scope.project_id,
             for_update=True,
             allowed_roles=frozenset({AdminRole.PROJECT_MANAGER}),
-            exact_project_scope=(action_id is ActionId.PROJECT_GUIDE_COMPILATION_REQUEST or action_id in GUIDE_PROPOSAL_ACTION_IDS),
+            exact_project_scope=(action_id is ActionId.PROJECT_GUIDE_COMPILATION_REQUEST or action_id in GUIDE_PROPOSAL_ACTION_IDS | POST_POLICY_HUMAN_ACTION_IDS),
         )
         if grant is None:
             raise PreparedAuthorizationUnsupported(
                 AuthorizationDenialCode.PERMISSION_NOT_GRANTED
             )
-        if (action_id is ActionId.PROJECT_GUIDE_COMPILATION_REQUEST or action_id in GUIDE_PROPOSAL_ACTION_IDS) and (
+        if (action_id is ActionId.PROJECT_GUIDE_COMPILATION_REQUEST or action_id in GUIDE_PROPOSAL_ACTION_IDS | POST_POLICY_HUMAN_ACTION_IDS) and (
             grant.scope_type != "project" or grant.scope_project_id != str(scope.project_id)
         ):
             raise PreparedAuthorizationUnsupported(
@@ -1289,6 +1289,8 @@ class AuthorizationService:
     ) -> bool:
         if action_id in contribution_policies.CONTRIBUTION_POLICY_ACTIONS:
             return type(resource) is contribution_policies.CONTRIBUTION_POLICY_RESOURCE_BY_ACTION[action_id]
+        if type(resource) is PostPolicyResourceContext:
+            return action_id in POST_POLICY_ACTION_IDS and resource.facts.locator.action_id == action_id
         expected = _ADMIN_EXPECTED_RESOURCES.get(action_id)
         if expected is None or not isinstance(resource, expected):
             return False
@@ -1306,9 +1308,6 @@ class AuthorizationService:
             return False
         submission_policy_kind = PROJECT_SUBMISSION_POLICY_TARGET_KIND_BY_ACTION.get(action_id)
         if submission_policy_kind is not None and resource.target_kind != submission_policy_kind:
-            return False
-        post_submit_policy_kind = PROJECT_POST_SUBMIT_POLICY_TARGET_KIND_BY_ACTION.get(action_id)
-        if post_submit_policy_kind is not None and resource.target_kind != post_submit_policy_kind:
             return False
         transition = {
             ActionId.ACTOR_PROFILE_SUSPEND: "suspend",

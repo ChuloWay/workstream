@@ -937,7 +937,7 @@ the replacement. A general unified correction also invalidates the predecessor's
 current upstream; subsequent post-policy derivation supersedes it atomically.
 
 Hidden operations consume the saved result without model, document or checker
-calls. Live authority and public wiring remain AUTH-12G/POL-06B. Setup remains
+calls. AUTH-12G supplies live authorization; public wiring remains POL-06B. Setup remains
 immutable. The existing complete proposal retains requirements, exact registered
 bindings, safe findings and non-executable capability suggestions. Evidence binds
 assigned original-document versions and hashes; model page/section attributions

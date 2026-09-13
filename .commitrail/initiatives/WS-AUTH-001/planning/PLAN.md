@@ -9,7 +9,8 @@ AUTH-13/14 cutovers are not additional implementation work.
 - [AUTH-12F4](chunks/WS-AUTH-001-12F4-submission-policy-approval.md) follows
   hidden POL-05A approval/provenance and precedes POL-05B.
 - [AUTH-12G](chunks/WS-AUTH-001-12G-post-submit-checker-policy-mutations.md)
-  follows hidden POL-06A post-policy operations and precedes POL-06B.
+  is delivered by the [combined record](../WS-AUTH-001-12G.md), following hidden
+  POL-06A post-policy operations. POL-06B public wiring remains next.
 - [AUTH-12H](chunks/WS-AUTH-001-12H-guide-activation.md) follows POL-07 and
   hidden CP07. It activates only the complete PROJECTS guide command.
 - CP05 owns exact ContributionPolicy-action activation after merged CP04B.

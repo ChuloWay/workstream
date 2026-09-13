@@ -167,8 +167,8 @@ The active review/revision policy setup endpoints are:
 The latest setup run exposes bounded diagnostics and `finalized_compilation_id`.
 Use that exact ID to read the complete pre/post proposal, findings and suggested
 catalogue additions through the manager flow below. POL-06A implements hidden
-post-submit policy projection and approval; live authorization and public access
-remain AUTH-12G/POL-06B.
+post-submit policy projection and approval. AUTH-12G supplies live authorization;
+public access remains POL-06B.
 
 The two policy `PUT` routes require a UUID `Idempotency-Key` and a quoted
 `If-Match` value. Use `"no-current-policy"` for the first version and the quoted
@@ -186,7 +186,7 @@ Policy truth remains in the canonical versioned policy rows, not the setup
 ledger. POL-04B owns live unified wiring; POL-05A/05B and POL-06A/06B own separate
 append-only approval/projection/correction operations linked to that receipt.
 Pre-submission approval is public through POL-05B. Post-submit policy approval
-remains publicly unavailable until AUTH-12G authorization and POL-06B wiring.
+remains publicly unavailable until POL-06B wiring.
 
 An authorized Project Manager reviews the complete bounded proposal before
 approval. Effective intake combines mandatory platform defaults with approved
@@ -201,14 +201,15 @@ authority does not grant access to the complete proposal. The separate implement
 `project.guide_compilation.correction.request` permits only the covered Project
 Manager to correct the exact known terminal result. These are new object-scoped
 contracts with AUTH-12F4 authorization; status-only setup reads do not
-provide them. POL-05B supplies public wiring; AUTH-12G/POL-06B separately provide the
-exact post-policy draft read before post-policy approval.
+provide them. POL-05B supplies public wiring. AUTH-12G authorizes the separate exact
+post-policy draft read; its public exposure remains POL-06B.
 
 POL-06A implements deterministic post-submit projection, an exact complete draft
 read, separate approval and correction custody. It uses the canonical checker
 policy body and the saved unified result without document access or inference.
-The hidden operations require explicit authority ports; their live adapters and
-public wiring remain AUTH-12G/POL-06B. There is no current public post-submit
+The hidden operations use live AUTH-12G adapters. Only the fixed setup service
+derives; an exact-project Project Manager reads, approves or corrects. Public
+wiring remains POL-06B. There is no current public post-submit
 checker setup read. The current unified
 proposal package displays proposed post-submit checks for manager inspection,
 but does not approve a post-submit policy. The latest setup read exposes bounded
@@ -237,8 +238,8 @@ policy activation and contribution-policy publication remain independently gover
 but project activation requires both. Compiled
 post-submit setup output carries exact source/effective/pre-submit provenance,
 but activation remains blocked until the current compiled policy is approved
-through the separate approval operation (live authorization/public wiring remain
-AUTH-12G/POL-06B). A correction request can supersede either a compiled or an
+through the separate approval operation (authorized internally by AUTH-12G; public wiring remains
+POL-06B). A correction request can supersede either a compiled or an
 already approved policy while its setup is current. It preserves the original
 body and receipts and requires a new unified generation and separate reapproval;
 it does not satisfy activation. A task cannot enter `READY` until it also locks the guide

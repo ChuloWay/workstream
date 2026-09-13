@@ -1,4 +1,4 @@
-"""Nominal post-policy PREP seam; AUTH-12G supplies live authority later."""
+"""Nominal post-policy PREP seam over finalized immutable owner commitments."""
 
 from abc import ABC, abstractmethod
 from contextlib import AbstractAsyncContextManager
@@ -6,8 +6,6 @@ from dataclasses import asdict, dataclass
 import json
 from typing import Literal, Protocol
 from uuid import UUID
-
-from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.hashing import canonical_json_hash
 
@@ -106,54 +104,8 @@ class PreparedPostPolicyOperation(ABC):
 
 
 class PostPolicyAuthorizationPort(Protocol):
-    """No default, live adapter or runtime composition is provided by POL-06A."""
+    """Explicit authorization port; the composition root supplies live AUTH."""
 
     def prepare_post_policy_operation(
         self, locator: PostPolicyAuthorizationLocator,
     ) -> AbstractAsyncContextManager[PreparedPostPolicyOperation]: ...
-
-
-class ProjectPostSubmitCheckerPolicyMutationResourceContext(BaseModel):
-    """Exact finalized compilation and approved upstream commitments for post policy."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-    resource_type: Literal["project_post_submit_checker_policy_mutation"]
-    resource_id: UUID
-    scope_project_id: UUID
-    guide_id: UUID
-    guide_version: str
-    source_snapshot_id: UUID
-    source_snapshot_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    target_kind: Literal["approve", "correction_request", "derive"]
-    execution_kind: Literal["human", "setup_service"]
-    checker_policy_id: UUID
-    setup_run_id: UUID
-    setup_generation: int = Field(ge=1)
-    compilation_id: UUID
-    finalization_id: UUID
-    result_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    post_component_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    requirement_inventory_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    catalogue_manifest_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    upstream_approval_operation_id: UUID
-    upstream_approval_output_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    effective_policy_id: UUID
-    effective_policy_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    pre_submit_policy_id: UUID
-    pre_submit_bundle_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    projection_operation_id: UUID
-    operation_id: UUID
-    request_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    target_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    policy_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    lifecycle_status: Literal["compiled", "approved", "superseded"]
-
-    @model_validator(mode="after")
-    def require_checker_policy_identity(self):
-        """No unfinished setup step authorizes a downstream finalized-policy mutation."""
-        if self.resource_id != self.checker_policy_id:
-            raise ValueError("checker policy resource must match policy")
-        if (self.execution_kind == "setup_service") != (self.target_kind == "derive"):
-            raise ValueError("checker derivation requires setup-service authority")
-        return self

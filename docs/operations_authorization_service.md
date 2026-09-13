@@ -693,19 +693,21 @@ unavailable, so registry membership alone grants no authority. Do not create a
 shared review service or a database service-grant table.
 
 Historically, AUTH-12B extended the registry to an eighth identity,
-`workstream.project.setup`, now with exactly five static memberships:
+`workstream.project.setup`, now with exactly six static memberships:
 `project.guide_sufficiency.run`,
+`project.guide_compilation.request.automatic`,
 `project.guide_compilation.execute`,
 `project.submission_artifact_policy.derive`,
 `project.post_submit_checker_policy.derive`, and `project.setup_run.update`.
 AUTH-12E activates `project.guide_sufficiency.run`, AUTH-12F3 activates
 `project.submission_artifact_policy.derive`, and AUTH-12I activates
 `project.guide_compilation.execute`. AUTH-12B2 activates `project.setup_run.update`
-only for the exact finalization resource; post-submit derivation remains planned
-and unavailable. Each active action can be resolved
-for this fixed service only by an internal command carrying exact setup-run,
-expected-step, task/correlation, project, guide, snapshot, generation, stale
-output, and material custody. It is not admitted through the public HTTP route,
+only for the exact finalization resource. AUTH-12G activates post-submit derivation
+for this fixed service, binding complete finalized lineage and policy commitments
+through the same request-local PREP and root transaction. Exact-project managers
+separately authorize post-policy read, approval and correction; diagnostic grants
+do not permit proposal access. POL-06B public composition remains pending.
+The setup service is not admitted through a human HTTP route,
 and it never receives a fabricated human grant. The baseline seeds no profile,
 link, AdminRoleGrant, or ProjectRoleGrant. An Access Administrator may use the existing controlled
 service-actor provisioning route only when the deployment supplies the exact

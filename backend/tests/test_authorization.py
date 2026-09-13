@@ -2,7 +2,8 @@
 # pyright: reportIndexIssue=false, reportOptionalMemberAccess=false
 # pyright: reportOptionalSubscript=false, reportRedeclaration=false
 from __future__ import annotations
-from app.modules.authorization.api.post_policy import ProjectPostSubmitCheckerPolicyMutationResourceContext
+from app.modules.authorization.domain.post_policy import post_policy_resource
+from tests.authorization.post_policy.support import post_facts
 
 from tests.authorization.catalogue_fixtures import ART_CUSTODY_EXPECTATIONS, REV_CUSTODY_EXPECTATIONS
 
@@ -1859,35 +1860,11 @@ def test_project_mutation_resources_and_prepared_scopes_are_closed() -> None:
         )
     }
     checker_resources = {
-        action_id: ProjectPostSubmitCheckerPolicyMutationResourceContext(
-            resource_type="project_post_submit_checker_policy_mutation",
-            resource_id=checker_policy_id,
-            scope_project_id=project_id,
-            guide_id=guide_id,
-            guide_version="1",
-            source_snapshot_id=snapshot_id,
-            source_snapshot_hash=DIGEST,
-            target_kind=target_kind,
-            execution_kind="setup_service" if target_kind == "derive" else "human",
-            checker_policy_id=checker_policy_id,
-            setup_generation=1,
-            lifecycle_status="compiled", policy_hash=DIGEST,
-            setup_run_id=uuid4(), compilation_id=uuid4(), finalization_id=uuid4(),
-            result_hash=DIGEST, post_component_hash=DIGEST, requirement_inventory_hash=DIGEST,
-            catalogue_manifest_hash=DIGEST, upstream_approval_operation_id=uuid4(),
-            upstream_approval_output_digest=DIGEST, effective_policy_id=uuid4(),
-            effective_policy_hash=DIGEST, pre_submit_policy_id=uuid4(), pre_submit_bundle_hash=DIGEST,
-            projection_operation_id=uuid4(), operation_id=operation_id,
-            request_digest=DIGEST, target_digest=DIGEST,
-
-        )
-        for action_id, target_kind in (
-            (ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_APPROVE, "approve"),
-            (
-                ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_CORRECTION_REQUEST,
-                "correction_request",
-            ),
-            (ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE, "derive"),
+        action: post_policy_resource(post_facts(action.value, project_id))
+        for action in (
+            ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_APPROVE,
+            ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_CORRECTION_REQUEST,
+            ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE,
         )
     }
     from app.modules.authorization.domain.project_setup_finalization import finalization_resource_context
@@ -2142,7 +2119,7 @@ def test_fixed_service_action_matrix_and_activation_are_exact_and_immutable() ->
         ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE: (
             PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE,
             ActionOwner.AUTH_12G,
-            ActionAvailability.PLANNED,
+            ActionAvailability.ACTIVE,
         ),
         ActionId.PROJECT_SETUP_RUN_UPDATE: (
             PermissionId.PROJECT_GUIDE_MANAGE,
@@ -2178,6 +2155,7 @@ def test_submission_artifact_policy_draft_actions_have_exact_child_owners() -> N
         ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC,
         ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
         ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE, ActionId.PROJECT_SETUP_RUN_UPDATE,
+        ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE,
     }
     assert {
         action

@@ -21,8 +21,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   post-policy projection, complete draft read, separate approval and correction custody.
 - Intent: compile one locked guide and its policies into authoritative,
   versioned project behavior without circular subsystem authority.
-- Next usable boundary: AUTH-12G live post-policy authorization, then POL-06B
-  public wiring over POL-06A. POL-05B already connects manager review, pre-submit
+- Next usable boundary: POL-06B public wiring over POL-06A and completed
+  [AUTH-12G authority](../WS-AUTH-001/WS-AUTH-001-12G.md). POL-05B already connects manager review, pre-submit
   approval and manual correction dispatch to AUTH-12F4 and POL-05A.
   Live setup consumes the [consolidated catalogue](../WS-ARCH-001/WS-ARCH-001-04A.md)
   and completed AUTH-12B2.

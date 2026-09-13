@@ -83,7 +83,6 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     'tests/projects/post_policy/test_authority.py',
     'tests/projects/post_policy/test_compiler.py',
     'tests/projects/post_policy/test_concurrency.py',
-    'tests/projects/post_policy/test_contracts.py',
     'tests/projects/post_policy/test_correction.py',
     'tests/projects/post_policy/test_direct_sql.py',
     'tests/projects/post_policy/test_guards.py',
@@ -180,6 +179,10 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     shared_b = modules_by_lane[catalogue.PARTITIONED_SHARED_LANES[1]]
     assert shared_a == shared_b == set(catalogue.SHARED_FOUNDATION_MODULES)
     assert {
+        "tests/authorization/post_policy/test_concurrency.py",
+        "tests/authorization/post_policy/test_context.py",
+        "tests/authorization/post_policy/test_prepared.py",
+        "tests/authorization/post_policy/test_postgresql.py",
         "tests/authorization/guide_proposals/test_concurrency.py",
         "tests/authorization/guide_proposals/test_context.py",
         "tests/authorization/guide_proposals/test_prepared.py",

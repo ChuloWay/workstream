@@ -1822,3 +1822,24 @@ def test_partition_accepts_only_exact_auth12f4_targets() -> None:
     ):
         with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
             ownership._validate_additive_partition_transition(invalid, trusted)
+
+
+def test_partition_accepts_only_exact_auth12g_targets() -> None:
+    expected = {
+        'backend/app/modules/authorization/domain/post_policy.py',
+        'backend/app/modules/authorization/post_policy_authorization.py',
+    }
+    assert ownership.AUTH_12G_PARTITION_TARGETS == expected
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    current = _partition(sorted({retained, *expected}))
+    ownership._validate_additive_partition_transition(current, trusted)
+    wrong_owner = _partition(sorted({retained, *expected}))
+    next(item for item in wrong_owner["assignments"] if item["target"] == retained)["group"] = "lifecycle"
+    for invalid in (
+        _partition(sorted(expected)),
+        _partition(sorted({retained, *expected, "backend/app/modules/authorization/extra.py"})),
+        wrong_owner,
+    ):
+        with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+            ownership._validate_additive_partition_transition(invalid, trusted)
