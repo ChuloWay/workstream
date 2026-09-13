@@ -369,6 +369,9 @@ expected = {
 
 
 AUDIT_ALLOWED_ACTION_VALUES = {
+    "project.post_submit_checker_policy.derive",
+    "project.post_submit_checker_policy.approve",
+    "project.post_submit_checker_policy.correction.request",
     "project.guide_compilation.review_package.read",
     "project.guide_compilation.correction.request",
     "project.submission_artifact_policy.approve",
