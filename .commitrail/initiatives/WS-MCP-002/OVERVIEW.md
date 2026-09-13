@@ -3,7 +3,7 @@
 - Disposition: Planned
 - Prepared by: OxVictor
 - Purpose: Review and agreement before implementation
-- Repository baseline reconciled: `016061f1`
+- Repository baseline reconciled: `6feef398`
 - Current change: [Planning proposal](WS-MCP-002-PLAN.md)
 
 ## 1. What I Understand We Are Building
@@ -20,13 +20,13 @@ I have reviewed the current contribution guide, Commitrail guidance, architectur
 
 The MCP design is based on commit `c69ff85`. It describes 27 tools: 12 reads and 15 mutations, with operation keys required for 14 mutations. It exposes no resources or prompts and ends at project setup and access.
 
-The corresponding handler names were present at the inspected `2c95d4e2` baseline. This is an initial check only. The maintainer will provide the public API list. After that handoff, I will map and verify its selected operations against the pinned code and tests before we jointly freeze tool definitions. A handler existing does not prove that its contract is unchanged.
+The maintainer has supplied the fixed public API list. Section 6 maps all 27 tool names to its operations and current route/schema owners at `6feef398`, with test references and differences from the original design. Source mapping does not replace running-server schema capture, joint agreement or MCP runtime proof.
 
 The roadmap still distinguishes public capabilities from hidden implementations and planned work. A hidden backend service will not be treated as a public API available to the adapter.
 
 I have also reviewed both complete Flow Identity designs. The architecture walkthrough, dated 10 September 2026, defines a human-only v0.1. The human and agent experience, dated 11 September 2026, defines an agreed future extension. Both are design records; neither claims that the integrations are deployed. I will keep that distinction clear in implementation and tests.
 
-The planning PR is reconciled with main `016061f1`, including merged PR #400. Public guide proposal review, pre-submission approval, correction and manual dispatch are now exposed; their authorization, route and schema changes must be included in the pre-implementation inventory. This does not automatically add tools to the agreed 27-tool catalogue. PR #395 was separate setup work at the earlier review; check its current state and other open work before implementation. Open work is not proof that an API is live.
+The planning PR is reconciled with main `6feef398`, including merged PR #400 and the updated API drill handoff. Public guide proposal review, pre-submission approval, correction and manual dispatch are exposed but outside the fixed 29-operation census and the proposed 27 tools. Guide creation itself has changed and is accounted for in the mapping. Recheck concurrent owner work before implementation; open work is not proof that an API is live.
 
 This is a fresh initiative. Closed contributor MCP PR #149 remains historical design evidence. Its runtime and old contribution process are not the implementation baseline. Main risks are API contract drift, the unresolved credential boundary, exposing hidden capabilities, unsafe mutation retries, and treating future agent support as available.
 
@@ -124,7 +124,7 @@ The MCP adapter will preserve these identities when the contracts become availab
 
 ## 6. API Contracts and Failures
 
-The public API list is a maintainer-owned handoff dependency. I will wait for that supplied list rather than reconstruct it independently. From it, I will produce a versioned deterministic inventory of all 27 tool names, HTTP methods and routes, input/output schemas, required headers and response statuses, with permission boundaries and relevant backend tests. We will review and freeze that mapping together before implementation. Any difference from the existing 27-tool design returns for agreement. The frozen inventory will be the source for binding tests and contract-drift checks.
+The maintainer-owned API handoff is now received and mapped below. It covers all 27 original names without adding tools. The inventory records methods/routes, current body and result models, headers, success statuses and per-operation drill references. Schema differences and workflow limits are explicit for joint agreement before freezing the generated tool definitions. The agreed inventory will be the source for binding tests and contract-drift checks.
 
 Tool calls will use a configured API destination and fixed routes. Users will not be able to supply arbitrary destinations or authentication headers. Redirects will not carry credentials to another destination.
 
@@ -133,6 +133,92 @@ For the 14 mutations that require an operation key, the client must supply and p
 Policy updates will preserve required version selectors such as `If-Match`. A stale selector must produce the API's conflict outcome. If the initial catalogue lacks an operation needed to recover the current selector, I will document that limitation for review instead of using a write to imitate a read.
 
 Errors will distinguish invalid credentials, invalid input, API denial, conflicts, unavailable dependencies, and uncertain execution. The result will preserve useful API status and correlation information while excluding secrets and raw internal exceptions. A successful MCP transport response does not mean the Workstream operation succeeded.
+
+### API handoff mapping at `6feef398`
+
+The maintainer supplied the [29-operation handoff](https://github.com/Flow-Research/workstream/pull/401#issuecomment-5654783507). The table below maps all 27 original tool names to that fixed list and the reconciled backend source at `6feef398`. It is a proposed mapping for joint review, not a claim of MCP runtime execution or an approved catalogue freeze.
+
+**Result:** 27 distinct tools match 27 distinct handed-off method/path pairs. Keep 12 logical reads, 15 mutations and 14 keyed mutations. The two unused operations are row 1, `GET /api/v1/health` (operational liveness, not a user tool), and row 18, `POST /api/v1/service-actors` (not part of this human-only catalogue). A human administrator reading or managing an existing service actor does not enable service actors to authenticate as MCP callers.
+
+All paths below have the fixed prefix `/api/v1`. `K` means required UUID `Idempotency-Key`; `K+M` also requires `If-Match`; `-` means neither mutation header. Authentication is request context, never a tool argument. Request/correlation IDs remain transport metadata. Success codes below are backend HTTP codes, not MCP transport success. Body and response names refer to current backend models, not the stale embedded HTML schemas.
+
+The **Drill** column names the exact row in the [fixed acceptance matrix](../../../docs/engineering/external-api-drill.md#fixed-29-operation-acceptance-matrix), including its named E/A cases, invalid inputs, authority, readback and replay controls. Linked response names point to the current route declaration for that binding; schemas are linked below. These references define the tests to reuse, not newly executed results.
+
+| Tool | Method and path | Body model | Success data model | HTTP / headers | Drill |
+| --- | --- | --- | --- | --- | --- |
+| `workstream_profile_get` | `GET /actors/me` | None | [ActorProfileSelfResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/api/routes/auth.py#L43) | 200 / - | 2 |
+| `workstream_profile_update` | `PATCH /actors/me` | `ActorProfileUpdateRequest` | [ActorProfileSelfResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/api/routes/auth.py#L113) | 200 / - | 3 |
+| `workstream_authorization_context_get` | `GET /actors/me/authorization-context` | None | [ActorAuthorizationContextResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/api/routes/auth.py#L77) | 200 / - | 4 |
+| `workstream_permissions_list` | `GET /authorization/permissions` | None | [PermissionDefinitionsResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L857) | 200 / - | 12 |
+| `workstream_admin_roles_list` | `GET /authorization/admin-role-definitions` | None | [AdminRoleDefinitionsResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L885) | 200 / - | 13 |
+| `workstream_admin_grants_list` | `GET /admin-role-grants` | None | [AdminRoleGrantCollectionResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L960) | 200 / - | 15 |
+| `workstream_admin_grants_issue` | `POST /admin-role-grants` | `AdminRoleGrantIssueBody` | [AuthorityMutationResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L1021) | 201 / K | 14 |
+| `workstream_admin_grants_revoke` | `POST /admin-role-grants/{grant_id}/revoke` | `AdminRoleGrantRevokeBody` | [AuthorityMutationResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L1125) | 200 / K | 17 |
+| `workstream_actor_admin_grants_list` | `GET /actors/{actor_profile_id}/admin-role-grants` | None | [AdminRoleGrantCollectionResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L989) | 200 / - | 16 |
+| `workstream_actor_get` | `GET /actors/{actor_profile_id}` | None | [ActorProfileAdminResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L775) | 200 / - | 5 |
+| `workstream_actor_identity_link_get` | `GET /actors/{actor_profile_id}/identity-links` | None | [ActorIdentityLinkAdminResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L817) | 200 / - | 6 |
+| `workstream_actor_suspend` | `POST /actors/{actor_profile_id}/suspend` | `ActorLifecycleBody` | [ActorLifecycleMutationResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L636) | 200 / K | 7 |
+| `workstream_actor_reactivate` | `POST /actors/{actor_profile_id}/reactivate` | `ActorLifecycleBody` | [ActorLifecycleMutationResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L664) | 200 / K | 8 |
+| `workstream_actor_deactivate` | `POST /actors/{actor_profile_id}/deactivate` | `ActorLifecycleBody` | [ActorLifecycleMutationResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L692) | 200 / K | 9 |
+| `workstream_identity_link_revoke` | `POST /actor-identity-links/{identity_link_id}/revoke` | `ActorLifecycleBody` | [IdentityLinkLifecycleMutationResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L720) | 200 / K | 10 |
+| `workstream_identity_link_reactivate` | `POST /actor-identity-links/{identity_link_id}/reactivate` | `ActorLifecycleBody` | [IdentityLinkLifecycleMutationResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L748) | 200 / K | 11 |
+| `workstream_projects_create` | `POST /projects` | `ProjectCreate` | [ProjectResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/projects/create_router.py#L83) | 201 / K | 19 |
+| `workstream_projects_get` | `GET /projects/{project_id}` | None | [ProjectResponse or ContributorProjectResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/projects/router.py#L193) | 200 / - | 20 |
+| `workstream_guides_create` | `POST /projects/{project_id}/guides` | `ProjectGuideCreate` | [ProjectGuideCreateResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/projects/guide_mutation_router.py#L161) | 201 / K | 26 |
+| `workstream_guides_update` | `PATCH /projects/{project_id}/guides/{guide_id}` | `ProjectGuideUpdate` | [ProjectGuideResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/projects/guide_mutation_router.py#L184) | 200 / K | 27 |
+| `workstream_review_policy_put` | `PUT /projects/{project_id}/guides/{guide_id}/review-policy` | `ReviewPolicyInput` | [ReviewPolicyResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/projects/policy_mutation_router.py#L112) | 200 / K+M | 28 |
+| `workstream_revision_policy_put` | `PUT /projects/{project_id}/guides/{guide_id}/revision-policy` | `RevisionPolicyInput` | [RevisionPolicyResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/projects/policy_mutation_router.py#L140) | 200 / K+M | 29 |
+| `workstream_contributor_candidates_list` | `GET /projects/{project_id}/contributor-candidates` | None | [ContributorCandidateListResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L1563) | 200 / - | 21 |
+| `workstream_project_grants_issue` | `POST /projects/{project_id}/role-grants` | `ProjectRoleGrantIssueBody` | [ProjectRoleGrantMutationResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L1233) | 201 / K | 22 |
+| `workstream_project_grants_list` | `GET /projects/{project_id}/role-grants` | None | [ProjectRoleGrantListResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L1592) | 200 / - | 23 |
+| `workstream_project_grants_get` | `GET /projects/{project_id}/role-grants/{grant_id}` | None | [ProjectRoleGrantRead](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L1626) | 200 / - | 24 |
+| `workstream_project_grants_revoke` | `POST /projects/{project_id}/role-grants/{grant_id}/revoke` | `ProjectRoleGrantRevokeBody` | [ProjectRoleGrantMutationResponse](https://github.com/Flow-Research/workstream/blob/6feef398/backend/app/modules/authorization/router.py#L1420) | 200 / K | 25 |
+
+### Input and output details
+
+Path selectors are supplied only where shown above. The authenticated actor is never replaced by a target selector. Preserve backend selector types: authorization target IDs are UUIDs; project/guide selectors follow their route and tool schemas. Query parameters are:
+
+- Authorization context: required `project_id`.
+- Both administrative-grant lists: required `scope_type`; optional `scope_project_id`, `status` (default `active`), `limit` (default 50, 1-100) and `cursor` (at most 512 characters). A project scope must satisfy the backend's project selector rules.
+- Contributor candidates: `limit` (default 50, 1-100) and `cursor` (at most 512 characters).
+- Project-grant list: optional `status` (`active` or `revoked`, omitted means unfiltered), `role` (`submitter` or `reviewer`), `limit` (default 50, 1-100) and `cursor` (at most 512 characters).
+- All other bindings: no query parameters. Omit absent/null optional query values; do not decode or manufacture cursors.
+
+Use these current model owners for the full field types, requiredness, enum values, nested schemas and validation. The field summaries below are navigation, not replacement validators:
+
+| Model owner | Mapped fields and output boundaries |
+| --- | --- |
+| [Actor schemas](../../../backend/app/modules/actors/schemas.py) | Profile PATCH accepts only optional nullable `display_name` (200 characters) and `contact_email` (320). Preserve omission versus explicit null and normalization/NUL rules. Self responses contain the caller's declared profile fields; administrative actor/link responses are separate projections without raw subject or contact email. The plural identity-links route returns one object, not a list. |
+| [Administrative schemas](../../../backend/app/modules/authorization/admin_schemas.py) | Grant issue uses `target_actor_profile_id`, `role`, `scope_type`, optional `scope_project_id`, and `reason`; revoke uses `reason`. Collection responses include `items`, `total`, `next_cursor`. Mutation responses are receipts, not full grant objects. |
+| [Authorization router](../../../backend/app/modules/authorization/router.py) | Actor/link lifecycle bodies contain `reason`. Keep the existing lifecycle response models, catalogue projections and exact action binding; lifecycle operations do not provision a new identity or grant. |
+| [Project-role request schemas](../../../backend/app/modules/authorization/project_role_schemas.py) and [nested qualification/read schemas](../../../backend/app/modules/authorization/schemas.py) | Grant issue uses `target_actor_profile_id`, `role` (`submitter` or `reviewer`), `qualification`, `reason`. Qualification contains skills/reputation availability snapshots, prior-project work UUIDs and external expertise references. Preserve nested availability consistency and collection/token bounds. Revoke accepts `reason`. Candidate and project-grant pages have `items` and `next_cursor`, no `total`. |
+| [Project and guide schemas](../../../backend/app/modules/projects/schemas.py) | Project create: `name`, `slug`, optional nullable `description`. Project read preserves the API-selected administrative projection or the exact contributor `id/name/status` projection. Guide create: required `version`, `task_examples`, `documents`, optional nullable `change_summary`. Documents are 1-100 declarations with `label` and `media_type`; IDs/order are returned by the API. Guide PATCH accepts only optional nullable `change_summary`. |
+| [Policy schemas](../../../backend/app/modules/projects/schemas.py) | Review input requires positive preference-window and lease-duration seconds; optional fields include strict boolean `human_review_required`, one active lease, no self-review, reject policy, finding evidence requirement, second-review flag, allowed decisions and minimum finding fields. Revision requires positive `max_revision_rounds` and `revision_deadline_hours`; optional state list is exactly one `needs_revision`, and reassignment rule is nullable. Preserve full version/hash/predecessor responses. |
+
+### Authority and failure mapping
+
+Guide task examples use the [nested task-example schema](../../../backend/app/modules/projects/api/task_examples.py): 1-100 examples, each with required nonblank `content`, optional nullable `title` and optional `labels`. Preserve its per-field and aggregate 128 KiB serialized UTF-8 bound; OpenAPI field types alone do not capture every custom validator.
+
+Each tool uses its linked route's existing action and authorization path; the adapter does not recreate role evaluation. Self-profile/context operations act on the authenticated caller. Catalogue, actor, identity-link and administrative-grant operations retain their administrative/audit boundaries. Project creation requires the backend's system-scoped project-manager authority. Project reads may use exact contributor access; project management, candidate discovery and grant/policy mutations retain their exact-project and current-role checks. An administrative tool being listed is not permission to invoke it.
+
+Run the named tests for each matrix row under the same caller categories, including ordinary users, applicable administrators/auditors, project managers, foreign-project managers, revoked/suspended/deactivated actors and revoked links. Preserve concealed 404 responses where the API uses them; do not convert every denial to 403 or expose target existence. Retain self-grant/self-removal and final-effective-administrator safeguards in the API, never a parallel adapter implementation.
+
+For all rows, preserve actual API status, safe error code and correlation metadata. Applicable cases include 401 token rejection, 403 authority refusal, concealed 404, 422 input/header rejection, 409 state/precondition/idempotency conflicts, and 429/503 rate/dependency failures. This is not a claim that every row produces every code. The per-row drill cases and [findings and fixes](../../../docs/engineering/external-api-drill-findings.md) are the observed error oracle; OpenAPI's declared success/validation responses alone are insufficient. In particular, key mismatch and state-changed replay conflicts are not interchangeable. Do not retry a mutation automatically, even on a retryable API error.
+
+Candidate and project-grant lists also return `400 invalid_cursor` for invalid cursors; preserve that instead of relabeling it as schema validation. Policy selector errors distinguish `policy_precondition_invalid` from `policy_precondition_failed`, both HTTP 409.
+
+For the 14 keyed mutations, retain the original key, normalized request semantics and API replay outcome. Recheck current authority on replay through the API. Do not promise that an earlier receipt can always be replayed after target state or authority changes. The unkeyed profile PATCH remains unkeyed. Reads may update admission timestamps, so read-only means no requested product mutation, not absolutely no database writes.
+
+### Differences and decisions to freeze
+
+1. **Guide contract has changed.** Remove `content_markdown` from guide input/output. Add required task examples and document declarations; create success is now `ProjectGuideCreateResponse`, including `documents` and `setup`. PATCH still returns `ProjectGuideResponse`. Preserve task-example content/hash and all declared metadata. Do not silently keep the old embedded schemas.
+2. **This catalogue does not complete guide setup.** Creating a guide returns `awaiting_documents`; there is no upload tool among the 27. Upload/setup/findings and the four proposal APIs from PR #400 are outside the handed-off 29-operation census. Confirm that the first release deliberately stops at declarations and draft policy configuration, with uploads handled outside MCP. Adding that workflow requires an explicitly agreed scope change.
+3. **Policy omission and selector behavior matter.** Review input/output now includes `human_review_required` and response semantics metadata. Omission of the mode preserves a selected predecessor's setting; ordinary omitted optional fields use backend defaults. Do not fill defaults in the adapter. First creation uses the quoted `"no-current-policy"` selector. A later selector is the quoted policy ID, generation and hash without its `sha256:` prefix, joined by dots, as specified by the [policy owner](../../../backend/app/modules/projects/policy_mutation_service.py). Forward a caller-supplied selector unchanged. The 27 tools have no policy-read operation for recovering a lost/stale selector; confirm an outside-MCP recovery path or separately agree a read tool. Never use a write as discovery.
+4. **Refresh all schemas, not just guide names.** Current validation also includes NUL rejection, qualification limits and revision-policy constraints. Before freezing generated tool JSON, compare the selected operations and their transitive schemas against `/openapi.json` from the exact pinned backend build. The source mapping here is complete; running-server schema capture and MCP conformance execution have not been performed in this planning change. Do not describe the old HTML JSON as the approved current schema.
+5. **Credential handoff remains an owner decision.** The API list does not resolve MCP resource registration, audience or the credential presented to Workstream. Keep the caller's authority intact without inventing token exchange, accepting a wrong-audience token or substituting an administrator identity.
+
+For implementation evidence, reuse [the drill setup](../../../docs/engineering/external-api-drill.md#run) and per-row assertions through an actual MCP client and independently running adapter. Keep health, local bootstrap and service-actor fixture provisioning outside the 27-tool count. Setup may need backend-only calls, but tools must dispatch only their agreed endpoint. Retain direct-API parity checks, state/audit checks, rejection-before-write assertions and same-key recovery. Existing historical backend runs are useful evidence, not proof that the new MCP path or live Flow deployment passes.
+
 
 ### Exact request path
 
@@ -199,7 +285,7 @@ The following are acceptance requirements from the review addendum, not claims t
 | 7. Network failures | Bound connection refusal, DNS/TLS failures, connect/read/total/cancellation timeouts, applicable API 429/401/403/404/409/412/422/5xx responses, malformed JSON, wrong content type, schema-invalid success and oversized responses. Test API failure during a call and adapter shutdown with in-flight work. Never claim rollback of a possibly committed write. |
 | 8. Privacy and observability | No credentials or authorization headers in results, logs, traces, exceptions, metric labels or URLs. Do not echo raw arguments or sensitive bodies into diagnostics. Profile data, guide content, reasons and cursor payloads must not enter telemetry. Allow only bounded tool name, fixed method/route template, duration, response size, safe status/error code and approved correlation IDs. Return the declared API fields the caller is authorized to receive, even when a field value also appeared in the request. Prove authorized profile/guide/cursor results are preserved while credentials and sensitive diagnostic content are excluded. Workstream remains audit authority. |
 | 9. Independent deployment | Build, install and start without the backend package. Run in a separate process/container using only the configured public API. Invalid API URL or identity configuration fails startup safely. API unavailability affects readiness/calls without crashing catalogue discovery. No Garden-specific or client-name conditional behavior. Two MCP clients see the same catalogue and are independently authorized. Authenticated success and error responses carry `Cache-Control: no-store`; verify proxy/CDN preservation and no cross-caller reuse through the deployed HTTP path. |
-| 10. Contract drift | After the maintainer supplies the public API list, map and jointly freeze the exact 27-tool inventory against a pinned current-main source commit, including routes, schemas, headers, statuses, authorization and API drill evidence. CI must fail on route, method, input/output, header, status, annotation or capability drift. Regeneration must not silently accept a changed contract. Changes require deliberate review and renewed proof. |
+| 10. Contract drift | Use the source mapping in section 6 and jointly freeze the exact 27-tool definitions against the pinned running backend schemas, including routes, schemas, headers, statuses, authorization and API drill evidence. CI must fail on route, method, input/output, header, status, annotation or capability drift. Regeneration must not silently accept a changed contract. Changes require deliberate review and renewed proof. |
 
 For annotations, a logical read is not automatically side-effect-free: first profile access may provision identity records. The annotation tests must reflect the actual API operation rather than its HTTP method alone. The implementation contract will trace the requested protocol assertions to the selected SDK and protocol sources; any mismatch must be raised for review before freezing behavior.
 
@@ -222,7 +308,7 @@ The maintainer's [clarification](https://github.com/Flow-Research/workstream/pul
 
 ## 9. Proposed PR Order
 
-Before runtime work, receive the maintainer's API list, produce and jointly freeze the exact tool mapping, and agree the MCP-to-API credential contract. The inventory handoff is a dependency, not a task to reconstruct the list independently. Then proceed through the following proposed implementation PRs:
+Before runtime work, jointly review the completed source mapping and its schema/workflow differences, capture the pinned running backend schemas, freeze the tool definitions, and agree the MCP-to-API credential contract. The API-list handoff is complete; the mapping does not itself settle those remaining decisions. Then proceed through the following proposed implementation PRs:
 
 1. **Runtime and identity foundation:** independent package and container, SDK setup, authentication boundary, HTTP client, and one profile-read tool proving the full request path. The final 27-tool catalogue is not claimed complete here.
 2. **Profile and access tools:** complete the remaining profile, authorization, actor, and administrative-grant operations with focused authorization tests.
@@ -241,12 +327,17 @@ The addendum confirms the human-only, 27-tool release and independently packaged
 
 1. How should the separately deployed MCP adapter and Workstream API be registered as resources, and which credential should the adapter use for the API call? Which test environment and preregistered MCP clients should prove that contract?
 
-The public API list will come from the maintainer. Mapping and joint catalogue review follow that handoff. Privacy, conditional MCP headers and `no-store` response caching are settled by the linked clarification.
+2. Can we freeze the mapped 27 names with the corrected guide/policy schemas, leaving document uploads and lost-policy-selector recovery outside MCP for this release? These workflow limits are detailed in section 6; adding tools needs explicit agreement.
 
-The proposal follows the documents' human-only v0.1 baseline and keeps the future agent extension explicit. Once the API handoff, joint catalogue review and credential agreement are complete, I can turn the first PR boundary into its concrete Commitrail change record and begin implementation.
+The public API list is received and the source mapping is complete. Joint catalogue review remains. Privacy, conditional MCP headers and `no-store` response caching are settled by the linked clarification.
+
+The proposal follows the documents' human-only v0.1 baseline and keeps the future agent extension explicit. Once joint catalogue review, schema freeze and credential agreement are complete, I can turn the first PR boundary into its concrete Commitrail change record and begin implementation.
 
 ## References
 
+- [Maintainer API handoff](https://github.com/Flow-Research/workstream/pull/401#issuecomment-5654783507)
+- [Fixed public API drill and cases](../../../docs/engineering/external-api-drill.md)
+- [API drill findings and fixes](../../../docs/engineering/external-api-drill-findings.md)
 - [Maintainer clarification: privacy, API handoff, headers and caching](https://github.com/Flow-Research/workstream/pull/401#issuecomment-5654493551)
 - [MCP standard request headers](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#standard-request-headers)
 - [Maintainer review addendum: dispatch and conformance requirements](https://github.com/Flow-Research/workstream/pull/401#issuecomment-5653317895)

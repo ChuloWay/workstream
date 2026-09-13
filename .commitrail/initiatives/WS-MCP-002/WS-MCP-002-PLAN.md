@@ -16,7 +16,7 @@ Workstream owns authorization and lifecycle behavior through its backend.
 The [roadmap](../../../docs/roadmap_status.md) distinguishes live, hidden and
 planned capabilities. The previous MCP PR is closed. The supplied 27-tool
 design and human/agent identity documents describe intended integrations, not
-live runtime proof. This proposal is reconciled with main `016061f1`.
+live runtime proof. This proposal is reconciled with main `6feef398`.
 
 ## Bounded change
 
@@ -76,10 +76,13 @@ credentials remain forbidden and sensitive content stays out of diagnostics.
 The overview records this confirmed policy, conditional `Mcp-Name` requirements,
 and `Cache-Control: no-store` for authenticated success/error responses with
 proxy/CDN and caller-isolation tests. It also records the maintainer-owned API
-list as a dependency: map and jointly freeze the catalogue after the handoff,
-without independently reconstructing the list. These changes address the
-related CodeRabbit inventory, caching and header findings at the planning level;
-no runtime conformance or completed inventory is claimed.
+list as the source for the catalogue. The subsequent handoff is now mapped:
+27 distinct tools match 27 of the 29 handed-off operations; health and service
+provisioning remain outside the tools. The overview records current routes,
+model owners, headers, statuses and exact drill-row references, plus corrected
+guide/policy schemas and missing upload/selector-recovery workflows. Source
+mapping is complete; running-server schema capture, joint freeze and MCP runtime
+conformance remain unproved. No tool expansion or credential decision is implied.
 
 CodeRabbit identified evidence cells describing required checks instead of
 their observed outcomes. The table now records the executed check results and
@@ -95,7 +98,7 @@ belong to the PR and must not be inferred from this correction.
 
 ## Reconciliation
 
-- Current-source reconciliation: main `016061f1` includes PR #400 public proposal review, pre-submission approval, correction and manual dispatch. Account for its API/schema changes in the binding inventory without expanding the agreed 27 tools. Recheck PR #395 and other concurrent owner work before implementation.
+- Current-source reconciliation: main `6feef398` includes the maintainer's updated API handoff and PR #400. The mapping uses the fixed 29-operation census, excludes additional upload/setup/proposal operations, and corrects changed guide/policy contracts without adding tools. Recheck concurrent owner work before implementation.
 - Roadmap impact: none; this records a proposal without changing any product capability or activating an implementation. No no-op roadmap edit.
-- Next usable boundary: maintainer API-list handoff, exact tool mapping and joint catalogue freeze, agreed credential contract, then a concrete foundation change record.
+- Next usable boundary: joint review of the completed source mapping and workflow limits, pinned running-server schema capture and catalogue freeze, agreed credential contract, then a concrete foundation change record.
 - Remaining risks: unresolved resource registration, changing API schemas and unavailable live identity proof. These are questions for review, not accepted runtime risks.
