@@ -264,3 +264,13 @@ with an otherwise valid operation whose output, grant or action is substituted.
 Schema parity uses the same PostgreSQL dialect on both sides; migration round-trip
 uses the existing schema-contract isolation because dropped/re-added columns change
 physical ordinals. The canonical schema fingerprint and all existing gates remain.
+
+
+The affected `backend/tests/test_projects.py` contract also removes the two
+obsolete tests that required role-string approval constraints or assigned a
+`worker` string to retained policy fields. Current authority is protected by
+post-policy stored-principal/direct-SQL tests and the shared proposal authority
+matrix, including operator, audit, system-manager and foreign-project denials.
+The retained pre-submit-hash rewrite test now requires the specific immutable
+policy guard and proves the original hash survives rollback. It no longer
+expects a foreign-key exception to precede the stronger immutable-row guard.

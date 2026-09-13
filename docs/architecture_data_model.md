@@ -994,25 +994,20 @@ warnings remain distinct from policy-adjusted blocking outcomes.
 
 Post-submit checker policy governs durable internal checker runs after a submission is finalized. It does not replace the generated project pre-submit checker policy.
 
-Baseline invariant: post-submit policy hash, body, and lock columns are
-explicit. Pre-v0.1 development rows without policy hashes are not backfilled
-into authority; recreate the database and use the project setup lifecycle.
-Runtime records fail
-closed when a task, submission, or checker run lacks valid
-`locked_post_submit_checker_policy_*` context.
+Post-submit policy hash, body and lock columns are explicit. Runtime records
+fail closed when a task, submission or checker run lacks valid
+`locked_post_submit_checker_policy_*` context. Earlier development rows are not
+automatically backfilled into authority. Retained data disposition requires
+separate authorization.
 
-Baseline invariant: required post-submit policy provenance binds a compiled
-policy to guide, source snapshot, effective project policy, and pre-submit
-checker bundle context. Construction-era rows are not an upgrade source.
-
-Baseline invariant: the single-row project/guide-version uniqueness rule is
-replaced by uniqueness for current
-`compiled` or `approved` rows. Superseded rows remain append-only and retain
-their policy body/hash, supersession kind/reason, actor/role/time provenance,
-and any same-context correction replacement link. Correction lookup is scoped
-to the exact guide, source
-snapshot, effective project policy, and pre-submit checker provenance so stale
-feedback cannot influence a later setup context.
+Policy custody binds the canonical body to the exact guide, source snapshot,
+approved upstream chain and pre-submit checker bundle. Only one current
+`compiled` or `approved` policy exists for a guide. Superseded rows preserve their
+body/hash, supersession kind/reason and timestamp, with actor, grant and decision
+provenance in exact append-only operation custody. Retained historical role
+values remain inert. Replacement links follow approved upstream generations;
+the canonical hash may stay the same. A correction targets the exact proposal
+and policy, so a stale target cannot authorize a decision on a later generation.
 
 ## ReviewPolicy
 
