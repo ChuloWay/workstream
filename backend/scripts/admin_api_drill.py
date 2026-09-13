@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import timezone
 import hashlib
 import json
 from pathlib import Path
@@ -56,6 +57,21 @@ def one_grant_matches(items, expected, timestamp_fields=("granted_at",)):
     return (row.keys() == expected.keys() | set(timestamp_fields)
         and strict_equal({key: row[key] for key in expected}, expected)
         and all(timestamp_value(row[field]) for field in timestamp_fields))
+
+
+def stored_admin_row(record):
+    """Independently project native custody columns, without the product serializer."""
+    native = dict(record)
+    native["grant_id"] = native["id"]
+    system = native["granted_by_system_principal"]
+    native["granted_by_ref_kind"] = "system_principal" if system is not None else "actor_profile"
+    native["granted_by_ref"] = system if system is not None else native["granted_by_actor_profile_id"]
+    row = {field: str(native[field]) if native[field] is not None else None for field in ADMIN_FIELDS}
+    row["version"] = native["version"]
+    for field in ("granted_at", "revoked_at"):
+        value = native[field]
+        row[field] = value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z") if value is not None else None
+    return row
 
 
 class AuthorityDrill:
@@ -121,17 +137,8 @@ class AuthorityDrill:
             "postgresql+asyncpg:", "postgresql:", 1))
         try:
             async with connection.transaction(readonly=True, isolation="repeatable_read"):
-                columns = ", ".join("id AS grant_id" if field == "grant_id" else field
-                                    for field in ADMIN_FIELDS)
-                records = await connection.fetch(f"SELECT {columns} FROM admin_role_grants")
-                result = {}
-                for record in records:
-                    row = {field: (record[field].isoformat() if hasattr(record[field], "isoformat")
-                           else str(record[field]) if record[field] is not None else None)
-                           for field in ADMIN_FIELDS}
-                    row["version"] = record["version"]
-                    result[row["grant_id"]] = row
-                return result
+                records = await connection.fetch("SELECT * FROM admin_role_grants")
+                return {str(record["id"]): stored_admin_row(record) for record in records}
         finally:
             await connection.close()
 
@@ -751,6 +758,7 @@ async def scenario(drill, issuer, env):
     drill.report["scenario"] = "twenty_actor_authority"
     drill.report["scenario_sha256"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     audit = AuthorityDrill(drill, issuer, env)
+    audit.proof("empty_history_owner_query", await audit.stored_admin_rows() == {})
     await audit.bootstrap()
     for name in ("role_matrix", "admin_read_fields", "grant_edges", "contributor_roles", "pagination", "lifecycle", "last_admin"):
         try:

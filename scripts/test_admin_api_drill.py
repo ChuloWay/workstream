@@ -29,6 +29,30 @@ def ambiguous_boundary(count):
 
 
 class EvidenceTests(unittest.IsolatedAsyncioTestCase):
+    def test_native_history_projection_binds_both_grantors_and_utc_json_timestamps(self):
+        from datetime import datetime, timezone
+        from uuid import uuid4
+        native = {field: None for field in module.ADMIN_FIELDS
+                  if field not in {"grant_id", "granted_by_ref", "granted_by_ref_kind"}}
+        native.update(id=uuid4(), target_actor_profile_id=str(uuid4()), role="operator", scope_type="system",
+                      status="active", version=1, granted_by_actor_profile_id=str(uuid4()),
+                      granted_by_system_principal=None, granted_by_admin_role_grant_id=uuid4(),
+                      grant_reason="Reason", granted_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+        row = module.stored_admin_row(native)
+        self.assertEqual(set(row), set(module.ADMIN_FIELDS))
+        self.assertEqual(row["grant_id"], str(native["id"]))
+        self.assertEqual(row["granted_by_ref_kind"], "actor_profile")
+        self.assertEqual(row["granted_by_ref"], native["granted_by_actor_profile_id"])
+        self.assertEqual(row["granted_at"], "2026-01-01T00:00:00Z")
+        self.assertIsNone(row["revoked_at"])
+        system = module.stored_admin_row(native | {"granted_by_actor_profile_id": None,
+            "granted_by_system_principal": "workstream:system:bootstrap", "granted_by_admin_role_grant_id": None})
+        self.assertEqual(system["granted_by_ref_kind"], "system_principal")
+        self.assertEqual(system["granted_by_ref"], "workstream:system:bootstrap")
+        self.assertIsNone(system["granted_by_admin_role_grant_id"])
+        changed = module.stored_admin_row(native | {"granted_by_actor_profile_id": str(uuid4())})
+        self.assertNotEqual(changed["granted_by_ref"], row["granted_by_ref"])
+
     def test_full_history_pages_reject_every_field_mutation(self):
         row = dict(zip(module.ADMIN_FIELDS, ("grant", "target", "operator", "system", None,
             "revoked", 2, "actor_profile", "admin", "authority-grant", "Issue reason",
