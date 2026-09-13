@@ -1,7 +1,7 @@
 # CI runtime recovery without reducing proof
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Reduce full Backend runtime through cheaper equivalent database resets and balanced allocation of the existing seven hosted lanes.
 
 ## Intent
@@ -88,6 +88,13 @@ Plan review precedes implementation. Run focused lane/evidence tests and real
 `tests/test_database_reset.py` through the existing isolated runner, including
 failure/cancellation probes; then lint, documentation/record checks and full hosted
 Backend CI. Hosted baseline evidence is inspected, not a performance guarantee.
+
+Plan review confirmed the existing transaction and evidence design. The task
+family now has one owner rather than a partition group; a count-preserving
+crossed-owner test still rejects incorrect manifest ownership. Added reset
+proof checks exact batched statements and real PostgreSQL rollback after a
+partial batch fails. Existing cancellation, process-termination and schema-drift
+tests remain intact. Current command results and hosted timing belong in the PR.
 
 ## Reconciliation
 

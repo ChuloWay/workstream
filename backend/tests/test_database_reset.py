@@ -19,8 +19,77 @@ from conftest import (
     TRUNCATE_GUARDED_TABLES,
     _assert_owned_test_database,
     _verify_test_database_schema,
+    _reset_test_database_state,
     clean_postgres_database as clean_postgres_database_fixture,
 )
+
+
+def test_reset_batches_all_trigger_commands_in_one_transaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Batching changes round trips, not statements or transaction ordering."""
+    connection = AsyncMock()
+    transaction = AsyncMock()
+    connection.transaction = Mock(return_value=transaction)
+    tables = {name: f'"public"."{name}"' for name in RESETTABLE_TEST_TABLES}
+    monkeypatch.setattr("conftest.asyncpg.connect", AsyncMock(return_value=connection))
+    custody = AsyncMock()
+    schema = AsyncMock(return_value=tables)
+    monkeypatch.setattr("conftest._assert_owned_test_database", custody)
+    monkeypatch.setattr("conftest._assert_canonical_test_schema", schema)
+
+    async def after_disable() -> None:
+        transaction.__aenter__.assert_awaited_once()
+        transaction.__aexit__.assert_not_awaited()
+        assert connection.execute.await_count == 1
+
+    asyncio.run(_reset_test_database_state("test-url", after_disable=after_disable))
+    custody.assert_awaited_once_with(connection, "test-url")
+    schema.assert_awaited_once_with(connection)
+    statements = [call.args[0] for call in connection.execute.await_args_list]
+    assert len(statements) == 4
+    assert statements[0].split("; ") == [
+        f"alter table {tables[name]} disable trigger user"
+        for name in TRUNCATE_GUARDED_TABLES
+    ]
+    assert statements[1] == (
+        f"truncate table {', '.join(tables.values())} restart identity cascade"
+    )
+    assert statements[2] == (
+        "insert into authority_control"
+        "(id, bootstrap_completed, bootstrap_grant_id, version) "
+        "values (1, false, null, 0)"
+    )
+    assert statements[3].split("; ") == [
+        f"alter table {tables[name]} enable trigger user"
+        for name in TRUNCATE_GUARDED_TABLES
+    ]
+    transaction.__aexit__.assert_awaited_once_with(None, None, None)
+    connection.close.assert_awaited_once()
+
+
+def test_partial_trigger_batch_sql_failure_rolls_back(
+    postgres_database_url: str,
+) -> None:
+    """A server error after an ALTER rolls back the earlier batch statement."""
+    async def exercise() -> None:
+        connection = await asyncpg.connect(postgres_database_url.replace("+asyncpg", ""))
+        try:
+            protected_before = await _protected_state(connection)
+            first = TRUNCATE_GUARDED_TABLES[0]
+            with pytest.raises(asyncpg.DivisionByZeroError):
+                async with connection.transaction():
+                    await connection.execute(
+                        f'alter table public."{first}" disable trigger user; '
+                        "select 1 / 0"
+                    )
+            await _assert_guards_enabled(connection)
+            assert await _protected_state(connection) == protected_before
+        finally:
+            await connection.close()
+        await _verify_test_database_schema(postgres_database_url)
+
+    asyncio.run(exercise())
 
 
 def test_alembic_schema_mutators_declare_schema_ownership() -> None:

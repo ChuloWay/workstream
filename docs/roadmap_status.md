@@ -165,6 +165,10 @@ cannot be reused as post-submission review-gate evidence. See the
 - GitHub CI distributes the backend suite across semantic lanes, rejects
   skipped/deselected tests, preserves global coverage, and requires at least
   90 percent coverage for new or materially changed backend subsystems.
+  Its seven-lane allocation uses three project lanes, one task lane, two
+  shared-foundation lanes and one schema lane. Database resets batch trigger
+  commands within the existing transaction while retaining full schema checks;
+  hosted runtime remains measured rather than guaranteed.
 
 ### Identity and authorization
 

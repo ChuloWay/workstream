@@ -112,9 +112,9 @@ before collection. This is semantic fan-out, not arbitrary test-count sharding:
 lane ownership remains repository-defined and exact.
 
 The explicit inventory lives in `backend/scripts/test_lane_catalogue.py`.
-The `project_lifecycle_a`/`project_lifecycle_b` pair partitions PROJECT nodes;
-`task_lifecycle_a`/`task_lifecycle_b` partitions TASK and checker nodes. The single
-`schema_contracts` lane owns all baseline/PostgreSQL schema, reset and
+The `project_lifecycle_a`, `project_lifecycle_b`, and `project_lifecycle_c` lanes
+partition PROJECT nodes; the single `task_lifecycle` lane owns TASK and checker
+nodes. The single `schema_contracts` lane owns all baseline/PostgreSQL schema, reset and
 isolated-runner contracts. The
 `shared_foundations_a` and `shared_foundations_b` lanes deterministically
 partition exact node IDs from the remaining authorization, artifact, API, and

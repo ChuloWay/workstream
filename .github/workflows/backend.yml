@@ -88,8 +88,8 @@ jobs:
           - schema_contracts
           - project_lifecycle_a
           - project_lifecycle_b
-          - task_lifecycle_a
-          - task_lifecycle_b
+          - project_lifecycle_c
+          - task_lifecycle
 
     services:
       postgres:
@@ -308,19 +308,19 @@ jobs:
           name: backend-lane-${{ github.sha }}-project_lifecycle_b
           path: backend/.ci/download/project_lifecycle_b
 
-      - name: Download task lifecycle A evidence
+      - name: Download project lifecycle C evidence
         if: ${{ always() }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: backend-lane-${{ github.sha }}-task_lifecycle_a
-          path: backend/.ci/download/task_lifecycle_a
+          name: backend-lane-${{ github.sha }}-project_lifecycle_c
+          path: backend/.ci/download/project_lifecycle_c
 
-      - name: Download task lifecycle B evidence
+      - name: Download task lifecycle evidence
         if: ${{ always() }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: backend-lane-${{ github.sha }}-task_lifecycle_b
-          path: backend/.ci/download/task_lifecycle_b
+          name: backend-lane-${{ github.sha }}-task_lifecycle
+          path: backend/.ci/download/task_lifecycle
 
       - name: Require every semantic lane
         if: ${{ always() }}
@@ -834,8 +834,8 @@ jobs:
               "schema_contracts",
               "project_lifecycle_a",
               "project_lifecycle_b",
-              "task_lifecycle_a",
-              "task_lifecycle_b",
+              "project_lifecycle_c",
+              "task_lifecycle",
           ):
               timing_path = Path(".ci/download") / lane_name / "job-start-epoch.txt"
               if timing_path.is_symlink() or not timing_path.is_file():

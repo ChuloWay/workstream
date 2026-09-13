@@ -5,8 +5,12 @@ from dataclasses import dataclass
 ADMIN_RUNNER_MODULE = "tests/test_isolated_database_runner.py"
 SCHEMA_MODULE = "tests/test_alembic.py"
 PARTITIONED_SHARED_LANES = ("shared_foundations_a", "shared_foundations_b")
-PARTITIONED_PROJECT_LANES = ("project_lifecycle_a", "project_lifecycle_b")
-PARTITIONED_TASK_LANES = ("task_lifecycle_a", "task_lifecycle_b")
+PARTITIONED_PROJECT_LANES = (
+    "project_lifecycle_a",
+    "project_lifecycle_b",
+    "project_lifecycle_c",
+)
+TASK_LANE = "task_lifecycle"
 
 
 @dataclass(frozen=True)
@@ -324,7 +328,6 @@ TASK_MODULES = (
 PARTITION_GROUPS = (
     (PARTITIONED_SHARED_LANES, SHARED_FOUNDATION_MODULES),
     (PARTITIONED_PROJECT_LANES, PROJECT_MODULES),
-    (PARTITIONED_TASK_LANES, TASK_MODULES),
 )
 PARTITION_LANES_BY_MODULE = {
     module: names for names, modules in PARTITION_GROUPS for module in modules
@@ -336,5 +339,5 @@ LANES = (
         "schema_contracts", (SCHEMA_MODULE, "tests/test_database_reset.py", ADMIN_RUNNER_MODULE)
     ),
     *(TestLane(name, PROJECT_MODULES) for name in PARTITIONED_PROJECT_LANES),
-    *(TestLane(name, TASK_MODULES) for name in PARTITIONED_TASK_LANES),
+    TestLane(TASK_LANE, TASK_MODULES),
 )

@@ -128,8 +128,8 @@ class LightweightAgentGateTests(unittest.TestCase):
             "          - schema_contracts\n"
             "          - project_lifecycle_a\n"
             "          - project_lifecycle_b\n"
-            "          - task_lifecycle_a\n"
-            "          - task_lifecycle_b",
+            "          - project_lifecycle_c\n"
+            "          - task_lifecycle",
         )
         self.assertIn("  test:\n    if: ${{ always() }}\n    needs: lanes", workflow)
         self.assertIn("Require every semantic lane", workflow)
