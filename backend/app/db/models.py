@@ -87,3 +87,5 @@ from app.modules.tasks.models import (  # noqa: F401
 from app.modules.projects.guide_compilation.models import (  # noqa: F401
     ProjectGuideRuntimeAllocation, ProjectGuideDocumentAccess,
 )
+
+from app.modules.projects.post_policy.models import PostPolicyOperation  # noqa: F401

@@ -514,6 +514,11 @@ for opening the exact complete proposal, plus `correction_operation_id` and
 `predecessor_compilation_id` for recovering a saved correction after manager
 handoff or a lost creation response. See the
 [manager proposal flow](docs/operations_project_operating_manual.md#review-approve-or-correct-a-guide-proposal).
+POL-06A implements hidden deterministic post-submission policy projection, exact
+full-draft review, separate manager approval and correction custody from that same
+saved result. Correction uses the existing unified successor operation. These
+operations require explicit authorization ports; AUTH-12G supplies live authority
+and POL-06B supplies public wiring. Setup does not run post-submit evaluators.
 The separate post-submission Celery worker evaluates submitted work.
 The local Celery command above includes Beat; start it before creating guide sources.
 

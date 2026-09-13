@@ -160,7 +160,7 @@ claims require their real custody, not unit substitutes.
 |---|---|---|
 | POL-04B | `test_live_setup_uses_only_unified_attempt`, `test_finalization_replay_makes_zero_provider_calls` | Real API/worker composition and PostgreSQL; legacy call injection must fail |
 | POL-05A/05B | `test_approval_preserves_finalized_setup`, `test_effective_intake_keeps_platform_defaults` | PostgreSQL rollback/race plus canonical ART compiler; attempted default removal and mixed hash deny |
-| POL-06A/06B | `test_post_policy_operation_preserves_finalization`, `test_post_projection_never_invokes_evaluator` | PostgreSQL provenance and provider-call spy; stale upstream approval denies |
+| POL-06A/06B | `test_post_policy_operation_preserves_finalization_without_provider_or_evaluator_calls`, `test_corrected_generation_replaces_policy_and_retains_original_receipts` | PostgreSQL provenance and provider-call spy; stale upstream approval denies |
 | ARCH-04A/POL-07 | `test_registered_evaluator_rejects_invalid_work`, `test_checker_facade_delegates_once` | Actual registered evaluator fixtures and typed composition; presence-only mutant must fail |
 | CP06/CP07/AUTH-12H | `test_activate_without_legacy_payment_or_task`, `test_activation_requires_exact_selected_policy`, `test_activation_rejects_missing_review_revision_config` | PostgreSQL atomic command plus full response serialization; foreign/retired/incomplete new binding denies |
 | CP08/ARCH-03A/03B/03C | `test_ready_preserves_screening_policy_lock`, `test_claim_copies_policy_without_current_lookup` | PostgreSQL and actual AUTH/owner composition; later publication leaves existing attempt unchanged |

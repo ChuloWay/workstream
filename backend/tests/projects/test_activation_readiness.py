@@ -59,8 +59,8 @@ def _post_submit_policy(
         pre_submit_checker_policy_id=pre_submit.id,
         pre_submit_checker_bundle_hash=pre_submit.compiled_bundle_hash,
         lifecycle_status="approved",
-        approved_by_role="project_manager",
-        approved_by_actor="actor-1",
+        projection_operation_id=uuid4(),
+        approval_operation_id=uuid4(),
         approved_at=datetime.now(UTC),
         policy_body=compiled.policy_body,
         policy_hash=compiled.policy_hash,
@@ -176,8 +176,13 @@ def _activation_ready_bundle() -> dict[str, Any]:
         "revision_policy": revision,
         "payment_policy": payment,
         # Structural validator delegation only; PostgreSQL proposal tests prove custody.
+        "post_policy_custody": SimpleNamespace(
+            approval=SimpleNamespace(operation_id=post_submit.approval_operation_id),
+            projection=SimpleNamespace(operation_id=post_submit.projection_operation_id),
+            target=SimpleNamespace(upstream=SimpleNamespace(operation_id=pre_submit.id), policy_hash=post_submit.policy_hash),
+        ),
         "approval_custody": SimpleNamespace(
-            operation=SimpleNamespace(artifact_policy_id=submission.id),
+            operation=SimpleNamespace(artifact_policy_id=submission.id, operation_id=pre_submit.id),
             effective=effective, pre=pre_submit,
         ),
     }
@@ -233,8 +238,8 @@ def _set_activation_fact(bundle: dict[str, Any], fact: str, value: Any) -> None:
             "pre-submit hash mismatch",
         ),
         ("post_submit_checker_policy.lifecycle_status", "compiled", "approved post-submit"),
-        ("post_submit_checker_policy.approved_by_actor", None, "approval provenance"),
-        ("post_submit_checker_policy.approved_by_role", "submitter", "approval role is invalid"),
+        ("post_submit_checker_policy.approval_operation_id", None, "approval custody"),
+        ("post_submit_checker_policy.projection_operation_id", uuid4(), "approval custody"),
         ("review_policy.allowed_decisions", [], "allowed decisions"),
         ("review_policy.allowed_decisions", ["maybe"], "invalid decisions"),
         ("revision_policy.max_revision_rounds", 0, "revision policy is incomplete"),

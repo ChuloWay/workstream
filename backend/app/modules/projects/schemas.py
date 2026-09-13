@@ -537,8 +537,8 @@ class PostSubmitCheckerPolicyResponse(BaseModel):
     blocking_severities: list[str]
     policy_hash: str | None
     lifecycle_status: str
-    approved_by_role: str | None
-    approved_by_actor: str | None
+    projection_operation_id: UUID | None
+    approval_operation_id: UUID | None
     approved_at: datetime | None
     created_at: datetime
 

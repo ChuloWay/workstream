@@ -83,7 +83,7 @@ async def seed_active_guide_for_pre_12h_e2e(
             project_id=project_id, guide_id=guide_id,
             source_snapshot=fixture_bundle["source_snapshot"],
             pre_submit_checker_policy=fixture_bundle["pre_submit_checker_policy"],
-            approved_by_actor=manager_subject,
+            sessions=db_session.get_session_factory(),
         )
         link = await session.scalar(
             select(ActorIdentityLink).where(

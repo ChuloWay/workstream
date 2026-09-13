@@ -2,7 +2,7 @@
 
 ## Objective
 
-Replace the current three complete project-guide inference passes with one
+The delivered setup replaces the former three complete project-guide inference passes with one
 bounded logical `ProjectGuideCompilationAgent` attempt for each exact immutable
 guide source, capability-catalogue snapshot, and setup generation. A durable
 attempt identity and provider idempotency key enforce that cardinality across
@@ -278,10 +278,11 @@ expression.
 
 ## Evidence and text safety
 
-Evidence uses a closed `GuideEvidenceRef` structure minted/validated by trusted
-server code from the immutable source-item and extraction lineage. It never
-contains raw excerpts, URLs, paths, credentials, signed references, or caller
-text.
+Evidence uses the closed `GuideEvidenceRef` structure. Server validation binds
+source-item, document-version and digest to the exact assigned original bytes.
+Page ranges and bounded safe section labels are model attribution, not verified
+semantic evidence. References contain no raw excerpts, URLs, paths, credentials
+or signed storage references.
 
 Every persisted operator-readable model field passes centralized bounded safe
 text validation/redaction. Rejection is atomic: unsafe or structurally invalid
@@ -335,15 +336,16 @@ row, repurpose its output fields, or let AUTH/live-cutover code invent storage.
 Policy changes supersede through their canonical lifecycle or a new generation;
 later operations cannot rewrite earlier approval evidence.
 
-Agent-derived projections cannot be edited. Correction creates a new setup
-generation and compilation. If separately manual policies remain supported,
-they carry manual provenance, invalidate unified downstream proposals, and
-cannot claim or reuse agent compilation approval.
+Saved-result projections cannot be edited. POL-06A correction composes fresh
+post-policy and existing unified-correction authority before product locks,
+then writes one existing successor and immutable correction receipts atomically.
+A newly approved generation projects the next canonical post policy. There is no
+separate manual policy path. See the [implementation contract](../WS-POL-003-06A.md).
 
 ## Lifecycle
 
 ```text
-ART verified extraction
+ART verified original-document custody
 -> automatic source-ready request (POL-04B1/04B), or authorized PM correction/rerun in a new generation (POL-05)
 -> canonical platform/capability projections
 -> one unified model invocation

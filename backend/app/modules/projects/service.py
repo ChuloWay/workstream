@@ -35,9 +35,6 @@ from app.modules.projects.models import (
     SubmissionArtifactPolicy,
 )
 from app.modules.projects.policy_lineage import require_complete_policy
-from app.modules.projects.post_submit_policy import (
-    parse_locked_post_submit_checker_policy_body,
-)
 from app.modules.projects.repository import ProjectRepository, ProjectRepositoryIntegrityError
 from app.modules.projects.schemas import (
     ActiveGuideReadResponse,
@@ -1018,6 +1015,21 @@ class ProjectService:
         except (ProjectGuideSetupFinalizationError, ValueError) as exc:
             raise GuideActivationBlocked("current unified approval custody is unavailable") from exc
 
+    async def lock_active_post_policy(self, policy, approval):
+        """Require exact post-policy decision custody after upstream proof is locked."""
+        from .post_policy.custody import load_post_policy_custody
+        from .api.guide_proposals import GuideProposalError
+
+        try:
+            custody = await load_post_policy_custody(self._session, policy)
+            if (custody.approval is None
+                    or custody.target.upstream.operation_id != approval.operation.operation_id
+                    or custody.target.upstream_output_digest != approval.operation.output_digest):
+                raise ValueError("post-policy approval chain mismatch")
+            return custody
+        except (GuideProposalError, ValueError) as exc:
+            raise GuideActivationBlocked("post-submit checker approval custody is unavailable") from exc
+
     def validate_activation_ready(
         self,
         guide: ProjectGuide,
@@ -1033,6 +1045,7 @@ class ProjectService:
         *,
         require_payment_policy: bool = True,
         approval_custody=None,
+        post_policy_custody=None,
     ) -> None:
         """Enforce the minimum guide and policy contract required to activate.
 
@@ -1171,59 +1184,14 @@ class ProjectService:
             != pre_submit_checker_policy.compiled_bundle_hash
         ):
             raise GuideActivationBlocked("pre-submit checker compiled bundle hash mismatch")
-        if post_submit_checker_policy is None:
-            raise GuideActivationBlocked("post-submit checker policy is required")
-        if post_submit_checker_policy.guide_id != guide.id:
-            raise GuideActivationBlocked("post-submit checker policy guide mismatch")
-        if post_submit_checker_policy.source_snapshot_id != source_snapshot.id:
-            raise GuideActivationBlocked("post-submit checker policy snapshot mismatch")
-        if post_submit_checker_policy.source_snapshot_hash != source_snapshot.bundle_hash:
-            raise GuideActivationBlocked("post-submit checker policy snapshot hash mismatch")
-        if post_submit_checker_policy.effective_policy_id != effective_policy.id:
-            raise GuideActivationBlocked(
-                "post-submit checker policy is bound to the wrong effective policy"
-            )
-        if (
-            post_submit_checker_policy.effective_policy_hash
-            != effective_policy.effective_policy_hash
-        ):
-            raise GuideActivationBlocked("post-submit checker policy effective hash mismatch")
-        if post_submit_checker_policy.pre_submit_checker_policy_id != pre_submit_checker_policy.id:
-            raise GuideActivationBlocked(
-                "post-submit checker policy is bound to the wrong pre-submit checker policy"
-            )
-        if (
-            post_submit_checker_policy.pre_submit_checker_bundle_hash
-            != pre_submit_checker_policy.compiled_bundle_hash
-        ):
-            raise GuideActivationBlocked("post-submit checker policy pre-submit hash mismatch")
-        if post_submit_checker_policy.lifecycle_status != "approved":
-            raise GuideActivationBlocked("approved post-submit checker policy is required")
-        if (
-            not post_submit_checker_policy.approved_by_role
-            or not post_submit_checker_policy.approved_by_actor
-            or post_submit_checker_policy.approved_at is None
-        ):
-            raise GuideActivationBlocked("post-submit checker approval provenance is required")
-        if post_submit_checker_policy.approved_by_role not in PROJECT_SETUP_ROLES:
-            raise GuideActivationBlocked("post-submit checker approval role is invalid")
+        from .post_policy.custody import validate_activation_post_policy
         try:
-            parsed_post_submit_policy = parse_locked_post_submit_checker_policy_body(
-                post_submit_checker_policy.policy_body,
-                project_id=post_submit_checker_policy.project_id,
-                guide_version=post_submit_checker_policy.guide_version,
-                policy_hash=post_submit_checker_policy.policy_hash or "",
+            validate_activation_post_policy(
+                guide, source_snapshot, effective_policy, pre_submit_checker_policy,
+                post_submit_checker_policy, approval_custody, post_policy_custody,
             )
         except ValueError as exc:
-            raise GuideActivationBlocked("post-submit checker policy hash is invalid") from exc
-        try:
-            parsed_post_submit_policy.validate_sidecars(
-                required_checkers=post_submit_checker_policy.required_checkers,
-                warning_checkers=post_submit_checker_policy.warning_checkers,
-                blocking_severities=post_submit_checker_policy.blocking_severities,
-            )
-        except ValueError as exc:
-            raise GuideActivationBlocked("post-submit checker policy hash is invalid") from exc
+            raise GuideActivationBlocked(str(exc)) from exc
         if review_policy is None or revision_policy is None:
             raise GuideActivationBlocked(
                 "complete review and revision policy selections are required"

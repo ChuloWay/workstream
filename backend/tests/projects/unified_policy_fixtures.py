@@ -51,7 +51,7 @@ def downstream_artifact_proposal():
     )
 
 
-async def create_unified_submission_policy(report_id, snapshot_id, *, proposal=None):
+async def create_unified_submission_policy(report_id, snapshot_id, *, proposal=None, post_submit_required_checkers=()):
     """Project the actual scripted result, with no manual policy row replacement."""
     sessions = db_session.get_session_factory()
     proposal = proposal or downstream_artifact_proposal()
@@ -59,6 +59,7 @@ async def create_unified_submission_policy(report_id, snapshot_id, *, proposal=N
         report_id,
         snapshot_id,
         artifact_proposal=proposal,
+        post_submit_required_checkers=post_submit_required_checkers,
     )
     async with sessions() as session:
         compilation = (
@@ -158,7 +159,7 @@ async def approve_unified_submission_policy(project_id, guide_id, policy_id, *, 
         ).model_dump(mode="json")
 
 
-async def create_standalone_unified_policy(sessions, namespace, *, guide_version="v1", artifact_proposal=None):
+async def create_standalone_unified_policy(sessions, namespace, *, guide_version="v1", artifact_proposal=None, include_post_policy=False):
     """Arrange canonical setup before a lower-level artifact transaction starts."""
     from tests.projects.guide_compilation.helpers import context, seed_database
     from tests.projects.guide_compilation.finalization.pg_prerequisites import compilation_and_projections
@@ -194,7 +195,14 @@ async def create_standalone_unified_policy(sessions, namespace, *, guide_version
         pre = (await session.scalars(select(PreSubmitCheckerPolicy).where(
             PreSubmitCheckerPolicy.effective_policy_id == effective["id"],
         ))).one()
-        return values, effective, pre
+    if include_post_policy:
+        from tests.projects.post_submit_fixtures import seed_post_submit_policy_for_downstream_tests
+        await seed_post_submit_policy_for_downstream_tests(
+            project_id=str(values["project"]), guide_id=str(values["guide"]),
+            source_snapshot={"id": effective["source_snapshot_id"], "bundle_hash": effective["source_snapshot_hash"]},
+            pre_submit_checker_policy={"id": pre.id}, sessions=sessions,
+        )
+    return values, effective, pre
 
 
 async def _approval_context(sessions, project_id, guide_id, policy_id):

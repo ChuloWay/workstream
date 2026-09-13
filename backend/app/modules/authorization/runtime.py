@@ -29,6 +29,7 @@ from app.modules.authorization.domain.guide_mutations import (
     ProjectGuideSourceSnapshotMutationResourceContext,
 )
 from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.authorization.api.post_policy import ProjectPostSubmitCheckerPolicyMutationResourceContext
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.schemas import AdminRole, AdminScope, ProjectRole
 from app.modules.authorization.submission_preparation import SubmissionBundlePreparationPreflightResourceContext, SubmissionBundlePreparationResourceContext
@@ -751,50 +752,6 @@ class ProjectSubmissionArtifactPolicyMutationResourceContext(BaseModel):
                 expected_step="submission_artifact_policy",
                 setup_generation=self.setup_generation,
                 stale_output_digest=self.stale_output_digest,
-                scope_project_id=self.scope_project_id,
-                guide_id=self.guide_id,
-                source_snapshot_id=self.source_snapshot_id,
-            )
-        return self
-
-
-class ProjectPostSubmitCheckerPolicyMutationResourceContext(BaseModel):
-    """Canonical post-submit checker-policy lineage for one mutation."""
-
-    model_config = _STRICT_FROZEN
-
-    resource_type: Literal["project_post_submit_checker_policy_mutation"]
-    resource_id: UUID
-    scope_project_id: UUID
-    guide_id: UUID
-    guide_version: str
-    source_snapshot_id: UUID
-    source_snapshot_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    target_kind: Literal["approve", "correction_request", "derive"]
-    execution_kind: Literal["human", "setup_service"]
-    checker_policy_id: UUID
-    setup_generation: int = Field(ge=1)
-    lifecycle_status: str
-    compiled_policy_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    setup_service_custody: ProjectSetupServiceCustodyContext | None = None
-
-    @model_validator(mode="after")
-    def require_checker_policy_identity(self):
-        """Bind the resource selector to the checker policy only."""
-        if self.resource_id != self.checker_policy_id:
-            raise ValueError("checker policy resource must match policy")
-        service_execution = self.execution_kind == "setup_service"
-        if service_execution != (self.setup_service_custody is not None):
-            raise ValueError("checker service execution requires exact setup custody")
-        if service_execution != (self.target_kind == "derive"):
-            raise ValueError("checker derivation requires setup-service authority")
-        if service_execution:
-            _require_setup_custody(
-                self.setup_service_custody,
-                label="checker policy",
-                expected_step="post_submit_policy",
-                setup_generation=self.setup_generation,
-                stale_output_digest=self.compiled_policy_digest,
                 scope_project_id=self.scope_project_id,
                 guide_id=self.guide_id,
                 source_snapshot_id=self.source_snapshot_id,

@@ -885,8 +885,6 @@ async def create_policy_bundle_for_guide(
     artifact_proposal=None,
     *,
     post_submit_required_checkers: list[str] | None = None,
-    post_submit_warning_checkers: list[str] | None = None,
-    post_submit_blocking_severities: list[str] | None = None,
 ) -> dict:
     for kind, body in (
         (
@@ -954,8 +952,6 @@ async def create_policy_bundle_for_guide(
         artifact_proposal=artifact_proposal or task_artifact_proposal(),
         request_headers=auth_headers(),
         post_submit_required_checkers=post_submit_required_checkers,
-        post_submit_warning_checkers=post_submit_warning_checkers,
-        post_submit_blocking_severities=post_submit_blocking_severities,
     )
 
 

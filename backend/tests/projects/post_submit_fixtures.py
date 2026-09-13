@@ -1,76 +1,46 @@
-"""PROJECT generated post-submit fixtures, not agent-execution proof."""
+"""Arrange downstream post policy through the actual hidden projection and approval."""
 
-from __future__ import annotations
+from uuid import UUID, uuid4
 
-from datetime import UTC, datetime
-from uuid import uuid4
+from sqlalchemy import select
 
-
-from app.db import session as db_session
-from app.modules.projects.models import PostSubmitCheckerPolicy, ProjectGuide
-from app.modules.projects.post_submit_policy import (
-    build_project_post_submit_checker_spec,
-    compile_project_post_submit_checker_spec,
-)
+from app.modules.actors.models import ActorProfile, ActorIdentityLink
+from app.modules.authorization.api import ActorIdentityFacts, ActorKind
+from app.modules.projects.api.guide_proposals import GuideProposalSelection
+from app.modules.projects.api.post_policy import PostPolicyDerive, PostPolicyApproval
+from app.modules.projects.guide_compilation.models import ProjectGuideProposalApproval
+from tests.projects.post_policy.pg_support import operate
 
 
 async def seed_post_submit_policy_for_downstream_tests(
-    *,
-    project_id: str,
-    guide_id: str,
-    source_snapshot: dict,
-    pre_submit_checker_policy: dict,
-    required_checkers: list[str] | None = None,
-    warning_checkers: list[str] | None = None,
-    blocking_severities: list[str] | None = None,
-    approved_by_actor: str = "project-manager-subject",
+    *, project_id: str, guide_id: str, source_snapshot: dict, pre_submit_checker_policy: dict, sessions,
 ) -> dict:
-    """Seed the post-submit policy prerequisite without claiming setup execution."""
-    async with db_session.get_session_factory()() as session:
-        guide = await session.get(ProjectGuide, guide_id)
-        assert guide is not None
-        spec = build_project_post_submit_checker_spec(
-            project_id=project_id,
-            guide_version=guide.version,
-            required_checkers=[] if required_checkers is None else required_checkers,
-            warning_checkers=[] if warning_checkers is None else warning_checkers,
-            blocking_severities=blocking_severities,
-        )
-        compiled = compile_project_post_submit_checker_spec(
-            project_id=project_id,
-            guide_version=guide.version,
-            spec=spec,
-        )
-        post_submit_policy = PostSubmitCheckerPolicy(
-            id=str(uuid4()),
-            project_id=project_id,
-            guide_id=guide_id,
-            guide_version=guide.version,
-            source_snapshot_id=source_snapshot["id"],
-            source_snapshot_hash=source_snapshot["bundle_hash"],
-            effective_policy_id=pre_submit_checker_policy["effective_policy_id"],
-            effective_policy_hash=pre_submit_checker_policy["effective_policy_hash"],
-            pre_submit_checker_policy_id=pre_submit_checker_policy["id"],
-            pre_submit_checker_bundle_hash=pre_submit_checker_policy["compiled_bundle_hash"],
-            required_checkers=compiled.required_checkers,
-            warning_checkers=compiled.warning_checkers,
-            blocking_severities=list(compiled.blocking_severities),
-            policy_hash=compiled.policy_hash,
-            policy_body=compiled.policy_body,
-            lifecycle_status="approved",
-            approved_by_role="project_manager",
-            approved_by_actor=approved_by_actor,
-            approved_at=datetime.now(UTC),
-            created_by=approved_by_actor,
-        )
-        session.add(post_submit_policy)
-        await session.commit()
-        return {
-            "id": post_submit_policy.id,
-            "required_checkers": post_submit_policy.required_checkers,
-            "warning_checkers": post_submit_policy.warning_checkers,
-            "blocking_severities": post_submit_policy.blocking_severities,
-            "policy_hash": post_submit_policy.policy_hash,
-            "policy_body": post_submit_policy.policy_body,
-            "lifecycle_status": post_submit_policy.lifecycle_status,
-        }
+    """Use complete approved upstream custody; never fabricate an approved policy row."""
+    async with sessions() as session:
+        upstream = (await session.scalars(select(ProjectGuideProposalApproval).where(
+            ProjectGuideProposalApproval.project_id == project_id,
+            ProjectGuideProposalApproval.guide_id == guide_id,
+            ProjectGuideProposalApproval.pre_submit_policy_id == pre_submit_checker_policy['id'],
+        ))).one()
+        assert upstream.target_json['source_snapshot_id'] == source_snapshot['id']
+        assert upstream.target_json['source_snapshot_hash'] == source_snapshot['bundle_hash']
+        setup_id, setup_link = (await session.execute(select(ActorProfile.id, ActorIdentityLink.id)
+            .join(ActorIdentityLink, ActorIdentityLink.actor_profile_id == ActorProfile.id)
+            .where(ActorProfile.service_identity == 'workstream.project.setup', ActorIdentityLink.status == 'active'))).one()
+    actor = ActorIdentityFacts(UUID(upstream.actor_profile_id), UUID(upstream.identity_link_id), ActorKind.HUMAN)
+    setup = ActorIdentityFacts(UUID(setup_id), UUID(setup_link), ActorKind.SERVICE, 'workstream.project.setup')
+    selection = GuideProposalSelection(project_id=project_id, guide_id=guide_id, compilation_id=upstream.compilation_id)
+    projected = await operate(sessions, setup, UUID(project_id), None, 'derive', PostPolicyDerive(
+        selection=selection, upstream_approval_operation_id=upstream.operation_id,
+        upstream_approval_output_digest=upstream.output_digest,
+    ))
+    approved = await operate(sessions, actor, UUID(project_id), upstream.admin_role_grant_id, 'approve', PostPolicyApproval(
+        target=projected.target, idempotency_key=uuid4(),
+    ))
+    from app.modules.projects.models import PostSubmitCheckerPolicy
+    async with sessions() as session:
+        policy = await session.get(PostSubmitCheckerPolicy, str(approved.target.policy_id))
+        return {key: getattr(policy, key) for key in (
+            'id', 'required_checkers', 'warning_checkers', 'blocking_severities', 'policy_hash', 'policy_body',
+            'lifecycle_status', 'projection_operation_id', 'approval_operation_id',
+        )}

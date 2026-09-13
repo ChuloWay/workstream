@@ -166,8 +166,9 @@ The active review/revision policy setup endpoints are:
 
 The latest setup run exposes bounded diagnostics and `finalized_compilation_id`.
 Use that exact ID to read the complete pre/post proposal, findings and suggested
-catalogue additions through the manager flow below. Post-submit policy projection
-and approval remain POL-06.
+catalogue additions through the manager flow below. POL-06A implements hidden
+post-submit policy projection and approval; live authorization and public access
+remain AUTH-12G/POL-06B.
 
 The two policy `PUT` routes require a UUID `Idempotency-Key` and a quoted
 `If-Match` value. Use `"no-current-policy"` for the first version and the quoted
@@ -185,7 +186,7 @@ Policy truth remains in the canonical versioned policy rows, not the setup
 ledger. POL-04B owns live unified wiring; POL-05A/05B and POL-06A/06B own separate
 append-only approval/projection/correction operations linked to that receipt.
 Pre-submission approval is public through POL-05B. Post-submit policy approval
-remains unavailable until its separate projection and AUTH-12G activation.
+remains publicly unavailable until AUTH-12G authorization and POL-06B wiring.
 
 An authorized Project Manager reviews the complete bounded proposal before
 approval. Effective intake combines mandatory platform defaults with approved
@@ -203,8 +204,12 @@ contracts with AUTH-12F4 authorization; status-only setup reads do not
 provide them. POL-05B supplies public wiring; AUTH-12G/POL-06B separately provide the
 exact post-policy draft read before post-policy approval.
 
-Post-submit projection, its exact draft read and approval remain POL-06 work;
-there is no current public post-submit checker setup read. The current unified
+POL-06A implements deterministic post-submit projection, an exact complete draft
+read, separate approval and correction custody. It uses the canonical checker
+policy body and the saved unified result without document access or inference.
+The hidden operations require explicit authority ports; their live adapters and
+public wiring remain AUTH-12G/POL-06B. There is no current public post-submit
+checker setup read. The current unified
 proposal package displays proposed post-submit checks for manager inspection,
 but does not approve a post-submit policy. The latest setup read exposes bounded
 status and lineage pointers; it does not substitute for the authorized package.
