@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import asyncpg
 
-from external_api_drill import (ROOT, ProbeFailure, catalogue_expectations, guide_payload, main,
+from external_api_drill import (ROOT, ProbeFailure, catalogue_expectations, guide_metadata, guide_payload, main,
                                page_cases, page_matches, project_grant_read_expectations,
                                strict_equal, timestamp_value, uuid_value)
 from urllib.parse import urlencode
@@ -794,9 +794,15 @@ class AuthorityDrill:
         route, path = guide_route + "/{guide_id}", guide_path + "/" + guide["id"]
         await self.deny("closing_guide_patch_no_auth", "PATCH", route, None,
             path=path, payload={}, expected=401, code="missing_token")
+        await self.deny("closing_guide_patch_foreign_manager", "PATCH", route, "manager_b",
+            path=path, payload={"change_summary": "Must not persist"}, expected=403, code="permission_not_granted")
         for name, key in (("missing", None), ("malformed", "not-a-uuid")):
             await self.deny("closing_guide_patch_key_" + name, "PATCH", route, "manager_a",
                 path=path, payload={}, headers={"Idempotency-Key": key}, expected=422)
+        metadata = guide_metadata(guide)
+        await self.call("closing_guide_patch_scoped_control", "PATCH", route, "manager_a",
+            path=path, payload={}, values={key: value for key, value in metadata.items() if key != "updated_at"},
+            checks={"updated_at": timestamp_value}, exact_fields=metadata.keys())
         for kind, payload in (("review-policy", {"review_preference_window_seconds": 1, "review_lease_duration_seconds": 1}),
                                ("revision-policy", {"max_revision_rounds": 1, "revision_deadline_hours": 1})):
             for caller in (None, "manager_b"):
