@@ -32,9 +32,7 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
     assert all(
         count
         == (
-            len(("schema_contracts",))
-            if module == catalogue.SCHEMA_MODULE
-            else 2
+            len(catalogue.PARTITION_LANES_BY_MODULE[module])
             if module in catalogue.PARTITION_LANES_BY_MODULE
             else 1
         )
@@ -53,6 +51,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     assert (
         modules_by_lane["project_lifecycle_a"]
         == modules_by_lane["project_lifecycle_b"]
+        == modules_by_lane["project_lifecycle_c"]
         == {
             "tests/projects/test_active_guide_repository.py",
             "tests/test_guide_document_intake.py",
@@ -153,8 +152,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         }
     )
     assert (
-        modules_by_lane["task_lifecycle_a"]
-        == modules_by_lane["task_lifecycle_b"]
+        modules_by_lane["task_lifecycle"]
         == {
             "tests/checkers/post_submit/test_catalogue.py",
             "tests/checkers/post_submit/test_compiled_policy.py",
@@ -317,7 +315,7 @@ def test_schema_nodes_share_one_lane() -> None:
 
 
 @pytest.mark.parametrize(
-    ("names", "modules"), catalogue.PARTITION_GROUPS, ids=("shared", "project", "task")
+    ("names", "modules"), catalogue.PARTITION_GROUPS, ids=("shared", "project")
 )
 def test_owner_nodes_partition_deterministically(names, modules) -> None:
     module = modules[0]
@@ -332,6 +330,22 @@ def test_owner_nodes_partition_deterministically(names, modules) -> None:
     assert set(first_by_node.values()) == set(names)
     assert set(first_by_node) == set(nodes)
     assert len(first["nodes"]) == len(nodes)
+
+
+def test_task_nodes_have_one_owner() -> None:
+    module = catalogue.TASK_MODULES[0]
+    nodes = [f"{module}::test_task_{index}" for index in range(100)]
+
+    assert all(
+        task_module not in catalogue.PARTITION_LANES_BY_MODULE
+        for task_module in catalogue.TASK_MODULES
+    )
+    first = runner.build_manifest("a" * 40, nodes)
+    second = runner.build_manifest("a" * 40, list(reversed(nodes)))
+
+    assert first == second
+    assert {row["lane"] for row in first["nodes"]} == {catalogue.TASK_LANE}
+    assert [row["nodeid"] for row in first["nodes"]] == sorted(nodes)
 
 
 def test_manifest_has_no_exclusion_escape_hatch() -> None:
@@ -427,11 +441,11 @@ def test_collect_only_rejects_selected_lane(
 def test_partition_rejects_wrong_owner_pair(monkeypatch: pytest.MonkeyPatch) -> None:
     lanes = list(LANES)
     project_index = next(i for i, lane in enumerate(lanes) if lane.name == "project_lifecycle_b")
-    task_index = next(i for i, lane in enumerate(lanes) if lane.name == "task_lifecycle_b")
+    task_index = next(i for i, lane in enumerate(lanes) if lane.name == "task_lifecycle")
     project, task = lanes[project_index], lanes[task_index]
-    lanes[project_index] = replace(project, modules=(task.modules[0], *project.modules[1:]))
-    lanes[task_index] = replace(task, modules=(project.modules[0], *task.modules[1:]))
-    # Counts alone still pass: the counterexample changes ownership, not inventory.
+    lanes[project_index] = replace(project, name=task.name)
+    lanes[task_index] = replace(task, name=project.name)
+    # Counts alone still pass: the counterexample changes owner names, not inventory.
     runner.validate_lane_inventory(runner.discover_test_modules(), lanes=tuple(lanes))
     monkeypatch.setattr(runner, "LANES", tuple(lanes))
     with pytest.raises(LaneError, match="invalid_partition_lanes"):

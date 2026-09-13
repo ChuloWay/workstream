@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import Counter
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -25,6 +27,22 @@ def _write(path: Path, content: str) -> None:
 def _canonical(path: Path, value: object) -> None:
     """Write canonical JSON expected by the validator."""
     _write(path, json.dumps(value, indent=2, sort_keys=True) + "\n")
+
+
+def _old_mapping(revision: str, path: str, symbol: str, line: int, assertion: str) -> dict:
+    """Bind a fixture disposition to exact historical assertion bytes."""
+    digest = hashlib.sha256(assertion.encode()).hexdigest()
+    return {
+        "invariant_category": "replay",
+        "new_test_node": "tests/test_auth.py::test_new",
+        "old_assertion_id": f"assertion:{line}:{line}:{digest}",
+        "old_content_sha256": digest,
+        "old_revision": revision,
+        "old_source_span": [line, line],
+        "old_test_node": f"{path}::{symbol}",
+        "security_dimensions": {name: "preserved" for name in structure.SECURITY_DIMENSIONS},
+        "target_layer": "service",
+    }
 
 
 def test_repository_structural_debt_equals_the_frozen_ledger() -> None:
@@ -307,14 +325,103 @@ def test_old_assertion_inventory_rejects_a_bogus_test_node() -> None:
     """An assertion map cannot invent an old test that never owned proof."""
     source = "def test_real():\n    assert True\n"
     with pytest.raises(structure.TestStructureError, match="missing_old_test_node"):
-        structure._assertion_inventory(source, "tests/test_auth.py::test_fake")
+        structure._assertion_inventory(
+            structure._analyze_old_module(source), "tests/test_auth.py::test_fake"
+        )
 
 
 def test_old_assertion_inventory_binds_exact_span_and_hash() -> None:
     """Old assertion identity derives from exact trusted source bytes."""
     source = "def test_real():\n    assert True\n"
-    inventory = structure._assertion_inventory(source, "tests/test_auth.py::test_real")
+    inventory = structure._assertion_inventory(
+        structure._analyze_old_module(source), "tests/test_auth.py::test_real"
+    )
     assert inventory == {(2, 2): structure.hashlib.sha256(b"    assert True\n").hexdigest()}
+
+
+def test_assertion_maps_analyze_each_exact_revision_module_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ninety-seven old nodes in seven revision/module pairs need seven analyses."""
+    first, second = "a" * 40, "b" * 40
+    pairs = [(first, "tests/test_shared.py"), (second, "tests/test_shared.py")]
+    pairs.extend((first, f"tests/test_other_{index}.py") for index in range(5))
+    sources = {pair: ["def test_unused():\n", "    pass\n"] for pair in pairs}
+    mappings = []
+    for index in range(97):
+        revision, path = pairs[index % len(pairs)]
+        lines = sources[(revision, path)]
+        symbol = f"test_old_{index}"
+        assertion = f"    assert {index} == {index}\n"
+        lines.extend((f"def {symbol}():\n", assertion))
+        mappings.append(_old_mapping(revision, path, symbol, len(lines), assertion))
+    historical = {key: "".join(lines) for key, lines in sources.items()}
+    maps = tmp_path / "assertion-maps"
+    _canonical(
+        maps / "example.json",
+        {"chunk_id": "example", "mappings": mappings, "schema": structure.MAP_SCHEMA},
+    )
+    monkeypatch.setattr(structure, "_test_nodes", lambda _root: {"tests/test_auth.py::test_new"})
+    loads: list[tuple[str, str]] = []
+
+    def old_source(_root: Path, revision: str, node_id: str) -> str:
+        key = (revision, node_id.split("::", 1)[0])
+        loads.append(key)
+        return historical[key]
+
+    analyses = 0
+    original_analyze = structure.analyze_python
+
+    def analyze(source: str):
+        nonlocal analyses
+        analyses += 1
+        return original_analyze(source)
+
+    monkeypatch.setattr(structure, "_old_source", old_source)
+    monkeypatch.setattr(structure, "analyze_python", analyze)
+    structure.validate_assertion_maps(tmp_path, maps)
+    assert Counter(loads) == Counter({pair: 1 for pair in pairs})
+    assert analyses == len(pairs) == 7
+    mappings[-1]["old_content_sha256"] = "0" * 64
+    _canonical(
+        maps / "example.json",
+        {"chunk_id": "example", "mappings": mappings, "schema": structure.MAP_SCHEMA},
+    )
+    with pytest.raises(structure.TestStructureError, match="old_assertion_mismatch"):
+        structure.validate_assertion_maps(tmp_path, maps)
+
+
+def test_assertion_module_analysis_is_fresh_on_each_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A later invocation must not reuse historical source analyzed earlier."""
+    revision, path = "a" * 40, "tests/test_auth.py"
+    assertion = "    assert True\n"
+    mapping = _old_mapping(revision, path, "test_old", 2, assertion)
+    maps = tmp_path / "assertion-maps"
+    _canonical(
+        maps / "example.json",
+        {"chunk_id": "example", "mappings": [mapping], "schema": structure.MAP_SCHEMA},
+    )
+    monkeypatch.setattr(structure, "_test_nodes", lambda _root: {"tests/test_auth.py::test_new"})
+    sources = iter(("def test_old():\n    assert True\n", "def test_old():\n    assert False\n"))
+    monkeypatch.setattr(structure, "_old_source", lambda *_args: next(sources))
+
+    structure.validate_assertion_maps(tmp_path, maps)
+    with pytest.raises(structure.TestStructureError, match="old_assertion_mismatch"):
+        structure.validate_assertion_maps(tmp_path, maps)
+
+
+def test_unreferenced_zero_assertion_function_is_deferred() -> None:
+    """Only a requested old test node must contain assertion evidence."""
+    module = structure._analyze_old_module(
+        "def test_used():\n    assert True\ndef test_unused():\n    pass\n"
+    )
+    assert structure._assertion_inventory(module, "tests/test_auth.py::test_used")
+    with pytest.raises(structure.TestStructureError, match="old_test_has_no_assertions"):
+        structure._assertion_inventory(module, "tests/test_auth.py::test_unused")
+    with pytest.raises(structure.TestStructureError, match="missing_old_test_node"):
+        structure._assertion_inventory(module, "tests/test_auth.py::test_absent")
 
 
 @pytest.mark.parametrize(
@@ -356,7 +463,9 @@ def test_assertion_mapping_rejects_an_unknown_test_layer() -> None:
 def test_assertion_inventory_detects_an_omitted_old_assertion() -> None:
     """Every old assertion span requires exactly one preserved disposition."""
     source = "def test_real():\n    assert True\n    assert 1 == 1\n"
-    inventory = structure._assertion_inventory(source, "tests/test_auth.py::test_real")
+    inventory = structure._assertion_inventory(
+        structure._analyze_old_module(source), "tests/test_auth.py::test_real"
+    )
     key = ("0" * 40, "tests/test_auth.py::test_real")
     with pytest.raises(structure.TestStructureError, match="incomplete_assertion_disposition"):
         structure._require_complete_dispositions({key: inventory}, {key: {(2, 2)}})
