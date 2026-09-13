@@ -234,6 +234,14 @@ product-policy change is authorized. Add helper falsification tests for incorrec
 document order/IDs and grant history lineage; rerun both existing clients from a
 clean candidate. QA and security review the proof additions before readiness.
 
+The finite closing authority group additionally denies administrative grants to
+service actors and humans with revoked links, then proves restored-human
+eligibility. It checks project-grant reads/writes against an actual other
+project/manager, unauthorized callers, missing/malformed keys and unchanged
+stored state, using the existing HTTP and read-only snapshot helpers. Scoped
+guide/policy positive controls and unauthenticated/foreign-manager refusals stay
+within the original endpoints. No new product lifecycle is created.
+
 The policy criteria below remain required. Additionally, inspect and drill in
 this order: health; self profile GET/PATCH; self authorization context; actor
 and identity-link reads/lifecycle; permission and administrative-role discovery;
@@ -494,3 +502,33 @@ accepting any HTTP 200 body. Extend the existing response predicate to support
 the JSON root and test empty, duplicated, missing and foreign lineage. Keep
 original shareable-document findings in the private report for later inspection;
 do not print model text or claim earlier runs executed this new predicate.
+
+### Original 29-operation closure evidence
+
+The endpoint-by-endpoint handoff is the fixed matrix in
+`docs/engineering/external-api-drill.md`. The four proposal operations added in
+PR #400 are separate scope, not a reason to reopen these 29 operations.
+
+- External client: 798 HTTP checks at `7c9f60d2`, all expected outcomes.
+- Administrator client: 613 checks at `35e49840` (331 HTTP, 282 local evidence),
+  all expected outcomes and no incomplete groups.
+- Closing authority: 84 checks at `1fb14077` (53 HTTP, 31 local evidence), all
+  expected outcomes and no incomplete groups. This includes exact-project guide
+  PATCH denial and retained metadata, not merely guide creation authority.
+- Every runner confirmed disposable database/role cleanup. Reports remain
+  private and retain their actual execution targets. Product code is unchanged
+  across these runs; subsequent external assertions pin 15 domain conflict codes
+  independently verified against the retained responses. The added administrator
+  authority group has its own exact-target execution, not relabeled full-run proof.
+
+The first administrator retry exposed a drill oracle selecting public field names
+as native database columns. Replace that oracle with an explicit native-to-public
+projection, tested for both grantor branches and UTC timestamp normalization.
+Its failed report remains retained. A supplemental launch also rejected a
+duplicate setup case name; give that setup a unique name and retain the failed
+report. Both corrected executions passed; neither failure was a product defect.
+
+Resolved proof gaps include complete administrator history custody, exact domain
+conflict codes, service/revoked-link grant targets, and foreign-manager guide
+mutation denial. No coverage floor, workflow, authorization boundary or required
+behavior assertion is weakened to close this finite client-contract matrix.

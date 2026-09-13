@@ -1,5 +1,81 @@
 # External-client API drill
 
+The audit is bounded to the original 29 public operations below. The endpoint
+matrix is the client handoff boundary; OpenAPI route discovery is not a claim
+that every registered or future lifecycle operation is ready.
+
+## Fixed 29-operation acceptance matrix
+
+The matrix is complete across compatible frozen executions: 798 HTTP checks
+at `7c9f60d2`, 613 administrator checks (331 HTTP and 282 local evidence checks)
+at `35e49840`, and 84 closing authority checks (53 HTTP and 31 local evidence
+checks) at `1fb14077`. All met their expected outcomes, with no incomplete
+scenario groups; every disposable database and role was cleaned up.
+
+These are distinct recorded targets, not one execution at the final documentation
+commit. After the external run, its only changes tightened 15 conflict-code
+assertions; every expected code was checked against the retained real response,
+and a helper regression rejects the wrong code even when HTTP 409 matches.
+After the full administrator run, the added closing authority group was executed
+separately against the unchanged product implementation. It covers service and
+revoked-link grant targets, cross-project grant substitution, and scoped guide
+and policy writes. Reports remain private, out of tree, at their original hashes.
+
+This is the original client-audit scope, not all registered routes. Paths below
+use `/api/v1`. `E` names cases in `external_api_drill.py`; `A` names cases in
+`admin_api_drill.py`. Each row requires the named successful use, applicable
+invalid inputs, authority checks and state/replay assertions. Bootstrap remains
+local operator setup, not a thirtieth API. Draft-guide checks do not manufacture
+activation, task execution or acceptance. The four proposal APIs added in #400
+are outside this matrix.
+
+| # | Operation | Contract and named evidence |
+|---|---|---|
+| 1 | `GET /health` | Exact public health value/shape and request/correlation headers: E `health`. |
+| 2 | `GET /actors/me` | Canonical identity, every profile field, stable identity, token rejection and actor/link lifecycle admission: E `profile_*`, `*_self_read_*`. |
+| 3 | `PATCH /actors/me` | Both editable fields, omission/null/normalization/length/type/NUL, rejected mixed-update atomicity and readback: E `display_name_*`, `contact_email_*`, `*_self_write_*`. |
+| 4 | `GET /actors/me/authorization-context` | Exact project, actor, roles and effective actions; selector validation, both contributor roles, revoked and foreign-project concealment: E `context_*`, `contributor_context_*`, `revoked_contributor_context_*`. |
+| 5 | `GET /actors/{actor_profile_id}` | Exact human/service fields and timestamps, access-admin/system-audit reads, project-audit/ordinary/no-auth denial, absent/malformed selectors: E `admin_human_profile_fields`, `service_persisted_profile`; A `human_admin_read_fields`, `admin_read_profile_*`. |
+| 6 | `GET /actors/{actor_profile_id}/identity-links` | Exact human/service link fields without subject disclosure, authority/selector checks, revoked/restored state: A `human_admin_link_fields`, `admin_read_link_*`; E `service_persisted_identity`, `service_link_*_readback`. |
+| 7 | `POST /actors/{actor_profile_id}/suspend` | Full reason/key boundary matrix, authority/target denial, normalized replay/mismatch/conflict, exact receipt and current-state preservation: E `actor_suspend_*`; A self and last-admin guards. |
+| 8 | `POST /actors/{actor_profile_id}/reactivate` | Same boundary matrix, restored access, already-active and terminal refusal: E `actor_reactivate_*`, `reactivated_*`, `deactivated_actor_cannot_reactivate`. |
+| 9 | `POST /actors/{actor_profile_id}/deactivate` | Same boundary matrix, terminal status and subsequent self-access denial: E `actor_deactivate_*`, `deactivate_self_write_denied`. |
+| 10 | `POST /actor-identity-links/{identity_link_id}/revoke` | Reason/key/authority/target boundaries, exact receipt, replay/mismatch/conflict, denied admission and unchanged current link: E `link_revoke_*`, `service_link_revoke_*`; A self guard. |
+| 11 | `POST /actor-identity-links/{identity_link_id}/reactivate` | Same boundary matrix and restored identity admission without creating authority: E `link_reactivate_*`, `service_link_reactivate_*`. |
+| 12 | `GET /authorization/permissions` | Exact frozen 73-permission catalogue, not runtime-derived expectations; authority and lifecycle rejection: E `catalogue_*`; A `inactive_catalogue_*`. Catalogue presence does not activate an action. |
+| 13 | `GET /authorization/admin-role-definitions` | Exact five roles, allowed scopes and permission matrix; twenty-human allow/deny matrix: E `catalogue_*`; A `role_definitions_*`. |
+| 14 | `POST /admin-role-grants` | Required/optional scope inputs, role/reason/key boundaries, self-grant prohibition, target eligibility, exact receipt/history and replay: A `grant_*`, `self_grant_*`, `system_only_*`, `inactive_grant_target_*`, `closing_service_grant_denied`, `closing_revoked_link_grant_denied`, `closing_restored_target_grant`. |
+| 15 | `GET /admin-role-grants` | All 16 public history fields against independent stored custody, populated scope/status pagination, cursor/query limits and audit/ordinary/no-auth boundaries: A `admin_pages_*`, `admin_query_collection_*`, `admin_auditor_collection_*`. |
+| 16 | `GET /actors/{actor_profile_id}/admin-role-grants` | Complete active/revoked lineage, multiple history rows, filters/cursors, system/project-audit scope and malformed/absent actors: A `history_*`, `admin_query_history_*`, `grant_*_full_history*`, `revoke_*_full_history*`. |
+| 17 | `POST /admin-role-grants/{grant_id}/revoke` | Exact receipt and retained history, reason/key/selector boundaries, replay/mismatch, absent/revoked concealment and current authority: A `revoke_*`, `grant_target_revoke*`, `cross_admin_*`, `last_admin_*`. |
+| 18 | `POST /service-actors` | Closed identity/opaque subject/reason inputs, 200/500-byte equality and overflow, denied callers, distinct binding conflicts, exact receipt, replay and stored profile/link: E `service_*`. |
+| 19 | `POST /projects` | All three request fields, required/null/type/length/NUL, authority, duplicate slug, key/replay/conflict and exact draft readback: E `project_*`, `create_project`, `replay_project`, `overflow_*`; A `cannot_create_project_*`. |
+| 20 | `GET /projects/{project_id}` | Complete administrative view versus exact three-field contributor view, real foreign projects and revoked access: E `read_project`, `project_maximum_readback`, `contributor_project_access_*`, `foreign_project_denial`; A `project_read_*`. |
+| 21 | `GET /projects/{project_id}/contributor-candidates` | Exactly actor ID/display name; populated pagination, cursor tampering/binding, limit validation, service exclusion and human/link lifecycle membership: A `candidate_*`, `candidates_after_*`. |
+| 22 | `POST /projects/{project_id}/role-grants` | Submitter/reviewer only, required input and nested qualification fields, combined bounds, exact manager/capture lineage, replay/recovery and self/foreign denial: E `qualification_*`, `project_issue_*`, `issue_project_*`; A `manager_self_project_grant_*`. |
+| 23 | `GET /projects/{project_id}/role-grants` | Populated pages, role/status filters, scoped cursor and query boundaries, exact unchanged history after rejected writes: A `project_pages_*`, `project_filtered_*`, `project_cursor_*`; E `project_issue_*_unchanged`. |
+| 24 | `GET /projects/{project_id}/role-grants/{grant_id}` | Every grant and qualification field, provenance, versions, revocation timestamps and replay preservation: E `read_project_*`, `project_issue_replay_unchanged_*`, `revoked_grant_readback_*`. |
+| 25 | `POST /projects/{project_id}/role-grants/{grant_id}/revoke` | Both roles, reason boundaries, exact versioned receipt, preserved qualification, replay/mismatch/already-revoked conflict and lost contributor access: E `project_revoke_*`, `revoke_project_*`, `revoked_contributor_*`. |
+| 26 | `POST /projects/{project_id}/guides` | Required version/examples/documents; optional summary; ordered exact example commitment; document label/media/order/unique IDs and waiting setup; bounds/invalid/recovery/authority/replay: E `guide_fields_*`, `guide_documents_*`, `guide_*_missing`, `guide_create_*`. |
+| 27 | `PATCH /projects/{project_id}/guides/{guide_id}` | Summary only, omission/null/empty/max/type/NUL, immutable-field refusal, authority and exact metadata/replay: E `guide_patch_*`, `guide_foreign_actor_*`, `guide_rejected_body_unchanged`; A `closing_guide_patch_*` proves exact-project manager authority and retained metadata. |
+| 28 | `PUT /projects/{project_id}/guides/{guide_id}/review-policy` | Every policy input including strict human-review mode; nondefaults/omission semantics; key/If-Match validation, unauthorized writes, exact generation/hash/predecessor and replay: E `*_review-policy`, `review-policy_fields_*`. |
+| 29 | `PUT /projects/{project_id}/guides/{guide_id}/revision-policy` | Every revision-policy input, bounded rounds/deadline and state list, nullable reassignment, conditional mutation/replay and exact lineage: E `*_revision-policy`, `revision-policy_fields_*`. |
+
+Read-only methods do not acquire mutation idempotency requirements. Field limits
+are those in the current schema/owner, not invented client restrictions. Raw
+reports retain their conservative `partial_positive` indexes; completing this
+matrix is a bounded client-contract result, not a promise about every possible
+input combination, production Flow deployment or unfinished product lifecycle.
+
+For rows 22–25, A `closing_project_*` adds real foreign-manager and ordinary/
+unauthenticated denials, wrong-project grant relations, malformed/missing keys,
+and successful scoped controls with unchanged state after rejection. For rows
+28–29, A `closing_review-policy_*` and `closing_revision-policy_*` add scoped
+manager controls and foreign-manager/unauthenticated denials.
+
+## Additional scenario detail
+
+
 Project-role probes bind grantor and qualification-capture provenance to the
 known HTTP-issued manager authority grant. Both contributor roles use exact
 receipt, grant and qualification shapes, full current-state reads before and
@@ -12,8 +88,8 @@ Contributor-candidate probes require exactly `actor_profile_id` and
 contact field in the fixture. They check populated pagination, cursor tampering
 and project/limit binding, invalid query values, unauthenticated and unauthorized
 callers, and exact membership after actor suspension/deactivation and identity-link
-revocation/restoration. The existing twenty-human setup is reused; service-actor
-exclusion is not established by this group. Candidate listing is not a grant of
+revocation/restoration. The existing twenty-human setup is reused, and a real
+provisioned service actor must remain absent. Candidate listing is not a grant of
 task access. Exact row checks are recorded as response predicates, not additional
 nested field-index coverage entries.
 
@@ -125,15 +201,16 @@ partial behavioral observations, not exhaustive schema certification:
 - `untested`: no case executed for that operation.
 
 Even a field with a passing case can still need omission, boundary, invalid-type,
-cross-field, persistence or permission proof. No operation is promoted to fully
-verified by this initial slice. Successful-only counts must never hide failures.
+cross-field, persistence or permission proof. Use the fixed acceptance matrix
+above and the actual run evidence, not automatic promotion from these counters.
+Successful-only counts must never hide failures.
 
 Initial cases cover token rejection, self-profile field values/bounds/nulls and
 readback, administration/grant discovery, project creation/replay/conflict,
 ungranted read denial, draft guides, initial review/revision policies and grant
-revocation. Other methods, nested policy fields and response fields remain
-explicitly uncovered. Add independent scenarios as current APIs become reachable;
-never manufacture active-guide, task or acceptance state to complete a report.
+revocation. Later field extensions are mapped in the fixed matrix above. Methods
+outside that selection remain outside this audit; do not manufacture active-guide,
+task or acceptance state to complete an OpenAPI inventory.
 
 Extended cases check profile omission and normalization, response shape and
 identity, policy replacement with a current selector, project length limits,

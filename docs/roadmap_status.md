@@ -192,9 +192,13 @@ cannot be reused as post-submission review-gate evidence. See the
   unsupported project-role input is rejected before mutation. Both original
   drills passed again on merged main after that repair. The extended drill adds
   populated pagination/cursor checks, nested qualification boundary probes and
-  separate value/predicate/shape/request evidence. Remaining field combinations
-  and provider-dependent flows still need client proof before inclusion in the
-  MCP endpoint-and-field handoff; route discovery alone is not readiness.
+  separate value/predicate/shape/request evidence. The
+  [fixed 29-operation matrix](engineering/external-api-drill.md#fixed-29-operation-acceptance-matrix)
+  records the completed client-contract scope and its field/authority/replay
+  checks for the MCP handoff, across the documented frozen executions. New
+  provider-dependent operations require their own evidence;
+  they do not repeatedly reopen this original selection. Route discovery alone
+  is not readiness.
   The public-client drill targets currently usable APIs only; hidden and
   unfinished lifecycle routes are not completion targets. Draft-guide policy
   probes additionally cover optional fields, conditional headers and exact
@@ -216,6 +220,11 @@ cannot be reused as post-submission review-gate evidence. See the
   Project-role field probes bind issuance and qualification capture to the known
   manager grant and compare complete public state across issue/revoke replay
   and conflicts for both submitter and reviewer roles.
+  Closure probes include exact persisted administrator-history fields, all
+  lifecycle reason/key partitions and conflict codes, document declaration
+  limits/order/labels/media types, service exclusion from human discovery,
+  ineligible grant targets and stored cross-project grant substitution. Local
+  bootstrap/count-guard evidence remains distinct from HTTP API observations.
   [API-DRILL-007](engineering/external-api-drill-findings.md#api-drill-007-embedded-nul-in-canonical-profile-fields-becomes-503)
   records the reproduced self-profile NUL defect and its repair: both editable
   fields reject the unsupported character at request validation with 422 rather
