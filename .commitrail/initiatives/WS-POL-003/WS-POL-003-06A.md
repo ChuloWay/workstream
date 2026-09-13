@@ -274,3 +274,12 @@ matrix, including operator, audit, system-manager and foreign-project denials.
 The retained pre-submit-hash rewrite test now requires the specific immutable
 policy guard and proves the original hash survives rollback. It no longer
 expects a foreign-key exception to precede the stronger immutable-row guard.
+
+Main reconciliation preserves the API-drill repairs: archive byte/entry limits,
+machine policy identifiers, request validation and document replay remain owned
+by their existing pre-submit/setup paths. The shared agent-result schema keeps
+those fields alongside the extracted post-binding validator. The ownership
+partition includes both the guide-document drill and all eight POL-06A targets;
+its digest is recomputed over the combined assignments. The roadmap retains the
+completed client-drill evidence and advances only POL-06A's next boundary to
+AUTH-12G/POL-06B.
