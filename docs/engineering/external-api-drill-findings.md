@@ -526,7 +526,7 @@ guide produced `sufficiency_blocked` with
 `nested_archive_intake_check_unavailable`. All 33 HTTP checks met their expected
 outcomes, including upload replay, exact findings lineage and inactive-resolver
 denial. Both stored originals remained byte-identical; database, MinIO, API,
-worker and owned broker cleanup completed. The overall run nevertheless **failed**
+Celery worker and owned broker cleanup completed. The overall run nevertheless **failed**
 its `expected_complete_guide_draft` assertion; no stored draft-limit proof was
 possible because this outcome created no artifact-policy draft.
 
