@@ -418,9 +418,9 @@ provenance: guide id, source snapshot id/hash, effective project policy id/hash,
 and pre-submit checker policy id/hash. A corrected submission artifact policy
 approval establishes the new upstream provenance. The subsequent post-submit
 derive operation creates the compiled policy under that provenance and
-supersedes the prior post-submit policy while retaining its evidence. Workstream must not
-reuse a policy or correction request that only happens to match the same project
-id and guide version.
+supersedes any still-current prior policy while retaining its evidence; correction
+may already have superseded it. Workstream must not reuse a policy or correction
+request that only happens to match the same project id and guide version.
 
 The first two gates replace external origin qualification and task ingestion for v0.1. Origin qualification and webhook drop notifications are future adapter concerns.
 
