@@ -1,12 +1,14 @@
 """Unit proof for the administrator drill's evidence checks, not API proof."""
 
 import importlib.util
+from copy import deepcopy
 from contextlib import redirect_stdout
 import io
 import json
 from pathlib import Path
 import sys
 import unittest
+import httpx
 from unittest.mock import AsyncMock, patch
 from types import SimpleNamespace
 
@@ -27,6 +29,61 @@ def ambiguous_boundary(count):
 
 
 class EvidenceTests(unittest.IsolatedAsyncioTestCase):
+    def test_native_history_projection_binds_both_grantors_and_utc_json_timestamps(self):
+        from datetime import datetime, timezone
+        from uuid import uuid4
+        native = {field: None for field in module.ADMIN_FIELDS
+                  if field not in {"grant_id", "granted_by_ref", "granted_by_ref_kind"}}
+        native.update(id=uuid4(), target_actor_profile_id=str(uuid4()), role="operator", scope_type="system",
+                      status="active", version=1, granted_by_actor_profile_id=str(uuid4()),
+                      granted_by_system_principal=None, granted_by_admin_role_grant_id=uuid4(),
+                      grant_reason="Reason", granted_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+        row = module.stored_admin_row(native)
+        self.assertEqual(set(row), set(module.ADMIN_FIELDS))
+        self.assertEqual(row["grant_id"], str(native["id"]))
+        self.assertEqual(row["granted_by_ref_kind"], "actor_profile")
+        self.assertEqual(row["granted_by_ref"], native["granted_by_actor_profile_id"])
+        self.assertEqual(row["granted_at"], "2026-01-01T00:00:00Z")
+        self.assertIsNone(row["revoked_at"])
+        system = module.stored_admin_row(native | {"granted_by_actor_profile_id": None,
+            "granted_by_system_principal": "workstream:system:bootstrap", "granted_by_admin_role_grant_id": None})
+        self.assertEqual(system["granted_by_ref_kind"], "system_principal")
+        self.assertEqual(system["granted_by_ref"], "workstream:system:bootstrap")
+        self.assertIsNone(system["granted_by_admin_role_grant_id"])
+        changed = module.stored_admin_row(native | {"granted_by_actor_profile_id": str(uuid4())})
+        self.assertNotEqual(changed["granted_by_ref"], row["granted_by_ref"])
+
+    def test_full_history_pages_reject_every_field_mutation(self):
+        row = dict(zip(module.ADMIN_FIELDS, ("grant", "target", "operator", "system", None,
+            "revoked", 2, "actor_profile", "admin", "authority-grant", "Issue reason",
+            "2026-01-01T00:00:00+00:00", "other-admin", "other-authority", "Revoke reason",
+            "2026-01-02T00:00:00+00:00")))
+        def valid(items):
+            return module.page_matches(items, {"grant": row}, set(), 1, "grant_id", module.ADMIN_FIELDS)
+        self.assertTrue(valid([row]))
+        for field in module.ADMIN_FIELDS:
+            with self.subTest(field=field):
+                self.assertFalse(valid([row | {field: "wrong"}]))
+                self.assertFalse(valid([{key: value for key, value in row.items() if key != field}]))
+        self.assertFalse(valid([row | {"private": "not-public"}]))
+        self.assertFalse(valid([row | {"version": True}]))
+
+    def test_grant_row_and_replay_proof_reject_field_and_timestamp_mutants(self):
+        expected = {"grant_id": "known", "status": "active", "revoked_at": None}
+        row = expected | {"granted_at": "2026-01-01T00:00:00+00:00"}
+        self.assertTrue(module.one_grant_matches([row], expected))
+        for rows in ([], [row, row], [row | {"unexpected": True}], [row | {"status": "revoked"}],
+                     [{key: value for key, value in row.items() if key != "status"}]):
+            self.assertFalse(module.one_grant_matches(rows, expected))
+        from external_api_drill import verify_response
+        history = {"items": [row | {"revoked_at": "2026-01-02T00:00:00+00:00"}], "total": 1, "next_cursor": None}
+        verify_response(httpx.Response(200, json=history), 200, history)
+        for field in ("granted_at", "revoked_at"):
+            changed = deepcopy(history)
+            changed["items"][0][field] = "2026-01-03T00:00:00+00:00"
+            with self.subTest(field=field), self.assertRaises(module.ProbeFailure):
+                verify_response(httpx.Response(200, json=changed), 200, history)
+
     def test_duplicate_setup_grant_cannot_shrink_expected_pagination_truth(self):
         instance = module.AuthorityDrill(SimpleNamespace(results=[]), None, {})
         rows = {}
