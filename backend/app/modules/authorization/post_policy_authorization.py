@@ -60,7 +60,7 @@ class _PreparedPostPolicy(PreparedPostPolicyOperation):
             raise PreparedAuthorizationInvalid("invalid post-policy facts") from exc
 
     async def authorize_read(self, facts):
-        if self._locator.action_id != "project.guide_compilation.review_package.read":
+        if self._locator.action_id != ActionId.PROJECT_GUIDE_COMPILATION_REVIEW_PACKAGE_READ.value:
             raise PreparedAuthorizationInvalid("post-policy read action required")
         resource = self._resource(facts)
         with _authority_errors():
@@ -69,7 +69,7 @@ class _PreparedPostPolicy(PreparedPostPolicyOperation):
             )
 
     async def consume_new(self, facts):
-        if self._locator.action_id == "project.guide_compilation.review_package.read":
+        if self._locator.action_id == ActionId.PROJECT_GUIDE_COMPILATION_REVIEW_PACKAGE_READ.value:
             raise PreparedAuthorizationInvalid("post-policy mutation action required")
         resource = self._resource(facts)
         with _authority_errors():
@@ -92,7 +92,7 @@ class _PreparedPostPolicy(PreparedPostPolicyOperation):
         )
 
     async def validate_replay(self, facts, decision_event_id):
-        if self._locator.action_id == "project.guide_compilation.review_package.read":
+        if self._locator.action_id == ActionId.PROJECT_GUIDE_COMPILATION_REVIEW_PACKAGE_READ.value:
             raise PreparedAuthorizationInvalid("post-policy mutation replay required")
         resource = self._resource(facts)
         with _authority_errors():

@@ -164,7 +164,7 @@ Schema/authority event constraints remain real and preconditions complete.
 Run affected AUTH/catalogue/resource/PREP/POL suites using the isolated
 PostgreSQL/MinIO runner and locked clean venv, Ruff, structural/ownership and
 boundary checks, stale wording and Markdown links. New/changed AUTH subsystem
-coverage must be at least90%; preserve all current global and per-file floors.
+coverage must be at least 90%; preserve all current global and per-file floors.
 Use hosted full-suite coverage instead of duplicating the full suite locally.
 Frozen clean-head review and latest pushed-head hosted evidence precede PR
 readiness. Live model smoke testing is irrelevant: this boundary invokes none.
