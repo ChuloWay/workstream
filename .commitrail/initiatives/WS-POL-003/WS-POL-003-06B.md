@@ -98,7 +98,7 @@ subsystem would duplicate durable owners. Neither is needed.
 - [ ] Failed authority, invalid/stale custody and transactional failures leave no
   partial policy/operation/audit state; shared existing guard tests remain intact.
 - [ ] Public OpenAPI and current documentation agree; POL-07 remains the next
-  guide-facade boundary. No submitted-work evaluation or guide activation is claimed.
+  single CHECKER service-port boundary. No submitted-work evaluation or guide activation is claimed.
 
 ## Risk and review routing
 
@@ -121,14 +121,20 @@ subsystem would duplicate durable owners. Neither is needed.
 
 ## Review findings
 
-Plan and implementation findings will be recorded when available.
+Plan review passed with low risks. Recovery uses stable approval-ID keyset pages,
+advances past denied candidates and schedules the next bounded page; each new
+sweep starts at the beginning. Delivery reloads immutable approval selection and
+digest, resolves the provisioned service, rolls back identity reads, then opens
+a fresh root transaction. Discovery binds the requested compilation and its own
+approval custody, never the guide-wide current approval tip. Focused tests must
+prove each boundary. Implementation review remains outstanding.
 
 ## Reconciliation
 
 - Current-source reconciliation: Main `a81df4d6` includes merged POL-06A and
   AUTH-12G, including the corrected proof-map reference. Their operations and
   authorization remain authoritative.
-- Next usable boundary: POL-07 guide facade, followed by its adopted activation
+- Next usable boundary: POL-07 single CHECKER service port, followed by its adopted activation
   dependency; CP06 is not part of this change.
 - Remaining risks: Asynchronous derivation requires a running worker and beat
   recovery scanner. Live model testing is unrelated to this deterministic chunk.
