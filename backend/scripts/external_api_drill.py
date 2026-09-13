@@ -965,7 +965,7 @@ async def guide_document_field_cases(drill, manager, outsider, project, manager_
             values=result, exact_fields=result.keys())
         await drill.call("guide_documents_" + label + "_changed_order", "POST", route, path=path,
             token=manager, payload=body | {"documents": list(reversed(documents))},
-            headers=key, expected=409)
+            headers=key, expected=409, values={"error.code": "idempotency_mismatch"})
     valid = {"label": "Guide", "media_type": types[0]}
     invalids = [("null", None), ("empty", []), ("object", {}),
                 ("overflow", [valid] * 101), ("duplicate", [valid, valid]),
@@ -1164,9 +1164,12 @@ async def authority_cases(drill, admin, manager, outsider, manager_id, project):
             headers=key, values=changed,
             exact_fields=changed.keys())
         await drill.call("actor_" + action + "_mismatch", "POST", mutation_route,
-            path=mutation_path, token=admin, payload={"reason": "Changed"}, headers=key, expected=409)
+            path=mutation_path, token=admin, payload={"reason": "Changed"}, headers=key, expected=409,
+            values={"error.code": "idempotency_mismatch"})
         await drill.call("actor_" + action + "_repeated_transition", "POST", mutation_route,
-            path=mutation_path, token=admin, payload=payload, expected=409)
+            path=mutation_path, token=admin, payload=payload, expected=409,
+            values={"error.code": {"suspend": "actor_already_suspended", "reactivate": "actor_not_suspended",
+                                    "deactivate": "actor_deactivated_terminal"}[action]})
         await drill.call("actor_" + action + "_replay_unchanged", "GET", actor_route,
             path=actor_path, token=admin, values=current, exact_fields=current.keys())
         if action == "reactivate":
@@ -1494,7 +1497,9 @@ async def service_actor_cases(drill, issuer, admin, outsider):
     for label, changes in (("duplicate", {}), ("identity", {"subject": "other-service"}),
                            ("subject", {"service_identity": "workstream.artifact.verifier"})):
         await drill.call("service_binding_conflict_" + label, "POST", route, token=admin,
-            payload=payload | changes, expected=409)
+            payload=payload | changes, expected=409,
+            values={"error.code": "identity_subject_already_linked" if label == "subject"
+                                   else "service_identity_already_provisioned"})
     actor_id = created["actor_profile_id"]
     actor_route = "/api/v1/actors/{actor_profile_id}"
     actor_path = f"/api/v1/actors/{actor_id}"
@@ -1549,9 +1554,11 @@ async def service_actor_cases(drill, issuer, admin, outsider):
             path=path, token=admin, payload={"reason": "Verify binding lifecycle"},
             headers=mutation_key, values=result)
         await drill.call("service_link_" + action + "_mismatch", "POST", mutation,
-            path=path, token=admin, payload={"reason": "Changed"}, headers=mutation_key, expected=409)
+            path=path, token=admin, payload={"reason": "Changed"}, headers=mutation_key, expected=409,
+            values={"error.code": "idempotency_mismatch"})
         await drill.call("service_link_" + action + "_repeated_transition", "POST", mutation,
-            path=path, token=admin, payload={"reason": "Repeat transition"}, expected=409)
+            path=path, token=admin, payload={"reason": "Repeat transition"}, expected=409,
+            values={"error.code": "identity_link_already_revoked" if action == "revoke" else "identity_link_not_revoked"})
         await drill.call("service_link_" + action + "_replay_unchanged", "GET", actor_route + "/identity-links",
             path=actor_path + "/identity-links", token=admin, values=link, exact_fields=link.keys())
         await drill.call("service_link_" + action + "_admission", "POST", route, token=service,

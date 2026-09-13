@@ -12,8 +12,9 @@ from uuid import uuid4
 
 import asyncpg
 
-from external_api_drill import (ROOT, ProbeFailure, catalogue_expectations, main,
-                               page_cases, page_matches, strict_equal, timestamp_value, uuid_value)
+from external_api_drill import (ROOT, ProbeFailure, catalogue_expectations, guide_payload, main,
+                               page_cases, page_matches, project_grant_read_expectations,
+                               strict_equal, timestamp_value, uuid_value)
 from urllib.parse import urlencode
 
 ROSTER = (
@@ -717,6 +718,97 @@ class AuthorityDrill:
             else:
                 await self.call("reactivated_link_catalogue", "GET", "/api/v1/authorization/permissions", "link_target")
 
+    async def closing_authority(self):
+        """Close target-eligibility and stored-project substitution proof without hidden APIs."""
+        service = await self.call("closing_service_target", "POST", "/api/v1/service-actors", self.admin,
+            payload={"service_identity": "workstream.artifact.verifier", "subject": "closing-service",
+                     "reason": "Verify administrative target eligibility"}, expected=201)
+        await self.deny("closing_service_grant_denied", "POST", GRANTS, self.admin,
+            payload=grant_body(service["actor_profile_id"]), expected=404, code="actor_not_found")
+        link_path = f'/api/v1/actors/{self.actors["link_target"]}/identity-links'
+        link = await self.call("closing_link_target", "GET", LINKS, self.admin, path=link_path)
+        mutation = "/api/v1/actor-identity-links/{identity_link_id}/"
+        mutation_path = f'/api/v1/actor-identity-links/{link["identity_link_id"]}/'
+        await self.call("closing_revoke_target_link", "POST", mutation + "revoke", self.admin,
+            path=mutation_path + "revoke", payload=REASON)
+        revoked = await self.call("closing_revoked_target_read", "GET", LINKS, self.admin,
+            path=link_path, values={"status": "revoked", "identity_link_id": link["identity_link_id"]})
+        await self.deny("closing_revoked_link_grant_denied", "POST", GRANTS, self.admin,
+            payload=grant_body(self.actors["link_target"]), expected=404, code="actor_not_found")
+        await self.call("closing_revoked_target_preserved", "GET", LINKS, self.admin,
+            path=link_path, values=revoked, exact_fields=revoked.keys())
+        await self.call("closing_restore_target_link", "POST", mutation + "reactivate", self.admin,
+            path=mutation_path + "reactivate", payload=REASON)
+        await self.issue("closing_restored_target_grant", self.admin, "link_target", "operator")
+
+        qualification = {"skills_snapshot": {"availability": "unavailable", "reference_ids": [],
+                           "unavailable_reason": "source_unavailable"},
+            "reputation_snapshot": {"availability": "unavailable", "reference_ids": [],
+                                     "unavailable_reason": "source_unavailable"},
+            "prior_project_work_refs": [], "external_expertise_refs": []}
+        route = PROJECT + "/role-grants"
+        path = f'/api/v1/projects/{self.projects["a"]}/role-grants'
+        body = dict(target_actor_profile_id=self.actors["outsider"], role="submitter",
+                    qualification=qualification, reason="é" * 250)
+        for caller in (None, "outsider", "manager_b"):
+            await self.deny("closing_project_issue_" + str(caller), "POST", route, caller,
+                path=path, payload=body, expected=401 if caller is None else 404,
+                code="missing_token" if caller is None else "resource_not_found")
+        for name, key in (("missing", None), ("malformed", "not-a-uuid")):
+            await self.deny("closing_project_issue_key_" + name, "POST", route, "manager_a",
+                path=path, payload=body, headers={"Idempotency-Key": key}, expected=422)
+        receipt = await self.call("closing_project_issue_control", "POST", route, "manager_a",
+            path=path, payload=body, expected=201, values={"project_id": self.projects["a"],
+                "actor_profile_id": self.actors["outsider"], "role": "submitter", "status": "active", "version": 1})
+        read_route, read_path = route + "/{grant_id}", path + "/" + receipt["id"]
+        stored = await self.call("closing_project_grant_readback", "GET", read_route, "manager_a",
+            path=read_path, **project_grant_read_expectations(receipt, qualification,
+                self.actors["manager_a"], self.grants["manager_a"], body["reason"]))
+        for label, read, request_path in (("list", route, path), ("read", read_route, read_path)):
+            for caller in (None, "manager_b"):
+                await self.deny("closing_project_" + label + "_" + str(caller), "GET", read, caller,
+                    path=request_path, expected=401 if caller is None else 404,
+                    code="missing_token" if caller is None else "project_authorization_resource_not_found")
+        other_path = f'/api/v1/projects/{self.projects["b"]}/role-grants/{receipt["id"]}'
+        await self.deny("closing_project_read_wrong_relation", "GET", read_route, "manager_b",
+            path=other_path, expected=404, code="resource_not_found")
+        revoke = read_route + "/revoke"
+        for caller in (None, "outsider", "manager_b"):
+            await self.deny("closing_project_revoke_" + str(caller), "POST", revoke, caller,
+                path=read_path + "/revoke", payload=REASON, expected=401 if caller is None else 404,
+                code="missing_token" if caller is None else "resource_not_found")
+        await self.deny("closing_project_revoke_wrong_relation", "POST", revoke, "manager_b",
+            path=other_path + "/revoke", payload=REASON, expected=404, code="resource_not_found")
+        for name, key in (("missing", None), ("malformed", "not-a-uuid")):
+            await self.deny("closing_project_revoke_key_" + name, "POST", revoke, "manager_a",
+                path=read_path + "/revoke", payload=REASON, headers={"Idempotency-Key": key}, expected=422)
+        await self.call("closing_project_denials_preserved", "GET", read_route, "manager_a",
+            path=read_path, values=stored, exact_fields=stored.keys())
+        await self.call("closing_project_revoke_control", "POST", revoke, "manager_a",
+            path=read_path + "/revoke", payload=REASON, values=receipt | {"status": "revoked", "version": 2})
+
+        guide_route = PROJECT + "/guides"
+        guide_path = f'/api/v1/projects/{self.projects["a"]}/guides'
+        guide = await self.call("closing_scoped_guide_control", "POST", guide_route, "manager_a",
+            path=guide_path, payload=guide_payload("closing-authority"), expected=201)
+        route, path = guide_route + "/{guide_id}", guide_path + "/" + guide["id"]
+        await self.deny("closing_guide_patch_no_auth", "PATCH", route, None,
+            path=path, payload={}, expected=401, code="missing_token")
+        for name, key in (("missing", None), ("malformed", "not-a-uuid")):
+            await self.deny("closing_guide_patch_key_" + name, "PATCH", route, "manager_a",
+                path=path, payload={}, headers={"Idempotency-Key": key}, expected=422)
+        for kind, payload in (("review-policy", {"review_preference_window_seconds": 1, "review_lease_duration_seconds": 1}),
+                               ("revision-policy", {"max_revision_rounds": 1, "revision_deadline_hours": 1})):
+            for caller in (None, "manager_b"):
+                await self.deny("closing_" + kind + "_" + str(caller), "PUT", route + "/" + kind, caller,
+                    path=path + "/" + kind, payload=payload, headers={"If-Match": '"no-current-policy"'},
+                    expected=401 if caller is None else 403,
+                    code="missing_token" if caller is None else "permission_not_granted")
+            await self.call("closing_" + kind + "_control", "PUT", route + "/" + kind, "manager_a",
+                path=path + "/" + kind, payload=payload, headers={"If-Match": '"no-current-policy"'},
+                values=payload | {"policy_generation": 1, "project_id": self.projects["a"],
+                                   "guide_version": "closing-authority"})
+
     async def last_admin(self):
         # Actual simultaneous HTTP requests; no claim of forced database lock overlap.
         print("Waiting for a fresh mutation-rate window before cross-admin calls", flush=True)
@@ -760,7 +852,8 @@ async def scenario(drill, issuer, env):
     audit = AuthorityDrill(drill, issuer, env)
     audit.proof("empty_history_owner_query", await audit.stored_admin_rows() == {})
     await audit.bootstrap()
-    for name in ("role_matrix", "admin_read_fields", "grant_edges", "contributor_roles", "pagination", "lifecycle", "last_admin"):
+    for name in ("role_matrix", "admin_read_fields", "grant_edges", "contributor_roles", "pagination", "lifecycle",
+                 "closing_authority", "last_admin"):
         try:
             await getattr(audit, name)()
         except ProbeFailure:

@@ -19,6 +19,16 @@ SPEC.loader.exec_module(drill)
 
 
 class ContractTests(unittest.TestCase):
+    def test_conflicts_require_the_exact_public_semantics_not_just_409(self):
+        for code in ("idempotency_mismatch", "actor_already_suspended", "actor_not_suspended",
+                     "actor_deactivated_terminal", "service_identity_already_provisioned",
+                     "identity_subject_already_linked", "identity_link_already_revoked", "identity_link_not_revoked"):
+            with self.subTest(code=code):
+                drill.verify_response(httpx.Response(409, json={"error": {"code": code}}), 409, {"error.code": code})
+                with self.assertRaises(drill.ProbeFailure):
+                    drill.verify_response(httpx.Response(409, json={"error": {"code": "wrong_conflict"}}),
+                                          409, {"error.code": code})
+
     def test_fixture_token_survives_rate_pacing_but_expiry_is_still_enforced(self):
         issuer = drill.TokenIssuer()
         now = int(drill.time.time())
