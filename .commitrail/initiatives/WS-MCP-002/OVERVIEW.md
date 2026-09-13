@@ -32,7 +32,7 @@ This is a fresh initiative. Closed contributor MCP PR #149 remains historical de
 
 ## 3. First Release Scope
 
-I propose using the 27-tool design as the starting scope, subject to checking its contracts and confirming this boundary with you.
+The maintainer's [review addendum](https://github.com/Flow-Research/workstream/pull/401#issuecomment-5653317895) confirms the 27-tool, human-only first release. Each binding still needs verification against the public API before implementation.
 
 | Area | Proposed tools |
 | --- | --- |
@@ -69,7 +69,7 @@ Workstream API
   - owns database changes, audit, and replay handling
 ```
 
-I propose a separate Python package in the Workstream repository, with its own dependencies, entry point, tests, and container build. This keeps review close to the API contracts while allowing separate deployment. Repository placement is a proposal; separate deployment does not require a separate repository.
+Following the review addendum, the adapter stays in the Workstream repository as a separate Python package, with its own entry point, dependency lock, tests, container build, configuration and release instructions. This keeps review close to the API contracts while allowing separate deployment. Its only Workstream runtime dependency is a configured, reachable public API base URL. It must not access backend queues or invoke private or hidden handlers.
 
 The runtime will communicate over HTTP and will not import Workstream's database models, private services, or application startup code. Its package must install and start without installing the backend. ADR 0014 continues to govern backend-owned integrations; the standalone adapter will not import private backend factories to reuse their internals.
 
@@ -128,15 +128,35 @@ Before implementing each tool, I will record its method, path, input and output 
 
 Tool calls will use a configured API destination and fixed routes. Users will not be able to supply arbitrary destinations or authentication headers. Redirects will not carry credentials to another destination.
 
-For mutations that require an operation key, the client must supply and preserve that key. The adapter will forward it unchanged. If a response is lost after dispatch, the adapter cannot know whether the write completed. It will report that uncertainty and will not automatically repeat the write with a new key.
+For the 14 mutations that require an operation key, the client must supply and preserve that key. The adapter will forward it unchanged. The self-profile PATCH is the one unkeyed mutation. Automatic mutation retry is forbidden, including retry with the same key. If a response is lost after dispatch, the adapter cannot know whether the write completed. It will report uncertain execution without claiming failure or rollback. A later client-initiated attempt preserves the original key and follows the API's replay rules.
 
 Policy updates will preserve required version selectors such as `If-Match`. A stale selector must produce the API's conflict outcome. If the initial catalogue lacks an operation needed to recover the current selector, I will document that limitation for review instead of using a write to imitate a read.
 
 Errors will distinguish invalid credentials, invalid input, API denial, conflicts, unavailable dependencies, and uncertain execution. The result will preserve useful API status and correlation information while excluding secrets and raw internal exceptions. A successful MCP transport response does not mean the Workstream operation succeeded.
 
+### Exact request path
+
+Every protected invocation follows this path:
+
+1. Receive one request on the declared POST Streamable HTTP endpoint.
+2. Validate protocol version, required transport metadata, Origin policy and bearer credential.
+3. Establish caller context for this request only. Shared connection pools must not retain a caller's credentials or actor context.
+4. Resolve the tool from a fixed typed registry. Unknown tools cause no API dispatch.
+5. Validate arguments against the tool's closed input schema.
+6. Select the registry's fixed public API method and route under the configured base URL.
+7. Encode path and query selectors in their declared locations and serialize only the declared model under the typed `body` argument.
+8. Add only adapter-controlled headers: approved downstream credentials, content type, required operation key and `If-Match`, and safe correlation identifiers. Arbitrary authorization, forwarding, host or destination headers are not tool inputs.
+9. Send one bounded HTTP attempt.
+10. Validate response status, content type, byte size, JSON shape and the declared success or error contract.
+11. Return the structured MCP result, preserving the API's meaning and excluding credentials and internal exceptions.
+
+Each tool has exactly one fixed method/path binding. Destination, route, method and authentication headers are never model-visible arguments. Authenticated redirects are disabled. Optional null query parameters are omitted, never serialized as the strings `None` or `null`. Partial updates preserve the difference between an omitted field and an explicit null, using JSON-safe, exclude-unset serialization rather than dropping every null.
+
+UUIDs, timestamps, enums, cursor bounds, byte limits and cross-field rules must match the public API. Cursors remain opaque: no decoding, modification, fabrication or inferred totals. The adapter returns only data available to that caller through the API. It does not cache grants, authorization context, actor state, project policy or lifecycle eligibility.
+
 ## 7. Deployment and Operation
 
-The adapter will have its own container, configuration, and release instructions. Production HTTP connections will use TLS. Request sizes, response sizes, connection counts, and timeouts will be bounded.
+The adapter will have its own container, configuration, and release instructions. Production HTTP connections will use TLS. Request sizes, response sizes, connection counts, timeouts and maximum in-flight calls will be configurable and tested. Backpressure must reject or limit excess work before an unbounded queue forms.
 
 A liveness check will report whether the adapter process is running. Readiness and dependency reporting will make API unavailability visible without creating an actor or performing a business mutation as a health check.
 
@@ -156,11 +176,47 @@ I will test the complete route from an MCP client, through the adapter, to a sep
 | Product authorization | Allowed caller succeeds; missing, revoked, and cross-project authority is denied by the real API |
 | Replay and conflict | Same-key retries follow backend behavior; changed payloads and stale policy selectors preserve conflicts |
 | Dependency failures | Timeouts and malformed or oversized responses produce bounded, accurate failures |
-| Privacy | Tokens and sensitive data do not appear in results, logs, or traces |
+| Privacy | Credentials never appear in results or telemetry; authorized API result fields remain distinct from prohibited diagnostic leakage, subject to the clarification below |
 | Key rotation | Trusted new and still-valid retiring keys work within the agreed cache policy; unknown keys or unavailable verification never trigger a fallback signer |
 | Independent deployment | Adapter builds and starts separately and reports Workstream unavailability correctly |
 
 The actual Flow Identity integration also needs an agreed test environment, preregistered clients, and credentials for representative callers. Tests using locally signed fixtures will be identified as fixture-based tests, not evidence that the deployed identity service works. Agent support will later need separate tests for missing delegation, human-grant removal, project restrictions, caller attribution, and revoked links that cannot be recreated by reconnecting.
+
+### Required conformance suites
+
+The following are acceptance requirements from the review addendum, not claims that tests have already run. Each implementation record will identify the concrete tests and commands for its portion of this matrix.
+
+| Suite | Required proof |
+| --- | --- |
+| 1. Catalogue | Exactly 27 unique tools, 12 reads, 15 mutations, 14 keyed mutations and one fixed binding per tool. No resources, prompts, login tool, generic HTTP tool, hidden route or extra capability. Input and structured-output schemas are complete and self-contained; references resolve locally; closed schemas reject unknown fields. Read-only, destructive, idempotent and open-world annotations match actual behavior. |
+| 2. MCP protocol | Explicit `2026-07-28` support on one POST Streamable HTTP endpoint. Test missing, unsupported and mismatched `MCP-Protocol-Version`; required `Mcp-Method` and `Mcp-Name` matching the body; invalid present Origin; Accept and content-type rules. Test unknown methods/tools, malformed JSON-RPC, notifications, cancellation and bounded SSE according to the selected revision. No unapproved legacy GET event stream, session ID, DELETE session endpoint or resumable stream. `tools/list` is deterministic across clients and restarts. |
+| 3. OAuth and Flow | Publish protected-resource metadata for the canonical MCP resource. Missing or invalid bearer gets the correct 401 challenge. Validate the full Flow profile. Distinguish safe failures for wrong issuer/audience, ID token, expired or premature token, malformed token, unknown key and verifier/JWKS unavailability. Prove current/retiring-key cache behavior, stable issuer/subject resolution and concurrent caller isolation across credentials, results, actor context and telemetry. Protected dispatch is incomplete until the downstream credential contract is approved and tested. |
+| 4. All tool bindings | At least one positive wire-level case per tool proving exact method, encoded path, query omission/defaults, typed body, headers, successful status and structured response, with no extra API call. Cover both permitted project-response projections and every maximum-valid bounded input. Mock assertions support this proof but do not replace the release drill. |
+| 5. Real authorization and lifecycle | Use the real API and PostgreSQL path. Prove first human profile/link provisioning grants no authority; self-edit remains self-only; missing authority, wrong administrative role, wrong scope and cross-project access are denied. Revoked grants and inactive actors/links stop subsequent actions. Preserve administrative self-grant/self-revoke guards and final effective Access Administrator protection. Contributor/admin projections must not leak into one another. Workstream guards and audit remain authoritative. |
+| 6. Replay and concurrency | Same key and identical payload follows canonical replay; changed input conflicts. Concurrent duplicates match direct-API outcomes. Both policy writes preserve stale `If-Match` conflicts. Lost responses after possible commit report uncertainty without claiming rollback. No automatic mutation retry. Client restart preserves caller-retained keys, cursors, grant/resource IDs and policy selectors. |
+| 7. Network failures | Bound connection refusal, DNS/TLS failures, connect/read/total/cancellation timeouts, applicable API 429/401/403/404/409/412/422/5xx responses, malformed JSON, wrong content type, schema-invalid success and oversized responses. Test API failure during a call and adapter shutdown with in-flight work. Never claim rollback of a possibly committed write. |
+| 8. Privacy and observability | No credentials or authorization headers in results, logs, traces, exceptions, metric labels or URLs. Do not echo raw arguments or sensitive bodies into diagnostics. Profile data, guide content, reasons and cursor payloads must not enter telemetry. Allow only bounded tool name, fixed method/route template, duration, response size, safe status/error code and approved correlation IDs. API-authorized result data needs the explicit interpretation below. Workstream remains audit authority. |
+| 9. Independent deployment | Build, install and start without the backend package. Run in a separate process/container using only the configured public API. Invalid API URL or identity configuration fails startup safely. API unavailability affects readiness/calls without crashing catalogue discovery. No Garden-specific or client-name conditional behavior. Two MCP clients see the same catalogue and are independently authorized. |
+| 10. Contract drift | Pin the exact current-main source commit for the 27 bindings and reconcile public routes, schemas, headers, statuses, authorization and API drill evidence. CI must fail on route, method, input/output, header, status, annotation or capability drift. Regeneration must not silently accept a changed contract. Changes require deliberate review and renewed proof. |
+
+For annotations, a logical read is not automatically side-effect-free: first profile access may provision identity records. The annotation tests must reflect the actual API operation rather than its HTTP method alone. The implementation contract will trace the requested protocol assertions to the selected SDK and protocol sources; any mismatch must be raised for review before freezing behavior.
+
+### Required release drill
+
+```text
+Real MCP client -> HTTP /mcp -> independently running adapter
+  -> public Workstream HTTP API -> PostgreSQL
+```
+
+Use signed test tokens through normal verification, local bootstrap for the first Access Administrator and public grant APIs for subsequent authority. Do not disable guards or seed database authority to make a case pass. The harness may inspect database and audit state for proof; the adapter itself has no database access.
+
+Exercise all 27 tools through HTTP MCP. For equivalent actors and intent, compare MCP execution with direct API execution for API outcome, response contract, database state, replay results, denial and audit provenance. Use equivalent isolated fixtures for the two paths so the first mutation does not change the second path's starting state.
+
+Release requires 27/27 positive cases, corresponding negative and replay cases, zero unresolved schema drift, zero credential leakage, correct direct-API parity, independent package installation and a reviewed dependency lock. SDK tests, mock request counts, API-only drills and successful tool listing are supporting evidence, not substitutes for this gate. Fixture-token proof remains separate from proof of the deployed Flow service.
+
+### Privacy clarification for review
+
+The addendum lists profiles, guide content, reasons and cursor payloads as prohibited in tool results as well as telemetry. Read tools and pagination also need to return the API's authorized fields. My proposed interpretation is: return only fields allowed by the declared API response and the caller's permissions; never copy raw inputs or additional sensitive content into results, and never include that content in diagnostics. Credentials are always prohibited. Please confirm this interpretation before response schemas are frozen; this is an open wording clarification, not a relaxation already agreed.
 
 ## 9. Proposed PR Order
 
@@ -169,7 +225,7 @@ The actual Flow Identity integration also needs an agreed test environment, prer
 3. **Project setup and participation:** complete the agreed project, guide, policy, candidate, and project-grant tools, including replay and conflict tests.
 4. **Release verification:** prove the complete agreed catalogue against the running API and identity environment, finish client/deployment instructions, and close remaining integration findings.
 
-Each PR will include its relevant tests and documentation. Security and deployment checks begin with the first PR and become broader as tools are added. Later lifecycle tools require their own agreed scope.
+Each PR will include its relevant tests and documentation. PR 1 establishes protocol, credential, privacy and independent-package tests; PRs 2 and 3 add binding, authority, replay and drift tests for every tool they introduce. PR 4 closes the complete ten-suite matrix and the 27-tool direct-API parity drill. Security and deployment checks begin with the first PR and become broader as tools are added. Later lifecycle tools require their own agreed scope.
 
 I will follow the current Commitrail process: one initiative overview for this multi-PR effort and one change record for each implementation PR. Each record will state the allowed files, non-goals, acceptance criteria, risks, and required review. Open PRs will be checked for overlapping changes before each boundary starts.
 
@@ -177,14 +233,16 @@ Review will follow the repository's risk routing, including security and archite
 
 ## 10. Points for Your Review
 
-1. Should the first release cover the 27 setup and access tools, with the wider contributor lifecycle added as its public APIs become ready?
-2. Is a separate package and container in this repository the preferred location for the independently deployed adapter?
-3. How should the separately deployed MCP adapter and Workstream API be registered as resources, and which credential should the adapter use for the API call? Which test environment and preregistered MCP clients should prove that contract?
+The addendum confirms the human-only, 27-tool release and independently packaged deployment within this repository. The remaining questions are:
+
+1. How should the separately deployed MCP adapter and Workstream API be registered as resources, and which credential should the adapter use for the API call? Which test environment and preregistered MCP clients should prove that contract?
+2. Can the privacy rule explicitly permit the caller's authorized API response fields while excluding credentials, echoed inputs and sensitive diagnostic content, as proposed above?
 
 The proposal follows the documents' human-only v0.1 baseline and keeps the future agent extension explicit. Once the points above are agreed, I can turn the first PR boundary into its concrete Commitrail change record and begin implementation.
 
 ## References
 
+- [Maintainer review addendum: dispatch and conformance requirements](https://github.com/Flow-Research/workstream/pull/401#issuecomment-5653317895)
 - [Workstream contribution guide](../../../CONTRIBUTING.md)
 - [Commitrail guidance](../../README.md)
 - [Workstream capability status](../../../docs/roadmap_status.md)

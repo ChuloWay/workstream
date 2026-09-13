@@ -50,7 +50,7 @@ old multi-file `.agent-loop` process or add a duplicate specification.
 
 - Risk class: L1
 - Required reviewers: architecture, security/auth and docs; review the proposal, not runtime correctness.
-- Human review focus: first-release scope, repository placement and credential contract.
+- Human review focus: credential contract, authorized response-data privacy clarification and completeness of the conformance/release proof.
 
 ## Evidence
 
@@ -64,6 +64,14 @@ old multi-file `.agent-loop` process or add a duplicate specification.
 | Commitrail structure is valid | `/opt/homebrew/Caskroom/miniforge/base/bin/python3.12 scripts/check_commitrail_records.py --base-ref origin/main` | PASS: committed planning records passed validation | Existing macOS tooling uses markdown-it-py 3.0.0, not the pinned Linux environment; hosted Agent Gates remains separate proof |
 
 ## Review findings
+
+The maintainer's PR #401 addendum confirms in-repository independent packaging
+and the human-only 27-tool release. The overview now includes the exact dispatch
+path, serialization and retry rules, ten conformance suites, contract-drift
+checks and the real HTTP/API/PostgreSQL parity drill. These are future acceptance
+requirements, not executed runtime evidence. Credential transport remains
+unresolved. The proposed distinction between authorized API result fields and
+prohibited sensitive diagnostics is explicitly awaiting human clarification.
 
 CodeRabbit identified evidence cells describing required checks instead of
 their observed outcomes. The table now records the executed check results and
