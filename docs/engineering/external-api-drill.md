@@ -349,8 +349,11 @@ metadata; it does not reuse expanded size. None of these changes exposes hidden 
 Fresh real-provider execution must retain its own exact target and results.
 
 The post-POL-05B replay at `89a86753` completed 33 expected HTTP observations but
-failed its draft-readiness assertion: the original guide's nested-archive
-prohibition lacks a content-based intake implementation. See the
+failed its draft-readiness assertion on an assistant-authored nested-archive
+prohibition. The human subsequently rejected that restriction: submission ZIP
+members may have any file type, including nested archives. Preserve the old PDF
+and failed result, and version corrected inputs for the next run; this is a drill
+fixture correction, not a product detector requirement. See the
 [retained capability finding](external-api-drill-findings.md#post-pol-05b-replay-nested-archive-capability-gap).
 This is not complete-guide success. POL-05B's proposal read, pre-submission
 approval, correction and dispatch are now public; this replay did not exercise

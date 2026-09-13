@@ -266,6 +266,15 @@ security plus QA/test-delta and documentation, combined proportionately.
 
 ## Evidence
 
+The human corrected the post-POL-05B drill requirement: submission ZIP members
+may have any file type, including nested archives. The assistant introduced the
+prohibition in its sample guide; it is not product authority. The proposed
+separate detector was stopped before implementation. This same PR may correct
+the private guide by creating separately named, newly hashed inputs, preserving
+the original PDFs and failed report, then rerun the existing real-document
+scenario. Do not add a file-type/nested-archive ban, weaken actual safety limits,
+or relabel historical evidence as passing. Remaining public API proof stays bounded.
+
 Post-POL-05B integration retains the exact union of both parents' behavior
 ownership. The genuine replay at `89a86753` preserves 33 expected HTTP outcomes
 but fails the complete-draft assertion on the original guide's unsupported
