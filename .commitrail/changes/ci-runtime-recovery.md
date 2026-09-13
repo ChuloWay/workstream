@@ -35,6 +35,10 @@ commands per reset. Fingerprinting and real isolation must remain in place.
   No timeout or required-status changes.
 - `scripts/test_lightweight_agent_gates.py`: reconcile the exact seven-lane
   workflow assertion without reducing its completeness checks.
+- `backend/scripts/test_structure_boundary.py` and
+  `backend/tests/architecture/test_test_structure_boundary.py`: reuse exact
+  historical-module analysis within one assertion-map validation, without
+  changing ledgers, assertion maps or required dispositions.
 - `docs/operations_backend_testing.md`, `docs/roadmap_status.md` and this record:
   describe the same test guarantees and intended merged allocation accurately.
 
@@ -71,6 +75,14 @@ This removes roughly 90 seconds of observed serial delay on valid changes.
 The accepted tradeoff is speculative lane work when preflight fails, not fewer
 checks or an additional job. Focused plan review confirmed the acyclic dependency
 graph; execute the actual shell guard against success and non-success pairs.
+
+Hosted measurement of the first repair still found a 96.86-second structural
+integrity test: 599 assertion mappings reference 97 old test nodes in seven
+exact revision/module pairs. The validator reloaded and analyzed a whole
+historical module for each node. Reuse that analysis only inside one validation
+call, keyed by exact revision and module path. Preserve ancestry, node existence,
+span/hash identity, duplicate detection and complete dispositions. Never reuse
+analysis across validation calls or cache mutable current-source results.
 
 ## Acceptance criteria
 

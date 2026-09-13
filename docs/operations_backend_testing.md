@@ -116,6 +116,9 @@ Authorization preflight runs alongside the seven lanes. The final `test` job
 requires both preflight and every lane to succeed before validating evidence and
 coverage; failed, cancelled or skipped prerequisites remain blocking. This saves
 serial waiting on valid changes at the cost of lane work when preflight fails.
+Assertion-map validation analyzes each exact historical revision/module once per
+invocation, then checks every referenced node and assertion against that analysis.
+It does not cache current source or reuse analysis across validation calls.
 
 The `project_lifecycle_a`, `project_lifecycle_b`, and `project_lifecycle_c` lanes
 partition PROJECT nodes; the single `task_lifecycle` lane owns TASK and checker
