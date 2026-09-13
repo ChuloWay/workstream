@@ -2155,6 +2155,7 @@ def test_submission_artifact_policy_draft_actions_have_exact_child_owners() -> N
         ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC,
         ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
         ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE, ActionId.PROJECT_SETUP_RUN_UPDATE,
+        ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE,
     }
     assert {
         action
