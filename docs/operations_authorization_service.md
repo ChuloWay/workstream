@@ -526,7 +526,7 @@ and suspend/resume include the exact lifecycle version. AUTH does not translate
 the value or own CON instrument rules.
 AUTH-12I adds and activates only the unified compilation
 request/execute pair. AUTH-11C2 activates three current effective-policy and
-active-guide reads in addition to AUTH-11C1's six diagnostic reads. The exact
+active-guide reads in addition to AUTH-11C1's five diagnostic reads. The exact
 route mapping is in `docs/spec_authorization_service.md`. WS-XINT-002-04A
 activates Project Manager guide-source ingest, and WS-XINT-002-04B activates
 only the fixed-service guide binding and read actions. WS-ARCH-001-02G activates
@@ -540,7 +540,7 @@ AUTH-11A adds read-only `project.setup_diagnostic.read` and
 `project.effective_policy.read`. Project Manager and Audit Authority receive
 them at system or exact-project scope; Operator receives them at system scope.
 Finance Authority and Access Administrator do not. The two AUTH-11B
-identity/context actions, six AUTH-11C1 diagnostic-read actions, and three
+identity/context actions, five AUTH-11C1 diagnostic-read actions, and three
 AUTH-11C2 current effective-policy/active-guide actions are active. AUTH-11C2
 admits only covered Project Manager/Audit Authority or system Operator grants;
 Finance, Access Administrator, contributors, and services receive concealed
@@ -887,7 +887,7 @@ records which grant class authorized the decision. The context response is a
 derived read model, not an authority token: it contains no grant ids or
 identity-link fields and never advertises planned or unrelated actions.
 
-The six AUTH-11C1 diagnostic GET routes use the same rate-first human-read
+The five AUTH-11C1 diagnostic GET routes use the same rate-first human-read
 admission and concealed authorization response. They lock the exact project,
 guide/version, selected child or collection, source snapshot, current actor and
 identity link, and matched administrative grant through projection/commit.
