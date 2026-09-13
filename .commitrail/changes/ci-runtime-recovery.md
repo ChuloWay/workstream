@@ -31,7 +31,8 @@ commands per reset. Fingerprinting and real isolation must remain in place.
   task lane, two shared-foundation lanes and one schema lane. Preserve exact
   recursive inventory, unique node assignment, trusted manifest and evidence.
 - `.github/workflows/backend.yml`: match those seven lanes, downloads and timing
-  inventory. No timeout or required-status changes.
+  inventory; overlap preflight and lanes while requiring both at fan-in.
+  No timeout or required-status changes.
 - `scripts/test_lightweight_agent_gates.py`: reconcile the exact seven-lane
   workflow assertion without reducing its completeness checks.
 - `docs/operations_backend_testing.md`, `docs/roadmap_status.md` and this record:
@@ -62,6 +63,14 @@ must execute exactly once. Retire removed lane names from active tooling/docs.
 Do not increase the 1200-second execution deadline. Do not substitute local-machine
 timing for hosted evidence. Broader test-layer changes and reducing repeated
 coverage execution are outside this repair unless a concrete prerequisite appears.
+
+Run the existing authorization preflight concurrently with lanes. The aggregate
+depends on both and executes an explicit success check for both results; failure,
+cancellation or skipped prerequisites cannot produce a passing aggregate.
+This removes roughly 90 seconds of observed serial delay on valid changes.
+The accepted tradeoff is speculative lane work when preflight fails, not fewer
+checks or an additional job. Focused plan review confirmed the acyclic dependency
+graph; execute the actual shell guard against success and non-success pairs.
 
 ## Acceptance criteria
 

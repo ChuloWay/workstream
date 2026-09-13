@@ -112,6 +112,11 @@ before collection. This is semantic fan-out, not arbitrary test-count sharding:
 lane ownership remains repository-defined and exact.
 
 The explicit inventory lives in `backend/scripts/test_lane_catalogue.py`.
+Authorization preflight runs alongside the seven lanes. The final `test` job
+requires both preflight and every lane to succeed before validating evidence and
+coverage; failed, cancelled or skipped prerequisites remain blocking. This saves
+serial waiting on valid changes at the cost of lane work when preflight fails.
+
 The `project_lifecycle_a`, `project_lifecycle_b`, and `project_lifecycle_c` lanes
 partition PROJECT nodes; the single `task_lifecycle` lane owns TASK and checker
 nodes. The single `schema_contracts` lane owns all baseline/PostgreSQL schema, reset and

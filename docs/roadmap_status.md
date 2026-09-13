@@ -168,7 +168,8 @@ cannot be reused as post-submission review-gate evidence. See the
   Its seven-lane allocation uses three project lanes, one task lane, two
   shared-foundation lanes and one schema lane. Database resets batch trigger
   commands within the existing transaction while retaining full schema checks;
-  hosted runtime remains measured rather than guaranteed.
+  authorization preflight runs alongside lanes and remains mandatory at fan-in.
+  Hosted runtime remains measured rather than guaranteed.
 
 ### Identity and authorization
 

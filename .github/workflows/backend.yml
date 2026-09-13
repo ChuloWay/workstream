@@ -76,7 +76,6 @@ jobs:
           python -m scripts.behavior_ownership validate
 
   lanes:
-    needs: auth-boundary-preflight
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -210,7 +209,7 @@ jobs:
 
   test:
     if: ${{ always() }}
-    needs: lanes
+    needs: [auth-boundary-preflight, lanes]
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -322,11 +321,12 @@ jobs:
           name: backend-lane-${{ github.sha }}-task_lifecycle
           path: backend/.ci/download/task_lifecycle
 
-      - name: Require every semantic lane
+      - name: Require preflight and every semantic lane
         if: ${{ always() }}
         env:
+          PREFLIGHT_RESULT: ${{ needs.auth-boundary-preflight.result }}
           LANES_RESULT: ${{ needs.lanes.result }}
-        run: test "${LANES_RESULT}" = success
+        run: test "${PREFLIGHT_RESULT}" = success && test "${LANES_RESULT}" = success
 
       - name: Merge and independently validate exact lane custody
         working-directory: backend

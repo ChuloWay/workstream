@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -131,8 +132,11 @@ class LightweightAgentGateTests(unittest.TestCase):
             "          - project_lifecycle_c\n"
             "          - task_lifecycle",
         )
-        self.assertIn("  test:\n    if: ${{ always() }}\n    needs: lanes", workflow)
-        self.assertIn("Require every semantic lane", workflow)
+        self.assertIn(
+            "  test:\n    if: ${{ always() }}\n"
+            "    needs: [auth-boundary-preflight, lanes]", workflow
+        )
+        self.assertIn("Require preflight and every semantic lane", workflow)
         self.assertIn("python -m scripts.merge_test_lane_evidence", workflow)
         self.assertIn("scripts/validate_test_lane_evidence.py", workflow)
         self.assertIn(
@@ -172,6 +176,32 @@ class LightweightAgentGateTests(unittest.TestCase):
                     gate_requirements,
                     rf"(?m)^{package}==[^ ]+ \\\n    --hash=sha256:[0-9a-f]{{64}}$",
                 )
+
+    def test_parallel_preflight_and_lanes_fail_closed_at_fan_in(self) -> None:
+        workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
+        lanes = workflow.split("\n  lanes:\n", 1)[1].split("\n  test:\n", 1)[0]
+        self.assertNotRegex(lanes, r"(?m)^    needs:")
+        step = workflow.split(
+            "      - name: Require preflight and every semantic lane\n", 1
+        )[1].split("\n      - name:", 1)[0]
+        self.assertIn("if: ${{ always() }}", step)
+        self.assertIn("PREFLIGHT_RESULT: ${{ needs.auth-boundary-preflight.result }}", step)
+        self.assertIn("LANES_RESULT: ${{ needs.lanes.result }}", step)
+        guard = re.search(r"(?m)^        run: (.+)$", step)
+        self.assertIsNotNone(guard)
+        for preflight in ("success", "failure", "cancelled", "skipped", "", "unknown"):
+            for lanes_result in ("success", "failure", "cancelled", "skipped", "", "unknown"):
+                with self.subTest(preflight=preflight, lanes=lanes_result):
+                    result = subprocess.run(
+                        ["bash", "-e", "-c", guard[1]],
+                        env={"PREFLIGHT_RESULT": preflight, "LANES_RESULT": lanes_result},
+                        capture_output=True,
+                        check=False,
+                    )
+                    self.assertEqual(
+                        result.returncode == 0,
+                        preflight == lanes_result == "success",
+                    )
 
     def test_retired_behavior_mutation_gate_stays_out_of_required_ci(self) -> None:
         backend = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
