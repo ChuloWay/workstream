@@ -74,3 +74,102 @@ async def test_direct_sql_rejects_one_substituted_commitment(clean_postgres_data
                 await session.rollback()
         assert await state(factory) == before
         assert (await operate(factory, actor, command.project_id, grant, 'approve', payload)).kind == 'approve'
+
+
+@pytest.mark.parametrize('classification', ['project_required', 'project_warning'])
+async def test_database_rejects_unrequested_project_selection(clean_postgres_database, monkeypatch, classification):
+    from app.modules.projects.post_policy import service
+    from app.modules.projects.post_submit_policy import (
+        build_project_post_submit_checker_spec, compile_project_post_submit_checker_spec,
+    )
+    from .pg_support import prepare_upstream
+
+    async with proposal_case(clean_postgres_database) as (values, factory, command, actor, grant):
+        payload = await prepare_upstream(factory, command, actor, grant)
+        before = await state(factory)
+        calls = []
+
+        def extra_selection(*, project_id, guide_version, result, catalogue):
+            assert result.post_submit_bindings == ()
+            field = 'required_checkers' if classification == 'project_required' else 'warning_checkers'
+            compiled = compile_project_post_submit_checker_spec(
+                project_id=str(project_id), guide_version=guide_version,
+                spec=build_project_post_submit_checker_spec(
+                    project_id=str(project_id), guide_version=guide_version,
+                    **{field: ['check_acceptance_criteria_present']}),
+            )
+            compiled.validate_catalogue(catalogue)
+            calls.append(compiled)
+            return compiled
+
+        with monkeypatch.context() as patch:
+            # Faulty compiler output remains a valid canonical body with real hash/custody.
+            patch.setattr(service, 'compile_saved_post_policy', extra_selection)
+            with pytest.raises(DBAPIError, match='post-policy compiled selection not requested'):
+                await operate(factory, service_actor(values), command.project_id, None, 'derive', payload)
+        assert len(calls) == 1
+        assert calls[0].entries[-1].classification == classification
+        assert await state(factory) == before
+        # Platform defaults remain valid with no project bindings, including separate approval.
+        projected = await operate(factory, service_actor(values), command.project_id, None, 'derive', payload)
+        approved = await operate(factory, actor, command.project_id, grant, 'approve',
+                                 PostPolicyApproval(target=projected.target, idempotency_key=uuid4()))
+        assert approved.kind == 'approve'
+
+
+@pytest.mark.parametrize('binding_count', [1, 2])
+async def test_database_accepts_exact_selection_shared_by_requirements(clean_postgres_database, binding_count):
+    from app.interfaces.project_agents import ProjectGuideCompilationResult
+    from .test_compiler import selected_result
+
+    body = selected_result()
+    if binding_count == 2:
+        body['requirements'].append(body['requirements'][0] | dict(requirement_id='criteria-two'))
+        body['post_submit_bindings'].append(body['post_submit_bindings'][0] | dict(requirement_id='criteria-two'))
+    outcome = ProjectGuideCompilationResult.model_validate(body)
+    async with proposal_case(clean_postgres_database, outcome=outcome) as (values, factory, command, actor, grant):
+        _, projected = await prepare_post_policy(factory, command, actor, grant, service_actor(values))
+        approved = await operate(factory, actor, command.project_id, grant, 'approve',
+                                 PostPolicyApproval(target=projected.target, idempotency_key=uuid4()))
+        async with factory() as session:
+            policy = await session.scalar(text('SELECT policy_body FROM checker_policies WHERE id=:id'),
+                                          dict(id=str(projected.target.policy_id)))
+        selections = [entry for entry in policy['entries'] if entry['classification'] != 'platform_default']
+        assert len(selections) == 1
+        assert selections[0]['checker_id'] == 'check_acceptance_criteria_present'
+        assert selections[0]['classification'] == 'project_required'
+        assert approved.kind == 'approve'
+
+
+async def test_database_rejects_missing_required_selection(clean_postgres_database, monkeypatch):
+    from app.interfaces.project_agents import ProjectGuideCompilationResult
+    from app.modules.projects.post_policy import service
+    from app.modules.projects.post_submit_policy import (
+        build_project_post_submit_checker_spec, compile_project_post_submit_checker_spec,
+    )
+    from .pg_support import prepare_upstream
+    from .test_compiler import selected_result
+
+    async with proposal_case(clean_postgres_database, outcome=ProjectGuideCompilationResult.model_validate(
+        selected_result()
+    )) as (values, factory, command, actor, grant):
+        payload = await prepare_upstream(factory, command, actor, grant)
+        before = await state(factory)
+        calls = []
+
+        def missing_selection(*, project_id, guide_version, result, catalogue):
+            assert len(result.post_submit_bindings) == 1
+            compiled = compile_project_post_submit_checker_spec(
+                project_id=str(project_id), guide_version=guide_version,
+                spec=build_project_post_submit_checker_spec(project_id=str(project_id), guide_version=guide_version))
+            compiled.validate_catalogue(catalogue)
+            calls.append(compiled)
+            return compiled
+
+        with monkeypatch.context() as patch:
+            patch.setattr(service, 'compile_saved_post_policy', missing_selection)
+            with pytest.raises(DBAPIError, match='post-policy compiled required binding missing'):
+                await operate(factory, service_actor(values), command.project_id, None, 'derive', payload)
+        assert len(calls) == 1
+        assert await state(factory) == before
+        assert (await operate(factory, service_actor(values), command.project_id, None, 'derive', payload)).kind == 'derive'

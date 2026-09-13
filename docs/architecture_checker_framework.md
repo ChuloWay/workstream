@@ -416,8 +416,9 @@ registered checker, not an automatic consequence of this setup flow.
 The compiled project `PostSubmitCheckerPolicy` is persisted with exact setup
 provenance: guide id, source snapshot id/hash, effective project policy id/hash,
 and pre-submit checker policy id/hash. A corrected submission artifact policy
-approval supersedes and retains stale post-submit setup output, then regenerates
-the compiled post-submit policy under the new provenance. Workstream must not
+approval establishes the new upstream provenance. The subsequent post-submit
+derive operation creates the compiled policy under that provenance and
+supersedes the prior post-submit policy while retaining its evidence. Workstream must not
 reuse a policy or correction request that only happens to match the same project
 id and guide version.
 

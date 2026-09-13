@@ -156,6 +156,20 @@ def _guards():
                FROM jsonb_array_elements(binding->'parameters') parameter),'{}'::jsonb))) THEN
         RAISE EXCEPTION 'post-policy compiled required binding missing' USING ERRCODE='23514';
       END IF;
+      IF EXISTS(
+        SELECT 1 FROM jsonb_array_elements(p.policy_body::jsonb->'entries') entry
+        WHERE entry->>'classification' IS DISTINCT FROM 'platform_default'
+          AND NOT EXISTS(
+            SELECT 1 FROM project_guide_compilations c,
+              jsonb_array_elements(c.canonical_result::jsonb->'post_submit_bindings') binding
+            WHERE c.id=NEW.compilation_id
+              AND entry->>'checker_id'=binding->>'capability_id'
+              AND entry->>'definition_version'=binding->>'capability_version'
+              AND entry->>'classification'='project_required'
+              AND entry->'configuration'=COALESCE((SELECT jsonb_object_agg(parameter->>'name',parameter->'value')
+                 FROM jsonb_array_elements(binding->'parameters') parameter),'{}'::jsonb))) THEN
+        RAISE EXCEPTION 'post-policy compiled selection not requested' USING ERRCODE='23514';
+      END IF;
       expected := jsonb_build_object(
         'locator',jsonb_build_object('project_id',NEW.project_id,'guide_id',NEW.guide_id,
           'compilation_id',NEW.compilation_id,'actor_profile_id',NEW.actor_profile_id,

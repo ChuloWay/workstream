@@ -263,7 +263,7 @@ exact reads, fresh predecessor decisions after successor approval, and direct SQ
 with an otherwise valid operation whose output, grant or action is substituted.
 Schema parity uses the same PostgreSQL dialect on both sides; migration round-trip
 uses the existing schema-contract isolation because dropped/re-added columns change
-physical ordinals. The canonical schema fingerprint and all existing gates remain.
+physical ordinals. The schema fingerprint continues to bind the exact migrated objects; all existing gates remain.
 
 
 The affected `backend/tests/test_projects.py` contract also removes the two
@@ -283,3 +283,19 @@ partition includes both the guide-document drill and all eight POL-06A targets;
 its digest is recomputed over the combined assignments. The roadmap retains the
 completed client-drill evidence and advances only POL-06A's next boundary to
 AUTH-12G/POL-06B.
+
+Database membership hardening remains within migration `0020` and the existing
+post-policy PostgreSQL proof owners: require every project selection to match a
+saved binding, in addition to requiring every binding in the policy. Platform
+defaults remain independent of project bindings; shared requirements may select
+one checker. Fault injection must reach the PostgreSQL custody guard with a
+valid compiled body and exact hashes, reject unrequested required or warning
+selections, and preserve all stored state. Prove the regression fails without
+the reverse-membership guard. Correct the checker architecture description so
+upstream approval precedes, rather than performs, post-policy derivation.
+Affected review tracks: security, architecture/reuse, QA/test delta, docs/product
+and CI integrity; retain existing L1 verification and human review boundaries.
+
+The membership repair updates the exact schema fingerprint in `tests/conftest.py`;
+object-level comparison permits only the changed `require_post_policy_operation`
+function. No schema guard or reset behavior is relaxed.
