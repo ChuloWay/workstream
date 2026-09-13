@@ -526,7 +526,7 @@ and suspend/resume include the exact lifecycle version. AUTH does not translate
 the value or own CON instrument rules.
 AUTH-12I adds and activates only the unified compilation
 request/execute pair. AUTH-11C2 activates three current effective-policy and
-active-guide reads in addition to AUTH-11C1's six diagnostic reads. The exact
+active-guide reads in addition to AUTH-11C1's five diagnostic reads. The exact
 route mapping is in `docs/spec_authorization_service.md`. WS-XINT-002-04A
 activates Project Manager guide-source ingest, and WS-XINT-002-04B activates
 only the fixed-service guide binding and read actions. WS-ARCH-001-02G activates
@@ -540,7 +540,7 @@ AUTH-11A adds read-only `project.setup_diagnostic.read` and
 `project.effective_policy.read`. Project Manager and Audit Authority receive
 them at system or exact-project scope; Operator receives them at system scope.
 Finance Authority and Access Administrator do not. The two AUTH-11B
-identity/context actions, six AUTH-11C1 diagnostic-read actions, and three
+identity/context actions, five AUTH-11C1 diagnostic-read actions, and three
 AUTH-11C2 current effective-policy/active-guide actions are active. AUTH-11C2
 admits only covered Project Manager/Audit Authority or system Operator grants;
 Finance, Access Administrator, contributors, and services receive concealed
@@ -603,11 +603,11 @@ ART foundation actions, Project Manager `artifact.guide_source.ingest`, and the
 fixed-service `artifact.guide_source.binding.create` and
 `artifact.guide_source.read`, contributor `artifact.submission_bundle.prepare`,
 hidden human `submission.create`, and fixed-service
-`artifact.submission.binding.create` actions. AUTH-12F4 also supports hidden
+`artifact.submission.binding.create` actions. AUTH-12F4 also supports
 Project Manager `project.guide_compilation.review_package.read`,
 `project.submission_artifact_policy.approve`, and
-`project.guide_compilation.correction.request`; these have no public route, with
-POL-05B public composition pending. Checker, review, generic artifact-read, and
+`project.guide_compilation.correction.request`; POL-05B exposes these with
+exact Project Manager authority and manual correction dispatch. Checker, review, generic artifact-read, and
 the public Submission cutover remain planned. Callers begin and own one root
 transaction, call `prepare`,
 lock their participant rows, compose final typed facts, call `consume` with the
@@ -887,7 +887,7 @@ records which grant class authorized the decision. The context response is a
 derived read model, not an authority token: it contains no grant ids or
 identity-link fields and never advertises planned or unrelated actions.
 
-The six AUTH-11C1 diagnostic GET routes use the same rate-first human-read
+The five AUTH-11C1 diagnostic GET routes use the same rate-first human-read
 admission and concealed authorization response. They lock the exact project,
 guide/version, selected child or collection, source snapshot, current actor and
 identity link, and matched administrative grant through projection/commit.
@@ -1232,8 +1232,8 @@ authorization event to one setup generation. Both human and automatic request
 replays recheck current authority inside the receipt transaction. POL-04B
 composes this authority with execution, projections and finalization in the live
 Celery worker. The automatic operation stops at findings or draft proposals;
-POL-05A delivers hidden manager review, correction and pre-submit approval.
-AUTH-12F4 supplies exact-project Project Manager authority; POL-05B still supplies public composition and manual dispatch. Complete
+POL-05A owns manager review, correction and pre-submit approval.
+AUTH-12F4 supplies exact-project Project Manager authority; POL-05B supplies public composition and manual dispatch. Complete
 proposal content requires current exact-project manager authority; Operator and
-Audit diagnostic permissions do not grant it. Default proposal ports remain
-unavailable.
+Audit diagnostic permissions do not grant it. Proposal services require explicit
+authority injection; there is no unconfigured construction path.
