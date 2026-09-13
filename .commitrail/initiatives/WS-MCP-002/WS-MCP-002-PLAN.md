@@ -50,7 +50,7 @@ old multi-file `.agent-loop` process or add a duplicate specification.
 
 - Risk class: L1
 - Required reviewers: architecture, security/auth and docs; review the proposal, not runtime correctness.
-- Human review focus: credential contract, authorized response-data privacy clarification and completeness of the conformance/release proof.
+- Human review focus: credential contract, maintainer API-list handoff and joint catalogue freeze, and completeness of the conformance/release proof.
 
 ## Evidence
 
@@ -70,8 +70,16 @@ and the human-only 27-tool release. The overview now includes the exact dispatch
 path, serialization and retry rules, ten conformance suites, contract-drift
 checks and the real HTTP/API/PostgreSQL parity drill. These are future acceptance
 requirements, not executed runtime evidence. Credential transport remains
-unresolved. The proposed distinction between authorized API result fields and
-prohibited sensitive diagnostics is explicitly awaiting human clarification.
+unresolved. The maintainer subsequently confirmed that authorized declared API
+response fields are allowed, including values also present in the request;
+credentials remain forbidden and sensitive content stays out of diagnostics.
+The overview records this confirmed policy, conditional `Mcp-Name` requirements,
+and `Cache-Control: no-store` for authenticated success/error responses with
+proxy/CDN and caller-isolation tests. It also records the maintainer-owned API
+list as a dependency: map and jointly freeze the catalogue after the handoff,
+without independently reconstructing the list. These changes address the
+related CodeRabbit inventory, caching and header findings at the planning level;
+no runtime conformance or completed inventory is claimed.
 
 CodeRabbit identified evidence cells describing required checks instead of
 their observed outcomes. The table now records the executed check results and
@@ -89,5 +97,5 @@ belong to the PR and must not be inferred from this correction.
 
 - Current-source reconciliation: main `016061f1` includes PR #400 public proposal review, pre-submission approval, correction and manual dispatch. Account for its API/schema changes in the binding inventory without expanding the agreed 27 tools. Recheck PR #395 and other concurrent owner work before implementation.
 - Roadmap impact: none; this records a proposal without changing any product capability or activating an implementation. No no-op roadmap edit.
-- Next usable boundary: agreed credential contract and a concrete foundation change record.
+- Next usable boundary: maintainer API-list handoff, exact tool mapping and joint catalogue freeze, agreed credential contract, then a concrete foundation change record.
 - Remaining risks: unresolved resource registration, changing API schemas and unavailable live identity proof. These are questions for review, not accepted runtime risks.

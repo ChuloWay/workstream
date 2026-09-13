@@ -20,7 +20,7 @@ I have reviewed the current contribution guide, Commitrail guidance, architectur
 
 The MCP design is based on commit `c69ff85`. It describes 27 tools: 12 reads and 15 mutations, with operation keys required for 14 mutations. It exposes no resources or prompts and ends at project setup and access.
 
-The corresponding handler names were present at the inspected `2c95d4e2` baseline. This is an initial check only. Before freezing tool definitions, I will verify each route, schema, required header, response, and authorization rule against current code and tests. A handler existing does not prove that its contract is unchanged.
+The corresponding handler names were present at the inspected `2c95d4e2` baseline. This is an initial check only. The maintainer will provide the public API list. After that handoff, I will map and verify its selected operations against the pinned code and tests before we jointly freeze tool definitions. A handler existing does not prove that its contract is unchanged.
 
 The roadmap still distinguishes public capabilities from hidden implementations and planned work. A hidden backend service will not be treated as a public API available to the adapter.
 
@@ -124,7 +124,7 @@ The MCP adapter will preserve these identities when the contracts become availab
 
 ## 6. API Contracts and Failures
 
-Before implementing each tool, I will record its method, path, input and output schemas, required headers, permission boundary, and relevant backend tests. This inventory will also identify changed or unavailable operations.
+The public API list is a maintainer-owned handoff dependency. I will wait for that supplied list rather than reconstruct it independently. From it, I will produce a versioned deterministic inventory of all 27 tool names, HTTP methods and routes, input/output schemas, required headers and response statuses, with permission boundaries and relevant backend tests. We will review and freeze that mapping together before implementation. Any difference from the existing 27-tool design returns for agreement. The frozen inventory will be the source for binding tests and contract-drift checks.
 
 Tool calls will use a configured API destination and fixed routes. Users will not be able to supply arbitrary destinations or authentication headers. Redirects will not carry credentials to another destination.
 
@@ -139,7 +139,7 @@ Errors will distinguish invalid credentials, invalid input, API denial, conflict
 Every protected invocation follows this path:
 
 1. Receive one request on the declared POST Streamable HTTP endpoint.
-2. Validate protocol version, required transport metadata, Origin policy and bearer credential.
+2. Validate protocol version, required transport metadata, Origin policy and bearer credential. `Mcp-Method` is required for every MCP request. In this tools-only release, `Mcp-Name` is required for `tools/call` and must match `params.name`; discovery and tool listing do not require it.
 3. Establish caller context for this request only. Shared connection pools must not retain a caller's credentials or actor context.
 4. Resolve the tool from a fixed typed registry. Unknown tools cause no API dispatch.
 5. Validate arguments against the tool's closed input schema.
@@ -155,6 +155,8 @@ Each tool has exactly one fixed method/path binding. Destination, route, method 
 UUIDs, timestamps, enums, cursor bounds, byte limits and cross-field rules must match the public API. Cursors remain opaque: no decoding, modification, fabrication or inferred totals. The adapter returns only data available to that caller through the API. It does not cache grants, authorization context, actor state, project policy or lifecycle eligibility.
 
 ## 7. Deployment and Operation
+
+Authenticated MCP responses, including errors, must carry `Cache-Control: no-store`. The reverse proxy/CDN must preserve and respect this policy. Test headers and caller isolation through the deployed HTTP path, including error responses. v0.1 uses no identity-partitioned response cache; the prohibition on local authority and lifecycle caches remains in force.
 
 The adapter will have its own container, configuration, and release instructions. Production HTTP connections will use TLS. Request sizes, response sizes, connection counts, timeouts and maximum in-flight calls will be configurable and tested. Backpressure must reject or limit excess work before an unbounded queue forms.
 
@@ -176,7 +178,7 @@ I will test the complete route from an MCP client, through the adapter, to a sep
 | Product authorization | Allowed caller succeeds; missing, revoked, and cross-project authority is denied by the real API |
 | Replay and conflict | Same-key retries follow backend behavior; changed payloads and stale policy selectors preserve conflicts |
 | Dependency failures | Timeouts and malformed or oversized responses produce bounded, accurate failures |
-| Privacy | Credentials never appear in results or telemetry; authorized API result fields remain distinct from prohibited diagnostic leakage, subject to the clarification below |
+| Privacy | Credentials never appear in results or telemetry; authorized API result fields remain distinct from prohibited diagnostic leakage, as confirmed in the response-data policy below |
 | Key rotation | Trusted new and still-valid retiring keys work within the agreed cache policy; unknown keys or unavailable verification never trigger a fallback signer |
 | Independent deployment | Adapter builds and starts separately and reports Workstream unavailability correctly |
 
@@ -189,15 +191,15 @@ The following are acceptance requirements from the review addendum, not claims t
 | Suite | Required proof |
 | --- | --- |
 | 1. Catalogue | Exactly 27 unique tools, 12 reads, 15 mutations, 14 keyed mutations and one fixed binding per tool. No resources, prompts, login tool, generic HTTP tool, hidden route or extra capability. Input and structured-output schemas are complete and self-contained; references resolve locally; closed schemas reject unknown fields. Read-only, destructive, idempotent and open-world annotations match actual behavior. |
-| 2. MCP protocol | Explicit `2026-07-28` support on one POST Streamable HTTP endpoint. Test missing, unsupported and mismatched `MCP-Protocol-Version`; required `Mcp-Method` and `Mcp-Name` matching the body; invalid present Origin; Accept and content-type rules. Test unknown methods/tools, malformed JSON-RPC, notifications, cancellation and bounded SSE according to the selected revision. No unapproved legacy GET event stream, session ID, DELETE session endpoint or resumable stream. `tools/list` is deterministic across clients and restarts. |
+| 2. MCP protocol | Explicit `2026-07-28` support on one POST Streamable HTTP endpoint. Test missing, unsupported and mismatched `MCP-Protocol-Version`; `Mcp-Method` required for every request and matching its method; `Mcp-Name` required for `tools/call` and matching `params.name`; positive `server/discover` and `tools/list` cases without `Mcp-Name`, and negative tool-call cases with missing or mismatched names; invalid present Origin; Accept and content-type rules. Test unknown methods/tools, malformed JSON-RPC, notifications, cancellation and bounded SSE according to the selected revision. No unapproved legacy GET event stream, session ID, DELETE session endpoint or resumable stream. `tools/list` is deterministic across clients and restarts. |
 | 3. OAuth and Flow | Publish protected-resource metadata for the canonical MCP resource. Missing or invalid bearer gets the correct 401 challenge. Validate the full Flow profile. Distinguish safe failures for wrong issuer/audience, ID token, expired or premature token, malformed token, unknown key and verifier/JWKS unavailability. Prove current/retiring-key cache behavior, stable issuer/subject resolution and concurrent caller isolation across credentials, results, actor context and telemetry. Protected dispatch is incomplete until the downstream credential contract is approved and tested. |
 | 4. All tool bindings | At least one positive wire-level case per tool proving exact method, encoded path, query omission/defaults, typed body, headers, successful status and structured response, with no extra API call. Cover both permitted project-response projections and every maximum-valid bounded input. Mock assertions support this proof but do not replace the release drill. |
 | 5. Real authorization and lifecycle | Use the real API and PostgreSQL path. Prove first human profile/link provisioning grants no authority; self-edit remains self-only; missing authority, wrong administrative role, wrong scope and cross-project access are denied. Revoked grants and inactive actors/links stop subsequent actions. Preserve administrative self-grant/self-revoke guards and final effective Access Administrator protection. Contributor/admin projections must not leak into one another. Workstream guards and audit remain authoritative. |
 | 6. Replay and concurrency | Same key and identical payload follows canonical replay; changed input conflicts. Concurrent duplicates match direct-API outcomes. Both policy writes preserve stale `If-Match` conflicts. Lost responses after possible commit report uncertainty without claiming rollback. No automatic mutation retry. Client restart preserves caller-retained keys, cursors, grant/resource IDs and policy selectors. |
 | 7. Network failures | Bound connection refusal, DNS/TLS failures, connect/read/total/cancellation timeouts, applicable API 429/401/403/404/409/412/422/5xx responses, malformed JSON, wrong content type, schema-invalid success and oversized responses. Test API failure during a call and adapter shutdown with in-flight work. Never claim rollback of a possibly committed write. |
-| 8. Privacy and observability | No credentials or authorization headers in results, logs, traces, exceptions, metric labels or URLs. Do not echo raw arguments or sensitive bodies into diagnostics. Profile data, guide content, reasons and cursor payloads must not enter telemetry. Allow only bounded tool name, fixed method/route template, duration, response size, safe status/error code and approved correlation IDs. API-authorized result data needs the explicit interpretation below. Workstream remains audit authority. |
-| 9. Independent deployment | Build, install and start without the backend package. Run in a separate process/container using only the configured public API. Invalid API URL or identity configuration fails startup safely. API unavailability affects readiness/calls without crashing catalogue discovery. No Garden-specific or client-name conditional behavior. Two MCP clients see the same catalogue and are independently authorized. |
-| 10. Contract drift | Pin the exact current-main source commit for the 27 bindings and reconcile public routes, schemas, headers, statuses, authorization and API drill evidence. CI must fail on route, method, input/output, header, status, annotation or capability drift. Regeneration must not silently accept a changed contract. Changes require deliberate review and renewed proof. |
+| 8. Privacy and observability | No credentials or authorization headers in results, logs, traces, exceptions, metric labels or URLs. Do not echo raw arguments or sensitive bodies into diagnostics. Profile data, guide content, reasons and cursor payloads must not enter telemetry. Allow only bounded tool name, fixed method/route template, duration, response size, safe status/error code and approved correlation IDs. Return the declared API fields the caller is authorized to receive, even when a field value also appeared in the request. Prove authorized profile/guide/cursor results are preserved while credentials and sensitive diagnostic content are excluded. Workstream remains audit authority. |
+| 9. Independent deployment | Build, install and start without the backend package. Run in a separate process/container using only the configured public API. Invalid API URL or identity configuration fails startup safely. API unavailability affects readiness/calls without crashing catalogue discovery. No Garden-specific or client-name conditional behavior. Two MCP clients see the same catalogue and are independently authorized. Authenticated success and error responses carry `Cache-Control: no-store`; verify proxy/CDN preservation and no cross-caller reuse through the deployed HTTP path. |
+| 10. Contract drift | After the maintainer supplies the public API list, map and jointly freeze the exact 27-tool inventory against a pinned current-main source commit, including routes, schemas, headers, statuses, authorization and API drill evidence. CI must fail on route, method, input/output, header, status, annotation or capability drift. Regeneration must not silently accept a changed contract. Changes require deliberate review and renewed proof. |
 
 For annotations, a logical read is not automatically side-effect-free: first profile access may provision identity records. The annotation tests must reflect the actual API operation rather than its HTTP method alone. The implementation contract will trace the requested protocol assertions to the selected SDK and protocol sources; any mismatch must be raised for review before freezing behavior.
 
@@ -214,11 +216,13 @@ Exercise all 27 tools through HTTP MCP. For equivalent actors and intent, compar
 
 Release requires 27/27 positive cases, corresponding negative and replay cases, zero unresolved schema drift, zero credential leakage, correct direct-API parity, independent package installation and a reviewed dependency lock. SDK tests, mock request counts, API-only drills and successful tool listing are supporting evidence, not substitutes for this gate. Fixture-token proof remains separate from proof of the deployed Flow service.
 
-### Privacy clarification for review
+### Confirmed response-data policy
 
-The addendum lists profiles, guide content, reasons and cursor payloads as prohibited in tool results as well as telemetry. Read tools and pagination also need to return the API's authorized fields. My proposed interpretation is: return only fields allowed by the declared API response and the caller's permissions; never copy raw inputs or additional sensitive content into results, and never include that content in diagnostics. Credentials are always prohibited. Please confirm this interpretation before response schemas are frozen; this is an open wording clarification, not a relaxation already agreed.
+The maintainer's [clarification](https://github.com/Flow-Research/workstream/pull/401#issuecomment-5654493551) confirms that tool results return the declared Workstream API fields the caller is authorized to receive, including profile data, guide content and pagination cursors. A declared response field is allowed even when its value also appeared in the request. Do not add an indiscriminate input-echo filter that removes valid response data. Credentials must never appear in results. Sensitive business content stays out of logs, traces and diagnostic errors; raw arguments are not copied into diagnostic output. These rules preserve authorized response data without adding fields unavailable through the API.
 
 ## 9. Proposed PR Order
+
+Before runtime work, receive the maintainer's API list, produce and jointly freeze the exact tool mapping, and agree the MCP-to-API credential contract. The inventory handoff is a dependency, not a task to reconstruct the list independently. Then proceed through the following proposed implementation PRs:
 
 1. **Runtime and identity foundation:** independent package and container, SDK setup, authentication boundary, HTTP client, and one profile-read tool proving the full request path. The final 27-tool catalogue is not claimed complete here.
 2. **Profile and access tools:** complete the remaining profile, authorization, actor, and administrative-grant operations with focused authorization tests.
@@ -236,12 +240,15 @@ Review will follow the repository's risk routing, including security and archite
 The addendum confirms the human-only, 27-tool release and independently packaged deployment within this repository. The remaining questions are:
 
 1. How should the separately deployed MCP adapter and Workstream API be registered as resources, and which credential should the adapter use for the API call? Which test environment and preregistered MCP clients should prove that contract?
-2. Can the privacy rule explicitly permit the caller's authorized API response fields while excluding credentials, echoed inputs and sensitive diagnostic content, as proposed above?
 
-The proposal follows the documents' human-only v0.1 baseline and keeps the future agent extension explicit. Once the points above are agreed, I can turn the first PR boundary into its concrete Commitrail change record and begin implementation.
+The public API list will come from the maintainer. Mapping and joint catalogue review follow that handoff. Privacy, conditional MCP headers and `no-store` response caching are settled by the linked clarification.
+
+The proposal follows the documents' human-only v0.1 baseline and keeps the future agent extension explicit. Once the API handoff, joint catalogue review and credential agreement are complete, I can turn the first PR boundary into its concrete Commitrail change record and begin implementation.
 
 ## References
 
+- [Maintainer clarification: privacy, API handoff, headers and caching](https://github.com/Flow-Research/workstream/pull/401#issuecomment-5654493551)
+- [MCP standard request headers](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#standard-request-headers)
 - [Maintainer review addendum: dispatch and conformance requirements](https://github.com/Flow-Research/workstream/pull/401#issuecomment-5653317895)
 - [Workstream contribution guide](../../../CONTRIBUTING.md)
 - [Commitrail guidance](../../README.md)
