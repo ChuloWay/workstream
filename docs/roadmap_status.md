@@ -134,7 +134,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls; canonical `/actors/me` self-read with duplicate `/auth/me` removed | Final end-to-end operational and conformance proof |
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
 | Project Guide source custody | **Live foundation** | Guide creation declares documents and task examples; public document upload; immutable internal metadata snapshots; exact run-scoped reads; S3-backed originals and isolated agent document inspection | Carry the same document generation through manager approval and guide activation; prove each enabled document reader |
-| Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch | Add post-submit projection/approval and one checker-service port |
+| Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; hidden deterministic post-policy projection, complete draft read, approval and correction custody | Activate post-policy authority (AUTH-12G), expose its operations (POL-06B), then one checker-service port (POL-07) |
 | Contribution policy administration | **Hidden and proven** | Finance Authority adapter-binding lifecycle; ContributionPolicy read/create/update/publish/retire with exact Finance Authority; immutable operation and event history | Expose selected-policy validation, bind one published complete version to the active guide generation |
 | Task readiness and claim | **Foundation with grant-backed contributor commands** | Task records, assignments and locked work context; claim/start/contributor context use exact-project Submitter grants; separate manager context and system-Operator start | Bind the guide's ContributionPolicyVersion before `READY` and carry it through TaskAssignment without a current-policy lookup; finish ready queues, remaining management/read authority and durable assignment invalidation |
 | Contributor artifact preparation | **Hidden and proven** | One outer ZIP; bounded scratch inspection; canonical manifest; platform and project prechecks; unchanged-work rejection; durable put intent; verification; capacity-charged ready admission | Connect only the active unified guide/checker lineage and complete the later public admission-only cutover |
@@ -316,8 +316,11 @@ cannot be reused as post-submission review-gate evidence. See the
   The authorized latest-setup read exposes saved correction/predecessor identifiers
   so a replacement manager can discover and explicitly dispatch a pending correction
   after the creator is revoked, without the original creation receipt.
-  Superseded post-submit setup/approval/correction routes are removed; POL-06
-  owns the remaining post-submit projection. Real Terra runs through API upload,
+  Superseded post-submit setup/approval/correction routes are removed. POL-06A
+  implements hidden deterministic projection of the saved post-submit proposal,
+  complete draft read, separate approval and correction through the existing
+  unified successor. Immutable operation receipts replace role-string authority
+  in affected readers. Live adapters and public wiring remain AUTH-12G/POL-06B. Real Terra runs through API upload,
   MinIO, the Celery handler and PostgreSQL proved both blocked findings and ready
   draft policy outcomes, with exact replay and provider cleanup. Broker delivery
   was scripted in these drills; live Celery transport and broad semantic accuracy
@@ -386,14 +389,14 @@ requires its exact owner-proven prerequisites.
 
 The next dependency-safe product sequence is:
 
-1. **Complete post-submit policy approval.** POL-05B delivers public manager
-   review, pre-submission approval, correction and manual dispatch through the
-   same unified setup runtime. Pre-submit effective policy and its compiled plan
-   have authorized approval custody. Persist the post-submit
-   policy through its deterministic compiler, activate its narrow AUTH gate,
-   and expose one typed checker-service facade. Approval consumes the existing
-   result without another agent invocation. Approval/projection records reference immutable setup finalization;
-   they cannot reopen or overwrite it.
+1. **Connect post-submit policy authority and public access.** POL-05B delivers
+   public manager review, pre-submission approval, correction and manual dispatch.
+   POL-06A adds hidden canonical post-policy projection, complete draft read,
+   separate approval and correction custody. AUTH-12G must activate their narrow
+   authority; POL-06B exposes those operations. POL-07 then supplies one typed
+   checker-service facade. Approval consumes the saved result without another
+   agent invocation. Its receipts reference immutable setup finalization and
+   cannot reopen or overwrite it.
 2. **Validate and bind the selected ContributionPolicy.** CP05 completes
    authorization for the five hidden policy actions. CP06 supplies selected-policy
    validation; CP07 binds one exact published, complete, binding-valid

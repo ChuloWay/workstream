@@ -416,10 +416,11 @@ registered checker, not an automatic consequence of this setup flow.
 The compiled project `PostSubmitCheckerPolicy` is persisted with exact setup
 provenance: guide id, source snapshot id/hash, effective project policy id/hash,
 and pre-submit checker policy id/hash. A corrected submission artifact policy
-approval supersedes and retains stale post-submit setup output, then regenerates
-the compiled post-submit policy under the new provenance. Workstream must not
-reuse a policy or correction request that only happens to match the same project
-id and guide version.
+approval establishes the new upstream provenance. The subsequent post-submit
+derive operation creates the compiled policy under that provenance and
+supersedes any still-current prior policy while retaining its evidence; correction
+may already have superseded it. Workstream must not reuse a policy or correction
+request that only happens to match the same project id and guide version.
 
 The first two gates replace external origin qualification and task ingestion for v0.1. Origin qualification and webhook drop notifications are future adapter concerns.
 
@@ -655,3 +656,19 @@ Workstream product-job boundary. Request-bound pre-submit feedback can remain
 fast and deterministic because it runs before submission creation, but any
 long-running setup or post-submit checker work must go through the durable
 worker boundary.
+
+### Saved guide proposal to post-submit policy
+
+POL-06A projects validated bindings from the saved unified guide result through
+this canonical compiler. Shared identical bindings emit one required checker;
+all requirement references remain in the saved proposal. Platform defaults are
+inserted once. The complete policy body and its canonical hash are the reviewable
+draft; separate operation receipts bind its source and approved upstream chain.
+Approval cannot supply a replacement body. Correction creates the existing
+unified successor, preserving the original result and policy evidence.
+
+These hidden operations require explicit authority ports. AUTH-12G supplies live
+authorization and POL-06B supplies public access. Projection and approval neither
+open guide documents nor invoke a model or runtime checker. Supported structural
+checks do not establish substantive work quality, and capability suggestions do
+not register implementations or bypass required gaps.

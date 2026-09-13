@@ -291,15 +291,17 @@ async def test_submission_rejects_crossed_post_submit_policy_sidecar(
             task.locked_post_submit_checker_policy_id,
         )
         assert post_submit_policy is not None
-        post_submit_policy.required_checkers = [
-            *post_submit_policy.required_checkers,
-            "check_acceptance_criteria_present",
-        ]
+        policy_id = post_submit_policy.id
         audit_ids = sorted(await session.scalars(select(AuditEvent.id)))
         await session.commit()
 
-    with pytest.raises(TaskLockedContextInvalid) as rejected:
-        await _create_hidden_submission(started_task["id"])
+    from tests.projects.post_submit_fixtures import crossed_post_policy_read
+
+    with crossed_post_policy_read(policy_id) as seen:
+        with pytest.raises(TaskLockedContextInvalid) as rejected:
+            await _create_hidden_submission(started_task["id"])
+    assert seen
+
     assert rejected.value.status_code == 422
     assert rejected.value.code == "task_locked_context_invalid"
     assert rejected.value.details["field"] == "locked_post_submit_checker_policy_body"

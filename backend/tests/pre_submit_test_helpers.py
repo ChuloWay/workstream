@@ -1,5 +1,8 @@
 """Shared dependency-safe construction for focused pre-submit tests."""
 
+import json
+
+from sqlalchemy import select
 from uuid import UUID, uuid4
 
 from app.adapters.checkers import PreSubmitCheckerExecutionAdapter
@@ -77,12 +80,12 @@ async def approved_pre_submit_fixture(factory, namespace, *, guide_version):
     from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue
     from app.modules.checkers.api import EffectivePreSubmissionPlanLineage
     from app.modules.projects.api.guide_proposals import GuideProposalSelection
-    from app.modules.projects.models import ProjectGuide
+    from app.modules.projects.models import ProjectGuide, PostSubmitCheckerPolicy
     from tests.projects.unified_policy_fixtures import create_standalone_unified_policy, _approval_context
     from tests.projects.guide_compilation.proposals.pg_support import seed_selected_review_revision_inputs
 
     values, effective, pre = await create_standalone_unified_policy(
-        factory, namespace, guide_version=guide_version,
+        factory, namespace, guide_version=guide_version, include_post_policy=True,
         artifact_proposal=SubmissionArtifactPolicyProposal(
             maximum_file_size_bytes=1_000_000, maximum_package_size_bytes=5_000_000,
             required_artifacts=("task.toml",), required_evidence=("results",),
@@ -106,7 +109,13 @@ async def approved_pre_submit_fixture(factory, namespace, *, guide_version):
     )
     async with factory() as session:
         guide = await session.get(ProjectGuide, str(values["guide"]))
+        post = await session.scalar(select(PostSubmitCheckerPolicy).where(
+            PostSubmitCheckerPolicy.effective_policy_id == effective["id"]))
+        assert post is not None
         return plan, {
+            "post_policy": post.id,
+            "post_policy_hash": post.policy_hash,
+            "post_policy_body": json.dumps(post.policy_body),
             "submission_policy": effective["submission_artifact_policy_id"],
             "review_policy": guide.selected_review_policy_id,
             "review_policy_hash": guide.selected_review_policy_hash,

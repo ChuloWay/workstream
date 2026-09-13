@@ -23,8 +23,10 @@ The first user flows prove that Workstream can run real work from intake to acce
 
 POL-04B delivers the automatic compilation and immutable draft/findings stop
 below. POL-05A delivers hidden manager proposal review, correction and pre-submit
-approval. AUTH-12F4 → POL-05B still supplies public authority and manual dispatch;
-the complete activation flow below describes the target lifecycle.
+approval. AUTH-12F4 and POL-05B deliver public manager authority and manual
+dispatch. POL-06A adds hidden post-policy projection/read/approval/correction;
+AUTH-12G and POL-06B remain for live authority and public access. The complete
+activation flow below describes the target lifecycle.
 
 1. A system-scoped Project Manager creates the project.
 2. Project owner provides open-ended guide material and business terms.
@@ -48,13 +50,14 @@ the complete activation flow below describes the target lifecycle.
     component from that same unified result; it does not execute a checker.
 13. An authorized covered Project Manager approves the current compiled
     post-submit checker policy.
-14. If correction is requested instead, Workstream supersedes and retains the
-    unapproved compiled output, preserves its policy hash/body plus bounded
-    actor/reason/time and redacted derivation metadata. Correction has separate
-    operation provenance; new model output requires a new unified compilation
-    generation with bounded feedback for a known terminal result, never
-    resuming the finalized run or restarting an uncertain provider operation. An
-    unchanged replacement fails closed, and activation remains blocked.
+14. A manager may correct a compiled or already approved policy while its setup
+    remains current. Workstream supersedes it and preserves its body/hash and
+    immutable attributed receipts. Correction creates the existing unified
+    successor with bounded feedback; it never resumes the finalized run or
+    retries an uncertain provider operation. The successor needs fresh upstream
+    approval, deterministic post-policy projection and separate approval. Its
+    canonical policy hash may be unchanged; its generation and approval custody
+    are new. Correction does not satisfy activation.
 15. An authorized covered Project Manager enables review policy.
 16. An authorized covered Project Manager enables revision policy.
 17. The owning Finance Authority publishes the ContributionPolicy version

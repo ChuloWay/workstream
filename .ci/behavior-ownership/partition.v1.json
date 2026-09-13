@@ -370,6 +370,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/api/post_policy.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/api/project_guide_compilation.py"
     },
     {
@@ -798,6 +802,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/post_policy.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/projects/api/setup_identity.py"
     },
     {
@@ -983,6 +991,30 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/projects/policy_mutation_service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/compiler.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/correction.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/custody.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/service.py"
     },
     {
       "group": "lifecycle",
@@ -1213,7 +1245,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "c2e538ac989928d2f7fce550c437b5de4cd7c61289594b4fbd318ff49c066d21",
+  "authority_digest": "e6e35dc53229241a9d0c31fa50de13e8d103454928158899f9bf894a1c0497e1",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

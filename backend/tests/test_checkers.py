@@ -2847,7 +2847,6 @@ async def create_checker_trial_project(
     client: AsyncClient,
     slug: str,
     required_checkers: list[str] | None = None,
-    blocking_severities: list[str] | None = None,
 ) -> dict:
     """Create and activate a project guide for one checker trial scenario.
 
@@ -2883,7 +2882,6 @@ async def create_checker_trial_project(
         project["id"],
         guide_response.json()["id"],
         post_submit_required_checkers=required_checkers,
-        post_submit_blocking_severities=blocking_severities,
     )
     await seed_active_guide_for_downstream_test(
         db_session.get_session_factory(),
@@ -3167,21 +3165,22 @@ async def test_manual_checker_run_rejects_crossed_post_submit_policy_sidecar(
             )
         )
         assert policy is not None
-        policy.required_checkers = [
-            "check_policy_context_present",
-            "check_acceptance_criteria_present",
-        ]
+        policy_id = policy.id
         await session.commit()
 
     before = await task_side_effect_snapshot(started_task["id"])
     assert len(before["checker_runs"]) == 1
     assert before["checker_results"]
     set_dev_actor(monkeypatch, roles="project_manager", subject="project-manager-subject")
-    rejected = await checker_client.post(
-        f"/api/v1/submissions/{created_id}/checker-runs",
-        headers=auth_headers(),
-        json={"trigger_reason": "Retry after policy corruption"},
-    )
+    from tests.projects.post_submit_fixtures import crossed_post_policy_read
+
+    with crossed_post_policy_read(policy_id) as seen:
+        rejected = await checker_client.post(
+            f"/api/v1/submissions/{created_id}/checker-runs",
+            headers=auth_headers(),
+            json={"trigger_reason": "Retry after policy corruption"},
+        )
+    assert seen
 
     assert rejected.status_code == 422, rejected.text
     assert rejected.json()["detail"] == "locked post-submit checker policy summaries are invalid"
@@ -3438,11 +3437,9 @@ async def test_checker_revision_routing_and_reads_for_retained_packet_versions(
     project = await create_checker_trial_project(
         checker_client,
         "checker-caused-revision-project",
-        blocking_severities=["critical", "high", "medium"],
     )
     started_task = await create_started_task(checker_client, project["id"], monkeypatch)
     v1_payload = complete_submission_payload()
-    v1_payload["summary"] = "Completed the proof evaluation with TODO placeholder notes."
     precheck_v1 = await checker_client.post(
         f"/api/v1/tasks/{started_task['id']}/submission-precheck",
         headers=auth_headers(),
@@ -3451,6 +3448,10 @@ async def test_checker_revision_routing_and_reads_for_retained_packet_versions(
     assert precheck_v1.status_code == 200, precheck_v1.text
     assert precheck_v1.json()["eligible_to_submit"] is True, precheck_v1.text
 
+    # This fixture isolates post-submit routing from intake. The valid packet above
+    # is the intake control; the retained packet below deliberately lacks the
+    # required evidence key so the canonical required checker reports a failure.
+    v1_payload["evidence_items"][0]["metadata"]["policy_key"] = "other_evidence"
     v1_id = await seed_finalized_submission_for_checker_test(
         started_task["id"], v1_payload,
     )
@@ -3458,15 +3459,15 @@ async def test_checker_revision_routing_and_reads_for_retained_packet_versions(
     _, v1_run = await get_submission_and_automatic_pre_review_run(checker_client, v1_id)
     assert v1_run["routing_recommendation"] == "needs_revision"
     assert v1_run["outcome_source"] == "auto_checker"
-    low_quality = next(
+    evidence_result = next(
         result
         for result in v1_run["results"]
-        if result["checker_name"] == "check_low_quality_generated_artifacts"
+        if result["checker_name"] == "check_evidence_present"
     )
-    assert low_quality["status"] == "failed"
-    assert low_quality["blocks_review"] is True
-    assert low_quality["worker_message"]
-    assert low_quality["worker_suggested_fix"]
+    assert evidence_result["status"] == "failed"
+    assert evidence_result["blocks_review"] is True
+    assert evidence_result["worker_message"]
+    assert evidence_result["worker_suggested_fix"]
 
     async with db_session.get_session_factory()() as session:
         task = await session.get(WorkstreamTask, started_task["id"])
@@ -3518,16 +3519,16 @@ async def test_checker_revision_routing_and_reads_for_retained_packet_versions(
     worker_body = worker_run.json()
     assert "routing_recommendation" not in worker_body
     assert "outcome_source" not in worker_body
-    worker_low_quality = next(
+    worker_evidence = next(
         result
         for result in worker_body["results"]
-        if result["checker_name"] == "check_low_quality_generated_artifacts"
+        if result["checker_name"] == "check_evidence_present"
     )
-    assert worker_low_quality["id"]
-    assert worker_low_quality["status"] == "failed"
-    assert worker_low_quality["severity"] == "high"
-    assert worker_low_quality["worker_message"]
-    assert worker_low_quality["worker_suggested_fix"]
+    assert worker_evidence["id"]
+    assert worker_evidence["status"] == "failed"
+    assert worker_evidence["severity"] == "high"
+    assert worker_evidence["worker_message"]
+    assert worker_evidence["worker_suggested_fix"]
     assert "routing_recommendation" not in worker_run.text
     assert "outcome_source" not in worker_run.text
     worker_audit = await checker_client.get(

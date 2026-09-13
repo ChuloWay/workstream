@@ -523,9 +523,7 @@ def validate_project_guide_compilation_result(
         pre_definitions,
         "pre_submit",
     )
-    post_bound_requirements = _validate_bindings(
-        result.post_submit_bindings, requirements, post_definitions, "post_submit"
-    )
+    post_bound_requirements = validate_post_submission_bindings(result, post_capabilities)
     expected_pre = {
         item.requirement_id
         for item in result.requirements
@@ -538,6 +536,30 @@ def validate_project_guide_compilation_result(
     }
     if pre_bound_requirements != expected_pre or post_bound_requirements != expected_post:
         raise ValueError("supported compilation requirements must have one binding")
+
+
+def validate_post_submission_bindings(
+    result: ProjectGuideCompilationResult, catalogue: PostSubmitCatalogue,
+) -> set[str]:
+    """Validate the same post-stage requirement/configuration rules at both boundaries."""
+    result = ProjectGuideCompilationResult.model_validate_json(result.model_dump_json())
+    catalogue = PostSubmitCatalogue.model_validate(catalogue)
+    requirements = {item.requirement_id: item for item in result.requirements}
+    if len(requirements) != len(result.requirements):
+        raise ValueError("compilation requirements must be unique")
+    _validate_status_consistency(result)
+    if any(item.platform_default and item.state != "enabled" for item in catalogue.definitions):
+        raise ValueError("post-submit capability projection is unavailable")
+    bound = _validate_bindings(
+        result.post_submit_bindings, requirements,
+        {item.capability_id: item for item in catalogue.definitions}, "post_submit",
+    )
+    if bound != {
+        item.requirement_id for item in result.requirements
+        if item.disposition is RequirementDisposition.SUPPORTED_POST_SUBMIT
+    }:
+        raise ValueError("supported compilation requirements must have one binding")
+    return bound
 
 
 def project_guide_compilation_result_storage_bytes(result: ProjectGuideCompilationResult) -> int:

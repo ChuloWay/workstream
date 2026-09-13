@@ -1346,22 +1346,6 @@ def test_submission_artifact_policy_approval_requires_provenance() -> None:
     assert "approved_at" in constraint_sql
 
 
-def test_post_submit_checker_policy_approval_requires_setup_role_provenance() -> None:
-    constraint = next(
-        constraint
-        for constraint in PostSubmitCheckerPolicy.__table__.constraints
-        if constraint.name is not None and constraint.name.endswith("approval_provenance")
-    )
-
-    constraint_sql = str(constraint.sqltext)
-
-    assert "approved_by_role" in constraint_sql
-    assert "admin" in constraint_sql
-    assert "project_manager" in constraint_sql
-    assert "approved_by_actor" in constraint_sql
-    assert "approved_at" in constraint_sql
-
-
 async def revoke_system_project_manager_for_default_actor() -> None:
     """Remove fixture-only creation authority before testing narrower grants."""
     async with db_session.get_session_factory()() as session:
@@ -5325,27 +5309,6 @@ async def test_sufficiency_warning_acknowledgement_rejects_unknown_fields(
 
 
 
-async def test_database_rejects_post_submit_checker_approved_by_non_setup_role(
-    project_client: AsyncClient,
-) -> None:
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    bundle = await create_approved_policy_bundle(
-        project_client,
-        project["id"],
-        guide["id"],
-    )
-    async with db_session.get_session_factory()() as session:
-        policy = await session.get(
-            PostSubmitCheckerPolicy, bundle["post_submit_checker_policy"]["id"]
-        )
-        assert policy is not None
-        policy.approved_by_role = "worker"
-        with pytest.raises(IntegrityError):
-            await session.commit()
-        await session.rollback()
-
-
 async def test_database_rejects_superseded_post_submit_policy_without_correction_provenance(
     project_client: AsyncClient,
 ) -> None:
@@ -5545,11 +5508,15 @@ async def test_database_rejects_mismatched_post_submit_pre_submit_checker_hash(
             bundle["post_submit_checker_policy"]["id"],
         )
         assert post_submit_checker_policy is not None
+        original_hash = post_submit_checker_policy.pre_submit_checker_bundle_hash
         post_submit_checker_policy.pre_submit_checker_bundle_hash = sha256_hash(
             "wrong-compiled-bundle"
         )
-        with pytest.raises(IntegrityError):
+        with pytest.raises(DBAPIError, match="post-policy retained evidence is immutable"):
             await session.commit()
+        await session.rollback()
+        await session.refresh(post_submit_checker_policy)
+        assert post_submit_checker_policy.pre_submit_checker_bundle_hash == original_hash
 
 
 async def test_active_guide_read_rejects_mismatched_effective_policy_body_hash(

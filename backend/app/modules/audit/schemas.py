@@ -39,7 +39,8 @@ _RESOURCE_TYPES = frozenset(
     pre_submit_checker_input project_guide_compilation_request
     project_guide_compilation_attempt project_guide_sufficiency_projection
     project_submission_artifact_policy_projection project_guide_setup_finalization
-    project_guide_compilation_review_package project_guide_compilation_correction""".split()
+    project_guide_compilation_review_package project_guide_compilation_correction
+    project_post_submit_checker_policy_mutation""".split()
 )
 _UUID_TARGET_KINDS = frozenset(
     {

@@ -1,6 +1,7 @@
 # WS-POL-003 — Unified project-guide compilation
 
-Latest completed POL behavior: [POL-05B public manager operations](WS-POL-003-05B.md),
+Latest completed POL behavior: [POL-06A hidden post-policy custody](WS-POL-003-06A.md),
+building on [POL-05B public manager operations](WS-POL-003-05B.md),
 building on [POL-05A proposal custody](WS-POL-003-05A.md),
 building on [POL-04B2 guide document intake](WS-POL-003-04B2.md),
 building on [POL-04B live unified setup](WS-POL-003-04B.md).
@@ -16,12 +17,13 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   immutable setup finalization, current-authority replay and one public guide
   creation/document-upload flow; hidden complete-proposal review, pre-submission
   approval custody and correction successors; public exact manager review,
-  pre-submission approval and manual dispatch through the same runtime.
+  pre-submission approval and manual dispatch through the same runtime; hidden
+  post-policy projection, complete draft read, separate approval and correction custody.
 - Intent: compile one locked guide and its policies into authoritative,
   versioned project behavior without circular subsystem authority.
-- Next usable boundary: POL-06 post-submission policy projection/approval and
-  AUTH-12G. POL-05B connects manager review, pre-submit approval and manual
-  correction dispatch to the delivered AUTH-12F4 and POL-05A owners.
+- Next usable boundary: AUTH-12G live post-policy authorization, then POL-06B
+  public wiring over POL-06A. POL-05B already connects manager review, pre-submit
+  approval and manual correction dispatch to AUTH-12F4 and POL-05A.
   Live setup consumes the [consolidated catalogue](../WS-ARCH-001/WS-ARCH-001-04A.md)
   and completed AUTH-12B2.
   Earlier development schemas require no backward-compatibility paths.

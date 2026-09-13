@@ -483,8 +483,6 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                 "effective_hash": lineage.effective_policy_hash,
                 "checker_policy": str(lineage.pre_submit_policy_id),
                 "checker_hash": lineage.pre_submit_policy_bundle_hash,
-                "post_policy": str(uuid4()),
-                "post_policy_hash": "sha256:" + "8" * 64,
                 "task": str(request.task_id),
                 "assignment": str(request.assignment_id),
             }
@@ -507,21 +505,6 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
             )
             for table, trigger in custody_triggers:
                 await connection.execute(text(f"alter table {table} disable trigger {trigger}"))
-            await connection.execute(
-                text(
-                    "insert into checker_policies "
-                    "(id,project_id,guide_id,guide_version,source_snapshot_id,"
-                    "source_snapshot_hash,effective_policy_id,effective_policy_hash,"
-                    "pre_submit_checker_policy_id,pre_submit_checker_bundle_hash,"
-                    "required_checkers,warning_checkers,blocking_severities,policy_hash,"
-                    "policy_body,lifecycle_status,created_by) values "
-                    "(:post_policy,:project,:guide,:guide_version,:snapshot,:snapshot_hash,"
-                    ":effective_policy,:effective_hash,:checker_policy,:checker_hash,"
-                    "'[]'::json,'[]'::json,'[]'::json,:post_policy_hash,'{}'::json,"
-                    "'compiled','test')"
-                ),
-                params,
-            )
             await connection.execute(text("update projects set status='active' where id=:project"), params)
             await connection.execute(text(
                 "update project_guides set status='active',approved_by=:actor,effective_at=now() where id=:guide"
@@ -544,7 +527,7 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                     "source_type,title,description,skill_tags,status,assigned_to,created_by) values "
                     "(:task,:project,:guide_version,:snapshot,:snapshot_hash,:effective_policy,"
                     ":effective_hash,:checker_policy,:checker_hash,:post_policy,:guide_version,"
-                    ":post_policy_hash,'{}'::json,:review_policy,1,:review_policy_hash,"
+                    ":post_policy_hash,CAST(:post_policy_body AS json),:review_policy,1,:review_policy_hash,"
                     ":revision_policy,1,:revision_policy_hash,'manual','Evidence task',"
                     "'Evidence test task','[]'::json,'in_progress',:actor,'test')"
                 ),

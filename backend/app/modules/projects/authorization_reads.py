@@ -330,9 +330,9 @@ async def authorize_project_active_guide_read(
                 post_submit.pre_submit_checker_policy_id == checker.id,
                 post_submit.pre_submit_checker_bundle_hash == checker.compiled_bundle_hash,
                 post_submit.lifecycle_status == "approved",
-                post_submit.approved_by_actor is not None,
+                post_submit.approval_operation_id is not None,
                 post_submit.approved_at is not None,
-                post_submit.approved_by_role in {"admin", "project_manager"},
+                post_submit.projection_operation_id is not None,
                 review.project_id == project_id,
                 review.guide_version == guide.version,
                 bool(review.allowed_decisions),
@@ -360,6 +360,7 @@ async def authorize_project_active_guide_read(
             approval = await project_service.lock_active_approval(
                 guide, snapshot, submission, effective, checker,
             )
+            post_approval = await project_service.lock_active_post_policy(post_submit, approval)
             project_service.validate_activation_ready(
                 guide,
                 snapshot,
@@ -373,6 +374,7 @@ async def authorize_project_active_guide_read(
                 None,
                 require_payment_policy=False,
                 approval_custody=approval,
+                post_policy_custody=post_approval,
             )
         except (ProjectServiceError, ValueError):
             target_exists = False

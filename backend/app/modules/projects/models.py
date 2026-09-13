@@ -559,31 +559,11 @@ class PostSubmitCheckerPolicy(Base):
             "lifecycle_status in ('compiled', 'approved', 'superseded')",
             name="lifecycle_status",
         ),
-        CheckConstraint(
-            """
-            lifecycle_status != 'approved'
-            or (
-                approved_by_role in ('admin', 'project_manager')
-                and approved_by_actor is not null
-                and approved_at is not null
-            )
-            """,
-            name="approval_provenance",
-        ),
-        CheckConstraint(
-            """
-            lifecycle_status != 'superseded'
-            or (
-                superseded_at is not null
-                and superseded_by_role in ('admin', 'project_manager')
-                and superseded_by_actor is not null
-                and supersession_kind in ('correction_requested', 'upstream_policy_changed')
-                and supersession_reason is not null
-                and length(btrim(supersession_reason)) > 0
-            )
-            """,
-            name="correction_provenance",
-        ),
+        UniqueConstraint("id", "project_id", "guide_id", name="uq_checker_policies_scope"),
+        Index("uq_post_policy_chain_root", "guide_id", unique=True,
+              postgresql_where=text("projection_operation_id IS NOT NULL AND supersedes_policy_id IS NULL")),
+        Index("uq_post_policy_chain_successor", "supersedes_policy_id", unique=True,
+              postgresql_where=text("projection_operation_id IS NOT NULL")),
         Index(
             "uq_checker_policies_current_project_version",
             "project_id",
@@ -622,6 +602,15 @@ class PostSubmitCheckerPolicy(Base):
         String(71),
         nullable=False,
         index=True,
+    )
+    projection_operation_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("project_post_policy_operations.operation_id", deferrable=True, initially="DEFERRED"),
+    )
+    approval_operation_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("project_post_policy_operations.operation_id", deferrable=True, initially="DEFERRED"),
+    )
+    supersession_operation_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("project_post_policy_operations.operation_id", deferrable=True, initially="DEFERRED"),
     )
     required_checkers: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     warning_checkers: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)

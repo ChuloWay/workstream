@@ -2,6 +2,7 @@
 # pyright: reportIndexIssue=false, reportOptionalMemberAccess=false
 # pyright: reportOptionalSubscript=false, reportRedeclaration=false
 from __future__ import annotations
+from app.modules.authorization.api.post_policy import ProjectPostSubmitCheckerPolicyMutationResourceContext
 
 from tests.authorization.catalogue_fixtures import ART_CUSTODY_EXPECTATIONS, REV_CUSTODY_EXPECTATIONS
 
@@ -13,7 +14,6 @@ from tests.authorization.runtime_support import (
     _GuideMutationAuthorityFacts,
     _guide_mutation_resources,
 )
-
 
 import ast
 import asyncio
@@ -226,7 +226,6 @@ from app.modules.authorization.runtime import (
     ProjectGuideMutationResourceContext,
     ProjectGuideSourceSnapshotMutationResourceContext,
     ProjectGuideSufficiencyMutationResourceContext,
-    ProjectPostSubmitCheckerPolicyMutationResourceContext,
     ProjectPolicyMutationPrepareDenialResourceContext,
     ProjectReviewPolicyMutationResourceContext,
     ProjectRevisionPolicyMutationResourceContext,
@@ -1872,11 +1871,15 @@ def test_project_mutation_resources_and_prepared_scopes_are_closed() -> None:
             execution_kind="setup_service" if target_kind == "derive" else "human",
             checker_policy_id=checker_policy_id,
             setup_generation=1,
-            lifecycle_status="draft",
-            compiled_policy_digest=DIGEST,
-            setup_service_custody=(
-                setup_custody_by_step["post_submit_policy"] if target_kind == "derive" else None
-            ),
+            lifecycle_status="compiled", policy_hash=DIGEST,
+            setup_run_id=uuid4(), compilation_id=uuid4(), finalization_id=uuid4(),
+            result_hash=DIGEST, post_component_hash=DIGEST, requirement_inventory_hash=DIGEST,
+            catalogue_manifest_hash=DIGEST, upstream_approval_operation_id=uuid4(),
+            upstream_approval_output_digest=DIGEST, effective_policy_id=uuid4(),
+            effective_policy_hash=DIGEST, pre_submit_policy_id=uuid4(), pre_submit_bundle_hash=DIGEST,
+            projection_operation_id=uuid4(), operation_id=operation_id,
+            request_digest=DIGEST, target_digest=DIGEST,
+
         )
         for action_id, target_kind in (
             (ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_APPROVE, "approve"),
@@ -1996,10 +1999,6 @@ def test_project_mutation_resources_and_prepared_scopes_are_closed() -> None:
             ProjectSubmissionArtifactPolicyMutationResourceContext,
             submission_resources[ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE],
         ),
-        (
-            ProjectPostSubmitCheckerPolicyMutationResourceContext,
-            checker_resources[ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE],
-        ),
     ):
         missing_custody = service_resource.model_dump()
         missing_custody["setup_service_custody"] = None
@@ -2023,8 +2022,6 @@ def test_project_mutation_resources_and_prepared_scopes_are_closed() -> None:
             context_type.model_validate(wrong_generation)
         wrong_step = service_resource.model_dump()
         wrong_step["setup_service_custody"]["expected_step"] = "post_submit_policy"
-        if context_type is ProjectPostSubmitCheckerPolicyMutationResourceContext:
-            wrong_step["setup_service_custody"]["expected_step"] = "guide_sufficiency"
         with pytest.raises(ValidationError, match="setup-service step is inconsistent"):
             context_type.model_validate(wrong_step)
         wrong_stale_output = service_resource.model_dump()
