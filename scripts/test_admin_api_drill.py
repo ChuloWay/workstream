@@ -29,6 +29,21 @@ def ambiguous_boundary(count):
 
 
 class EvidenceTests(unittest.IsolatedAsyncioTestCase):
+    def test_full_history_pages_reject_every_field_mutation(self):
+        row = dict(zip(module.ADMIN_FIELDS, ("grant", "target", "operator", "system", None,
+            "revoked", 2, "actor_profile", "admin", "authority-grant", "Issue reason",
+            "2026-01-01T00:00:00+00:00", "other-admin", "other-authority", "Revoke reason",
+            "2026-01-02T00:00:00+00:00")))
+        def valid(items):
+            return module.page_matches(items, {"grant": row}, set(), 1, "grant_id", module.ADMIN_FIELDS)
+        self.assertTrue(valid([row]))
+        for field in module.ADMIN_FIELDS:
+            with self.subTest(field=field):
+                self.assertFalse(valid([row | {field: "wrong"}]))
+                self.assertFalse(valid([{key: value for key, value in row.items() if key != field}]))
+        self.assertFalse(valid([row | {"private": "not-public"}]))
+        self.assertFalse(valid([row | {"version": True}]))
+
     def test_grant_row_and_replay_proof_reject_field_and_timestamp_mutants(self):
         expected = {"grant_id": "known", "status": "active", "revoked_at": None}
         row = expected | {"granted_at": "2026-01-01T00:00:00+00:00"}

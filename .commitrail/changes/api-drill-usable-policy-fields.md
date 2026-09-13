@@ -216,6 +216,24 @@ not a readiness list. Bootstrap is operator setup, not an external endpoint.
 
 ## Acceptance criteria
 
+Final closure is a fixed 29-operation matrix, evaluated across the existing
+external and twenty-actor administrator scenarios together. It is not a new
+catalogue or the four proposal operations added in PR #400. Preserve raw reports
+and their conservative per-operation indexes; a reviewed matrix binds the named
+field, authority, readback and replay assertions to the actual executed target.
+It must not infer readiness from a route count or rename historical partial runs.
+
+The final gap review requires current guide declaration field boundaries (all
+three supported media declarations, ordered unique IDs, normalized labels,
+100-document limit, invalid declarations and rejected-key recovery), complete
+lifecycle reason/key/authority/conflict probes, full human/service admin reads,
+service binding conflicts and byte boundaries, and exact persisted grant-history
+fields with populated filter/pagination checks. Reuse current scenarios and the
+read-only snapshot owner. No new endpoint, product fixture, guard bypass or
+product-policy change is authorized. Add helper falsification tests for incorrect
+document order/IDs and grant history lineage; rerun both existing clients from a
+clean candidate. QA and security review the proof additions before readiness.
+
 The policy criteria below remain required. Additionally, inspect and drill in
 this order: health; self profile GET/PATCH; self authorization context; actor
 and identity-link reads/lifecycle; permission and administrative-role discovery;

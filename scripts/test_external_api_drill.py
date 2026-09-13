@@ -71,6 +71,27 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(drill.guide_metadata({"id": "guide", "documents": [document], "setup": setup}),
                          {"id": "guide"})
 
+    def test_guide_declaration_oracle_binds_order_distinct_ids_and_normalized_labels(self):
+        from uuid import uuid4
+        body = drill.guide_payload("initial") | {"documents": [
+            {"label": "  Guide\t 名   notes  ", "media_type": "application/pdf"},
+            {"label": "Second", "media_type": "application/pdf"}]}
+        check = drill.guide_expectations(body, "project", "manager")["checks"]["documents"]
+        rows = [dict(document_id=str(uuid4()), order=i, media_type=item["media_type"],
+                     label=" ".join(item["label"].split())) for i, item in enumerate(body["documents"])]
+        self.assertTrue(check(rows))
+        for mutant in (list(reversed(rows)), [rows[0], rows[1] | {"document_id": rows[0]["document_id"]}],
+                       [rows[0] | {"label": body["documents"][0]["label"]}, rows[1]],
+                       [rows[0], rows[1] | {"order": 0}], rows[:1]):
+            self.assertFalse(check(mutant))
+
+    def test_lifecycle_reason_partitions_are_explicit_and_independent(self):
+        cases = dict(drill.lifecycle_reason_inputs())
+        self.assertEqual(set(cases), {"missing", "null", "integer", "bool", "array", "empty",
+                                     "blank", "nul", "ascii_overflow", "overflow", "extra"})
+        self.assertEqual(len(cases["ascii_overflow"]["reason"].encode()), 501)
+        self.assertEqual(len(cases["overflow"]["reason"].encode()), 502)
+
     def test_project_grant_contract_rejects_wrong_provenance_and_extra_fields(self):
         receipt = dict(id="grant", qualification_snapshot_id="snapshot", project_id="project",
                        actor_profile_id="contributor", role="reviewer", status="active", version=1)
@@ -332,8 +353,8 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
                         await operation
                     self.assertEqual(report["cases"][0]["result"], "failed")
                     self.assertEqual(report["cases"][1]["name"], "link_revoke_missing_unchanged")
-                    self.assertEqual(posts, 1 if state_changed else 6)
-                    self.assertEqual(len(report["cases"]), 2 if state_changed else 12)
+                    self.assertEqual(posts, 1 if state_changed else 11)
+                    self.assertEqual(len(report["cases"]), 2 if state_changed else 22)
                     self.assertEqual(report["cases"][-1]["result"], "failed" if state_changed else "success")
 
     async def test_binary_body_is_exact_and_cannot_be_combined_with_json(self):

@@ -64,7 +64,7 @@ def guide_expectations(payload, project_id, manager_id):
                     or set(actual) != {"document_id", "label", "media_type", "order"}
                     or not uuid_value(actual["document_id"])
                     or not strict_equal(actual["order"], index)
-                    or actual["label"] != declared["label"].strip()
+                    or actual["label"] != " ".join(declared["label"].split())
                     or actual["media_type"] != declared["media_type"]):
                 return False
             ids.append(actual["document_id"])
@@ -616,6 +616,7 @@ async def project_cases(drill, admin, manager, outsider, manager_id):
     await project_field_cases(drill, manager, outsider, project, guide, manager_id)
     await project_guide_nul_cases(drill, manager)
     await guide_field_cases(drill, manager, outsider, project, manager_id)
+    await guide_document_field_cases(drill, manager, outsider, project, manager_id)
     await project_role_cases(drill, manager, outsider, project, manager_id, grant["resource_id"])
     await authority_cases(drill, admin, manager, outsider, manager_id, project)
     await drill.call("revoke_manager", "POST", "/api/v1/admin-role-grants/{grant_id}/revoke",
@@ -942,6 +943,62 @@ async def guide_field_cases(drill, manager, outsider, project, manager_id):
             token=manager, payload=body, headers=key, values=current, exact_fields=current.keys())
 
 
+async def guide_document_field_cases(drill, manager, outsider, project, manager_id):
+    """Close declaration fields on the original guide-create API, not upload routes."""
+    route = "/api/v1/projects/{project_id}/guides"
+    path = f'/api/v1/projects/{project["id"]}/guides'
+    types = ("application/pdf",
+             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+             "application/vnd.openxmlformats-officedocument.presentationml.presentation")
+    declarations = [{"label": "  Guide\t 名   notes  ", "media_type": types[0]},
+                    {"label": "d" * 500, "media_type": types[1]},
+                    {"label": "Slides", "media_type": types[2]}]
+    for label, documents in (("types", declarations), ("count_limit", [
+            {"label": f"Document {i}", "media_type": types[i % 3]} for i in range(100)])):
+        body = guide_payload("documents-" + uuid4().hex) | {"documents": documents}
+        key = {"Idempotency-Key": str(uuid4())}
+        result = await drill.call("guide_documents_" + label, "POST", route, path=path,
+            token=manager, payload=body, headers=key, expected=201,
+            **guide_expectations(body, project["id"], manager_id))
+        await drill.call("guide_documents_" + label + "_replay", "POST", route, path=path,
+            token=manager, payload=body, headers=key, expected=201,
+            values=result, exact_fields=result.keys())
+        await drill.call("guide_documents_" + label + "_changed_order", "POST", route, path=path,
+            token=manager, payload=body | {"documents": list(reversed(documents))},
+            headers=key, expected=409)
+    valid = {"label": "Guide", "media_type": types[0]}
+    invalids = [("null", None), ("empty", []), ("object", {}),
+                ("overflow", [valid] * 101), ("duplicate", [valid, valid]),
+                ("normalized_duplicate", [valid, valid | {"label": " Guide "}])]
+    for field in ("label", "media_type"):
+        invalids.append((field + "_missing", [{k: v for k, v in valid.items() if k != field}]))
+        for label, value in (("null", None), ("object", {}), ("bool", True), ("empty", "")):
+            invalids.append((field + "_" + label, [valid | {field: value}]))
+    for label, value in (("overflow", "d" * 501), ("blank", " \t\n "),
+                         ("nul", "bad\x00label"), ("locator", "https://example.invalid/guide")):
+        invalids.append(("label_" + label, [valid | {"label": value}]))
+    invalids += [("unsupported_type", [valid | {"media_type": "text/plain"}]),
+                 ("extra", [valid | {"storage_key": "not-client-owned"}])]
+    for label, documents in invalids:
+        body = guide_payload("recovery-" + uuid4().hex)
+        key = {"Idempotency-Key": str(uuid4())}
+        try:
+            await drill.call("guide_documents_invalid_" + label, "POST", route, path=path,
+                token=manager, payload=body | {"documents": documents}, headers=key, expected=422)
+        except ProbeFailure:
+            pass
+        await drill.call("guide_documents_recovery_" + label, "POST", route, path=path,
+            token=manager, payload=body, headers=key, expected=201,
+            **guide_expectations(body, project["id"], manager_id))
+    body = guide_payload("authority-" + uuid4().hex)
+    for label, token, status in (("no_auth", None, 401), ("ungranted", outsider, 403)):
+        await drill.call("guide_create_" + label, "POST", route, path=path,
+            token=token, payload=body, expected=status)
+    for label, key in (("missing", None), ("malformed", "invalid-key")):
+        await drill.call("guide_create_key_" + label, "POST", route, path=path,
+            token=manager, payload=body, headers={"Idempotency-Key": key}, expected=422)
+
+
 async def project_field_cases(drill, manager, outsider, project, guide, manager_id):
     """Input boundaries and current-state checks using public project operations."""
     route = "/api/v1/projects"
@@ -1073,15 +1130,18 @@ async def authority_cases(drill, admin, manager, outsider, manager_id, project):
                          values={"error.code": "permission_not_granted"})
     for action in ("suspend", "reactivate", "deactivate"):
         mutation_route, mutation_path = actor_route + "/" + action, actor_path + "/" + action
-        for label, invalid in (("missing_reason", {}), ("reason_overflow", {"reason": "é" * 251}),
-                               ("reason_nul", {"reason": "before\x00after"})):
+        key = {"Idempotency-Key": str(uuid4())}
+        for label, invalid in lifecycle_reason_inputs():
             await drill.call("actor_" + action + "_" + label, "POST", mutation_route,
-                path=mutation_path, token=admin, payload=invalid, expected=422,
+                path=mutation_path, token=admin, payload=invalid, headers=key, expected=422,
                 values={"error.code": "invalid_request", "error.retryable": False})
             await drill.call("actor_" + action + "_" + label + "_unchanged", "GET", actor_route,
                 path=actor_path, token=admin, values=current, exact_fields=current.keys())
-        key = {"Idempotency-Key": str(uuid4())}
-        payload = {"reason": "é" * 250}
+        await lifecycle_admission_cases(drill, "actor_" + action, mutation_route, mutation_path,
+                                        admin, manager)
+        await drill.call("actor_" + action + "_admission_unchanged", "GET", actor_route,
+            path=actor_path, token=admin, values=current, exact_fields=current.keys())
+        payload = {"reason": "  " + "é" * 250 + "  "}
         changed = await drill.call("actor_" + action, "POST", mutation_route,
             path=mutation_path, token=admin, payload=payload, headers=key,
             values={"resource_type": "actor_profile", "resource_id": scoped_id,
@@ -1100,8 +1160,13 @@ async def authority_cases(drill, admin, manager, outsider, manager_id, project):
             checks={"updated_at": timestamp_value, transition_field: timestamp_value},
             exact_fields=current.keys())
         await drill.call("actor_" + action + "_replay", "POST", mutation_route,
-            path=mutation_path, token=admin, payload=payload, headers=key, values=changed,
+            path=mutation_path, token=admin, payload={"reason": payload["reason"].strip()},
+            headers=key, values=changed,
             exact_fields=changed.keys())
+        await drill.call("actor_" + action + "_mismatch", "POST", mutation_route,
+            path=mutation_path, token=admin, payload={"reason": "Changed"}, headers=key, expected=409)
+        await drill.call("actor_" + action + "_repeated_transition", "POST", mutation_route,
+            path=mutation_path, token=admin, payload=payload, expected=409)
         await drill.call("actor_" + action + "_replay_unchanged", "GET", actor_route,
             path=actor_path, token=admin, values=current, exact_fields=current.keys())
         if action == "reactivate":
@@ -1381,9 +1446,9 @@ async def project_role_cases(drill, manager, contributor, project, manager_id, m
 async def service_actor_cases(drill, issuer, admin, outsider):
     """Provision through HTTP and prove binding, replay, privacy and revocation."""
     route = "/api/v1/service-actors"
-    subject = "external-drill-service"
+    subject = "é" * 100
     payload = {"service_identity": "workstream.review.projection", "subject": subject,
-               "reason": "Verify exact service binding"}
+               "reason": "é" * 250}
     for label, token, status in (("missing_auth", None, 401), ("ungranted", outsider, 403)):
         await drill.call("service_" + label, "POST", route, token=token, payload=payload,
                          expected=status)
@@ -1426,14 +1491,24 @@ async def service_actor_cases(drill, issuer, admin, outsider):
     await drill.call("service_key_conflict", "POST", route, token=admin,
                      payload=payload | {"subject": "different-subject"}, headers=key, expected=409,
                      values={"error.code": "idempotency_mismatch"})
+    for label, changes in (("duplicate", {}), ("identity", {"subject": "other-service"}),
+                           ("subject", {"service_identity": "workstream.artifact.verifier"})):
+        await drill.call("service_binding_conflict_" + label, "POST", route, token=admin,
+            payload=payload | changes, expected=409)
     actor_id = created["actor_profile_id"]
     actor_route = "/api/v1/actors/{actor_profile_id}"
     actor_path = f"/api/v1/actors/{actor_id}"
-    await drill.call("service_persisted_profile", "GET", actor_route, path=actor_path, token=admin,
+    service_profile = await drill.call("service_persisted_profile", "GET", actor_route, path=actor_path, token=admin,
         values={"actor_profile_id": actor_id, "actor_kind": "service", "status": "active",
                 "provisioning_method": "manual_service_provisioning", "display_name": None,
                 "service_identity": payload["service_identity"], "suspended_at": None,
-                "reactivated_at": None, "deactivated_at": None})
+                "reactivated_at": None, "deactivated_at": None, "created_at": created["created_at"],
+                "last_seen_at": None}, checks={"updated_at": timestamp_value},
+        exact_fields=("actor_profile_id", "actor_kind", "status", "provisioning_method",
+                      "display_name", "service_identity", "suspended_at", "reactivated_at",
+                      "deactivated_at", "created_at", "updated_at", "last_seen_at"))
+    await drill.call("service_conflicts_preserved_profile", "GET", actor_route, path=actor_path,
+        token=admin, values=service_profile, exact_fields=service_profile.keys())
     link = await drill.call("service_persisted_identity", "GET", actor_route + "/identity-links",
         path=actor_path + "/identity-links", token=admin,
         values={"actor_profile_id": actor_id, "subject_kind": "service", "status": "active",
@@ -1452,13 +1527,16 @@ async def service_actor_cases(drill, issuer, admin, outsider):
     for action, state in (("revoke", "revoked"), ("reactivate", "active")):
         mutation = "/api/v1/actor-identity-links/{identity_link_id}/" + action
         path = f'/api/v1/actor-identity-links/{link["identity_link_id"]}/{action}'
-        await identity_link_reason_cases(drill, admin, action, mutation, path,
-                                        actor_route, actor_path, link)
-        mutation_key = {"Idempotency-Key": str(uuid4())}
+        mutation_key = await identity_link_reason_cases(drill, admin, action, mutation, path,
+                                                       actor_route, actor_path, link)
+        await lifecycle_admission_cases(drill, "link_" + action, mutation, path, admin, outsider)
+        await drill.call("link_" + action + "_admission_unchanged", "GET", actor_route + "/identity-links",
+            path=actor_path + "/identity-links", token=admin, values=link, exact_fields=link.keys())
         result = await drill.call("service_link_" + action, "POST", mutation,
             path=path, token=admin, payload={"reason": " Verify binding lifecycle "}, headers=mutation_key,
             values={"resource_type": "actor_identity_link", "resource_id": link["identity_link_id"],
-                    "version": None, "http_status": 200})
+                    "version": None, "http_status": 200},
+            exact_fields=("resource_type", "resource_id", "version", "http_status"))
         changed_timestamp = "revoked_at" if action == "revoke" else "reactivated_at"
         expected_link = link | {"status": state}
         if action == "reactivate":
@@ -1468,8 +1546,12 @@ async def service_actor_cases(drill, issuer, admin, outsider):
             values={key: value for key, value in expected_link.items() if key != changed_timestamp},
             checks={changed_timestamp: timestamp_value}, exact_fields=link.keys())
         await drill.call("service_link_" + action + "_replay", "POST", mutation,
-            path=path, token=admin, payload={"reason": " Verify binding lifecycle "},
+            path=path, token=admin, payload={"reason": "Verify binding lifecycle"},
             headers=mutation_key, values=result)
+        await drill.call("service_link_" + action + "_mismatch", "POST", mutation,
+            path=path, token=admin, payload={"reason": "Changed"}, headers=mutation_key, expected=409)
+        await drill.call("service_link_" + action + "_repeated_transition", "POST", mutation,
+            path=path, token=admin, payload={"reason": "Repeat transition"}, expected=409)
         await drill.call("service_link_" + action + "_replay_unchanged", "GET", actor_route + "/identity-links",
             path=actor_path + "/identity-links", token=admin, values=link, exact_fields=link.keys())
         await drill.call("service_link_" + action + "_admission", "POST", route, token=service,
@@ -1479,18 +1561,41 @@ async def service_actor_cases(drill, issuer, admin, outsider):
 
 async def identity_link_reason_cases(drill, admin, action, mutation, path, actor_route, actor_path, link):
     """Retain each failed reason probe and verify state before continuing."""
-    for label, invalid in (("missing", {}), ("null", {"reason": None}),
-            ("bool", {"reason": True}), ("nul", {"reason": "before\x00after"}),
-            ("overflow", {"reason": "é" * 251}),
-            ("extra", {"reason": "Valid", "unexpected": True})):
+    key = {"Idempotency-Key": str(uuid4())}
+    for label, invalid in lifecycle_reason_inputs():
         try:
             await drill.call(f"link_{action}_{label}", "POST", mutation, path=path,
-                token=admin, payload=invalid, expected=422,
+                token=admin, payload=invalid, headers=key, expected=422,
                 values={"error.code": "invalid_request", "error.retryable": False})
         except ProbeFailure:
             pass
         await drill.call(f"link_{action}_{label}_unchanged", "GET", actor_route + "/identity-links",
             path=actor_path + "/identity-links", token=admin, values=link, exact_fields=link.keys())
+    return key
+
+
+def lifecycle_reason_inputs():
+    """Named contract partitions shared by the five lifecycle mutations."""
+    return (("missing", {}), ("null", {"reason": None}), ("integer", {"reason": 7}),
+            ("bool", {"reason": True}), ("array", {"reason": []}), ("empty", {"reason": ""}),
+            ("blank", {"reason": " \t\n "}), ("nul", {"reason": "bad\x00reason"}),
+            ("ascii_overflow", {"reason": "a" * 501}), ("overflow", {"reason": "é" * 251}),
+            ("extra", {"reason": "Valid", "unexpected": True}))
+
+
+async def lifecycle_admission_cases(drill, name, route, path, admin, outsider):
+    """Reject bad keys, authority and targets before the valid transition."""
+    for label, key in (("missing_key", None), ("malformed_key", "invalid-key")):
+        await drill.call(name + "_" + label, "POST", route, path=path, token=admin,
+            payload={"reason": "Admission probe"}, headers={"Idempotency-Key": key}, expected=422)
+    for label, token, status in (("no_auth", None, 401), ("ungranted", outsider, 403)):
+        await drill.call(name + "_" + label, "POST", route, path=path, token=token,
+            payload={"reason": "Admission probe"}, expected=status)
+    prefix, _, action = path.rsplit("/", 2)
+    for label, target, status in (("malformed_target", "invalid-uuid", 422),
+                                   ("absent_target", str(uuid4()), 404)):
+        await drill.call(name + "_" + label, "POST", route, path=f"{prefix}/{target}/{action}",
+            token=admin, payload={"reason": "Admission probe"}, expected=status)
 
 
 async def isolation(metadata_path, *, require_empty=True):
