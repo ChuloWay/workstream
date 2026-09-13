@@ -5,7 +5,7 @@
 - Risk: L1
 - Intended merge outcome: Deterministically project the saved post-submit proposal into the canonical checker policy, with separate approval and correction custody; live authority and public exposure remain AUTH-12G/POL-06B.
 
-## Intent and discovery
+## Intent
 
 The unified guide run already saves the complete result. POL-05B exposes it and
 approves the artifact/effective/pre-submit chain. The missing next operation
@@ -30,7 +30,7 @@ remain inert historical data with no writer, reader, constraint or authority
 dependence. Do not drop retained values; removing executable dependence is the
 cleanup, and no historical column authorizes any operation.
 
-## Allowed changes
+## Bounded change
 
 - PROJECTS canonical post-policy compiler, model, repository, typed API and hidden
   service, and guide-compilation approval/correction custody helpers where reuse
@@ -80,20 +80,29 @@ cleanup, and no historical column authorizes any operation.
   `backend/tests/projects/{unified_policy_fixtures,policy_bundle_fixtures}.py`,
   `backend/tests/committed_guide_fixtures.py`, `backend/tests/test_api_contract_e2e.py`
   and `backend/tests/test_tasks.py` for their shared downstream policy setup;
+  `backend/tests/test_alembic.py` for exact migration graph enrolment;
   `backend/scripts/api_contract_e2e.py` for its isolated hidden-prerequisite call.
   Replace manual policy seed assertions with real operation custody; preserve
   runtime requirement and revision behavior tests using reachable canonical inputs.
 - `backend/scripts/behavior_ownership.py`, `.ci/behavior-ownership/partition.v1.json`,
   affected `.ci/behavior-ownership/{auth,lifecycle}/` records, canonical test-lane
   catalogue and inventory, and `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`
-  for exact shrinking source/line changes only; no thresholds or proof
-  requirements change.
+  for exact shrinking source/line changes only. `.github/workflows/backend.yml`
+  adds an exact post-policy 90% coverage gate; no existing threshold or proof
+  requirement is weakened.
 - This record, adopted `planning/chunks/WS-POL-003-06A-hidden-post-submit-projection.md`,
   `planning/PLAN.md`, `OVERVIEW.md`, `.commitrail/INDEX.md`, ARCH current dependency
   plan, `README.md`, `docs/roadmap_status.md`,
   `docs/operations_project_operating_manual.md`,
-  `docs/architecture_checker_framework.md` and the current project-guide spec.
+  `docs/architecture_checker_framework.md`, `docs/architecture_data_model.md`,
+  `docs/product_first_user_flows.md` and the current project-guide spec.
   Local `sheets/workstream_roadmap.{xlsx,csv}` only if present.
+
+## Risk and review routing
+
+L1: exact policy lineage, authorization, transactions and retained evidence.
+Required tracks: architecture/reuse, security, QA/test-delta, product/docs and
+CI integrity. Human focus is complete projection and atomic decision custody.
 
 ## Prohibited changes
 
@@ -102,7 +111,7 @@ provider invocation, document reread, new capability registration, frontend,
 external adapter changes, manual policy fallback, retained-data deletion or
 weakening of authorization, lineage, atomicity, tests or CI.
 
-## Design and acceptance
+## Acceptance criteria
 
 1. Resolve the exact finalized compilation under existing guide serialization.
    Explicitly require current ApprovalCustody: committed reservation, approval
@@ -168,7 +177,7 @@ weakening of authorization, lineage, atomicity, tests or CI.
    tests. Required capability gaps stay explicit and cannot turn into supported
    structural judgments or authorize activation.
 
-## Verification and review
+## Evidence
 
 Before implementation: read-only plan review of reuse, correction transaction
 composition, authorization separation, schema ownership and concrete test paths.
@@ -233,3 +242,25 @@ readers and replacement fixtures together. Splitting those would leave readers
 or tests using superseded approval proof. No public wiring or action activation
 is included. Review is divided by these concrete risks, while the change remains
 one post-policy custody outcome.
+
+
+### Shared-consumer verification repairs
+
+Affected tests now arrange post-policy custody through the same hidden operations,
+including artifact recovery and pre-submit evidence prerequisites. Controlled
+read-corruption tests inject only a loaded value; they do not rewrite immutable
+policy evidence. Their original release/submission/checker rejection and zero-effect
+assertions remain. Scope includes their existing owners
+`backend/tests/test_artifact_recovery.py`, `backend/tests/test_artifact_internal_authorization.py`,
+`backend/tests/test_default_pre_submit_execution.py`, `backend/tests/pre_submit_test_helpers.py`,
+`backend/tests/authorization/task_authority/test_submission_policy.py`,
+`backend/tests/projects/policy_read_fixtures.py`,
+`backend/tests/projects/test_active_guide_read_composition.py` and
+`backend/tests/test_ci_lane_catalogue.py`.
+
+Additional regression proof covers stored foreign principals, separately denied
+exact reads, fresh predecessor decisions after successor approval, and direct SQL
+with an otherwise valid operation whose output, grant or action is substituted.
+Schema parity uses the same PostgreSQL dialect on both sides; migration round-trip
+uses the existing schema-contract isolation because dropped/re-added columns change
+physical ordinals. The canonical schema fingerprint and all existing gates remain.

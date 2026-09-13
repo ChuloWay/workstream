@@ -128,9 +128,9 @@ class _PolicyReadRepository:
             pre_submit_checker_policy_id=self.checker.id,
             pre_submit_checker_bundle_hash=self.checker.compiled_bundle_hash,
             lifecycle_status="approved",
-            approved_by_actor="actor",
+            approval_operation_id=uuid4(),
+            projection_operation_id=uuid4(),
             approved_at=datetime.now(UTC),
-            approved_by_role="project_manager",
             policy_body=post_body,
             policy_hash=canonical_json_hash(post_body),
         )

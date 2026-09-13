@@ -56,8 +56,8 @@ remaining setup/activation work:
 - compiled project post-submit checker policy attached with source/effective/pre-submit provenance
 - current compiled project post-submit checker policy approved by an authorized
   covered Project Manager; a correction request supersedes and retains the
-  unapproved policy through a separate operation, with a new compilation
-  generation when new model output is required
+  compiled or already approved policy through a separate operation, preserving
+  its evidence and requiring a new unified generation and separate reapproval
 - review policy attached
 - revision policy attached
 - exact expected published, complete, binding-valid ContributionPolicyVersion
@@ -237,10 +237,11 @@ policy activation and contribution-policy publication remain independently gover
 but project activation requires both. Compiled
 post-submit setup output carries exact source/effective/pre-submit provenance,
 but activation remains blocked until the current compiled policy is approved
-through the server-owned approval endpoint. A correction request supersedes the
-unapproved output and requires separately recorded correction and reapproval;
-it does not
-satisfy activation. A task cannot enter `READY` until it also locks the guide
+through the separate approval operation (live authorization/public wiring remain
+AUTH-12G/POL-06B). A correction request can supersede either a compiled or an
+already approved policy while its setup is current. It preserves the original
+body and receipts and requires a new unified generation and separate reapproval;
+it does not satisfy activation. A task cannot enter `READY` until it also locks the guide
 source snapshot id/hash, effective project submission artifact policy hash,
 project pre-submit checker bundle hash, and approved provenance-matched project
 post-submit checker policy reference.

@@ -32,7 +32,7 @@ async def test_post_policy_operation_model_matches_migrated_columns_and_relation
                 inspector = inspect(sync)
                 table = PostPolicyOperation.__table__
                 actual = inspector.get_columns(table.name)
-                assert {(c['name'], str(c['type']), c['nullable']) for c in actual} == {
+                assert {(c['name'], str(c['type'].compile(dialect=sync.dialect)), c['nullable']) for c in actual} == {
                     (c.name, str(c.type.compile(dialect=sync.dialect)), c.nullable) for c in table.columns}
                 actual_fks = {(tuple(fk['constrained_columns']), fk['referred_table'], tuple(fk['referred_columns']))
                               for fk in inspector.get_foreign_keys(table.name)}

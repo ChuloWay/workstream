@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any, cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -239,7 +239,7 @@ def _set_activation_fact(bundle: dict[str, Any], fact: str, value: Any) -> None:
         ),
         ("post_submit_checker_policy.lifecycle_status", "compiled", "approved post-submit"),
         ("post_submit_checker_policy.approval_operation_id", None, "approval custody"),
-        ("post_submit_checker_policy.projection_operation_id", uuid4(), "approval custody"),
+        ("post_submit_checker_policy.projection_operation_id", UUID("d8aed408-588e-4214-ae5e-c214e41e2b73"), "approval custody"),
         ("review_policy.allowed_decisions", [], "allowed decisions"),
         ("review_policy.allowed_decisions", ["maybe"], "invalid decisions"),
         ("revision_policy.max_revision_rounds", 0, "revision policy is incomplete"),

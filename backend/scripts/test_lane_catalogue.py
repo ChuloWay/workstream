@@ -217,6 +217,8 @@ PROJECT_MODULES = (
     "tests/projects/guide_compilation/finalization/test_service.py",
     "tests/projects/guide_compilation/finalization/test_structure.py",
     'tests/projects/post_policy/test_compiler.py',
+    'tests/projects/post_policy/test_authority.py',
+    'tests/projects/post_policy/test_direct_sql.py',
     'tests/projects/post_policy/test_concurrency.py',
     'tests/projects/post_policy/test_replacement.py',
     'tests/projects/post_policy/test_inventory.py',

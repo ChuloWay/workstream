@@ -1,5 +1,6 @@
 """Arrange downstream post policy through the actual hidden projection and approval."""
 
+from contextlib import contextmanager
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -44,3 +45,28 @@ async def seed_post_submit_policy_for_downstream_tests(
             'id', 'required_checkers', 'warning_checkers', 'blocking_severities', 'policy_hash', 'policy_body',
             'lifecycle_status', 'projection_operation_id', 'approval_operation_id',
         )}
+
+
+
+@contextmanager
+def crossed_post_policy_read(policy_id):
+    """Inject one corrupted read without modifying immutable stored evidence."""
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
+    from sqlalchemy.orm.attributes import set_committed_value
+    from app.modules.projects.models import PostSubmitCheckerPolicy
+
+    seen = []
+
+    def loaded(_session, row):
+        if isinstance(row, PostSubmitCheckerPolicy) and row.id == policy_id:
+            seen.append(row.id)
+            set_committed_value(row, 'required_checkers', [
+                *row.required_checkers, 'check_acceptance_criteria_present',
+            ])
+
+    event.listen(Session, 'loaded_as_persistent', loaded)
+    try:
+        yield seen
+    finally:
+        event.remove(Session, 'loaded_as_persistent', loaded)

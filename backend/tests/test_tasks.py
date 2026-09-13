@@ -1816,18 +1816,19 @@ async def test_release_rejects_crossed_post_submit_policy_sidecar(
             persisted_task.locked_post_submit_checker_policy_id,
         )
         assert post_submit_policy is not None
-        post_submit_policy.required_checkers = [
-            *post_submit_policy.required_checkers,
-            "check_acceptance_criteria_present",
-        ]
+        policy_id = post_submit_policy.id
         audit_ids = sorted(await session.scalars(select(AuditEvent.id)))
         await session.commit()
 
-    release = await task_client.post(
-        f"/api/v1/tasks/{task['id']}/release",
-        headers=auth_headers(),
-        json={"reason": "release decision recorded"},
-    )
+    from tests.projects.post_submit_fixtures import crossed_post_policy_read
+
+    with crossed_post_policy_read(policy_id) as seen:
+        release = await task_client.post(
+            f"/api/v1/tasks/{task['id']}/release",
+            headers=auth_headers(),
+            json={"reason": "release decision recorded"},
+        )
+    assert seen
 
     assert release.status_code == 422, release.text
     assert release.json()["error"]["code"] == "task_locked_context_invalid"

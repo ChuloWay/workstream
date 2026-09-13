@@ -3165,21 +3165,22 @@ async def test_manual_checker_run_rejects_crossed_post_submit_policy_sidecar(
             )
         )
         assert policy is not None
-        policy.required_checkers = [
-            "check_policy_context_present",
-            "check_acceptance_criteria_present",
-        ]
+        policy_id = policy.id
         await session.commit()
 
     before = await task_side_effect_snapshot(started_task["id"])
     assert len(before["checker_runs"]) == 1
     assert before["checker_results"]
     set_dev_actor(monkeypatch, roles="project_manager", subject="project-manager-subject")
-    rejected = await checker_client.post(
-        f"/api/v1/submissions/{created_id}/checker-runs",
-        headers=auth_headers(),
-        json={"trigger_reason": "Retry after policy corruption"},
-    )
+    from tests.projects.post_submit_fixtures import crossed_post_policy_read
+
+    with crossed_post_policy_read(policy_id) as seen:
+        rejected = await checker_client.post(
+            f"/api/v1/submissions/{created_id}/checker-runs",
+            headers=auth_headers(),
+            json={"trigger_reason": "Retry after policy corruption"},
+        )
+    assert seen
 
     assert rejected.status_code == 422, rejected.text
     assert rejected.json()["detail"] == "locked post-submit checker policy summaries are invalid"

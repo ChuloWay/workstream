@@ -906,85 +906,42 @@ review decision values.
 
 ## PostSubmitCheckerPolicy
 
-Fields:
+The canonical `checker_policies` row contains project/guide/version and exact
+source snapshot, effective-policy and pre-submit-policy IDs/hashes; `policy_body`
+and `policy_hash`; required/warning checker and blocking-severity sidecars;
+`lifecycle_status`; `projection_operation_id`, `approval_operation_id` and
+`supersession_operation_id`; approval/supersession timestamps; predecessor
+`supersedes_policy_id`; and creation metadata.
 
-- `id`
-- `project_id`
-- `guide_id`
-- `guide_version`
-- `source_snapshot_id`
-- `source_snapshot_hash`
-- `effective_policy_id`
-- `effective_policy_hash`
-- `pre_submit_checker_policy_id`
-- `pre_submit_checker_bundle_hash`
-- `required_checkers`
-- `warning_checkers`
-- `blocking_severities`
-- `policy_hash`
-- `policy_body`
-- `lifecycle_status`
-- `approved_by_admin_role_grant_id`
-- `approved_by_actor_profile_id`
-- `approved_at`
-- `supersedes_policy_id`
-- `superseded_at`
-- `superseded_by_role`
-- `superseded_by_actor`
-- `supersession_kind`
-- `supersession_reason`
-- `created_by`
-- `created_at`
+`policy_body` is the sole execution body. Its hash is
+`sha256(canonical_json(policy_body))`; sidecars must match it. Lifecycle is
+`compiled`, `approved` or `superseded`. POL-06A derives a compiled policy only
+from a finalized unified result with the current approved artifact/effective/
+pre-submit chain. Separate exact-target manager approval records its receipt.
+Both compiled and approved policies may be corrected while their setup is current.
 
-`policy_body` is the canonical source for post-submit checker execution. The
-hash is `sha256(canonical_json(policy_body))`. `required_checkers`,
-`warning_checkers`, and `blocking_severities` are query projections and must
-match `policy_body`.
+The append-only `project_post_policy_operations` family records derive, approve
+and correction receipts with exact actor, identity link, grant or fixed service,
+authorization decision, finalization, source/result, upstream approval, catalogue
+and policy commitments. Active-guide readers require that custody. Historical
+role-string approval/supersession columns remain inert retained data; they do not
+authorize operations and receive no new writes.
 
-`lifecycle_status` is `compiled`, `approved`, or `superseded`. The derivation
-and compiler continuation creates `compiled` records. Guide activation requires
-an `approved` generated policy with setup-role approval provenance and exact
-`source_snapshot_id/hash`, `effective_policy_id/hash`, and
-`pre_submit_checker_policy_id` plus pre-submit checker bundle hash matching the
-active setup context. Server-owned approval/correction APIs move compiled
-post-submit policies into that approved state or supersede rejected generated
-output for regeneration. Superseded records retain actor, role, time, bounded
-reason, policy hash, and policy body provenance. A replacement links through
-`supersedes_policy_id` only when it replaces a correction-requested policy in
-the exact same setup context; bounded correction feedback reaches setup-time
-derivation, and Workstream rejects an identical replacement policy hash.
+Correction preserves the result and policy body, supersedes the policy, and
+allocates the existing unified successor with bounded manager feedback. A newly
+approved upstream generation produces the next policy and links its predecessor.
+It may have the same canonical hash: new generation/approval custody identifies
+the replacement. A general unified correction also invalidates the predecessor's
+current upstream; subsequent post-policy derivation supersedes it atomically.
 
-For generated setup, the sole unified guide compiler proposes the post-submit
-component in the same inference as sufficiency and pre-submit policy proposals.
-It receives exact verified guide material and registered capability snapshots.
-POL-04B retains that component in the immutable compilation and stops at draft
-review. Later approval and deterministic post-submit projection/compilation
-consume it without another agent call. The setup runtime does not execute
-checkers or judge contributor submissions.
-
-The constrained derivation output contains:
-
-- `required_checkers`
-- `warning_checkers`
-- `blocking_severities`
-- `reasons`
-- `unsupported_required_checks`
-- `setup_notes`
-
-Setup-run summaries persist bounded metadata from that output: checker lists,
-server-owned agent name/version, reason count, sanitized evidence refs,
-unsupported checker reason codes, and setup note count. They do not persist
-free-form agent rationales, setup-note text, source excerpts, local paths,
-exact source hashes, replayable refs, or contributor submission data. Agent-returned
-agent names and versions are treated as untrusted metadata; persisted setup
-summaries use Workstream's server-owned derivation agent identity.
-
-Evidence references in `reasons` and unsupported-checker gaps are bounded
-setup pointers such as `project_guide`, `source_item:N`, `sufficiency_report`,
-`effective_policy`, and `pre_submit_checker`. The registered checker catalog is
-agent input, not an evidence reference. Evidence refs must not contain local
-filesystem paths, signed URLs, credentials, private storage locators, raw source
-excerpts, or contributor submission data.
+Hidden operations consume the saved result without model, document or checker
+calls. Live authority and public wiring remain AUTH-12G/POL-06B. Setup remains
+immutable. The existing complete proposal retains requirements, exact registered
+bindings, safe findings and non-executable capability suggestions. Evidence binds
+assigned original-document versions and hashes; model page/section attributions
+do not become verified judgments. Review display excludes credentials, private
+storage locators, signed URLs and raw source excerpts. No second derivation
+output or setup-summary state machine is introduced.
 
 When a task locks project context, Workstream copies the canonical persisted
 `PostSubmitCheckerPolicy.policy_body` and its exact hash. Submission and checker

@@ -485,6 +485,14 @@ jobs:
           --precision=2
           --fail-under=90
 
+      - name: Post-submit policy custody subsystem coverage
+        working-directory: backend
+        run: >-
+          coverage report
+          --include='app/modules/projects/post_policy/*,app/modules/projects/api/post_policy.py,app/modules/authorization/api/post_policy.py'
+          --precision=2
+          --fail-under=90
+
       - name: POL-04A hidden compilation per-file coverage
         working-directory: backend
         shell: bash

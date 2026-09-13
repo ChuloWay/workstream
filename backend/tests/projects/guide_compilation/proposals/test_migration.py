@@ -1,11 +1,13 @@
 """Forward/reverse schema proof with retained-evidence protection."""
 
+import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from migration_fixtures import run_alembic_revision
 
 
+@pytest.mark.postgres_schema_contract
 async def test_empty_proposal_migration_round_trip(clean_postgres_database):
     engine = create_async_engine(clean_postgres_database)
 
