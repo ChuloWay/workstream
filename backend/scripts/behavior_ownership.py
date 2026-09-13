@@ -226,6 +226,11 @@ POL_04A3_PARTITION_TARGETS = frozenset(
         "backend/app/modules/projects/api/guide_compilation_projections.py",
     }
 )
+AUTH_12G_PARTITION_TARGETS = frozenset({
+    'backend/app/modules/authorization/domain/post_policy.py',
+    'backend/app/modules/authorization/post_policy_authorization.py',
+})
+
 AUTH_12F4_PARTITION_TARGETS = frozenset({
     'backend/app/modules/authorization/domain/guide_manager_resources.py',
     'backend/app/modules/authorization/domain/guide_proposals.py',
@@ -532,6 +537,7 @@ def _validate_additive_partition_transition(
         | POL_04B_PARTITION_TARGETS
         | POL_04B2_PARTITION_TARGETS
         | AUTH_12F4_PARTITION_TARGETS
+        | AUTH_12G_PARTITION_TARGETS
         | POL_05A_PARTITION_TARGETS
         | POL_05B_PARTITION_TARGETS
         | POL_06A_PARTITION_TARGETS

@@ -1,6 +1,6 @@
 # Chunk Contract: WS-AUTH-001-12G — Live Post-Policy Authorization
 
-Disposition: Planned. Risk: L1. Depends on completed POL-06A; precedes POL-06B.
+Disposition: Complete. Risk: L1. Depends on completed POL-06A; precedes POL-06B.
 
 The [combined change record](../../WS-AUTH-001-12G.md) owns the reconciled
 implementation scope, existing owners, allowed/prohibited files, acceptance

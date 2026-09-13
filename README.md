@@ -517,8 +517,9 @@ handoff or a lost creation response. See the
 POL-06A implements hidden deterministic post-submission policy projection, exact
 full-draft review, separate manager approval and correction custody from that same
 saved result. Correction uses the existing unified successor operation. These
-operations require explicit authorization ports; AUTH-12G supplies live authority
-and POL-06B supplies public wiring. Setup does not run post-submit evaluators.
+operations have live AUTH-12G authorization: the fixed setup service derives,
+and an exact-project Project Manager reads, approves or requests correction.
+Public wiring remains POL-06B. Setup does not run post-submit evaluators.
 The separate post-submission Celery worker evaluates submitted work.
 The local Celery command above includes Beat; start it before creating guide sources.
 

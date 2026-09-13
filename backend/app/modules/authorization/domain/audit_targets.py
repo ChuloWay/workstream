@@ -2,6 +2,7 @@
 
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.domain.guide_proposals import GuideProposalResourceContext
+from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
 from app.modules.authorization.domain.action_groups import (
     GUIDE_BOUND_PROJECT_MANAGER_ACTIONS, SUBMISSION_POLICY_MUTATIONS,
 )
@@ -58,7 +59,7 @@ def project_authority_audit_target(
             AdapterBindingMutationResourceContext,
             ProjectGuideProjectionResourceContext,
             ProjectSetupFinalizationResourceContext,
-            GuideProposalResourceContext,
+            GuideProposalResourceContext, PostPolicyResourceContext,
         ),
     ):
         project_id = str(getattr(resource, "project_id", None) or resource.scope_project_id)
