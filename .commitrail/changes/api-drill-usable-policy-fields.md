@@ -540,3 +540,7 @@ recovery. A failed response stays red; continue only after exact unchanged-state
 readback. Helper regressions cover actor and link failures, safe continuation,
 single-key reuse and abort on state drift. This changes failure diagnostics, not
 the successful execution sequence or the completed endpoint scope.
+The behavioral helper test is paired with a narrow owner-wiring assertion:
+`authority_cases` must delegate to that guarded loop with the actual actor target
+and current state, not restore its original direct reason loop. This catches a
+call-site-only regression that would otherwise leave helper tests green.

@@ -1,5 +1,6 @@
 """Focused evidence-integrity tests for the standalone external-client drill."""
 
+import ast
 import importlib.util
 from copy import deepcopy
 import json
@@ -19,6 +20,20 @@ SPEC.loader.exec_module(drill)
 
 
 class ContractTests(unittest.TestCase):
+    def test_actor_reason_partitions_use_the_guarded_lifecycle_helper(self):
+        owner = next(node for node in ast.parse(SOURCE.read_text()).body
+                     if isinstance(node, ast.AsyncFunctionDef) and node.name == "authority_cases")
+        calls = [node for node in ast.walk(owner)
+                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)]
+        guarded = [node for node in calls if node.func.id == "lifecycle_reason_cases"]
+        self.assertEqual(len(guarded), 1, "actor reasons must use the tested guarded loop")
+        self.assertEqual([ast.unparse(arg) for arg in guarded[0].args], [
+            "drill", "admin", "'actor_' + action", "mutation_route", "mutation_path",
+            "actor_route", "actor_path", "current",
+        ])
+        self.assertNotIn("lifecycle_reason_inputs", [node.func.id for node in calls],
+                         "actor owner must not restore an unguarded reason loop")
+
     def test_conflicts_require_the_exact_public_semantics_not_just_409(self):
         for code in ("idempotency_mismatch", "actor_already_suspended", "actor_not_suspended",
                      "actor_deactivated_terminal", "service_identity_already_provisioned",
