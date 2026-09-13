@@ -53,6 +53,11 @@ SECURITY_DIMENSIONS = (
     "concealment",
 )
 TEST_LAYERS = frozenset({"domain", "service", "persistence", "integration", "end_to_end"})
+OldModuleAnalysis = tuple[
+    list[str],
+    dict[str, ast.FunctionDef | ast.AsyncFunctionDef],
+    set[tuple[int, int]],
+]
 
 
 class TestStructureError(RuntimeError):
@@ -622,25 +627,32 @@ def _old_source(root: Path, revision: str, node_id: str) -> str:
     return result.stdout
 
 
-def _assertion_inventory(source: str, node_id: str) -> dict[tuple[int, int], str]:
-    """Derive every framework-aware assertion span/hash inside one old test node."""
+def _analyze_old_module(source: str) -> OldModuleAnalysis:
+    """Analyze one historical module without requiring every function to assert."""
     try:
         tree, analysis = analyze_python(source)
     except (SyntaxError, ValueError) as exc:
         raise TestStructureError("invalid_old_test_source") from exc
-    symbol = node_id.split("::", 1)[1].replace("::", ".") if "::" in node_id else ""
     functions = {
         name: node
         for name, node in _qualified_functions(tree)
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
+    return source.splitlines(keepends=True), functions, analysis.assertion_ranges
+
+
+def _assertion_inventory(
+    module: OldModuleAnalysis, node_id: str
+) -> dict[tuple[int, int], str]:
+    """Derive exact assertion spans/hashes inside one requested old test node."""
+    lines, functions, assertion_ranges = module
+    symbol = node_id.split("::", 1)[1].replace("::", ".") if "::" in node_id else ""
     node = functions.get(symbol)
     if node is None or node.end_lineno is None or not node.name.startswith("test_"):
         raise TestStructureError("missing_old_test_node")
-    lines = source.splitlines(keepends=True)
     inventory = {
         (start, end): _digest_lines(lines, start, end)
-        for start, end in analysis.assertion_ranges
+        for start, end in assertion_ranges
         if node.lineno <= start <= end <= node.end_lineno
     }
     if not inventory:
@@ -681,6 +693,7 @@ def validate_assertion_maps(root: Path, maps_dir: Path) -> None:
     dispositions: set[tuple[str, str, str]] = set()
     mapped_spans: dict[tuple[str, str], set[tuple[int, int]]] = {}
     inventories: dict[tuple[str, str], dict[tuple[int, int], str]] = {}
+    old_modules: dict[tuple[str, str], OldModuleAnalysis] = {}
     for path in sorted(maps_dir.glob("*.json")):
         value = _load_json(path, "invalid_assertion_map")
         if set(value) != {"chunk_id", "mappings", "schema"} or value["schema"] != MAP_SCHEMA:
@@ -694,10 +707,13 @@ def validate_assertion_maps(root: Path, maps_dir: Path) -> None:
             revision_node = (mapping["old_revision"], mapping["old_test_node"])
             inventory = inventories.get(revision_node)
             if inventory is None:
-                inventory = _assertion_inventory(
-                    _old_source(root, mapping["old_revision"], mapping["old_test_node"]),
-                    mapping["old_test_node"],
-                )
+                module_key = (mapping["old_revision"], mapping["old_test_node"].split("::", 1)[0])
+                module = old_modules.get(module_key)
+                if module is None:
+                    source = _old_source(root, *revision_node)
+                    module = _analyze_old_module(source)
+                    old_modules[module_key] = module
+                inventory = _assertion_inventory(module, mapping["old_test_node"])
                 inventories[revision_node] = inventory
             span = _validate_old_assertion(mapping, inventory)
             key = (*revision_node, mapping["old_assertion_id"])

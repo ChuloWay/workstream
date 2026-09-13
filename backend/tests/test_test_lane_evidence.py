@@ -23,10 +23,10 @@ HEAD = "a" * 40
 LANES = (
     "shared_foundations_a",
     "shared_foundations_b",
-    "schema_contracts_a",
-    "schema_contracts_b",
-    "schema_contracts_c",
-    "project_lifecycle",
+    "schema_contracts",
+    "project_lifecycle_a",
+    "project_lifecycle_b",
+    "project_lifecycle_c",
     "task_lifecycle",
 )
 
@@ -52,7 +52,7 @@ def _bundle(tmp_path: Path, mode: str = "run") -> tuple[Path, Path, dict]:
     nodes.append(
         {
             "execution_kind": "admin_runner_self_test",
-            "lane": "schema_contracts_a",
+            "lane": "schema_contracts",
             "module": "tests/test_isolated_database_runner.py",
             "nodeid": "tests/test_isolated_database_runner.py::test_admin_custody",
         }

@@ -112,9 +112,26 @@ before collection. This is semantic fan-out, not arbitrary test-count sharding:
 lane ownership remains repository-defined and exact.
 
 The explicit inventory lives in `backend/scripts/test_lane_catalogue.py`.
-The `project_lifecycle_a`/`project_lifecycle_b` pair partitions PROJECT nodes;
-`task_lifecycle_a`/`task_lifecycle_b` partitions TASK and checker nodes. The single
-`schema_contracts` lane owns all baseline/PostgreSQL schema, reset and
+Authorization preflight runs alongside the seven lanes. The final `test` job
+requires both preflight and every lane to succeed before validating evidence and
+coverage; failed, cancelled or skipped prerequisites remain blocking. This saves
+serial waiting on valid changes at the cost of lane work when preflight fails.
+Assertion-map validation analyzes each exact historical revision/module once per
+invocation, then checks every referenced node and assertion against that analysis.
+It does not cache current source or reuse analysis across validation calls.
+
+The six ordinary lanes use private, 2 GiB RAM-backed PostgreSQL data directories
+to reduce ephemeral reset I/O. A runtime guard verifies the mount, capacity,
+data directory and enabled `fsync`, `full_page_writes` and `synchronous_commit`
+before tests. Real SQL, transaction, lock, isolation and coverage checks remain.
+The schema-contract lane and aggregate job retain disk-backed databases.
+This is not a production configuration or proof of host-power-loss durability:
+[Docker tmpfs data disappears when the container stops](https://docs.docker.com/engine/storage/tmpfs/).
+An exhausted mount fails the job; it does not silently change storage or skip tests.
+
+The `project_lifecycle_a`, `project_lifecycle_b`, and `project_lifecycle_c` lanes
+partition PROJECT nodes; the single `task_lifecycle` lane owns TASK and checker
+nodes. The single `schema_contracts` lane owns all baseline/PostgreSQL schema, reset and
 isolated-runner contracts. The
 `shared_foundations_a` and `shared_foundations_b` lanes deterministically
 partition exact node IDs from the remaining authorization, artifact, API, and

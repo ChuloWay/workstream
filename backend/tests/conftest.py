@@ -385,8 +385,12 @@ async def _reset_test_database_state(
         await _assert_owned_test_database(connection, database_url)
         tables = await _assert_canonical_test_schema(connection)
         async with connection.transaction():
-            for name in TRUNCATE_GUARDED_TABLES:
-                await connection.execute(f"alter table {tables[name]} disable trigger user")
+            # Keep every statement and the transaction, but avoid a network round
+            # trip per table. asyncpg execute without parameters accepts a batch.
+            await connection.execute("; ".join(
+                f"alter table {tables[name]} disable trigger user"
+                for name in TRUNCATE_GUARDED_TABLES
+            ))
             if after_disable is not None:
                 await after_disable()
             await connection.execute(
@@ -397,8 +401,10 @@ async def _reset_test_database_state(
                 "(id, bootstrap_completed, bootstrap_grant_id, version) "
                 "values (1, false, null, 0)"
             )
-            for name in TRUNCATE_GUARDED_TABLES:
-                await connection.execute(f"alter table {tables[name]} enable trigger user")
+            await connection.execute("; ".join(
+                f"alter table {tables[name]} enable trigger user"
+                for name in TRUNCATE_GUARDED_TABLES
+            ))
     finally:
         await connection.close()
 
