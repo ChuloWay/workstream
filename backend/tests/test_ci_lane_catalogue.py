@@ -180,10 +180,10 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     assert shared_a == shared_b == set(catalogue.SHARED_FOUNDATION_MODULES)
     assert {
         "tests/authorization/post_policy/test_concurrency.py",
-"tests/authorization/post_policy/test_context.py",
-"tests/authorization/post_policy/test_prepared.py",
-"tests/authorization/post_policy/test_postgresql.py",
-    "tests/authorization/guide_proposals/test_concurrency.py",
+        "tests/authorization/post_policy/test_context.py",
+        "tests/authorization/post_policy/test_prepared.py",
+        "tests/authorization/post_policy/test_postgresql.py",
+        "tests/authorization/guide_proposals/test_concurrency.py",
         "tests/authorization/guide_proposals/test_context.py",
         "tests/authorization/guide_proposals/test_prepared.py",
         "tests/authorization/guide_proposals/test_postgresql.py",
