@@ -47,6 +47,7 @@ Allowed production owners:
 - Existing `authorization/catalogue.py`, `runtime.py`, `kernel.py`, `prepared.py`,
   `prepared_proposal_replay.py`, `prepared_projection_replay.py`, and domain
   `action_groups.py`, `prepared_service.py`, `guide_proposals.py`,
+  `guide_manager_resources.py::guide_manager_resource_denial`,
   `resource_digest.py`, `audit_targets.py`: bounded action/resource/selector,
   service/human, digest and replay integration. Extract a shared exact operation
   helper only where both existing consumers actually reuse it; no second kernel
@@ -168,3 +169,42 @@ coverage must be at least90%; preserve all current global and per-file floors.
 Use hosted full-suite coverage instead of duplicating the full suite locally.
 Frozen clean-head review and latest pushed-head hosted evidence precede PR
 readiness. Live model smoke testing is irrelevant: this boundary invokes none.
+
+### Planned proof map
+
+All rows below are future proof, not executed evidence. Test paths are relative
+to `backend/tests/authorization/post_policy/` unless an existing owner is named.
+Each parametrized row varies only its named invariant. Contract fixtures use the
+real kernel/PREP with explicit principal/evidence ports; transactional rows use
+`proposal_case`/`prepare_upstream`, real concrete adapters and PostgreSQL.
+
+| Acceptance atom | Owner/source | Named future proof and assertion | Required custody |
+|---|---|---|---|
+| Only three reserved actions activate; service matrix unchanged | `authorization/catalogue.py` | `test_context.py::test_exact_action_activation_and_matrix`: exact active delta and unchanged singleton pair | pure catalogue |
+| Fixed setup service derives | `PostPolicyAuthorizationAdapter`, shared service PREP | `test_postgresql.py::test_setup_service_derives_with_exact_evidence`: one policy/operation and matching service event/digest commit | PostgreSQL transaction |
+| Other services or humans cannot derive | adapter, `kernel._prepare_prelocked` | `test_prepared.py::test_derive_rejects_other_principals`: each service identity/human denies with no allow | service; valid setup control |
+| Covered PM reads complete exact draft | `guide_manager_resource_denial`, `PostPolicyService.review_package` | `test_postgresql.py::test_manager_reads_exact_post_policy`: displayed target/body and bounded PM event match stored policy | PostgreSQL transaction |
+| Covered PM approves separately | adapter and `PostPolicyService.approve` | `test_postgresql.py::test_manager_approves_exact_post_policy`: compiled control becomes approved with exact human receipt | PostgreSQL transaction |
+| Covered PM corrects compiled or approved policy | both AUTH adapters, `request_post_policy_correction` | `test_postgresql.py::test_manager_correction_has_one_shared_successor`: parameterized initial lifecycle; one successor and both exact decisions commit | PostgreSQL transaction |
+| Wrong role, system/foreign scope, expired or revoked grant cannot read/approve/correct | `_prepare_project_manager`, repository grant lookup | `test_postgresql.py::test_manager_operations_reject_wrong_authority`: valid upstream/policy and real alternative principal/grant, unchanged protected rows and no new allow | stored foreign resource and PostgreSQL transaction |
+| Inactive/revoked identity fails | shared kernel request-actor lock | `test_prepared.py::test_inactive_identity_denies`: parameterized actor/link lifecycle with same valid final facts, no allow | service |
+| Missing, malformed or crossed commitments reject | `domain/post_policy.py` exact locator/facts validator | `test_context.py::test_each_commitment_is_required_and_strict`: each UUID/hash/generation/lifecycle and selector fails independently; valid tuple passes | pure |
+| Proposal handle cannot consume post-policy read | both domain family matchers and `prepared.consume` | `test_prepared.py::test_proposal_handle_rejects_post_policy_read`: otherwise identical locator fails with no allow | service PREP |
+| Post-policy handle cannot consume proposal read | same owners | `test_prepared.py::test_post_policy_handle_rejects_proposal_read`: reverse substitution fails with no allow | service PREP |
+| Bound action/principal/request/operation or scope cannot be substituted | adapter and `prepared._binding` | `test_prepared.py::test_prepared_selector_substitution_rejects`: change each independent selector after valid preparation, no allow | service PREP |
+| Raw kernel cannot authorize these operations | kernel public versus private PREP boundary | `test_prepared.py::test_raw_kernel_cannot_authorize_post_policy`: read/approve/correct/derive valid resources deny without preparation | service |
+| Handle cannot cross issuer/session/root transaction, repeat or survive close | shared PREP and nominal adapter | `test_prepared.py::test_handle_lifetime_is_exact`: parameterized misuse after valid preparation, no allow | service PREP |
+| Replay uses original exact decision and fresh authority with new transport request | shared prepared replay and post-policy adapter | `test_postgresql.py::test_exact_replay_adds_no_effects`: derive/approve/correct original receipt returned, rows/events unchanged; revoked caller replay denies | PostgreSQL transaction |
+| Forged replay decision fields reject | shared prepared replay | `test_prepared.py::test_replay_evidence_substitution_rejects`: each actor/action/permission/project/resource/correlation/digest/grant-kind mismatch rejects | service evidence port |
+| Post-policy or unified authority deny/close failure rolls back correction | both real adapters and caller root transaction | `test_postgresql.py::test_correction_authority_failure_rolls_back`: inject failure only at chosen authority boundary after complete prerequisites; no successor/policy/operation/allow changes | PostgreSQL transaction |
+| Stale upstream remains rejected after replacement | existing POL owner and new live adapter | `test_postgresql.py::test_stale_upstream_denies_through_live_authority`: new approved generation, fresh old target cannot mutate; retained rows unchanged | PostgreSQL transaction |
+| Manager operation and revocation serialize in either order | repository locks, shared PREP | `test_concurrency.py::test_manager_operation_and_revocation_serialize`: independent sessions, observed blocker/waiter; grant-first denies, operation-first commits then revoke | PostgreSQL concurrency |
+| Concurrent exact replay commits one operation | shared authority/product locks | `test_concurrency.py::test_concurrent_derive_commits_once`: independent sessions return same receipt, one operation/event | PostgreSQL concurrency |
+| No document/model/evaluator calls on operation/replay/denial | unchanged POL owner and AUTH composition | shared `forbid_runtime_calls` fixture on all new PostgreSQL/concurrency tests: actual runtime/document/checker entrypoints raise if invoked | composition spy with real transaction |
+| Audit stays bounded; public boundary unchanged | digest/audit targets, adapter root, existing routers | `test_context.py::test_post_policy_digest_preserves_public_facts`; exact stored event assertions above; existing public OpenAPI contract test retains route set | pure digest, PostgreSQL audit and composition |
+
+The plan reviewer identified the human resource-owner omission and requested
+this atom-level future proof map; both are incorporated without changing the
+product boundary or claiming future execution. Mutation probes will target the
+named exact-project, sibling-family, read and replay tests after their controls
+pass; structural/source inspection alone will not be called runtime proof.
