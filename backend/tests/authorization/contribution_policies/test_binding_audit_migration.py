@@ -67,7 +67,9 @@ async def binding_lifecycle(admin_access):
     # CON's historical binding seed uses a verifier actor and already fills both
     # instruments. Fresh binding creation needs its own eligible adapter and project.
     project, _ = await foreign_project(target)
-    await admin_access.grant("finance_authority", project_id=project)
+    await admin_access.signed.grant(
+        admin_access.admin, admin_access.target, role="finance_authority", project_id=project,
+    )
     target = replace(target, project=project)
     factory = db_session.get_session_factory()
     adapter_id = uuid4()
