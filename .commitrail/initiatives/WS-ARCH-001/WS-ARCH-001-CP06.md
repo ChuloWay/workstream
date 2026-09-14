@@ -36,7 +36,8 @@ The adopted CP06 skeleton is design input, not an executable plan.
   existing PROJECTS and COMPENSATION ports.
 - Remove the redundant CON alias for PROJECTS eligibility; update its affected
   CON callers to import the canonical PROJECTS contract directly.
-- Focused CON contract/PostgreSQL/concurrency tests and exact test-lane inventory;
+- Focused CON contract/PostgreSQL/concurrency tests and exact test-lane, public
+  contract and behavior-ownership inventories (including exact-addition proof);
   current specs, README, roadmap, initiative navigation and this adopted contract.
 
 ### Not allowed
@@ -45,7 +46,8 @@ No migration, guide/Task/Assignment/Submission/ReviewLease write, public route,
 new AUTH action/evaluator, economic execution, compiler, provider, worker,
 compatibility alias or fallback implementation. No change to publication or
 retirement authorization, transition evidence, or existing attempt lineage.
-No CI workflow or gate changes; retry-artifact work belongs to open PR #408.
+No CI workflow or gate relaxation; retry-artifact changes arrive unchanged
+from main through merged PR #408.
 
 ## Design and decisions
 
@@ -140,3 +142,16 @@ operations. It also conflates a formerly published retired version with a draft
 and overstates what a CON-only test can prove about future complete guide/task
 adoption. This record narrows those claims and preserves ownership. CP07 remains
 next; CP06 does not begin it automatically.
+
+## Cross-owner lock handoff
+
+Before production composition, reconcile the existing AUTH/CON/COMPENSATION
+lock order. Source tracing shows role issuance taking AuthorityControl before
+Project, while hidden CON publication takes Project before AuthorityControl
+and hidden binding suspension takes binding before AuthorityControl. Selected
+validation takes Project before binding. These edges can form a cycle; no real
+PostgreSQL interleaving of that cycle was executed in CP06. Neither the new
+validation port nor the hidden publication/suspension operations has a current
+production caller. This is an existing cross-owner availability concern to
+resolve before exposing or composing those paths, not proof of a live deadlock
+or an authorization bypass. CP06 does not claim to repair it.
