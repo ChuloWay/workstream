@@ -91,6 +91,12 @@ def test_evidence_operation_identity_binds_every_custody_fact() -> None:
         attempt_id=UUID(int=1), attempt_request_digest=_sha("9"), effective_plan_sha256=_sha("7")
     )
     assert identity != context.operation_identity(attempt_id=UUID(int=1), attempt_request_digest=_sha("9"), effective_plan_sha256=_sha("8"))
+    assert identity != context.operation_identity(
+        attempt_id=UUID(int=2), attempt_request_digest=_sha("9"), effective_plan_sha256=_sha("7"),
+    )
+    assert identity != context.operation_identity(
+        attempt_id=UUID(int=1), attempt_request_digest=_sha("a"), effective_plan_sha256=_sha("7"),
+    )
 
 
 def test_post_byte_relock_rejects_advanced_predecessor_version() -> None:

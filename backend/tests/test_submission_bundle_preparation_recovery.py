@@ -17,7 +17,9 @@ from app.modules.artifacts.api import (
     SubmissionBundlePreparationInfrastructureUnavailable, SubmissionBundlePreparationResult,
 )
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
-from app.modules.artifacts.pre_submit_evidence import PreSubmitEvidenceConflict
+from app.modules.artifacts.pre_submit_evidence import (
+    PreSubmitEvidenceConflict, PreSubmitEvidencePersistenceResult,
+)
 from app.modules.artifacts.submission_admission import PreparedSubmissionBundlePreparationCommand
 from tests.artifact_store_helpers import artifact_byte_stream
 from tests.test_submission_bundle_admission import _actor, _transaction
@@ -82,9 +84,9 @@ def _preparation_replay_runtime(prepare_bytes, evidence_id, *, eligible):
         evidence=SimpleNamespace(
             reserve=AsyncMock(return_value=object()),
             execute_reserved=AsyncMock(
-                return_value=SimpleNamespace(
+                return_value=PreSubmitEvidencePersistenceResult(
                     evidence=SimpleNamespace(evidence_set_id=evidence_id),
-                    pass_capability=None,
+                    pass_capability=None, failure_audit=None,
                     execution=SimpleNamespace(eligible=eligible),
                 )
             ),
@@ -186,6 +188,7 @@ async def test_hidden_preparation_replays_persisted_checked_custody(monkeypatch,
     if outcome == "no_continuation":
         command._existing_durable_result.return_value = None
     if outcome == "completed":
+        runtime.evidence.reserve.return_value = runtime.evidence.execute_reserved.return_value
         assert await command.prepare(request) == expected
     elif outcome == "blocked":
         with pytest.raises(SubmissionBundlePreparationRejected, match="pre_submission_checker_failed"):
@@ -200,7 +203,7 @@ async def test_hidden_preparation_replays_persisted_checked_custody(monkeypatch,
     authority.revalidate.assert_awaited_once_with(request=request, project_id=project_id)
     assert events[:2] == ["revalidate", "prepare_bytes"]
     runtime.evidence.reserve.assert_awaited_once()
-    if outcome in {"unresolved", "corrupt_evidence"}:
+    if outcome in {"completed", "unresolved", "corrupt_evidence"}:
         runtime.evidence.execute_reserved.assert_not_awaited()
     else:
         runtime.evidence.execute_reserved.assert_awaited_once()
