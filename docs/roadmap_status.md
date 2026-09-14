@@ -559,11 +559,10 @@ reader does not need internal engineering records to understand the roadmap
 above. The main
 remaining trace sequence is:
 
-- Unified guide: `POL-04B1 -> POL-04B -> POL-04B2 -> POL-05A -> AUTH-12F4 -> POL-05B -> POL-06A
-  -> AUTH-12G -> POL-06B -> POL-07 -> AUTH-12H`. `ARCH-04A` catalogue/schema
-  reconciliation precedes approval-eligible `POL-04B` generations, and actual
-  selected-capability conformance precedes `POL-07`/activation. POL-05 includes
-  complete proposal visibility and setup-wide correction before approval.
+- Unified guide: POL-04B1/04B/04B2, POL-05A/AUTH-12F4/POL-05B,
+  POL-06A/AUTH-12G/POL-06B and POL-07A/07B are delivered. The remaining guide
+  sequence is `CP06 -> CP07 -> AUTH-12H`. ARCH-04A supplies registered-capability
+  contracts; activation does not require a Task, Submission or completed run.
 - Contribution lineage: CP05 authorization is complete; `CP06 -> CP07` remain. Hidden `CP07` is another
   prerequisite of `AUTH-12H`, not a second live activation. `CP08` supplies
   lineage fields after `CP07`; `ARCH-03A` follows both `AUTH-12H` and `CP08`,
@@ -571,7 +570,7 @@ remaining trace sequence is:
   legacy consumers to be replaced; it is outside the `allow_review` critical path.
   Live assignment invalidation also requires shared dispatch and its exact
   service authority; current authority is still checked on every request.
-- Post-submit admission: after `POL-07` and `ARCH-03C`, `ARCH-04B -> 04C ->
+- Post-submit admission: after delivered `POL-07B` and remaining `ARCH-03C`, `ARCH-04B -> 04C ->
   04D -> 04E` supplies materialization, durable results, authority and routing.
   An ART-owned output/log custody child precedes `04C` final completion.
   Automatic `04E` delivery also needs the shared `CON-02B` dispatcher and its

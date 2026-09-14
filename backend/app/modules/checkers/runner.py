@@ -336,7 +336,7 @@ def _warning(name: str, message: str, *, metadata: dict | None = None) -> Checke
 
 
 def _packet_shape_outcome(summary: str, package_hash: str, manifest: list[dict]) -> CheckerOutcome:
-    """Validate required packet fields shared by pre-submit and durable checks."""
+    """Validate required packet fields for persisted post-submit checks."""
     missing: list[str] = []
     if not summary.strip():
         missing.append("summary")

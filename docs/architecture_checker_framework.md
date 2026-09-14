@@ -327,7 +327,7 @@ obtains fresh authority. Replay returns ART's canonical result unchanged.
 
 The post command validates and delegates CHECKER's closed value contract.
 Production explicitly uses `UnavailablePostSubmissionExecution`; this does not
-install a post worker, authorize material reads, or prove durable attempt and
+install durable post-submit execution, authorize material reads, or prove attempt and
 currentness ownership. ARCH-04B/04C/04D/04E own that cutover. Existing post-submit
 run and history consumers remain until their replacement lands; the facade
 neither wraps their execution nor adds another policy compiler.

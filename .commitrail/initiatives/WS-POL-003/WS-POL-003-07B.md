@@ -99,6 +99,13 @@ work advances to CP06/CP07 without claiming live submitted-work execution.
 
 ## Evidence
 
+Internal review identified missing retained per-file size proof and stale
+normative templates/current navigation. The real ZIP limit matrix now includes
+an exact 4096-byte file passing at a 4096-byte cap and failing at 4095 bytes,
+with and without explicit directory entries. Templates and the AUTH/roadmap
+trace distinguish delivered hidden preparation and phase composition from the
+remaining CP06/CP07/AUTH-12H and public intake boundaries.
+
 The module-boundary probe requires the concrete service in ART's exact adapter
 root: a separate adapter file would introduce private ART dependency debt.
 This placement uses the existing owner exemption, without changing a gate or

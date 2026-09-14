@@ -75,10 +75,8 @@ PreSubmitCheckerPolicy =
 
 Failed preparation currently returns only the `pre_submission_checker_failed`
 code through the hidden route. ART retains bounded results; structured public
-feedback remains pending the canonical public intake cutover. POL-07 removes
-the non-authoritative standalone
-preflight route when connecting the single checker-service port; it is not part
-of this effective policy. WS-ARCH-001-02I retains the broader Submission caller
+feedback remains pending the canonical public intake cutover. POL-07B connects
+the internal checker phase service and removes the standalone JSON precheck. WS-ARCH-001-02I retains the broader Submission caller
 cutover. Pre-submit failures do not create durable
 `CheckerRun` records and do not return review decision values: `accept`,
 `needs_revision`, or `reject`.
