@@ -124,8 +124,7 @@ analogous mismatch was reconciled by migration 0012.
 
 Amend the allowed scope with one focused `0022_adapter_binding_audit_resource`
 migration and its schema/privacy tests. Admit only this existing resource and
-these four actions paired with existing `compensation.adapter.manage` permission
-(subject to confirming the canonical catalogue identifier). Preserve every other
+these four actions paired with existing `compensation.adapter_binding.manage` permission from the canonical catalogue. Preserve every other
 constraint clause, registry and reason-code bound; reject unexpected installed
 shapes. Lock the audit table atomically during the constraint replacement.
 Downgrade refuses retained binding audit evidence rather than deleting history.
