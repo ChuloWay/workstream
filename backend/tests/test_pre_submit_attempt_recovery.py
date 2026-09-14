@@ -99,7 +99,7 @@ class _Harness:
             preparation_authorization=(
                 preparation_authorization
                 if preparation_authorization is not None
-                else SimpleNamespace(revalidate=AsyncMock())
+                else SimpleNamespace(lock_actor=AsyncMock(), revalidate=AsyncMock())
             ),
         )
         materialization = workflow._materialization

@@ -59,8 +59,8 @@ generation is process-local and cannot be reassigned to a retried upload.
    authorization cannot cross that commit: obtain and consume fresh authority
    in the existing materialization transaction. The existing adapter resets its
    handle after consume and can issue a fresh one; no fallback adapter is added.
-   Prove both consumes against actual AUTH idempotency/audit semantics. Acquire TASK then PROJECT context, contributor AUTH, fixed-materializer AUTH
-   when needed, then attempt/evidence locks in every transaction. Do not hold an attempt lock across checks.
+   Prove both consumes against actual AUTH idempotency/audit semantics. Acquire TASK, contributor profile/link, PROJECT, submitter grant, then
+   fixed-materializer AUTH when needed and attempt/evidence locks. Do not hold an attempt lock across checks.
 3. Only the request that created the reservation can proceed. ART mints an opaque,
    nonserializable one-use winning claim only after its reservation commits.
    Bind it to the exact original prepared object/generation and request digest;
@@ -158,6 +158,11 @@ separate from controlled doubles used for command/error routing.
 | Checker returns, then evidence commit fails; same key never reruns | `test_crash_after_member_before_evidence_commit_cannot_rerun` |
 | Independent sessions allow one invocation | `test_independent_sessions_same_key_invoke_members_once` |
 | Different contributors/tasks/keys in one project cannot deadlock reservation against execution | `test_same_project_reservation_and_execution_complete_without_auth_project_deadlock` with real AUTH and an observed PostgreSQL lock wait |
+| Real role issuance cannot deadlock pre-submit execution; service targets deny | `test_role_issue_and_pre_submit_execution_complete_without_project_contributor_deadlock` with production AUTH and PostgreSQL blocking observation |
+| Revocation wins the project lock without deadlocking the grant lock | `test_revoke_after_project_lock_denies_art_before_checker` using the actual revoke operation |
+| TASK work-context and ART agree on TASK-before-actor order | `test_work_context_task_lock_precedes_art_actor_lock` using the actual authorized TASK command |
+| Newly provisioned role target is locked before PROJECT | `test_target_created_after_prepare_is_locked_before_project` with PostgreSQL NOWAIT probes |
+| Actor denial stops before PROJECT; grant denial stops before fixed-service consume | `test_authority_denial_preserves_task_actor_project_grant_order` |
 | Reservation rollback cannot issue a claim | `test_uncommitted_reservation_never_issues_a_claim` |
 | Completion failure rolls back evidence and retains reservation | `test_completion_failure_rolls_back_evidence_and_keeps_attempt_reserved` |
 | Immutable attempt and same-resource/different-packet evidence binding | Direct SQL cases in `test_pre_submit_attempt_recovery.py` |
@@ -216,9 +221,10 @@ waiting for that principal. A database deadlock abort after reservation commit
 would leave the key unresolved. The correction stays in the existing ART command
 and workflow, with no retry reset, AUTH relaxation, migration or second lock owner.
 
-The implemented order is TASK context, PROJECT policy context, contributor AUTH,
-fixed-materializer AUTH, then attempt/evidence custody. It applies to the initial
-context check, ZIP inspection and reservation transaction, execution transaction and
+The initial repair ordered TASK context, PROJECT policy context, contributor AUTH,
+fixed-materializer AUTH, then attempt/evidence custody. The AUTH reconciliation
+below supersedes that order by separating identity and grant locking. The final
+order applies to the initial context check, ZIP inspection and reservation, execution and
 completion transaction; reacquiring an already held lock cannot replace the
 required initial order. The reservation row is written after ZIP inspection.
 Fixed-service authorization must still precede ZIP
@@ -235,13 +241,12 @@ the same regression fails against the old implementation with PostgreSQL
 rollback tests are retained. Required repair reviews are architecture/
 reuse, security, QA/test-delta, CI integrity and affected docs/product operations.
 The actual command reservation and both evidence transactions run in the
-regression; its provider boundary stops only after evidence commits. The
-superseded test requiring contributor AUTH before context locks is replaced
-with context-first denial proof: denied authority still prevents fixed-service
-consume and attempt reservation. Initial contributor preflight remains before
-context or byte access.
+regression; its provider boundary stops only after evidence commits. The denial
+proof requires TASK, contributor identity, PROJECT, then grant authority; denial
+still prevents fixed-service consume and attempt reservation. Initial contributor
+preflight remains before context or byte access.
 
-### AUTH role issuance lock-order correction plan
+### AUTH role issuance lock-order correction
 
 Re-review source-traced a second cycle: ART holds PROJECT while requesting the
 contributor profile; project-role issuance holds that profile while requesting
@@ -252,25 +257,26 @@ commands, which lock TASK/assignment before contributor authority.
 The required common order is TASK/assignment, contributor profile and identity
 link, PROJECT policy context, submitter role grant, fixed-materializer AUTH, then
 attempt/evidence. Full contributor revalidation cannot move before PROJECT:
-role revocation locks PROJECT before the exact grant. Split the existing ART
-context acquisition at TASK/PROJECT; expose a transaction-bound actor-only lock
+role revocation locks PROJECT before the exact grant. Splitting the existing ART
+context acquisition at TASK/PROJECT exposes a transaction-bound actor-only lock
 on the existing authorization port, shared with initial preflight. Full project
 authorization remains after PROJECT. No alternate authorization path is added.
 
 Denied role issuance must also preserve the order. The AUTH principal selector
-currently locks a service target before PROJECT even though services cannot
-receive project roles. Filter the target row by immutable human actor kind
-before FOR UPDATE. The existing final eligibility guard remains unchanged.
-Move the existing final human eligibility lock before PROJECT as well: a
+previously locked a service target before PROJECT even though services cannot
+receive project roles. It now filters by immutable human actor kind before
+FOR UPDATE. Final eligibility and denial rules remain unchanged.
+The final human eligibility lock also precedes PROJECT: a
 previously absent target may be provisioned after principal selection. Actor
 kind is database-immutable; no unlocked mutable eligibility decision is
 introduced. This narrow AUTH repository correction prevents the same cycle
 through an ineligible request targeting the fixed materializer.
 
 Allowed repair files are the existing ART command, materialization, evidence,
-authorization adapter and port; AUTH repository principal selection and the existing role-issuance router lock
-sequence; affected
-tests/helpers and exact test-lane inventory; this record and checker architecture
+authorization adapter and port; AUTH repository principal selection and the
+existing role-issuance router lock sequence; affected tests/helpers, exact
+test-lane inventory and existing structural-debt fingerprints
+(without new debt or allowances); this record and checker architecture
 wording. No kernel or role-mutation workflow replacement, permission relaxation,
 schema change, retained-data deletion, or retry reset is authorized.
 
@@ -294,3 +300,9 @@ security, QA/test-delta, CI integrity and affected documentation review; run
 final-head hosted CI. Human review focus is the complete cross-owner lock order
 and preservation of immutable invocation custody. This repair changes no
 capability exposure or next roadmap dependency.
+
+A separate source-only concern was identified in hidden Submission creation:
+its grant lock may precede an artifact-binding insert whose project foreign key
+can conflict with role revocation. That call path is outside pre-submit
+preparation, is not reproduced by these tests, and must be assessed during its
+existing caller migration. This correction does not claim that path is repaired.

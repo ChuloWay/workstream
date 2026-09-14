@@ -324,8 +324,11 @@ claim. The fixed materializer consumes fresh authorization for inspected custody
 and obtains another transaction-bound authorization before execution. Evidence
 and attempt completion commit together after a fresh locked-context check.
 The context, reservation, execution, and completion transactions acquire TASK
-and PROJECT context locks before contributor AUTH. Where needed,
-fixed-materializer AUTH follows, then attempt/evidence locks. The ZIP inspection
+locks, contributor profile/link locks, PROJECT context locks, then the submitter
+role-grant lock. Where needed, fixed-materializer AUTH follows, then attempt/
+evidence locks. This matches TASK command ordering and project-role issuance
+and revocation. Role issuance locks eligible human targets before PROJECT;
+non-human targets cannot take a service-principal lock through that operation. The ZIP inspection
 and reservation transaction takes context and authority locks before inspecting
 the archive, and records the reservation only after inspection. It follows the
 same lock order as execution, so concurrent tasks in one project cannot invert

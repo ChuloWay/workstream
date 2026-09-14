@@ -132,6 +132,14 @@ class PreparedSubmissionBundlePreparationAuthorization:
         return values
 
     async def preflight(self, *, request) -> None:
+        """Check the actor before context or byte access in a separate transaction."""
+        async with self._session.begin():
+            await self.lock_actor(request=request)
+
+    async def lock_actor(self, *, request) -> None:
+        """Hold current actor identity between TASK and PROJECT locks."""
+        if not self._session.in_transaction() or self._session.in_nested_transaction():
+            self._deny()
         action = ACTION_BY_ID[ActionId.ARTIFACT_SUBMISSION_BUNDLE_PREPARE]
         invalid = (
             not isinstance(self._context, HumanAuthorizationContext)
@@ -143,22 +151,21 @@ class PreparedSubmissionBundlePreparationAuthorization:
         )
         if invalid:
             self._deny()
-        async with self._session.begin():
-            locked = await self._repository.lock_request_actor(
-                self._context.identity_link_id, self._context.actor_profile_id
-            )
-            if locked is None:
-                self._deny()
-            link, profile = locked
-            if (
-                link.id != str(self._context.identity_link_id)
-                or link.actor_profile_id != str(self._context.actor_profile_id)
-                or link.status != "active"
-                or profile.id != str(self._context.actor_profile_id)
-                or profile.actor_kind != "human"
-                or profile.status != "active"
-            ):
-                self._deny()
+        locked = await self._repository.lock_request_actor(
+            self._context.identity_link_id, self._context.actor_profile_id
+        )
+        if locked is None:
+            self._deny()
+        link, profile = locked
+        if (
+            link.id != str(self._context.identity_link_id)
+            or link.actor_profile_id != str(self._context.actor_profile_id)
+            or link.status != "active"
+            or profile.id != str(self._context.actor_profile_id)
+            or profile.actor_kind != "human"
+            or profile.status != "active"
+        ):
+            self._deny()
 
     async def revalidate(self, *, request, project_id: UUID | None = None) -> None:
         if project_id is None:

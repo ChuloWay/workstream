@@ -114,12 +114,29 @@ async def test_explicit_deny_preparation_authority_denies() -> None:
     with pytest.raises(ArtifactAuthorityDeniedError):
         await authority.preflight(request=request)
     with pytest.raises(ArtifactAuthorityDeniedError):
+        await authority.lock_actor(request=request)
+    with pytest.raises(ArtifactAuthorityDeniedError):
         await authority.revalidate(request=request, project_id=uuid4())
     with pytest.raises(ArtifactAuthorityDeniedError):
         authority.transaction()
     with pytest.raises(ArtifactAuthorityDeniedError):
         await authority.prepare_final(request=request)
     authority.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("active,nested", ((False, False), (True, True)))
+async def test_actor_prelock_requires_a_root_transaction(active, nested) -> None:
+    from app.modules.artifacts.authorization import PreparedSubmissionBundlePreparationAuthorization
+
+    authority = object.__new__(PreparedSubmissionBundlePreparationAuthorization)
+    authority._session = SimpleNamespace(
+        in_transaction=lambda: active, in_nested_transaction=lambda: nested,
+    )
+    authority._repository = SimpleNamespace(lock_request_actor=AsyncMock())
+    with pytest.raises(ArtifactAuthorityDeniedError):
+        await authority.lock_actor(request=object())
+    authority._repository.lock_request_actor.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -354,19 +371,23 @@ async def test_hidden_preparation_closes_authority_after_invalid_media_type() ->
 
 
 @pytest.mark.asyncio
-async def test_context_locks_precede_denied_authority_without_reserving_attempt() -> None:
+@pytest.mark.parametrize("denied_phase", ("actor", "grant"))
+async def test_authority_denial_preserves_task_actor_project_grant_order(denied_phase) -> None:
     events = []
     denial = ArtifactAuthorityDeniedError("submission bundle preparation is unavailable")
 
-    async def lock_context(*_args, **_kwargs):
-        events.append("context")
-        return object()
+    def phase(name):
+        async def invoke(*_args, **_kwargs):
+            events.append(name)
+            if name == denied_phase:
+                raise denial
+            return object()
+        return invoke
 
-    async def deny(**_kwargs):
-        events.append("contributor_authority")
-        raise denial
-
-    authority = SimpleNamespace(revalidate=AsyncMock(side_effect=deny))
+    authority = SimpleNamespace(
+        lock_actor=AsyncMock(side_effect=phase("actor")),
+        revalidate=AsyncMock(side_effect=phase("grant")),
+    )
     materialization = SimpleNamespace(
         _storage_scheme="s3", authorize_inspected=AsyncMock(),
     )
@@ -375,18 +396,19 @@ async def test_context_locks_precede_denied_authority_without_reserving_attempt(
         preparation_authorization=authority,
         task_contexts=SimpleNamespace(), project_contexts=SimpleNamespace(),
     )
-    evidence = SimpleNamespace(lock_context=AsyncMock(side_effect=lock_context))
+    evidence = SimpleNamespace(
+        lock_task_context=AsyncMock(side_effect=phase("task")),
+        lock_project_context=AsyncMock(side_effect=phase("project")),
+    )
     workflow._evidence_service = lambda: evidence
     workflow._input = Mock(return_value=object())
     workflow._attempts.reserve = AsyncMock()
-    request, preparation_request = object(), object()
 
-    with pytest.raises(ArtifactAuthorityDeniedError):
-        await workflow.reserve(request, preparation_request=preparation_request)
-
-    assert events == ["context", "contributor_authority"]
-    authority.revalidate.assert_awaited_once_with(request=preparation_request)
-    evidence.lock_context.assert_awaited_once()
+    with pytest.raises(ArtifactAuthorityDeniedError) as caught:
+        await workflow.reserve(object(), preparation_request=object())
+    assert caught.value is denial
+    assert events == (["task", "actor"] if denied_phase == "actor"
+                      else ["task", "actor", "project", "grant"])
     materialization.authorize_inspected.assert_not_awaited()
     workflow._attempts.reserve.assert_not_awaited()
 

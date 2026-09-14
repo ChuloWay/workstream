@@ -16,6 +16,7 @@ from app.modules.artifacts.preparation import ArtifactPreparationService
 from app.modules.artifacts.sources import PreparedArtifact
 from app.modules.artifacts.pre_submit_evidence import (
     PreSubmitEvidenceInput,
+    PreSubmitEvidenceContext,
     PreSubmitEvidenceConflict,
     PreSubmitExecutionCustody,
     PreSubmitExecutionResult,
@@ -437,16 +438,28 @@ class PreparedBundlePreSubmitEvidenceService:
             semantic_manifest_sha256=request.manifest.sha256, plan=request.effective_plan,
         )
 
+    async def _lock_authorized_context(
+        self, request: PreparedBundleMaterializationRequest,
+        preparation_request: SubmissionBundlePreparationRequest,
+    ) -> PreSubmitEvidenceContext:
+        """Match TASK, AUTH role issuance and revocation without reversing their locks."""
+        evidence = self._evidence_service()
+        values = self._input(request, preparation_request)
+        task_context = await evidence.lock_task_context(values)
+        await self._preparation_authorization.lock_actor(request=preparation_request)
+        context = await evidence.lock_project_context(
+            values, task_context=task_context,
+            storage_scheme=self._materialization._storage_scheme,
+        )
+        await self._preparation_authorization.revalidate(request=preparation_request)
+        return context
+
     async def reserve(
         self, request: PreparedBundleMaterializationRequest, *,
         preparation_request: SubmissionBundlePreparationRequest,
     ) -> object:
         """Consume inspected authority and reserve; the caller must commit before execution."""
-        context = await self._evidence_service().lock_context(
-            self._input(request, preparation_request),
-            storage_scheme=self._materialization._storage_scheme,
-        )
-        await self._preparation_authorization.revalidate(request=preparation_request)
+        context = await self._lock_authorized_context(request, preparation_request)
         await self._materialization.authorize_inspected(request)
         selected = await self._attempts.reserve(
             context=context, plan=request.effective_plan, packet=request.packet,
@@ -471,11 +484,7 @@ class PreparedBundlePreSubmitEvidenceService:
             raise RuntimeError("pre-submit execution requires a transaction-free session")
         claim = await self._attempts.committed_claim(reservation)
         async with self._session.begin():
-            await self._evidence_service().lock_context(
-                self._input(request, preparation_request),
-                storage_scheme=self._materialization._storage_scheme,
-            )
-            await self._preparation_authorization.revalidate(request=preparation_request)
+            await self._lock_authorized_context(request, preparation_request)
             handle = await self._materialization.prepare_authorization(
                 task_id=request.task_id, assignment_id=request.assignment_id,
                 submission_artifact_policy_id=request.submission_artifact_policy_id,
@@ -490,10 +499,7 @@ class PreparedBundlePreSubmitEvidenceService:
         async with self._session.begin():
             await self._session.execute(text("set transaction isolation level read committed"))
             values = self._input(request, preparation_request)
-            await self._evidence_service().lock_context(
-                values, storage_scheme=self._materialization._storage_scheme,
-            )
-            await self._preparation_authorization.revalidate(request=preparation_request)
+            await self._lock_authorized_context(request, preparation_request)
             return await self._evidence_service().persist(PreSubmitEvidencePersistenceRequest(
                 **{name: getattr(values, name) for name in values.__dataclass_fields__},
                 execution=execution, attempt=claim,

@@ -666,7 +666,7 @@ class PreparedSubmissionBundlePreparationCommand:
     async def _lock_authorized_context(
         self, request: SubmissionBundlePreparationRequest,
     ) -> tuple[TaskSubmissionContextFacts, ProjectLockedPolicyContextFacts]:
-        """Take TASK/PROJECT locks before contributor AUTH in either preparation phase."""
+        """Lock TASK, actor identity, PROJECT, then the current submitter grant."""
         task, project = await self._lock_context(request)
         await self._authority.revalidate(
             request=request, project_id=task.locked_project_context.project_id,
@@ -677,7 +677,7 @@ class PreparedSubmissionBundlePreparationCommand:
         self,
         request: SubmissionBundlePreparationRequest,
     ) -> tuple[TaskSubmissionContextFacts, ProjectLockedPolicyContextFacts]:
-        """Lock exact TASK then PROJECT facts through their public ports."""
+        """Lock actor identity between the exact TASK and PROJECT context phases."""
         try:
             task_context = await self._task_contexts.lock_submission_context(
                 TaskSubmissionContextRequest(
@@ -687,6 +687,7 @@ class PreparedSubmissionBundlePreparationCommand:
                     predecessor_submission_id=request.predecessor_submission_id,
                 )
             )
+            await self._authority.lock_actor(request=request)
             references = task_context.locked_project_context
             project_context = await self._project_contexts.lock_locked_policy_context(
                 ProjectLockedPolicyContextRequest(

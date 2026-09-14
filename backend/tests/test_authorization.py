@@ -1405,13 +1405,7 @@ async def test_project_role_mutation_routes_enforce_project_lifecycle_without_di
     project_exists: bool,
     expected_status: int,
 ) -> None:
-    project_id, grant_id, caller_id, target_id, snapshot_id = (
-        uuid4(),
-        uuid4(),
-        uuid4(),
-        uuid4(),
-        uuid4(),
-    )
+    project_id, grant_id, caller_id, target_id, snapshot_id = (uuid4() for _ in range(5))
     staged = {
         "idempotency": 0,
         "qualification_snapshot": 0,
@@ -1622,7 +1616,7 @@ async def test_project_role_mutation_routes_enforce_project_lifecycle_without_di
         assert calls["complete"] == 0
         assert session.commit_count == 0
         if not project_exists:
-            assert calls == {"target_lookup": 0, "consume": 0, "complete": 0}
+            assert calls == {"target_lookup": int(operation == "issue"), "consume": 0, "complete": 0}
     else:
         expected_body = {
             "id": str(grant_id),

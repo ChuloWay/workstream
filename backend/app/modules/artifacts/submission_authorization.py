@@ -33,6 +33,14 @@ class SubmissionBundlePreparationAuthorization(SubmissionBundlePreparedAuthoriza
         request: SubmissionBundlePreparationRequest,
     ) -> None: ...
 
+    async def lock_actor(
+        self,
+        *,
+        request: SubmissionBundlePreparationRequest,
+    ) -> None:
+        """Lock current actor identity in the caller's root transaction."""
+        ...
+
     async def revalidate(
         self,
         *,
@@ -76,6 +84,10 @@ class DenySubmissionBundlePreparationAuthorization(DenySubmissionBundlePreparedA
     """Keep the complete contributor surface unavailable until XINT-05A."""
 
     async def preflight(self, **values: object) -> None:
+        del values
+        raise ArtifactAuthorityDeniedError("submission bundle preparation is unavailable")
+
+    async def lock_actor(self, **values: object) -> None:
         del values
         raise ArtifactAuthorityDeniedError("submission bundle preparation is unavailable")
 

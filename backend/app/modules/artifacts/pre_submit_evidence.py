@@ -729,7 +729,16 @@ class PreSubmitEvidenceService:
     async def lock_context(
         self, request: PreSubmitEvidenceInput, *, storage_scheme: str
     ) -> PreSubmitEvidenceContext:
-        """Use the same TASK then PROJECT lineage locks for reservation and completion."""
+        """Relock exact lineage when authority locks are already held by the workflow."""
+        task_context = await self.lock_task_context(request)
+        return await self.lock_project_context(
+            request, task_context=task_context, storage_scheme=storage_scheme,
+        )
+
+    async def lock_task_context(
+        self, request: PreSubmitEvidenceInput,
+    ) -> TaskSubmissionContextFacts:
+        """Acquire TASK custody before the workflow locks contributor identity."""
         try:
             task_context = await self._task_contexts.lock_submission_context(
                 TaskSubmissionContextRequest(
@@ -739,6 +748,16 @@ class PreSubmitEvidenceService:
                     predecessor_submission_id=request.predecessor_submission_id,
                 )
             )
+        except TaskSubmissionContextUnavailable as exc:
+            raise PreSubmitEvidenceConflict("pre_submit_locked_context_changed") from exc
+        return task_context
+
+    async def lock_project_context(
+        self, request: PreSubmitEvidenceInput, *,
+        task_context: TaskSubmissionContextFacts, storage_scheme: str,
+    ) -> PreSubmitEvidenceContext:
+        """Lock PROJECT and validate lineage after TASK and actor identity are held."""
+        try:
             references = task_context.locked_project_context
             project_context = await self._project_contexts.lock_locked_policy_context(
                 ProjectLockedPolicyContextRequest(
@@ -752,7 +771,7 @@ class PreSubmitEvidenceService:
                     pre_submit_policy_bundle_hash=references.pre_submit_policy_bundle_hash,
                 )
             )
-        except (TaskSubmissionContextUnavailable, ProjectLockedPolicyContextUnavailable) as exc:
+        except ProjectLockedPolicyContextUnavailable as exc:
             raise PreSubmitEvidenceConflict("pre_submit_locked_context_changed") from exc
         validate_predecessor_lineage(
             task_context,

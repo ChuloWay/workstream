@@ -553,7 +553,7 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
             before = await table_counts(connection, tables)
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
         async with session_factory() as session:
-            preparation_authority = cast(Any, SimpleNamespace(revalidate=AsyncMock()))
+            preparation_authority = cast(Any, SimpleNamespace(lock_actor=AsyncMock(), revalidate=AsyncMock()))
             workflow = evidence_workflow(
                 session=session,
                 preparation=preparation,
