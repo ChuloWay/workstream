@@ -143,6 +143,42 @@ The maintainer supplied the [29-operation handoff](https://github.com/Flow-Resea
 
 All paths below have the fixed prefix `/api/v1`. `K` means required UUID `Idempotency-Key`; `K+M` also requires `If-Match`; `-` means neither mutation header. Authentication is request context, never a tool argument. Request/correlation IDs remain transport metadata. Success codes below are backend HTTP codes, not MCP transport success. Body and response names refer to current backend models, not the stale embedded HTML schemas.
 
+### Mutation values at MCP ingress
+
+Following the supplied interactive tool schemas, mutation values come from typed
+fields in `tools/call.params.arguments`, alongside `body` and path selectors.
+They are not MCP `_meta` values or incoming MCP HTTP headers. The adapter never
+uses those other locations as a fallback or override.
+
+- Every table row marked `K` or `K+M` requires `arguments.idempotency_key`: a JSON string validated as a UUID. Map it only to the downstream `Idempotency-Key` header, not the body or query. The adapter validates without replacing the original string with a UUID object's normalized serialization; valid spelling is forwarded unchanged. It never generates a missing key.
+- Only `workstream_review_policy_put` and `workstream_revision_policy_put` (the `K+M` rows) additionally require `arguments.if_match`: a JSON string mapped only to downstream `If-Match`. Preserve its exact quotes and contents; do not trim, rebuild, select a policy, or fill a default selector.
+- Rows marked `-`, including the unkeyed profile PATCH, have neither field in their closed input schemas and send neither header. Unknown mutation fields are rejected, not silently ignored.
+
+The adapter's input validator rejects missing/null/wrong-type fields and invalid
+UUID strings before any API request. Header values must also be safe to encode
+as one HTTP field: reject CR/LF, NUL and other control characters or unencodable
+values without dispatch. For `if_match`, Workstream remains responsible for
+policy-selector syntax and current-state meaning: a transport-safe malformed
+selector reaches the API unchanged and preserves `409 policy_precondition_invalid`;
+a valid but stale selector preserves `409 policy_precondition_failed`. This
+avoids copying policy parsing into the adapter. Workstream also retains its own
+header validation, authorization and replay checks; local input failure is an
+adapter failure, not a fabricated Workstream HTTP response.
+
+Conformance for each affected binding must prove missing/null/wrong-type and
+invalid UUID input causes zero dispatch; header-injection values cause zero
+dispatch; valid values appear byte-for-byte in exactly one corresponding
+downstream header and not in JSON/query data. Cover both policy tools with the
+quoted initial selector, a current selector, a safe malformed selector and a
+stale selector. Test that MCP HTTP headers or `_meta` cannot supply a missing
+argument or override a valid one, and that every `-` row rejects extra mutation
+arguments and omits both downstream headers. Direct-API fixtures separately
+retain the drill's missing/invalid HTTP-header expectations. Repeat the same
+client-retained key after adapter restart to exercise Workstream-owned replay;
+the adapter stores no replay state and performs no automatic mutation retry.
+These tests belong to the chunks that introduce the affected mutations, not
+only the final release drill.
+
 The **Drill** column names the exact row in the [fixed acceptance matrix](../../../docs/engineering/external-api-drill.md#fixed-29-operation-acceptance-matrix), including its named E/A cases, invalid inputs, authority, readback and replay controls. Linked response names point to the current route declaration for that binding; schemas are linked below. These references define the tests to reuse, not newly executed results.
 
 | Tool | Method and path | Body model | Success data model | HTTP / headers | Drill |
