@@ -2,7 +2,7 @@
 
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, call
 from uuid import uuid4
 
 import pytest
@@ -200,7 +200,10 @@ async def test_hidden_preparation_replays_persisted_checked_custody(monkeypatch,
         with pytest.raises(SubmissionBundlePreparationInfrastructureUnavailable, match=code):
             await command.prepare(request)
     runtime.preparation.prepare.assert_awaited_once()
-    authority.revalidate.assert_awaited_once_with(request=request, project_id=project_id)
+    assert authority.revalidate.await_args_list == [
+        call(request=request, project_id=project_id),
+        call(request=request, project_id=project_id),
+    ]
     assert events[:2] == ["revalidate", "prepare_bytes"]
     runtime.evidence.reserve.assert_awaited_once()
     if outcome in {"completed", "unresolved", "corrupt_evidence"}:

@@ -354,39 +354,41 @@ async def test_hidden_preparation_closes_authority_after_invalid_media_type() ->
 
 
 @pytest.mark.asyncio
-async def test_inspected_authority_denial_precedes_attempt_context_relock() -> None:
+async def test_context_locks_precede_denied_authority_without_reserving_attempt() -> None:
+    events = []
     denial = ArtifactAuthorityDeniedError("submission bundle preparation is unavailable")
-    authority = SimpleNamespace(revalidate=AsyncMock(side_effect=denial))
-    task_contexts = SimpleNamespace(lock_submission_context=AsyncMock())
-    project_contexts = SimpleNamespace(lock_locked_policy_context=AsyncMock())
-    session = SimpleNamespace(
-        in_transaction=lambda: False,
-        begin=_transaction,
-        execute=AsyncMock(),
+
+    async def lock_context(*_args, **_kwargs):
+        events.append("context")
+        return object()
+
+    async def deny(**_kwargs):
+        events.append("contributor_authority")
+        raise denial
+
+    authority = SimpleNamespace(revalidate=AsyncMock(side_effect=deny))
+    materialization = SimpleNamespace(
+        _storage_scheme="s3", authorize_inspected=AsyncMock(),
     )
     workflow = PreparedBundlePreSubmitEvidenceService(
-        session=session,
-        materialization=SimpleNamespace(),
+        session=SimpleNamespace(), materialization=materialization,
         preparation_authorization=authority,
-        task_contexts=task_contexts,
-        project_contexts=project_contexts,
+        task_contexts=SimpleNamespace(), project_contexts=SimpleNamespace(),
     )
-    materialization_request = SimpleNamespace(
-        prepared_artifact=SimpleNamespace(
-            commitment=SimpleNamespace(sha256=_sha("1"), byte_count=1),
-            generation_id=uuid4(),
-        ),
-    )
+    evidence = SimpleNamespace(lock_context=AsyncMock(side_effect=lock_context))
+    workflow._evidence_service = lambda: evidence
+    workflow._input = Mock(return_value=object())
+    workflow._attempts.reserve = AsyncMock()
+    request, preparation_request = object(), object()
 
     with pytest.raises(ArtifactAuthorityDeniedError):
-        await workflow.reserve(
-            materialization_request,
-            preparation_request=object(),
-        )
+        await workflow.reserve(request, preparation_request=preparation_request)
 
-    authority.revalidate.assert_awaited_once()
-    task_contexts.lock_submission_context.assert_not_awaited()
-    project_contexts.lock_locked_policy_context.assert_not_awaited()
+    assert events == ["context", "contributor_authority"]
+    authority.revalidate.assert_awaited_once_with(request=preparation_request)
+    evidence.lock_context.assert_awaited_once()
+    materialization.authorize_inspected.assert_not_awaited()
+    workflow._attempts.reserve.assert_not_awaited()
 
 
 @pytest.mark.asyncio

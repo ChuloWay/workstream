@@ -59,8 +59,8 @@ generation is process-local and cannot be reassigned to a retried upload.
    authorization cannot cross that commit: obtain and consume fresh authority
    in the existing materialization transaction. The existing adapter resets its
    handle after consume and can issue a fresh one; no fallback adapter is added.
-   Prove both consumes against actual AUTH idempotency/audit semantics. Retain TASK then PROJECT lock
-   ordering before attempt-row locks. Do not hold an attempt lock across checks.
+   Prove both consumes against actual AUTH idempotency/audit semantics. Acquire TASK then PROJECT context, contributor AUTH, fixed-materializer AUTH
+   when needed, then attempt/evidence locks in every transaction. Do not hold an attempt lock across checks.
 3. Only the request that created the reservation can proceed. ART mints an opaque,
    nonserializable one-use winning claim only after its reservation commits.
    Bind it to the exact original prepared object/generation and request digest;
@@ -157,6 +157,7 @@ separate from controlled doubles used for command/error routing.
 | Original scratch closes; exact retry does not execute or mint a pass capability | `test_completed_replay_after_original_scratch_closes` |
 | Checker returns, then evidence commit fails; same key never reruns | `test_crash_after_member_before_evidence_commit_cannot_rerun` |
 | Independent sessions allow one invocation | `test_independent_sessions_same_key_invoke_members_once` |
+| Different contributors/tasks/keys in one project cannot deadlock reservation against execution | `test_same_project_reservation_and_execution_complete_without_auth_project_deadlock` with real AUTH and an observed PostgreSQL lock wait |
 | Reservation rollback cannot issue a claim | `test_uncommitted_reservation_never_issues_a_claim` |
 | Completion failure rolls back evidence and retains reservation | `test_completion_failure_rolls_back_evidence_and_keeps_attempt_reserved` |
 | Immutable attempt and same-resource/different-packet evidence binding | Direct SQL cases in `test_pre_submit_attempt_recovery.py` |
@@ -215,20 +216,26 @@ waiting for that principal. A database deadlock abort after reservation commit
 would leave the key unresolved. The correction stays in the existing ART command
 and workflow, with no retry reset, AUTH relaxation, migration or second lock owner.
 
-The proposed order is TASK context, PROJECT policy context, contributor AUTH,
-fixed-materializer AUTH, then attempt/evidence custody. Apply it to the initial
+The implemented order is TASK context, PROJECT policy context, contributor AUTH,
+fixed-materializer AUTH, then attempt/evidence custody. It applies to the initial
 context check, pre-inspection reservation transaction, execution transaction and
 completion transaction; reacquiring an already held lock cannot replace the
 required initial order. Fixed-service authorization must still precede ZIP
-inspection and checker construction. Trace every actual materializer-preparation
-caller and update affected tests together.
+inspection and checker construction. Both production materializer-preparation
+callers and the real-AUTH test helper follow this order.
 
-Add real PostgreSQL and production AUTH proof with two contributors, different
-tasks/assignments and distinct idempotency keys in one project. Coordinate a
+The regression uses real PostgreSQL and production AUTH with two contributors, different
+tasks/assignments and distinct idempotency keys in one project. It coordinates a
 reservation with another request's committed-attempt execution using explicit
 barriers and observed database waits, not timing guesses. Both attempts must
 complete with one checker invocation each and completed canonical evidence;
-restoring the old ordering must fail the regression. Retain same-key concurrency,
-replay, revocation and rollback tests. Required repair reviews are architecture/
+the same regression fails against the old implementation with PostgreSQL
+`40P01` (`DeadlockDetectedError`). Same-key concurrency, replay, revocation and
+rollback tests are retained. Required repair reviews are architecture/
 reuse, security, QA/test-delta, CI integrity and affected docs/product operations.
-This paragraph records the repair plan; runtime proof must establish the result.
+The actual command reservation and both evidence transactions run in the
+regression; its provider boundary stops only after evidence commits. The
+superseded test requiring contributor AUTH before context locks is replaced
+with context-first denial proof: denied authority still prevents fixed-service
+consume and attempt reservation. Initial contributor preflight remains before
+context or byte access.

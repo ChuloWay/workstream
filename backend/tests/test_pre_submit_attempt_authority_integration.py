@@ -19,6 +19,11 @@ async def _reserve_with_real_materializer(workflow, request, preparation_request
     """Issue the exact transaction-bound handle consumed by ART reservation."""
     materialization = workflow._materialization
     async with workflow._session.begin():
+        await workflow._evidence_service().lock_context(
+            workflow._input(request, preparation_request),
+            storage_scheme=materialization._storage_scheme,
+        )
+        await workflow._preparation_authorization.revalidate(request=preparation_request)
         handle = await materialization.prepare_authorization(
             task_id=request.task_id, assignment_id=request.assignment_id,
             submission_artifact_policy_id=request.submission_artifact_policy_id,

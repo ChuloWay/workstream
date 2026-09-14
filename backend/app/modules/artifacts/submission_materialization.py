@@ -442,12 +442,12 @@ class PreparedBundlePreSubmitEvidenceService:
         preparation_request: SubmissionBundlePreparationRequest,
     ) -> object:
         """Consume inspected authority and reserve; the caller must commit before execution."""
-        await self._preparation_authorization.revalidate(request=preparation_request)
-        await self._materialization.authorize_inspected(request)
         context = await self._evidence_service().lock_context(
             self._input(request, preparation_request),
             storage_scheme=self._materialization._storage_scheme,
         )
+        await self._preparation_authorization.revalidate(request=preparation_request)
+        await self._materialization.authorize_inspected(request)
         selected = await self._attempts.reserve(
             context=context, plan=request.effective_plan, packet=request.packet,
             idempotency_key=preparation_request.idempotency_key, request=request,
@@ -471,11 +471,11 @@ class PreparedBundlePreSubmitEvidenceService:
             raise RuntimeError("pre-submit execution requires a transaction-free session")
         claim = await self._attempts.committed_claim(reservation)
         async with self._session.begin():
-            await self._preparation_authorization.revalidate(request=preparation_request)
             await self._evidence_service().lock_context(
                 self._input(request, preparation_request),
                 storage_scheme=self._materialization._storage_scheme,
             )
+            await self._preparation_authorization.revalidate(request=preparation_request)
             handle = await self._materialization.prepare_authorization(
                 task_id=request.task_id, assignment_id=request.assignment_id,
                 submission_artifact_policy_id=request.submission_artifact_policy_id,
@@ -489,8 +489,11 @@ class PreparedBundlePreSubmitEvidenceService:
             )
         async with self._session.begin():
             await self._session.execute(text("set transaction isolation level read committed"))
-            await self._preparation_authorization.revalidate(request=preparation_request)
             values = self._input(request, preparation_request)
+            await self._evidence_service().lock_context(
+                values, storage_scheme=self._materialization._storage_scheme,
+            )
+            await self._preparation_authorization.revalidate(request=preparation_request)
             return await self._evidence_service().persist(PreSubmitEvidencePersistenceRequest(
                 **{name: getattr(values, name) for name in values.__dataclass_fields__},
                 execution=execution, attempt=claim,

@@ -479,22 +479,19 @@ class PreparedSubmissionBundlePreparationCommand:
                 raise SubmissionBundlePreparationRejected("submission_bundle_media_type_invalid")
             async with self._runtime_factory() as runtime:
                 async with self._session.begin():
-                    task_context, project_context = await self._lock_context(request)
+                    task_context, project_context = await self._lock_authorized_context(request)
                     plan = self._compile_plan(
                         task_context,
                         project_context,
                         runtime.catalogue,
                     )
                     predecessor = await self._load_predecessor(task_context)
-                    await self._authority.revalidate(
-                        request=request,
-                        project_id=task_context.locked_project_context.project_id,
-                    )
                 prepared = await runtime.preparation.prepare(
                     request.byte_source,
                     media_type="application/zip",
                 )
                 async with self._session.begin():
+                    await self._lock_authorized_context(request)
                     materialization_handle = await runtime.materialization.prepare_authorization(
                         task_id=request.task_id,
                         assignment_id=request.assignment_id,
@@ -665,6 +662,16 @@ class PreparedSubmissionBundlePreparationCommand:
                 if str(exc) == "pre_submit_attempt_outcome_unresolved"
                 else "pre_submission_checked_custody_unavailable")
         return SubmissionBundlePreparationInfrastructureUnavailable(code)
+
+    async def _lock_authorized_context(
+        self, request: SubmissionBundlePreparationRequest,
+    ) -> tuple[TaskSubmissionContextFacts, ProjectLockedPolicyContextFacts]:
+        """Take TASK/PROJECT locks before contributor AUTH in either preparation phase."""
+        task, project = await self._lock_context(request)
+        await self._authority.revalidate(
+            request=request, project_id=task.locked_project_context.project_id,
+        )
+        return task, project
 
     async def _lock_context(
         self,
