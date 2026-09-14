@@ -6,7 +6,7 @@
   before invoking checks, and recover its completed canonical ART evidence
   without another checker invocation or upload capability.
 
-## Intent and current behavior
+## Intent
 
 This is the approved prerequisite identified by reviewing the
 [adopted POL-07 contract](planning/chunks/WS-POL-003-07-single-checker-service-port.md)
@@ -73,7 +73,7 @@ does not contain a second result body or replace ART's immutable evidence tables
 The minimal lifecycle is reserved then completed. A still-reserved row denotes
 an unavailable/uncertain attempt to later callers, not contributor failure.
 
-## Acceptance and proof
+## Acceptance criteria
 
 - Durable reservation precedes the real CHECKER processor; completed exact
   replay returns the same evidence ID/digest and invokes no members.
@@ -92,7 +92,7 @@ an unavailable/uncertain attempt to later callers, not contributor failure.
 - Real scratch/member execution and PostgreSQL proof are required. Fakes only
   isolate broker/provider publication; no live transport claim is made.
 
-## Risk, reviews and verification
+## Risk and review routing
 
 - Risk: L1, bounded ART persistence/authority/recovery change.
 - Required reviewers: plan/architecture, security, QA/test delta, reuse,
@@ -103,6 +103,13 @@ an unavailable/uncertain attempt to later callers, not contributor failure.
   race, replay and direct-SQL cases; migration round trip on isolated data;
   module/AUTH/CI inventories; lint/docs checks; full hosted suite and at least
   90% changed-subsystem coverage. No runtime evidence is claimed yet.
+
+## Evidence
+
+Read-only owner inspection and independent architecture/reuse review identified
+the after-execution replay lookup and crash window. This establishes plan
+feasibility constraints, not runtime proof. Implementation tests and exact-head
+review results remain to be produced by this bounded change.
 
 ## Review findings and reconciliation
 
