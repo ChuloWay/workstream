@@ -32,7 +32,7 @@ planning references. Extend existing files where practical.
 
 Not allowed: new routes/actions/permissions, activation or guide/attempt writes,
 policy-selection changes, new authorization evaluator, public generic lock API,
-migrations, evidence bypass, retry-on-deadlock substitutes, compatibility paths,
+unrelated migrations, evidence bypass, retry-on-deadlock substitutes, compatibility paths,
 or unrelated CI workflow changes. Do not alter ART or role-issue lock ordering.
 No retained data deletion. Replay must keep its existing current-read authority.
 
@@ -112,3 +112,26 @@ fixture, grant its contributor Finance authority, and invoke real CON
 `create_draft` on the same project. ART holds the caller profile before Project;
 a Control-only prelock still fails this case. Fixtures require no live guide
 activation and must preserve ART's real authority composition.
+
+## Discovered binding audit schema dependency
+
+The real three-way test reaches binding suspension but its required AUTH audit
+insert fails `ck_audit_events_authority_privacy_bounds`. The existing Python
+audit vocabulary names `compensation_adapter_binding`; the database resource
+check omits it, and its action/permission check omits all four already-active
+`compensation.adapter_binding.{read,create,suspend,resume}` actions. CON's
+analogous mismatch was reconciled by migration 0012.
+
+Amend the allowed scope with one focused `0022_adapter_binding_audit_resource`
+migration and its schema/privacy tests. Admit only this existing resource and
+these four actions paired with existing `compensation.adapter.manage` permission
+(subject to confirming the canonical catalogue identifier). Preserve every other
+constraint clause, registry and reason-code bound; reject unexpected installed
+shapes. Lock the audit table atomically during the constraint replacement.
+Downgrade refuses retained binding audit evidence rather than deleting history.
+Prove exact clause delta/roundtrip, valid real binding create/suspend/resume/read
+audits, mismatched permission/resource privacy denials, and downgrade retention.
+Do not bypass audit to make concurrency tests pass or add a new permission.
+This is schema parity for the same existing mutations under repair, not a new
+product action or independent subsystem. Security and architecture plan review
+cover this discovered dependency before its implementation.
