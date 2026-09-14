@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -15,7 +15,9 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.hashing import canonical_json_hash
-from app.modules.artifacts.models import PreSubmitEvidenceSet, PreSubmitExecutionAttempt
+from app.modules.artifacts.models import (
+    PreSubmitEvidenceResult, PreSubmitEvidenceSet, PreSubmitExecutionAttempt,
+)
 from app.modules.artifacts.authorization import PreparedSubmissionBundlePreparationAuthorization
 from app.modules.artifacts.pre_submit_attempts import PreSubmitAttemptClaim
 from app.modules.artifacts.schemas import ArtifactAuthorityDeniedError
@@ -379,10 +381,21 @@ async def test_independent_sessions_same_key_invoke_members_once(
     harness = await _harness(tmp_path, isolated_database_env)
     calls: list[int] = []
     entered, release = asyncio.Event(), asyncio.Event()
+    executing = competing = None
     try:
         async with harness.factory() as first_session, harness.factory() as second_session:
             first_workflow = harness.workflow(first_session, calls, entered=entered, release=release)
             second_workflow = harness.workflow(second_session, calls)
+            competing_pid = asyncio.get_running_loop().create_future()
+            task_contexts = second_workflow._task_contexts
+
+            class _ObservedTaskContexts:
+                async def lock_submission_context(self, request):
+                    pid = await second_session.scalar(text("select pg_backend_pid()"))
+                    competing_pid.set_result(pid)
+                    return await task_contexts.lock_submission_context(request)
+
+            second_workflow._task_contexts = _ObservedTaskContexts()
             reservation = await _reserve(
                 first_workflow, harness.request, harness.preparation_request,
             )
@@ -393,7 +406,19 @@ async def test_independent_sessions_same_key_invoke_members_once(
             competing = asyncio.create_task(_reserve(
                 second_workflow, harness.request, harness.preparation_request,
             ))
-            await asyncio.sleep(0)
+            pid = await asyncio.wait_for(competing_pid, timeout=3)
+            async with harness.engine.connect() as observer:
+                wait_type = None
+                async with asyncio.timeout(3):
+                    while not competing.done():
+                        await observer.execute(text("select pg_stat_clear_snapshot()"))
+                        wait_type = await observer.scalar(text(
+                            "select wait_event_type from pg_stat_activity where pid=:pid"
+                        ), {"pid": pid})
+                        if wait_type == "Lock":
+                            break
+                        await asyncio.sleep(0.02)
+            assert competing.done() or wait_type == "Lock"
             release.set()
             result = await executing
             recovered = (await asyncio.gather(competing, return_exceptions=True))[0]
@@ -407,6 +432,10 @@ async def test_independent_sessions_same_key_invoke_members_once(
             assert len(calls) == 1
     finally:
         release.set()
+        await asyncio.gather(
+            *(task for task in (executing, competing) if task is not None),
+            return_exceptions=True,
+        )
         await harness.close()
 
 
@@ -495,30 +524,57 @@ async def test_database_rejects_same_resource_different_packet_evidence_completi
         assert first_reservation.request_digest != second_reservation.request_digest
         new_evidence = str(uuid4())
         source_evidence = str(first.evidence.evidence_set_id)
+        async with harness.factory() as session:
+            original_evidence = await session.get(PreSubmitEvidenceSet, source_evidence)
+            second_attempt = await session.get(
+                PreSubmitExecutionAttempt, str(second_reservation.attempt_id),
+            )
+            assert original_evidence is not None and second_attempt is not None
+            assert original_evidence.packet_sha256 == canonical_json_hash(
+                asdict(harness.request.packet)
+            )
+            assert original_evidence.packet_sha256 != second_attempt.request_json["packet_sha256"]
         columns = tuple(column.name for column in PreSubmitEvidenceSet.__table__.columns)
         replacements = {
             "id": ":new_evidence",
             "operation_identity": ":new_operation",
             "attempt_id": ":new_attempt",
             "created_at": "transaction_timestamp()",
-            # This digest belongs to the first packet, while the new reservation
-            # belongs to the different packet with otherwise identical resources.
-            "attempt_request_digest": ":wrong_packet_digest",
+            # The request digest is valid for the second attempt. Only the
+            # evidence's independently captured packet hash remains original.
+            "attempt_request_digest": ":correct_request_digest",
         }
         copy_sql = (
             f"insert into pre_submit_evidence_sets ({', '.join(columns)}) "
             f"select {', '.join(replacements.get(column, column) for column in columns)} "
             "from pre_submit_evidence_sets where id=:source_evidence"
         )
-        with pytest.raises(DBAPIError, match="pre-submit evidence attempt mismatch"):
+        result_columns = tuple(column.name for column in PreSubmitEvidenceResult.__table__.columns)
+        result_replacements = {
+            "id": "gen_random_uuid()::text",
+            "evidence_set_id": ":new_evidence",
+            "created_at": "transaction_timestamp()",
+        }
+        copy_results_sql = (
+            f"insert into pre_submit_evidence_results ({', '.join(result_columns)}) "
+            f"select {', '.join(result_replacements.get(column, column) for column in result_columns)} "
+            "from pre_submit_evidence_results where evidence_set_id=:source_evidence "
+            "order by result_order"
+        )
+        with pytest.raises(DBAPIError, match="pre-submit evidence packet mismatch"):
             async with harness.engine.begin() as connection:
                 await connection.execute(text(copy_sql), {
                     "new_evidence": new_evidence,
                     "new_operation": canonical_json_hash({"counterexample": new_evidence}),
                     "new_attempt": str(second_reservation.attempt_id),
-                    "wrong_packet_digest": first_reservation.request_digest,
+                    "correct_request_digest": second_reservation.request_digest,
                     "source_evidence": source_evidence,
                 })
+                copied = await connection.execute(text(copy_results_sql), {
+                    "new_evidence": new_evidence,
+                    "source_evidence": source_evidence,
+                })
+                assert copied.rowcount == len(first.execution.entries)
                 await connection.execute(text(
                     "update pre_submit_execution_attempts set status='completed',"
                     "evidence_set_id=:evidence where id=:attempt"
@@ -529,6 +585,7 @@ async def test_database_rejects_same_resource_different_packet_evidence_completi
             )
             assert attempt is not None and attempt.status == "reserved"
             assert await session.get(PreSubmitEvidenceSet, new_evidence) is None
+            assert await session.get(PreSubmitEvidenceSet, source_evidence) is not None
     finally:
         await harness.close()
 

@@ -390,14 +390,19 @@ async def test_inspected_authority_denial_precedes_attempt_context_relock() -> N
 
 
 @pytest.mark.asyncio
-async def test_existing_durable_preparation_projects_exact_ready_admission() -> None:
+@pytest.mark.parametrize("admission_status,expected_status", (
+    ("ready", "ready"), ("stale", "stale"), ("consumed", "conflict"),
+))
+async def test_existing_durable_preparation_projects_current_admission_state(
+    admission_status, expected_status,
+) -> None:
     attempt_id = uuid4()
     admission_id = uuid4()
     row_result = SimpleNamespace(
         one_or_none=lambda: (
             SimpleNamespace(id=str(uuid4())),
             SimpleNamespace(id=str(attempt_id), status="object_confirmed"),
-            SimpleNamespace(id=str(admission_id)),
+            SimpleNamespace(id=str(admission_id), status=admission_status),
         )
     )
     session = SimpleNamespace(begin=_transaction, execute=AsyncMock(return_value=row_result))
@@ -413,8 +418,8 @@ async def test_existing_durable_preparation_projects_exact_ready_admission() -> 
 
     assert result == SubmissionBundlePreparationResult(
         put_attempt_id=attempt_id,
-        admission_id=admission_id,
-        submission_bundle_preparation_status="ready",
+        admission_id=admission_id if admission_status == "ready" else None,
+        submission_bundle_preparation_status=expected_status,
         replayed=True,
     )
 
@@ -463,10 +468,9 @@ def test_durable_put_result_projects_every_closed_preparation_status(
 
 def test_post_byte_locked_context_conflict_maps_to_public_race_code() -> None:
     conflict = PreSubmitEvidenceConflict("pre_submit_locked_context_changed")
-    assert (
-        PreparedSubmissionBundlePreparationCommand._evidence_conflict_code(conflict)
-        == "submission_bundle_preparation_context_changed"
-    )
+    failure = PreparedSubmissionBundlePreparationCommand._evidence_failure(conflict)
+    assert isinstance(failure, SubmissionBundlePreparationRejected)
+    assert str(failure) == "submission_bundle_preparation_context_changed"
 
 def _capability(prepared, evidence_set_id):
     service = PreSubmitEvidenceService(

@@ -27,6 +27,12 @@ from tests.test_submission_bundle_admission import _actor, _transaction
 @pytest.mark.parametrize("error,status_code,detail", (
     (SubmissionBundlePreparationRejected("submission_bundle_preparation_context_changed"),
      409,"submission_bundle_preparation_context_changed"),
+    (PreparedSubmissionBundlePreparationCommand._evidence_failure(
+        PreSubmitEvidenceConflict("pre_submit_attempt_result_unavailable")),
+     503,"pre_submission_checked_custody_unavailable"),
+    (PreparedSubmissionBundlePreparationCommand._evidence_failure(
+        PreSubmitEvidenceConflict("pre_submit_attempt_member_invalid")),
+     503,"pre_submission_checked_custody_unavailable"),
     (SubmissionBundlePreparationInfrastructureUnavailable("pre_submission_attempt_outcome_unresolved"),
      503,"pre_submission_attempt_outcome_unresolved"),
     (SubmissionBundlePreparationUnavailable("submission bundle preparation is unavailable"),
@@ -88,7 +94,7 @@ def _preparation_replay_runtime(prepare_bytes, evidence_id, *, eligible):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("outcome", ("completed", "blocked", "unresolved", "no_continuation"))
+@pytest.mark.parametrize("outcome", ("completed", "blocked", "unresolved", "no_continuation", "corrupt_evidence"))
 async def test_hidden_preparation_replays_persisted_checked_custody(monkeypatch, outcome) -> None:
     actor_id = uuid4()
     task_id = uuid4()
@@ -172,9 +178,10 @@ async def test_hidden_preparation_replays_persisted_checked_custody(monkeypatch,
             media_type="application/zip",
             byte_source=artifact_byte_stream(b"PK\x03\x04replay"),
         )
-    if outcome == "unresolved":
+    if outcome in {"unresolved", "corrupt_evidence"}:
         runtime.evidence.reserve.side_effect = PreSubmitEvidenceConflict(
-            "pre_submit_attempt_outcome_unresolved"
+            "pre_submit_attempt_outcome_unresolved" if outcome == "unresolved"
+            else "pre_submit_attempt_result_digest_invalid"
         )
     if outcome == "no_continuation":
         command._existing_durable_result.return_value = None
@@ -193,7 +200,7 @@ async def test_hidden_preparation_replays_persisted_checked_custody(monkeypatch,
     authority.revalidate.assert_awaited_once_with(request=request, project_id=project_id)
     assert events[:2] == ["revalidate", "prepare_bytes"]
     runtime.evidence.reserve.assert_awaited_once()
-    if outcome == "unresolved":
+    if outcome in {"unresolved", "corrupt_evidence"}:
         runtime.evidence.execute_reserved.assert_not_awaited()
     else:
         runtime.evidence.execute_reserved.assert_awaited_once()

@@ -157,6 +157,10 @@ class PreSubmitEvidenceSet(Base):
             ],
             name="fk_pre_submit_evidence_task_checker_policy",
         ),
+        CheckConstraint(
+            "packet_sha256 is null or " + SHA256_CHECK.format(column="packet_sha256"),
+            name="ck_pre_submit_evidence_packet_sha256",
+        ),
         UniqueConstraint("operation_identity", name="uq_pre_submit_evidence_operation"),
         CheckConstraint(
             SHA256_CHECK.format(column="operation_identity"),
@@ -229,6 +233,7 @@ class PreSubmitEvidenceSet(Base):
         ForeignKey("pre_submit_execution_attempts.id", ondelete="RESTRICT"), unique=True,
     )
     attempt_request_digest: Mapped[str | None] = mapped_column(String(71))
+    packet_sha256: Mapped[str | None] = mapped_column(String(71))
     operation_identity: Mapped[str] = mapped_column(String(71), nullable=False)
     actor_profile_id: Mapped[str] = mapped_column(
         ForeignKey("actor_profiles.id", ondelete="RESTRICT"), nullable=False, index=True

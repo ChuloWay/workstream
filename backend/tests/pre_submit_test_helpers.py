@@ -218,3 +218,20 @@ async def assert_pre_submit_evidence_immutable(connection):
                     "from pre_submit_evidence_sets existing_row limit 1"
                 )
             )
+
+
+async def assert_admission_replay_state(session, evidence_id, attempt_id, admission_id, status):
+    """Both recovery reads expose an admission ID only while its real SQL row is ready."""
+    from app.modules.artifacts.submission_admission import (
+        PreparedSubmissionBundlePreparationCommand, current_submission_bundle_admission_id,
+    )
+    command = PreparedSubmissionBundlePreparationCommand(
+        session=session, authority=SimpleNamespace(), task_contexts=SimpleNamespace(),
+        project_contexts=SimpleNamespace(), runtime_factory=None,
+    )
+    result = await command._existing_durable_result(evidence_id)
+    assert result.submission_bundle_preparation_status == status
+    assert result.admission_id == (UUID(admission_id) if status == "ready" else None)
+    async with session.begin():
+        current = await current_submission_bundle_admission_id(session, put_attempt_id=attempt_id)
+        assert current == (UUID(admission_id) if status == "ready" else None)

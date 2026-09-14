@@ -48,7 +48,10 @@ CREATE TABLE pre_submit_execution_attempts (
 );
 ALTER TABLE pre_submit_evidence_sets
  ADD COLUMN attempt_id varchar(36) UNIQUE REFERENCES pre_submit_execution_attempts(id) ON DELETE RESTRICT,
- ADD COLUMN attempt_request_digest varchar(71);
+ ADD COLUMN attempt_request_digest varchar(71),
+ ADD COLUMN packet_sha256 varchar(71),
+ ADD CONSTRAINT ck_pre_submit_evidence_packet_sha256
+   CHECK(packet_sha256 IS NULL OR packet_sha256 ~ '^sha256:[0-9a-f]{64}$');
 ALTER TABLE pre_submit_evidence_results
  ADD COLUMN checker_order integer,
  ADD COLUMN metadata_json json;
@@ -102,6 +105,10 @@ BEGIN
     OR e.attempt_request_digest IS DISTINCT FROM a.request_digest
     OR e.prepared_generation_id IS DISTINCT FROM a.prepared_generation_id THEN
    RAISE EXCEPTION 'pre-submit evidence attempt mismatch' USING ERRCODE='23514';
+ END IF;
+ IF e.packet_sha256 IS NULL
+    OR e.packet_sha256 IS DISTINCT FROM a.request_json->>'packet_sha256' THEN
+   RAISE EXCEPTION 'pre-submit evidence packet mismatch' USING ERRCODE='23514';
  END IF;
  FOREACH name IN ARRAY ARRAY[
    'actor_profile_id','identity_link_id','task_id','assignment_id','project_id',
@@ -199,7 +206,8 @@ DROP TRIGGER pre_submit_evidence_attempt ON pre_submit_evidence_sets;
 DROP TRIGGER pre_submit_attempt_completion ON pre_submit_execution_attempts;
 DROP FUNCTION require_pre_submit_attempt_evidence();
 ALTER TABLE pre_submit_evidence_results DROP COLUMN checker_order, DROP COLUMN metadata_json;
-ALTER TABLE pre_submit_evidence_sets DROP COLUMN attempt_id, DROP COLUMN attempt_request_digest;
+ALTER TABLE pre_submit_evidence_sets DROP COLUMN attempt_id, DROP COLUMN attempt_request_digest,
+ DROP COLUMN packet_sha256;
 DROP TABLE pre_submit_execution_attempts;
 DROP FUNCTION guard_pre_submit_attempt();
 """)

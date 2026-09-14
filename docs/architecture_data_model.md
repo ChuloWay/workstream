@@ -842,18 +842,21 @@ The generated checker order is deterministic:
 8. contributor attestation validation
 9. low-quality artifact warnings
 
-At the deferred WS-ARCH-001-02I cutover, the legacy standalone
-`/tasks/{id}/submission-precheck` path is removed. Pre-submit then runs only
-inside the same process-local preparation request that owns the uploaded ZIP
-and bounded scratch generation:
+POL-07 removes the standalone `/tasks/{id}/submission-precheck` path when
+connecting the single checker-service port. Authoritative pre-submit checking
+already belongs to the preparation request owning the uploaded ZIP and bounded
+scratch. Broader Submission caller migration remains WS-ARCH-001-02I.
+
+The following structured public feedback is the target intake contract; the
+existing hidden route currently returns only `pre_submission_checker_failed`:
 
 ```text
 POST /api/v1/tasks/{id}/submission-bundle-preparations
 422 DomainError(code="pre_submission_checker_failed", details={status, eligible_to_submit, results})
 ```
 
-After that cutover no independent precheck route or client-owned manifest can
-reproduce the authoritative result. `POST /api/v1/tasks/{id}/submissions` consumes the verified ready
+After POL-07 no independent precheck route remains. A client-owned manifest
+cannot reproduce the authoritative result. `POST /api/v1/tasks/{id}/submissions` consumes the verified ready
 admission and does not receive scratch paths or rerun the pre-submit plan.
 
 Before that cutover, hidden ART-04B2 establishes the execution boundary without

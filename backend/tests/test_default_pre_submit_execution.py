@@ -90,6 +90,7 @@ from tests.artifact_store_helpers import artifact_admission_limit_settings
 from tests.pre_submit_test_helpers import (
     approved_pre_submit_fixture,
     assert_pre_submit_evidence_immutable,
+    assert_admission_replay_state,
     materialize_member_fixture,
     execute_evidence_workflow,
     checker_execution as _CheckerExecution,
@@ -863,6 +864,8 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
             provider.execute_committed_put.assert_not_awaited()
             provider.resume_committed_put.assert_not_awaited()
             assert selected_evidence_id == first.evidence.evidence_set_id
+            await assert_admission_replay_state(session, selected_evidence_id,
+                                               first_admission.attempt_id, published_ids[0], "ready")
             await session.execute(
                 text(
                     "update submission_bundle_admissions set status='stale', "
@@ -871,6 +874,8 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                 {"id": published_ids[0]},
             )
             await session.commit()
+            await assert_admission_replay_state(session, selected_evidence_id,
+                                               first_admission.attempt_id, published_ids[0], "stale")
             async with session.begin():
                 stale_usage = await ArtifactOperatorService(
                     session,

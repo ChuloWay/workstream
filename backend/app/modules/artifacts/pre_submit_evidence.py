@@ -464,6 +464,7 @@ class _PreSubmitEvidenceRepository:
         execution: PreSubmitExecutionResult,
         attempt_id: UUID,
         attempt_request_digest: str,
+        packet_sha256: str,
     ) -> PersistedPreSubmitEvidence:
         """Write the winning attempt's result once; the attempt owner handles replay."""
         transaction = self._session.sync_session.get_transaction()
@@ -479,7 +480,9 @@ class _PreSubmitEvidenceRepository:
             attempt_request_digest=attempt_request_digest,
         )
         values = self._set_values(context, plan, execution, operation_identity)
-        values.update(attempt_id=str(attempt_id), attempt_request_digest=attempt_request_digest)
+        ArtifactCommitment.validate_sha256(packet_sha256)
+        values.update(attempt_id=str(attempt_id), attempt_request_digest=attempt_request_digest,
+                      packet_sha256=packet_sha256)
         evidence_set_id = uuid4()
         await self._session.execute(
             insert(PreSubmitEvidenceSet).values(id=str(evidence_set_id), **values)
@@ -686,6 +689,7 @@ class PreSubmitEvidenceService:
             execution=request.execution,
             attempt_id=request.attempt.attempt_id,
             attempt_request_digest=request.attempt.request_digest,
+            packet_sha256=request.attempt.packet_sha256,
         )
         await request.attempt.complete(self._session, evidence.evidence_set_id)
         pass_capability = (

@@ -113,9 +113,11 @@ async def test_completed_replay_rejects_missing_result_metadata_before_capabilit
     request_digest = "sha256:" + "a" * 64
     evidence = SimpleNamespace(
         id=evidence_id, attempt_id=attempt_id, attempt_request_digest=request_digest,
+        packet_sha256="sha256:" + "b" * 64,
     )
     row = SimpleNamespace(
         id=attempt_id, status="completed", evidence_set_id=evidence_id,
+        request_json={"packet_sha256": "sha256:" + "b" * 64},
         request_digest=request_digest,
     )
     members = [SimpleNamespace(metadata_json=[], checker_order=entry.order)
@@ -139,6 +141,7 @@ async def test_completed_replay_rejects_nonnull_corrupt_result_before_capability
     request_digest = "sha256:" + "a" * 64
     evidence = SimpleNamespace(
         id=evidence_id, attempt_id=attempt_id, attempt_request_digest=request_digest,
+        packet_sha256="sha256:" + "b" * 64,
         archive_sha256=context.archive_sha256, archive_byte_count=context.archive_byte_count,
         semantic_manifest_sha256=context.semantic_manifest_sha256,
         storage_scheme=context.storage_scheme, effective_plan_sha256=plan.plan_sha256,
@@ -146,6 +149,7 @@ async def test_completed_replay_rejects_nonnull_corrupt_result_before_capability
     )
     row = SimpleNamespace(
         id=attempt_id, status="completed", evidence_set_id=evidence_id,
+        request_json={"packet_sha256": "sha256:" + "b" * 64},
         request_digest=request_digest, prepared_generation_id=str(context.prepared_generation_id),
     )
     members = [SimpleNamespace(

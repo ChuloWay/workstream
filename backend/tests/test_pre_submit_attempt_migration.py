@@ -103,6 +103,7 @@ async def _snapshot(
             if upgraded:
                 assert evidence["attempt_id"] is None
                 assert evidence["attempt_request_digest"] is None
+                assert evidence["packet_sha256"] is None
                 assert result["checker_order"] is None
                 assert result["metadata_json"] is None
                 assert await connection.scalar(text(
@@ -110,7 +111,7 @@ async def _snapshot(
                 )) == attempt_count
             return (
                 {key: value for key, value in evidence.items()
-                 if key not in {"attempt_id", "attempt_request_digest"}},
+                 if key not in {"attempt_id", "attempt_request_digest", "packet_sha256"}},
                 {key: value for key, value in result.items()
                  if key not in {"checker_order", "metadata_json"}},
             )
@@ -224,21 +225,60 @@ def test_new_result_rows_require_valid_order_and_bounded_metadata(
     async def probe() -> None:
         engine = create_async_engine(isolated_database_env)
         new_id = str(uuid4())
+        attempt_id = str(uuid4())
+        packet_sha256 = "sha256:" + "d" * 64
         try:
             async with engine.connect() as connection:
                 transaction = await connection.begin()
                 try:
-                    # A transaction-local parent lets the INSERT guard run; the
-                    # rolled-back probe creates no incomplete retained evidence.
+                    # Reserve a complete request body so the transaction-local
+                    # parent can satisfy every attempt/evidence binding guard.
+                    await connection.execute(text("""
+                        INSERT INTO pre_submit_execution_attempts (
+                          id,idempotency_key,actor_profile_id,identity_link_id,
+                          task_id,assignment_id,prepared_generation_id,claim_nonce,
+                          request_json,request_digest,status)
+                        SELECT :attempt,:key,e.actor_profile_id,e.identity_link_id,
+                          e.task_id,e.assignment_id,e.prepared_generation_id,:nonce,
+                          (to_jsonb(e) || jsonb_build_object(
+                            'packet_sha256',CAST(:packet_sha256 AS text)))::json,
+                          'sha256:' || encode(sha256(convert_to(
+                            project_guide_projection_canonical_json(
+                              to_jsonb(e) || jsonb_build_object(
+                                'packet_sha256',CAST(:packet_sha256 AS text))),
+                            'UTF8')), 'hex'),
+                          'reserved'
+                        FROM pre_submit_evidence_sets e WHERE e.id=:retained
+                    """), {
+                        "attempt": attempt_id, "key": str(uuid4()),
+                        "nonce": str(uuid4()), "packet_sha256": packet_sha256,
+                        "retained": retained_id,
+                    })
                     await connection.execute(text("""
                         INSERT INTO pre_submit_evidence_sets
                         SELECT (jsonb_populate_record(NULL::pre_submit_evidence_sets,
                           to_jsonb(e) || jsonb_build_object(
                             'id',CAST(:new_id AS text),
                             'operation_identity','sha256:' || repeat('c',64),
+                            'packet_sha256',CAST(:packet_sha256 AS text),
+                            'attempt_id',CAST(:attempt AS text),
+                            'attempt_request_digest',a.request_digest,
                             'created_at',transaction_timestamp()))).*
-                        FROM pre_submit_evidence_sets e WHERE e.id=:retained
-                    """), {"new_id": new_id, "retained": retained_id})
+                        FROM pre_submit_evidence_sets e
+                        JOIN pre_submit_execution_attempts a ON a.id=:attempt
+                        WHERE e.id=:retained
+                    """), {
+                        "new_id": new_id, "retained": retained_id,
+                        "packet_sha256": packet_sha256, "attempt": attempt_id,
+                    })
+                    await connection.execute(text(
+                        "UPDATE pre_submit_execution_attempts "
+                        "SET status='completed',evidence_set_id=:evidence "
+                        "WHERE id=:attempt"
+                    ), {"evidence": new_id, "attempt": attempt_id})
+                    # Flush deferred lineage checks before probing the result
+                    # trigger, so a mismatched packet cannot mask its verdict.
+                    await connection.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
                     insert_result = text("""
                         INSERT INTO pre_submit_evidence_results (
                           id,evidence_set_id,result_order,schema_version,

@@ -96,7 +96,8 @@ async def prepare_submission_bundle(
         raise HTTPException(status_code=404, detail="Task not found") from exc
     except SubmissionBundlePreparationRejected as exc:
         code = str(exc)
-        if code == "submission_bundle_preparation_context_changed":
+        if code in {"submission_bundle_preparation_context_changed",
+                    "submission_bundle_preparation_request_conflict"}:
             raise HTTPException(status_code=409, detail=code) from exc
         raise HTTPException(status_code=422, detail=code) from exc
     return SubmissionBundlePreparationResponse.model_validate(result, from_attributes=True)

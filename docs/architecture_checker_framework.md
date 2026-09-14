@@ -321,13 +321,17 @@ POL-07A commits an ART attempt reservation after bounded ZIP inspection and
 before invoking any checker. Only the original request can consume the winning
 claim. The fixed materializer consumes fresh authorization for inspected custody
 and obtains another transaction-bound authorization before execution. Evidence
-and attempt completion commit together after a fresh locked-context check.
+and attempt completion commit together after a fresh locked-context check. The
+evidence captures a separate hash of the packet actually passed to the winning
+invocation; the database compares it with the attempt's requested packet.
 
 An exact completed retry verifies its uploaded bytes and manifest, revalidates
 contributor and fixed-service authority, and reconstructs the original result
 from canonical evidence, including member metadata and definition order. It
 invokes no checker and receives no new pass capability. An existing durable put
-receipt may continue recovery; absent continuation is unavailable. A reservation
+receipt may continue recovery; absent or corrupt evidence/continuation is an
+infrastructure failure. A stale admission is reported stale, and a consumed
+admission conflicts; neither returns an admission ID for reuse. A reservation
 without committed completion remains unavailable under the same key, including
 a crash after checker return. A new authorized attempt requires a new key.
 Retained evidence is not rewritten or assigned invented attempt metadata.
@@ -338,9 +342,10 @@ The generated project `PreSubmitCheckerPolicy` is persisted with a compiled
 bundle hash and locked to the effective project submission artifact policy before tasks enter the
 contributor pipeline. Tasks lock references to the shared project's compiled checker
 bundle hash. It runs inside continuous submission-bundle preparation before
-Workstream creates a submission. Failures return the bounded same-request code
-`pre_submission_checker_failed` with status, eligibility, and structured
-pass/fail/warning details. The standalone JSON preflight remains an obsolete caller scheduled for removal
+Workstream creates a submission. ART retains bounded status, eligibility and
+pass/fail/warning results. The existing hidden route returns only the code
+`pre_submission_checker_failed`; structured public intake feedback remains
+pending. The standalone JSON preflight remains an obsolete caller scheduled for removal
 by POL-07 facade integration; it is not authoritative intake evidence. Broader
 Submission caller migration remains WS-ARCH-001-02I; this result is not a review decision value.
 Pre-submit results do not create durable `CheckerRun` records, do not move a

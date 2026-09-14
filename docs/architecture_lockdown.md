@@ -177,10 +177,9 @@ and a bounded ordered list of catalogue ID/version plus stable outcome code.
 It excludes filenames, archive paths, scratch/provider references, credentials,
 raw checker output, evidence content, and free-form or unbounded messages. This
 is audit evidence, not a product review decision. The independently invocable
-legacy preflight route remains frozen until WS-ARCH-001-02I removes it together
-with the legacy Submission path after all initial, checker-remediation,
-reviewer-requested revision, checker-output, and REV-admission prerequisites;
-it is never an alternate authority for this flow.
+standalone preflight route is not authoritative intake evidence. POL-07 removes
+it when connecting the single checker-service port. WS-ARCH-001-02I retains the
+broader Submission caller migration and its downstream prerequisites.
 
 Hidden ART-04B2 uses XINT-06A's two-stage fixed-materializer PREP. It locks the
 service/action and scalar lineage before ZIP inspection, then consumes the same
@@ -193,7 +192,11 @@ that same plan and sealed-tree callback
 to the locked project-policy entries, then reloads the exact task context and
 persists one immutable platform-plus-project evidence set after scratch cleanup.
 It creates no provider object, admission, Submission, or lifecycle effect;
-AUTH activation remains XINT-06A.
+AUTH activation remains XINT-06A. POL-07A commits an ART execution reservation
+before invoking checks, then obtains fresh materialization authority; a prepared
+AUTH handle never crosses that commit. Completed replay freshly authorizes the
+stored original generation and returns evidence without another checker run or
+pass capability.
 
 Tasks lock to the active guide version at creation or screening time before entering `READY`. Material guide changes require a new guide version.
 

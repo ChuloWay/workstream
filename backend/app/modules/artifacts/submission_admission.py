@@ -425,7 +425,10 @@ async def current_submission_bundle_admission_id(
             SubmissionBundleDurableIntent,
             SubmissionBundleDurableIntent.id == SubmissionBundleAdmission.durable_intent_id,
         )
-        .where(SubmissionBundleDurableIntent.put_attempt_id == str(put_attempt_id))
+        .where(
+            SubmissionBundleDurableIntent.put_attempt_id == str(put_attempt_id),
+            SubmissionBundleAdmission.status == "ready",
+        )
     )
     return UUID(value) if value is not None else None
 
@@ -571,13 +574,7 @@ class PreparedSubmissionBundlePreparationCommand:
                 )
                 return self._result(result)
         except PreSubmitEvidenceConflict as exc:
-            if str(exc) == "pre_submit_attempt_outcome_unresolved":
-                raise SubmissionBundlePreparationInfrastructureUnavailable(
-                    "pre_submission_attempt_outcome_unresolved"
-                ) from exc
-            raise SubmissionBundlePreparationRejected(
-                self._evidence_conflict_code(exc)
-            ) from exc
+            raise self._evidence_failure(exc) from exc
         except ArtifactAuthorityDeniedError as exc:
             raise SubmissionBundlePreparationUnavailable(
                 "submission bundle preparation is unavailable"
@@ -658,11 +655,16 @@ class PreparedSubmissionBundlePreparationCommand:
             return UUID(value) if value is not None else None
 
     @staticmethod
-    def _evidence_conflict_code(exc: PreSubmitEvidenceConflict) -> str:
-        """Map ART-private evidence failures to the bounded public vocabulary."""
+    def _evidence_failure(exc: PreSubmitEvidenceConflict) -> RuntimeError:
+        """Separate changed client context from unavailable canonical execution evidence."""
         if str(exc) == "pre_submit_locked_context_changed":
-            return "submission_bundle_preparation_context_changed"
-        return "pre_submission_checked_custody_unavailable"
+            return SubmissionBundlePreparationRejected("submission_bundle_preparation_context_changed")
+        if str(exc) == "pre_submit_attempt_request_conflict":
+            return SubmissionBundlePreparationRejected("submission_bundle_preparation_request_conflict")
+        code = ("pre_submission_attempt_outcome_unresolved"
+                if str(exc) == "pre_submit_attempt_outcome_unresolved"
+                else "pre_submission_checked_custody_unavailable")
+        return SubmissionBundlePreparationInfrastructureUnavailable(code)
 
     async def _lock_context(
         self,
@@ -768,12 +770,19 @@ class PreparedSubmissionBundlePreparationCommand:
             if row is None:
                 return None
             _, attempt, admission = row
+            status = attempt.status
+            admission_id = None
+            if admission is not None:
+                if admission.status == "ready":
+                    status, admission_id = "ready", UUID(admission.id)
+                elif admission.status == "stale":
+                    status = "stale"
+                else:
+                    status = "conflict"
             return SubmissionBundlePreparationResult(
                 put_attempt_id=UUID(attempt.id),
-                admission_id=UUID(admission.id) if admission is not None else None,
-                submission_bundle_preparation_status=SubmissionBundlePreparationStatus(
-                    "ready" if admission is not None else attempt.status
-                ),
+                admission_id=admission_id,
+                submission_bundle_preparation_status=SubmissionBundlePreparationStatus(status),
                 replayed=True,
             )
 

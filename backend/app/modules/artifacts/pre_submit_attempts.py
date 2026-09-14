@@ -66,6 +66,11 @@ class PreSubmitAttemptClaim:
         """Keep the winning invocation bound to this process and session."""
         raise TypeError("pre-submit claims cannot be serialized")
 
+    @property
+    def packet_sha256(self) -> str:
+        """Capture the packet actually passed to this claim's checker invocation."""
+        return canonical_json_hash(asdict(self._request.packet))
+
     async def _reserved(
         self, session: AsyncSession, *, lock: bool = False,
     ) -> PreSubmitExecutionAttempt:
@@ -190,7 +195,9 @@ class PreSubmitAttemptStore:
         evidence = await self._session.get(PreSubmitEvidenceSet, row.evidence_set_id,
                                            populate_existing=True)
         if (evidence is None or row.status != "completed" or evidence.attempt_id != row.id
-                or evidence.attempt_request_digest != row.request_digest):
+                or evidence.attempt_request_digest != row.request_digest
+                or evidence.packet_sha256 is None
+                or evidence.packet_sha256 != row.request_json.get("packet_sha256")):
             raise PreSubmitEvidenceConflict("pre_submit_attempt_evidence_invalid")
         rows = tuple((await self._session.scalars(select(PreSubmitEvidenceResult).where(
             PreSubmitEvidenceResult.evidence_set_id == evidence.id,

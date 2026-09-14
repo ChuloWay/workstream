@@ -327,6 +327,7 @@ TASK_MODULES = (
     "tests/test_default_pre_submit_execution.py",
     "tests/test_pre_submit_attempt_recovery.py",
     "tests/test_pre_submit_attempt_contracts.py",
+    "tests/test_pre_submit_attempt_authority_integration.py",
     "tests/test_pre_submit_attempt_migration.py",
     "tests/test_effective_pre_submit_execution.py",
     "tests/test_project_guide_compilation_contracts.py",

@@ -73,7 +73,9 @@ generation is process-local and cannot be reassigned to a retried upload.
    authorized attempt uses a new key and fresh scratch custody.
 4. In the existing fresh evidence transaction, revalidate authority and locked
    lineage, persist the canonical evidence and atomically link it to the attempt
-   as completed. New evidence also records its attempt ID/request digest and
+   as completed. New evidence also records its attempt ID/request digest and the packet digest
+   computed from the winning claim’s original request. The database compares
+   that independent evidence field to the reserved packet identity and
    includes that binding in its operation identity. Database guards reject
    rewritten request facts, illegal state transitions, duplicate evidence links
    and cross-resource or same-resource/different-packet completion. Retained
@@ -157,10 +159,10 @@ separate from controlled doubles used for command/error routing.
 | Reservation rollback cannot issue a claim | `test_uncommitted_reservation_never_issues_a_claim` |
 | Completion failure rolls back evidence and retains reservation | `test_completion_failure_rolls_back_evidence_and_keeps_attempt_reserved` |
 | Immutable attempt and same-resource/different-packet evidence binding | Direct SQL cases in `test_pre_submit_attempt_recovery.py` |
-| Current contributor and fixed-service authority after commit and on replay | Production adapter cases in `test_pre_submit_attempt_recovery.py` and `authorization/test_pre_submit_attempt_authority.py` |
+| Current contributor and fixed-service authority after commit and on replay | Integrated ART/real AUTH replay in `test_pre_submit_attempt_authority_integration.py`, contributor revocation in `test_pre_submit_attempt_recovery.py`, and kernel cases in `authorization/test_pre_submit_attempt_authority.py` |
 | Missing/foreign/spent claim cannot build a processor; incomplete result cannot recover | `test_pre_submit_attempt_contracts.py` |
 | Retained evidence stays unchanged; downgrade cannot discard a reservation | `test_pre_submit_attempt_migration.py` |
-| Checker rejection, recovery unavailability and concealed authority denial remain distinct | `test_submission_bundle_preparation_recovery.py` |
+| Checker rejection, corrupt/unresolved recovery and concealed authority denial remain distinct | `test_submission_bundle_preparation_recovery.py` |
 
 The focused run covers the new attempt owner and affected evidence/materializer
 above 90 percent each. Exact hosted results and reviewer freshness belong in the
@@ -183,3 +185,19 @@ precheck removal remain the following POL-07 implementation boundary. CP06/CP07
 and AUTH-12H activation remain downstream. Focused architecture/reuse and
 security plan review passed after reconciling the winning claim, fresh authority,
 original-generation replay and exact metadata reconstruction requirements.
+
+Implementation review exposed a misleading database test: it supplied a foreign
+request digest, so an earlier link guard masked the missing packet comparison.
+The corrected regression supplies the new attempt’s valid digest and complete
+copied results, then asserts the specific independently stored packet mismatch
+and transaction rollback. Replay authorization is now exercised through ART and
+real AUTH together, including both retry and original-generation audit facts;
+removing original-generation authorization fails the denial assertion.
+
+Recovery reports corrupt or unavailable evidence as infrastructure unavailability,
+not a contributor checker failure. Only a still-ready durable admission returns
+an admission ID; stale or consumed admissions retain their actual state without
+usable custody. Current documentation assigns obsolete JSON precheck removal to
+POL-07 and broader Submission call-path migration to ARCH-02I. The hidden route
+currently returns a checker-failure code; structured public feedback remains
+POL-07 work.
