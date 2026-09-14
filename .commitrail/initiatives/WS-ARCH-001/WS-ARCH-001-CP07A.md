@@ -57,7 +57,7 @@ No retained data deletion. Replay must keep its existing current-read authority.
 
 ## Acceptance criteria and proof
 
-- All seven mutations acquire authority scope before Project/binding owner locks.
+- All seven non-recovered mutation paths acquire authority scope before Project/binding owner locks.
   The exact final PREP consumption remains mandatory and unchanged.
 - Malformed action/UUID, wrong actor/project authority, service context, missing
   composition and nested/no-root transactions deny without product changes.
@@ -68,6 +68,9 @@ No retained data deletion. Replay must keep its existing current-read authority.
 - Regression probes must fail when early authority locking is removed, and the
   dual-role proof must reject an AuthorityControl-only substitute. Do not fake
   successful authorization or accept unrelated SQL errors as concurrency proof.
+- Prove early scope locking leaves no issued PREP handle, sealed prelock or
+  decision/audit evidence, including cleanup on failure. Completed replay uses
+  current-read authorization without creating a fresh mutation scope or handle.
 - Preserve publication, binding lifecycle, replay, revocation and rollback tests.
   Run focused tests/coverage, exact inventories and boundary scanners, lint,
   links/stale wording/Commitrail checks and final hosted lanes. No weakened gates.
@@ -90,3 +93,22 @@ readiness/guide binding path with one current implementation and trace shared
 consumers, rather than resurrect an old response or add another activation path.
 This repair changes no guide readiness capability. Next usable boundary remains
 reviewed CP07 guide binding, followed by exact AUTH-12H activation.
+
+## Concrete concurrency fixtures
+
+Update `tests/authorization/contribution_policies/concurrency.py` and its
+callers: a second mutation now waits on Control before reaching PROJECTS.
+Observe actual backend PID blocking edges rather than requiring both
+participants to enter the project-lock hook.
+
+For the three-way proof, hold validation's Project lock, let role issuance
+hold Control and wait on Project, then start binding suspension. Suspension
+must wait on Control before taking the binding; validation can acquire that
+binding and finish. Removing early suspension scope locking recreates the
+Project-to-binding-to-Control cycle. Assert both waits and final outcomes.
+
+For dual-role proof, reuse ART's existing `_harness` and `_PauseBeforeProject`
+fixture, grant its contributor Finance authority, and invoke real CON
+`create_draft` on the same project. ART holds the caller profile before Project;
+a Control-only prelock still fails this case. Fixtures require no live guide
+activation and must preserve ART's real authority composition.
