@@ -529,6 +529,12 @@ The Beat scheduler must run alongside the Celery execution processes so
 artifact pending-work, verified guide-continuation and post-policy approval scans can recover
 publication failures automatically.
 
+The hidden submission-bundle preparation flow reserves an exact pre-submit
+attempt before invoking checks. Completed retries recover the original evidence
+without rerunning checks or issuing a new upload capability. An uncertain attempt
+cannot execute again under the same key. The next POL-07 boundary connects the
+single checker-service port and removes the obsolete standalone precheck.
+
 ## v0.1 Success Standard
 
 Workstream v0.1 succeeds only when the complete lifecycle defined at the top of

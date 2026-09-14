@@ -292,9 +292,14 @@ class AdminAuthorizationRepository:
         for actor_profile_id in sorted(
             {caller_actor_profile_id, target_actor_profile_id}, key=str
         ):
+            # Project roles cannot target service actors. Their immutable kind
+            # excludes them before locking, including requests that will deny.
             profile = await self._session.scalar(
                 select(ActorProfile)
-                .where(ActorProfile.id == str(actor_profile_id))
+                .where(
+                    ActorProfile.id == str(actor_profile_id),
+                    ActorProfile.actor_kind == "human",
+                )
                 .with_for_update()
                 .execution_options(populate_existing=True)
             )

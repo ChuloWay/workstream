@@ -1,6 +1,8 @@
 """Retained post-policy custody cannot be removed by migration rollback."""
 
 import pytest
+
+from tests.migration_fixtures import current_schema_revision
 from sqlalchemy import inspect, text
 
 from migration_fixtures import run_alembic_revision
@@ -18,7 +20,7 @@ async def test_downgrade_preserves_retained_post_policy_evidence(clean_postgres_
             await run_alembic_revision('downgrade', '0019_guide_proposal_review')
         assert 'retained post-policy evidence prevents downgrade' in capfd.readouterr().err
         async with factory() as session:
-            assert await session.scalar(text('SELECT version_num FROM alembic_version')) == '0020_post_submit_policy_custody'
+            assert await session.scalar(text('SELECT version_num FROM alembic_version')) == current_schema_revision()
         assert await operate(factory, setup, command.project_id, None, 'derive', payload) == receipt
 
 

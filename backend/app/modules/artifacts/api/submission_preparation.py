@@ -19,6 +19,10 @@ class SubmissionBundlePreparationUnavailable(RuntimeError):
     """Conceal unavailable or denied preparation authority."""
 
 
+class SubmissionBundlePreparationInfrastructureUnavailable(RuntimeError):
+    """Authorized preparation cannot safely recover its execution or continuation."""
+
+
 class SubmissionBundlePreparationStatus(StrEnum):
     """Closed public state vocabulary for one ART preparation operation."""
 

@@ -50,6 +50,51 @@ class ArtifactContent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class PreSubmitExecutionAttempt(Base):
+    """Durable invocation fence; canonical outcomes remain ART evidence rows."""
+
+    __tablename__ = "pre_submit_execution_attempts"
+    __table_args__ = (
+        UniqueConstraint("actor_profile_id", "idempotency_key", name="uq_pre_submit_attempt_key"),
+        UniqueConstraint("evidence_set_id", name="uq_pre_submit_attempt_evidence"),
+        ForeignKeyConstraint(
+            ["identity_link_id", "actor_profile_id"],
+            ["actor_identity_links.id", "actor_identity_links.actor_profile_id"],
+            name="fk_pre_submit_attempt_actor_link",
+        ),
+        ForeignKeyConstraint(
+            ["assignment_id", "task_id", "actor_profile_id"],
+            ["task_assignments.id", "task_assignments.task_id", "task_assignments.contributor_id"],
+            name="fk_pre_submit_attempt_assignment",
+        ),
+        CheckConstraint(
+            "(status='reserved' and evidence_set_id is null) or "
+            "(status='completed' and evidence_set_id is not null)",
+            name="ck_pre_submit_attempt_status",
+        ),
+        CheckConstraint(SHA256_CHECK.format(column="request_digest"),
+                        name="ck_pre_submit_attempt_digest"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(36), nullable=False)
+    actor_profile_id: Mapped[str] = mapped_column(
+        ForeignKey("actor_profiles.id", ondelete="RESTRICT"), nullable=False,
+    )
+    identity_link_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    task_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    assignment_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    prepared_generation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    claim_nonce: Mapped[str] = mapped_column(String(36), nullable=False)
+    request_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    evidence_set_id: Mapped[str | None] = mapped_column(
+        ForeignKey("pre_submit_evidence_sets.id", ondelete="RESTRICT"),
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class PreSubmitEvidenceSet(Base):
     """Immutable execution provenance for one exact prepared submission bundle."""
 
@@ -111,6 +156,10 @@ class PreSubmitEvidenceSet(Base):
                 "workstream_tasks.locked_pre_submit_checker_bundle_hash",
             ],
             name="fk_pre_submit_evidence_task_checker_policy",
+        ),
+        CheckConstraint(
+            "packet_sha256 is null or " + SHA256_CHECK.format(column="packet_sha256"),
+            name="ck_pre_submit_evidence_packet_sha256",
         ),
         UniqueConstraint("operation_identity", name="uq_pre_submit_evidence_operation"),
         CheckConstraint(
@@ -180,6 +229,11 @@ class PreSubmitEvidenceSet(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    attempt_id: Mapped[str | None] = mapped_column(
+        ForeignKey("pre_submit_execution_attempts.id", ondelete="RESTRICT"), unique=True,
+    )
+    attempt_request_digest: Mapped[str | None] = mapped_column(String(71))
+    packet_sha256: Mapped[str | None] = mapped_column(String(71))
     operation_identity: Mapped[str] = mapped_column(String(71), nullable=False)
     actor_profile_id: Mapped[str] = mapped_column(
         ForeignKey("actor_profiles.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -296,6 +350,8 @@ class PreSubmitEvidenceResult(Base):
         ForeignKey("pre_submit_evidence_sets.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     result_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    checker_order: Mapped[int | None] = mapped_column(Integer)
+    metadata_json: Mapped[list | None] = mapped_column(JSON)
     schema_version: Mapped[str] = mapped_column(String(80), nullable=False)
     dispatch_authority: Mapped[str] = mapped_column(String(160), nullable=False)
     definition_id: Mapped[str] = mapped_column(String(160), nullable=False)

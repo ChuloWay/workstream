@@ -1,7 +1,12 @@
 # Chunk Contract: WS-POL-003-07 - Single Checker Service Port
 
 Disposition: Planned. Dependencies: 06B, ARCH-04A capability contracts,
-and merged ART-04B1-04B3. Risk: L1.
+merged ART-04B1-04B3, and [POL-07A ART attempt custody](../../WS-POL-003-07A.md). Risk: L1.
+
+The plan review identified that ART's evidence deduplication originally happened
+only after execution. POL-07A supplies the committed reservation and canonical
+recovery prerequisite; this facade chunk consumes that owner capability. Its
+ART lifecycle exclusion applies after that separately bounded repair.
 
 ## Goal
 

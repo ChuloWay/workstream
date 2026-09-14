@@ -5,6 +5,9 @@ This module proves materialization outcomes, not durable admission or Submission
 """
 
 from dataclasses import replace
+from types import SimpleNamespace
+from tests.pre_submit_test_helpers import materialize_member_fixture
+
 
 import pytest
 
@@ -55,10 +58,12 @@ async def test_effective_project_rules_control_exact_prepared_contents(
             ),
             effective_policy=policy, compiled_bundle=compiled.compiled_bundle, catalogue=catalogue,
         )
-        result = await PreparedBundleMaterializationService(
+        service = PreparedBundleMaterializationService(
+            session=SimpleNamespace(),
             authorization=_AllowAuthority(), preparation=preparation,
             checker_execution=_CheckerExecution(inspector, catalogue), storage_scheme="s3",
-        ).materialize_prepared_bundle(replace(request, effective_plan=plan))
+        )
+        result = await materialize_member_fixture(service, replace(request, effective_plan=plan))
         assert result.eligible is (failed_definition is None)
         failed = [entry.definition_id for entry in result.entries
                   if entry.checker_execution_status == PreSubmissionResultStatus.FAILED.value]

@@ -1843,3 +1843,17 @@ def test_partition_accepts_only_exact_auth12g_targets() -> None:
     ):
         with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
             ownership._validate_additive_partition_transition(invalid, trusted)
+
+
+def test_partition_accepts_only_exact_pre_submit_attempt_owner_addition() -> None:
+    retained = "backend/app/core/config.py"
+    attempt = "backend/app/modules/artifacts/pre_submit_attempts.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted([retained, attempt])), trusted,
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted([retained, attempt, "backend/app/modules/artifacts/other.py"])),
+            trusted,
+        )

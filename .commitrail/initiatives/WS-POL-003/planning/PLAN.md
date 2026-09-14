@@ -159,7 +159,11 @@ activation or task readiness. ARCH-04C alone implements durable post-submit
 attempt/result/currentness storage and worker recovery; 07 cannot claim that
 future repository proof or make it a prerequisite for guide activation. Later
 artifact-flow integration consumes it at ART's scratch and verified-storage
-boundaries without WS-POL-003 modifying ART code or forcing ART lifecycle changes.
+boundaries. The reviewed [POL-07A prerequisite](../WS-POL-003-07A.md)
+repairs ART-owned pre-submit invocation custody before the facade: a committed
+reservation fences execution, and completed recovery reads canonical evidence.
+This bounded exception does not move ART persistence into CHECKER or add
+post-submit execution to POL-07.
 
 ## Input contract
 

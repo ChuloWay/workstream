@@ -39,6 +39,7 @@ async def test_stale_task_relock_denies_before_evidence_or_pass_capability(
     service._repository.persist = AsyncMock()  # type: ignore[method-assign]
     monkeypatch.setattr(pre_submit_evidence, "_validate_execution", lambda *_: None)
     custody = SimpleNamespace(
+        storage_scheme="s3",
         prepared_generation_id="generation",
         archive_sha256="archive",
         archive_byte_count=1,

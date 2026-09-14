@@ -53,15 +53,14 @@ and TaskAssignment for this next attempt; publication or submission input alone
 cannot change it.
 
 Workstream runs the single effective pre-submission plan against the uploaded
-outer ZIP in bounded scratch before creating the submission. Failed preparation
-returns `pre_submission_checker_failed` with bounded same-request structured
-details, creates no
+outer ZIP in bounded scratch before creating the submission. The existing hidden preparation route returns only the code
+`pre_submission_checker_failed`; ART retains bounded check results and structured
+public intake feedback remains pending. Failed preparation creates no
 submission row, no submission version, and no submission-created audit event,
 and does not return review decision values: `accept`, `needs_revision`, or
-`reject`. The frozen legacy standalone preflight endpoint remains temporary
-until WS-ARCH-001-02I removes it with the legacy Submission path after every
-submission context and downstream prerequisite is live; it is not an
-authoritative result for this packet.
+`reject`. POL-07 removes the standalone preflight endpoint when connecting the single
+checker-service port. Broader Submission caller migration remains WS-ARCH-001-02I;
+the standalone endpoint is not authoritative intake evidence for this packet.
 
 The hidden default phase first validates ART's server-generated commitment,
 semantic manifest, change result, and one sealed scratch projection. Its

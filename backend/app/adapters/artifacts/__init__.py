@@ -344,6 +344,7 @@ def get_submission_bundle_preparation_command(
             except KeyError as exc:
                 raise RuntimeError("unsupported artifact store backend") from exc
             materialization = PreparedBundleMaterializationService(
+                session=session,
                 authorization=materialization_authority,
                 preparation=preparation,
                 checker_execution=checker_execution,

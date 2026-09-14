@@ -1272,6 +1272,9 @@ async def issue_project_role_grant(
         )
     except PreparedAuthorizationUnsupported as exc:
         raise _project_role_resource_not_found() from exc
+    target_eligible = await _database_call(
+        session, service.repository.lock_eligible_human(payload.target_actor_profile_id),
+    ) is not None
     project = await _database_call(session, service.repository.lock_project(project_id))
     if project is None:
         raise _project_role_resource_not_found()
@@ -1284,13 +1287,6 @@ async def issue_project_role_grant(
                 payload.role.value,
             )
         ),
-    )
-    target_eligible = (
-        await _database_call(
-            session,
-            service.repository.lock_eligible_human(payload.target_actor_profile_id),
-        )
-        is not None
     )
     active_exact_role = await _database_call(
         session,

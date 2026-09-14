@@ -89,6 +89,10 @@ from app.modules.checkers.api import PreSubmissionInfrastructureUnavailableError
 from tests.artifact_store_helpers import artifact_admission_limit_settings
 from tests.pre_submit_test_helpers import (
     approved_pre_submit_fixture,
+    assert_pre_submit_evidence_immutable,
+    assert_admission_replay_state,
+    materialize_member_fixture,
+    execute_evidence_workflow,
     checker_execution as _CheckerExecution,
     evidence_workflow,
     submission_preparation_request,
@@ -125,8 +129,8 @@ async def test_evidence_workflow_requires_transaction_free_session() -> None:
     )
 
     with pytest.raises(RuntimeError, match="requires a transaction-free session"):
-        await workflow.execute(
-            cast(Any, object()),
+        await workflow.execute_reserved(
+            cast(Any, object()), object(),
             preparation_request=cast(Any, object()),
         )
 
@@ -298,6 +302,7 @@ async def _request(
 async def test_authority_denial_precedes_workspace_and_checker_access(tmp_path: Path) -> None:
     request, inspector, manager, preparation, catalogue = await _request(tmp_path)
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=DenyPreSubmitMaterializationAuthorization(),
         preparation=preparation,
         checker_execution=_CheckerExecution(inspector, catalogue),
@@ -305,7 +310,7 @@ async def test_authority_denial_precedes_workspace_and_checker_access(tmp_path: 
     )
 
     with pytest.raises(ArtifactAuthorityDeniedError):
-        await service.materialize_prepared_bundle(request)
+        await materialize_member_fixture(service, request)
 
     assert list((tmp_path / "scratch" / "workspaces").iterdir()) == []
     await request.prepared_artifact.close()
@@ -331,6 +336,7 @@ async def test_authority_preparation_denies_before_zip_inspection(
 
     monkeypatch.setattr(type(prepared), "inspect", forbidden_inspection)
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=DenyPreSubmitMaterializationAuthorization(),
         preparation=preparation,
         checker_execution=_CheckerExecution(
@@ -376,6 +382,7 @@ async def test_manifest_drift_denies_before_authority_and_workspace(tmp_path: Pa
     )
     authority = _AllowAuthority()
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=authority,
         preparation=preparation,
         checker_execution=_CheckerExecution(inspector, catalogue),
@@ -386,7 +393,7 @@ async def test_manifest_drift_denies_before_authority_and_workspace(tmp_path: Pa
         PreSubmissionInfrastructureUnavailableError,
         match="materialization_context_invalid",
     ):
-        await service.materialize_prepared_bundle(
+        await materialize_member_fixture(service,
             replace(request, manifest=forged_manifest, change_gate=forged_change)
         )
 
@@ -403,6 +410,7 @@ async def test_two_stage_authority_uses_one_handle_and_exact_final_facts(
     request, inspector, manager, preparation, catalogue = await _request(tmp_path)
     authority = _AllowAuthority()
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=authority,
         preparation=preparation,
         checker_execution=_CheckerExecution(inspector, catalogue),
@@ -418,7 +426,7 @@ async def test_two_stage_authority_uses_one_handle_and_exact_final_facts(
         idempotency_key=uuid4(),
     )
 
-    result = await service.materialize_prepared_bundle(
+    result = await materialize_member_fixture(service,
         replace(request, prepared_authorization=handle)
     )
 
@@ -545,7 +553,7 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
             before = await table_counts(connection, tables)
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
         async with session_factory() as session:
-            preparation_authority = cast(Any, SimpleNamespace(revalidate=AsyncMock()))
+            preparation_authority = cast(Any, SimpleNamespace(lock_actor=AsyncMock(), revalidate=AsyncMock()))
             workflow = evidence_workflow(
                 session=session,
                 preparation=preparation,
@@ -578,18 +586,18 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                         predecessor_exists=False,
                     ),
                 )
-                result = await workflow.execute(
+                result = await execute_evidence_workflow(workflow,
                     fresh_request,
-                    preparation_request=preparation_request,
+                    preparation_request=replace(preparation_request, idempotency_key=uuid4()),
                 )
                 assert result.pass_capability is not None
                 return prepared, result
 
-            first = await workflow.execute(
+            first = await execute_evidence_workflow(workflow,
                 request,
                 preparation_request=preparation_request,
             )
-            replay = await workflow.execute(
+            replay = await execute_evidence_workflow(workflow,
                 request,
                 preparation_request=preparation_request,
             )
@@ -856,6 +864,8 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
             provider.execute_committed_put.assert_not_awaited()
             provider.resume_committed_put.assert_not_awaited()
             assert selected_evidence_id == first.evidence.evidence_set_id
+            await assert_admission_replay_state(session, selected_evidence_id,
+                                               first_admission.attempt_id, published_ids[0], "ready")
             await session.execute(
                 text(
                     "update submission_bundle_admissions set status='stale', "
@@ -864,6 +874,8 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                 {"id": published_ids[0]},
             )
             await session.commit()
+            await assert_admission_replay_state(session, selected_evidence_id,
+                                               first_admission.attempt_id, published_ids[0], "stale")
             async with session.begin():
                 stale_usage = await ArtifactOperatorService(
                     session,
@@ -918,9 +930,13 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                     contributor_attestation="",
                 ),
             )
-            blocked = await workflow.execute(
+            blocked = await execute_evidence_workflow(workflow,
                 blocked_request,
-                preparation_request=preparation_request,
+                preparation_request=replace(
+                    preparation_request, idempotency_key=uuid4(),
+                    contributor_attestation=blocked_request.packet.contributor_attestation,
+                    summary=blocked_request.packet.summary,
+                ),
             )
         async with engine.begin() as connection:
             evidence_count = int(
@@ -934,58 +950,7 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                 table: int(await connection.scalar(text(f"select count(*) from {table}")) or 0)
                 for table in tables
             }
-            immutable_statements = (
-                "update pre_submit_evidence_sets set terminal_status='blocked'",
-                "update pre_submit_evidence_results set status='failed'",
-                "delete from pre_submit_evidence_results",
-                "truncate pre_submit_evidence_results",
-                "insert into pre_submit_evidence_results "
-                "select '00000000-0000-0000-0000-000000000001',"
-                "evidence_set_id,result_order+1000,"
-                "schema_version,dispatch_authority,definition_id || '.forged',"
-                "definition_version,public_name,source,phase,classification,severity,status,"
-                "failure_code,message_code,effective_plan_sha256,rule_instance_id,"
-                "locked_policy_sha256,now() from pre_submit_evidence_results limit 1",
-            )
-            for statement in immutable_statements:
-                with pytest.raises(DBAPIError):
-                    async with connection.begin_nested():
-                        await connection.execute(text(statement))
-            with pytest.raises(DBAPIError, match="pre_submit_evidence_sets rows are immutable"):
-                async with connection.begin_nested():
-                    await connection.execute(
-                        text(
-                            "insert into pre_submit_evidence_sets select "
-                            "(jsonb_populate_record(null::pre_submit_evidence_sets, "
-                            "to_jsonb(existing_row) || jsonb_build_object("
-                            "'id','00000000-0000-0000-0000-000000000003',"
-                            "'operation_identity','sha256:' || repeat('e',64),"
-                            "'created_at',transaction_timestamp()))).* "
-                            "from pre_submit_evidence_sets existing_row limit 1"
-                        )
-                    )
-                    await connection.execute(
-                        text(
-                            "delete from pre_submit_evidence_sets "
-                            "where id='00000000-0000-0000-0000-000000000003'"
-                        )
-                    )
-            with pytest.raises(DBAPIError, match="pre_submit_evidence_sets rows are immutable"):
-                async with connection.begin_nested():
-                    await connection.execute(text("truncate pre_submit_evidence_sets cascade"))
-            with pytest.raises(DBAPIError, match="creation timestamp is invalid"):
-                async with connection.begin_nested():
-                    await connection.execute(
-                        text(
-                            "insert into pre_submit_evidence_sets select "
-                            "(jsonb_populate_record(null::pre_submit_evidence_sets, "
-                            "to_jsonb(existing_row) || jsonb_build_object("
-                            "'id','00000000-0000-0000-0000-000000000002',"
-                            "'operation_identity','sha256:' || repeat('f',64),"
-                            "'created_at',existing_row.created_at - interval '1 day'))).* "
-                            "from pre_submit_evidence_sets existing_row limit 1"
-                        )
-                    )
+            await assert_pre_submit_evidence_immutable(connection)
     finally:
         for prepared in (
             blocked_prepared,
@@ -1040,6 +1005,7 @@ async def test_materializer_rejects_policy_lineage_mismatch_before_authority(
     request, inspector, manager, preparation, catalogue = await _request(tmp_path)
     authority = _AllowAuthority()
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=authority,
         preparation=preparation,
         checker_execution=_CheckerExecution(inspector, catalogue),
@@ -1050,7 +1016,7 @@ async def test_materializer_rejects_policy_lineage_mismatch_before_authority(
         PreSubmissionInfrastructureUnavailableError,
         match="pre_submission_materialization_context_invalid",
     ):
-        await service.materialize_prepared_bundle(
+        await materialize_member_fixture(service,
             replace(request, submission_artifact_policy_id=uuid4())
         )
 
@@ -1067,13 +1033,14 @@ async def test_effective_executor_uses_plan_order_and_dispatches_project_rules(
     request, inspector, manager, preparation, catalogue = await _request(tmp_path)
     authority = _AllowAuthority()
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=authority,
         preparation=preparation,
         checker_execution=_CheckerExecution(inspector, catalogue),
         storage_scheme="s3",
     )
 
-    result = await service.materialize_prepared_bundle(request)
+    result = await materialize_member_fixture(service, request)
 
     expected = [
         entry.definition_id
@@ -1115,13 +1082,14 @@ async def test_blocking_default_stops_later_dependency_without_review_decision(
 ) -> None:
     request, inspector, manager, preparation, catalogue = await _request(tmp_path, path=".env")
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=_AllowAuthority(),
         preparation=preparation,
         checker_execution=_CheckerExecution(inspector, catalogue),
         storage_scheme="s3",
     )
 
-    result = await service.materialize_prepared_bundle(request)
+    result = await materialize_member_fixture(service, request)
     by_id = {entry.definition_id: entry for entry in result.entries}
 
     assert (
@@ -1150,13 +1118,14 @@ async def test_disabled_advisory_is_explicit_and_not_skipped_success(tmp_path: P
     )
     request, inspector, manager, preparation, _ = await _request(tmp_path, catalogue=catalogue)
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=_AllowAuthority(),
         preparation=preparation,
         checker_execution=_CheckerExecution(inspector, catalogue),
         storage_scheme="s3",
     )
 
-    result = await service.materialize_prepared_bundle(request)
+    result = await materialize_member_fixture(service, request)
     advisory = next(
         entry
         for entry in result.entries
@@ -1177,13 +1146,14 @@ async def test_quality_warning_emits_only_a_bounded_category_count(tmp_path: Pat
         packet=replace(request.packet, summary="Completed work; TODO placeholder removed."),
     )
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=_AllowAuthority(),
         preparation=preparation,
         checker_execution=_CheckerExecution(inspector, catalogue),
         storage_scheme="s3",
     )
 
-    result = await service.materialize_prepared_bundle(request)
+    result = await materialize_member_fixture(service, request)
     warning = next(
         entry
         for entry in result.entries
@@ -1203,6 +1173,7 @@ async def test_forged_plan_identity_fails_closed_and_cleans_workspace(tmp_path: 
     forged = replace(request.effective_plan, plan_sha256="sha256:" + "0" * 64)
     request = replace(request, effective_plan=forged)
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=_AllowAuthority(),
         preparation=preparation,
         checker_execution=_CheckerExecution(inspector, catalogue),
@@ -1210,7 +1181,7 @@ async def test_forged_plan_identity_fails_closed_and_cleans_workspace(tmp_path: 
     )
 
     with pytest.raises(PreSubmissionInfrastructureUnavailableError, match="plan_identity"):
-        await service.materialize_prepared_bundle(request)
+        await materialize_member_fixture(service, request)
 
     assert list((tmp_path / "scratch" / "workspaces").iterdir()) == []
     await request.prepared_artifact.close()
@@ -1270,6 +1241,7 @@ async def test_invalid_executor_state_fails_closed_and_cleans_workspace(
         effective_plan=_rehash_plan(request.effective_plan, entries=entries),
     )
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=_AllowAuthority(),
         preparation=preparation,
         checker_execution=_CheckerExecution(inspector, selected_catalogue),
@@ -1277,7 +1249,7 @@ async def test_invalid_executor_state_fails_closed_and_cleans_workspace(
     )
 
     with pytest.raises(PreSubmissionInfrastructureUnavailableError, match=expected_message):
-        await service.materialize_prepared_bundle(request)
+        await materialize_member_fixture(service, request)
 
     assert list((tmp_path / "scratch" / "workspaces").iterdir()) == []
     await request.prepared_artifact.close()
@@ -1305,6 +1277,7 @@ async def test_disabled_mandatory_executor_state_fails_closed(tmp_path: Path) ->
         ),
     )
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=_AllowAuthority(),
         preparation=preparation,
         checker_execution=_CheckerExecution(inspector, catalogue),
@@ -1312,7 +1285,7 @@ async def test_disabled_mandatory_executor_state_fails_closed(tmp_path: Path) ->
     )
 
     with pytest.raises(PreSubmissionInfrastructureUnavailableError):
-        await service.materialize_prepared_bundle(request)
+        await materialize_member_fixture(service, request)
 
     assert list((tmp_path / "scratch" / "workspaces").iterdir()) == []
     await request.prepared_artifact.close()
@@ -1351,13 +1324,14 @@ async def test_effective_execution_enforces_project_only_forbidden_rule(tmp_path
         effective_plan=plan,
     )
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=_AllowAuthority(),
         preparation=preparation,
         checker_execution=_CheckerExecution(inspector, catalogue),
         storage_scheme="s3",
     )
 
-    result = await service.materialize_prepared_bundle(request)
+    result = await materialize_member_fixture(service, request)
 
     assert result.eligible is False
     project_result = next(
@@ -1372,13 +1346,14 @@ async def test_effective_execution_enforces_project_only_forbidden_rule(tmp_path
 async def test_effective_execution_enforces_server_owned_storage_scheme(tmp_path: Path) -> None:
     request, inspector, manager, preparation, catalogue = await _request(tmp_path)
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=_AllowAuthority(),
         preparation=preparation,
         checker_execution=_CheckerExecution(inspector, catalogue),
         storage_scheme="local",
     )
 
-    result = await service.materialize_prepared_bundle(request)
+    result = await materialize_member_fixture(service, request)
 
     policy_result = next(
         entry for entry in result.entries if entry.definition_id == "policy.storage_scheme.enforce"
@@ -1393,12 +1368,13 @@ async def test_effective_execution_enforces_server_owned_storage_scheme(tmp_path
 async def test_canonical_result_validator_rejects_forged_definition(tmp_path: Path) -> None:
     request, inspector, manager, preparation, catalogue = await _request(tmp_path)
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=_AllowAuthority(),
         preparation=preparation,
         checker_execution=_CheckerExecution(inspector, catalogue),
         storage_scheme="s3",
     )
-    result = await service.materialize_prepared_bundle(request)
+    result = await materialize_member_fixture(service, request)
     first = result.entries[0]
     forged = replace(
         result,
@@ -1436,13 +1412,14 @@ async def test_legacy_precheck_runner_is_not_an_execution_dependency(
     monkeypatch.setattr(legacy_runner, "pre_submit_static_feedback", forbidden)
     monkeypatch.setattr(legacy_runner, "default_checker_registry", forbidden)
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=_AllowAuthority(),
         preparation=preparation,
         checker_execution=_CheckerExecution(inspector, catalogue),
         storage_scheme="s3",
     )
 
-    result = await service.materialize_prepared_bundle(request)
+    result = await materialize_member_fixture(service, request)
 
     assert result.eligible is True
     await request.prepared_artifact.close()
@@ -1467,12 +1444,13 @@ async def test_authorized_cancellation_cleans_before_propagating(
 
     monkeypatch.setattr(EffectivePreSubmissionProcessor, "process_blocking", blocking_process)
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=_AllowAuthority(),
         preparation=preparation,
         checker_execution=_CheckerExecution(inspector, catalogue),
         storage_scheme="s3",
     )
-    task = asyncio.create_task(service.materialize_prepared_bundle(request))
+    task = asyncio.create_task(materialize_member_fixture(service, request))
     assert await asyncio.to_thread(entered.wait, 5)
     task.cancel()
     release.set()
@@ -1500,6 +1478,7 @@ async def test_cancellation_during_member_projection_cleans_workspace(
             return super()._project_file(*args, **kwargs)
 
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=_AllowAuthority(),
         preparation=preparation,
         checker_execution=_CheckerExecution(
@@ -1507,7 +1486,7 @@ async def test_cancellation_during_member_projection_cleans_workspace(
         ),
         storage_scheme="s3",
     )
-    task = asyncio.create_task(service.materialize_prepared_bundle(request))
+    task = asyncio.create_task(materialize_member_fixture(service, request))
     assert await asyncio.to_thread(entered.wait, 5)
     task.cancel()
     release.set()
@@ -1542,12 +1521,13 @@ async def test_timeout_during_checker_access_cleans_workspace(
         asyncio.get_running_loop().time() + 0.01
     )
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=_AllowAuthority(),
         preparation=preparation,
         checker_execution=_CheckerExecution(inspector, catalogue),
         storage_scheme="s3",
     )
-    task = asyncio.create_task(service.materialize_prepared_bundle(request))
+    task = asyncio.create_task(materialize_member_fixture(service, request))
     assert await asyncio.to_thread(entered.wait, 5)
     await asyncio.sleep(0.02)
     release.set()
@@ -1593,6 +1573,7 @@ async def test_terminal_event_during_sealing_precedes_checker_access_and_cleans(
             asyncio.get_running_loop().time() + 0.01
         )
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=_AllowAuthority(),
         preparation=preparation,
         checker_execution=_CheckerExecution(
@@ -1600,7 +1581,7 @@ async def test_terminal_event_during_sealing_precedes_checker_access_and_cleans(
         ),
         storage_scheme="s3",
     )
-    task = asyncio.create_task(service.materialize_prepared_bundle(request))
+    task = asyncio.create_task(materialize_member_fixture(service, request))
     assert await asyncio.to_thread(entered.wait, 5)
     if terminal == "cancel":
         task.cancel()
@@ -1630,15 +1611,16 @@ async def test_policy_packet_fields_use_inspected_manifest_and_reject_unknown(tm
         tmp_path, catalogue=catalogue, plan=_plan(catalogue, policy=policy),
     )
     service = PreparedBundleMaterializationService(
+        session=SimpleNamespace(),
         authorization=_AllowAuthority(), preparation=preparation,
         checker_execution=_CheckerExecution(inspector, catalogue), storage_scheme="s3",
     )
     try:
         if field == "unknown_packet_field":
             with pytest.raises(PreSubmissionInfrastructureUnavailableError, match="pre_submission_policy_field_unmappable"):
-                await service.materialize_prepared_bundle(request)
+                await materialize_member_fixture(service, request)
         else:
-            outcome = await service.materialize_prepared_bundle(request)
+            outcome = await materialize_member_fixture(service, request)
             assert outcome.eligible
             assert outcome.custody.semantic_manifest_sha256 == request.manifest.sha256
     finally:
