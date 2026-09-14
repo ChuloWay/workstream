@@ -902,8 +902,9 @@ and crosses the active `artifact.submission_bundle.prepare` PREP boundary before
 
 Blocking pre-submit failures prevent submission creation, create no submission
 row, no submission version, no task transition to `submitted`, and no
-submission-created audit event. Workstream still writes a task audit event named
-`pre_submission_check_failed` with bounded identifiers, catalogue identity,
+submission-created audit event. ART constructs an audit-ready projection;
+publication as a task event named `pre_submission_check_failed` remains pending.
+That event must use bounded identifiers, catalogue identity,
 stable codes, counts and categories for project operators. It excludes paths,
 filenames, scratch/provider references, raw output, evidence contents,
 credentials and free-form checker messages. Pre-submit results never return

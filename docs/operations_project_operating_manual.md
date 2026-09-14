@@ -341,10 +341,10 @@ Before locking a submission packet:
 - revision replay exists when task was previously `NEEDS_REVISION`
 - effective project submission artifact policy is loaded
 - generated project pre-submit checker policy runs
-- failed submission-bundle preparation returns `pre_submission_checker_failed` with bounded same-request status, eligibility, and pass/fail/warning details
-- the retained preflight endpoint is non-authoritative; the completed cutover
-  must leave no standalone endpoint or client-owned manifest that can reproduce
-  the authoritative result
+- failed preparation currently returns only `pre_submission_checker_failed` through the hidden route; ART retains bounded results and structured public feedback remains POL-07 work
+- POL-07 removes the non-authoritative standalone preflight endpoint when
+  connecting the single checker-service port; broader Submission caller
+  migration remains WS-ARCH-001-02I
 - no submission row is created until blocking pre-submit checks pass
 - successful submission creation stamps the immutable submission boundary and queues the Celery pre-review gate
 - the intended Operator repair/requeue operation for an already locked submission

@@ -200,4 +200,6 @@ an admission ID; stale or consumed admissions retain their actual state without
 usable custody. Current documentation assigns obsolete JSON precheck removal to
 POL-07 and broader Submission call-path migration to ARCH-02I. The hidden route
 currently returns a checker-failure code; structured public feedback remains
-POL-07 work.
+POL-07 work. ART constructs the bounded failure-audit projection, but publishing
+it as a TASK audit event remains pending; current documentation distinguishes
+that implementation gap from the target contract.

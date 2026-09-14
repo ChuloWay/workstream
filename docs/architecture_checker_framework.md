@@ -299,12 +299,13 @@ Workstream default submission artifact rules require:
 - production artifact hashes shaped as `sha256:<64 lowercase hex>`
 - pre-cutover only: validated caller-supplied storage references and manifest;
   the superseded `WS-ART-001-05B` contract is implemented by
-  `WS-ARCH-001-02I`, which removes the standalone caller-owned precheck, its
-  internal legacy Submission guard, and the caller-owned `package_uri`,
+  `WS-ARCH-001-02I` for the broader Submission caller cutover, including its
+  internal Submission guard and the caller-owned `package_uri`,
   `package_hash`, and `artifact_hash_manifest` fields together so checkers
   consume Workstream artifact bindings only; the transitional `artifact_hash`
   column is handled separately by a schema-removal migration after every
-  reader uses exact binding/content identity
+  reader uses exact binding/content identity. POL-07 removes the standalone
+  caller-owned precheck when connecting the single checker-service port
 - no credentials, signed URLs, query strings, raw local filesystem paths, or token-bearing references
 - narrowly high-confidence sensitive-file exclusions such as `.env`, `.git`,
   exact known credential/private-key files, `.pem`, and `.key`; broad
