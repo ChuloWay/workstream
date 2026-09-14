@@ -239,6 +239,15 @@ AUTH_12F4_PARTITION_TARGETS = frozenset({
     'backend/app/modules/authorization/prepared_proposal_replay.py',
 })
 
+POL_06B_PARTITION_TARGETS = frozenset({
+    'backend/app/api/deps/guide_proposal_http.py',
+    'backend/app/api/deps/post_policy.py',
+    'backend/app/api/routes/post_policy.py',
+    'backend/app/modules/projects/post_policy/delivery.py',
+    'backend/app/modules/projects/post_policy/queue.py',
+    'backend/app/workers/post_policy.py',
+})
+
 POL_06A_PARTITION_TARGETS = frozenset({
     'backend/app/modules/authorization/api/post_policy.py',
     'backend/app/modules/projects/api/post_policy.py',
@@ -541,6 +550,7 @@ def _validate_additive_partition_transition(
         | POL_05A_PARTITION_TARGETS
         | POL_05B_PARTITION_TARGETS
         | POL_06A_PARTITION_TARGETS
+        | POL_06B_PARTITION_TARGETS
 
         | API_DRILL_PARTITION_TARGETS
         | AUTH_12I_TARGETS

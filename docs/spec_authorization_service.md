@@ -1294,7 +1294,10 @@ so their handles cannot be exchanged. Mutation evidence retains the exact public
 facts digest. Replay locks fresh current authority and checks the original exact
 decision without another allow or product write. Correction consumes both the
 post-policy and unified-proposal authorities in the caller's one root transaction,
-then records one shared successor. Public post-policy composition remains POL-06B.
+then records one shared successor. POL-06B exposes these public manager operations
+and delivers deterministic derivation through the fixed setup service after
+upstream approval commits. Recovery reloads the exact approval custody and
+prepares fresh service authority in a separate root transaction.
 
 
 The 12F1 foundation binds each future submission-policy handle to the exact

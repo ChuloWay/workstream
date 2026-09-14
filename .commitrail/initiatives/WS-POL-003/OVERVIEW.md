@@ -1,6 +1,7 @@
 # WS-POL-003 — Unified project-guide compilation
 
-Latest completed POL behavior: [POL-06A hidden post-policy custody](WS-POL-003-06A.md),
+Latest completed POL behavior: [POL-06B public post-policy review](WS-POL-003-06B.md),
+building on [POL-06A post-policy custody](WS-POL-003-06A.md),
 building on [POL-05B public manager operations](WS-POL-003-05B.md),
 building on [POL-05A proposal custody](WS-POL-003-05A.md),
 building on [POL-04B2 guide document intake](WS-POL-003-04B2.md),
@@ -17,12 +18,13 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   immutable setup finalization, current-authority replay and one public guide
   creation/document-upload flow; hidden complete-proposal review, pre-submission
   approval custody and correction successors; public exact manager review,
-  pre-submission approval and manual dispatch through the same runtime; hidden
-  post-policy projection, complete draft read, separate approval and correction custody.
+  pre-submission approval and manual dispatch through the same runtime; automatic
+  post-policy derivation, public complete policy read, separate approval and correction.
 - Intent: compile one locked guide and its policies into authoritative,
   versioned project behavior without circular subsystem authority.
-- Next usable boundary: POL-06B public wiring over POL-06A and completed
-  [AUTH-12G authority](../WS-AUTH-001/WS-AUTH-001-12G.md). POL-05B already connects manager review, pre-submit
+- Next usable boundary: POL-07 single checker-service port. POL-06B public
+  policy review and automatic derivation use completed
+  [AUTH-12G authority](../WS-AUTH-001/WS-AUTH-001-12G.md). POL-05B connects manager review, pre-submit
   approval and manual correction dispatch to AUTH-12F4 and POL-05A.
   Live setup consumes the [consolidated catalogue](../WS-ARCH-001/WS-ARCH-001-04A.md)
   and completed AUTH-12B2.
@@ -63,11 +65,11 @@ Configured `false` remains available in draft but cannot activate a guide until
 the authorized automated FinalAcceptance/CON path is proven and available.
 Existing tasks retain their locked rules; adjudication is not included.
 
-1. POL-05/06 complete proposal visibility, setup-wide correction, approval and
-   post-submit manifests with AUTH-12F4/12G. Immutable
-   finalized setup rows require separately reviewed downstream custody before
-   live post-submit integration.
-2. POL-07 facade consumes independent ARCH-04A registered-capability proof;
+POL-05/06 and AUTH-12F4/12G deliver public proposal and post-policy visibility,
+separate approvals and shared corrections. Automatic derivation and recovery
+consume committed upstream approvals while finalized setup remains immutable.
+
+1. POL-07 facade consumes independent ARCH-04A registered-capability proof;
    ARCH-04C alone owns durable post-submit persistence. AUTH-12H activates
    CP07's hidden complete guide command without a Task/CheckerRun dependency.
    Remove obsolete owner code in each replacement chunk; no compatibility or

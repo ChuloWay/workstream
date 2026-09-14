@@ -24,8 +24,9 @@ The first user flows prove that Workstream can run real work from intake to acce
 POL-04B delivers the automatic compilation and immutable draft/findings stop
 below. POL-05A delivers hidden manager proposal review, correction and pre-submit
 approval. AUTH-12F4 and POL-05B deliver public manager authority and manual
-dispatch. POL-06A adds hidden post-policy projection/read/approval/correction;
-AUTH-12G supplies live internal authority; POL-06B remains for public access. The complete
+dispatch. POL-06A owns post-policy projection/read/approval/correction;
+AUTH-12G supplies authority and POL-06B exposes public manager decisions plus
+automatic deterministic derivation after pre-submit approval. The complete
 activation flow below describes the target lifecycle.
 
 1. A system-scoped Project Manager creates the project.

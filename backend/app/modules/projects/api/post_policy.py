@@ -1,14 +1,14 @@
 """Exact post-policy projection, review and decision values; no execution authority."""
 
 from typing import Generic, Literal, Protocol, TypeVar
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.core.hashing import canonical_json_hash
 from app.modules.projects.api.guide_proposal_package import GuideProposalReviewPackage
 from app.modules.projects.api.guide_proposals import (
-    Digest, GuideProposalApprovalReceipt, GuideProposalCorrection,
+    Digest, GuideProposalApprovalReceipt, GuideProposalCorrectionInput,
     GuideProposalCorrectionReceipt, GuideProposalSelection, GuideProposalTarget,
 )
 
@@ -60,17 +60,28 @@ class PostPolicySelection(GuideProposalSelection):
     policy_id: UUID
 
 
-class PostPolicyApproval(PostPolicyValue):
+class PostPolicyApprovalInput(PostPolicyValue):
     """Approve only the exact displayed policy; content editing is not approval."""
 
     target: PostPolicyTarget
+
+
+class PostPolicyApproval(PostPolicyApprovalInput):
+    """Canonical approval with a transport-validated replay key."""
+
     idempotency_key: UUID
 
 
-class PostPolicyCorrection(GuideProposalCorrection):
+class PostPolicyCorrectionInput(GuideProposalCorrectionInput):
     """Reuse canonical manager feedback validation for a unified successor."""
 
     target: PostPolicyTarget
+
+
+class PostPolicyCorrection(PostPolicyCorrectionInput):
+    """Canonical correction with a transport-validated replay key."""
+
+    idempotency_key: UUID
 
 
 class PostPolicyReceipt(PostPolicyValue):
@@ -110,7 +121,7 @@ _GuideAuthorityT = TypeVar("_GuideAuthorityT", contravariant=True)
 
 
 class PostPolicyOperationsPort(Protocol[_ActorT, _GuideAuthorityT, _PolicyT]):
-    """Typed hidden operations; composition supplies authority without a default adapter."""
+    """Typed canonical operations; composition supplies authority without a default adapter."""
 
     async def derive(self, command: PostPolicyDerive, *, actor: _ActorT, request_id: UUID) -> PostPolicyReceipt: ...
 
@@ -122,3 +133,28 @@ class PostPolicyOperationsPort(Protocol[_ActorT, _GuideAuthorityT, _PolicyT]):
         self, command: PostPolicyCorrection, *, actor: _ActorT, request_id: UUID,
         guide_authorization: _GuideAuthorityT,
     ) -> PostPolicyReceipt: ...
+
+
+class PostPolicyDelivery(PostPolicyValue):
+    """Broker identity for one committed upstream approval; no caller policy body."""
+
+    approval_operation_id: UUID
+    task_id: UUID
+
+    @model_validator(mode="after")
+    def require_task_identity(self):
+        """Reject delivery under another approval's deterministic task identity."""
+        if self.task_id != post_policy_task_id(self.approval_operation_id):
+            raise ValueError("post-policy delivery identity mismatch")
+        return self
+
+
+def post_policy_task_id(approval_operation_id: UUID) -> UUID:
+    """Use one stable broker identity across publication, recovery and redelivery."""
+    return uuid5(approval_operation_id, "post-policy-delivery")
+
+
+class PostPolicyDeliveryPort(Protocol):
+    """Deliver an existing approval through the canonical deterministic owner."""
+
+    async def run(self, delivery: PostPolicyDelivery) -> dict: ...

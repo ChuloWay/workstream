@@ -25,6 +25,8 @@ from app.modules.projects.models import (
     SubmissionArtifactPolicy,
 )
 
+from app.modules.projects.post_policy.models import PostPolicyOperation
+
 from .contracts import AcceptedCompilationResult
 from .finalization_payloads import (
     LockedFinalization,
@@ -196,7 +198,20 @@ class GuideProposalRepository:
                 item["evidence_refs"] = projected
         display = GuideProposalDisplayResult.model_validate(body)
         approval = await self.current_approval(locked.target.guide_id)
+        # Discovery belongs to this retained compilation's own approval custody,
+        # even when the guide-wide current approval has advanced.
+        custody = locked.view.approval_custody
+        post_policy_id = None
+        if custody is not None:
+            post_policy_id = await self.session.scalar(select(PostPolicyOperation.policy_id).where(
+                PostPolicyOperation.kind == "derive",
+                PostPolicyOperation.project_id == str(locked.target.project_id),
+                PostPolicyOperation.guide_id == str(locked.target.guide_id),
+                PostPolicyOperation.compilation_id == locked.target.compilation_id,
+                PostPolicyOperation.upstream_approval_operation_id == custody.operation.operation_id,
+            ))
         return GuideProposalReviewPackage(
+            post_submit_policy_id=post_policy_id,
             target=locked.target,
             target_digest=locked.target.digest,
             result=display,

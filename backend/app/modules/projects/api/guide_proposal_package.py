@@ -84,3 +84,4 @@ class GuideProposalReviewPackage(BaseModel):
     warning_hashes: tuple[Digest, ...]
     current_approval_operation_id: UUID | None = None
     current_approval_output_digest: Digest | None = None
+    post_submit_policy_id: UUID | None = None

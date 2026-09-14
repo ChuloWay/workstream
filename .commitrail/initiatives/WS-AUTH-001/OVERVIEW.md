@@ -18,7 +18,8 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
   and pre-submit approval authority over hidden POL-05A behavior.
 - Completed post-policy boundary: AUTH-12G fixed setup derivation and exact-project
   manager read, approval and correction authority over POL-06A.
-- Next usable boundary: POL-06B public post-policy composition.
+- Public post-policy composition: POL-06B delivered using existing AUTH-12G.
+- Next usable boundary: POL-07 checker-service port, then AUTH-12H guide activation.
   Unavailable dispatcher contracts remain a separate contribution boundary.
 - Governing source: `docs/spec_authorization_service.md`, authorization code,
   migrations, and tests.
@@ -46,12 +47,13 @@ Follow the [current cross-owner dependency contract](../WS-ARCH-001/planning/PLA
 Hidden owner behavior precedes exact AUTH authority; neither guide activation
 nor policy selection is authorized by the sufficiency action.
 
-1. POL-06B exposes the completed POL-06A operations with AUTH-12G authority.
-   POL-04B/05A/05B and AUTH-12F4 already supply live unified setup and public
-   manager proposal review, pre-submit approval and manual correction dispatch.
-2. POL-07 supplies one checker-service port; AUTH-12H then reconciles final guide
+POL-06B exposes completed POL-06A operations with AUTH-12G authority.
+POL-04B/05A/05B and AUTH-12F4 supply live unified setup and public
+manager proposal review, pre-submit approval and manual correction dispatch.
+
+1. POL-07 supplies one checker-service port; AUTH-12H then reconciles final guide
    activation with selected contribution policies and remaining CON CP06-CP07.
-3. ARCH-03B/03C replace broad AUTH-13 and ARCH-04D replaces AUTH-14/XINT-06B.
+2. ARCH-03B/03C replace broad AUTH-13 and ARCH-04D replaces AUTH-14/XINT-06B.
    AUTH-OUTBOX-01/02 bracket hidden CON-02B dispatch; ARCH-04E2 activates only
    the proven TASK routing handler before ARCH-04E3 live composition.
    Remaining cleanup/conformance and queue/read work must use its exact owner;

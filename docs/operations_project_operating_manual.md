@@ -166,9 +166,8 @@ The active review/revision policy setup endpoints are:
 
 The latest setup run exposes bounded diagnostics and `finalized_compilation_id`.
 Use that exact ID to read the complete pre/post proposal, findings and suggested
-catalogue additions through the manager flow below. POL-06A implements hidden
-post-submit policy projection and approval. AUTH-12G supplies live authorization;
-public access remains POL-06B.
+catalogue additions through the manager flow below. POL-06B exposes separate
+post-submit policy inspection, approval and correction with AUTH-12G authority.
 
 The two policy `PUT` routes require a UUID `Idempotency-Key` and a quoted
 `If-Match` value. Use `"no-current-policy"` for the first version and the quoted
@@ -185,8 +184,8 @@ that run, rewrite its result or invoke a second post-submit derivation agent.
 Policy truth remains in the canonical versioned policy rows, not the setup
 ledger. POL-04B owns live unified wiring; POL-05A/05B and POL-06A/06B own separate
 append-only approval/projection/correction operations linked to that receipt.
-Pre-submission approval is public through POL-05B. Post-submit policy approval
-remains publicly unavailable until POL-06B wiring.
+Pre-submission approval is public through POL-05B; separate post-submit policy
+approval is public through POL-06B.
 
 An authorized Project Manager reviews the complete bounded proposal before
 approval. Effective intake combines mandatory platform defaults with approved
@@ -202,15 +201,15 @@ authority does not grant access to the complete proposal. The separate implement
 Manager to correct the exact known terminal result. These are new object-scoped
 contracts with AUTH-12F4 authorization; status-only setup reads do not
 provide them. POL-05B supplies public wiring. AUTH-12G authorizes the separate exact
-post-policy draft read; its public exposure remains POL-06B.
+post-policy draft read exposed by POL-06B.
 
 POL-06A implements deterministic post-submit projection, an exact complete draft
 read, separate approval and correction custody. It uses the canonical checker
 policy body and the saved unified result without document access or inference.
-The hidden operations use live AUTH-12G adapters. Only the fixed setup service
-derives; an exact-project Project Manager reads, approves or corrects. Public
-wiring remains POL-06B. There is no current public post-submit
-checker setup read. The current unified
+POL-06B connects those operations to public manager APIs and a fixed-service
+worker. Committed pre-submit approval schedules deterministic derivation. Only
+the fixed setup service derives; an exact-project Project Manager reads, approves
+or corrects. The current unified
 proposal package displays proposed post-submit checks for manager inspection,
 but does not approve a post-submit policy. The latest setup read exposes bounded
 status and lineage pointers; it does not substitute for the authorized package.
@@ -238,8 +237,7 @@ policy activation and contribution-policy publication remain independently gover
 but project activation requires both. Compiled
 post-submit setup output carries exact source/effective/pre-submit provenance,
 but activation remains blocked until the current compiled policy is approved
-through the separate approval operation (authorized internally by AUTH-12G; public wiring remains
-POL-06B). A correction request can supersede either a compiled or an
+through the separate approval operation (AUTH-12G authority and POL-06B public API). A correction request can supersede either a compiled or an
 already approved policy while its setup is current. It preserves the original
 body and receipts and requires a new unified generation and separate reapproval;
 it does not satisfy activation. A task cannot enter `READY` until it also locks the guide
@@ -473,15 +471,18 @@ finalized result, use this prefix:
 | `POST /pre-submission-approval` | Approve the displayed pre-submission target and warning acknowledgements |
 | `POST /corrections` | Record feedback and allocate one successor without invoking the agent |
 | `POST /corrections/{correction_operation_id}/dispatch` | Explicitly run that successor asynchronously |
+| `GET /post-submission-policies/{policy_id}` | Inspect the complete derived policy, lineage and saved correction |
+| `POST /post-submission-policies/{policy_id}/approval` | Separately approve that displayed policy |
+| `POST /post-submission-policies/{policy_id}/corrections` | Request a unified successor from that policy |
 
-All four require a current human Project Manager grant for the exact project.
+All these operations require a current human Project Manager grant for the exact project.
 Audit/Operator authority and a system-scoped manager grant do not grant proposal
 access. The source pointer is not permission to read another project's proposal.
 
 Approval and correction require exactly one UUID `Idempotency-Key` header.
 Duplicate occurrences are rejected with 422, even when their values match. Copy the exact
 `target` from the package into the request body; do not construct it from status
-summaries. Approval supplies `acknowledged_warning_hashes` from that package and,
+summaries. Pre-submission approval supplies `acknowledged_warning_hashes` from that package and,
 when replacing a prior approval, both prior approval identifiers. Correction
 supplies a meaningful `reason`. The body has no second idempotency key. Dispatch
 uses the committed correction operation ID for stable replay identity.
@@ -495,7 +496,24 @@ A `correction_requested` successor waits for this explicit dispatch. Both pointe
 remain available after dispatch and finalization; neither grants proposal access
 or bypasses current Project Manager authority. Initial setups have neither pointer.
 
-Approval atomically persists the existing artifact/effective/pre-submit chain.
+After pre-submission approval, poll `GET /proposal` for `post_submit_policy_id`.
+A null ID means derivation has not produced a policy for that exact compilation.
+The fixed setup worker derives from the saved result without another model call.
+Every 60 seconds, Beat scans committed approvals missing a derivation; bounded
+pages progress past unavailable candidates. Broker failure leaves approval
+committed and recoverable. No public derive endpoint or extra manager action is
+needed. Current authority and exact upstream/catalogue custody are rechecked on
+every delivery. Stale custody requires a new corrected generation and approval;
+it is never relabelled by recovery.
+
+Use the discovered policy ID with the three post-submission-policy suffixes.
+Copy that read's `target` into the separate approval or correction body;
+correction also includes `reason`. Both require exactly one UUID header key.
+The read includes the complete canonical `policy`, `lifecycle_status`, `current`,
+its approval operation ID and any canonical correction receipt. Dispatch uses
+the shared predecessor-compilation route above, including after manager handoff.
+
+Pre-submission approval atomically persists the existing artifact/effective/pre-submit chain.
 It does not approve the post-submit policy or activate the guide, and makes no
 model call. Correction leaves finalized history immutable. Dispatch commits its
 request and queue intent before broker publication; failed publication remains
