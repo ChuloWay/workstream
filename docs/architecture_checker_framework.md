@@ -325,8 +325,11 @@ and obtains another transaction-bound authorization before execution. Evidence
 and attempt completion commit together after a fresh locked-context check.
 The context, reservation, execution, and completion transactions acquire TASK
 and PROJECT context locks before contributor AUTH. Where needed,
-fixed-materializer AUTH follows, then attempt/evidence locks. The pre-inspection reservation follows the same order as execution, so
-concurrent tasks in one project cannot invert the shared materializer lock.
+fixed-materializer AUTH follows, then attempt/evidence locks. The ZIP inspection
+and reservation transaction takes context and authority locks before inspecting
+the archive, and records the reservation only after inspection. It follows the
+same lock order as execution, so concurrent tasks in one project cannot invert
+the shared materializer lock.
 The evidence captures a separate hash of the packet actually passed to the winning
 invocation; the database compares it with the attempt's requested packet.
 

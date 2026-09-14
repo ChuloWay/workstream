@@ -218,9 +218,10 @@ and workflow, with no retry reset, AUTH relaxation, migration or second lock own
 
 The implemented order is TASK context, PROJECT policy context, contributor AUTH,
 fixed-materializer AUTH, then attempt/evidence custody. It applies to the initial
-context check, pre-inspection reservation transaction, execution transaction and
+context check, ZIP inspection and reservation transaction, execution transaction and
 completion transaction; reacquiring an already held lock cannot replace the
-required initial order. Fixed-service authorization must still precede ZIP
+required initial order. The reservation row is written after ZIP inspection.
+Fixed-service authorization must still precede ZIP
 inspection and checker construction. Both production materializer-preparation
 callers and the real-AUTH test helper follow this order.
 
