@@ -149,6 +149,11 @@ all four correction path identities. The current authorization specification now
 describes delivered POL-06B composition. No product-code defect was identified.
 Local checks performed before the implementation commit are development proof;
 exact committed-head execution is established separately after freezing changes.
+Hosted preflight exposed six missing behavior-partition entries. The exact
+delivery/router/guard files are now registered through the existing additive
+admission rule; regression tests reject unrelated additions and removal of a
+retained target. No directory wildcard, permission change or gate exception is
+introduced.
 
 ## Reconciliation
 
