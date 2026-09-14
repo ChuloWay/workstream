@@ -4,7 +4,7 @@
 - Durable disposition: Complete
 - Intended merge outcome: partial CI retries select each lane's latest attempt without losing earlier successful lanes or weakening evidence validation.
 
-## Intent and current behavior
+## Intent
 
 Backend artifacts currently reuse one SHA/lane name across attempts. In run
 34881720409 the older incomplete schema artifact had a higher artifact ID than
@@ -34,7 +34,7 @@ deleting diagnostic artifacts, all-lane reruns, and scanning for any passing
 older bundle. No compatibility path for old artifact names is introduced;
 existing runs retain their original workflow definition.
 
-## Acceptance and proof
+## Acceptance criteria
 
 - Partial retry replaces only rerun lanes; aggregate-only retry reuses lanes.
 - Numeric attempt 10 beats 9 regardless of ID/list/directory order.
@@ -46,7 +46,7 @@ existing runs retain their original workflow definition.
   hosted full Backend, link/stale and Commitrail checks. Replay real failed-run
   artifact metadata to demonstrate why ID ordering is invalid.
 
-## Risk and review
+## Risk and review routing
 
 L1 CI change. Plan review first; CI-integrity and QA/test-delta review the frozen
 implementation, including evidence selection and fail-closed behavior. Human
@@ -63,3 +63,15 @@ the same strict selector for timing and evidence, and no fallback from invalid
 newest bundles. All are implemented. Measured Backend wall time on a retry is
 retry-inclusive: it starts at the earliest selected lane, including any wait
 between attempts; it is not fresh-run execution latency.
+
+## Evidence
+
+Focused merger, workflow inventory and unchanged evidence-validator tests
+exercise selection and integrity. Lexical-order and oldest-attempt mutations
+are rejected by the numeric-order and latest-invalid regression assertions.
+Hosted initial, partial-lane and aggregate-only retries provide the runtime
+integration proof; current runs and reviewer results belong in the PR.
+
+Review found obsolete complete-workflow-only rerun instructions. The testing
+operations guide now describes separate attempt bundles, safe partial retries,
+the no-fallback rule and retry-inclusive wall time.
