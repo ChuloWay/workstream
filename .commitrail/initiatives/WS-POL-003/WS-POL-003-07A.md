@@ -261,6 +261,10 @@ role revocation locks PROJECT before the exact grant. Splitting the existing ART
 context acquisition at TASK/PROJECT exposes a transaction-bound actor-only lock
 on the existing authorization port, shared with initial preflight. Full project
 authorization remains after PROJECT. No alternate authorization path is added.
+Invalid actor/request facts are rejected before opening the initial transaction;
+the same validator is reused by the transaction-bound actor lock. The existing
+`test_preflight_rejects_nonhuman_context_before_database_access` guards that
+ordering and remains unchanged.
 
 Denied role issuance must also preserve the order. The AUTH principal selector
 previously locked a service target before PROJECT even though services cannot
