@@ -667,9 +667,12 @@ draft; separate operation receipts bind its source and approved upstream chain.
 Approval cannot supply a replacement body. Correction creates the existing
 unified successor, preserving the original result and policy evidence.
 
-These hidden operations use live AUTH-12G authorization: only the fixed setup
-service derives, and exact-project managers read, approve or correct.
-Public access remains POL-06B. Projection and approval neither
+POL-06B exposes these operations under AUTH-12G: only the fixed setup
+service derives, and exact-project managers read, approve or correct. Committed
+pre-submission approval schedules derivation; an approval-ID recovery scan
+republishes missing derivations in bounded pages. Derivation supersedes any
+still-current prior policy. The proposal read identifies its exact derived
+policy, whose complete body is separately reviewed and approved. Projection and approval neither
 open guide documents nor invoke a model or runtime checker. Supported structural
 checks do not establish substantive work quality, and capability suggestions do
 not register implementations or bypass required gaps.

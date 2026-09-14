@@ -930,14 +930,15 @@ role-string approval/supersession columns remain inert retained data; they do no
 authorize operations and receive no new writes.
 
 Correction preserves the result and policy body, supersedes the policy, and
-allocates the existing unified successor with bounded manager feedback. A newly
-approved upstream generation produces the next policy and links its predecessor.
+allocates the existing unified successor with bounded manager feedback. After a new upstream generation is approved, subsequent deterministic
+derivation produces the next policy and links its predecessor.
 It may have the same canonical hash: new generation/approval custody identifies
 the replacement. A general unified correction also invalidates the predecessor's
 current upstream; subsequent post-policy derivation supersedes it atomically.
 
-Hidden operations consume the saved result without model, document or checker
-calls. AUTH-12G supplies live authorization; public wiring remains POL-06B. Setup remains
+The policy operations consume the saved result without model, document or checker
+calls. AUTH-12G supplies authorization; POL-06B connects public manager decisions
+and approval-driven automatic derivation/recovery. Setup remains
 immutable. The existing complete proposal retains requirements, exact registered
 bindings, safe findings and non-executable capability suggestions. Evidence binds
 assigned original-document versions and hashes; model page/section attributions

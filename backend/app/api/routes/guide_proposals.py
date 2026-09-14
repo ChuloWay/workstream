@@ -3,21 +3,24 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.adapters.artifacts import guide_document_manifest_port
 from app.adapters.checkers import project_guide_approval_compiler
 from app.api.deps.authorization import enforce_human_authorization_read
 from app.api.deps.guide_proposals import ProposalRequest, CorrectionDispatchRequest, get_proposal_request, get_correction_dispatch
-from app.core.api_controls import ApiErrorResponse, StructuredHTTPException
+from app.core.api_controls import ApiErrorResponse
 from app.modules.projects.api.guide_proposal_package import GuideProposalReviewPackage
 from app.modules.projects.api.guide_proposals import (
     GuideProposalApproval, GuideProposalApprovalInput, GuideProposalApprovalReceipt,
     GuideProposalCorrection, GuideProposalCorrectionInput, GuideProposalCorrectionReceipt,
     GuideProposalError, GuideProposalSelection, GuideProposalDispatchResponse,
 )
-from app.core.api_controls import parse_idempotency_key
+from app.api.deps.guide_proposal_http import (
+    IDEMPOTENCY_PARAMETER, require_proposal_key, proposal_http_error, require_matching_target,
+)
+from app.adapters.projects import dispatch_post_policy_derivation_after_commit
 
 router = APIRouter(
     prefix="/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}",
@@ -25,40 +28,6 @@ router = APIRouter(
     dependencies=[Depends(enforce_human_authorization_read)],
     responses={code: {"model": ApiErrorResponse} for code in (404, 409, 422, 503)},
 )
-
-
-IDEMPOTENCY_PARAMETER = {
-    "name": "Idempotency-Key", "in": "header", "required": True,
-    "schema": {"type": "string", "format": "uuid"},
-}
-
-
-def require_proposal_key(request: Request) -> UUID:
-    """Require one key before FastAPI resolves identity or SQL."""
-    values = request.headers.getlist("Idempotency-Key")
-    return parse_idempotency_key(values[0] if len(values) == 1 else "")
-
-
-def proposal_http_error(exc: GuideProposalError) -> StructuredHTTPException:
-    """Conceal selectors and authority; retain bounded actionable conflicts."""
-    if exc.code in {"authority_unavailable", "proposal_unavailable"}:
-        code, status, message = "proposal_unavailable", 404, "Guide proposal unavailable"
-    elif exc.code == "storage_unavailable":
-        code, status, message = exc.code, 503, "Guide proposal storage unavailable"
-    else:
-        code, status, message = exc.code, 409, "Guide proposal conflicts with current state"
-    return StructuredHTTPException(
-        status_code=status, detail=code, error_code=code, error_message=message,
-        retryable=status == 503,
-    )
-
-
-def require_matching_target(target, project_id, guide_id, compilation_id):
-    """Never let a body substitute an object from outside the selected path."""
-    if (target.project_id, target.guide_id, target.compilation_id) != (
-        project_id, guide_id, compilation_id
-    ):
-        raise proposal_http_error(GuideProposalError("proposal_unavailable"))
 
 
 @router.get(
@@ -106,6 +75,7 @@ async def approve_proposal(
             pre_capabilities=pre, post_capabilities=post, planner=planner,
         )
         await request.session.commit()
+        await dispatch_post_policy_derivation_after_commit(response.operation_id)
         return response
     except GuideProposalError as exc:
         raise proposal_http_error(exc) from exc

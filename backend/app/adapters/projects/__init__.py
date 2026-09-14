@@ -4,7 +4,12 @@ from app.modules.projects.api.guide_documents import ProjectGuideDocumentScopePo
 from app.modules.projects.api.guide_proposals import GuideProposalOperationsPort, GuideCorrectionDispatchPort
 from app.modules.authorization.api.guide_proposal_review import GuideProposalAuthorizationPort
 from app.modules.authorization.api import ProjectGuideCompilationAuthorizationPort
+from uuid import UUID
 from collections.abc import Callable
+from app.modules.authorization.api.post_policy import PostPolicyAuthorizationPort
+from app.modules.projects.api.post_policy import PostPolicyOperationsPort, PostPolicyDeliveryPort
+from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPolicy
+from app.modules.projects.post_policy.delivery import PostPolicyServiceAuthority
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.modules.projects.api.guide_documents import GuideDocumentManifestPort, GuideDocumentAccessFactory
 from app.interfaces.project_agents import ProjectGuideAgentRuntime
@@ -155,3 +160,39 @@ def project_guide_correction_dispatch(
     return GuideCorrectionDispatchService(
         session, authorization, CompilationRequestInputs(material, pre, post, configuration),
     )
+
+
+def project_post_policy_service(
+    session: AsyncSession, authorization: PostPolicyAuthorizationPort, catalogue: PostSubmitCatalogue,
+) -> PostPolicyOperationsPort[ActorIdentityFacts, GuideProposalAuthorizationPort, CompiledPostSubmitPolicy]:
+    """Compose the canonical post-policy owner with explicitly supplied authority."""
+    from app.modules.projects.post_policy.service import PostPolicyService
+
+    return PostPolicyService(session, authorization, catalogue)
+
+
+def project_post_policy_delivery_port(
+    session_factory: async_sessionmaker[AsyncSession], *,
+    authority: PostPolicyServiceAuthority, catalogue: PostSubmitCatalogue,
+) -> PostPolicyDeliveryPort:
+    """Compose deterministic delivery without document or agent capabilities."""
+    from app.modules.projects.post_policy.delivery import PostPolicyDeliveryService
+
+    return PostPolicyDeliveryService(session_factory, authority=authority, catalogue=catalogue)
+
+
+async def pending_post_policy_approvals(
+    session_factory: async_sessionmaker[AsyncSession], *, after: UUID | None, limit: int,
+) -> list[UUID]:
+    """Read only pending immutable approval identifiers for a bounded internal scan."""
+    from app.modules.projects.post_policy.delivery import pending_approval_ids
+
+    async with session_factory() as session:
+        return await pending_approval_ids(session, after=after, limit=limit)
+
+
+async def dispatch_post_policy_derivation_after_commit(approval_operation_id: UUID) -> bool:
+    """Publish the committed approval; existing custody survives broker failure."""
+    from app.modules.projects.post_policy.queue import dispatch_after_commit
+
+    return await dispatch_after_commit(approval_operation_id)

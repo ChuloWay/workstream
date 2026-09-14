@@ -1,4 +1,4 @@
-"""Hidden, zero-inference post-policy projection and exact manager decisions."""
+"""Canonical, zero-inference post-policy projection and exact manager decisions."""
 
 from datetime import UTC, datetime
 from uuid import NAMESPACE_URL, UUID, uuid5

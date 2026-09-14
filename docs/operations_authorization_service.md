@@ -706,7 +706,9 @@ only for the exact finalization resource. AUTH-12G activates post-submit derivat
 for this fixed service, binding complete finalized lineage and policy commitments
 through the same request-local PREP and root transaction. Exact-project managers
 separately authorize post-policy read, approval and correction; diagnostic grants
-do not permit proposal access. POL-06B public composition remains pending.
+do not permit proposal access. POL-06B exposes those manager operations and
+delivers deterministic derivation through the fixed setup service. Every delivery
+resolves current service authority and starts a fresh root transaction.
 The setup service is not admitted through a human HTTP route,
 and it never receives a fabricated human grant. The baseline seeds no profile,
 link, AdminRoleGrant, or ProjectRoleGrant. An Access Administrator may use the existing controlled

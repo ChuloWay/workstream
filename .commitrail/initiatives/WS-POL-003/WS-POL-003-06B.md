@@ -1,7 +1,7 @@
 # WS-POL-003-06B — Public post-submission policy review
 
 - Initiative: `WS-POL-003`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: Pre-submission approval automatically schedules deterministic post-submission policy derivation; project managers can discover, inspect, separately approve, or request correction of that policy through public APIs.
 
 ## Intent
@@ -11,11 +11,11 @@ step. The manager approves the pre-submission proposal first, then inspects and
 separately approves its derived post-submission policy. Both correction origins
 use the existing unified correction and explicit manual dispatch operation.
 
-## Current behavior
+## Starting behavior
 
-POL-06A owns immutable derivation, approval and correction in
-`backend/app/modules/projects/post_policy/`. AUTH-12G supplies the exact fixed
-service and project-manager adapters. Neither is connected to a public route or
+At the start of this change, POL-06A owned immutable derivation, approval and correction in
+`backend/app/modules/projects/post_policy/`. AUTH-12G supplied the exact fixed
+service and project-manager adapters. Neither was connected to a public route or
 automatic continuation. `guide_proposals.py` exposes the upstream approval and
 canonical correction dispatch; its authorized proposal read does not yet identify
 the downstream policy. These existing operations and receipts remain the owners.
@@ -35,7 +35,7 @@ the downstream policy. These existing operations and receipts remain the owners.
   beat scheduling, and PROJECTS queue publication using existing worker utilities.
 - Focused public/worker/PostgreSQL tests and affected fixtures; exact test-lane
   registration and required structural inventories for those files.
-- Current README, API/checker/operating documentation, roadmap, POL navigation,
+- Current README, API/checker/operating documentation, roadmap, POL/AUTH navigation,
   adopted chunk contract and this change record.
 
 ### Not allowed
@@ -83,21 +83,21 @@ subsystem would duplicate durable owners. Neither is needed.
 
 ## Acceptance criteria
 
-- [ ] Public approval commits upstream custody and schedules the exact derivation;
+- [x] Public approval commits upstream custody and schedules the exact derivation;
   broker failure or process interruption can be recovered from that custody.
-- [ ] Real PostgreSQL delivery/redelivery creates one compiled policy and one
+- [x] Real PostgreSQL delivery/redelivery creates one compiled policy and one
   derivation receipt with matching hashes; no extra provider/document/checker call.
-- [ ] Project managers discover the policy from an existing public read and
+- [x] Project managers discover the policy from an existing public read and
   inspect its complete canonical body, lifecycle and upstream lineage.
-- [ ] Approval remains a separate explicit mutation. Exact project scope, current
+- [x] Approval remains a separate explicit mutation. Exact project scope, current
   role grants, revocation, stale/mixed targets and replay retain existing guards.
-- [ ] Lost correction response plus creator revocation is recoverable entirely
+- [x] Lost correction response plus creator revocation is recoverable entirely
   through public reads and the existing manual dispatch API by another manager.
-- [ ] Both new mutation routes reject missing/duplicate/malformed keys before
+- [x] Both new mutation routes reject missing/duplicate/malformed keys before
   identity or database work; mismatched path/body identities are concealed.
-- [ ] Failed authority, invalid/stale custody and transactional failures leave no
+- [x] Failed authority, invalid/stale custody and transactional failures leave no
   partial policy/operation/audit state; shared existing guard tests remain intact.
-- [ ] Public OpenAPI and current documentation agree; POL-07 remains the next
+- [x] Public OpenAPI and current documentation agree; POL-07 remains the next
   single CHECKER service-port boundary. No submitted-work evaluation or guide activation is claimed.
 
 ## Risk and review routing
@@ -111,13 +111,25 @@ subsystem would duplicate durable owners. Neither is needed.
 
 ## Evidence
 
+The public proof lives in `tests/projects/post_policy/test_public_api.py`:
+`test_public_policy_body_separate_approval_replay_and_revocation` checks complete
+canonical body/hash equality and current authority; the commit-failure test
+stages real writes and proves rollback for read, approval and correction.
+`test_public_recovery.py` proves failed-publication recovery, public-only manager
+handoff, stale denial, service revocation, post-write rollback, keyset progression
+and independent concurrent worker delivery. `test_delivery_worker.py` isolates
+transport admission, retry classification, pagination and cleanup. Existing
+POL-06A/AUTH-12G database constraints, compiler and authorization tests remain
+required; none protect an obsolete compatibility implementation.
+
+
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
 | Existing owners support this boundary | Inspected post-policy service/repository/API, proposal routes/custody, AUTH composition and Celery registration on main `a81df4d6` | Contract feasible | Public/worker execution proof remains to be implemented |
-| Public workflow and authority | Future focused PostgreSQL/public tests in `backend/tests/projects/post_policy/`, existing AUTH post-policy and proposal tests | Pending | Includes actual manager handoff and full policy assertions |
-| Recovery and zero inference | Future delivery/scan tests with real committed approval, failed publication, redelivery and fail-on-call runtime/document hooks | Pending | A broker mock proves publication boundary; hosted worker checks supplement it |
+| Public workflow and authority | `pytest tests/projects/post_policy/test_public_api.py tests/projects/post_policy/test_public_recovery.py` with isolated PostgreSQL | Executed public body, approval/replay/revocation, broker recovery and manager-handoff proofs | Hosted full regression remains the broad check |
+| Recovery and zero inference | The public recovery tests plus `pytest tests/projects/post_policy/test_delivery_worker.py` | Actual Celery task functions, real SQL/AUTH and fail-on-call runtime/document/evaluator hooks | Publication transport is controlled; this does not claim a live broker drill |
 | Test integrity and coverage | Required hosted seven-lane suite, inventory checks and affected module coverage at least 90% | Pending | No skipped/deselected tests accepted |
-| Current documentation | Markdown-link check, stale wording scan and roadmap assessment | Pending | No local sheet exports present |
+| Current documentation | Markdown-link check, stale wording scan and roadmap assessment | Current public boundaries and next dependency reconciled | No local sheet exports present |
 
 ## Review findings
 
@@ -126,8 +138,7 @@ advances past denied candidates and schedules the next bounded page; each new
 sweep starts at the beginning. Delivery reloads immutable approval selection and
 digest, resolves the provisioned service, rolls back identity reads, then opens
 a fresh root transaction. Discovery binds the requested compilation and its own
-approval custody, never the guide-wide current approval tip. Focused tests must
-prove each boundary. Implementation review remains outstanding.
+approval custody, never the guide-wide current approval tip. Focused tests protect each boundary.
 
 ## Reconciliation
 

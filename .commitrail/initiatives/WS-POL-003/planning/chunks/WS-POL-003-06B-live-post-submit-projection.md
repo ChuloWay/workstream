@@ -1,6 +1,6 @@
 # Chunk Contract: WS-POL-003-06B - Live Post-Submit Projection
 
-Durable disposition: Planned. Risk: L1. POL-06A and AUTH-12G are complete.
+Durable disposition: Complete. Risk: L1. POL-06A and AUTH-12G are complete.
 The bounded implementation and proof contract is
 [WS-POL-003-06B](../../WS-POL-003-06B.md).
 
