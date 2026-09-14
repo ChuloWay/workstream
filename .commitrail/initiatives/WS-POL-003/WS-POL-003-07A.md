@@ -40,29 +40,51 @@ generation is process-local and cannot be reassigned to a retried upload.
 1. Add one ART attempt row, uniquely keyed by actor and idempotency key. Its
    immutable identity binds actor/link, project/task/assignment/predecessor,
    locked plan/guide/policies/catalogue, packet digest, archive digest/size,
-   storage scheme and exact prepared generation. The logical attempt UUID is
+   and storage scheme. The original execution generation is recorded separately
+   and is immutable. The logical attempt UUID is
    deterministically derived from its key namespace. Request digest binds all
-   facts; a changed generation or other fact under the same key is a conflict.
+   logical facts; changed packet, content or lineage under the same key conflicts.
+   A retry may spool and inspect bytes to confirm the same archive/manifest, but
+   its new scratch generation cannot become the original execution generation.
 2. Under fresh contributor and fixed materializer authority, commit the
-   reservation before any checker member is invoked. The original prepared
+   reservation after bounded ZIP inspection and before any checker member is
+   invoked. Consume the first exact AUTH handle for inspected custody/reservation.
+   The original prepared
    authorization cannot cross that commit: obtain and consume fresh authority
-   in the existing materialization transaction. Retain TASK then PROJECT lock
+   in the existing materialization transaction. The existing adapter resets its
+   handle after consume and can issue a fresh one; no fallback adapter is added.
+   Prove both consumes against actual AUTH idempotency/audit semantics. Retain TASK then PROJECT lock
    ordering before attempt-row locks. Do not hold an attempt lock across checks.
-3. Only the request that created the reservation can proceed. An existing
+3. Only the request that created the reservation can proceed. ART mints an opaque,
+   nonserializable one-use winning claim only after its reservation commits.
+   Bind it to the exact original prepared object/generation and request digest;
+   consume it before processor construction and verify the committed reserved
+   row. A failed commit cannot leave an executable claim. Final persistence
+   requires the corresponding execution receipt, not an attempt UUID or boolean.
+   An existing
    unresolved reservation fails closed, including crashes after checker return
    but before evidence commit. No timeout silently resets it. A genuinely new
    authorized attempt uses a new key and fresh scratch custody.
 4. In the existing fresh evidence transaction, revalidate authority and locked
    lineage, persist the canonical evidence and atomically link it to the attempt
-   as completed. Database guards reject rewritten request facts, illegal state
-   transitions, duplicate evidence links and cross-resource completion.
-5. Completed exact replay revalidates authority and resolves that linked evidence
+   as completed. New evidence also records its attempt ID/request digest and
+   includes that binding in its operation identity. Database guards reject
+   rewritten request facts, illegal state transitions, duplicate evidence links
+   and cross-resource or same-resource/different-packet completion. Retained
+   evidence receives no invented attempt binding.
+5. Completed exact replay revalidates contributor and fixed-service authority
+   using the stored original materializer facts in a fresh transaction, including
+   a fresh AUTH prepare/consume without scratch/member access. It resolves linked evidence
    before any member invocation. Return the canonical reference/result with no
    freshly minted `PreSubmitPassCapability`. Existing durable-put recovery may
-   reuse its own receipt; missing durable continuation never licenses rebinding
-   old evidence to another generation.
-6. Persist the bounded member metadata currently included in the result manifest
-   hash but omitted from result rows. Add a nullable metadata column without
+   reuse its own receipt; missing durable continuation returns explicit
+   infrastructure unavailability and requires a new authorized attempt, never
+   re-execution under the old key. Close/discard any retry scratch. The response
+   retains the original evidence/generation; no field is rewritten to the retry
+   generation. Recovery is an evidence read, not proof that new custody passed.
+6. Persist bounded member metadata and definition order, currently included in
+   the result manifest hash but omitted from result rows. Row ordinal is not
+   definition order. Add nullable metadata/order columns without
    rewriting retained evidence. New writes always include validated metadata;
    NULL retained values cannot become an empty fabricated value. Reconstruct and
    verify the complete manifest digest for new attempt replay. No reservation
@@ -86,7 +108,9 @@ an unavailable/uncertain attempt to later callers, not contributor failure.
 - Completion and evidence rows commit or roll back together; direct SQL cannot
   cross-link evidence or mutate immutable attempt identity.
 - Replay never mints a new upload capability; different scratch bytes/generation
-  do not inherit old passing evidence. Retained rows remain unchanged.
+  do not inherit old passing evidence. Byte-identical reupload may recover the
+  original completed result only after fresh authority; it cannot execute with
+  the original claim or produce a new pass capability. Retained rows remain unchanged.
 - Metadata reconstruction verifies the exact result digest; missing/corrupt
   metadata fails closed rather than filling defaults.
 - Real scratch/member execution and PostgreSQL proof are required. Fakes only
