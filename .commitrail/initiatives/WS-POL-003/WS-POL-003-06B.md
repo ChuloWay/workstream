@@ -140,6 +140,16 @@ digest, resolves the provisioned service, rolls back identity reads, then opens
 a fresh root transaction. Discovery binds the requested compilation and its own
 approval custody, never the guide-wide current approval tip. Focused tests protect each boundary.
 
+Implementation review identified missing regression proof for discovery after a
+newer upstream approval, valid-key service HTTP denial, and correction path/body
+substitution. The existing two-generation replacement test now reads both
+compilations through public APIs and asserts their distinct policy IDs despite
+the shared newer approval tip. Public tests cover valid-key service denial and
+all four correction path identities. The current authorization specification now
+describes delivered POL-06B composition. No product-code defect was identified.
+Local checks performed before the implementation commit are development proof;
+exact committed-head execution is established separately after freezing changes.
+
 ## Reconciliation
 
 - Current-source reconciliation: Main `a81df4d6` includes merged POL-06A and

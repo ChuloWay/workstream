@@ -103,6 +103,9 @@ async def test_public_policy_body_separate_approval_replay_and_revocation(
             for replaced in (str(command.project_id), str(command.guide_id), str(command.compilation_id), policy_id):
                 invalid = policy_path.replace(replaced, str(uuid4()))
                 assert (await client.post(invalid + "/approval", headers=headers, json=payload)).status_code == 404
+                corrected = await client.post(invalid + "/corrections", headers=headers,
+                    json={**payload, "reason":"Reconsider the evaluation requirements."})
+                assert corrected.status_code == 404, corrected.text
             await revoke_review_grant(factory, actor, grant)
             assert (await client.get(policy_path)).status_code == 404
             assert (await client.post(policy_path + "/approval", headers=headers, json=payload)).status_code == 404
@@ -148,3 +151,28 @@ async def test_public_commit_failures_rollback_policy_and_correction_evidence(
             response = await client.post(path + "/corrections", headers={"Idempotency-Key":str(uuid4())},
                 json={"target":invalid, "reason":"Reconsider the evidence requirement."})
             assert response.status_code == 409, response.text
+
+
+@pytest.mark.parametrize("suffix", ["", "/approval", "/corrections"])
+async def test_service_http_denial_with_valid_key_precedes_identity_and_sql(suffix):
+    from types import SimpleNamespace
+    from httpx import ASGITransport, AsyncClient
+    from app.api.deps.auth import get_auth_verification_result
+    from app.api.deps.api_controls import enforce_authorization_read_rate_limit
+    from app.api.deps.authorization import get_authorization_actor
+    from app.db.session import get_db_session
+
+    app = create_app()
+    app.dependency_overrides[get_auth_verification_result] = lambda: SimpleNamespace(token=SimpleNamespace(subject_kind="service"))
+    app.dependency_overrides[enforce_authorization_read_rate_limit] = lambda: None
+    def forbidden():
+        pytest.fail("service admission reached identity or SQL")
+    app.dependency_overrides[get_authorization_actor] = forbidden
+    app.dependency_overrides[get_db_session] = forbidden
+    path = f"/api/v1/projects/{uuid4()}/guides/{uuid4()}/compilations/{uuid4()}/post-submission-policies/{uuid4()}"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        if suffix:
+            response = await client.post(path + suffix, json={}, headers={"Idempotency-Key":str(uuid4())})
+        else:
+            response = await client.get(path)
+    assert response.status_code == 404, response.text

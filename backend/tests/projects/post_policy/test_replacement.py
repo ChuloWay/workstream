@@ -12,6 +12,7 @@ from app.modules.projects.api.post_policy import PostPolicyApproval, PostPolicyC
 from tests.projects.guide_compilation.helpers import service_actor
 from tests.projects.guide_compilation.proposals.pg_support import proposal_case, read_package, finalize_corrected_attempt
 from tests.projects.guide_compilation.proposals.test_postgresql import approve
+from tests.projects.guide_compilation.proposals.public_support import proposal_client, proposal_path
 from .pg_support import prepare_post_policy, operate
 
 
@@ -45,6 +46,17 @@ async def test_corrected_generation_replaces_policy_and_retains_original_receipt
         assert second.target.predecessor_policy_id == first.target.policy_id
         assert second.target.policy_hash == first.target.policy_hash
         assert second.target.proposal.setup_generation == first.target.proposal.setup_generation + 1
+        # Both reads see the newer guide-wide approval tip. Each requested
+        # compilation must still identify its own separately derived policy.
+        async with proposal_client(factory, actor) as client:
+            old_package = await client.get(proposal_path(command) + '/proposal')
+            new_package = await client.get(proposal_path(next_command) + '/proposal')
+            assert old_package.status_code == new_package.status_code == 200
+            assert old_package.json()['current_approval_operation_id'] == str(upstream.operation_id)
+            assert new_package.json()['current_approval_operation_id'] == str(upstream.operation_id)
+            assert old_package.json()['post_submit_policy_id'] == str(first.target.policy_id)
+            assert new_package.json()['post_submit_policy_id'] == str(second.target.policy_id)
+            assert first.target.policy_id != second.target.policy_id
         assert await operate(factory, setup, command.project_id, None, 'derive', derive) == first
         assert await operate(factory, actor, command.project_id, grant, 'approve', approval) == approved
         async with factory() as session:
