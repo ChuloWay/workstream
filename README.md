@@ -535,8 +535,12 @@ without rerunning checks or issuing a new upload capability. An uncertain attemp
 cannot execute again under the same key. POL-07B connects the internal
 checker phase service and removes the standalone JSON precheck. Both fresh
 pre-submit execution and completed replay use that service, with ART retaining
-canonical evidence ownership. Its post-submit command remains unavailable until
-the durable execution and authority boundaries land. The next guide boundary
+canonical evidence ownership. The existing Celery pre-review gate still calls
+`CheckerService.run_queued_pre_review_gate`; it does not call the new phase
+service. That service's `evaluate_post_submission` uses
+`UnavailablePostSubmissionExecution` and raises
+`PostSubmissionExecutionUnavailable` until its durable execution and authority
+boundaries land. The next guide boundary
 is CP06 selected ContributionPolicy validation, then CP07 binding and AUTH-12H
 activation.
 

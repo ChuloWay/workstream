@@ -7,7 +7,7 @@
 
 Chunk 6 creates the durable checker run and checker result contract for Week 2.
 
-This chunk does not run the full checker framework yet. It defines the durable post-submit checker records, the pre-submit intake feedback response contract, schemas, service boundaries, and read APIs that later chunks use for static checks, internal auto checks, and review gating.
+This chunk does not run the full checker framework yet. It defines the durable post-submit checker records, the separate internal ART pre-submit evidence boundary, schemas, service boundaries, and read APIs that later chunks use for static checks, internal auto checks, and review gating.
 
 ## Scope
 
@@ -18,7 +18,7 @@ This chunk does not run the full checker framework yet. It defines the durable p
 - trigger source fields
 - routing recommendation fields
 - source tracking for checker-caused `needs_revision`
-- pre-submit intake feedback response contract
+- internal ART pre-submit evidence boundary
 - backend read APIs for checker runs and results
 - internal service method for creating checker runs/results
 - migration and ORM metadata
@@ -194,36 +194,19 @@ Normalization rules:
 - equivalent manifests with different JSON key order or entry order must produce the same hash
 - any changed artifact hash, size, path, or notes must produce a different hash
 
-## Pre-Submit Intake Feedback Contract
+## Pre-Submit Intake Evidence Contract
 
-Pre-submit checks run before a submission is created. They are authoritative for submission intake and return immediate API feedback without creating an authoritative post-submit checker run.
+Pre-submit checks run against the uploaded ZIP before a Submission exists.
+Hidden preparation invokes the internal phase service under ART custody.
+ART retains bounded results tied to the exact task/assignment, locked guide
+and policy hashes, verified ZIP commitment, semantic manifest, prepared
+generation and execution attempt. Completed replay returns the canonical
+stored evidence without another checker invocation or upload capability.
 
-Workstream loads the locked generated project pre-submit checker compiled bundle hash
-for the task's guide version. Workers submit only draft packet fields. They
-cannot choose checker names, policy versions, blocking rules, severities,
-results, or outcomes.
-
-Response fields:
-
-- `run_type = pre_submit`
-- `task_id`
-- `actor_id`
-- `request_hash`
-- `eligible_to_submit`
-- `artifact_manifest_hash`
-- `blocking_failure_count`
-- `warning_count`
-- `results`
-- `submission_created = false`
-- `durable_checker_run_id = null`
-- `created_at`
-- `expires_at`
-
-Pre-submit feedback binds to `task_id`, the task's locked guide source snapshot,
-effective project submission artifact policy hash, pre-submit checker bundle hash,
-server-verified ZIP commitment, packet fields and canonical semantic manifest. It does not
-require a finalized `submission_id` or finalized submission version because
-those do not exist before submission creation.
+Contributors supply the ZIP and packet headers; they cannot choose checker
+names, locked policy versions, blocking rules, severities or outcomes. No
+public precheck response schema is defined here. Pre-submit evidence is not a
+post-submit CheckerRun and does not require a finalized Submission ID/version.
 
 Blocking pre-submit failures prevent submission creation. POL-07B removes the
 standalone JSON precheck and its response schema. Hidden ZIP preparation
@@ -334,7 +317,7 @@ Internal services may only create new runs/results or transition a run status th
 - artifact manifest hash follows the canonical SHA-256 JSON algorithm
 - equivalent manifests with different entry or key order hash identically
 - duplicate artifact names are rejected
-- pre-submit invalid packet returns structured feedback without creating a submission
+- hidden ZIP preparation rejects invalid intake without creating a Submission; ART retains bounded evidence and public structured feedback remains pending
 - pre-submit result cannot be reused as post-submit gate proof
 - checker results are tied to one checker run
 - canonical status/severity values are enforced by schemas/service constants

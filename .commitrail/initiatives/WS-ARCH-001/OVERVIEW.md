@@ -12,7 +12,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   [ARCH-04A consolidation](WS-ARCH-001-04A.md) canonical post-submit contracts/conformance.
 - Intent: keep product modules behind explicit ports and composition roots.
 - Current boundary: one CHECKERS catalogue, compiler/parser and implementation
-  per checker ID serve active policy consumers; phase execution remains unavailable.
+  per checker ID serve active policy consumers; production post-submit phase
+  execution remains unavailable.
 - Next usable boundary: CP06 selected ContributionPolicy validation and CP07
   guide binding, then AUTH-12H activation. POL-04B unified setup, POL-05/06
   manager operations and POL-07B internal phase composition are delivered.

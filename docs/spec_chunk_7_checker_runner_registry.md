@@ -9,7 +9,7 @@ Chunk 7 turns the checker contract into a working backend slice.
 
 Workstream now has a checker module that can:
 
-- return pre-submit intake feedback before a submission row is created
+- evaluate pre-submit ZIP intake and retain internal ART evidence before a submission row is created
 - run registered structural checkers against a real finalized submission
 - persist durable `checker_runs` and `checker_results`
 - validate checker policy names against the registry
@@ -195,7 +195,7 @@ Worker responses must not expose:
 - assigned worker reads are sanitized
 - authorized manual checker triggers are linked to audit events
 - non-latest submissions cannot receive new checker runs
-- unassigned workers cannot read or precheck another worker's task
+- submitters cannot prepare another contributor's assigned task; post-submit checker reads retain their object-level visibility guards
 - caller-supplied fake checker result payloads are rejected by schemas
 - tests use real Postgres-backed API flows, not monkeypatch-only unit tests
 

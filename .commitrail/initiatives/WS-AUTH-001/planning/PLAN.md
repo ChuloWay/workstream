@@ -12,8 +12,8 @@ AUTH-13/14 cutovers are not additional implementation work.
   is delivered by the [combined record](../WS-AUTH-001-12G.md), following hidden
   POL-06A post-policy operations. POL-06B public wiring and POL-07B internal
   phase composition are delivered.
-- [AUTH-12H](chunks/WS-AUTH-001-12H-guide-activation.md) follows delivered POL-07B, then CP06 selected-policy
-  validation and hidden CP07 guide binding. It activates only the complete PROJECTS guide command.
+- [AUTH-12H](chunks/WS-AUTH-001-12H-guide-activation.md) requires completed POL-07B phase composition, CP06
+  selected-policy validation and hidden CP07 guide binding. It activates only the complete PROJECTS guide command.
 - CP05 owns exact ContributionPolicy-action activation after merged CP04B.
 - ARCH-03B owns task behavior and ARCH-03C owns its exact activation.
   [AUTH-13 is superseded](chunks/WS-AUTH-001-13-task-assignment-cutover.md).
