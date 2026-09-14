@@ -3,7 +3,8 @@
 - Disposition: Planned
 - Prepared by: OxVictor
 - Purpose: Review and agreement before implementation
-- Repository baseline reconciled: `6feef398`
+- Repository baseline reconciled: `a3e4c696`
+- Pinned API handoff baseline: `6feef39834737eed106773fdaed6003561fd021a`
 - Current change: [Planning proposal](WS-MCP-002-PLAN.md)
 
 ## 1. What I Understand We Are Building
@@ -306,16 +307,36 @@ Release requires 27/27 positive cases, corresponding negative and replay cases, 
 
 The maintainer's [clarification](https://github.com/Flow-Research/workstream/pull/401#issuecomment-5654493551) confirms that tool results return the declared Workstream API fields the caller is authorized to receive, including profile data, guide content and pagination cursors. A declared response field is allowed even when its value also appeared in the request. Do not add an indiscriminate input-echo filter that removes valid response data. Credentials must never appear in results. Sensitive business content stays out of logs, traces and diagnostic errors; raw arguments are not copied into diagnostic output. These rules preserve authorized response data without adding fields unavailable through the API.
 
-## 9. Proposed PR Order
+## 9. Chunk Map and PR Boundaries
 
 Before runtime work, jointly review the completed source mapping and its schema/workflow differences, capture the pinned running backend schemas, freeze the tool definitions, and agree the MCP-to-API credential contract. The API-list handoff is complete; the mapping does not itself settle those remaining decisions. Then proceed through the following proposed implementation PRs:
 
-1. **Runtime and identity foundation:** independent package and container, SDK setup, authentication boundary, HTTP client, and one profile-read tool proving the full request path. The final 27-tool catalogue is not claimed complete here.
-2. **Profile and access tools:** complete the remaining profile, authorization, actor, and administrative-grant operations with focused authorization tests.
-3. **Project setup and participation:** complete the agreed project, guide, policy, candidate, and project-grant tools, including replay and conflict tests.
-4. **Release verification:** prove the complete agreed catalogue against the running API and identity environment, finish client/deployment instructions, and close remaining integration findings.
+The following stable IDs replace the four broad headings. Each row is one intended implementation PR and one observable outcome. Paths are proposed ownership under the new `mcp_server/` package, not claims that those files exist. Tool names below omit only the common `workstream_` prefix. Every one of the 27 names in section 6 appears exactly once. All chunks also own their matching combined change record and directly affected tests/docs; they do not own backend product behavior.
 
-Each PR will include its relevant tests and documentation. PR 1 establishes protocol, credential, privacy and independent-package tests; PRs 2 and 3 add binding, authority, replay and drift tests for every tool they introduce. PR 4 closes the complete ten-suite matrix and the 27-tool direct-API parity drill. Security and deployment checks begin with the first PR and become broader as tools are added. Later lifecycle tools require their own agreed scope.
+| Change ID and outcome | Depends on | Owned modules and exact new tools | PR acceptance evidence and next usable boundary |
+| --- | --- | --- | --- |
+| WS-MCP-002-01: one authenticated self-profile read through an independently installed adapter | Catalogue/schema agreement and credential decision below; [first contract](WS-MCP-002-01.md) | Package/container/configuration, `workstream_mcp/{server,auth,http_gateway,errors,schemas}.py`, `tools/profile.py`; `profile_get` only | Package-only install/container, protocol/credential isolation/privacy tests, real profile API parity and rejected-token no-dispatch proof. Leaves one protected path and test harness for later bindings, not 27 working tools. |
+| WS-MCP-002-02: own profile editing and project authorization context | 01 | `tools/profile.py`, `tools/context.py`, their schemas/registry entries; `profile_update`, `authorization_context_get` | Profile omission/null/normalization/atomic rejection, unkeyed PATCH and no automatic retry; exact-project context, revoked/foreign access and safe data tests. Leaves complete self-service surface. |
+| WS-MCP-002-03: inspect authorization definitions and administrative projections | 01 | `tools/access_reads.py`; `permissions_list`, `admin_roles_list`, `admin_grants_list`, `actor_admin_grants_list`, `actor_get`, `actor_identity_link_get` | Frozen catalogue/projection fields, pagination/cursor behavior, admin/audit/ordinary denial matrix and no contact/subject leakage. Leaves administrative readback for mutation proofs. |
+| WS-MCP-002-04: issue and revoke administrative grants | 03 | `tools/admin_grants.py`; `admin_grants_issue`, `admin_grants_revoke` | Exact receipts/history, scope and self-grant checks, last-admin protection, key mismatch/replay/current-authority checks and lost-response handling. Leaves HTTP-owned administrative authority changes. |
+| WS-MCP-002-05: manage actor and identity-link admission | 03, 04 | `tools/actor_lifecycle.py`; `actor_suspend`, `actor_reactivate`, `actor_deactivate`, `identity_link_revoke`, `identity_link_reactivate` | Each reason/key boundary, self/final-admin guards, terminal deactivation, revoked-link admission and replay/current-state tests. Leaves bounded lifecycle administration, no new identity registration. |
+| WS-MCP-002-06: create and read project shells | 01, 04 | `tools/projects.py`; `projects_create`, `projects_get` | System-manager create, duplicate slug/replay/conflict and administrative versus three-field contributor read projections. Leaves exact project selectors for project-scoped chunks. |
+| WS-MCP-002-07: manage project participation | 03, 06 | `tools/project_grants.py`; `contributor_candidates_list`, `project_grants_issue`, `project_grants_list`, `project_grants_get`, `project_grants_revoke` | Populated bounded cursors, qualification fields, both roles, cross-project/target substitution, revoked access, replay/concurrency and unchanged-state denials. Leaves project access management, not task eligibility logic in MCP. |
+| WS-MCP-002-08: declare guide documents and edit draft metadata | 06; agreement on upload exclusion | `tools/guides.py`; `guides_create`, `guides_update` | Current examples/documents schema, waiting-setup response, summary-only PATCH, immutable-field rejection, UTF-8/aggregate limits and replay. Leaves document declarations; actual uploads/setup completion stay outside MCP. |
+| WS-MCP-002-09: configure draft review and revision policies | 08; agreement on selector recovery limitation | `tools/policies.py`; `review_policy_put`, `revision_policy_put` | Correct initial/current `If-Match`, omission versus defaults, human-review mode, stale/malformed selectors, lineage, exact-project denial and replay. Leaves draft policy configuration without approval/activation tools. |
+| WS-MCP-002-10: prove the assembled 27-tool release | 02, 05, 07, 09 and their ancestors; agreed live identity/client environment | `tests/integration/`, release drill, deployment/client docs and contract snapshot validation; no new tools | Complete ten-suite matrix, 27/27 positives plus per-tool negatives and mutation replay, actual client-to-adapter-to-API/PostgreSQL parity, deployed proxy no-store/caller isolation and independent container. Leaves a release candidate for human decision, not an automatic merge/deploy. |
+
+The dependency column describes technical prerequisites, not permission to start another chunk automatically. Default delivery follows row order. Independent branches may be proposed only after checking shared registry/schema ownership. One chunk finishes with its checks, focused review and human review/merge direction before beginning the next. If a chunk grows beyond its coherent behavior, revise its contract/map before adding unrelated implementation; do not silently combine rows into one PR.
+
+Every binding chunk includes its route/body/query/header/status tests, public API authorization and error parity, snapshot drift checks, privacy checks, and relevant mutation replay/failure tests from its first PR. Tests may use public-API-only fixtures for prerequisite state that has no MCP tool; fixture setup must not masquerade as catalogue coverage. The final drill assembles existing proofs and adds deployed/live integration coverage; it is not the first test of any tool. Each partial catalogue is asserted exactly, with zero prompts/resources and no placeholder tools.
+
+### Decisions before dependent code
+
+- **Catalogue and schemas:** jointly agree the 27-name mapping and its corrected guide/policy schemas. Capture selected operations and transitive schemas from `/openapi.json` of the pinned backend, with source SHA and explicit differences if a newer runtime target is selected. Main reconciliation alone does not silently replace the handoff baseline or approve drift.
+- **Credential contract:** record MCP resource/audience, downstream Workstream resource/audience, the owner-supported credential mechanism, preservation of human caller identity, issuer/JWKS/client configuration and the test environment. Do not assume forwarding, exchange or shared audience. This must be settled before 01 implements protected dispatch.
+- **Workflow limits:** agree that document upload/setup completion and recovery of lost/stale policy selectors remain outside this catalogue. No automatic extra endpoint, hidden route or write-as-read workaround.
+
+The first record is authored here as a proposed contract, with runtime acceptance still unchecked. Its implementation PR will update that same `WS-MCP-002-01.md` record, not introduce a second intent/plan/risk bundle. Before each later chunk starts, create its own combined record from the current template. This planning PR contains the planning record and the requested first-contract draft; each future implementation PR has exactly one implementation change record.
 
 I will follow the current Commitrail process: one initiative overview for this multi-PR effort and one change record for each implementation PR. Each record will state the allowed files, non-goals, acceptance criteria, risks, and required review. Open PRs will be checked for overlapping changes before each boundary starts.
 
@@ -331,7 +352,7 @@ The addendum confirms the human-only, 27-tool release and independently packaged
 
 The public API list is received and the source mapping is complete. Joint catalogue review remains. Privacy, conditional MCP headers and `no-store` response caching are settled by the linked clarification.
 
-The proposal follows the documents' human-only v0.1 baseline and keeps the future agent extension explicit. Once joint catalogue review, schema freeze and credential agreement are complete, I can turn the first PR boundary into its concrete Commitrail change record and begin implementation.
+The proposal follows the documents' human-only v0.1 baseline and keeps the future agent extension explicit. The chunk map and first contract are ready for review. Runtime work starts only after the relevant catalogue, schema and credential decisions are recorded; this proposal is not merge approval.
 
 ## References
 
