@@ -38,5 +38,3 @@ def require_matching_target(target, project_id, guide_id, compilation_id):
         project_id, guide_id, compilation_id
     ):
         raise proposal_http_error(GuideProposalError("proposal_unavailable"))
-
-

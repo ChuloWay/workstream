@@ -126,9 +126,9 @@ required; none protect an obsolete compatibility implementation.
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
 | Existing owners support this boundary | Inspected post-policy service/repository/API, proposal routes/custody, AUTH composition and Celery registration on main `a81df4d6` | Contract feasible | Public/worker execution proof remains to be implemented |
-| Public workflow and authority | `pytest tests/projects/post_policy/test_public_api.py tests/projects/post_policy/test_public_recovery.py` with isolated PostgreSQL | Executed public body, approval/replay/revocation, broker recovery and manager-handoff proofs | Hosted full regression remains the broad check |
+| Public workflow and authority | Isolated PostgreSQL public, recovery, worker and replacement modules | 43 tests passed on clean `3cc45b55`, including both approved generations and independent worker sessions; cleanup complete | Later inventory/editorial edits do not change those runtime operations or tests |
 | Recovery and zero inference | The public recovery tests plus `pytest tests/projects/post_policy/test_delivery_worker.py` | Actual Celery task functions, real SQL/AUTH and fail-on-call runtime/document/evaluator hooks | Publication transport is controlled; this does not claim a live broker drill |
-| Test integrity and coverage | Required hosted seven-lane suite, inventory checks and affected module coverage at least 90% | Pending | No skipped/deselected tests accepted |
+| Test integrity and coverage | Required hosted seven-lane suite, inventory checks and affected module coverage at least 90% | [PR #405](https://github.com/Flow-Research/workstream/pull/405) owns exact-head hosted results and artifact links | No skipped/deselected tests accepted |
 | Current documentation | Markdown-link check, stale wording scan and roadmap assessment | Current public boundaries and next dependency reconciled | No local sheet exports present |
 
 ## Review findings
