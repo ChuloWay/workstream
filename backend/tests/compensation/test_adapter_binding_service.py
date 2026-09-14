@@ -35,39 +35,68 @@ BindingSeed = Callable[[], Awaitable[tuple[UUID, UUID, UUID]]]
 pytest_plugins = ("adapter_binding_fixtures",)
 
 
+def _trace_binding_order(service, authorization, monkeypatch):
+    order = []
+    for owner, name, label in (
+        (service, "_recover", "recovery"),
+        (authorization, "lock_adapter_binding_mutation_scope", "scope"),
+        (service._projects, "lock_compensation_binding_project", "project"),
+        (service._actors, "lock_compensation_adapter_actor", "actor"),
+        (service, "_lock_transition_binding", "binding"),
+        (authorization, "prepare_adapter_binding_mutation", "prepare"),
+        (authorization, "authorize_adapter_binding_read", "read"),
+    ):
+        original = getattr(owner, name)
+
+        async def traced(*args, _original=original, _label=label, **kwargs):
+            order.append(_label)
+            return await _original(*args, **kwargs)
+
+        monkeypatch.setattr(owner, name, traced)
+    return order
+
+
+async def _mutate_and_replay(session, method, request, order, expected):
+    order.clear()
+    async with session.begin():
+        result = await method(request)
+    assert order == ["recovery", "scope", *expected, "prepare"]
+    order.clear()
+    async with session.begin():
+        assert await method(request) == result
+    assert order == ["recovery", "read"]
+    return result
+
+
 @pytest.mark.asyncio
 async def test_create_suspend_resume_persists_contiguous_immutable_history(
     compensation_database_env: str,
     binding_seed: BindingSeed,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_id, adapter_id, actor_id = await binding_seed()
     authorization = _Authorization()
     async with db_session.get_session_factory()() as session:
         service = _service(session, authorization)
-        async with session.begin():
-            created = await service.create(
-                AdapterBindingCreateRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id, project_id=project_id,
-                    instrument_type="money", adapter_actor_id=adapter_id,
-                    route_key="adapter.primary",
-                )
-            )
-        async with session.begin():
-            suspended = await service.suspend(
-                AdapterBindingSuspendRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id, project_id=project_id,
-                    adapter_binding_id=created.adapter_binding_id,
-                    expected_lifecycle_version=1,
-                )
-            )
-        async with session.begin():
-            resumed = await service.resume(
-                AdapterBindingResumeRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id, project_id=project_id,
-                    adapter_binding_id=created.adapter_binding_id,
-                    expected_lifecycle_version=2,
-                )
-            )
+        order = _trace_binding_order(service, authorization, monkeypatch)
+        created = await _mutate_and_replay(session, service.create,
+            AdapterBindingCreateRequest(
+                operation_id=uuid4(), actor_profile_id=actor_id, project_id=project_id,
+                instrument_type="money", adapter_actor_id=adapter_id, route_key="adapter.primary",
+            ), order, ["project", "actor"],
+        )
+        suspended = await _mutate_and_replay(session, service.suspend,
+            AdapterBindingSuspendRequest(
+                operation_id=uuid4(), actor_profile_id=actor_id, project_id=project_id,
+                adapter_binding_id=created.adapter_binding_id, expected_lifecycle_version=1,
+            ), order, ["binding"],
+        )
+        resumed = await _mutate_and_replay(session, service.resume,
+            AdapterBindingResumeRequest(
+                operation_id=uuid4(), actor_profile_id=actor_id, project_id=project_id,
+                adapter_binding_id=created.adapter_binding_id, expected_lifecycle_version=2,
+            ), order, ["project", "actor", "binding"],
+        )
         view = await service.read(
             AdapterBindingReadRequest(
                 actor_profile_id=actor_id,
@@ -144,7 +173,7 @@ async def test_close_failure_prevents_product_state_and_event(
 
 
 @pytest.mark.asyncio
-async def test_owner_denial_precedes_actor_lookup_and_authorization(
+async def test_owner_denial_precedes_actor_lookup_and_exact_mutation_authorization(
     compensation_database_env: str,
     binding_seed: BindingSeed,
 ) -> None:

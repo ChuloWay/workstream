@@ -1,7 +1,7 @@
 # WS-ARCH-001-CP07A — Lock policy authority before product resources
 
 - Initiative: WS-ARCH-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: remove the cross-owner lock inversion in existing
   ContributionPolicy and compensation-adapter mutations before guide binding.
 
@@ -28,7 +28,7 @@ AUTH public authorization protocols, their application adapters, AUTH owner
 adapters and PREP service; existing CON mutation entry/recovery helpers and
 COMP mutation service; affected authorization fakes/contracts and real PostgreSQL
 concurrency tests; exact test inventories and line-only relocation metadata for
-the unchanged PREP `_binding` structural-debt entry (no new debt or limit change); current roadmap/navigation and CP07
+the unchanged PREP `_binding` structural-debt entry (no new debt or limit change); current roadmap/navigation, canonical AUTH/CON specifications and CP07
 planning references. Extend existing files where practical.
 
 Not allowed: new routes/actions/permissions, activation or guide/attempt writes,

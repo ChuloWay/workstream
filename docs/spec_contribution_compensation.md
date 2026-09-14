@@ -782,11 +782,13 @@ activation. Target-only identity registration never satisfies that path.
 
 The table contains both registered-unavailable and future proposed mappings.
 CP01A registers the four adapter-binding read/create/suspend/resume ActionIds,
-and CP01B registers the five ContributionPolicy ActionIds. CP03B now activates
-only the four adapter-binding actions for covered human Finance Authority
+and CP01B registers the five ContributionPolicy ActionIds. CP03B activated
+the four adapter-binding actions for covered human Finance Authority
 through the hidden AUTH factory; it adds no public route, fixed-service
-identity, or service-matrix row. The five ContributionPolicy actions remain
-unavailable with no evaluator or activation. CP01C corrected the binding facts before behavior:
+identity, or service-matrix row. At the CP03B stage, the five ContributionPolicy
+actions were still unavailable;
+CP05 subsequently activated them through hidden Finance Authority composition.
+CP01C corrected the binding facts before behavior:
 create binds project, server-selected binding identity, `instrument_type`, adapter
 actor, and non-secret route key; suspend/resume additionally bind the exact
 positive lifecycle version. A binding is project/instrument scoped, so its
@@ -835,7 +837,11 @@ activates the five policy actions using serialized read authorization and exact
 transaction-bound PREP. Committed replay checks current read authority. Migration `0012` admits only
 the policy resource token and five exact action/permission pairs in the existing
 closed audit constraints; it does not
-change the event shape or policy lifecycle.
+change the event shape or policy lifecycle. CP07A migration
+`0022_adapter_binding_audit_resource` admits the existing
+`compensation_adapter_binding` resource and the four binding read/create/suspend/resume
+actions paired with `compensation.adapter_binding.manage`. Other audit clauses
+remain unchanged, and downgrade refuses retained binding audit evidence.
 
 | ActionId | PermissionId | Principal / target | Protocol | Feature owner |
 |---|---|---|---:|---|
