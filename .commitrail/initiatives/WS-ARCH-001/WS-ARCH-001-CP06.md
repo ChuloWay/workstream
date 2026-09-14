@@ -1,7 +1,7 @@
 # WS-ARCH-001-CP06 — Validate an explicitly selected ContributionPolicy
 
 - Initiative: WS-ARCH-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: expose CON-owned, caller-transaction validation of an
   exact ContributionPolicy version for new guide binding and later controlled
   revision adoption, without activating a guide or changing frozen work.
@@ -113,9 +113,15 @@ No CI workflow or gate changes; retry-artifact work belongs to open PR #408.
 
 ## Evidence
 
-Focused tests will cover the typed contract and real PostgreSQL participant,
-publication/retirement races, resource fences and caller rollback. Existing
-publication/authority tests protect the shared-rule extraction. Final exact-head
+The typed contract tests require exact selection, both actor rules, valid
+resources and caller transaction custody. Real PostgreSQL tests exercise
+authorized publication/retirement races, resource fences, caller rollback and
+stale identity-map refresh. Existing publication/authority tests protect the
+shared-rule extraction. A selector negative control removes only equality:
+the stale-selector test fails while both valid-purpose controls pass.
+Database-owned UUID subclasses are normalized for the canonical graph-input
+validator; public requests accept UUID instances without accepting strings.
+Final exact-head
 commands, hosted results and review freshness belong in the PR trust summary.
 
 ## Plan reconciliation
