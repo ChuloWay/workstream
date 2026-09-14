@@ -742,7 +742,15 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/contributions/api/validation.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/contributions/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/policy_eligibility.py"
     },
     {
       "group": "lifecycle",
@@ -767,6 +775,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/contributions/schemas.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/selected_policy_validation.py"
     },
     {
       "group": "lifecycle",
@@ -1281,7 +1293,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "98d6536e24b98165ed839272de94e4cb5ef9e9d24376d78b2941a93490584b9e",
+  "authority_digest": "8607985116c78cd472248b1384a0dbc35727b57f7ca7323eb08193ea5ee0f182",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
