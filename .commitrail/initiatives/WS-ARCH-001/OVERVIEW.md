@@ -34,6 +34,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   draft/publication behavior and exact Finance Authority are complete.
   CP06 exact selected-policy validation is complete. CP07-CP09 remain:
   hidden guide binding/activation and task-attempt lineage.
+  [CP07A](WS-ARCH-001-CP07A.md) supplies the cross-owner authority lock repair
+  and binding audit schema parity required before guide composition.
   CP09 physical removal follows zero legacy consumers, including checker/public
   Submission cutover; it is not on the `allow_review` critical path.
 - Consolidated ARCH-04A supplies one current catalogue, immutable phase contracts and

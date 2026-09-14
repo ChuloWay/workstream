@@ -271,6 +271,8 @@ async def test_concurrent_duplicate_waits_then_recovers_one_effect(
     first, second = await asyncio.gather(winner, loser)
     assert first == second
     assert winner_auth.prepared + loser_auth.prepared == 1
+    assert len(winner_auth.scopes) == 1 and loser_auth.scopes == []
+    assert loser_auth.read_authorized == 1
     async with db_session.get_session_factory()() as session:
         assert len((await session.scalars(select(ProjectCompensationAdapterBinding))).all()) == 1
         assert len(

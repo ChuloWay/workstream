@@ -428,6 +428,17 @@ operation even though the policy contains both actor rules.
 
 ## Policy Freezing
 
+### Policy mutation authority ordering
+
+Fresh ContributionPolicy and compensation-adapter mutations retain AUTH's
+AuthorityControl, caller profile/link and scoped Finance grant locks before
+acquiring product-owner resources. The early scope step issues no mutation
+handle or audit evidence. Exact resource-bound PREP preparation and consumption
+remain mandatory after locked policy/binding facts are available. Completed
+operation replay uses current read authority and does not reacquire a fresh
+mutation scope. Binding suspension retains its existing eligibility semantics;
+it does not require an active project merely to stop new binding use.
+
 ### Governing policy lock
 
 During authorized Project Guide activation, PROJECTS calls the narrow CON

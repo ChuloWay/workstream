@@ -65,6 +65,9 @@ async def test_exact_duplicate_returns_immutable_original_result() -> None:
 
     result = await fixture.service.create_draft(request)
 
+    assert fixture.authorization.scopes == []
+    assert fixture.authorization.prepared == []
+    assert fixture.authorization.reads
     assert result.event_id == event.id
     assert result.operation_id == event.operation_id
     assert result.request_digest == event.request_digest

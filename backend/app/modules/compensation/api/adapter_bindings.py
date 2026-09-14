@@ -214,6 +214,11 @@ class AdapterBindingReadAuthorizationPort(Protocol):
 
 class AdapterBindingMutationAuthorizationPort(Protocol):
     """Prepare, consume, and close opaque mutation authority."""
+    async def lock_adapter_binding_mutation_scope(
+        self, *, action: AdapterBindingAction, actor_profile_id: UUID, project_id: UUID,
+    ) -> None:
+        """Retain scoped authority locks before product rows without issuing a handle."""
+
     async def prepare_adapter_binding_mutation(
         self, facts: AdapterBindingMutationAuthorizationFacts
     ) -> object:
@@ -235,6 +240,13 @@ class DenyAdapterBindingAuthorization:
         """Deny reads until CP03 installs production authorization."""
         del request
         raise AdapterBindingUnavailable("compensation_adapter_binding_unavailable")
+
+    async def lock_adapter_binding_mutation_scope(
+        self, *, action: AdapterBindingAction, actor_profile_id: UUID, project_id: UUID,
+    ) -> None:
+        """Retain scoped authority locks before product rows without issuing a handle."""
+
+        raise AdapterBindingUnavailable('compensation_adapter_binding_unavailable')
 
     async def prepare_adapter_binding_mutation(
         self, facts: AdapterBindingMutationAuthorizationFacts

@@ -229,6 +229,11 @@ class ContributionPolicyAuthorizationPort(Protocol):
     ) -> None:
         """Authorize the exact current read without disclosing product rows."""
 
+    async def lock_mutation_scope(
+        self, *, action_id: ActionId, actor_profile_id: UUID, project_id: UUID,
+    ) -> None:
+        """Lock current mutation authority before product owners; issue no capability."""
+
     async def prepare_mutation(self, facts: ContributionPolicyMutationAuthorityFacts) -> object:
         """Prepare exact mutation authority in the caller transaction."""
 

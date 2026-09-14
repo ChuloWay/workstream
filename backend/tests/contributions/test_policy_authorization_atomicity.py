@@ -86,12 +86,17 @@ async def test_operation_fence_precedes_owner_locks_and_authorization() -> None:
         order.append("authorization")
         return object()
 
+    async def scope_lock(**scope):
+        assert scope["project_id"] == fixture.project_id
+        order.append("authority_scope")
+
+    fixture.authorization.lock_contribution_policy_mutation_scope = scope_lock
     fixture.repository.lock_operation.side_effect = operation_lock
     fixture.service._projects.lock_contribution_policy_project = owner_lock  # noqa: SLF001
     fixture.repository.lock_project_scope.side_effect = project_scope
     fixture.authorization.prepare_contribution_policy_mutation = prepare
     await fixture.service.create_draft(create_request(fixture))
-    assert order == ["operation", "owner", "project_scope", "authorization"]
+    assert order == ["operation", "authority_scope", "owner", "project_scope", "authorization"]
 
 
 @pytest.mark.asyncio

@@ -166,6 +166,11 @@ class AdapterBindingAuthorizationPort(Protocol):
         self, *, actor_profile_id: UUID, facts: AdapterBindingReadFacts
     ) -> None: ...
 
+    async def lock_mutation_scope(
+        self, *, action_id: ActionId, actor_profile_id: UUID, project_id: UUID,
+    ) -> None:
+        """Lock current mutation authority before product owners; issue no capability."""
+
     async def prepare_mutation(self, facts: AdapterBindingMutationAuthorityFacts) -> object: ...
 
     async def consume_mutation(
