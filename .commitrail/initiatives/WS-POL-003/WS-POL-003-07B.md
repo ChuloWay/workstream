@@ -26,7 +26,9 @@ post-submit run/result/history consumers cannot be deleted before that cutover.
 - Allowed: ART `submission_admission.py` phase call site and narrow owner-local
   protocol; composition in `adapters/artifacts/__init__.py`;
   CHECKER `router.py`, `service.py`, `runner.py`, `schemas.py` solely for deleting
-  the JSON precheck and exclusive helpers; affected tests and exact test/debt
+  the JSON precheck and exclusive helpers; TASK lifecycle schema and response
+  builder solely to remove the obsolete precheck capability field; affected
+  API-contract drill, tests and exact test/debt
   inventories; current checker/ART documentation, roadmap and initiative navigation.
 - Prohibited: changes to ART reservation, claim, lock order, persistence,
   durable-put, scratch or storage lifecycle; migrations; new routes, permission
@@ -61,7 +63,9 @@ post-submit run/result/history consumers cannot be deleted before that cutover.
 4. Delete `/tasks/{task_id}/submission-precheck`, its schemas, service method,
    draft-packet runner and exclusive helpers/callers/tests. Existing real ZIP
    intake checks remain the standard. Do not replace the removed HTTP route
-   with a compatibility route or expose hidden preparation prematurely.
+   with a compatibility route or expose hidden preparation prematurely. Remove
+   the always-false TASK work-context precheck capability field with its producer
+   and update API assertions to prove its absence.
 
 ## Acceptance criteria
 
@@ -76,7 +80,8 @@ post-submit run/result/history consumers cannot be deleted before that cutover.
 - Post delegation preserves exact request identity and validates the returned
   member plan/hash/generation. Production always reports unavailable. No test
   claims post database ownership, AUTH, replay or currentness from value objects.
-- Removed route and schemas are absent from routing/OpenAPI. Remove obsolete
+- Removed route and schemas are absent from routing/OpenAPI; work-context
+  responses omit the obsolete precheck capability field. Remove obsolete
   JSON-only tests; retain shared post-check assertions and required real ZIP
   packet/size/path/integrity coverage. Test changes must discriminate a bypass
   of the facade on completed replay and an incorrectly accepted post result.

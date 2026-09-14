@@ -1929,7 +1929,7 @@ async def test_task_context_apis_return_worker_requirements_and_operator_provena
     assert "content_markdown" not in work_body["guide"]
     assert work_body["payment_policy"]["base_amount"] == "25.00"
     assert work_body["lifecycle"]["can_submit"] is False
-    assert work_body["lifecycle"]["can_run_pre_submit_check"] is False
+    assert "can_run_pre_submit_check" not in work_body["lifecycle"]
     assert work_body["lifecycle"]["next_actions"] == []
     worker_context_json = json.dumps(work_body, sort_keys=True)
     for internal_field in (

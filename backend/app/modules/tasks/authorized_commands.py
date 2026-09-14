@@ -193,7 +193,6 @@ class AuthorizedTaskCommands:
                 lifecycle=TaskWorkerLifecycleContext(
                     status=task.status,
                     assigned_to_current_actor=own_assignment,
-                    can_run_pre_submit_check=False,
                     can_submit=False,
                     next_actions=actions,
                 ),
