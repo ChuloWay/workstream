@@ -232,7 +232,10 @@ tests, sandboxed execution, no network, no shell, no secrets, no database access
 covered Project Manager approval of the exact code hash after those checks
 pass, and a locked code hash.
 
-Blocking pre-submit failures prevent submission creation. When blocking pre-submit checks fail:
+Blocking pre-submit failures prevent submission creation. The target intake
+contract requires the following when checks fail; the current hidden route
+returns only the failure code and ART constructs an audit-ready payload, while
+structured public feedback and TASK audit publication remain pending:
 
 - no `Submission` row is created
 - no submission version is assigned
@@ -242,10 +245,12 @@ Blocking pre-submit failures prevent submission creation. When blocking pre-subm
   structured checker result for project operators
 - the response does not use review decision values: `accept`, `needs_revision`, or `reject`
 
-At the deferred WS-ARCH-001-02I cutover, the legacy standalone
-`/tasks/{id}/submission-precheck` contract is removed. Pre-submit checks then
-run only inside the continuous submission-bundle preparation request against
-the exact uploaded ZIP in bounded scratch:
+POL-07 removes the standalone `/tasks/{id}/submission-precheck` contract when
+connecting the internal checker-service port. WS-ARCH-001-02I retains the broader
+Submission caller cutover. Authoritative intake checks run inside continuous
+submission-bundle preparation against the exact uploaded ZIP in bounded scratch.
+The structured response below is the target for the canonical public intake
+cutover, not the current hidden route’s response:
 
 ```text
 POST /api/v1/tasks/{id}/submission-bundle-preparations
@@ -256,7 +261,7 @@ POST /api/v1/tasks/{id}/submission-bundle-preparations
 }
 ```
 
-After that cutover there is no independently invocable precheck route and no
+After the canonical public intake cutover there is no independently invocable precheck route and no
 reusable client-owned manifest input. The bounded result is returned only to the authorized actor in
 that same request. A passing preparation later returns an admission identity;
 `POST /api/v1/tasks/{id}/submissions` consumes that verified ready admission under its

@@ -36,7 +36,8 @@ generation is process-local and cannot be reassigned to a retried upload.
 - No second checker/evidence implementation, facade cache, rewritten historical
   evidence, new provider, storage lifecycle or scratch-generation rebinding.
 - No new contributor endpoint, guide activation, post-submit executor, acceptance
-  or public phase facade in this prerequisite. POL-07 retains that next boundary.
+  or phase facade in this prerequisite. POL-07 owns the next internal facade
+  boundary; public intake exposure retains its separate cutover.
 - No automatic retry of an attempt whose execution outcome is uncertain.
 
 ## Proposed owner design
@@ -200,6 +201,6 @@ an admission ID; stale or consumed admissions retain their actual state without
 usable custody. Current documentation assigns obsolete JSON precheck removal to
 POL-07 and broader Submission call-path migration to ARCH-02I. The hidden route
 currently returns a checker-failure code; structured public feedback remains
-POL-07 work. ART constructs the bounded failure-audit projection, but publishing
+pending the canonical public intake cutover. ART constructs the bounded failure-audit projection, but publishing
 it as a TASK audit event remains pending; current documentation distinguishes
 that implementation gap from the target contract.

@@ -341,7 +341,7 @@ Before locking a submission packet:
 - revision replay exists when task was previously `NEEDS_REVISION`
 - effective project submission artifact policy is loaded
 - generated project pre-submit checker policy runs
-- failed preparation currently returns only `pre_submission_checker_failed` through the hidden route; ART retains bounded results and structured public feedback remains POL-07 work
+- failed preparation currently returns only `pre_submission_checker_failed` through the hidden route; ART retains bounded results and structured public feedback remains pending the canonical public intake cutover
 - POL-07 removes the non-authoritative standalone preflight endpoint when
   connecting the single checker-service port; broader Submission caller
   migration remains WS-ARCH-001-02I

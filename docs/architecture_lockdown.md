@@ -167,7 +167,7 @@ submission policy schema.
 
 Blocking pre-submit failures prevent submission creation. The current hidden
 preparation route returns only `pre_submission_checker_failed`; bounded
-structured public feedback remains POL-07 work. Failures create no submission
+structured public feedback remains pending the canonical public intake cutover. Failures create no submission
 row, no submission version, no task transition to `submitted`, and no
 submission-created audit event. ART constructs a bounded audit-ready projection;
 publication as a task event named `pre_submission_check_failed` remains pending.

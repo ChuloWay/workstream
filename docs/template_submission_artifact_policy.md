@@ -240,7 +240,8 @@ do not derive or compile their own checker by default.
 
 Failed preparation currently returns only `pre_submission_checker_failed`
 through the hidden route. ART retains bounded results; structured public
-feedback remains POL-07 work. POL-07 removes the non-authoritative standalone
+feedback remains pending the canonical public intake cutover. POL-07 removes
+the non-authoritative standalone
 preflight endpoint when connecting the single checker-service port.
 WS-ARCH-001-02I retains the broader Submission caller cutover; no ID-addressed
 evidence-read route exists. These results never use review decision values:

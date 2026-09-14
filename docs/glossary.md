@@ -246,7 +246,7 @@ one immutable ordered platform-plus-project evidence set after scratch cleanup.
 
 ## pre_submission_checker_failed
 
-The contributor-facing domain error code returned when submission-bundle preparation is blocked by pre-submit checks. The current hidden route returns only this code; ART retains the bounded check results. Structured public feedback remains POL-07 work. The code is not a review decision. It must not be stored as `accept`, `needs_revision`, or `reject`.
+The contributor-facing domain error code returned when submission-bundle preparation is blocked by pre-submit checks. The current hidden route returns only this code; ART retains the bounded check results. Structured public feedback remains pending the canonical public intake cutover. The code is not a review decision. It must not be stored as `accept`, `needs_revision`, or `reject`.
 
 ## Task
 
