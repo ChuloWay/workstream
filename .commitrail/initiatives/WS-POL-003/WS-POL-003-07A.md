@@ -40,11 +40,12 @@ generation is process-local and cannot be reassigned to a retried upload.
 1. Add one ART attempt row, uniquely keyed by actor and idempotency key. Its
    immutable identity binds actor/link, project/task/assignment/predecessor,
    locked plan/guide/policies/catalogue, packet digest, archive digest/size,
+   semantic_manifest_sha256,
    and storage scheme. The original execution generation is recorded separately
    and is immutable. The logical attempt UUID is
    deterministically derived from its key namespace. Request digest binds all
    logical facts; changed packet, content or lineage under the same key conflicts.
-   A retry may spool and inspect bytes to confirm the same archive/manifest, but
+   A retry must spool and inspect bytes to confirm the same archive/manifest, but
    its new scratch generation cannot become the original execution generation.
 2. Under fresh contributor and fixed materializer authority, commit the
    reservation after bounded ZIP inspection and before any checker member is
@@ -58,7 +59,8 @@ generation is process-local and cannot be reassigned to a retried upload.
 3. Only the request that created the reservation can proceed. ART mints an opaque,
    nonserializable one-use winning claim only after its reservation commits.
    Bind it to the exact original prepared object/generation and request digest;
-   consume it before processor construction and verify the committed reserved
+   consume it at `PreparedBundleMaterializationService.materialize_prepared_bundle`
+   before processor construction and verify the committed reserved
    row. A failed commit cannot leave an executable claim. Final persistence
    requires the corresponding execution receipt, not an attempt UUID or boolean.
    An existing
@@ -86,7 +88,8 @@ generation is process-local and cannot be reassigned to a retried upload.
    the result manifest hash but omitted from result rows. Row ordinal is not
    definition order. Add nullable metadata/order columns without
    rewriting retained evidence. New writes always include validated metadata;
-   NULL retained values cannot become an empty fabricated value. Reconstruct and
+   NULL retained metadata or definition order must fail reconstruction; neither
+   can become a fabricated default. Reconstruct and
    verify the complete manifest digest for new attempt replay. No reservation
    is invented for previously retained evidence.
 
@@ -113,6 +116,12 @@ an unavailable/uncertain attempt to later callers, not contributor failure.
   the original claim or produce a new pass capability. Retained rows remain unchanged.
 - Metadata reconstruction verifies the exact result digest; missing/corrupt
   metadata fails closed rather than filling defaults.
+- `test_completed_replay_after_original_scratch_closes` must use real scratch:
+  close the original preparation, prepare identical bytes under the same key
+  with a different generation, and recover the original evidence with zero
+  additional checker calls and no pass capability. Retry-byte verification
+  uses the retry's own inspected custody; original generation is only returned
+  evidence and a fresh authority selector, never a live retry handle.
 - Real scratch/member execution and PostgreSQL proof are required. Fakes only
   isolate broker/provider publication; no live transport claim is made.
 
