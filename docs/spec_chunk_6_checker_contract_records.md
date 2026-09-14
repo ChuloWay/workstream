@@ -7,7 +7,11 @@
 
 Chunk 6 creates the durable checker run and checker result contract for Week 2.
 
-This chunk does not run the full checker framework yet. It defines the durable post-submit checker records, the separate internal ART pre-submit evidence boundary, schemas, service boundaries, and read APIs that later chunks use for static checks, internal auto checks, and review gating.
+This historical chunk established durable post-submit checker records, schemas,
+service boundaries and read APIs for later checker execution and review gating.
+Its original pre-submit contract has since been removed. The internal ART
+evidence boundary described below is the later ART/POL-07B replacement, not
+part of the original Chunk 6 delivery.
 
 ## Scope
 
@@ -18,7 +22,7 @@ This chunk does not run the full checker framework yet. It defines the durable p
 - trigger source fields
 - routing recommendation fields
 - source tracking for checker-caused `needs_revision`
-- internal ART pre-submit evidence boundary
+- current pre-submit behavior is documented below as the later ART/POL-07B replacement
 - backend read APIs for checker runs and results
 - internal service method for creating checker runs/results
 - migration and ORM metadata

@@ -7,9 +7,7 @@
 
 Chunk 7 turns the checker contract into a working backend slice.
 
-Workstream now has a checker module that can:
-
-- evaluate pre-submit ZIP intake and retain internal ART evidence before a submission row is created
+The historical checker delivery covered these post-submit capabilities:
 - run registered structural checkers against a real finalized submission
 - persist durable `checker_runs` and `checker_results`
 - validate checker policy names against the registry
@@ -29,7 +27,7 @@ Note: Chunk 8 supersedes the temporary Chunk 7 artifact-manifest and evidence-re
 - checker service
 - checker API router
 - checker registry
-- internal pre-submit ZIP evaluation that executes the locked project `PreSubmitCheckerPolicy`
+- current pre-submit ZIP evaluation is documented below as the later ART/POL-07B replacement
 - first structural checkers:
   - `check_submission_packet`
   - `check_policy_context_present`
