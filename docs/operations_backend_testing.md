@@ -160,11 +160,15 @@ review rules independently enforce exact-head human approval.
 Superseded Agent Gates runs for the same PR are cancelled without repeating the
 full backend suite.
 
-Each matrix job uploads a fixed-name artifact bound to GitHub's checked-out PR
-merge-tree SHA, containing its manifest, lane evidence, isolation record, and coverage data. The final `test`
+Each matrix job uploads an artifact named for GitHub's checked-out PR merge-tree
+SHA, lane and numeric run attempt, containing its manifest, lane evidence,
+isolation record, and coverage data. The final `test`
 job runs with `if: always()`, downloads available diagnostic bundles, then
 rejects any failed, cancelled, or skipped matrix result before fan-in. Fan-in
-accepts exactly the seven declared lane directories,
+selects the highest numeric attempt available for each of the seven declared
+lanes from separately downloaded artifact directories. It rejects malformed,
+foreign or future attempt names and never falls back from an incomplete or
+corrupt latest bundle to an older passing one. For the selected bundles it
 requires byte-identical manifests and heads, verifies every bound digest, and
 rejects symlinks or surplus lanes.
 
@@ -179,8 +183,10 @@ isolated invocation inside the final required job.
 
 ### Evidence bundle
 
-Each lane uploads one seven-day bundle, and the final job uploads the reconciled
-`.ci/test-lanes` tree. Its summary
+Each executed lane uploads one seven-day bundle per attempt, and the final job
+uploads the reconciled `.ci/test-lanes` tree and downloaded diagnostics under its
+own attempt-specific artifact name. Older diagnostic artifacts are preserved.
+Its summary
 records the exact head, canonical node count, seven lane results, elapsed time,
 and raw-file digests. Per-lane evidence records collected, completed, skipped,
 and deselected exact node IDs plus the bound resource-isolation metadata and
@@ -208,15 +214,21 @@ coverage tampering before coverage combination.
 - API contract or coverage failure: the required job remains failed; lane
   completion cannot compensate for either boundary.
 
-Rerun the complete workflow on the same exact head. Never edit or upload
-evidence manually. Review submission or dismissal does not rerun Backend because
+On the same exact head, rerun failed lanes (and their dependent final job), or
+rerun only the final job when the lane evidence already passed. Successful lanes
+not rerun retain their previous attempt's evidence; a rerun lane's newest bundle
+must independently pass all existing checks. A failed, cancelled or skipped
+required job still blocks fan-in. Never edit or upload evidence manually.
+Review submission or dismissal does not rerun Backend because
 it does not change the tested tree. A new PR commit starts a new run and cancels
 the superseded same-PR run. Every new commit requires complete evidence because
 its head and digests differ. Each lane bundle records its job-start epoch;
 missing or malformed timing fails the final evidence step. Hosted evidence
-records whole Backend wall time from the earliest lane start, lane
+records whole Backend wall time from the earliest selected lane start, lane
 aggregate/slowest execution timing, and whether
-the eight-minute target was met. When the repository owner explicitly accepts
+the eight-minute target was met. Timing uses the same bundle selection as
+evidence. On a retry this wall time includes the wait between selected attempts;
+it is not fresh-run execution latency. When the repository owner explicitly accepts
 a measured target miss at the human merge checkpoint, that performance result
 does not override otherwise passing correctness, custody, service-contract,
 API, and coverage gates. Never lower coverage, skip nodes, or add a silent
