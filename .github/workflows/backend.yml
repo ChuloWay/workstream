@@ -216,7 +216,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: backend-lane-${{ github.sha }}-${{ matrix.lane }}
+          name: backend-lane-${{ github.sha }}-${{ matrix.lane }}-attempt-${{ github.run_attempt }}
           path: |
             backend/.ci/lane-bundle/${{ matrix.lane }}/summary.json
             backend/.ci/lane-bundle/${{ matrix.lane }}/job-start-epoch.txt
@@ -295,54 +295,13 @@ jobs:
           docker logs workstream-minio
           exit 1
 
-      - name: Download shared foundations A evidence
+      - name: Download separate lane attempts from this run
         if: ${{ always() }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: backend-lane-${{ github.sha }}-shared_foundations_a
-          path: backend/.ci/download/shared_foundations_a
-
-      - name: Download shared foundations B evidence
-        if: ${{ always() }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: backend-lane-${{ github.sha }}-shared_foundations_b
-          path: backend/.ci/download/shared_foundations_b
-
-      - name: Download schema contracts evidence
-        if: ${{ always() }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: backend-lane-${{ github.sha }}-schema_contracts
-          path: backend/.ci/download/schema_contracts
-
-      - name: Download project lifecycle A evidence
-        if: ${{ always() }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: backend-lane-${{ github.sha }}-project_lifecycle_a
-          path: backend/.ci/download/project_lifecycle_a
-
-      - name: Download project lifecycle B evidence
-        if: ${{ always() }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: backend-lane-${{ github.sha }}-project_lifecycle_b
-          path: backend/.ci/download/project_lifecycle_b
-
-      - name: Download project lifecycle C evidence
-        if: ${{ always() }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: backend-lane-${{ github.sha }}-project_lifecycle_c
-          path: backend/.ci/download/project_lifecycle_c
-
-      - name: Download task lifecycle evidence
-        if: ${{ always() }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: backend-lane-${{ github.sha }}-task_lifecycle
-          path: backend/.ci/download/task_lifecycle
+          pattern: backend-lane-${{ github.sha }}-*-attempt-*
+          path: backend/.ci/download
+          merge-multiple: false
 
       - name: Require preflight and every semantic lane
         if: ${{ always() }}
@@ -360,7 +319,9 @@ jobs:
           python -m scripts.merge_test_lane_evidence \
             --input-root .ci/download \
             --metadata-dir .ci/test-lanes/run \
-            --summary-json .ci/test-lanes/run-summary.json
+            --summary-json .ci/test-lanes/run-summary.json \
+            --expected-head "${GITHUB_SHA}" \
+            --run-attempt "${GITHUB_RUN_ATTEMPT}"
           python scripts/validate_test_lane_evidence.py \
             --metadata-dir .ci/test-lanes/run \
             --summary-json .ci/test-lanes/run-summary.json
@@ -754,6 +715,8 @@ jobs:
           import subprocess
           import time
 
+          from scripts.merge_test_lane_evidence import select_lane_bundles
+
           evidence_root = Path(".ci/test-lanes")
           run_root = evidence_root / "run"
           summary_path = evidence_root / "run-summary.json"
@@ -851,16 +814,11 @@ jobs:
               raise SystemExit("slowest lane timing drift")
 
           start_epochs = []
-          for lane_name in (
-              "shared_foundations_a",
-              "shared_foundations_b",
-              "schema_contracts",
-              "project_lifecycle_a",
-              "project_lifecycle_b",
-              "project_lifecycle_c",
-              "task_lifecycle",
-          ):
-              timing_path = Path(".ci/download") / lane_name / "job-start-epoch.txt"
+          selected_bundles = select_lane_bundles(
+              Path(".ci/download"), expected_head, int(os.environ["GITHUB_RUN_ATTEMPT"]),
+          )
+          for bundle in selected_bundles.values():
+              timing_path = bundle / "job-start-epoch.txt"
               if timing_path.is_symlink() or not timing_path.is_file():
                   raise SystemExit("missing lane start timing")
               timing_value = timing_path.read_text(encoding="ascii").strip()
@@ -911,7 +869,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: backend-semantic-lane-evidence-${{ steps.identity.outputs.tree_sha }}
+          name: backend-semantic-lane-evidence-${{ steps.identity.outputs.tree_sha }}-attempt-${{ github.run_attempt }}
           path: |
             backend/.ci/download/**
             backend/.ci/test-lanes/**

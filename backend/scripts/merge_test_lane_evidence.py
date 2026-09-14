@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import shutil
 from typing import Any
 
@@ -47,7 +48,38 @@ def _copy_bound(source: Path, destination: Path, expected_digest: Any) -> None:
     shutil.copyfile(source, destination)
 
 
-def merge_bundles(input_root: Path, metadata_dir: Path, summary_json: Path) -> None:
+def select_lane_bundles(input_root: Path, head_sha: str, run_attempt: int) -> dict[str, Path]:
+    """Select latest numeric attempts, never an older passing bundle after failure."""
+    if (
+        re.fullmatch(r"[0-9a-f]{40}", head_sha) is None
+        or type(run_attempt) is not int
+        or run_attempt < 1
+        or input_root.is_symlink()
+        or not input_root.is_dir()
+    ):
+        raise LaneError("invalid_lane_bundle_root")
+    expected = {lane.name for lane in LANES}
+    pattern = re.compile(rf"backend-lane-{head_sha}-([a-z_]+)-attempt-([1-9][0-9]*)")
+    selected: dict[str, tuple[int, Path]] = {}
+    for path in input_root.iterdir():
+        match = pattern.fullmatch(path.name)
+        if path.is_symlink() or not path.is_dir() or match is None:
+            raise LaneError("invalid_lane_bundle_set")
+        lane, attempt_text = match.groups()
+        attempt = int(attempt_text)
+        if lane not in expected or attempt > run_attempt:
+            raise LaneError("invalid_lane_bundle_set")
+        if lane not in selected or attempt > selected[lane][0]:
+            selected[lane] = (attempt, path)
+    if selected.keys() != expected:
+        raise LaneError("invalid_lane_bundle_set")
+    return {lane.name: selected[lane.name][1] for lane in LANES}
+
+
+def merge_bundles(
+    input_root: Path, metadata_dir: Path, summary_json: Path, *,
+    expected_head: str, run_attempt: int,
+) -> None:
     """Merge exactly one authenticated bundle for each declared lane."""
     if (
         input_root.is_symlink()
@@ -58,10 +90,7 @@ def merge_bundles(input_root: Path, metadata_dir: Path, summary_json: Path) -> N
         or summary_json.is_symlink()
     ):
         raise LaneError("invalid_lane_bundle_root")
-    expected_names = {lane.name for lane in LANES}
-    actual_names = {path.name for path in input_root.iterdir() if path.is_dir()}
-    if actual_names != expected_names or any(path.is_symlink() for path in input_root.iterdir()):
-        raise LaneError("invalid_lane_bundle_set")
+    bundles = select_lane_bundles(input_root, expected_head, run_attempt)
     metadata_dir.mkdir(mode=0o700)
 
     manifest_bytes: bytes | None = None
@@ -71,10 +100,12 @@ def merge_bundles(input_root: Path, metadata_dir: Path, summary_json: Path) -> N
     lane_rows: list[dict[str, Any]] = []
     elapsed_seconds = 0.0
     for lane in LANES:
-        bundle = input_root / lane.name
+        bundle = bundles[lane.name]
+        print(f"Selected lane evidence: {bundle.name}")
         summary = _read_object(bundle / "summary.json")
         if (
             summary.get("schema_version") != SCHEMA_VERSION
+            or summary.get("head_sha") != expected_head
             or summary.get("mode") != "lane"
             or not isinstance(summary.get("lanes"), list)
             or len(summary["lanes"]) != 1
@@ -161,9 +192,14 @@ def main() -> int:
     parser.add_argument("--input-root", required=True, type=Path)
     parser.add_argument("--metadata-dir", required=True, type=Path)
     parser.add_argument("--summary-json", required=True, type=Path)
+    parser.add_argument("--expected-head", required=True)
+    parser.add_argument("--run-attempt", required=True, type=int)
     args = parser.parse_args()
     try:
-        merge_bundles(args.input_root, args.metadata_dir, args.summary_json)
+        merge_bundles(
+            args.input_root, args.metadata_dir, args.summary_json,
+            expected_head=args.expected_head, run_attempt=args.run_attempt,
+        )
     except (LaneError, OSError) as exc:
         code = exc.args[0] if isinstance(exc, LaneError) else "lane_merge_failed"
         print(f"test lane merge failed: {code}")
