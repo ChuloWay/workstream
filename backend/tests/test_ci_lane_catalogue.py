@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 from collections import Counter
 from dataclasses import replace
 import hashlib
@@ -483,14 +482,14 @@ def test_workflow_lane_inventory_matches_catalogue() -> None:
     matrix = re.search(r"        lane:\n((?:          - [a-z_]+\n)+)", source)
     assert matrix is not None
     assert Counter(re.findall(r"- ([a-z_]+)", matrix[1])) == expected
-    assert (
-        Counter(re.findall(r"name: backend-lane-\$\{\{ github.sha \}\}-([a-z_]+)", source))
-        == expected
-    )
-    assert Counter(re.findall(r"path: backend/\.ci/download/([a-z_]+)", source)) == expected
-    timing = re.search(r"for lane_name in (\([\s\S]*?\)):", source)
-    assert timing is not None
-    assert Counter(ast.literal_eval(timing[1])) == expected
+    assert source.count("name: backend-lane-${{ github.sha }}-${{ matrix.lane }}-attempt-${{ github.run_attempt }}") == 1
+    assert source.count("pattern: backend-lane-${{ github.sha }}-*-attempt-*") == 1
+    assert source.count("path: backend/.ci/download\n          merge-multiple: false") == 1
+    assert '--expected-head "${GITHUB_SHA}"' in source
+    assert '--run-attempt "${GITHUB_RUN_ATTEMPT}"' in source
+    assert 'Path(".ci/download"), expected_head, int(os.environ["GITHUB_RUN_ATTEMPT"])' in source
+    assert 'timing_path = bundle / "job-start-epoch.txt"' in source
+    assert "name: backend-semantic-lane-evidence-${{ steps.identity.outputs.tree_sha }}-attempt-${{ github.run_attempt }}" in source
 
 
 def test_project_read_coverage_gate_selects_relocated_proof() -> None:
