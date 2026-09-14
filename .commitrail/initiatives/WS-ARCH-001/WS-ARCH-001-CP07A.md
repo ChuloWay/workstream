@@ -123,13 +123,17 @@ check omits it, and its action/permission check omits all four already-active
 analogous mismatch was reconciled by migration 0012.
 
 Amend the allowed scope with one focused `0022_adapter_binding_audit_resource`
-migration and its schema/privacy tests. Admit only this existing resource and
+migration and its schema/privacy tests; update the exact current-head pin in
+`backend/alembic/env.py` and revision walk in `backend/tests/test_alembic.py`; replace the exact current
+PostgreSQL schema fingerprint in `backend/tests/conftest.py` with the measured
+0022 fingerprint, retaining strict equality and rejection of unexpected objects.
+The schema roundtrip starts from an existing 0021 database to prove its upgrade. Admit only this existing resource and
 these four actions paired with existing `compensation.adapter_binding.manage` permission from the canonical catalogue. Preserve every other
 constraint clause, registry and reason-code bound; reject unexpected installed
 shapes. Lock the audit table atomically during the constraint replacement.
 Downgrade refuses retained binding audit evidence rather than deleting history.
 Prove exact clause delta/roundtrip, valid real binding create/suspend/resume/read
-audits, mismatched permission/resource privacy denials, and downgrade retention.
+audits, wrong action/permission pairs and unknown-resource privacy denials, and downgrade retention.
 Do not bypass audit to make concurrency tests pass or add a new permission.
 This is schema parity for the same existing mutations under repair, not a new
 product action or independent subsystem. Security and architecture plan review
