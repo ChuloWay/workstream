@@ -445,13 +445,20 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         f"POST {proposal_prefix}/corrections/{{correction_operation_id}}/dispatch",
     }
     assert proposal_routes <= set(protected_inventory)
-    assert len(route_inventory) == 75
-    retained_routes = sorted(set(route_inventory) - proposal_routes)
-    retained_protected = sorted(set(protected_inventory) - proposal_routes)
+    post_policy_prefix = f"{proposal_prefix}/post-submission-policies/{{policy_id}}"
+    post_policy_routes = {
+        f"GET {post_policy_prefix}",
+        f"POST {post_policy_prefix}/approval",
+        f"POST {post_policy_prefix}/corrections",
+    }
+    assert post_policy_routes <= set(protected_inventory)
+    assert len(route_inventory) == 78
+    retained_routes = sorted(set(route_inventory) - proposal_routes - post_policy_routes)
+    retained_protected = sorted(set(protected_inventory) - proposal_routes - post_policy_routes)
     assert sha256("\n".join(retained_routes).encode()).hexdigest() == (
         "fd0fff869be00f102755e579d694ba62fe0208a7c78774ccdb463ca3d2425fb9"
     )
-    assert len(protected_inventory) == 73
+    assert len(protected_inventory) == 76
     assert sha256("\n".join(retained_protected).encode()).hexdigest() == (
         "cac6b5bc0ff252bf83757fefdf2da5325ef6624665d55efa7e4ce6093aae5a28"
     )
@@ -478,6 +485,9 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         if method in methods and "x-workstream-action-id" in operation
     }
     assert action_declarations == {
+        f"GET {post_policy_prefix}": "project.guide_compilation.review_package.read",
+        f"POST {post_policy_prefix}/approval": "project.post_submit_checker_policy.approve",
+        f"POST {post_policy_prefix}/corrections": "project.post_submit_checker_policy.correction.request",
         f"GET {proposal_prefix}/proposal": "project.guide_compilation.review_package.read",
         f"POST {proposal_prefix}/pre-submission-approval": "project.submission_artifact_policy.approve",
         f"POST {proposal_prefix}/corrections": "project.guide_compilation.correction.request",

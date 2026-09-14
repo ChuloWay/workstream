@@ -154,6 +154,9 @@ delivery/router/guard files are now registered through the existing additive
 admission rule; regression tests reject unrelated additions and removal of a
 retained target. No directory wildcard, permission change or gate exception is
 introduced.
+The shared OpenAPI inventory now explicitly admits the three protected
+post-policy routes. Both retained-route fingerprints remain unchanged, preserving
+proof that unrelated endpoints and their authentication exposure did not change.
 
 ## Reconciliation
 
