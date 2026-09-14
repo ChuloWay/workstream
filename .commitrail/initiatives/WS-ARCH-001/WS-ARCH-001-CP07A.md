@@ -5,7 +5,7 @@
 - Intended merge outcome: remove the cross-owner lock inversion in existing
   ContributionPolicy and compensation-adapter mutations before guide binding.
 
-## Intent and current behavior
+## Intent
 
 CP06 supplies exact policy validation but has no production guide caller.
 Before CP07 composes it, existing CON mutations and COMPENSATION binding
@@ -55,7 +55,7 @@ No retained data deletion. Replay must keep its existing current-read authority.
 - Caller owns the root transaction. Denial and failure roll back all effects;
   completion replay remains authorized without repeating a mutation.
 
-## Acceptance criteria and proof
+## Acceptance criteria
 
 - All seven non-recovered mutation paths acquire authority scope before Project/binding owner locks.
   The exact final PREP consumption remains mandatory and unchanged.
@@ -138,3 +138,11 @@ Do not bypass audit to make concurrency tests pass or add a new permission.
 This is schema parity for the same existing mutations under repair, not a new
 product action or independent subsystem. Security and architecture plan review
 cover this discovered dependency before its implementation.
+
+## Evidence
+
+Real PostgreSQL regressions distinguish the original cycle from the full scoped
+lock repair and from an insufficient Control-only alternative. Schema tests
+compare exact constraint clauses through upgrade and downgrade and retain
+privacy and evidence-preservation guards. Final commands and review freshness
+belong to the PR trust summary.

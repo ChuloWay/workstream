@@ -1,6 +1,8 @@
 """Exact binding audit vocabulary and real authorized lifecycle persistence."""
 
-from uuid import UUID, uuid4
+from dataclasses import replace
+from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import select
@@ -9,16 +11,18 @@ from sqlalchemy.exc import DBAPIError
 from app.adapters.auth import compensation_adapter_binding_authorization
 from app.db import session as db_session
 from app.modules.actors.compensation_adapter import CompensationAdapterActorEligibility
+from app.modules.actors.api import ServiceIdentity
+from app.modules.actors.models import ActorProfile, ActorIdentityLink
 from app.modules.compensation.api import (
     AdapterBindingCreateRequest, AdapterBindingReadRequest, AdapterBindingResumeRequest,
     AdapterBindingSuspendRequest,
 )
-from app.modules.compensation.models import ProjectCompensationAdapterBinding
 from app.modules.compensation.service import AdapterBindingService
 from app.modules.projects.compensation_binding import ProjectCompensationBindingEligibility
 from app.modules.tasks.models import AuditEvent
 from tests.migration_fixtures import current_schema_revision, run_guarded_revision_downgrade
 from .postgresql_support import world
+from .foreign_fixtures import foreign_project
 from .test_migration import clone_decision, definition, migrate, schema_value, CONSTRAINTS
 
 PRIOR = "0021_pre_submit_attempts"
@@ -60,10 +64,26 @@ async def test_binding_audit_migration_preserves_every_unrelated_clause(
 async def binding_lifecycle(admin_access):
     """Run all four existing actions through canonical AUTH and product owners."""
     target = await world(admin_access)
+    # CON's historical binding seed uses a verifier actor and already fills both
+    # instruments. Fresh binding creation needs its own eligible adapter and project.
+    project, _ = await foreign_project(target)
+    await admin_access.grant("finance_authority", project_id=project)
+    target = replace(target, project=project)
     factory = db_session.get_session_factory()
-    async with factory() as session:
-        prior = await session.get(ProjectCompensationAdapterBinding, target.binding)
-        adapter_id = UUID(prior.adapter_actor_id)
+    adapter_id = uuid4()
+    async with factory() as session, session.begin():
+        session.add(ActorProfile(
+            id=str(adapter_id), actor_kind="service", status="active",
+            provisioning_method="manual_service_provisioning",
+            service_identity=ServiceIdentity.COMPENSATION_ADAPTER.value,
+            created_by=str(target.context.actor_profile_id),
+        ))
+        await session.flush()
+        session.add(ActorIdentityLink(
+            id=str(uuid4()), actor_profile_id=str(adapter_id), issuer="https://compensation.test",
+            subject="binding-audit-" + adapter_id.hex, subject_kind="service", status="active",
+            linked_by=str(target.context.actor_profile_id), last_verified_at=datetime.now(UTC),
+        ))
     async with factory() as session:
         authority = compensation_adapter_binding_authorization(session, target.context)
         service = AdapterBindingService(
