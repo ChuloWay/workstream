@@ -5,7 +5,7 @@
 - Purpose: Review and agreement before implementation
 - Repository baseline reconciled: `a3e4c696`
 - Pinned API handoff baseline: `6feef39834737eed106773fdaed6003561fd021a`
-- Current change: [Planning proposal](WS-MCP-002-PLAN.md)
+- Current change: [Combined planning and first-chunk contract](WS-MCP-002-01.md)
 
 ## 1. What I Understand We Are Building
 
@@ -336,7 +336,7 @@ Every binding chunk includes its route/body/query/header/status tests, public AP
 - **Credential contract:** record MCP resource/audience, downstream Workstream resource/audience, the owner-supported credential mechanism, preservation of human caller identity, issuer/JWKS/client configuration and the test environment. Do not assume forwarding, exchange or shared audience. This must be settled before 01 implements protected dispatch.
 - **Workflow limits:** agree that document upload/setup completion and recovery of lost/stale policy selectors remain outside this catalogue. No automatic extra endpoint, hidden route or write-as-read workaround.
 
-The first record is authored here as a proposed contract, with runtime acceptance still unchecked. Its implementation PR will update that same `WS-MCP-002-01.md` record, not introduce a second intent/plan/risk bundle. Before each later chunk starts, create its own combined record from the current template. This planning PR contains the planning record and the requested first-contract draft; each future implementation PR has exactly one implementation change record.
+The first record is authored here as a proposed contract, with runtime acceptance still unchecked. Its implementation PR will update that same `WS-MCP-002-01.md` record, not introduce a second intent/plan/risk bundle. Before each later chunk starts, create its own combined record from the current template. The earlier planning record is consolidated into this first contract so this planning PR and each future implementation PR contain exactly one change record.
 
 I will follow the current Commitrail process: one initiative overview for this multi-PR effort and one change record for each implementation PR. Each record will state the allowed files, non-goals, acceptance criteria, risks, and required review. Open PRs will be checked for overlapping changes before each boundary starts.
 
