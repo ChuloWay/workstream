@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 from uuid import UUID, uuid4
 
@@ -32,7 +32,6 @@ from app.modules.artifacts.models import (
     SubmissionBundleDurableIntent,
 )
 from app.modules.artifacts.pre_submit_evidence import (
-    PreSubmitEvidencePersistenceResult,
     PreSubmitEvidenceConflict,
     PreSubmitPassCapability,
 )
@@ -64,6 +63,7 @@ from app.modules.artifacts.submission_materialization import (
     PreparedBundleMaterializationRequest,
     PreparedBundleMaterializationService,
     PreparedBundlePreSubmitEvidenceService,
+    PreSubmissionEvaluationPort,
 )
 from app.modules.checkers.api import (
     EffectivePreSubmissionExecutionPlan,
@@ -440,6 +440,7 @@ class SubmissionBundlePreparationRuntime:
     catalogue: EffectivePreSubmissionPlanningPort
     materialization: PreparedBundleMaterializationService
     evidence: PreparedBundlePreSubmitEvidenceService
+    checker_service: PreSubmissionEvaluationPort
     durable_put: SubmissionBundleDurablePutService
 
 
@@ -534,12 +535,10 @@ class PreparedSubmissionBundlePreparationCommand:
                     reserved = await runtime.evidence.reserve(
                         materialization_request, preparation_request=request,
                     )
-                if isinstance(reserved, PreSubmitEvidencePersistenceResult):
-                    evidence = reserved
-                else:
-                    evidence = await runtime.evidence.execute_reserved(
-                        materialization_request, reserved, preparation_request=request,
-                    )
+                evidence = await runtime.checker_service.evaluate_pre_submission(
+                    replace(materialization_request, prepared_authorization=None),
+                    reserved, preparation_request=request,
+                )
                 if not evidence.execution.eligible:
                     raise SubmissionBundlePreparationRejected("pre_submission_checker_failed")
                 if evidence.pass_capability is None:

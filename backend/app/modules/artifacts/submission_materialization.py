@@ -79,6 +79,15 @@ class PreSubmitCheckerExecutionRequest:
     storage_scheme: str
 
 
+class PreSubmissionEvaluationPort(Protocol):
+    """Finish ART's committed selection through the composed checker phase service."""
+
+    async def evaluate_pre_submission(
+        self, request: PreparedBundleMaterializationRequest, reservation: object, *,
+        preparation_request: SubmissionBundlePreparationRequest,
+    ) -> PreSubmitEvidencePersistenceResult: ...
+
+
 class PreSubmitCheckerProcessor(Protocol):
     """Async processor built by the composition-root CHECKER adapter."""
 

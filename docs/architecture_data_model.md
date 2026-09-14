@@ -842,8 +842,8 @@ The generated checker order is deterministic:
 8. contributor attestation validation
 9. low-quality artifact warnings
 
-POL-07 removes the standalone `/tasks/{id}/submission-precheck` path when
-connecting the single checker-service port. Authoritative pre-submit checking
+POL-07B removes the standalone JSON precheck and connects the internal
+checker phase service. Authoritative pre-submit checking
 already belongs to the preparation request owning the uploaded ZIP and bounded
 scratch. Broader Submission caller migration remains WS-ARCH-001-02I.
 
@@ -855,9 +855,11 @@ POST /api/v1/tasks/{id}/submission-bundle-preparations
 422 DomainError(code="pre_submission_checker_failed", details={status, eligible_to_submit, results})
 ```
 
-After POL-07 no independent precheck route remains. A client-owned manifest
-cannot reproduce the authoritative result. `POST /api/v1/tasks/{id}/submissions` consumes the verified ready
-admission and does not receive scratch paths or rerun the pre-submit plan.
+No independent precheck route remains. A client-owned manifest
+cannot reproduce the authoritative result. At the later public cutover,
+`POST /api/v1/tasks/{id}/submissions` will consume the verified ready admission
+without receiving scratch paths or rerunning the pre-submit plan. Canonical
+admission-backed creation remains hidden until then.
 
 Before that cutover, hidden ART-04B2 establishes the execution boundary without
 exposing a route. The fixed materializer authorizes before any prepared-byte

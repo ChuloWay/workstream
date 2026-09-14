@@ -65,22 +65,19 @@ The checker binding includes:
 
 Workstream has two checker moments.
 
-Pre-submit static checks run before Workstream creates a submission. They execute the task's locked project `PreSubmitCheckerPolicy`, which was generated from the effective project submission artifact policy during project setup, and give immediate feedback on packet shape and policy issues:
+Pre-submit intake checks run against one uploaded ZIP in ART-managed bounded
+scratch before Workstream creates a Submission. They execute the locked
+platform/project effective plan and retain canonical ART evidence for packet
+fields, safe archive members, size limits, required outputs/evidence and
+contributor attestation. A caller-owned manifest or storage reference is not
+proof of uploaded bytes.
 
-- required field presence
-- package hash presence
-- artifact hash manifest shape
-- evidence references
-- worker attestation
-- storage reference safety
-- task assignment and state compatibility
-
-Blocking pre-submit failures prevent submission creation. Preflight failures
-return `PreSubmitCheckResponse(status="failed", eligible_to_submit=false,
-results=[...])`. Blocked submission-create attempts return
-`DomainError(code="pre_submission_checker_failed")` with structured
-pass/fail/warning details, create no submission row, no submission version, no
-task transition to `submitted`, and no submission-created audit event.
+Blocking pre-submit failures prevent submission creation. POL-07B removes the
+standalone JSON precheck and its response schema. Hidden ZIP preparation
+returns `pre_submission_checker_failed`, while ART retains bounded evidence.
+Structured public feedback remains pending the canonical intake cutover.
+Failure creates no Submission row or version, task transition to `submitted`,
+or submission-created audit event.
 
 Pre-submit failures do not create review decisions, do not return `accept`,
 `needs_revision`, or `reject`, and do not create durable post-submit checker

@@ -245,8 +245,8 @@ structured public feedback and TASK audit publication remain pending:
   structured checker result for project operators
 - the response does not use review decision values: `accept`, `needs_revision`, or `reject`
 
-POL-07 removes the standalone `/tasks/{id}/submission-precheck` contract when
-connecting the internal checker-service port. WS-ARCH-001-02I retains the broader
+POL-07B removes the standalone JSON precheck contract and connects the internal
+checker phase service. WS-ARCH-001-02I retains the broader
 Submission caller cutover. Authoritative intake checks run inside continuous
 submission-bundle preparation against the exact uploaded ZIP in bounded scratch.
 The structured response below is the target for the canonical public intake

@@ -4,6 +4,9 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+
+from app.adapters.artifacts import CheckerPhaseService
+from app.modules.checkers.api import UnavailablePostSubmissionExecution
 from sqlalchemy import select
 
 from app.modules.artifacts.authorization import PreparedPreSubmitMaterializationAuthorization
@@ -67,12 +70,15 @@ async def test_completed_replay_authorizes_retry_custody_and_stored_original_gen
                 session, calls, preparation_authorization=contributor,
             )
             workflow._materialization._authorization = authority
+            phases = CheckerPhaseService(
+                pre_submission=workflow, post_submission=UnavailablePostSubmissionExecution(),
+            )
             try:
                 reservation = await _reserve_with_real_materializer(
                     workflow, harness.request, harness.preparation_request,
                 )
-                original = await workflow.execute_reserved(
-                    harness.request, reservation,
+                original = await phases.evaluate_pre_submission(
+                    replace(harness.request, prepared_authorization=None), reservation,
                     preparation_request=harness.preparation_request,
                 )
                 assert original.pass_capability is not None
@@ -122,6 +128,12 @@ async def test_completed_replay_authorizes_retry_custody_and_stored_original_gen
                 replay = await _reserve_with_real_materializer(
                     workflow, retry, harness.preparation_request,
                 )
+                selected = replay
+                replay = await phases.evaluate_pre_submission(
+                    replace(retry, prepared_authorization=None), selected,
+                    preparation_request=harness.preparation_request,
+                )
+                assert replay is selected
                 assert isinstance(replay, PreSubmitEvidencePersistenceResult)
                 assert replay.evidence.evidence_set_id == original.evidence.evidence_set_id
                 assert replay.execution.custody.prepared_generation_id == original_generation

@@ -6,7 +6,6 @@ import hashlib
 import json
 import re
 from fnmatch import fnmatchcase
-from urllib.parse import urlparse
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Awaitable
@@ -18,8 +17,6 @@ from app.modules.checkers.api.post_submit_catalogue import (
 from app.modules.checkers.api.post_submit import (
     ExpectedPostSubmitContext, ObservedPostSubmitContext,
 )
-from app.modules.tasks.models import WorkstreamTask
-from app.modules.tasks.schemas import SubmissionCreate
 from app.modules.checkers.pre_submit_defaults import (
     LOW_QUALITY_GENERATED_PATTERNS,
     attestation_validation_facts,
@@ -288,73 +285,6 @@ def canonical_artifact_manifest_hash(manifest: list[dict]) -> str:
     return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
 
 
-async def pre_submit_static_feedback(
-    task: WorkstreamTask,
-    payload: SubmissionCreate,
-    effective_policy: dict,
-    checker_names: list[str],
-) -> list[CheckerOutcome]:
-    """Run project-policy pre-submit checks before a submission is created.
-
-    Args:
-        task: Task receiving the draft packet.
-        payload: Draft submission packet payload.
-        effective_policy: Locked effective project submission artifact policy.
-        checker_names: Compiled project pre-submit checker names in run order.
-
-    Returns:
-        Worker-facing checker feedback items. These are not durable gate records.
-    """
-    manifest = [entry.model_dump() for entry in payload.artifact_hash_manifest]
-    evidence_items = [entry.model_dump() for entry in payload.evidence_items]
-    outcomes_by_name = {
-        "check_submission_packet": _pre_submit_packet_outcome(
-            payload,
-            manifest,
-            evidence_items,
-            effective_policy,
-        ),
-        "check_evidence_present": _evidence_presence_outcome(
-            evidence_items,
-            _required_evidence_keys(effective_policy),
-        ),
-        "check_evidence_integrity": _evidence_integrity_outcome(manifest, evidence_items),
-        "check_required_files": _required_files_outcome(
-            _required_artifact_paths(effective_policy),
-            manifest,
-        ),
-        "check_forbidden_files": _forbidden_files_outcome(
-            manifest,
-            evidence_items,
-            _forbidden_artifact_patterns(effective_policy),
-        ),
-        "check_confidentiality_attestation": _confidentiality_attestation_outcome(
-            payload.worker_attestation,
-            _required_attestation_terms(effective_policy),
-        ),
-    }
-    low_quality = _low_quality_generated_artifacts_outcome(
-        payload.summary,
-        payload.worker_attestation,
-        manifest,
-        evidence_items,
-    )
-    if low_quality is not None:
-        outcomes_by_name["check_low_quality_generated_artifacts"] = low_quality
-    else:
-        outcomes_by_name["check_low_quality_generated_artifacts"] = _pass(
-            "check_low_quality_generated_artifacts",
-            "Submission does not contain obvious generated-output placeholder signals.",
-        )
-    missing_checkers = [name for name in checker_names if name not in outcomes_by_name]
-    if missing_checkers:
-        raise UnknownChecker(
-            "compiled pre-submit checker bundle references unsupported checker names: "
-            + ", ".join(sorted(missing_checkers))
-        )
-    return [outcomes_by_name[name] for name in checker_names]
-
-
 def _pass(name: str, message: str, *, metadata: dict | None = None) -> CheckerOutcome:
     """Build a passing checker outcome."""
     return CheckerOutcome(
@@ -422,59 +352,6 @@ def _packet_shape_outcome(summary: str, package_hash: str, manifest: list[dict])
             metadata={"missing_fields": missing},
         )
     return _pass("check_submission_packet", "Submission packet contains required fields.")
-
-
-def _pre_submit_packet_outcome(
-    payload: SubmissionCreate,
-    manifest: list[dict],
-    evidence_items: list[dict],
-    effective_policy: dict,
-) -> CheckerOutcome:
-    """Validate packet-level rules from the effective project policy."""
-    base_outcome = _packet_shape_outcome(payload.summary, payload.package_hash, manifest)
-    if base_outcome.blocks_review:
-        return base_outcome
-
-    required_packet_fields = set(effective_policy.get("required_packet_fields", []))
-    missing_required = []
-    field_values = {
-        "summary": payload.summary,
-        "artifact_hash_manifest": manifest,
-        "worker_attestation": payload.worker_attestation,
-    }
-    for field_name in sorted(required_packet_fields):
-        value = field_values.get(field_name)
-        if value is None or (isinstance(value, str) and not value.strip()) or value == []:
-            missing_required.append(field_name)
-    if missing_required:
-        return _fail(
-            "check_submission_packet",
-            f"Submission packet is missing required fields: {', '.join(missing_required)}.",
-            "Add the missing packet fields before submitting.",
-            metadata={"missing_fields": missing_required},
-        )
-
-    invalid_storage_refs = _invalid_storage_references(payload, evidence_items, effective_policy)
-    if invalid_storage_refs:
-        return _fail(
-            "check_submission_packet",
-            "Submission includes storage references outside the locked project policy.",
-            "Use only storage schemes allowed by the project submission artifact policy.",
-            metadata={"invalid_storage_refs": invalid_storage_refs},
-        )
-
-    size_outcome = _size_limit_outcome(manifest, effective_policy)
-    if size_outcome is not None:
-        return size_outcome
-
-    packaging_outcome = _packaging_outcome(payload, effective_policy)
-    if packaging_outcome is not None:
-        return packaging_outcome
-
-    return _pass(
-        "check_submission_packet",
-        "Submission packet satisfies locked project packet policy.",
-    )
 
 
 def _hash_token_is_valid(value: str | None) -> bool:
@@ -706,81 +583,6 @@ def _path_matches_forbidden_pattern(path: str, pattern: str) -> bool:
         or fnmatchcase(filename, normalized_pattern)
         or any(fnmatchcase(segment, normalized_pattern) for segment in segments)
     )
-
-
-def _invalid_storage_references(
-    payload: SubmissionCreate,
-    evidence_items: list[dict],
-    effective_policy: dict,
-) -> list[str]:
-    """Return storage references whose scheme is not allowed by policy."""
-    allowed_schemes = set(effective_policy.get("allowed_storage_schemes", []))
-    refs = []
-    if payload.package_uri:
-        refs.append(payload.package_uri)
-    refs.extend(str(item["uri"]) for item in evidence_items if item.get("uri"))
-    invalid = []
-    for ref in refs:
-        scheme = urlparse(ref).scheme
-        if scheme not in allowed_schemes:
-            invalid.append(ref)
-    return invalid
-
-
-def _size_limit_outcome(manifest: list[dict], effective_policy: dict) -> CheckerOutcome | None:
-    """Validate artifact and package size limits when sizes are supplied."""
-    maximum_file_size = effective_policy.get("maximum_file_size_bytes")
-    if maximum_file_size is not None:
-        oversized = [
-            str(entry.get("artifact", ""))
-            for entry in manifest
-            if entry.get("size_bytes") is not None and entry["size_bytes"] > maximum_file_size
-        ]
-        if oversized:
-            return _fail(
-                "check_submission_packet",
-                "Submission contains artifacts larger than the locked project file limit.",
-                "Remove or reduce oversized artifacts before submitting.",
-                metadata={"oversized_artifacts": oversized},
-            )
-
-    maximum_package_size = effective_policy.get("maximum_package_size_bytes")
-    known_manifest_size = sum(entry.get("size_bytes") or 0 for entry in manifest)
-    if maximum_package_size is not None and known_manifest_size > maximum_package_size:
-        return _fail(
-            "check_submission_packet",
-            "Submission package exceeds the locked project package size limit.",
-            "Reduce the submitted package before submitting.",
-            metadata={"known_manifest_size_bytes": known_manifest_size},
-        )
-    return None
-
-
-def _packaging_outcome(
-    payload: SubmissionCreate,
-    effective_policy: dict,
-) -> CheckerOutcome | None:
-    """Validate package requirements from the effective project policy."""
-    packaging = effective_policy.get("packaging") or {}
-    if packaging.get("package_required") and not payload.package_uri:
-        return _fail(
-            "check_submission_packet",
-            "Submission package is required by the locked project policy.",
-            "Attach the package reference before submitting.",
-        )
-    allowed_formats = packaging.get("allowed_package_formats") or []
-    if allowed_formats and payload.package_uri:
-        lowered_uri = payload.package_uri.lower()
-        if not any(
-            lowered_uri.endswith(f".{str(fmt).lower().lstrip('.')}") for fmt in allowed_formats
-        ):
-            return _fail(
-                "check_submission_packet",
-                "Submission package format is not allowed by the locked project policy.",
-                "Use one of the package formats allowed by the project policy.",
-                metadata={"allowed_package_formats": allowed_formats},
-            )
-    return None
 
 
 def _missing_effective_policy_outcome(checker_name: str) -> CheckerOutcome:

@@ -221,16 +221,16 @@ Response fields:
 
 Pre-submit feedback binds to `task_id`, the task's locked guide source snapshot,
 effective project submission artifact policy hash, pre-submit checker bundle hash,
-draft packet fields, package hash, and artifact manifest shape. It does not
+server-verified ZIP commitment, packet fields and canonical semantic manifest. It does not
 require a finalized `submission_id` or finalized submission version because
 those do not exist before submission creation.
 
-Blocking pre-submit failures prevent submission creation. Preflight failures
-return `PreSubmitCheckResponse(status="failed", eligible_to_submit=false,
-results=[...])`. Blocked submission-create attempts return
-`DomainError(code="pre_submission_checker_failed")` with structured
-pass/fail/warning details, create no submission row, no submission version, no
-task transition to `submitted`, and no submission-created audit event.
+Blocking pre-submit failures prevent submission creation. POL-07B removes the
+standalone JSON precheck and its response schema. Hidden ZIP preparation
+returns `pre_submission_checker_failed`, while ART retains bounded evidence.
+Structured public feedback remains pending the canonical intake cutover.
+Failure creates no Submission row or version, task transition to `submitted`,
+or submission-created audit event.
 
 Pre-submit results are not authoritative for `REVIEW_PENDING`, cannot create
 `NEEDS_REVISION`, and do not return review decision values: `accept`,

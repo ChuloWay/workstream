@@ -134,13 +134,13 @@ cannot be reused as post-submission review-gate evidence. See the
 | Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls; canonical `/actors/me` self-read with duplicate `/auth/me` removed | Final end-to-end operational and conformance proof |
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
 | Project Guide source custody | **Live foundation** | Guide creation declares documents and task examples; public document upload; immutable internal metadata snapshots; exact run-scoped reads; S3-backed originals and isolated agent document inspection | Carry the same document generation through manager approval and guide activation; prove each enabled document reader |
-| Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; automatic deterministic post-policy derivation, public complete policy read, separate approval and shared correction custody | One checker-service port (POL-07) |
+| Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; automatic deterministic post-policy derivation, public complete policy read, separate approval and shared correction custody | CP06 selected ContributionPolicy validation, CP07 guide binding and AUTH-12H activation |
 | Contribution policy administration | **Hidden and proven** | Finance Authority adapter-binding lifecycle; ContributionPolicy read/create/update/publish/retire with exact Finance Authority; immutable operation and event history | Expose selected-policy validation, bind one published complete version to the active guide generation |
 | Task readiness and claim | **Foundation with grant-backed contributor commands** | Task records, assignments and locked work context; claim/start/contributor context use exact-project Submitter grants; separate manager context and system-Operator start | Bind the guide's ContributionPolicyVersion before `READY` and carry it through TaskAssignment without a current-policy lookup; finish ready queues, remaining management/read authority and durable assignment invalidation |
 | Contributor artifact preparation | **Hidden and proven** | One outer ZIP; bounded scratch inspection; canonical manifest; platform and project prechecks; unchanged-work rejection; durable put intent; verification; capacity-charged ready admission | Connect only the active unified guide/checker lineage and complete the later public admission-only cutover |
-| Pre-submission intake checking | **Hidden and proven; unified-guide integration remains** | Separate versioned pre-submission catalogue, locked effective-plan compilation, platform/project checks during continuous preparation, and blocking feedback before Submission creation | Connect approved unified-guide pre-submit policy lineage through task/assignment preparation and complete the canonical public cutover; passing intake must never substitute for post-submit evaluation |
+| Pre-submission intake checking | **Hidden and proven; unified-guide integration remains** | Separate versioned pre-submission catalogue, locked effective-plan compilation, platform/project checks during continuous preparation, blocking feedback before Submission creation, and one internal phase command covering execution/replay with the JSON precheck removed | Connect approved unified-guide pre-submit policy lineage through task/assignment preparation and complete the canonical public cutover; passing intake must never substitute for post-submit evaluation |
 | Immutable Submission creation | **Hidden foundation; public packet creation retired** | Contributor preparation authority; durable pre-submit reservation and exact completed-evidence recovery without rerunning checks; atomic admission consumption; TASK-owned admission-backed creation; fixed-service artifact binding; replay/concurrency/rollback proof | Stamp the assignment's exact ContributionPolicyVersion and complete unified policy lineage; finish downstream evaluation and the canonical public integration. The retained submission-list GET is not a usable creation POST |
-| Post-submission evaluation and `allow_review` | **Planned; immediate integration milestone** | One canonical CHECKER post-submit catalogue/compiler used by existing consumers, hidden phase contracts and structural-handler conformance; existing pre-review and materialization foundations | Connect the unavailable phase port to durable execution; evaluate the exact Submission against its locked policy; persist one durable current superseding result; activate fixed services; automatically dispatch it and publish the canonical `allow_review` manifest |
+| Post-submission evaluation and `allow_review` | **Planned; immediate integration milestone** | One canonical CHECKER post-submit catalogue/compiler used by existing consumers, internal phase service with explicitly unavailable post execution, hidden value contracts and structural-handler conformance; existing pre-review and materialization foundations | Connect the unavailable phase port to durable execution; evaluate the exact Submission against its locked policy; persist one durable current superseding result; activate fixed services; automatically dispatch it and publish the canonical `allow_review` manifest |
 | Review queue and lease | **Hidden persistence foundation** | Queue/admission idempotency and ReviewLease/preference persistence; complete unavailable REV action/principal catalogue and typed AUTH contracts | Packet-membership contract and manifest; Review schema; canonical admission from `allow_review`; claim/lease/packet authority; lease copies the Submission-stamped policy version with no CON lookup |
 | Review decision and revision | **Planned** | Review/revision policy identities and mutation authority; approved same-task revision-rebase semantics | Immutable findings and decisions; `accept`, `needs_revision`, and `reject`; complete-context revision preparation; finding responses; replacement contributor rules; replay and recovery |
 | Contribution and compensation truth | **Schema foundations plus hidden policy behavior** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings; hidden policy administration | Persist ContributionRecord/CompensationAward and one shared FinalAcceptance/submitter operation for human accept or authorized false/pass routing. Only actual Reviews create reviewer records. Evaluate frozen actor rules into zero, one or two awards |
@@ -388,7 +388,7 @@ approval and manual correction dispatch through the same compiler. The reconcile
 [dependency and ownership plan](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
 permits selected-policy validation independently after completed CP05. The
 selected delivery order finishes unified setup, separate pre/post approval and
-the POL-07 facade before returning to CP06/CP07 and AUTH-12H guide activation.
+the delivered POL-07B facade before CP06/CP07 and AUTH-12H guide activation.
 This priority adds no dependency on CP06 to live setup. Plans are not
 implementation claims.
 The sequence below describes product dependencies; production activation still
@@ -396,23 +396,18 @@ requires its exact owner-proven prerequisites.
 
 The next dependency-safe product sequence is:
 
-1. **Connect the single checker-service port.** POL-05B and POL-06B deliver public
-   manager inspection, separate pre/post approval and shared manual correction
-   dispatch. POL-06A owns post-policy custody and AUTH-12G supplies its narrow
-   authority. Committed pre-submit approval now schedules deterministic derivation;
-   recovery uses existing immutable approvals without another agent invocation.
-   POL-07A supplies the ART prerequisite: a committed reservation precedes checks,
-   completed retries read the original canonical evidence without another invocation
-   or pass capability, and uncertain attempts remain unavailable under the same key.
-   Fresh authority and byte/manifest checks still apply. POL-07 remains the next
-   typed checker-service boundary, consuming independent
-   registered-capability proof. Setup receipts remain immutable; guide activation
-   and submitted-work execution retain their separate dependencies.
-2. **Validate and bind the selected ContributionPolicy.** CP05 completes
+POL-07B completes the internal checker phase service and removes the standalone
+JSON precheck. Hidden ZIP preparation uses one pre command for both execution
+and completed replay, preserving ART's reservation, authority and canonical
+evidence ownership. Production post execution remains unavailable; value-contract
+proof does not replace ARCH-04B/04C/04D/04E custody, execution and routing work.
+Setup receipts remain immutable. The next guide boundary is:
+
+1. **Validate and bind the selected ContributionPolicy.** CP05 completes
    authorization for the five hidden policy actions. CP06 supplies selected-policy
    validation; CP07 binds one exact published, complete, binding-valid
    ContributionPolicyVersion to the Project Guide.
-3. **Activate the complete guide generation.** AUTH may permit terminal guide
+2. **Activate the complete guide generation.** AUTH may permit terminal guide
    activation only when compilation, sufficiency, pre-submit policy,
    post-submit policy, review policy, revision policy, and ContributionPolicy
    all belong to the same approved current generation. First prove that each
@@ -422,7 +417,7 @@ The next dependency-safe product sequence is:
    The new activation command replaces legacy economic readiness guards;
    physical deletion waits until all old consumers are gone, including checker
    and public Submission cutover. Physical deletion is not a prerequisite for `allow_review`.
-4. **Make tasks claimable from that generation.** TASK locks the complete guide
+3. **Make tasks claimable from that generation.** TASK locks the complete guide
    and policy context before `READY`. Claim copies it to TaskAssignment; it
    performs no ContributionPolicy selection. Submission later copies the
    assignment's attempt version.
@@ -431,7 +426,7 @@ The next dependency-safe product sequence is:
    correction feedback on blocking failures, and publishes ready admission only
    after the required preparation/custody checks. TASK then consumes that
    admission to create the immutable Submission with the same assignment lineage.
-5. **Produce current post-submit evidence and policy-governed routing.** Materialize the exact immutable
+4. **Produce current post-submit evidence and policy-governed routing.** Materialize the exact immutable
    Submission, execute the locked post-submit plan, persist one current result,
    activate only its fixed services, and automatically publish an exact
    human `allow_review` manifest on true when no blocking failure exists.
@@ -449,19 +444,19 @@ The next dependency-safe product sequence is:
    enabling false. This milestone creates the submitter contribution and
    applicable awards without live human queues/leases/decisions; it neither
    invents a reviewer nor removes the later human branch from v0.1.
-6. **Start the live REV path.** Complete packet, Review, and FinalAcceptance
+5. **Start the live REV path.** Complete packet, Review, and FinalAcceptance
    persistence; admit only canonical `allow_review`; claim a bounded lease and
    exact packet using the Submission-stamped ContributionPolicyVersion.
-7. **Make human review decisions economically complete.** Before the first live
+6. **Make human review decisions economically complete.** Before the first live
    Review commit, add the reviewer CON operation and reuse the shared acceptance
    operation already needed by the false branch. Every final decision records
    reviewer work; accept additionally records accepted submitter work. Do not
    duplicate the common persistence or submitter participant.
-8. **Complete revision and operations.** Preserve old attempts immutably;
+7. **Complete revision and operations.** Preserve old attempts immutably;
    rebase a continuing TaskAssignment only at the controlled human-revision
    boundary when the complete governed context changed. Finish recovery,
    fulfillment, reconciliation, audit, release controls, and legacy cleanup.
-9. **Release proof.** Expose stable APIs and frontend surfaces, exercise the
+8. **Release proof.** Expose stable APIs and frontend surfaces, exercise the
     complete path through real database, durable-job, storage, security, failure,
     and recovery tests, then run the internal pilot.
 

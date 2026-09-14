@@ -1,13 +1,13 @@
 # WS-POL-003-07B — One internal checker command per phase
 
 - Initiative: WS-POL-003
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Risk class: L1
 - Intended merge outcome: route hidden ZIP preparation through one pre-submit
   phase command, provide the separate unavailable post-submit command, and
   remove the obsolete public JSON precheck and its exclusive implementation.
 
-## Intent and reviewed boundaries
+## Intent
 
 This implements the remaining [POL-07 contract](planning/chunks/WS-POL-003-07-single-checker-service-port.md)
 after POL-07A on main `0849ca3e`. The old contract overstated what this boundary
@@ -21,10 +21,10 @@ CP07/AUTH-12H work. Live post-submit materialization, attempts, authority,
 currentness, workers and routing remain ARCH-04B/04C/04D/04E work. Existing
 post-submit run/result/history consumers cannot be deleted before that cutover.
 
-## Allowed and prohibited scope
+## Bounded change
 
 - Allowed: ART `submission_admission.py` phase call site and narrow owner-local
-  protocol; composition in `adapters/artifacts` and `adapters/checkers`;
+  protocol; composition in `adapters/artifacts/__init__.py`;
   CHECKER `router.py`, `service.py`, `runner.py`, `schemas.py` solely for deleting
   the JSON precheck and exclusive helpers; affected tests and exact test/debt
   inventories; current checker/ART documentation, roadmap and initiative navigation.
@@ -40,7 +40,7 @@ post-submit run/result/history consumers cannot be deleted before that cutover.
 
 ## Implementation
 
-1. Add a composition-level checker phase service with exactly
+1. Add a checker phase service in the exact ART adapter composition root with exactly
    `evaluate_pre_submission` and `evaluate_post_submission`. Inject ART's
    existing evidence operation and CHECKER's existing post execution port.
    ART imports only an owner-local pre-phase protocol; CHECKER imports no ART
@@ -49,7 +49,9 @@ post-submit run/result/history consumers cannot be deleted before that cutover.
    for both completed replay and a winning reservation. Clear the consumed
    prepared authorization from the process-local request before this handoff.
    Return the original canonical ART persistence result unchanged on replay;
-   otherwise call the existing `execute_reserved`. That operation alone mints
+   otherwise call the existing `execute_reserved` on the same evidence-service
+   instance that issued the same opaque reservation, without an intervening
+   session read or transaction. That operation alone mints
    the committed claim, reauthorizes, evaluates and persists. Preserve the
    original pass-capability semantics and durable continuation.
 3. Delegate the post command to CHECKER's typed contract, checking its exact
@@ -61,7 +63,7 @@ post-submit run/result/history consumers cannot be deleted before that cutover.
    intake checks remain the standard. Do not replace the removed HTTP route
    with a compatibility route or expose hidden preparation prematurely.
 
-## Acceptance and proof
+## Acceptance criteria
 
 - A prepared winner and an exact completed replay each reach the facade once.
   Winner executes members once; replay executes none and returns the exact
@@ -85,7 +87,7 @@ post-submit run/result/history consumers cannot be deleted before that cutover.
   markdown links, Commitrail validation and stale wording scan. Reconcile
   roadmap and any local sheet exports with the intended merged outcome.
 
-## Review and human focus
+## Risk and review routing
 
 Required focused internal tracks: architecture/reuse, security, QA/test-delta,
 documentation/product operations and CI integrity for changed test inventories.
@@ -94,3 +96,38 @@ mistaken for production execution. Final reviews use a clean exact candidate.
 Human focus: unchanged ART authority/custody and canonical result ownership;
 complete obsolete precheck deletion; honest unavailable post boundary; next
 work advances to CP06/CP07 without claiming live submitted-work execution.
+
+## Evidence
+
+The module-boundary probe requires the concrete service in ART's exact adapter
+root: a separate adapter file would introduce private ART dependency debt.
+This placement uses the existing owner exemption, without changing a gate or
+exporting private workflow types through CHECKER's public API.
+
+- `tests/checkers/test_phase_service.py` proves canonical result/pass-capability
+  preservation, owner failure propagation, exact post request/result validation,
+  explicit unavailability and route/schema deletion. Post result fixtures are
+  detached contract facts, never production execution or database evidence.
+- `test_hidden_preparation_replays_persisted_checked_custody` counts the facade
+  call for both completed replay and execution and checks cleared authorization.
+  Its controlled command doubles prove routing, not database authority.
+- `test_completed_replay_authorizes_retry_custody_and_stored_original_generation`
+  exercises the real phase facade, committed ART claim, PostgreSQL evidence and
+  real contributor/fixed-service authority. It retains denial/rollback and exact
+  original-generation replay with no extra member invocation or capability.
+- The existing real PostgreSQL ART/ART and ART/role-issuance lock tests retain
+  their assertions; the preparation-command runtime now uses the real facade.
+- Obsolete JSON-precheck endpoint/schema/service tests and exclusive packet-size,
+  storage-reference and package-suffix tests are removed with their code. Real
+  ZIP packet/size/path/evidence and attestation checks remain covered in
+  `test_default_pre_submit_execution.py` and artifact archive tests. Mixed
+  post-submit revision/read/authority tests retain their lifecycle assertions;
+  only draft-precheck requests/assertions are removed.
+- No new dependency or CI gate relaxation. Test lane inventory registers the
+  phase tests and removes the deleted packet-schema file. Private import debt
+  shrinks with removed CHECKER-to-TASK schema/model imports; the oversized-test
+  inventory records only the smaller affected existing file, without a new waiver.
+- No local spreadsheet exports are present. Current roadmap/navigation advances
+  to CP06/CP07 and AUTH-12H; post execution and public intake remain deferred.
+
+Exact-head commands, review findings and hosted evidence are recorded in the PR.

@@ -32,14 +32,11 @@ from app.modules.checkers.runner import (
     UnknownChecker,
     canonical_artifact_manifest_hash,
     default_checker_registry,
-    pre_submit_static_feedback,
     policy_context_mismatches,
 )
 from app.modules.checkers.schemas import (
-    CheckerFeedbackItem,
     CheckerResultResponse,
     CheckerRunResponse,
-    PreSubmitCheckResponse,
 )
 from app.modules.projects.models import (
     EffectiveProjectSubmissionArtifactPolicy,
@@ -54,7 +51,6 @@ from app.modules.projects.repository import ProjectRepository
 from app.modules.tasks.lifecycle import (
     InvalidTaskTransition,
     TASK_STATUS_EVALUATION_PENDING,
-    TASK_STATUS_IN_PROGRESS,
     TASK_STATUS_NEEDS_REVISION,
     TASK_STATUS_REVIEW_PENDING,
     TASK_STATUS_SUBMITTED,
@@ -63,7 +59,6 @@ from app.modules.tasks.lifecycle import (
 from app.modules.tasks.authorization import can_admin_or_task_creator_manage
 from app.modules.tasks.models import AuditEvent, Submission, WorkstreamTask
 from app.modules.tasks.repository import TaskRepository
-from app.modules.tasks.schemas import SubmissionCreate
 from app.schemas.auth import ActorContext
 
 CHECKER_TRIGGER_ROLES = {"admin", "project_manager"}
@@ -188,49 +183,6 @@ class CheckerService:
         self._checker_repo = CheckerRepository(session)
         self._registry = default_checker_registry()
 
-    async def pre_submit_check(
-        self,
-        actor: ActorContext,
-        task_id: str,
-        payload: SubmissionCreate,
-    ) -> PreSubmitCheckResponse:
-        """Return non-authoritative static feedback for a draft submission.
-
-        Args:
-            actor: Trusted actor resolved from the Flow token.
-            task_id: Task receiving the draft submission.
-            payload: Draft submission packet payload.
-
-        Returns:
-            Worker-facing pre-submit feedback.
-        """
-        task = await self._get_task_for_actor(actor, task_id)
-        if "worker" in actor.roles and task.status not in {
-            TASK_STATUS_IN_PROGRESS,
-            TASK_STATUS_NEEDS_REVISION,
-        }:
-            raise CheckerExecutionBlocked("task must be in progress for worker pre-submit checks")
-        effective_policy, pre_submit_checker_policy = await self._load_locked_pre_submit_context(
-            task,
-        )
-        try:
-            outcomes = await pre_submit_static_feedback(
-                task,
-                payload,
-                effective_policy.effective_policy,
-                list(pre_submit_checker_policy.checker_names or []),
-            )
-        except UnknownChecker as exc:
-            raise CheckerPolicyInvalid(
-                "locked project pre-submit checker policy references unregistered checker"
-            ) from exc
-        eligible_to_submit = not any(outcome.blocks_review for outcome in outcomes)
-        return PreSubmitCheckResponse(
-            task_id=task.id,
-            status="passed" if eligible_to_submit else "failed",
-            eligible_to_submit=eligible_to_submit,
-            results=[self._feedback_item(outcome) for outcome in outcomes],
-        )
 
     async def _load_locked_pre_submit_context(
         self,
@@ -2107,24 +2059,4 @@ class CheckerService:
             failure_message=checker_run.failure_message if has_checker_admin_access else None,
             created_at=checker_run.created_at,
             results=results,
-        )
-
-    @staticmethod
-    def _feedback_item(outcome: CheckerOutcome) -> CheckerFeedbackItem:
-        """Convert an internal checker outcome to pre-submit feedback.
-
-        Args:
-            outcome: Checker outcome from a non-authoritative static check.
-
-        Returns:
-            Worker-facing feedback item.
-        """
-        return CheckerFeedbackItem(
-            checker_name=outcome.checker_name,
-            status=outcome.status,
-            severity=outcome.severity,
-            would_block_if_submitted=outcome.blocks_review,
-            worker_message=outcome.worker_message or "Checker feedback is not worker-visible.",
-            worker_suggested_fix=outcome.worker_suggested_fix,
-            worker_evidence_refs=outcome.worker_evidence_refs,
         )

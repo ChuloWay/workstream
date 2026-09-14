@@ -1400,17 +1400,16 @@ async def test_canonical_result_validator_rejects_forged_definition(tmp_path: Pa
 
 
 @pytest.mark.asyncio
-async def test_legacy_precheck_runner_is_not_an_execution_dependency(
+async def test_post_submit_registry_is_not_an_intake_execution_dependency(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     request, inspector, manager, preparation, catalogue = await _request(tmp_path)
-    import app.modules.checkers.runner as legacy_runner
+    import app.modules.checkers.runner as post_submit_runner
 
     def forbidden(*_args, **_kwargs):
-        raise AssertionError("legacy precheck path was called")
+        raise AssertionError("post-submit registry was called")
 
-    monkeypatch.setattr(legacy_runner, "pre_submit_static_feedback", forbidden)
-    monkeypatch.setattr(legacy_runner, "default_checker_registry", forbidden)
+    monkeypatch.setattr(post_submit_runner, "default_checker_registry", forbidden)
     service = PreparedBundleMaterializationService(
         session=SimpleNamespace(),
         authorization=_AllowAuthority(),
