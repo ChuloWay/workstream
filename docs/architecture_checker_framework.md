@@ -323,9 +323,9 @@ before invoking any checker. Only the original request can consume the winning
 claim. The fixed materializer consumes fresh authorization for inspected custody
 and obtains another transaction-bound authorization before execution. Evidence
 and attempt completion commit together after a fresh locked-context check.
-Each transaction acquires TASK context, PROJECT policy context, contributor
-AUTH, fixed-materializer AUTH when needed, then attempt/evidence locks in that
-order. The pre-inspection reservation follows the same order as execution, so
+The context, reservation, execution, and completion transactions acquire TASK
+and PROJECT context locks before contributor AUTH. Where needed,
+fixed-materializer AUTH follows, then attempt/evidence locks. The pre-inspection reservation follows the same order as execution, so
 concurrent tasks in one project cannot invert the shared materializer lock.
 The evidence captures a separate hash of the packet actually passed to the winning
 invocation; the database compares it with the attempt's requested packet.
