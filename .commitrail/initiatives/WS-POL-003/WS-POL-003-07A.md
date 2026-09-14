@@ -8,7 +8,9 @@
 
 ## Intent and current behavior
 
-This is the approved prerequisite identified by the [POL-07 review](WS-POL-003-07.md).
+This is the approved prerequisite identified by reviewing the
+[adopted POL-07 contract](planning/chunks/WS-POL-003-07-single-checker-service-port.md)
+against main `d5dd94d3`.
 Current ART evidence writes are idempotent only after checker execution; a
 crash before evidence commit leaves no record of the invocation. A prepared
 generation is process-local and cannot be reassigned to a retried upload.
