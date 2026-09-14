@@ -138,6 +138,8 @@ async def test_all_binding_actions_persist_required_audit(admin_access):
 async def test_binding_audit_sql_preserves_privacy_and_permission_guards(admin_access, tamper, constraint):
     _, events = await binding_lifecycle(admin_access)
     event = events[0]
+    if "after_facts" in tamper:
+        tamper = {**tamper, "after_facts": {**event.after_facts, **tamper["after_facts"]}}
     control = await clone_decision(event, {})
     assert await schema_value(f"select count(*) from audit_events where id='{control}'") == 1
     count = await schema_value("select count(*) from audit_events")
