@@ -1822,3 +1822,58 @@ def test_partition_accepts_only_exact_auth12f4_targets() -> None:
     ):
         with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
             ownership._validate_additive_partition_transition(invalid, trusted)
+
+
+def test_partition_accepts_only_exact_auth12g_targets() -> None:
+    expected = {
+        'backend/app/modules/authorization/domain/post_policy.py',
+        'backend/app/modules/authorization/post_policy_authorization.py',
+    }
+    assert ownership.AUTH_12G_PARTITION_TARGETS == expected
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    current = _partition(sorted({retained, *expected}))
+    ownership._validate_additive_partition_transition(current, trusted)
+    wrong_owner = _partition(sorted({retained, *expected}))
+    next(item for item in wrong_owner["assignments"] if item["target"] == retained)["group"] = "lifecycle"
+    for invalid in (
+        _partition(sorted(expected)),
+        _partition(sorted({retained, *expected, "backend/app/modules/authorization/extra.py"})),
+        wrong_owner,
+    ):
+        with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+            ownership._validate_additive_partition_transition(invalid, trusted)
+
+
+def test_partition_accepts_only_exact_pre_submit_attempt_owner_addition() -> None:
+    retained = "backend/app/core/config.py"
+    attempt = "backend/app/modules/artifacts/pre_submit_attempts.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted([retained, attempt])), trusted,
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted([retained, attempt, "backend/app/modules/artifacts/other.py"])),
+            trusted,
+        )
+
+
+def test_partition_accepts_only_exact_cp06_selected_policy_targets() -> None:
+    """CP06 registers its three owners without admitting an adjacent module."""
+    expected = frozenset({
+        "backend/app/modules/contributions/api/validation.py",
+        "backend/app/modules/contributions/policy_eligibility.py",
+        "backend/app/modules/contributions/selected_policy_validation.py",
+    })
+    assert ownership.ARCH_CP06_SELECTED_POLICY_TARGETS == expected
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *expected})), trusted
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted({retained, *expected, "backend/app/modules/contributions/extra.py"})),
+            trusted,
+        )

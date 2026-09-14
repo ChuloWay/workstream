@@ -86,7 +86,7 @@ async def seed_setup_service_for_compiled_fixture(sessions):
 
 
 async def create_compiled_report_fixture(
-    report_id: str, source_snapshot_id: str, *, artifact_proposal=None,
+    report_id: str, source_snapshot_id: str, *, artifact_proposal=None, post_submit_required_checkers=(),
 ) -> str:
     """Project a scripted unified result under real service authority and custody."""
     from app.adapters.auth import guide_compilation_request_authority, guide_compilation_execution_authority, guide_sufficiency_projection_authorization, artifact_policy_projection_authorization
@@ -140,6 +140,15 @@ async def create_compiled_report_fixture(
             patch = {"status": {"blocked": "guide_blocked", "passed": "draft_ready", "passed_with_warnings": "draft_ready_with_warnings"}[status], "findings": compiled_findings}
             if artifact_proposal is not None:
                 patch["submission_artifact_policy"] = artifact_proposal
+            from app.interfaces.project_agents import AtomicGuideRequirement, PostSubmissionBindingProposal
+            patch["requirements"] = tuple(AtomicGuideRequirement(
+                requirement_id=f"post_requirement_{index}", statement="Apply the selected task evaluation requirement",
+                disposition="supported_post_submit", evidence_refs=refs,
+            ) for index, _ in enumerate(post_submit_required_checkers))
+            patch["post_submit_bindings"] = tuple(PostSubmissionBindingProposal(
+                requirement_id=f"post_requirement_{index}", capability_id=checker,
+                capability_version="v0.1", stage="post_submit", parameters=(),
+            ) for index, checker in enumerate(post_submit_required_checkers))
             if status == "blocked":
                 patch["submission_artifact_policy"] = None
             return result().model_copy(update=patch)

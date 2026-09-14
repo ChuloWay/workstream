@@ -555,17 +555,17 @@ ACTION_DEFINITIONS = (
         PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE,
         ActionOwner.AUTH_12F4,
     ),
-    _planned(
+    _active(
         ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_APPROVE,
         PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE,
         ActionOwner.AUTH_12G,
     ),
-    _planned(
+    _active(
         ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_CORRECTION_REQUEST,
         PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE,
         ActionOwner.AUTH_12G,
     ),
-    _planned(
+    _active(
         ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE,
         PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE,
         ActionOwner.AUTH_12G,
@@ -873,6 +873,15 @@ def _require_catalogue_counts() -> None:
         raise RuntimeError("authorization permission boundary mismatch")
 
 
+POST_POLICY_MUTATION_ACTION_IDS = frozenset({
+    ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_APPROVE,
+    ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_CORRECTION_REQUEST,
+    ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE,
+})
+POST_POLICY_ACTION_IDS = POST_POLICY_MUTATION_ACTION_IDS | {ActionId.PROJECT_GUIDE_COMPILATION_REVIEW_PACKAGE_READ}
+POST_POLICY_HUMAN_ACTION_IDS = POST_POLICY_ACTION_IDS - {ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE}
+
+
 GUIDE_PROPOSAL_ACTION_IDS = frozenset({
     ActionId.PROJECT_GUIDE_COMPILATION_REVIEW_PACKAGE_READ,
     ActionId.PROJECT_GUIDE_COMPILATION_CORRECTION_REQUEST,
@@ -880,9 +889,8 @@ GUIDE_PROPOSAL_ACTION_IDS = frozenset({
 })
 
 
-def _index_actions(
-    definitions: tuple[ActionDefinition, ...],
-) -> MappingProxyType[ActionId, ActionDefinition]:
+def _validate_action_definitions(definitions: tuple[ActionDefinition, ...]) -> None:
+    """Validate closed row types before indexing executable action availability."""
     if any(
         not isinstance(definition, ActionDefinition)
         or not isinstance(definition.action_id, ActionId)
@@ -892,6 +900,12 @@ def _index_actions(
         for definition in definitions
     ):
         raise RuntimeError("authorization action catalogue contains an invalid row")
+
+
+def _index_actions(
+    definitions: tuple[ActionDefinition, ...],
+) -> MappingProxyType[ActionId, ActionDefinition]:
+    _validate_action_definitions(definitions)
     indexed = {definition.action_id: definition for definition in definitions}
     _require_catalogue_counts()
     if len(indexed) != len(definitions) or set(indexed) != ACTION_IDS:
@@ -899,6 +913,7 @@ def _index_actions(
     active_actions = {
         *_CONTRIBUTION_POLICY_ACTION_IDS,
         *GUIDE_PROPOSAL_ACTION_IDS,
+        *POST_POLICY_MUTATION_ACTION_IDS,
         ActionId.ACTOR_PROFILE_READ_SELF,
         ActionId.ACTOR_PROFILE_UPDATE_SELF,
         ActionId.AUTHORIZATION_PERMISSION_CATALOGUE_READ,
@@ -1074,6 +1089,7 @@ _EXPECTED_SERVICE_ACTION_MEMBERSHIPS = frozenset(
 
 
 _ACTIVE_SERVICE_ACTIONS = {
+    ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE,
     ActionId.PROJECT_SETUP_RUN_UPDATE,
     ActionId.ARTIFACT_VERIFICATION_EXECUTE,
     ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,

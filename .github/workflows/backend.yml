@@ -76,7 +76,6 @@ jobs:
           python -m scripts.behavior_ownership validate
 
   lanes:
-    needs: auth-boundary-preflight
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -88,8 +87,8 @@ jobs:
           - schema_contracts
           - project_lifecycle_a
           - project_lifecycle_b
-          - task_lifecycle_a
-          - task_lifecycle_b
+          - project_lifecycle_c
+          - task_lifecycle
 
     services:
       postgres:
@@ -101,6 +100,7 @@ jobs:
         ports:
           - 5433:5432
         options: >-
+          ${{ matrix.lane != 'schema_contracts' && '--tmpfs /var/lib/postgresql/data:rw,nosuid,nodev,noexec,size=2147483648' || '' }}
           --health-cmd "pg_isready -U workstream -d workstream_test"
           --health-interval 5s
           --health-timeout 5s
@@ -164,6 +164,28 @@ jobs:
           docker logs workstream-minio
           exit 1
 
+      - name: Verify PostgreSQL CI storage and write settings
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+          EXPECTED_PG_STORAGE: ${{ matrix.lane == 'schema_contracts' && 'disk' || 'tmpfs' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          storage=$(docker exec "${POSTGRES_CONTAINER}" stat -f -c '%T %b %S' /var/lib/postgresql/data)
+          read -r filesystem blocks block_size <<< "${storage}"
+          [[ -n "${filesystem}" && "${blocks}" =~ ^[0-9]+$ && "${block_size}" =~ ^[0-9]+$ ]]
+          if [[ "${EXPECTED_PG_STORAGE}" == tmpfs ]]; then
+            [[ "${filesystem}" == tmpfs ]]
+            (( blocks * block_size == 2147483648 ))
+          elif [[ "${EXPECTED_PG_STORAGE}" == disk ]]; then
+            [[ "${filesystem}" != tmpfs ]]
+          else
+            exit 1
+          fi
+          settings=$(docker exec "${POSTGRES_CONTAINER}" psql -U workstream -d workstream_test -At -c "SELECT current_setting('fsync'), current_setting('full_page_writes'), current_setting('synchronous_commit'), current_setting('data_directory')")
+          [[ "${settings}" == 'on|on|on|/var/lib/postgresql/data' ]]
+          echo "PostgreSQL CI storage: ${filesystem}, bytes=$((blocks * block_size)); write settings: ${settings}"
+
       - name: Execute semantic lane ${{ matrix.lane }}
         working-directory: backend
         env:
@@ -194,7 +216,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: backend-lane-${{ github.sha }}-${{ matrix.lane }}
+          name: backend-lane-${{ github.sha }}-${{ matrix.lane }}-attempt-${{ github.run_attempt }}
           path: |
             backend/.ci/lane-bundle/${{ matrix.lane }}/summary.json
             backend/.ci/lane-bundle/${{ matrix.lane }}/job-start-epoch.txt
@@ -210,7 +232,7 @@ jobs:
 
   test:
     if: ${{ always() }}
-    needs: lanes
+    needs: [auth-boundary-preflight, lanes]
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -273,60 +295,20 @@ jobs:
           docker logs workstream-minio
           exit 1
 
-      - name: Download shared foundations A evidence
+      - name: Download separate lane attempts from this run
         if: ${{ always() }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: backend-lane-${{ github.sha }}-shared_foundations_a
-          path: backend/.ci/download/shared_foundations_a
+          pattern: backend-lane-${{ github.sha }}-*-attempt-*
+          path: backend/.ci/download
+          merge-multiple: false
 
-      - name: Download shared foundations B evidence
-        if: ${{ always() }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: backend-lane-${{ github.sha }}-shared_foundations_b
-          path: backend/.ci/download/shared_foundations_b
-
-      - name: Download schema contracts evidence
-        if: ${{ always() }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: backend-lane-${{ github.sha }}-schema_contracts
-          path: backend/.ci/download/schema_contracts
-
-      - name: Download project lifecycle A evidence
-        if: ${{ always() }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: backend-lane-${{ github.sha }}-project_lifecycle_a
-          path: backend/.ci/download/project_lifecycle_a
-
-      - name: Download project lifecycle B evidence
-        if: ${{ always() }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: backend-lane-${{ github.sha }}-project_lifecycle_b
-          path: backend/.ci/download/project_lifecycle_b
-
-      - name: Download task lifecycle A evidence
-        if: ${{ always() }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: backend-lane-${{ github.sha }}-task_lifecycle_a
-          path: backend/.ci/download/task_lifecycle_a
-
-      - name: Download task lifecycle B evidence
-        if: ${{ always() }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: backend-lane-${{ github.sha }}-task_lifecycle_b
-          path: backend/.ci/download/task_lifecycle_b
-
-      - name: Require every semantic lane
+      - name: Require preflight and every semantic lane
         if: ${{ always() }}
         env:
+          PREFLIGHT_RESULT: ${{ needs.auth-boundary-preflight.result }}
           LANES_RESULT: ${{ needs.lanes.result }}
-        run: test "${LANES_RESULT}" = success
+        run: test "${PREFLIGHT_RESULT}" = success && test "${LANES_RESULT}" = success
 
       - name: Merge and independently validate exact lane custody
         working-directory: backend
@@ -337,7 +319,9 @@ jobs:
           python -m scripts.merge_test_lane_evidence \
             --input-root .ci/download \
             --metadata-dir .ci/test-lanes/run \
-            --summary-json .ci/test-lanes/run-summary.json
+            --summary-json .ci/test-lanes/run-summary.json \
+            --expected-head "${GITHUB_SHA}" \
+            --run-attempt "${GITHUB_RUN_ATTEMPT}"
           python scripts/validate_test_lane_evidence.py \
             --metadata-dir .ci/test-lanes/run \
             --summary-json .ci/test-lanes/run-summary.json
@@ -482,6 +466,14 @@ jobs:
         run: >-
           coverage report
           --include='app/modules/projects/guide_compilation/*,app/modules/projects/api/compilation_identity.py,app/modules/projects/api/guide_proposal_package.py,app/modules/projects/api/guide_proposals.py'
+          --precision=2
+          --fail-under=90
+
+      - name: Post-submit policy custody subsystem coverage
+        working-directory: backend
+        run: >-
+          coverage report
+          --include='app/modules/projects/post_policy/*,app/modules/projects/api/post_policy.py,app/modules/authorization/api/post_policy.py'
           --precision=2
           --fail-under=90
 
@@ -723,6 +715,8 @@ jobs:
           import subprocess
           import time
 
+          from scripts.merge_test_lane_evidence import select_lane_bundles
+
           evidence_root = Path(".ci/test-lanes")
           run_root = evidence_root / "run"
           summary_path = evidence_root / "run-summary.json"
@@ -820,16 +814,11 @@ jobs:
               raise SystemExit("slowest lane timing drift")
 
           start_epochs = []
-          for lane_name in (
-              "shared_foundations_a",
-              "shared_foundations_b",
-              "schema_contracts",
-              "project_lifecycle_a",
-              "project_lifecycle_b",
-              "task_lifecycle_a",
-              "task_lifecycle_b",
-          ):
-              timing_path = Path(".ci/download") / lane_name / "job-start-epoch.txt"
+          selected_bundles = select_lane_bundles(
+              Path(".ci/download"), expected_head, int(os.environ["GITHUB_RUN_ATTEMPT"]),
+          )
+          for bundle in selected_bundles.values():
+              timing_path = bundle / "job-start-epoch.txt"
               if timing_path.is_symlink() or not timing_path.is_file():
                   raise SystemExit("missing lane start timing")
               timing_value = timing_path.read_text(encoding="ascii").strip()
@@ -880,7 +869,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: backend-semantic-lane-evidence-${{ steps.identity.outputs.tree_sha }}
+          name: backend-semantic-lane-evidence-${{ steps.identity.outputs.tree_sha }}-attempt-${{ github.run_attempt }}
           path: |
             backend/.ci/download/**
             backend/.ci/test-lanes/**

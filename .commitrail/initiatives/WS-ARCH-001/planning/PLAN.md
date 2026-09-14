@@ -16,7 +16,7 @@ checker-remediation boundary before public Submission cutover.
 | POL-04B1 | Existing AUTH-12I request contract and immutable compilation/ART material foundations | AUTH/PROJECTS automatic request origin custody, no provider call |
 | POL-04B | POL-04B1 plus merged POL-04A/04A3/04A2, AUTH-12I/12J/12B2, ARCH-04A catalogue/schema foundation | PROJECTS live unified setup wiring, no new compiler/finalizer |
 | CP05 | Merged CP04A/CP04B | AUTH exact policy-action activation |
-| CP06 | CP05 | CON selected-version validation facts |
+| [CP06](../WS-ARCH-001-CP06.md) | CP05 | Complete CON exact-version validation facts; no guide/attempt write |
 | CP07 | CP06 | PROJECTS hidden activation/binding command and replacement readiness guard |
 | ARCH-04A | Merged canonical CHECKER catalogue and unified compilation contracts | CHECKERS post-phase public facts and registered evaluator conformance, no live run |
 | POL-05A | POL-04B | PROJECTS hidden effective/pre approval and separate immutable operation provenance |
@@ -160,7 +160,7 @@ claims require their real custody, not unit substitutes.
 |---|---|---|
 | POL-04B | `test_live_setup_uses_only_unified_attempt`, `test_finalization_replay_makes_zero_provider_calls` | Real API/worker composition and PostgreSQL; legacy call injection must fail |
 | POL-05A/05B | `test_approval_preserves_finalized_setup`, `test_effective_intake_keeps_platform_defaults` | PostgreSQL rollback/race plus canonical ART compiler; attempted default removal and mixed hash deny |
-| POL-06A/06B | `test_post_policy_operation_preserves_finalization`, `test_post_projection_never_invokes_evaluator` | PostgreSQL provenance and provider-call spy; stale upstream approval denies |
+| POL-06A/06B | `test_post_policy_operation_preserves_finalization_without_provider_or_evaluator_calls`, `test_corrected_generation_replaces_policy_and_retains_original_receipts` | PostgreSQL provenance and provider-call spy; stale upstream approval denies |
 | ARCH-04A/POL-07 | `test_registered_evaluator_rejects_invalid_work`, `test_checker_facade_delegates_once` | Actual registered evaluator fixtures and typed composition; presence-only mutant must fail |
 | CP06/CP07/AUTH-12H | `test_activate_without_legacy_payment_or_task`, `test_activation_requires_exact_selected_policy`, `test_activation_rejects_missing_review_revision_config` | PostgreSQL atomic command plus full response serialization; foreign/retired/incomplete new binding denies |
 | CP08/ARCH-03A/03B/03C | `test_ready_preserves_screening_policy_lock`, `test_claim_copies_policy_without_current_lookup` | PostgreSQL and actual AUTH/owner composition; later publication leaves existing attempt unchanged |

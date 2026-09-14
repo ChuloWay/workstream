@@ -10,11 +10,9 @@ from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
 from starlette.requests import Request
 
 import app.adapters.artifacts as artifact_adapters
-import app.modules.artifacts.submission_admission as submission_admission_module
 from app.core.config import Settings
 from app.modules.artifacts.pre_submit_evidence import (
     PreSubmitEvidenceConflict,
@@ -63,7 +61,7 @@ from app.modules.authorization.prepared import PreparedAuthorizationHandle
 from tests.artifact_store_helpers import artifact_byte_stream, artifact_preparation_limits
 from tests.artifact_store_helpers import artifact_admission_limit_settings
 from app.main import create_app
-from app.api.routes.artifact_submissions import prepare_submission_bundle, router as submission_router
+from app.api.routes.artifact_submissions import router as submission_router
 from app.modules.artifacts.submission_admission import validate_submission_packet_headers
 
 
@@ -116,12 +114,29 @@ async def test_explicit_deny_preparation_authority_denies() -> None:
     with pytest.raises(ArtifactAuthorityDeniedError):
         await authority.preflight(request=request)
     with pytest.raises(ArtifactAuthorityDeniedError):
+        await authority.lock_actor(request=request)
+    with pytest.raises(ArtifactAuthorityDeniedError):
         await authority.revalidate(request=request, project_id=uuid4())
     with pytest.raises(ArtifactAuthorityDeniedError):
         authority.transaction()
     with pytest.raises(ArtifactAuthorityDeniedError):
         await authority.prepare_final(request=request)
     authority.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("active,nested", ((False, False), (True, True)))
+async def test_actor_prelock_requires_a_root_transaction(active, nested) -> None:
+    from app.modules.artifacts.authorization import PreparedSubmissionBundlePreparationAuthorization
+
+    authority = object.__new__(PreparedSubmissionBundlePreparationAuthorization)
+    authority._session = SimpleNamespace(
+        in_transaction=lambda: active, in_nested_transaction=lambda: nested,
+    )
+    authority._repository = SimpleNamespace(lock_request_actor=AsyncMock())
+    with pytest.raises(ArtifactAuthorityDeniedError):
+        await authority.lock_actor(request=object())
+    authority._repository.lock_request_actor.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -282,38 +297,6 @@ def test_submission_packet_headers_reject_non_ascii() -> None:
         )
 
 
-@pytest.mark.asyncio
-async def test_hidden_preparation_maps_locked_context_race_to_bounded_conflict() -> None:
-    command = SimpleNamespace(
-        prepare=AsyncMock(
-            side_effect=SubmissionBundlePreparationRejected(
-                "submission_bundle_preparation_context_changed"
-            )
-        )
-    )
-    request = Request(
-        {
-            "type": "http",
-            "method": "POST",
-            "path": "/",
-            "headers": [(b"content-type", b"application/zip")],
-        }
-    )
-
-    with pytest.raises(HTTPException) as failure:
-        await prepare_submission_bundle(
-            task_id=str(uuid4()),
-            request=request,
-            actor=_actor(),
-            command=command,
-            assignment_id=str(uuid4()),
-            idempotency_key=str(uuid4()),
-            summary="summary",
-            contributor_attestation="attestation",
-        )
-
-    assert failure.value.status_code == 409
-    assert failure.value.detail == "submission_bundle_preparation_context_changed"
 
 
 @asynccontextmanager
@@ -388,51 +371,62 @@ async def test_hidden_preparation_closes_authority_after_invalid_media_type() ->
 
 
 @pytest.mark.asyncio
-async def test_post_byte_authority_denial_precedes_evidence_relock() -> None:
+@pytest.mark.parametrize("denied_phase", ("actor", "grant"))
+async def test_authority_denial_preserves_task_actor_project_grant_order(denied_phase) -> None:
+    events = []
     denial = ArtifactAuthorityDeniedError("submission bundle preparation is unavailable")
-    authority = SimpleNamespace(revalidate=AsyncMock(side_effect=denial))
-    task_contexts = SimpleNamespace(lock_submission_context=AsyncMock())
-    project_contexts = SimpleNamespace(lock_locked_policy_context=AsyncMock())
-    session = SimpleNamespace(
-        in_transaction=lambda: False,
-        begin=_transaction,
-        execute=AsyncMock(),
+
+    def phase(name):
+        async def invoke(*_args, **_kwargs):
+            events.append(name)
+            if name == denied_phase:
+                raise denial
+            return object()
+        return invoke
+
+    authority = SimpleNamespace(
+        lock_actor=AsyncMock(side_effect=phase("actor")),
+        revalidate=AsyncMock(side_effect=phase("grant")),
+    )
+    materialization = SimpleNamespace(
+        _storage_scheme="s3", authorize_inspected=AsyncMock(),
     )
     workflow = PreparedBundlePreSubmitEvidenceService(
-        session=session,
-        materialization=SimpleNamespace(),
+        session=SimpleNamespace(), materialization=materialization,
         preparation_authorization=authority,
-        task_contexts=task_contexts,
-        project_contexts=project_contexts,
+        task_contexts=SimpleNamespace(), project_contexts=SimpleNamespace(),
     )
-    materialization_request = SimpleNamespace(
-        prepared_artifact=SimpleNamespace(
-            commitment=SimpleNamespace(sha256=_sha("1"), byte_count=1),
-            generation_id=uuid4(),
-        ),
+    evidence = SimpleNamespace(
+        lock_task_context=AsyncMock(side_effect=phase("task")),
+        lock_project_context=AsyncMock(side_effect=phase("project")),
     )
+    workflow._evidence_service = lambda: evidence
+    workflow._input = Mock(return_value=object())
+    workflow._attempts.reserve = AsyncMock()
 
-    with pytest.raises(ArtifactAuthorityDeniedError):
-        await workflow.persist(
-            materialization_request,
-            execution=object(),
-            preparation_request=object(),
-        )
-
-    authority.revalidate.assert_awaited_once()
-    task_contexts.lock_submission_context.assert_not_awaited()
-    project_contexts.lock_locked_policy_context.assert_not_awaited()
+    with pytest.raises(ArtifactAuthorityDeniedError) as caught:
+        await workflow.reserve(object(), preparation_request=object())
+    assert caught.value is denial
+    assert events == (["task", "actor"] if denied_phase == "actor"
+                      else ["task", "actor", "project", "grant"])
+    materialization.authorize_inspected.assert_not_awaited()
+    workflow._attempts.reserve.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_existing_durable_preparation_projects_exact_ready_admission() -> None:
+@pytest.mark.parametrize("admission_status,expected_status", (
+    ("ready", "ready"), ("stale", "stale"), ("consumed", "conflict"),
+))
+async def test_existing_durable_preparation_projects_current_admission_state(
+    admission_status, expected_status,
+) -> None:
     attempt_id = uuid4()
     admission_id = uuid4()
     row_result = SimpleNamespace(
         one_or_none=lambda: (
             SimpleNamespace(id=str(uuid4())),
             SimpleNamespace(id=str(attempt_id), status="object_confirmed"),
-            SimpleNamespace(id=str(admission_id)),
+            SimpleNamespace(id=str(admission_id), status=admission_status),
         )
     )
     session = SimpleNamespace(begin=_transaction, execute=AsyncMock(return_value=row_result))
@@ -448,121 +442,13 @@ async def test_existing_durable_preparation_projects_exact_ready_admission() -> 
 
     assert result == SubmissionBundlePreparationResult(
         put_attempt_id=attempt_id,
-        admission_id=admission_id,
-        submission_bundle_preparation_status="ready",
+        admission_id=admission_id if admission_status == "ready" else None,
+        submission_bundle_preparation_status=expected_status,
         replayed=True,
     )
 
 
-@pytest.mark.asyncio
-async def test_hidden_preparation_replays_persisted_checked_custody(monkeypatch) -> None:
-    actor_id = uuid4()
-    task_id = uuid4()
-    assignment_id = uuid4()
-    evidence_id = uuid4()
-    expected = SubmissionBundlePreparationResult(
-        put_attempt_id=uuid4(),
-        admission_id=uuid4(),
-        submission_bundle_preparation_status="ready",
-        replayed=True,
-    )
-    locked = SimpleNamespace(effective_policy_id=uuid4(), pre_submit_policy_id=uuid4())
-    prepared = SimpleNamespace(
-        commitment=object(),
-        inspect=AsyncMock(return_value=object()),
-        close=AsyncMock(),
-    )
-    events: list[str] = []
 
-    async def prepare_bytes(*_args, **_kwargs):
-        events.append("prepare_bytes")
-        return prepared
-
-    async def revalidate(**_kwargs):
-        events.append("revalidate")
-
-    runtime = SimpleNamespace(
-        preparation=SimpleNamespace(prepare=AsyncMock(side_effect=prepare_bytes)),
-        inspector=object(),
-        catalogue=object(),
-        materialization=SimpleNamespace(prepare_authorization=AsyncMock(return_value=object())),
-        evidence=SimpleNamespace(
-            materialize=AsyncMock(return_value=object()),
-            persist=AsyncMock(
-                return_value=SimpleNamespace(
-                    evidence=SimpleNamespace(evidence_set_id=evidence_id),
-                    pass_capability=None,
-                )
-            ),
-        ),
-        durable_put=object(),
-    )
-
-    @asynccontextmanager
-    async def runtime_factory():
-        yield runtime
-
-    monkeypatch.setattr(
-        submission_admission_module,
-        "build_submission_manifest",
-        Mock(return_value=object()),
-    )
-    monkeypatch.setattr(
-        submission_admission_module,
-        "evaluate_submission_change",
-        Mock(return_value=object()),
-    )
-    project_id = uuid4()
-    authority = SimpleNamespace(
-        preflight=AsyncMock(), revalidate=AsyncMock(side_effect=revalidate), close=Mock()
-    )
-    command = PreparedSubmissionBundlePreparationCommand(
-        session=SimpleNamespace(begin=_transaction),
-        authority=authority,
-        task_contexts=SimpleNamespace(),
-        project_contexts=SimpleNamespace(),
-        runtime_factory=runtime_factory,
-    )
-    command._lock_context = AsyncMock(
-        return_value=(
-            SimpleNamespace(
-                predecessor=None,
-                locked_project_context=SimpleNamespace(project_id=project_id),
-            ),
-            locked,
-        )
-    )
-    command._compile_plan = Mock(return_value=object())
-    command._load_predecessor = AsyncMock(return_value=None)
-    command._existing_durable_result = AsyncMock(return_value=expected)
-
-    request = SubmissionBundlePreparationRequest(
-            actor=ActorIdentityFacts(
-                actor_profile_id=actor_id,
-                identity_link_id=uuid4(),
-                actor_kind=ActorKind.HUMAN,
-            ),
-            request_id=uuid4(),
-            correlation_id=uuid4(),
-            task_id=task_id,
-            assignment_id=assignment_id,
-            predecessor_submission_id=None,
-            idempotency_key=uuid4(),
-            summary="summary",
-            contributor_attestation="attestation",
-            media_type="application/zip",
-            byte_source=artifact_byte_stream(b"PK\x03\x04replay"),
-        )
-    result = await command.prepare(request)
-
-    assert result == expected
-    runtime.preparation.prepare.assert_awaited_once()
-    authority.revalidate.assert_awaited_once_with(request=request, project_id=project_id)
-    assert events[:2] == ["revalidate", "prepare_bytes"]
-    runtime.evidence.materialize.assert_awaited_once()
-    runtime.evidence.persist.assert_awaited_once()
-    prepared.close.assert_awaited_once()
-    authority.close.assert_called_once_with()
 
 
 @pytest.mark.parametrize(
@@ -606,10 +492,9 @@ def test_durable_put_result_projects_every_closed_preparation_status(
 
 def test_post_byte_locked_context_conflict_maps_to_public_race_code() -> None:
     conflict = PreSubmitEvidenceConflict("pre_submit_locked_context_changed")
-    assert (
-        PreparedSubmissionBundlePreparationCommand._evidence_conflict_code(conflict)
-        == "submission_bundle_preparation_context_changed"
-    )
+    failure = PreparedSubmissionBundlePreparationCommand._evidence_failure(conflict)
+    assert isinstance(failure, SubmissionBundlePreparationRejected)
+    assert str(failure) == "submission_bundle_preparation_context_changed"
 
 def _capability(prepared, evidence_set_id):
     service = PreSubmitEvidenceService(

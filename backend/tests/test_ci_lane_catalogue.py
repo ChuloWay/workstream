@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 from collections import Counter
 from dataclasses import replace
 import hashlib
@@ -32,9 +31,7 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
     assert all(
         count
         == (
-            len(("schema_contracts",))
-            if module == catalogue.SCHEMA_MODULE
-            else 2
+            len(catalogue.PARTITION_LANES_BY_MODULE[module])
             if module in catalogue.PARTITION_LANES_BY_MODULE
             else 1
         )
@@ -53,6 +50,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     assert (
         modules_by_lane["project_lifecycle_a"]
         == modules_by_lane["project_lifecycle_b"]
+        == modules_by_lane["project_lifecycle_c"]
         == {
             "tests/projects/test_active_guide_repository.py",
             "tests/test_guide_document_intake.py",
@@ -81,6 +79,19 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     'tests/projects/guide_compilation/proposals/test_public_api.py',
     'tests/projects/guide_compilation/proposals/test_public_dispatch.py',
     'tests/projects/guide_compilation/proposals/test_delivery_custody.py',
+    'tests/projects/post_policy/test_authority.py',
+    'tests/projects/post_policy/test_compiler.py',
+    'tests/projects/post_policy/test_public_api.py',
+    'tests/projects/post_policy/test_public_recovery.py',
+    'tests/projects/post_policy/test_delivery_worker.py',
+    'tests/projects/post_policy/test_concurrency.py',
+    'tests/projects/post_policy/test_correction.py',
+    'tests/projects/post_policy/test_direct_sql.py',
+    'tests/projects/post_policy/test_guards.py',
+    'tests/projects/post_policy/test_inventory.py',
+    'tests/projects/post_policy/test_migration.py',
+    'tests/projects/post_policy/test_postgresql.py',
+    'tests/projects/post_policy/test_replacement.py',
 
             "tests/projects/guide_compilation/test_authorized_concurrency_postgresql.py",
             "tests/projects/guide_compilation/test_authorized_execution_service.py",
@@ -143,8 +154,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         }
     )
     assert (
-        modules_by_lane["task_lifecycle_a"]
-        == modules_by_lane["task_lifecycle_b"]
+        modules_by_lane["task_lifecycle"]
         == {
             "tests/checkers/post_submit/test_catalogue.py",
             "tests/checkers/post_submit/test_compiled_policy.py",
@@ -155,11 +165,17 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/checkers/post_submit/test_request.py",
             "tests/checkers/post_submit/test_requirement_dispositions.py",
             "tests/checkers/post_submit/test_result_contract.py",
-            "tests/checkers/test_packet_schema.py",
             "tests/checkers/test_effective_intake_rules.py",
             "tests/test_checker_catalogue.py",
             "tests/test_checkers.py",
             "tests/test_default_pre_submit_execution.py",
+            "tests/test_pre_submit_attempt_recovery.py",
+            "tests/test_pre_submit_attempt_contracts.py",
+            "tests/test_pre_submit_attempt_authority_integration.py",
+            "tests/test_pre_submit_attempt_lock_order.py",
+            "tests/test_pre_submit_role_issue_lock_order.py",
+            "tests/test_pre_submit_related_lock_order.py",
+            "tests/test_pre_submit_attempt_migration.py",
             "tests/test_effective_pre_submit_execution.py",
             "tests/test_project_guide_compilation_contracts.py",
             "tests/test_review_lease_persistence.py",
@@ -171,6 +187,10 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     shared_b = modules_by_lane[catalogue.PARTITIONED_SHARED_LANES[1]]
     assert shared_a == shared_b == set(catalogue.SHARED_FOUNDATION_MODULES)
     assert {
+        "tests/authorization/post_policy/test_concurrency.py",
+        "tests/authorization/post_policy/test_context.py",
+        "tests/authorization/post_policy/test_prepared.py",
+        "tests/authorization/post_policy/test_postgresql.py",
         "tests/authorization/guide_proposals/test_concurrency.py",
         "tests/authorization/guide_proposals/test_context.py",
         "tests/authorization/guide_proposals/test_prepared.py",
@@ -303,7 +323,7 @@ def test_schema_nodes_share_one_lane() -> None:
 
 
 @pytest.mark.parametrize(
-    ("names", "modules"), catalogue.PARTITION_GROUPS, ids=("shared", "project", "task")
+    ("names", "modules"), catalogue.PARTITION_GROUPS, ids=("shared", "project")
 )
 def test_owner_nodes_partition_deterministically(names, modules) -> None:
     module = modules[0]
@@ -318,6 +338,22 @@ def test_owner_nodes_partition_deterministically(names, modules) -> None:
     assert set(first_by_node.values()) == set(names)
     assert set(first_by_node) == set(nodes)
     assert len(first["nodes"]) == len(nodes)
+
+
+def test_task_nodes_have_one_owner() -> None:
+    module = catalogue.TASK_MODULES[0]
+    nodes = [f"{module}::test_task_{index}" for index in range(100)]
+
+    assert all(
+        task_module not in catalogue.PARTITION_LANES_BY_MODULE
+        for task_module in catalogue.TASK_MODULES
+    )
+    first = runner.build_manifest("a" * 40, nodes)
+    second = runner.build_manifest("a" * 40, list(reversed(nodes)))
+
+    assert first == second
+    assert {row["lane"] for row in first["nodes"]} == {catalogue.TASK_LANE}
+    assert [row["nodeid"] for row in first["nodes"]] == sorted(nodes)
 
 
 def test_manifest_has_no_exclusion_escape_hatch() -> None:
@@ -413,11 +449,11 @@ def test_collect_only_rejects_selected_lane(
 def test_partition_rejects_wrong_owner_pair(monkeypatch: pytest.MonkeyPatch) -> None:
     lanes = list(LANES)
     project_index = next(i for i, lane in enumerate(lanes) if lane.name == "project_lifecycle_b")
-    task_index = next(i for i, lane in enumerate(lanes) if lane.name == "task_lifecycle_b")
+    task_index = next(i for i, lane in enumerate(lanes) if lane.name == "task_lifecycle")
     project, task = lanes[project_index], lanes[task_index]
-    lanes[project_index] = replace(project, modules=(task.modules[0], *project.modules[1:]))
-    lanes[task_index] = replace(task, modules=(project.modules[0], *task.modules[1:]))
-    # Counts alone still pass: the counterexample changes ownership, not inventory.
+    lanes[project_index] = replace(project, name=task.name)
+    lanes[task_index] = replace(task, name=project.name)
+    # Counts alone still pass: the counterexample changes owner names, not inventory.
     runner.validate_lane_inventory(runner.discover_test_modules(), lanes=tuple(lanes))
     monkeypatch.setattr(runner, "LANES", tuple(lanes))
     with pytest.raises(LaneError, match="invalid_partition_lanes"):
@@ -446,14 +482,14 @@ def test_workflow_lane_inventory_matches_catalogue() -> None:
     matrix = re.search(r"        lane:\n((?:          - [a-z_]+\n)+)", source)
     assert matrix is not None
     assert Counter(re.findall(r"- ([a-z_]+)", matrix[1])) == expected
-    assert (
-        Counter(re.findall(r"name: backend-lane-\$\{\{ github.sha \}\}-([a-z_]+)", source))
-        == expected
-    )
-    assert Counter(re.findall(r"path: backend/\.ci/download/([a-z_]+)", source)) == expected
-    timing = re.search(r"for lane_name in (\([\s\S]*?\)):", source)
-    assert timing is not None
-    assert Counter(ast.literal_eval(timing[1])) == expected
+    assert source.count("name: backend-lane-${{ github.sha }}-${{ matrix.lane }}-attempt-${{ github.run_attempt }}") == 1
+    assert source.count("pattern: backend-lane-${{ github.sha }}-*-attempt-*") == 1
+    assert source.count("path: backend/.ci/download\n          merge-multiple: false") == 1
+    assert '--expected-head "${GITHUB_SHA}"' in source
+    assert '--run-attempt "${GITHUB_RUN_ATTEMPT}"' in source
+    assert 'Path(".ci/download"), expected_head, int(os.environ["GITHUB_RUN_ATTEMPT"])' in source
+    assert 'timing_path = bundle / "job-start-epoch.txt"' in source
+    assert "name: backend-semantic-lane-evidence-${{ steps.identity.outputs.tree_sha }}-attempt-${{ github.run_attempt }}" in source
 
 
 def test_project_read_coverage_gate_selects_relocated_proof() -> None:

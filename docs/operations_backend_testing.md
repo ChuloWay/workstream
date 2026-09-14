@@ -112,9 +112,26 @@ before collection. This is semantic fan-out, not arbitrary test-count sharding:
 lane ownership remains repository-defined and exact.
 
 The explicit inventory lives in `backend/scripts/test_lane_catalogue.py`.
-The `project_lifecycle_a`/`project_lifecycle_b` pair partitions PROJECT nodes;
-`task_lifecycle_a`/`task_lifecycle_b` partitions TASK and checker nodes. The single
-`schema_contracts` lane owns all baseline/PostgreSQL schema, reset and
+Authorization preflight runs alongside the seven lanes. The final `test` job
+requires both preflight and every lane to succeed before validating evidence and
+coverage; failed, cancelled or skipped prerequisites remain blocking. This saves
+serial waiting on valid changes at the cost of lane work when preflight fails.
+Assertion-map validation analyzes each exact historical revision/module once per
+invocation, then checks every referenced node and assertion against that analysis.
+It does not cache current source or reuse analysis across validation calls.
+
+The six ordinary lanes use private, 2 GiB RAM-backed PostgreSQL data directories
+to reduce ephemeral reset I/O. A runtime guard verifies the mount, capacity,
+data directory and enabled `fsync`, `full_page_writes` and `synchronous_commit`
+before tests. Real SQL, transaction, lock, isolation and coverage checks remain.
+The schema-contract lane and aggregate job retain disk-backed databases.
+This is not a production configuration or proof of host-power-loss durability:
+[Docker tmpfs data disappears when the container stops](https://docs.docker.com/engine/storage/tmpfs/).
+An exhausted mount fails the job; it does not silently change storage or skip tests.
+
+The `project_lifecycle_a`, `project_lifecycle_b`, and `project_lifecycle_c` lanes
+partition PROJECT nodes; the single `task_lifecycle` lane owns TASK and checker
+nodes. The single `schema_contracts` lane owns all baseline/PostgreSQL schema, reset and
 isolated-runner contracts. The
 `shared_foundations_a` and `shared_foundations_b` lanes deterministically
 partition exact node IDs from the remaining authorization, artifact, API, and
@@ -143,11 +160,15 @@ review rules independently enforce exact-head human approval.
 Superseded Agent Gates runs for the same PR are cancelled without repeating the
 full backend suite.
 
-Each matrix job uploads a fixed-name artifact bound to GitHub's checked-out PR
-merge-tree SHA, containing its manifest, lane evidence, isolation record, and coverage data. The final `test`
+Each matrix job uploads an artifact named for GitHub's checked-out PR merge-tree
+SHA, lane and numeric run attempt, containing its manifest, lane evidence,
+isolation record, and coverage data. The final `test`
 job runs with `if: always()`, downloads available diagnostic bundles, then
 rejects any failed, cancelled, or skipped matrix result before fan-in. Fan-in
-accepts exactly the seven declared lane directories,
+selects the highest numeric attempt available for each of the seven declared
+lanes from separately downloaded artifact directories. It rejects malformed,
+foreign or future attempt names and never falls back from an incomplete or
+corrupt latest bundle to an older passing one. For the selected bundles it
 requires byte-identical manifests and heads, verifies every bound digest, and
 rejects symlinks or surplus lanes.
 
@@ -162,8 +183,10 @@ isolated invocation inside the final required job.
 
 ### Evidence bundle
 
-Each lane uploads one seven-day bundle, and the final job uploads the reconciled
-`.ci/test-lanes` tree. Its summary
+Each executed lane uploads one seven-day bundle per attempt, and the final job
+uploads the reconciled `.ci/test-lanes` tree and downloaded diagnostics under its
+own attempt-specific artifact name. Older diagnostic artifacts are preserved.
+Its summary
 records the exact head, canonical node count, seven lane results, elapsed time,
 and raw-file digests. Per-lane evidence records collected, completed, skipped,
 and deselected exact node IDs plus the bound resource-isolation metadata and
@@ -191,15 +214,21 @@ coverage tampering before coverage combination.
 - API contract or coverage failure: the required job remains failed; lane
   completion cannot compensate for either boundary.
 
-Rerun the complete workflow on the same exact head. Never edit or upload
-evidence manually. Review submission or dismissal does not rerun Backend because
+On the same exact head, rerun failed lanes (and their dependent final job), or
+rerun only the final job when the lane evidence already passed. Successful lanes
+not rerun retain their previous attempt's evidence; a rerun lane's newest bundle
+must independently pass all existing checks. A failed, cancelled or skipped
+required job still blocks fan-in. Never edit or upload evidence manually.
+Review submission or dismissal does not rerun Backend because
 it does not change the tested tree. A new PR commit starts a new run and cancels
 the superseded same-PR run. Every new commit requires complete evidence because
 its head and digests differ. Each lane bundle records its job-start epoch;
 missing or malformed timing fails the final evidence step. Hosted evidence
-records whole Backend wall time from the earliest lane start, lane
+records whole Backend wall time from the earliest selected lane start, lane
 aggregate/slowest execution timing, and whether
-the eight-minute target was met. When the repository owner explicitly accepts
+the eight-minute target was met. Timing uses the same bundle selection as
+evidence. On a retry this wall time includes the wait between selected attempts;
+it is not fresh-run execution latency. When the repository owner explicitly accepts
 a measured target miss at the human merge checkpoint, that performance result
 does not override otherwise passing correctness, custody, service-contract,
 API, and coverage gates. Never lower coverage, skip nodes, or add a silent

@@ -29,6 +29,7 @@ CONTEXT_DIGEST_RESOURCE_TYPES = (
     "project_guide_setup_finalization",
     "project_guide_compilation_review_package",
     "project_guide_compilation_correction",
+    "project_post_submit_checker_policy_mutation",
     "contribution_policy",
 )
 
@@ -55,6 +56,7 @@ AuthorizationDecisionResourceType = Literal[
     "project_guide_setup_finalization",
     "project_guide_compilation_review_package",
     "project_guide_compilation_correction",
+    "project_post_submit_checker_policy_mutation",
     "project_setup_run_mutation",
     "project_guide_sufficiency_projection",
     "project_submission_artifact_policy_projection",

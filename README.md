@@ -514,12 +514,38 @@ for opening the exact complete proposal, plus `correction_operation_id` and
 `predecessor_compilation_id` for recovering a saved correction after manager
 handoff or a lost creation response. See the
 [manager proposal flow](docs/operations_project_operating_manual.md#review-approve-or-correct-a-guide-proposal).
+POL-06B connects deterministic post-submission policy derivation to committed
+pre-submission approval. The fixed setup service derives from the saved result;
+project managers discover its `post_submit_policy_id` through the proposal read,
+inspect its complete body, and separately approve it or request a unified
+correction. Both correction origins use the same explicit manual dispatch.
+Derivation, reads, approval and correction creation do not invoke inference or
+post-submit evaluators. A periodic scan recovers publication failures from
+committed approvals; duplicate delivery retains one policy and receipt.
 The separate post-submission Celery worker evaluates submitted work.
 The local Celery command above includes Beat; start it before creating guide sources.
 
 The Beat scheduler must run alongside the Celery execution processes so
-artifact pending-work and verified guide-continuation scans can recover
+artifact pending-work, verified guide-continuation and post-policy approval scans can recover
 publication failures automatically.
+
+The hidden submission-bundle preparation flow reserves an exact pre-submit
+attempt before invoking checks. Completed retries recover the original evidence
+without rerunning checks or issuing a new upload capability. An uncertain attempt
+cannot execute again under the same key. POL-07B connects the internal
+checker phase service and removes the standalone JSON precheck. Both fresh
+pre-submit execution and completed replay use that service, with ART retaining
+canonical evidence ownership. The existing Celery pre-review gate still calls
+`CheckerService.run_queued_pre_review_gate`; it does not call the new phase
+service. That service's `evaluate_post_submission` uses
+`UnavailablePostSubmissionExecution` and raises
+`PostSubmissionExecutionUnavailable` until its durable execution and authority
+boundaries land. CON now provides internal exact selected-policy validation: a
+new guide binding must match the active policy’s current published version;
+the revision-adoption purpose validates an explicitly supplied historical version
+without reselection. Both validate complete rules and current unit/binding
+eligibility in the caller transaction. Guide custody and controlled revision
+integration remain pending. The next guide boundary is CP07 binding, then AUTH-12H activation.
 
 ## v0.1 Success Standard
 

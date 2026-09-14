@@ -191,15 +191,21 @@ def test_archive_limit_changes_locked_hashes_and_preserves_null_semantics(field,
     assert len(hashes) == 3
 
 
-@pytest.mark.parametrize("count, size, archive_delta, failure, task_path", [
-    (3, 4101, None, None, "task.toml"), (2, 4101, None, "policy.archive_entries.limit", "task.toml"),
-    (3, 4100, None, "policy.package_size.limit", "task.toml"), (None, 4101, None, None, "task.toml"),
-    (4, 4101, None, "policy.file.require", "wrapper/task.toml"),
-    (3, 4101, 0, None, "task.toml"),
-    (3, 4101, -1, "policy.archive_size.limit", "task.toml"),
+@pytest.mark.parametrize("count, size, archive_delta, file_limit, failure, task_path", [
+    (3, 4101, None, None, None, "task.toml"),
+    (2, 4101, None, None, "policy.archive_entries.limit", "task.toml"),
+    (3, 4100, None, None, "policy.package_size.limit", "task.toml"),
+    (None, 4101, None, None, None, "task.toml"),
+    (4, 4101, None, None, "policy.file.require", "wrapper/task.toml"),
+    (3, 4101, 0, None, None, "task.toml"),
+    (3, 4101, -1, None, "policy.archive_size.limit", "task.toml"),
+    (3, 4101, None, 4096, None, "task.toml"),
+    (3, 4101, None, 4095, "policy.file_size.limit", "task.toml"),
 ])
 @pytest.mark.parametrize("explicit_directory", [True, False])
-def test_real_zip_enforces_locked_archive_limits(tmp_path, count, size, archive_delta, failure, task_path, explicit_directory) -> None:
+def test_real_zip_enforces_locked_archive_limits(
+    tmp_path, count, size, archive_delta, file_limit, failure, task_path, explicit_directory,
+) -> None:
     from hashlib import sha256
     from io import BytesIO
     from zipfile import ZipFile, ZIP_DEFLATED, ZIP_STORED
@@ -227,6 +233,8 @@ def test_real_zip_enforces_locked_archive_limits(tmp_path, count, size, archive_
     commitment = ArtifactCommitment("sha256:" + sha256(data).hexdigest(), len(data), "application/zip")
     policy = {**_effective_policy(), "maximum_archive_entries": count, "maximum_package_size_bytes": size}
     policy["maximum_archive_size_bytes"] = None if archive_delta is None else len(data) + archive_delta
+    if file_limit is not None:
+        policy["maximum_file_size_bytes"] = file_limit
     digest = canonical_json_hash(policy)
     compiled = compile_effective_project_submission_artifact_policy(policy, digest)
     _, lineage = _compiled_and_lineage()

@@ -296,7 +296,7 @@ def validate_lane_inventory(
     expected_duplicates = {
         module: len(names)
         for module, names in PARTITION_LANES_BY_MODULE.items()
-        if module in discovered
+        if module in discovered and len(names) > 1
     }
     if duplicates != expected_duplicates:
         raise LaneError(f"duplicate_lane_modules:{','.join(duplicates)}")

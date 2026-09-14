@@ -5,10 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import shutil
 
 import pytest
 
-from scripts.merge_test_lane_evidence import merge_bundles
+from scripts.merge_test_lane_evidence import merge_bundles, select_lane_bundles
 from scripts.run_test_lanes import LANES, LaneError
 
 
@@ -16,6 +17,17 @@ def _write_json(path: Path, value: object) -> str:
     data = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
     path.write_bytes(data)
     return hashlib.sha256(data).hexdigest()
+
+
+HEAD = "a" * 40
+
+
+def _bundle(root: Path, lane: str, attempt: int = 1) -> Path:
+    return root / f"backend-lane-{HEAD}-{lane}-attempt-{attempt}"
+
+
+def _merge(source: Path, metadata: Path, summary: Path, attempt: int = 1) -> None:
+    merge_bundles(source, metadata, summary, expected_head=HEAD, run_attempt=attempt)
 
 
 def _bundles(root: Path) -> None:
@@ -33,7 +45,7 @@ def _bundles(root: Path) -> None:
         "schema_version": 1,
     }
     for index, lane in enumerate(LANES, 1):
-        metadata = root / lane.name / "metadata"
+        metadata = _bundle(root, lane.name) / "metadata"
         metadata.mkdir(parents=True)
         manifest_digest = _write_json(metadata / "manifest.json", manifest)
         isolation_name = f"{lane.name}.database.json"
@@ -65,7 +77,7 @@ def _bundles(root: Path) -> None:
             "name": lane.name,
         }
         _write_json(
-            root / lane.name / "summary.json",
+            _bundle(root, lane.name) / "summary.json",
             {
                 "aggregate_runner_seconds": float(index),
                 "canonical_node_count": len(LANES),
@@ -86,7 +98,7 @@ def test_merge_bundles_emits_complete_run_summary(tmp_path: Path) -> None:
     source.mkdir()
     _bundles(source)
 
-    merge_bundles(source, tmp_path / "merged", tmp_path / "summary.json")
+    _merge(source, tmp_path / "merged", tmp_path / "summary.json")
 
     summary = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
     assert summary["mode"] == "run"
@@ -102,10 +114,10 @@ def test_merge_bundles_rejects_missing_or_foreign_lane(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
     _bundles(source)
-    (source / LANES[0].name).rename(source / "foreign")
+    _bundle(source, LANES[0].name).rename(source / "foreign")
 
     with pytest.raises(LaneError, match="invalid_lane_bundle_set"):
-        merge_bundles(source, tmp_path / "merged", tmp_path / "summary.json")
+        _merge(source, tmp_path / "merged", tmp_path / "summary.json")
 
 
 def test_merge_bundles_rejects_coverage_digest_drift(tmp_path: Path) -> None:
@@ -113,64 +125,142 @@ def test_merge_bundles_rejects_coverage_digest_drift(tmp_path: Path) -> None:
     source.mkdir()
     _bundles(source)
     lane = LANES[0]
-    (source / lane.name / "metadata" / f".coverage.{lane.name}").write_bytes(b"changed")
+    (_bundle(source, lane.name) / "metadata" / f".coverage.{lane.name}").write_bytes(b"changed")
 
     with pytest.raises(LaneError, match="invalid_lane_bundle_file"):
-        merge_bundles(source, tmp_path / "merged", tmp_path / "summary.json")
+        _merge(source, tmp_path / "merged", tmp_path / "summary.json")
 
 
 def test_merge_bundles_rejects_manifest_path_traversal(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
     _bundles(source)
-    summary_path = source / LANES[0].name / "summary.json"
+    summary_path = _bundle(source, LANES[0].name) / "summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     summary["manifest_file"] = "../manifest.json"
     _write_json(summary_path, summary)
 
     with pytest.raises(LaneError, match="invalid_lane_bundle_manifest"):
-        merge_bundles(source, tmp_path / "merged", tmp_path / "summary.json")
+        _merge(source, tmp_path / "merged", tmp_path / "summary.json")
 
 
 def test_merge_bundles_rejects_manifest_mismatch(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
     _bundles(source)
-    metadata = source / LANES[0].name / "metadata"
+    metadata = _bundle(source, LANES[0].name) / "metadata"
     manifest = json.loads((metadata / "manifest.json").read_text(encoding="utf-8"))
     manifest["head_sha"] = "b" * 40
     digest = _write_json(metadata / "manifest.json", manifest)
-    summary_path = source / LANES[0].name / "summary.json"
+    summary_path = _bundle(source, LANES[0].name) / "summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     summary["manifest_sha256"] = digest
     _write_json(summary_path, summary)
 
     with pytest.raises(LaneError, match="lane_manifest_mismatch"):
-        merge_bundles(source, tmp_path / "merged", tmp_path / "summary.json")
+        _merge(source, tmp_path / "merged", tmp_path / "summary.json")
 
 
 def test_merge_bundles_rejects_symlinked_metadata(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
     _bundles(source)
-    lane_root = source / LANES[0].name
+    lane_root = _bundle(source, LANES[0].name)
     metadata = lane_root / "metadata"
     moved = lane_root / "moved"
     metadata.rename(moved)
     metadata.symlink_to(moved, target_is_directory=True)
 
     with pytest.raises(LaneError, match="invalid_lane_bundle_metadata"):
-        merge_bundles(source, tmp_path / "merged", tmp_path / "summary.json")
+        _merge(source, tmp_path / "merged", tmp_path / "summary.json")
 
 
 def test_merge_bundles_rejects_failed_lane_row(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
     _bundles(source)
-    summary_path = source / LANES[0].name / "summary.json"
+    summary_path = _bundle(source, LANES[0].name) / "summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     summary["lanes"][0]["execution_exit_code"] = 1
     _write_json(summary_path, summary)
 
     with pytest.raises(LaneError, match="lane_bundle_execution_incomplete"):
-        merge_bundles(source, tmp_path / "merged", tmp_path / "summary.json")
+        _merge(source, tmp_path / "merged", tmp_path / "summary.json")
+
+
+def test_partial_retry_selects_numeric_latest_before_validation(tmp_path: Path) -> None:
+    """Attempt 10 supersedes 9; untouched lanes survive an aggregate-only retry."""
+    source = tmp_path / "source"
+    _bundles(source)
+    lane = LANES[0].name
+    latest = _bundle(source, lane, 10)
+    shutil.copytree(_bundle(source, lane), latest)
+    # Old registry-failure artifacts contain only timing, not a bundle.
+    _bundle(source, lane, 9).mkdir()
+    (_bundle(source, lane) / "summary.json").unlink()
+    selection = select_lane_bundles(source, HEAD, 11)
+    assert selection[lane] == latest
+    assert all(selection[item.name] == _bundle(source, item.name) for item in LANES[1:])
+    _merge(source, tmp_path / "merged", tmp_path / "summary.json", 11)
+    assert len(json.loads((tmp_path / "summary.json").read_text())["lanes"]) == len(LANES)
+
+
+@pytest.mark.parametrize("damage,error", [
+    ("missing", "missing_lane_bundle_file"),
+    ("failed", "lane_bundle_execution_incomplete"),
+    ("coverage", "invalid_lane_bundle_file"),
+    ("head", "invalid_lane_bundle_summary"),
+])
+def test_latest_invalid_attempt_never_falls_back(tmp_path: Path, damage: str, error: str) -> None:
+    source = tmp_path / "source"
+    _bundles(source)
+    lane = LANES[0].name
+    latest = _bundle(source, lane, 2)
+    shutil.copytree(_bundle(source, lane), latest)
+    summary_file = latest / "summary.json"
+    if damage == "missing":
+        summary_file.unlink()
+    elif damage == "coverage":
+        (latest / "metadata" / f".coverage.{lane}").write_bytes(b"corrupt")
+    else:
+        summary = json.loads(summary_file.read_text())
+        if damage == "failed":
+            summary["lanes"][0]["execution_exit_code"] = 1
+        else:
+            summary["head_sha"] = "b" * 40
+        _write_json(summary_file, summary)
+    with pytest.raises(LaneError, match=error):
+        _merge(source, tmp_path / "merged", tmp_path / "summary.json", 2)
+
+
+@pytest.mark.parametrize("suffix", ["0", "01", "-1", "future", "3"])
+def test_attempt_names_are_canonical_and_not_future(tmp_path: Path, suffix: str) -> None:
+    _bundles(tmp_path)
+    (tmp_path / f"backend-lane-{HEAD}-{LANES[0].name}-attempt-{suffix}").mkdir()
+    with pytest.raises(LaneError, match="invalid_lane_bundle_set"):
+        select_lane_bundles(tmp_path, HEAD, 2)
+
+
+@pytest.mark.parametrize("damage", ["wrong_head", "foreign_lane", "file", "symlink", "missing"])
+def test_selection_rejects_untrusted_bundle_set(tmp_path: Path, damage: str) -> None:
+    _bundles(tmp_path)
+    path = _bundle(tmp_path, LANES[0].name)
+    if damage == "wrong_head":
+        path.rename(tmp_path / path.name.replace(HEAD, "b" * 40))
+    elif damage == "foreign_lane":
+        path.rename(_bundle(tmp_path, "foreign"))
+    elif damage == "file":
+        (tmp_path / "extra").write_text("unexpected")
+    else:
+        moved = tmp_path.parent / f"retained-{damage}"
+        path.rename(moved)
+        if damage == "symlink":
+            path.symlink_to(moved, target_is_directory=True)
+    with pytest.raises(LaneError, match="invalid_lane_bundle_set"):
+        select_lane_bundles(tmp_path, HEAD, 2)
+
+
+@pytest.mark.parametrize("head,attempt", [("wrong", 1), (HEAD, 0), (HEAD, True)])
+def test_selection_rejects_invalid_run_identity(tmp_path: Path, head: str, attempt: int) -> None:
+    with pytest.raises(LaneError, match="invalid_lane_bundle_root"):
+        select_lane_bundles(tmp_path, head, attempt)

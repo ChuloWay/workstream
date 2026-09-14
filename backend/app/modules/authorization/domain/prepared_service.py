@@ -5,6 +5,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from app.modules.authorization.catalogue import ActionId
+from app.modules.authorization.domain.post_policy import PostPolicyResourceContext, DERIVE
 from app.modules.authorization.domain.guide_compilation import (
     ProjectGuideCompilationExecuteResourceContext,
     ProjectGuideCompilationRequestResourceContext,
@@ -28,6 +29,7 @@ _PROJECT_SETUP_ACTIONS = frozenset(
         ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
         ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC,
         ActionId.PROJECT_SETUP_RUN_UPDATE,
+        DERIVE,
     }
 )
 
@@ -47,6 +49,10 @@ def project_setup_resource_matches(
     project_id: UUID | None,
 ) -> bool | None:
     """Validate setup-service facts, or return None for non-setup actions."""
+    if action_id == DERIVE:
+        return (type(resource) is PostPolicyResourceContext
+                and resource.facts.locator.action_id == DERIVE
+                and resource.scope_project_id == project_id)
     if action_id is ActionId.PROJECT_SETUP_RUN_UPDATE:
         return (
             isinstance(resource, ProjectSetupFinalizationResourceContext)

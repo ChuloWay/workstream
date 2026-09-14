@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel
 from app.modules.authorization.domain.guide_proposals import GuideProposalResourceContext
+from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
 
 from app.modules.authorization.domain.guide_compilation import persisted_result_digest
 from app.modules.authorization.domain.guide_compilation_projections import (
@@ -17,7 +18,7 @@ from app.core.hashing import canonical_json_hash
 
 def authorization_resource_digest(resource: BaseModel) -> str:
     """Preserve purpose-specific public digest parity and canonical fallback custody."""
-    if type(resource) is GuideProposalResourceContext:
+    if type(resource) in (GuideProposalResourceContext, PostPolicyResourceContext):
         resource.validate_identity()
         return resource.facts.digest
     if isinstance(resource, ProjectSetupFinalizationResourceContext):

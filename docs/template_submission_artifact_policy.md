@@ -238,12 +238,12 @@ Generated policy lock:
 Tasks lock this project checker compiled bundle hash before entering the contributor pipeline. Tasks
 do not derive or compile their own checker by default.
 
-Failed submission-bundle preparation returns
-`pre_submission_checker_failed` with bounded same-request status, eligibility,
-and pass/fail/warning details. The frozen legacy preflight endpoint remains
-non-authoritative until WS-ARCH-001-02I removes it with the legacy Submission
-path after every submission context and downstream prerequisite is live; no
-ID-addressed evidence-read route exists. These results never use review decision values:
+Failed preparation currently returns only `pre_submission_checker_failed`
+through the hidden route. ART retains bounded results; structured public
+feedback remains pending the canonical public intake cutover. POL-07B connects
+the internal checker phase service and removes the standalone JSON precheck.
+WS-ARCH-001-02I retains the broader Submission caller cutover; no ID-addressed
+evidence-read route exists. These results never use review decision values:
 `accept`, `needs_revision`, or `reject`. After verified preparation,
 final Submission creation consumes the ready admission under fresh authority
 and does not rerun scratch-bound checks.

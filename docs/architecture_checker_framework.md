@@ -299,12 +299,13 @@ Workstream default submission artifact rules require:
 - production artifact hashes shaped as `sha256:<64 lowercase hex>`
 - pre-cutover only: validated caller-supplied storage references and manifest;
   the superseded `WS-ART-001-05B` contract is implemented by
-  `WS-ARCH-001-02I`, which removes the standalone caller-owned precheck, its
-  internal legacy Submission guard, and the caller-owned `package_uri`,
+  `WS-ARCH-001-02I` for the broader Submission caller cutover, including its
+  internal Submission guard and the caller-owned `package_uri`,
   `package_hash`, and `artifact_hash_manifest` fields together so checkers
   consume Workstream artifact bindings only; the transitional `artifact_hash`
   column is handled separately by a schema-removal migration after every
-  reader uses exact binding/content identity
+  reader uses exact binding/content identity. POL-07B removes the standalone
+  caller-owned JSON precheck and connects the internal checker phase service
 - no credentials, signed URLs, query strings, raw local filesystem paths, or token-bearing references
 - narrowly high-confidence sensitive-file exclusions such as `.env`, `.git`,
   exact known credential/private-key files, `.pem`, and `.key`; broad
@@ -312,17 +313,53 @@ Workstream default submission artifact rules require:
   advisory or locked project-specific unless an exact generic custody risk is
   proven
 
-The hidden 04B2 executor consumes the exact 04B1 plan identity and only its
-`custody`, `identity`, `materialization`, and `default_policy` phase slice. It
-validates the 04A commitment, inspection, semantic manifest, and change-gate
-facts, projects one callback-scoped sealed tree through ART scratch custody, and
-returns bounded entry results: `passed`, `warning`, `failed`,
-`advisory_disabled`, or `dependency_not_run`. It does not consult the legacy
-checker registry or standalone precheck, does not run `project_policy`
-primitives, and does not persist checker evidence. XINT-06A activates only the
-fixed pre-submit materializer through two-stage PREP: scalar service/resource
-facts are locked before ZIP inspection, and the same handle consumes the final
-server-computed semantic-manifest fact before scratch or checker execution.
+The hidden pre-submit executor consumes one exact effective plan under ART
+scratch custody. It validates the commitment, inspection, semantic manifest and
+change-gate facts and returns bounded entry results. ART owns the immutable
+pre-submit evidence; these results are separate from post-submit CheckerRuns.
+
+POL-07B composes exactly two internal commands, `evaluate_pre_submission` and
+`evaluate_post_submission`. Hidden preparation calls the pre command once after
+reservation commits, including completed replay. The composition passes the
+same opaque reservation to the same ART evidence owner; it clears the consumed
+prepared authorization and opens no transaction before ART's existing executor
+obtains fresh authority. Replay returns ART's canonical result unchanged.
+
+The post command validates and delegates CHECKER's closed value contract.
+Production explicitly uses `UnavailablePostSubmissionExecution`; this does not
+install durable post-submit execution, authorize material reads, or prove attempt and
+currentness ownership. ARCH-04B/04C/04D/04E own that cutover. Existing post-submit
+run and history consumers remain until their replacement lands; the facade
+neither wraps their execution nor adds another policy compiler.
+
+POL-07A commits an ART attempt reservation after bounded ZIP inspection and
+before invoking any checker. Only the original request can consume the winning
+claim. The fixed materializer consumes fresh authorization for inspected custody
+and obtains another transaction-bound authorization before execution. Evidence
+and attempt completion commit together after a fresh locked-context check.
+The context, reservation, execution, and completion transactions acquire TASK
+locks, contributor profile/link locks, PROJECT context locks, then the submitter
+role-grant lock. Where needed, fixed-materializer AUTH follows, then attempt/
+evidence locks. This matches TASK command ordering and project-role issuance
+and revocation. Role issuance locks eligible human targets before PROJECT;
+non-human targets cannot take a service-principal lock through that operation. The ZIP inspection
+and reservation transaction takes context and authority locks before inspecting
+the archive, and records the reservation only after inspection. It follows the
+same lock order as execution, so concurrent tasks in one project cannot invert
+the shared materializer lock.
+The evidence captures a separate hash of the packet actually passed to the winning
+invocation; the database compares it with the attempt's requested packet.
+
+An exact completed retry verifies its uploaded bytes and manifest, revalidates
+contributor and fixed-service authority, and reconstructs the original result
+from canonical evidence, including member metadata and definition order. It
+invokes no checker and receives no new pass capability. An existing durable put
+receipt may continue recovery; absent or corrupt evidence/continuation is an
+infrastructure failure. A stale admission is reported stale, and a consumed
+admission conflicts; neither returns an admission ID for reuse. A reservation
+without committed completion remains unavailable under the same key, including
+a crash after checker return. A new authorized attempt requires a new key.
+Retained evidence is not rewritten or assigned invented attempt metadata.
 
 Project policy adds required artifacts, evidence requirements, stricter forbidden artifacts, stricter packaging rules, and project-specific attestation requirements.
 
@@ -330,12 +367,12 @@ The generated project `PreSubmitCheckerPolicy` is persisted with a compiled
 bundle hash and locked to the effective project submission artifact policy before tasks enter the
 contributor pipeline. Tasks lock references to the shared project's compiled checker
 bundle hash. It runs inside continuous submission-bundle preparation before
-Workstream creates a submission. Failures return the bounded same-request code
-`pre_submission_checker_failed` with status, eligibility, and structured
-pass/fail/warning details. Until deferred WS-ARCH-001-02I, the old standalone preflight route is
-frozen legacy behavior and is not an authoritative result for the new path.
-WS-ARCH-001-02I removes it completely after every submission context and
-downstream prerequisite is live; this result is not a review decision value.
+Workstream creates a submission. ART retains bounded status, eligibility and
+pass/fail/warning results. The existing hidden route returns only the code
+`pre_submission_checker_failed`; structured public intake feedback remains
+pending. The standalone JSON precheck and its exclusive implementation are removed
+by POL-07B. Broader
+Submission caller migration remains WS-ARCH-001-02I; this result is not a review decision value.
 Pre-submit results do not create durable `CheckerRun` records, do not move a
 task to `review_pending`, and do not return review decision values: `accept`,
 `needs_revision`, or `reject`.
@@ -416,10 +453,11 @@ registered checker, not an automatic consequence of this setup flow.
 The compiled project `PostSubmitCheckerPolicy` is persisted with exact setup
 provenance: guide id, source snapshot id/hash, effective project policy id/hash,
 and pre-submit checker policy id/hash. A corrected submission artifact policy
-approval supersedes and retains stale post-submit setup output, then regenerates
-the compiled post-submit policy under the new provenance. Workstream must not
-reuse a policy or correction request that only happens to match the same project
-id and guide version.
+approval establishes the new upstream provenance. The subsequent post-submit
+derive operation creates the compiled policy under that provenance and
+supersedes any still-current prior policy while retaining its evidence; correction
+may already have superseded it. Workstream must not reuse a policy or correction
+request that only happens to match the same project id and guide version.
 
 The first two gates replace external origin qualification and task ingestion for v0.1. Origin qualification and webhook drop notifications are future adapter concerns.
 
@@ -651,7 +689,27 @@ The checker interface is async-first from the start so storage reads, external
 checks, and later agent evaluation do not require a contract rewrite.
 
 Background checker execution uses Celery. FastAPI background tasks are not the
-Workstream product-job boundary. Request-bound pre-submit feedback can remain
+Workstream product-job boundary. Request-bound pre-submit evaluation can remain
 fast and deterministic because it runs before submission creation, but any
 long-running setup or post-submit checker work must go through the durable
 worker boundary.
+
+### Saved guide proposal to post-submit policy
+
+POL-06A projects validated bindings from the saved unified guide result through
+this canonical compiler. Shared identical bindings emit one required checker;
+all requirement references remain in the saved proposal. Platform defaults are
+inserted once. The complete policy body and its canonical hash are the reviewable
+draft; separate operation receipts bind its source and approved upstream chain.
+Approval cannot supply a replacement body. Correction creates the existing
+unified successor, preserving the original result and policy evidence.
+
+POL-06B exposes these operations under AUTH-12G: only the fixed setup
+service derives, and exact-project managers read, approve or correct. Committed
+pre-submission approval schedules derivation; an approval-ID recovery scan
+republishes missing derivations in bounded pages. Derivation supersedes any
+still-current prior policy. The proposal read identifies its exact derived
+policy, whose complete body is separately reviewed and approved. Projection and approval neither
+open guide documents nor invoke a model or runtime checker. Supported structural
+checks do not establish substantive work quality, and capability suggestions do
+not register implementations or bypass required gaps.

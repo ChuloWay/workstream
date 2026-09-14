@@ -24,6 +24,7 @@ def _validator() -> SimpleNamespace:
     return SimpleNamespace(
         validate_source_snapshot_integrity=AsyncMock(),
         validate_activation_ready=Mock(),
+        lock_active_post_policy=AsyncMock(return_value=object()),
         lock_active_approval=AsyncMock(return_value=SimpleNamespace(
             operation=SimpleNamespace(operation_id=UUID(int=91), output_digest='sha256:' + 'e' * 64),
             reservation=SimpleNamespace(operation_id=UUID(int=91)),
@@ -160,6 +161,7 @@ async def test_active_guide_read_validates_readiness() -> None:
         repository.post_submit, repository.review, repository.revision, None,
         require_payment_policy=False,
         approval_custody=service.lock_active_approval.return_value,
+        post_policy_custody=service.lock_active_post_policy.return_value,
     )
 
 

@@ -58,7 +58,15 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/api/deps/guide_proposal_http.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/api/deps/guide_proposals.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/deps/post_policy.py"
     },
     {
       "group": "shared",
@@ -83,6 +91,10 @@
     {
       "group": "shared",
       "target": "backend/app/api/routes/health.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/routes/post_policy.py"
     },
     {
       "group": "shared",
@@ -254,6 +266,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/artifacts/pre_submit_attempts.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/artifacts/pre_submit_evidence.py"
     },
     {
@@ -370,6 +386,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/api/post_policy.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/api/project_guide_compilation.py"
     },
     {
@@ -431,6 +451,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/guide_proposals.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/post_policy.py"
     },
     {
       "group": "auth",
@@ -507,6 +531,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/policy.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/post_policy_authorization.py"
     },
     {
       "group": "auth",
@@ -714,7 +742,15 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/contributions/api/validation.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/contributions/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/policy_eligibility.py"
     },
     {
       "group": "lifecycle",
@@ -739,6 +775,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/contributions/schemas.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/selected_policy_validation.py"
     },
     {
       "group": "lifecycle",
@@ -795,6 +835,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/projects/api/locked_policy.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/post_policy.py"
     },
     {
       "group": "lifecycle",
@@ -986,6 +1030,38 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/compiler.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/correction.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/custody.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/delivery.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/queue.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/service.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/projects/post_submit_policy.py"
     },
     {
@@ -1121,6 +1197,10 @@
       "target": "backend/app/workers/errors.py"
     },
     {
+      "group": "shared",
+      "target": "backend/app/workers/post_policy.py"
+    },
+    {
       "group": "lifecycle",
       "target": "backend/app/workers/project_setup.py"
     },
@@ -1213,7 +1293,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "c2e538ac989928d2f7fce550c437b5de4cd7c61289594b4fbd318ff49c066d21",
+  "authority_digest": "8607985116c78cd472248b1384a0dbc35727b57f7ca7323eb08193ea5ee0f182",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

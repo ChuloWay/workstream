@@ -5,8 +5,12 @@ from dataclasses import dataclass
 ADMIN_RUNNER_MODULE = "tests/test_isolated_database_runner.py"
 SCHEMA_MODULE = "tests/test_alembic.py"
 PARTITIONED_SHARED_LANES = ("shared_foundations_a", "shared_foundations_b")
-PARTITIONED_PROJECT_LANES = ("project_lifecycle_a", "project_lifecycle_b")
-PARTITIONED_TASK_LANES = ("task_lifecycle_a", "task_lifecycle_b")
+PARTITIONED_PROJECT_LANES = (
+    "project_lifecycle_a",
+    "project_lifecycle_b",
+    "project_lifecycle_c",
+)
+TASK_LANE = "task_lifecycle"
 
 
 @dataclass(frozen=True)
@@ -19,7 +23,12 @@ class TestLane:
 
 
 SHARED_FOUNDATION_MODULES = (
+    "tests/authorization/test_pre_submit_attempt_authority.py",
     "tests/authorization/test_guide_metadata_contracts.py",
+    "tests/authorization/post_policy/test_concurrency.py",
+    "tests/authorization/post_policy/test_context.py",
+    "tests/authorization/post_policy/test_prepared.py",
+    "tests/authorization/post_policy/test_postgresql.py",
     "tests/authorization/guide_proposals/test_concurrency.py",
     "tests/authorization/guide_proposals/test_context.py",
     "tests/authorization/guide_proposals/test_prepared.py",
@@ -89,6 +98,8 @@ SHARED_FOUNDATION_MODULES = (
     "tests/contributions/test_policy_publication_recovery.py",
     "tests/contributions/test_policy_publish.py",
     "tests/contributions/test_policy_read.py",
+    "tests/contributions/test_selected_policy_validation.py",
+    "tests/authorization/contribution_policies/test_selected_validation_postgresql.py",
     "tests/contributions/test_policy_retire.py",
     "tests/contributions/test_policy_routes_absent.py",
     "tests/test_coverage_contract.py",
@@ -176,6 +187,8 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_behavior_ownership.py",
     "tests/test_artifact_admission.py",
     "tests/test_submission_bundle_admission.py",
+    "tests/test_submission_bundle_preparation_recovery.py",
+    "tests/checkers/test_phase_service.py",
     "tests/test_submission_preparation_adapter.py",
     "tests/test_submission_preparation_authorization.py",
     "tests/test_submission_composition.py",
@@ -216,6 +229,19 @@ PROJECT_MODULES = (
     "tests/projects/guide_compilation/finalization/test_replay.py",
     "tests/projects/guide_compilation/finalization/test_service.py",
     "tests/projects/guide_compilation/finalization/test_structure.py",
+    'tests/projects/post_policy/test_compiler.py',
+    'tests/projects/post_policy/test_public_api.py',
+    'tests/projects/post_policy/test_public_recovery.py',
+    'tests/projects/post_policy/test_delivery_worker.py',
+    'tests/projects/post_policy/test_authority.py',
+    'tests/projects/post_policy/test_direct_sql.py',
+    'tests/projects/post_policy/test_concurrency.py',
+    'tests/projects/post_policy/test_replacement.py',
+    'tests/projects/post_policy/test_inventory.py',
+    'tests/projects/post_policy/test_migration.py',
+    'tests/projects/post_policy/test_correction.py',
+    'tests/projects/post_policy/test_guards.py',
+    'tests/projects/post_policy/test_postgresql.py',
     'tests/projects/guide_compilation/proposals/test_approved_tip.py',
     'tests/projects/guide_compilation/proposals/test_artifact_paths.py',
     'tests/projects/guide_compilation/proposals/test_selected_checks.py',
@@ -299,9 +325,15 @@ TASK_MODULES = (
     "tests/checkers/post_submit/test_result_contract.py",
     "tests/test_checker_catalogue.py",
     "tests/test_checkers.py",
-    "tests/checkers/test_packet_schema.py",
     "tests/checkers/test_effective_intake_rules.py",
     "tests/test_default_pre_submit_execution.py",
+    "tests/test_pre_submit_attempt_recovery.py",
+    "tests/test_pre_submit_attempt_contracts.py",
+    "tests/test_pre_submit_attempt_authority_integration.py",
+    "tests/test_pre_submit_attempt_lock_order.py",
+    "tests/test_pre_submit_role_issue_lock_order.py",
+    "tests/test_pre_submit_related_lock_order.py",
+    "tests/test_pre_submit_attempt_migration.py",
     "tests/test_effective_pre_submit_execution.py",
     "tests/test_project_guide_compilation_contracts.py",
     "tests/test_review_queue_persistence.py",
@@ -313,7 +345,6 @@ TASK_MODULES = (
 PARTITION_GROUPS = (
     (PARTITIONED_SHARED_LANES, SHARED_FOUNDATION_MODULES),
     (PARTITIONED_PROJECT_LANES, PROJECT_MODULES),
-    (PARTITIONED_TASK_LANES, TASK_MODULES),
 )
 PARTITION_LANES_BY_MODULE = {
     module: names for names, modules in PARTITION_GROUPS for module in modules
@@ -325,5 +356,5 @@ LANES = (
         "schema_contracts", (SCHEMA_MODULE, "tests/test_database_reset.py", ADMIN_RUNNER_MODULE)
     ),
     *(TestLane(name, PROJECT_MODULES) for name in PARTITIONED_PROJECT_LANES),
-    *(TestLane(name, TASK_MODULES) for name in PARTITIONED_TASK_LANES),
+    TestLane(TASK_LANE, TASK_MODULES),
 )

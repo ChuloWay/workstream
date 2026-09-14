@@ -98,50 +98,15 @@ context from changing silently after a submission has been recorded.
 
 ## API Contract
 
-POST `/api/v1/tasks/{task_id}/submission-precheck`
+POL-07B removes the standalone draft JSON precheck. Hidden ZIP preparation uses
+one internal pre-submit phase command and ART-owned canonical evidence. The
+hidden route returns `pre_submission_checker_failed` for blocking failures;
+structured public intake feedback remains pending.
 
-Runs non-authoritative pre-submit feedback against the task's locked project
-`PreSubmitCheckerPolicy`. This endpoint does not create a submission row,
-submission version, durable checker run, task transition, or submission-created
-audit event.
-
-Request body:
-
-- `submission`
-  - `summary`
-  - `package_uri`
-  - `package_hash`
-  - `artifact_hash_manifest`
-  - `worker_attestation`
-  - `evidence_items`
-
-Response body:
-
-- `task_id`
-- `authoritative` set to `false`
-- `status` as `passed` or `failed`
-- `eligible_to_submit`
-- `results`
-
-POST `/api/v1/tasks/{task_id}/submissions`
-
-Runs pre-submit checks from the locked project pre-submit checker policy for the
-assigned Contributor's draft packet. Creates and locks a new submission version
-only when blocking pre-submit checks pass, then enqueues the automatic Celery
-pre-review checker gate.
-
-Request body:
-
-- `summary`
-- `package_uri`
-- `package_hash`
-- `artifact_hash_manifest`
-- `worker_attestation`
-- `evidence_items`
-
-The request body must not accept guide source snapshot ids or hashes, effective project submission artifact policy ids or hashes, project pre-submit checker policy ids or bundle hashes, or guide/checker/review/revision/payment policy version fields. Those fields come from the task.
-
-The request body must not accept checker names, checker severities, checker outcomes, submission version, evidence ids, or checker run ids. Workstream owns those values.
+The former packet-creation POST is also removed. Canonical admission-backed
+Submission creation remains hidden until the broader WS-ARCH-001-02I cutover.
+Clients cannot supply a manifest, checker result or policy pointer as a substitute
+for verified ART admission and locked Task lineage.
 
 GET `/api/v1/tasks/{task_id}/submissions`
 
@@ -259,8 +224,8 @@ Chunk 5 writes task audit events with submission identifiers in `event_payload`.
 - Contributor-provided submission version fields are rejected by the API schema
 - Contributor-provided checker names, checker outcomes, evidence ids, and
   checker run ids are rejected by the API schema
-- preflight failures return `PreSubmitCheckResponse(status="failed", eligible_to_submit=false, results=[...])`
-- blocked submission-create attempts return `DomainError(code="pre_submission_checker_failed")` with structured pass/fail/warning details and create no submission row, no submission version, no task transition to `SUBMITTED`, and no submission-created audit event
+- no standalone JSON precheck route or response schema remains
+- blocking hidden ZIP preparation returns `pre_submission_checker_failed`, creates no submission row or version, and emits no submission-created event; structured public feedback remains pending
 - Workstream stamps locked guide source snapshot ids/hashes, effective project submission artifact policy ids/hashes, project pre-submit checker policy ids/bundle hashes, and guide/checker/review/revision/payment policy versions from task context
 - task moves to `SUBMITTED`
 - submitted packet is automatically locked and enters the current post-submit checker gate

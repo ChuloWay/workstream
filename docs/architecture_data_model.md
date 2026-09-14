@@ -842,19 +842,24 @@ The generated checker order is deterministic:
 8. contributor attestation validation
 9. low-quality artifact warnings
 
-At the deferred WS-ARCH-001-02I cutover, the legacy standalone
-`/tasks/{id}/submission-precheck` path is removed. Pre-submit then runs only
-inside the same process-local preparation request that owns the uploaded ZIP
-and bounded scratch generation:
+POL-07B removes the standalone JSON precheck and connects the internal
+checker phase service. Authoritative pre-submit checking
+already belongs to the preparation request owning the uploaded ZIP and bounded
+scratch. Broader Submission caller migration remains WS-ARCH-001-02I.
+
+The following structured public feedback is the target intake contract; the
+existing hidden route currently returns only `pre_submission_checker_failed`:
 
 ```text
 POST /api/v1/tasks/{id}/submission-bundle-preparations
 422 DomainError(code="pre_submission_checker_failed", details={status, eligible_to_submit, results})
 ```
 
-After that cutover no independent precheck route or client-owned manifest can
-reproduce the authoritative result. `POST /api/v1/tasks/{id}/submissions` consumes the verified ready
-admission and does not receive scratch paths or rerun the pre-submit plan.
+No independent precheck route remains. A client-owned manifest
+cannot reproduce the authoritative result. At the later public cutover,
+`POST /api/v1/tasks/{id}/submissions` will consume the verified ready admission
+without receiving scratch paths or rerunning the pre-submit plan. Canonical
+admission-backed creation remains hidden until then.
 
 Before that cutover, hidden ART-04B2 establishes the execution boundary without
 exposing a route. The fixed materializer authorizes before any prepared-byte
@@ -899,8 +904,9 @@ and crosses the active `artifact.submission_bundle.prepare` PREP boundary before
 
 Blocking pre-submit failures prevent submission creation, create no submission
 row, no submission version, no task transition to `submitted`, and no
-submission-created audit event. Workstream still writes a task audit event named
-`pre_submission_check_failed` with bounded identifiers, catalogue identity,
+submission-created audit event. ART constructs an audit-ready projection;
+publication as a task event named `pre_submission_check_failed` remains pending.
+That event must use bounded identifiers, catalogue identity,
 stable codes, counts and categories for project operators. It excludes paths,
 filenames, scratch/provider references, raw output, evidence contents,
 credentials and free-form checker messages. Pre-submit results never return
@@ -908,85 +914,43 @@ review decision values.
 
 ## PostSubmitCheckerPolicy
 
-Fields:
+The canonical `checker_policies` row contains project/guide/version and exact
+source snapshot, effective-policy and pre-submit-policy IDs/hashes; `policy_body`
+and `policy_hash`; required/warning checker and blocking-severity sidecars;
+`lifecycle_status`; `projection_operation_id`, `approval_operation_id` and
+`supersession_operation_id`; approval/supersession timestamps; predecessor
+`supersedes_policy_id`; and creation metadata.
 
-- `id`
-- `project_id`
-- `guide_id`
-- `guide_version`
-- `source_snapshot_id`
-- `source_snapshot_hash`
-- `effective_policy_id`
-- `effective_policy_hash`
-- `pre_submit_checker_policy_id`
-- `pre_submit_checker_bundle_hash`
-- `required_checkers`
-- `warning_checkers`
-- `blocking_severities`
-- `policy_hash`
-- `policy_body`
-- `lifecycle_status`
-- `approved_by_admin_role_grant_id`
-- `approved_by_actor_profile_id`
-- `approved_at`
-- `supersedes_policy_id`
-- `superseded_at`
-- `superseded_by_role`
-- `superseded_by_actor`
-- `supersession_kind`
-- `supersession_reason`
-- `created_by`
-- `created_at`
+`policy_body` is the sole execution body. Its hash is
+`sha256(canonical_json(policy_body))`; sidecars must match it. Lifecycle is
+`compiled`, `approved` or `superseded`. POL-06A derives a compiled policy only
+from a finalized unified result with the current approved artifact/effective/
+pre-submit chain. Separate exact-target manager approval records its receipt.
+Both compiled and approved policies may be corrected while their setup is current.
 
-`policy_body` is the canonical source for post-submit checker execution. The
-hash is `sha256(canonical_json(policy_body))`. `required_checkers`,
-`warning_checkers`, and `blocking_severities` are query projections and must
-match `policy_body`.
+The append-only `project_post_policy_operations` family records derive, approve
+and correction receipts with exact actor, identity link, grant or fixed service,
+authorization decision, finalization, source/result, upstream approval, catalogue
+and policy commitments. Active-guide readers require that custody. Historical
+role-string approval/supersession columns remain inert retained data; they do not
+authorize operations and receive no new writes.
 
-`lifecycle_status` is `compiled`, `approved`, or `superseded`. The derivation
-and compiler continuation creates `compiled` records. Guide activation requires
-an `approved` generated policy with setup-role approval provenance and exact
-`source_snapshot_id/hash`, `effective_policy_id/hash`, and
-`pre_submit_checker_policy_id` plus pre-submit checker bundle hash matching the
-active setup context. Server-owned approval/correction APIs move compiled
-post-submit policies into that approved state or supersede rejected generated
-output for regeneration. Superseded records retain actor, role, time, bounded
-reason, policy hash, and policy body provenance. A replacement links through
-`supersedes_policy_id` only when it replaces a correction-requested policy in
-the exact same setup context; bounded correction feedback reaches setup-time
-derivation, and Workstream rejects an identical replacement policy hash.
+Correction preserves the result and policy body, supersedes the policy, and
+allocates the existing unified successor with bounded manager feedback. After a new upstream generation is approved, subsequent deterministic
+derivation produces the next policy and links its predecessor.
+It may have the same canonical hash: new generation/approval custody identifies
+the replacement. A general unified correction also invalidates the predecessor's
+current upstream; subsequent post-policy derivation supersedes it atomically.
 
-For generated setup, the sole unified guide compiler proposes the post-submit
-component in the same inference as sufficiency and pre-submit policy proposals.
-It receives exact verified guide material and registered capability snapshots.
-POL-04B retains that component in the immutable compilation and stops at draft
-review. Later approval and deterministic post-submit projection/compilation
-consume it without another agent call. The setup runtime does not execute
-checkers or judge contributor submissions.
-
-The constrained derivation output contains:
-
-- `required_checkers`
-- `warning_checkers`
-- `blocking_severities`
-- `reasons`
-- `unsupported_required_checks`
-- `setup_notes`
-
-Setup-run summaries persist bounded metadata from that output: checker lists,
-server-owned agent name/version, reason count, sanitized evidence refs,
-unsupported checker reason codes, and setup note count. They do not persist
-free-form agent rationales, setup-note text, source excerpts, local paths,
-exact source hashes, replayable refs, or contributor submission data. Agent-returned
-agent names and versions are treated as untrusted metadata; persisted setup
-summaries use Workstream's server-owned derivation agent identity.
-
-Evidence references in `reasons` and unsupported-checker gaps are bounded
-setup pointers such as `project_guide`, `source_item:N`, `sufficiency_report`,
-`effective_policy`, and `pre_submit_checker`. The registered checker catalog is
-agent input, not an evidence reference. Evidence refs must not contain local
-filesystem paths, signed URLs, credentials, private storage locators, raw source
-excerpts, or contributor submission data.
+The policy operations consume the saved result without model, document or checker
+calls. AUTH-12G supplies authorization; POL-06B connects public manager decisions
+and approval-driven automatic derivation/recovery. Setup remains
+immutable. The existing complete proposal retains requirements, exact registered
+bindings, safe findings and non-executable capability suggestions. Evidence binds
+assigned original-document versions and hashes; model page/section attributions
+do not become verified judgments. Review display excludes credentials, private
+storage locators, signed URLs and raw source excerpts. No second derivation
+output or setup-summary state machine is introduced.
 
 When a task locks project context, Workstream copies the canonical persisted
 `PostSubmitCheckerPolicy.policy_body` and its exact hash. Submission and checker
@@ -1039,25 +1003,20 @@ warnings remain distinct from policy-adjusted blocking outcomes.
 
 Post-submit checker policy governs durable internal checker runs after a submission is finalized. It does not replace the generated project pre-submit checker policy.
 
-Baseline invariant: post-submit policy hash, body, and lock columns are
-explicit. Pre-v0.1 development rows without policy hashes are not backfilled
-into authority; recreate the database and use the project setup lifecycle.
-Runtime records fail
-closed when a task, submission, or checker run lacks valid
-`locked_post_submit_checker_policy_*` context.
+Post-submit policy hash, body and lock columns are explicit. Runtime records
+fail closed when a task, submission or checker run lacks valid
+`locked_post_submit_checker_policy_*` context. Earlier development rows are not
+automatically backfilled into authority. Retained data disposition requires
+separate authorization.
 
-Baseline invariant: required post-submit policy provenance binds a compiled
-policy to guide, source snapshot, effective project policy, and pre-submit
-checker bundle context. Construction-era rows are not an upgrade source.
-
-Baseline invariant: the single-row project/guide-version uniqueness rule is
-replaced by uniqueness for current
-`compiled` or `approved` rows. Superseded rows remain append-only and retain
-their policy body/hash, supersession kind/reason, actor/role/time provenance,
-and any same-context correction replacement link. Correction lookup is scoped
-to the exact guide, source
-snapshot, effective project policy, and pre-submit checker provenance so stale
-feedback cannot influence a later setup context.
+Policy custody binds the canonical body to the exact guide, source snapshot,
+approved upstream chain and pre-submit checker bundle. Only one current
+`compiled` or `approved` policy exists for a guide. Superseded rows preserve their
+body/hash, supersession kind/reason and timestamp, with actor, grant and decision
+provenance in exact append-only operation custody. Retained historical role
+values remain inert. Replacement links follow approved upstream generations;
+the canonical hash may stay the same. A correction targets the exact proposal
+and policy, so a stale target cannot authorize a decision on a later generation.
 
 ## ReviewPolicy
 

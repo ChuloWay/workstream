@@ -301,5 +301,12 @@ outputs. The retired post-submit setup-step response fields and dormant activati
 command are removed. Pre-submit capability references do not duplicate intake
 settings: `submission_artifact_policy` is the sole configuration proposal.
 Post-submit capability references retain their evaluator-owned configuration.
-POL-05/POL-06 and AUTH-12H own the remaining approval, projection and activation
-boundaries; current active-guide reads continue validating locked policy lineage.
+POL-06A implements hidden post-policy derivation from the saved unified result,
+complete canonical draft reads, separate approval and setup-wide correction.
+Projection requires the current approved artifact/effective/pre-submit chain.
+Each immutable operation binds finalization, source, result, upstream approval,
+catalogue and canonical policy hash. Correction reuses the unified successor;
+no operation reopens finalization or calls an evaluator. Affected active-guide
+reads require this operation custody instead of role-string approval fields.
+AUTH-12G and POL-06B own live post-policy authority and public exposure; AUTH-12H
+owns complete-guide activation after the remaining owner prerequisites.

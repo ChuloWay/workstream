@@ -1,6 +1,9 @@
 # Chunk Contract: WS-POL-003-06A - Hidden Post-Submit Projection
 
-Status: Proposed after 05B; inactive. Risk: L1.
+Disposition: Complete. Risk: L1.
+
+The reconciled [bounded implementation record](../../WS-POL-003-06A.md)
+owns the exact file boundary, current custody owners and verification contract.
 
 ## Goal
 
@@ -23,9 +26,10 @@ execution, new registrations, or reuse of agent provenance by manual policy.
   catalogue snapshot, setup generation, and deterministic output hash.
 - Unknown/wrong-stage/default-repeating entries fail closed.
 - A correction request against existing provenance performs no model call. A
-  correction requiring new unified generation is a separate compilation
-  attempt with its own idempotency key. Separately proven manual provenance
-  remains distinct; neither path may silently rederive from the guide.
+  correction allocates through the existing unified correction operation and
+  successor generation, with both protected actions separately authorized in
+  one transaction. Later dispatch is separate. No manual-policy mode or second
+  setup state machine is retained.
 - Candidate mutations remain denied until AUTH-12G.
 - PROJECTS owns separate post-policy projection/approval/correction operations
   linked to the finalized receipt and upstream approval identity. Finalization
@@ -39,7 +43,7 @@ execution, new registrations, or reuse of agent provenance by manual policy.
   unknown/disabled evaluator blocks activation instead of becoming a structural
   presence check or a silent human-review substitution.
 - Provide bounded exact-draft read facts for approval, with compilation,
-  upstream approval and canonical `policy_hash` lineage; a sparse legacy
+  upstream approval and canonical `policy_hash` lineage; a sparse
   checker-name list is not the current draft. AUTH-12G must extend the exact
   object-scoped read resource contract before POL-06B exposes it.
 

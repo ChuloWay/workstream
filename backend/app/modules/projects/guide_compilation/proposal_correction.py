@@ -1,5 +1,6 @@
 """Allocate one immutable correction successor without dispatching provider work."""
 
+from dataclasses import dataclass
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from sqlalchemy import select
@@ -7,6 +8,7 @@ from sqlalchemy import select
 from app.core.hashing import canonical_json_hash
 from app.interfaces.project_agents import ProjectGuideCorrectionFeedback
 from app.modules.authorization.api.guide_proposal_review import (
+    GuideProposalAuthorityReceipt,
     GuideProposalAuthorizationFacts,
     GuideProposalAuthorizationLocator,
     PreparedGuideProposalOperation,
@@ -21,97 +23,110 @@ from app.modules.projects.models import ProjectSetupRun
 from .correction_feedback import correction_feedback
 from .proposal_authority import proposal_resource_json, require_proposal_authority
 from .models import ProjectGuideProposalCorrection
-from .proposal_repository import GuideProposalRepository
+from .proposal_repository import GuideProposalRepository, LockedGuideProposal
 
 
-async def request_proposal_correction(
-    session,
-    authorization,
-    command,
-    *,
-    actor,
-    request_id,
-) -> GuideProposalCorrectionReceipt:
-    """Preserve the finalized predecessor and stop at committed successor intent."""
+@dataclass(frozen=True)
+class StagedGuideCorrection:
+    """Validated decision staged until every enclosing authority context closes."""
+
+    locked: LockedGuideProposal
+    receipt: GuideProposalCorrectionReceipt
+    facts: GuideProposalAuthorizationFacts | None
+    authority: GuideProposalAuthorityReceipt | None
+
+
+def correction_locator(command, actor, request_id):
+    """Precompute authority selectors before either caller acquires product locks."""
     target = command.target
-    operation_id = uuid5(
-        NAMESPACE_URL,
-        f"workstream.guide-proposal-correction:{actor.actor_profile_id}:{command.idempotency_key}",
-    )
-    locator = GuideProposalAuthorizationLocator(
-        project_id=target.project_id,
-        guide_id=target.guide_id,
+    return GuideProposalAuthorizationLocator(
+        project_id=target.project_id, guide_id=target.guide_id,
         compilation_id=target.compilation_id,
-        actor_profile_id=actor.actor_profile_id,
-        identity_link_id=actor.identity_link_id,
+        actor_profile_id=actor.actor_profile_id, identity_link_id=actor.identity_link_id,
         action_id="project.guide_compilation.correction.request",
-        operation_id=operation_id,
+        operation_id=uuid5(NAMESPACE_URL,
+            f"workstream.guide-proposal-correction:{actor.actor_profile_id}:{command.idempotency_key}"),
         request_id=request_id,
     )
+
+
+async def request_proposal_correction(session, authorization, command, *, actor, request_id):
+    """Preserve the finalized predecessor and stop at committed successor intent."""
+    locator = correction_locator(command, actor, request_id)
+    async with authorization.prepare_proposal_operation(locator) as prepared:
+        staged = await stage_proposal_correction(session, command, actor, locator, prepared)
+    return await persist_staged_correction(session, command, actor, staged)
+
+
+async def stage_proposal_correction(session, command, actor, locator, prepared, *, locked=None):
+    """Use an already-prepared capability; no product writes or nested authority."""
+    target = command.target
+    operation_id = locator.operation_id
     repository = GuideProposalRepository(session)
     request_digest = canonical_json_hash(command.model_dump(mode="json"))
-    async with authorization.prepare_proposal_operation(locator) as prepared:
-        if not isinstance(prepared, PreparedGuideProposalOperation):
-            raise GuideProposalError("authority_unavailable")
-        locked = await repository.lock(
-            GuideProposalSelection(
-                project_id=target.project_id,
-                guide_id=target.guide_id,
-                compilation_id=target.compilation_id,
-            )
+    if not isinstance(prepared, PreparedGuideProposalOperation):
+        raise GuideProposalError("authority_unavailable")
+    if locked is None:
+        locked = await repository.lock(GuideProposalSelection(
+            project_id=target.project_id, guide_id=target.guide_id,
+            compilation_id=target.compilation_id,
+        ))
+    if locked.target != target:
+        raise GuideProposalError("proposal_stale")
+    existing = await session.scalar(
+        select(ProjectGuideProposalCorrection)
+        .where(
+            ProjectGuideProposalCorrection.operation_id == operation_id,
         )
-        if locked.target != target:
-            raise GuideProposalError("proposal_stale")
-        existing = await session.scalar(
-            select(ProjectGuideProposalCorrection)
-            .where(
-                ProjectGuideProposalCorrection.operation_id == operation_id,
-            )
-            .with_for_update()
+        .with_for_update()
+    )
+    if existing is not None:
+        receipt = await _replay_correction(
+            session, existing, target, request_digest, locator, actor, prepared,
         )
-        if existing is not None:
-            return await _replay_correction(
-                session,
-                existing,
-                target,
-                request_digest,
-                locator,
-                actor,
-                prepared,
-            )
-        if not locked.current:
-            raise GuideProposalError("proposal_stale")
-        successor_id = uuid5(operation_id, "setup-successor")
-        feedback = ProjectGuideCorrectionFeedback(
-            operation_id=operation_id,
-            predecessor_compilation_id=target.compilation_id,
-            predecessor_result_hash=target.result_hash,
-            target_digest=target.digest,
-            reason=command.reason,
-        )
-        receipt = GuideProposalCorrectionReceipt(
-            operation_id=operation_id,
-            target_digest=target.digest,
-            successor_setup_run_id=successor_id,
-            successor_setup_generation=target.setup_generation + 1,
-            feedback_hash=canonical_json_hash(feedback.model_dump(mode="json")),
-        )
-        approval = await repository.current_approval(target.guide_id)
-        facts = GuideProposalAuthorizationFacts(
-            locator=locator,
-            finalization_id=target.finalization_id,
-            artifact_policy_id=target.artifact_policy_id,
-            setup_run_id=target.setup_run_id,
-            setup_generation=target.setup_generation,
-            target_digest=target.digest,
-            request_digest=request_digest,
-            output_digest=canonical_json_hash(receipt.model_dump(mode="json")),
-            current_approval_operation_id=approval.operation_id if approval else None,
-            current_approval_output_digest=approval.output_digest if approval else None,
-        )
-        authority = await prepared.consume_new(facts)
-        require_proposal_authority(authority, facts, actor, "project.guide_compilation.request")
-    return await _persist_correction(session, command, actor, locked, receipt, facts, authority)
+        return StagedGuideCorrection(locked, receipt, None, None)
+    if not locked.current:
+        raise GuideProposalError("proposal_stale")
+    successor_id = uuid5(operation_id, "setup-successor")
+    feedback = ProjectGuideCorrectionFeedback(
+        operation_id=operation_id,
+        predecessor_compilation_id=target.compilation_id,
+        predecessor_result_hash=target.result_hash,
+        target_digest=target.digest,
+        reason=command.reason,
+    )
+    receipt = GuideProposalCorrectionReceipt(
+        operation_id=operation_id,
+        target_digest=target.digest,
+        successor_setup_run_id=successor_id,
+        successor_setup_generation=target.setup_generation + 1,
+        feedback_hash=canonical_json_hash(feedback.model_dump(mode="json")),
+    )
+    approval = await repository.current_approval(target.guide_id)
+    facts = GuideProposalAuthorizationFacts(
+        locator=locator,
+        finalization_id=target.finalization_id,
+        artifact_policy_id=target.artifact_policy_id,
+        setup_run_id=target.setup_run_id,
+        setup_generation=target.setup_generation,
+        target_digest=target.digest,
+        request_digest=request_digest,
+        output_digest=canonical_json_hash(receipt.model_dump(mode="json")),
+        current_approval_operation_id=approval.operation_id if approval else None,
+        current_approval_output_digest=approval.output_digest if approval else None,
+    )
+    authority = await prepared.consume_new(facts)
+    require_proposal_authority(authority, facts, actor, "project.guide_compilation.request")
+    return StagedGuideCorrection(locked, receipt, facts, authority)
+
+
+async def persist_staged_correction(session, command, actor, staged):
+    """Persist once, only after the caller has closed all prepared contexts."""
+    if staged.authority is None:
+        return staged.receipt
+    return await _persist_correction(
+        session, command, actor, staged.locked, staged.receipt, staged.facts, staged.authority,
+    )
 
 
 async def _replay_correction(session, existing, target, request_digest, locator, actor, prepared):

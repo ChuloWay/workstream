@@ -2,7 +2,7 @@
 
 ## Objective
 
-Replace the current three complete project-guide inference passes with one
+The delivered setup replaces the former three complete project-guide inference passes with one
 bounded logical `ProjectGuideCompilationAgent` attempt for each exact immutable
 guide source, capability-catalogue snapshot, and setup generation. A durable
 attempt identity and provider idempotency key enforce that cardinality across
@@ -124,8 +124,9 @@ action-specific PREP at its protected transaction.
 
 ## Single checker execution surfaces
 
-There are two lifecycle phases exposed through one internal typed checker
-service port, with exactly one complete command per phase:
+POL-07B delivers the internal two-command composition. The end-state material
+flow below includes the later post-submit cutover; only the pre-submit call is
+currently wired into ART preparation:
 
 ```text
 ART sealed scratch material
@@ -136,30 +137,34 @@ ART verified stored/bound Submission material
    -> durable platform defaults + exact locked project post-submit plan
 ```
 
-Artifact-flow orchestration supplies exact ART material facts and invokes the
-phase command at the corresponding material boundary. The checker service
-facade invokes the canonical phase executor once and returns one typed bounded
-result; no caller invokes an individual checker. For pre-submit, ART-04B1-04B3
+At the later post-submit cutover, artifact-flow orchestration supplies exact
+ART material facts and invokes that phase at the verified-content boundary.
+Current pre-submit preparation calls its phase once after reservation commits
+for both a winning reservation and completed replay. The checker service
+facade delegates execution or returns the canonical completed pre result; no caller invokes an individual checker. For pre-submit, ART-04B1-04B3
 remain the sole plan compiler/executor/evidence writer behind the facade. For
 post-submit, the durable CHECKER executor/repository is the sole writer. The
 facade never reruns members or persists a competing evidence set.
 
 These commands are internal typed service APIs, not contributor-facing HTTP
 checker routes. Callers cannot provide checker names or invoke platform and
-project rules separately. Automatic orchestration and any bounded repair use
-the same command and deterministic attempt identity.
+project rules separately. Future post-submit orchestration and repair must use the same command and
+owner-issued attempt identity; POL-07B does not install that execution.
 
 Setup proposal, approval, correction-request, and visibility APIs remain
 separate because they configure or observe policy rather than execute a
 submission. Read-only checker-run visibility also remains bounded and separate.
 
-POL-07 owns facade composition over the CHECKER contract supplied by the
+[POL-07B](../WS-POL-003-07B.md) completes facade composition over the CHECKER contract supplied by the
 independent ARCH-04A boundary. ARCH-04A does not depend on POL-07, guide
 activation or task readiness. ARCH-04C alone implements durable post-submit
 attempt/result/currentness storage and worker recovery; 07 cannot claim that
-future repository proof or make it a prerequisite for guide activation. Later
-artifact-flow integration consumes it at ART's scratch and verified-storage
-boundaries without WS-POL-003 modifying ART code or forcing ART lifecycle changes.
+future repository proof or make it a prerequisite for guide activation. Production post composition explicitly injects the unavailable executor; later
+artifact-flow integration supplies verified stored material and durable custody. The reviewed [POL-07A prerequisite](../WS-POL-003-07A.md)
+repairs ART-owned pre-submit invocation custody before the facade: a committed
+reservation fences execution, and completed recovery reads canonical evidence.
+This bounded exception does not move ART persistence into CHECKER or add
+post-submit execution to POL-07.
 
 ## Input contract
 
@@ -278,10 +283,11 @@ expression.
 
 ## Evidence and text safety
 
-Evidence uses a closed `GuideEvidenceRef` structure minted/validated by trusted
-server code from the immutable source-item and extraction lineage. It never
-contains raw excerpts, URLs, paths, credentials, signed references, or caller
-text.
+Evidence uses the closed `GuideEvidenceRef` structure. Server validation binds
+source-item, document-version and digest to the exact assigned original bytes.
+Page ranges and bounded safe section labels are model attribution, not verified
+semantic evidence. References contain no raw excerpts, URLs, paths, credentials
+or signed storage references.
 
 Every persisted operator-readable model field passes centralized bounded safe
 text validation/redaction. Rejection is atomic: unsafe or structurally invalid
@@ -335,15 +341,16 @@ row, repurpose its output fields, or let AUTH/live-cutover code invent storage.
 Policy changes supersede through their canonical lifecycle or a new generation;
 later operations cannot rewrite earlier approval evidence.
 
-Agent-derived projections cannot be edited. Correction creates a new setup
-generation and compilation. If separately manual policies remain supported,
-they carry manual provenance, invalidate unified downstream proposals, and
-cannot claim or reuse agent compilation approval.
+Saved-result projections cannot be edited. POL-06A correction composes fresh
+post-policy and existing unified-correction authority before product locks,
+then writes one existing successor and immutable correction receipts atomically.
+A newly approved generation projects the next canonical post policy. There is no
+separate manual policy path. See the [implementation contract](../WS-POL-003-06A.md).
 
 ## Lifecycle
 
 ```text
-ART verified extraction
+ART verified original-document custody
 -> automatic source-ready request (POL-04B1/04B), or authorized PM correction/rerun in a new generation (POL-05)
 -> canonical platform/capability projections
 -> one unified model invocation

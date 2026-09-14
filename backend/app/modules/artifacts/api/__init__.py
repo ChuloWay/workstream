@@ -3,6 +3,7 @@
 from app.modules.artifacts.api.submission_preparation import (
     SubmissionBundlePreparationCommand,
     SubmissionBundlePreparationRejected,
+    SubmissionBundlePreparationInfrastructureUnavailable,
     SubmissionBundlePreparationRequest,
     SubmissionBundlePreparationResult,
     SubmissionBundlePreparationStatus,
@@ -19,6 +20,7 @@ from app.modules.artifacts.api.submission_admission import (
 __all__ = (
     "SubmissionBundlePreparationCommand",
     "SubmissionBundlePreparationRejected",
+    "SubmissionBundlePreparationInfrastructureUnavailable",
     "SubmissionBundlePreparationRequest",
     "SubmissionBundlePreparationResult",
     "SubmissionBundlePreparationStatus",

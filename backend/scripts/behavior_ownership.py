@@ -161,6 +161,13 @@ ARCH_CP04A_CONTRIBUTION_POLICY_TARGETS = frozenset(
         "backend/app/modules/projects/contribution_policy.py",
     }
 )
+ARCH_CP06_SELECTED_POLICY_TARGETS = frozenset(
+    {
+        "backend/app/modules/contributions/api/validation.py",
+        "backend/app/modules/contributions/policy_eligibility.py",
+        "backend/app/modules/contributions/selected_policy_validation.py",
+    }
+)
 ARCH_CP05_POLICY_AUTH_TARGETS = frozenset(
     {
         "backend/app/adapters/auth/contribution_policies.py",
@@ -226,12 +233,41 @@ POL_04A3_PARTITION_TARGETS = frozenset(
         "backend/app/modules/projects/api/guide_compilation_projections.py",
     }
 )
+AUTH_12G_PARTITION_TARGETS = frozenset({
+    'backend/app/modules/authorization/domain/post_policy.py',
+    'backend/app/modules/authorization/post_policy_authorization.py',
+})
+
 AUTH_12F4_PARTITION_TARGETS = frozenset({
     'backend/app/modules/authorization/domain/guide_manager_resources.py',
     'backend/app/modules/authorization/domain/guide_proposals.py',
     'backend/app/modules/authorization/domain/prepared_submission_policy.py',
     'backend/app/modules/authorization/guide_proposal_authorization.py',
     'backend/app/modules/authorization/prepared_proposal_replay.py',
+})
+
+POL_07A_PARTITION_TARGETS = frozenset({
+    "backend/app/modules/artifacts/pre_submit_attempts.py",
+})
+
+POL_06B_PARTITION_TARGETS = frozenset({
+    'backend/app/api/deps/guide_proposal_http.py',
+    'backend/app/api/deps/post_policy.py',
+    'backend/app/api/routes/post_policy.py',
+    'backend/app/modules/projects/post_policy/delivery.py',
+    'backend/app/modules/projects/post_policy/queue.py',
+    'backend/app/workers/post_policy.py',
+})
+
+POL_06A_PARTITION_TARGETS = frozenset({
+    'backend/app/modules/authorization/api/post_policy.py',
+    'backend/app/modules/projects/api/post_policy.py',
+    'backend/app/modules/projects/post_policy/compiler.py',
+    'backend/app/modules/projects/post_policy/correction.py',
+    'backend/app/modules/projects/post_policy/custody.py',
+    'backend/app/modules/projects/post_policy/models.py',
+    'backend/app/modules/projects/post_policy/repository.py',
+    'backend/app/modules/projects/post_policy/service.py',
 })
 
 POL_05B_PARTITION_TARGETS = frozenset({
@@ -521,8 +557,12 @@ def _validate_additive_partition_transition(
         | POL_04B_PARTITION_TARGETS
         | POL_04B2_PARTITION_TARGETS
         | AUTH_12F4_PARTITION_TARGETS
+        | AUTH_12G_PARTITION_TARGETS
         | POL_05A_PARTITION_TARGETS
         | POL_05B_PARTITION_TARGETS
+        | POL_06A_PARTITION_TARGETS
+        | POL_06B_PARTITION_TARGETS
+        | POL_07A_PARTITION_TARGETS
 
         | API_DRILL_PARTITION_TARGETS
         | AUTH_12I_TARGETS
@@ -538,6 +578,7 @@ def _validate_additive_partition_transition(
             | ARCH_CP04B_CONTRIBUTION_POLICY_TARGETS
         | ARCH_04A_POST_SUBMIT_TARGETS
         | ARCH_CP05_POLICY_AUTH_TARGETS
+        | ARCH_CP06_SELECTED_POLICY_TARGETS
         | V01_BASELINE_ADDED_TARGETS
         | TASK_PROJECT_AUTHORITY_TARGETS
     )

@@ -2,6 +2,8 @@
 # pyright: reportIndexIssue=false, reportOptionalMemberAccess=false
 # pyright: reportOptionalSubscript=false, reportRedeclaration=false
 from __future__ import annotations
+from app.modules.authorization.domain.post_policy import post_policy_resource
+from tests.authorization.post_policy.support import post_facts
 
 from tests.authorization.catalogue_fixtures import ART_CUSTODY_EXPECTATIONS, REV_CUSTODY_EXPECTATIONS
 
@@ -13,7 +15,6 @@ from tests.authorization.runtime_support import (
     _GuideMutationAuthorityFacts,
     _guide_mutation_resources,
 )
-
 
 import ast
 import asyncio
@@ -226,7 +227,6 @@ from app.modules.authorization.runtime import (
     ProjectGuideMutationResourceContext,
     ProjectGuideSourceSnapshotMutationResourceContext,
     ProjectGuideSufficiencyMutationResourceContext,
-    ProjectPostSubmitCheckerPolicyMutationResourceContext,
     ProjectPolicyMutationPrepareDenialResourceContext,
     ProjectReviewPolicyMutationResourceContext,
     ProjectRevisionPolicyMutationResourceContext,
@@ -1405,13 +1405,7 @@ async def test_project_role_mutation_routes_enforce_project_lifecycle_without_di
     project_exists: bool,
     expected_status: int,
 ) -> None:
-    project_id, grant_id, caller_id, target_id, snapshot_id = (
-        uuid4(),
-        uuid4(),
-        uuid4(),
-        uuid4(),
-        uuid4(),
-    )
+    project_id, grant_id, caller_id, target_id, snapshot_id = (uuid4() for _ in range(5))
     staged = {
         "idempotency": 0,
         "qualification_snapshot": 0,
@@ -1622,7 +1616,7 @@ async def test_project_role_mutation_routes_enforce_project_lifecycle_without_di
         assert calls["complete"] == 0
         assert session.commit_count == 0
         if not project_exists:
-            assert calls == {"target_lookup": 0, "consume": 0, "complete": 0}
+            assert calls == {"target_lookup": int(operation == "issue"), "consume": 0, "complete": 0}
     else:
         expected_body = {
             "id": str(grant_id),
@@ -1860,31 +1854,11 @@ def test_project_mutation_resources_and_prepared_scopes_are_closed() -> None:
         )
     }
     checker_resources = {
-        action_id: ProjectPostSubmitCheckerPolicyMutationResourceContext(
-            resource_type="project_post_submit_checker_policy_mutation",
-            resource_id=checker_policy_id,
-            scope_project_id=project_id,
-            guide_id=guide_id,
-            guide_version="1",
-            source_snapshot_id=snapshot_id,
-            source_snapshot_hash=DIGEST,
-            target_kind=target_kind,
-            execution_kind="setup_service" if target_kind == "derive" else "human",
-            checker_policy_id=checker_policy_id,
-            setup_generation=1,
-            lifecycle_status="draft",
-            compiled_policy_digest=DIGEST,
-            setup_service_custody=(
-                setup_custody_by_step["post_submit_policy"] if target_kind == "derive" else None
-            ),
-        )
-        for action_id, target_kind in (
-            (ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_APPROVE, "approve"),
-            (
-                ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_CORRECTION_REQUEST,
-                "correction_request",
-            ),
-            (ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE, "derive"),
+        action: post_policy_resource(post_facts(action.value, project_id))
+        for action in (
+            ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_APPROVE,
+            ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_CORRECTION_REQUEST,
+            ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE,
         )
     }
     from app.modules.authorization.domain.project_setup_finalization import finalization_resource_context
@@ -1996,10 +1970,6 @@ def test_project_mutation_resources_and_prepared_scopes_are_closed() -> None:
             ProjectSubmissionArtifactPolicyMutationResourceContext,
             submission_resources[ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE],
         ),
-        (
-            ProjectPostSubmitCheckerPolicyMutationResourceContext,
-            checker_resources[ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE],
-        ),
     ):
         missing_custody = service_resource.model_dump()
         missing_custody["setup_service_custody"] = None
@@ -2023,8 +1993,6 @@ def test_project_mutation_resources_and_prepared_scopes_are_closed() -> None:
             context_type.model_validate(wrong_generation)
         wrong_step = service_resource.model_dump()
         wrong_step["setup_service_custody"]["expected_step"] = "post_submit_policy"
-        if context_type is ProjectPostSubmitCheckerPolicyMutationResourceContext:
-            wrong_step["setup_service_custody"]["expected_step"] = "guide_sufficiency"
         with pytest.raises(ValidationError, match="setup-service step is inconsistent"):
             context_type.model_validate(wrong_step)
         wrong_stale_output = service_resource.model_dump()
@@ -2145,7 +2113,7 @@ def test_fixed_service_action_matrix_and_activation_are_exact_and_immutable() ->
         ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE: (
             PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE,
             ActionOwner.AUTH_12G,
-            ActionAvailability.PLANNED,
+            ActionAvailability.ACTIVE,
         ),
         ActionId.PROJECT_SETUP_RUN_UPDATE: (
             PermissionId.PROJECT_GUIDE_MANAGE,
@@ -2181,6 +2149,7 @@ def test_submission_artifact_policy_draft_actions_have_exact_child_owners() -> N
         ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC,
         ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
         ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE, ActionId.PROJECT_SETUP_RUN_UPDATE,
+        ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE,
     }
     assert {
         action

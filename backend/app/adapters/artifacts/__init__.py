@@ -13,6 +13,7 @@ from app.core.config import Settings
 from app.core.api_controls import request_ids
 from app.api.deps.authorization import get_authorization_actor_identity
 from app.adapters.checkers import PreSubmitCheckerExecutionAdapter
+from app.modules.checkers.api.post_submit import UnavailablePostSubmissionExecution
 from app.adapters.projects import project_locked_policy_context_port
 from app.adapters.tasks import task_submission_context_port
 from app.db.session import get_db_session
@@ -47,6 +48,54 @@ from app.modules.artifacts.authorization import (
 )
 from app.modules.actors.service_identities import ServiceIdentity
 from app.modules.authorization.api import ActorIdentityFacts
+
+
+from app.modules.artifacts.api import SubmissionBundlePreparationRequest
+from app.modules.artifacts.pre_submit_evidence import PreSubmitEvidencePersistenceResult
+from app.modules.artifacts.submission_materialization import (
+    PreparedBundleMaterializationRequest,
+    PreparedBundlePreSubmitEvidenceService,
+)
+from app.modules.checkers.api.post_submit import (
+    PostSubmissionEvaluationRequest,
+    PostSubmissionEvaluationResult,
+    PostSubmissionExecutionPort,
+)
+
+
+class CheckerPhaseService:
+    """One command per phase, composed from the canonical ART and CHECKER owners."""
+
+    def __init__(
+        self, *, pre_submission: PreparedBundlePreSubmitEvidenceService,
+        post_submission: PostSubmissionExecutionPort,
+    ) -> None:
+        self._pre_submission = pre_submission
+        self._post_submission = post_submission
+
+    async def evaluate_pre_submission(
+        self, request: PreparedBundleMaterializationRequest, reservation: object, *,
+        preparation_request: SubmissionBundlePreparationRequest,
+    ) -> PreSubmitEvidencePersistenceResult:
+        """Finish ART's committed selection, preserving its exact canonical result."""
+        if request.prepared_authorization is not None:
+            raise ValueError("pre_submission_phase_requires_consumed_authorization")
+        if isinstance(reservation, PreSubmitEvidencePersistenceResult):
+            return reservation
+        return await self._pre_submission.execute_reserved(
+            request, reservation, preparation_request=preparation_request,
+        )
+
+    async def evaluate_post_submission(
+        self, request: PostSubmissionEvaluationRequest,
+    ) -> PostSubmissionEvaluationResult:
+        """Delegate the closed post contract; production execution remains unavailable."""
+        request = PostSubmissionEvaluationRequest.model_validate(request)
+        result = PostSubmissionEvaluationResult.model_validate(
+            await self._post_submission.evaluate_post_submission(request)
+        )
+        result.validate_request(request)
+        return result
 
 
 async def get_submission_bundle_preparation_actor(
@@ -344,6 +393,7 @@ def get_submission_bundle_preparation_command(
             except KeyError as exc:
                 raise RuntimeError("unsupported artifact store backend") from exc
             materialization = PreparedBundleMaterializationService(
+                session=session,
                 authorization=materialization_authority,
                 preparation=preparation,
                 checker_execution=checker_execution,
@@ -357,17 +407,22 @@ def get_submission_bundle_preparation_command(
                 settings,
                 internal_authority,
             )
+            evidence = PreparedBundlePreSubmitEvidenceService(
+                session=session,
+                materialization=materialization,
+                preparation_authorization=authority,
+                task_contexts=task_contexts,
+                project_contexts=project_contexts,
+            )
             yield SubmissionBundlePreparationRuntime(
                 preparation=preparation,
                 inspector=inspector,
                 catalogue=catalogue,
                 materialization=materialization,
-                evidence=PreparedBundlePreSubmitEvidenceService(
-                    session=session,
-                    materialization=materialization,
-                    preparation_authorization=authority,
-                    task_contexts=task_contexts,
-                    project_contexts=project_contexts,
+                evidence=evidence,
+                checker_service=CheckerPhaseService(
+                    pre_submission=evidence,
+                    post_submission=UnavailablePostSubmissionExecution(),
                 ),
                 durable_put=SubmissionBundleDurablePutService(
                     session=session,

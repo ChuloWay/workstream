@@ -10,6 +10,14 @@ from .pg_support import proposal_case, revoke_review_grant
 from .public_support import proposal_client, proposal_path
 
 
+@pytest.fixture(autouse=True)
+def isolate_post_policy_broker(monkeypatch):
+    """These proposal tests stop at publication; delivery has its own public drill."""
+    from app.modules.projects.post_policy import queue
+
+    monkeypatch.setattr(queue, "enqueue_derivation", lambda approval_id: None)
+
+
 def test_openapi_exposes_complete_proposal_journey():
     paths = create_app().openapi()["paths"]
     prefix = "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}"

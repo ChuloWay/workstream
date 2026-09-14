@@ -125,6 +125,8 @@ def parse_proposal_prepare(action, caller_input, scope, context):
     if action not in GUIDE_PROPOSAL_ACTION_IDS:
         return None
     value = dict(caller_input.request_value)
+    if action == ActionId.PROJECT_GUIDE_COMPILATION_REVIEW_PACKAGE_READ and value.get("operation_family") == "post_policy":
+        return None
     parsed = {name: (raw if name == "action_id" else UUID(str(raw))) for name, raw in value.items()}
     locator = GuideProposalAuthorizationLocator(**parsed)
     validate_locator(locator)

@@ -62,6 +62,7 @@ def create_celery_app() -> Celery:
             "app.workers.artifacts",
             "app.workers.checkers",
             "app.workers.project_setup",
+            "app.workers.post_policy",
         ],
     )
     celery_app.conf.update(
@@ -73,6 +74,10 @@ def create_celery_app() -> Celery:
         task_serializer="json",
         timezone="UTC",
         beat_schedule={
+            "post-policy-approval-recovery": {
+                "task": "workstream.project_setup.scan_post_policy_approvals",
+                "schedule": 60.0,
+            },
             "guide-runtime-resource-cleanup": {
                 "task": "workstream.project_setup.cleanup_runtime_resources",
                 "schedule": settings.artifact_pending_work_scan_interval_seconds,

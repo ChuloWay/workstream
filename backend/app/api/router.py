@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.api.routes.guide_proposals import router as guide_proposal_router
+from app.api.routes.post_policy import router as post_policy_router
 
 from fastapi import APIRouter
 
@@ -33,3 +34,4 @@ api_router.include_router(artifacts_router, prefix="/api/v1")
 api_router.include_router(artifact_submission_router, prefix="/api/v1")
 
 api_router.include_router(guide_proposal_router, prefix="/api/v1")
+api_router.include_router(post_policy_router, prefix="/api/v1")

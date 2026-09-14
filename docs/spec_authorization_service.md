@@ -460,7 +460,7 @@ The paired artifact hidden-behavior matrix is closed:
 | `WS-ART-001-02D` | Operator binding/replica/receipt/verification-job/recovery-attempt/audit reads; the operations-domain `operations.artifact_storage_admission.read` action mapped to `operations.status.read`; verification retry; `artifact.verification.execute`; `artifact.pending_work.scan`; and `artifact.put_attempt.resolve` |
 | `WS-ART-001-03` | Hidden guide behavior for `artifact.guide_source.ingest -> artifact.guide_source.ingest`, `artifact.guide_source.read -> artifact.guide_source.read`; AUTH activation custody is split between WS-XINT-002-04A and 04B below |
 | `WS-ART-001-04A` historical baseline | the former multi-step upload authority had no route/command and is deleted from the live catalogue by WS-XINT-002-01 without compatibility aliases |
-| `WS-ART-001-04A1` through `04C2` | one hidden `artifact.submission_bundle.prepare` surface mapped to `submission.create`; 04B1-04B3 implement the sole catalogue/materialization/evidence path and XINT-002-06A activates its fixed pre-submit materializer before 04C1; contributor preparation remains unavailable until WS-ARCH-001-02A-02F establish the complete public owner path, 02G activates preparation, 02H activates consumption/binding, and 02I removes the frozen legacy precheck in the live clean cut |
+| `WS-ART-001-04A1` through `04C2` | one hidden `artifact.submission_bundle.prepare` surface mapped to `submission.create`; 04B1-04B3 implement the sole catalogue/materialization/evidence path and XINT-002-06A activates its fixed pre-submit materializer before 04C1; WS-ARCH-001-02G activates hidden contributor preparation and 02H activates hidden consumption/binding on the completed 02A-02F owner foundation; the public Submission cutover remains 02I work; POL-07B connects the internal checker phase service and removes the standalone JSON precheck |
 | `WS-ART-001-04B2` and `04B3` | hidden `artifact.pre_submit.checker_input.materialize` resource/guard usage mapped to `artifact.checker_input.materialize`; 04B2 owns exact sealed materialization and 04B3 consumes it in the complete effective plan |
 | `WS-ART-001-05` | `artifact.submission.binding.create` mapped to `artifact.binding.create` |
 | `WS-ART-001-06A` | `artifact.post_submit.checker_input.materialize` mapped to `artifact.checker_input.materialize` |
@@ -622,8 +622,8 @@ than a separate generation counter.
 02C expands the current registry to fourteen identities. AUTH-12E activates
 `project.guide_sufficiency.run`, AUTH-12F3 activates policy derivation, and
 AUTH-12I activates exact unified compilation execution. AUTH-12B2 activates
-exact setup finalization; only `project.post_submit_checker_policy.derive`
-remains planned among project-setup actions. All six REV rows remain unavailable.
+exact setup finalization; AUTH-12G activates
+`project.post_submit_checker_policy.derive` for the same fixed setup identity. All six REV rows remain unavailable.
 Registration makes the
 identity selectable by the existing controlled provisioning route but creates
 no ActorProfile, ActorIdentityLink, role, grant, or executable authority by
@@ -1281,8 +1281,24 @@ event. POL retains transaction and immutable receipt ownership. The default
 port remains unavailable; POL-04B explicitly composes the authorized adapter
 in the live Celery setup path. POL-05A delivers hidden complete proposal review,
 correction and pre-submit approval. AUTH-12F4 supplies exact manager authority; POL-05B exposes the exact public proposal operations and manual correction dispatch. Complete proposal content uses current exact-project manager
-`project.guide.manage` authority; diagnostic-read authority alone is insufficient. AUTH-12G later gates deterministic
-post-submit policy work; neither approval gate is required for draft finalization.
+`project.guide.manage` authority; diagnostic-read authority alone is insufficient. AUTH-12G gates deterministic
+post-submit policy derivation with the fixed setup identity and separate approval
+or correction with a current exact-project manager grant; neither approval gate is required for draft finalization.
+
+The post-policy adapter consumes the POL-owned finalization, upstream approval,
+projection, source, catalogue, effective/pre-submit and policy commitments without
+recomputing business identity or policy content. Its complete draft read reuses
+`project.guide_compilation.review_package.read` with `project.guide.manage`;
+private preparation distinguishes post-policy and unified-proposal operations,
+so their handles cannot be exchanged. Mutation evidence retains the exact public
+facts digest. Replay locks fresh current authority and checks the original exact
+decision without another allow or product write. Correction consumes both the
+post-policy and unified-proposal authorities in the caller's one root transaction,
+then records one shared successor. POL-06B exposes these public manager operations
+and delivers deterministic derivation through the fixed setup service after
+upstream approval commits. Recovery reloads the exact approval custody and
+prepares fresh service authority in a separate root transaction.
+
 
 The 12F1 foundation binds each future submission-policy handle to the exact
 project/guide/source lineage, mutation target, operation and request digests,

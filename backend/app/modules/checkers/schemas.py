@@ -7,7 +7,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.modules.tasks.schemas import SubmissionCreate
 
 CheckerStatus = Literal["queued", "running", "completed", "failed"]
 CheckerResultStatus = Literal["passed", "warning", "failed"]
@@ -39,36 +38,6 @@ class CheckerRunRequest(BaseModel):
         if not stripped:
             raise ValueError("trigger_reason must not be blank")
         return stripped
-
-
-class PreSubmitCheckRequest(BaseModel):
-    """Request schema for non-authoritative pre-submit checker feedback."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    submission: SubmissionCreate
-
-
-class CheckerFeedbackItem(BaseModel):
-    """Worker-facing checker feedback item."""
-
-    checker_name: str
-    status: CheckerResultStatus
-    severity: CheckerSeverity
-    would_block_if_submitted: bool
-    worker_message: str
-    worker_suggested_fix: str | None = None
-    worker_evidence_refs: list[str] = Field(default_factory=list)
-
-
-class PreSubmitCheckResponse(BaseModel):
-    """Response schema for non-authoritative pre-submit feedback."""
-
-    task_id: str
-    authoritative: Literal[False] = False
-    status: Literal["passed", "failed"]
-    eligible_to_submit: bool
-    results: list[CheckerFeedbackItem]
 
 
 class CheckerResultResponse(BaseModel):

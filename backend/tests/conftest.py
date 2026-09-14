@@ -23,7 +23,7 @@ from scripts.run_isolated_tests import LOOPBACK, NAME_RE, ROLE_RE
 DDL_LOCK_DIRECTORY = Path("/tmp")
 # Match the PostgreSQL 16 engine used by Backend CI. Catalog identity rendering
 # differs across major versions; regenerate only after comparing actual objects.
-EXPECTED_PUBLIC_SCHEMA_SHA256 = "a8c5eb383f3c38ef56e6db65d3c88d791c33ad1f5eba6b246923aa7c516fc55f"
+EXPECTED_PUBLIC_SCHEMA_SHA256 = "c398c56f2cd9f19eb9d5057349a8e59be26e0879f4b006d8f513d4f4b4f138bc"
 PROTECTED_TEST_TABLES = (
     "actor_profile_migration_state",
     "alembic_version",
@@ -84,6 +84,7 @@ RESETTABLE_TEST_TABLES = (
     "pre_submit_checker_policies",
     "pre_submit_evidence_results",
     "pre_submit_evidence_sets",
+    "pre_submit_execution_attempts",
     "project_compensation_adapter_bindings",
     "project_compensation_units",
     "project_create_idempotency_records",
@@ -99,6 +100,7 @@ RESETTABLE_TEST_TABLES = (
     "project_guide_compilation_request_operations",
     "project_role_grants",
     "project_role_qualification_snapshots",
+    "project_post_policy_operations",
     "project_setup_runs",
     "projects",
     "review_policies",
@@ -115,6 +117,7 @@ RESETTABLE_TEST_TABLES = (
     "workstream_tasks",
 )
 TRUNCATE_GUARDED_TABLES = (
+    "checker_policies",
     "admin_role_grants",
     "audit_events",
     "authority_control",
@@ -137,6 +140,7 @@ TRUNCATE_GUARDED_TABLES = (
     "policy_mutation_idempotency_records",
     "pre_submit_evidence_results",
     "pre_submit_evidence_sets",
+    "pre_submit_execution_attempts",
     "contribution_award_definitions",
     "contribution_policies",
     "contribution_policy_versions",
@@ -151,6 +155,7 @@ TRUNCATE_GUARDED_TABLES = (
     "project_guide_setup_finalizations",
     "project_guide_proposal_approvals",
     "project_guide_proposal_corrections",
+    "project_post_policy_operations",
     "project_setup_runs",
     "project_guide_compilations",
     "project_guide_compilation_request_operations",
@@ -382,8 +387,12 @@ async def _reset_test_database_state(
         await _assert_owned_test_database(connection, database_url)
         tables = await _assert_canonical_test_schema(connection)
         async with connection.transaction():
-            for name in TRUNCATE_GUARDED_TABLES:
-                await connection.execute(f"alter table {tables[name]} disable trigger user")
+            # Keep every statement and the transaction, but avoid a network round
+            # trip per table. asyncpg execute without parameters accepts a batch.
+            await connection.execute("; ".join(
+                f"alter table {tables[name]} disable trigger user"
+                for name in TRUNCATE_GUARDED_TABLES
+            ))
             if after_disable is not None:
                 await after_disable()
             await connection.execute(
@@ -394,8 +403,10 @@ async def _reset_test_database_state(
                 "(id, bootstrap_completed, bootstrap_grant_id, version) "
                 "values (1, false, null, 0)"
             )
-            for name in TRUNCATE_GUARDED_TABLES:
-                await connection.execute(f"alter table {tables[name]} enable trigger user")
+            await connection.execute("; ".join(
+                f"alter table {tables[name]} enable trigger user"
+                for name in TRUNCATE_GUARDED_TABLES
+            ))
     finally:
         await connection.close()
 

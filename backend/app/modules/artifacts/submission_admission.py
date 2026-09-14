@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 from uuid import UUID, uuid4
 
@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.artifacts.api import (
     SubmissionBundlePreparationRejected,
+    SubmissionBundlePreparationInfrastructureUnavailable,
     SubmissionBundlePreparationRequest,
     SubmissionBundlePreparationResult,
     SubmissionBundlePreparationStatus,
@@ -62,6 +63,7 @@ from app.modules.artifacts.submission_materialization import (
     PreparedBundleMaterializationRequest,
     PreparedBundleMaterializationService,
     PreparedBundlePreSubmitEvidenceService,
+    PreSubmissionEvaluationPort,
 )
 from app.modules.checkers.api import (
     EffectivePreSubmissionExecutionPlan,
@@ -423,7 +425,10 @@ async def current_submission_bundle_admission_id(
             SubmissionBundleDurableIntent,
             SubmissionBundleDurableIntent.id == SubmissionBundleAdmission.durable_intent_id,
         )
-        .where(SubmissionBundleDurableIntent.put_attempt_id == str(put_attempt_id))
+        .where(
+            SubmissionBundleDurableIntent.put_attempt_id == str(put_attempt_id),
+            SubmissionBundleAdmission.status == "ready",
+        )
     )
     return UUID(value) if value is not None else None
 
@@ -435,6 +440,7 @@ class SubmissionBundlePreparationRuntime:
     catalogue: EffectivePreSubmissionPlanningPort
     materialization: PreparedBundleMaterializationService
     evidence: PreparedBundlePreSubmitEvidenceService
+    checker_service: PreSubmissionEvaluationPort
     durable_put: SubmissionBundleDurablePutService
 
 
@@ -474,22 +480,19 @@ class PreparedSubmissionBundlePreparationCommand:
                 raise SubmissionBundlePreparationRejected("submission_bundle_media_type_invalid")
             async with self._runtime_factory() as runtime:
                 async with self._session.begin():
-                    task_context, project_context = await self._lock_context(request)
+                    task_context, project_context = await self._lock_authorized_context(request)
                     plan = self._compile_plan(
                         task_context,
                         project_context,
                         runtime.catalogue,
                     )
                     predecessor = await self._load_predecessor(task_context)
-                    await self._authority.revalidate(
-                        request=request,
-                        project_id=task_context.locked_project_context.project_id,
-                    )
                 prepared = await runtime.preparation.prepare(
                     request.byte_source,
                     media_type="application/zip",
                 )
                 async with self._session.begin():
+                    await self._lock_authorized_context(request)
                     materialization_handle = await runtime.materialization.prepare_authorization(
                         task_id=request.task_id,
                         assignment_id=request.assignment_id,
@@ -529,16 +532,19 @@ class PreparedSubmissionBundlePreparationCommand:
                             contributor_attestation=request.contributor_attestation,
                         ),
                     )
-                    execution = await runtime.evidence.materialize(materialization_request)
-                evidence = await runtime.evidence.persist(
-                    materialization_request,
-                    execution=execution,
-                    preparation_request=request,
+                    reserved = await runtime.evidence.reserve(
+                        materialization_request, preparation_request=request,
+                    )
+                evidence = await runtime.checker_service.evaluate_pre_submission(
+                    replace(materialization_request, prepared_authorization=None),
+                    reserved, preparation_request=request,
                 )
+                if not evidence.execution.eligible:
+                    raise SubmissionBundlePreparationRejected("pre_submission_checker_failed")
                 if evidence.pass_capability is None:
                     replay = await self._existing_durable_result(evidence.evidence.evidence_set_id)
                     if replay is None:
-                        raise SubmissionBundlePreparationRejected(
+                        raise SubmissionBundlePreparationInfrastructureUnavailable(
                             "pre_submission_checked_custody_unavailable"
                         )
                     await prepared.close()
@@ -564,9 +570,7 @@ class PreparedSubmissionBundlePreparationCommand:
                 )
                 return self._result(result)
         except PreSubmitEvidenceConflict as exc:
-            raise SubmissionBundlePreparationRejected(
-                self._evidence_conflict_code(exc)
-            ) from exc
+            raise self._evidence_failure(exc) from exc
         except ArtifactAuthorityDeniedError as exc:
             raise SubmissionBundlePreparationUnavailable(
                 "submission bundle preparation is unavailable"
@@ -647,17 +651,32 @@ class PreparedSubmissionBundlePreparationCommand:
             return UUID(value) if value is not None else None
 
     @staticmethod
-    def _evidence_conflict_code(exc: PreSubmitEvidenceConflict) -> str:
-        """Map ART-private evidence failures to the bounded public vocabulary."""
+    def _evidence_failure(exc: PreSubmitEvidenceConflict) -> RuntimeError:
+        """Separate changed client context from unavailable canonical execution evidence."""
         if str(exc) == "pre_submit_locked_context_changed":
-            return "submission_bundle_preparation_context_changed"
-        return "pre_submission_checked_custody_unavailable"
+            return SubmissionBundlePreparationRejected("submission_bundle_preparation_context_changed")
+        if str(exc) == "pre_submit_attempt_request_conflict":
+            return SubmissionBundlePreparationRejected("submission_bundle_preparation_request_conflict")
+        code = ("pre_submission_attempt_outcome_unresolved"
+                if str(exc) == "pre_submit_attempt_outcome_unresolved"
+                else "pre_submission_checked_custody_unavailable")
+        return SubmissionBundlePreparationInfrastructureUnavailable(code)
+
+    async def _lock_authorized_context(
+        self, request: SubmissionBundlePreparationRequest,
+    ) -> tuple[TaskSubmissionContextFacts, ProjectLockedPolicyContextFacts]:
+        """Lock TASK, actor identity, PROJECT, then the current submitter grant."""
+        task, project = await self._lock_context(request)
+        await self._authority.revalidate(
+            request=request, project_id=task.locked_project_context.project_id,
+        )
+        return task, project
 
     async def _lock_context(
         self,
         request: SubmissionBundlePreparationRequest,
     ) -> tuple[TaskSubmissionContextFacts, ProjectLockedPolicyContextFacts]:
-        """Lock exact TASK then PROJECT facts through their public ports."""
+        """Lock actor identity between the exact TASK and PROJECT context phases."""
         try:
             task_context = await self._task_contexts.lock_submission_context(
                 TaskSubmissionContextRequest(
@@ -667,6 +686,7 @@ class PreparedSubmissionBundlePreparationCommand:
                     predecessor_submission_id=request.predecessor_submission_id,
                 )
             )
+            await self._authority.lock_actor(request=request)
             references = task_context.locked_project_context
             project_context = await self._project_contexts.lock_locked_policy_context(
                 ProjectLockedPolicyContextRequest(
@@ -757,12 +777,19 @@ class PreparedSubmissionBundlePreparationCommand:
             if row is None:
                 return None
             _, attempt, admission = row
+            status = attempt.status
+            admission_id = None
+            if admission is not None:
+                if admission.status == "ready":
+                    status, admission_id = "ready", UUID(admission.id)
+                elif admission.status == "stale":
+                    status = "stale"
+                else:
+                    status = "conflict"
             return SubmissionBundlePreparationResult(
                 put_attempt_id=UUID(attempt.id),
-                admission_id=UUID(admission.id) if admission is not None else None,
-                submission_bundle_preparation_status=SubmissionBundlePreparationStatus(
-                    "ready" if admission is not None else attempt.status
-                ),
+                admission_id=admission_id,
+                submission_bundle_preparation_status=SubmissionBundlePreparationStatus(status),
                 replayed=True,
             )
 

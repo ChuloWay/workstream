@@ -344,13 +344,12 @@ async def _seed_checker_output_relationships(session, namespace, *, policy_bundl
     if policy_bundle is None:
         assert not session.in_transaction(), "Arrange canonical setup before staging artifact rows"
         policy_bundle = await create_standalone_unified_policy(
-            async_sessionmaker(session.bind, expire_on_commit=False), namespace,
+            async_sessionmaker(session.bind, expire_on_commit=False), namespace, include_post_policy=True,
         )
     values, effective, pre = policy_bundle
     project_id, guide_id, snapshot_id = (str(values[key]) for key in ("project", "guide", "snapshot"))
     effective_policy_id = effective["id"]
     pre_submit_policy_id = pre.id
-    post_submit_policy_id = str(uuid4())
     review_policy_id = str(uuid4())
     revision_policy_id = str(uuid4())
     task_id = str(uuid4())
@@ -362,8 +361,6 @@ async def _seed_checker_output_relationships(session, namespace, *, policy_bundl
     snapshot_hash = effective["source_snapshot_hash"]
     effective_policy_hash = effective["effective_policy_hash"]
     pre_submit_bundle_hash = pre.compiled_bundle_hash
-    post_submit_policy_body = {"required_checkers": []}
-    post_submit_policy_hash = canonical_json_hash(post_submit_policy_body)
     now = datetime.now(UTC)
     review_hash = policy_digest(
         "review",
@@ -385,7 +382,14 @@ async def _seed_checker_output_relationships(session, namespace, *, policy_bundl
     existing_post = await session.scalar(select(PostSubmitCheckerPolicy).where(
         PostSubmitCheckerPolicy.effective_policy_id == effective_policy_id,
     ))
-    if existing_post is None:
+    assert existing_post is not None
+    post_submit_policy_id = existing_post.id
+    post_submit_policy_body = existing_post.policy_body
+    post_submit_policy_hash = existing_post.policy_hash
+    existing_review = await session.scalar(select(ReviewPolicy).where(
+        ReviewPolicy.project_id == project_id, ReviewPolicy.guide_version == guide_version,
+    ))
+    if existing_review is None:
         async with (
             suspend_historical_product_custody(
                 session,
@@ -400,28 +404,6 @@ async def _seed_checker_output_relationships(session, namespace, *, policy_bundl
         ):
             session.add_all(
                 [
-                    PostSubmitCheckerPolicy(
-                        id=post_submit_policy_id,
-                        project_id=project_id,
-                        guide_id=guide_id,
-                        guide_version=guide_version,
-                        source_snapshot_id=snapshot_id,
-                        source_snapshot_hash=snapshot_hash,
-                        effective_policy_id=effective_policy_id,
-                        effective_policy_hash=effective_policy_hash,
-                        pre_submit_checker_policy_id=pre_submit_policy_id,
-                        pre_submit_checker_bundle_hash=pre_submit_bundle_hash,
-                        required_checkers=[],
-                        warning_checkers=[],
-                        blocking_severities=["error"],
-                        policy_hash=post_submit_policy_hash,
-                        policy_body=post_submit_policy_body,
-                        lifecycle_status="approved",
-                        approved_by_role="admin",
-                        approved_by_actor="setup-actor",
-                        approved_at=now,
-                        created_by="setup-actor",
-                    ),
                     ReviewPolicy(
                         id=review_policy_id,
                         project_id=project_id,
@@ -710,7 +692,7 @@ async def test_committed_put_and_independent_verification_are_fenced(
     factory = async_sessionmaker(engine, expire_on_commit=False)
     bootstrap, store = _local_store(settings, namespace)
     authority = _AllowArtifactAuthority()
-    policy_bundle = await create_standalone_unified_policy(factory, namespace)
+    policy_bundle = await create_standalone_unified_policy(factory, namespace, include_post_policy=True)
     try:
         async with factory() as session:
             async with minted_source(
@@ -800,7 +782,7 @@ async def test_every_provider_operation_revalidates_namespace_before_io(
         def open(self, _provider_object_ref):
             raise AssertionError("read must not run after namespace drift")
 
-    policy_bundle = await create_standalone_unified_policy(factory, namespace)
+    policy_bundle = await create_standalone_unified_policy(factory, namespace, include_post_policy=True)
     try:
         async with factory() as session:
             async with minted_source(tmp_path / "namespace-fence", b"fenced") as source:
@@ -1397,7 +1379,7 @@ async def test_verification_claim_takeover_and_scanner_due_order_are_fenced(
     engine = create_async_engine(admission_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     bootstrap, store = _local_store(settings, namespace)
-    policy_bundle = await create_standalone_unified_policy(factory, namespace)
+    policy_bundle = await create_standalone_unified_policy(factory, namespace, include_post_policy=True)
     try:
         job_ids, prior_audit_ids = await _seed_verification_scan_jobs(
             factory, settings, namespace, store, tmp_path, policy_bundle,
@@ -1607,7 +1589,7 @@ async def test_verification_resource_drift_after_read_is_stale_without_terminal_
     bootstrap, store = _local_store(settings, namespace)
     engine = create_async_engine(admission_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    policy_bundle = await create_standalone_unified_policy(factory, namespace)
+    policy_bundle = await create_standalone_unified_policy(factory, namespace, include_post_policy=True)
     try:
         async with factory() as session:
             async with minted_source(tmp_path / "verification-drift", b"expected") as source:
@@ -1682,7 +1664,7 @@ async def test_verification_rechecks_relationship_after_prepare_before_io(
     engine = create_async_engine(admission_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     bootstrap, store = _local_store(settings, namespace)
-    policy_bundle = await create_standalone_unified_policy(factory, namespace)
+    policy_bundle = await create_standalone_unified_policy(factory, namespace, include_post_policy=True)
     try:
         async with factory() as session:
             async with minted_source(tmp_path / "preclaim-drift", b"expected") as source:
@@ -1772,7 +1754,7 @@ async def test_verification_relationship_conflict_uses_fresh_terminal_authority(
             await super().prepare(**values)
             self.phases.append(str(values["phase"]))
 
-    policy_bundle = await create_standalone_unified_policy(factory, namespace)
+    policy_bundle = await create_standalone_unified_policy(factory, namespace, include_post_policy=True)
     try:
         async with factory() as session:
             attempts: list[ArtifactPutAttempt] = []
@@ -1831,7 +1813,7 @@ async def test_verification_rechecks_authorized_object_ref_before_io(
     engine = create_async_engine(admission_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     bootstrap, store = _local_store(settings, namespace)
-    policy_bundle = await create_standalone_unified_policy(factory, namespace)
+    policy_bundle = await create_standalone_unified_policy(factory, namespace, include_post_policy=True)
     try:
         async with factory() as session:
             async with minted_source(tmp_path / "preclaim-object-ref-drift", b"expected") as source:
@@ -1888,7 +1870,7 @@ async def test_verification_rechecks_authorized_object_ref_after_io(
     bootstrap, store = _local_store(settings, namespace)
     engine = create_async_engine(admission_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    policy_bundle = await create_standalone_unified_policy(factory, namespace)
+    policy_bundle = await create_standalone_unified_policy(factory, namespace, include_post_policy=True)
     try:
         async with factory() as session:
             async with minted_source(tmp_path / "postread-object-ref-drift", b"expected") as source:
@@ -1946,7 +1928,7 @@ async def test_verification_terminal_result_matrix(
     engine = create_async_engine(admission_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     bootstrap, store = _local_store(settings, namespace)
-    policy_bundle = await create_standalone_unified_policy(factory, namespace)
+    policy_bundle = await create_standalone_unified_policy(factory, namespace, include_post_policy=True)
     try:
         async with factory() as session:
             async with minted_source(tmp_path / expected, b"verification matrix") as source:
@@ -1992,7 +1974,7 @@ async def test_verification_terminal_authority_denial_writes_zero_result_facts(
     engine = create_async_engine(admission_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     bootstrap, store = _local_store(settings, namespace)
-    policy_bundle = await create_standalone_unified_policy(factory, namespace)
+    policy_bundle = await create_standalone_unified_policy(factory, namespace, include_post_policy=True)
     try:
         async with factory() as session:
             async with minted_source(
@@ -2047,7 +2029,7 @@ async def test_verification_unavailable_retries_then_exhausts(
     engine = create_async_engine(admission_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     bootstrap, store = _local_store(settings, namespace)
-    policy_bundle = await create_standalone_unified_policy(factory, namespace)
+    policy_bundle = await create_standalone_unified_policy(factory, namespace, include_post_policy=True)
     try:
         async with factory() as session:
             async with minted_source(tmp_path / "unavailable", b"retry") as source:
@@ -2744,7 +2726,7 @@ async def test_checker_output_shared_put_and_verification_lifecycle(
     bootstrap, store = _local_store(settings, namespace)
     engine = create_async_engine(admission_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    policy_bundle = await create_standalone_unified_policy(factory, namespace)
+    policy_bundle = await create_standalone_unified_policy(factory, namespace, include_post_policy=True)
     try:
         async with factory() as session:
             async with minted_source(
@@ -2824,7 +2806,7 @@ async def test_checker_output_put_observation_terminal_outcomes(
     namespace = _namespace(settings)
     engine = create_async_engine(admission_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    policy_bundle = await create_standalone_unified_policy(factory, namespace)
+    policy_bundle = await create_standalone_unified_policy(factory, namespace, include_post_policy=True)
     try:
         async with factory() as session:
             async with minted_source(
