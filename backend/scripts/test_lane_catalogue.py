@@ -23,6 +23,7 @@ class TestLane:
 
 
 SHARED_FOUNDATION_MODULES = (
+    "tests/authorization/test_pre_submit_attempt_authority.py",
     "tests/authorization/test_guide_metadata_contracts.py",
     "tests/authorization/post_policy/test_concurrency.py",
     "tests/authorization/post_policy/test_context.py",
@@ -184,6 +185,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_behavior_ownership.py",
     "tests/test_artifact_admission.py",
     "tests/test_submission_bundle_admission.py",
+    "tests/test_submission_bundle_preparation_recovery.py",
     "tests/test_submission_preparation_adapter.py",
     "tests/test_submission_preparation_authorization.py",
     "tests/test_submission_composition.py",
@@ -323,6 +325,9 @@ TASK_MODULES = (
     "tests/checkers/test_packet_schema.py",
     "tests/checkers/test_effective_intake_rules.py",
     "tests/test_default_pre_submit_execution.py",
+    "tests/test_pre_submit_attempt_recovery.py",
+    "tests/test_pre_submit_attempt_contracts.py",
+    "tests/test_pre_submit_attempt_migration.py",
     "tests/test_effective_pre_submit_execution.py",
     "tests/test_project_guide_compilation_contracts.py",
     "tests/test_review_queue_persistence.py",

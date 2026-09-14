@@ -3,7 +3,7 @@
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -84,13 +84,13 @@ def _context() -> PreSubmitEvidenceContext:
 
 def test_evidence_operation_identity_binds_every_custody_fact() -> None:
     context = _context()
-    identity = context.operation_identity(effective_plan_sha256=_sha("7"))
+    identity = context.operation_identity(attempt_id=UUID(int=1), attempt_request_digest=_sha("9"), effective_plan_sha256=_sha("7"))
 
-    assert identity == context.operation_identity(effective_plan_sha256=_sha("7"))
+    assert identity == context.operation_identity(attempt_id=UUID(int=1), attempt_request_digest=_sha("9"), effective_plan_sha256=_sha("7"))
     assert identity != replace(context, prepared_generation_id=uuid4()).operation_identity(
-        effective_plan_sha256=_sha("7")
+        attempt_id=UUID(int=1), attempt_request_digest=_sha("9"), effective_plan_sha256=_sha("7")
     )
-    assert identity != context.operation_identity(effective_plan_sha256=_sha("8"))
+    assert identity != context.operation_identity(attempt_id=UUID(int=1), attempt_request_digest=_sha("9"), effective_plan_sha256=_sha("8"))
 
 
 def test_post_byte_relock_rejects_advanced_predecessor_version() -> None:

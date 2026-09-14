@@ -1,7 +1,7 @@
 # WS-POL-003-07A — ART-owned pre-submission attempt recovery
 
 - Initiative: WS-POL-003
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: reserve an exact pre-submission execution attempt
   before invoking checks, and recover its completed canonical ART evidence
   without another checker invocation or upload capability.
@@ -19,11 +19,15 @@ generation is process-local and cannot be reassigned to a retried upload.
 
 ### Allowed
 
-- ART models, one additive Alembic migration, `pre_submit_evidence.py`,
+- ART models, one additive Alembic migration and its current-head startup registry, `pre_submit_evidence.py`,
   `submission_materialization.py`, `submission_admission.py`, a focused
-  owner-local attempt module and corresponding typed ART contracts.
+  owner-local attempt module and corresponding typed ART contracts. The existing
+  hidden preparation route translates recovery unavailability to 503, distinct
+  from concealed authority denial; it remains hidden.
 - Exact ART composition adjustments and affected authorization tests; no
   permission registration, relaxed authority or replacement AUTH implementation.
+  Include the existing fixed materializer resource in its database audit
+  vocabulary: real AUTH proof found that missing persisted allowlist entry.
 - Focused real PostgreSQL/scratch tests, exact affected test/owner inventories,
   current checker/ART docs, roadmap and initiative dependency navigation.
 
@@ -95,6 +99,8 @@ generation is process-local and cannot be reassigned to a retried upload.
 
 The attempt row records invocation custody and the evidence foreign key; it
 does not contain a second result body or replace ART's immutable evidence tables.
+The superseded after-execution replay lookup is removed from the evidence writer;
+completed recovery has one path through the attempt owner before execution.
 The minimal lifecycle is reserved then completed. A still-reserved row denotes
 an unavailable/uncertain attempt to later callers, not contributor failure.
 
@@ -135,14 +141,34 @@ an unavailable/uncertain attempt to later callers, not contributor failure.
 - Planned verification: focused ART PostgreSQL/scratch suites plus new crash,
   race, replay and direct-SQL cases; migration round trip on isolated data;
   module/AUTH/CI inventories; lint/docs checks; full hosted suite and at least
-  90% changed-subsystem coverage. No runtime evidence is claimed yet.
+  90% changed-subsystem coverage. Broker/provider transport is not part of this change.
 
 ## Evidence
 
-Read-only owner inspection and independent architecture/reuse review identified
-the after-execution replay lookup and crash window. This establishes plan
-feasibility constraints, not runtime proof. Implementation tests and exact-head
-review results remain to be produced by this bounded change.
+The focused execution proof exercises real PostgreSQL and canonical scratch,
+with a processor counter around the actual CHECKER implementation. It is
+separate from controlled doubles used for command/error routing.
+
+| Required behavior | Regression proof |
+| --- | --- |
+| Original scratch closes; exact retry does not execute or mint a pass capability | `test_completed_replay_after_original_scratch_closes` |
+| Checker returns, then evidence commit fails; same key never reruns | `test_crash_after_member_before_evidence_commit_cannot_rerun` |
+| Independent sessions allow one invocation | `test_independent_sessions_same_key_invoke_members_once` |
+| Reservation rollback cannot issue a claim | `test_uncommitted_reservation_never_issues_a_claim` |
+| Completion failure rolls back evidence and retains reservation | `test_completion_failure_rolls_back_evidence_and_keeps_attempt_reserved` |
+| Immutable attempt and same-resource/different-packet evidence binding | Direct SQL cases in `test_pre_submit_attempt_recovery.py` |
+| Current contributor and fixed-service authority after commit and on replay | Production adapter cases in `test_pre_submit_attempt_recovery.py` and `authorization/test_pre_submit_attempt_authority.py` |
+| Missing/foreign/spent claim cannot build a processor; incomplete result cannot recover | `test_pre_submit_attempt_contracts.py` |
+| Retained evidence stays unchanged; downgrade cannot discard a reservation | `test_pre_submit_attempt_migration.py` |
+| Checker rejection, recovery unavailability and concealed authority denial remain distinct | `test_submission_bundle_preparation_recovery.py` |
+
+The focused run covers the new attempt owner and affected evidence/materializer
+above 90 percent each. Exact hosted results and reviewer freshness belong in the
+PR. The schema fingerprint was reconciled against the actual main schema object
+inventory: only the attempt table and guards, result reconstruction fields,
+evidence binding fields, and exact existing materializer audit resource
+vocabulary changed. The existing oversized test file/function both shrink;
+no structural exception or limit was added. No retained data was removed.
 
 ## Review findings and reconciliation
 
@@ -154,5 +180,6 @@ cannot substitute for pre-submit invocation custody.
 The user approved the ART prerequisite; the original POL-07 no-ART-change
 restriction is superseded only for this bounded repair. The facade and obsolete
 precheck removal remain the following POL-07 implementation boundary. CP06/CP07
-and AUTH-12H activation remain downstream. No product implementation begins until
-this transaction/authority design passes focused plan review.
+and AUTH-12H activation remain downstream. Focused architecture/reuse and
+security plan review passed after reconciling the winning claim, fresh authority,
+original-generation replay and exact metadata reconstruction requirements.

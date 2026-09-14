@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.artifacts.api import (
     SubmissionBundlePreparationRejected,
+    SubmissionBundlePreparationInfrastructureUnavailable,
     SubmissionBundlePreparationRequest,
     SubmissionBundlePreparationResult,
     SubmissionBundlePreparationStatus,
@@ -31,6 +32,7 @@ from app.modules.artifacts.models import (
     SubmissionBundleDurableIntent,
 )
 from app.modules.artifacts.pre_submit_evidence import (
+    PreSubmitEvidencePersistenceResult,
     PreSubmitEvidenceConflict,
     PreSubmitPassCapability,
 )
@@ -529,16 +531,21 @@ class PreparedSubmissionBundlePreparationCommand:
                             contributor_attestation=request.contributor_attestation,
                         ),
                     )
-                    execution = await runtime.evidence.materialize(materialization_request)
-                evidence = await runtime.evidence.persist(
-                    materialization_request,
-                    execution=execution,
-                    preparation_request=request,
-                )
+                    reserved = await runtime.evidence.reserve(
+                        materialization_request, preparation_request=request,
+                    )
+                if isinstance(reserved, PreSubmitEvidencePersistenceResult):
+                    evidence = reserved
+                else:
+                    evidence = await runtime.evidence.execute_reserved(
+                        materialization_request, reserved, preparation_request=request,
+                    )
+                if not evidence.execution.eligible:
+                    raise SubmissionBundlePreparationRejected("pre_submission_checker_failed")
                 if evidence.pass_capability is None:
                     replay = await self._existing_durable_result(evidence.evidence.evidence_set_id)
                     if replay is None:
-                        raise SubmissionBundlePreparationRejected(
+                        raise SubmissionBundlePreparationInfrastructureUnavailable(
                             "pre_submission_checked_custody_unavailable"
                         )
                     await prepared.close()
@@ -564,6 +571,10 @@ class PreparedSubmissionBundlePreparationCommand:
                 )
                 return self._result(result)
         except PreSubmitEvidenceConflict as exc:
+            if str(exc) == "pre_submit_attempt_outcome_unresolved":
+                raise SubmissionBundlePreparationInfrastructureUnavailable(
+                    "pre_submission_attempt_outcome_unresolved"
+                ) from exc
             raise SubmissionBundlePreparationRejected(
                 self._evidence_conflict_code(exc)
             ) from exc

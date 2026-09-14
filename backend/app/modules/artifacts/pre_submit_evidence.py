@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from typing import TYPE_CHECKING
 import threading
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
-from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +32,10 @@ from app.modules.tasks.api import (
     TaskSubmissionContextRequest,
     TaskSubmissionContextUnavailable,
 )
+
+if TYPE_CHECKING:
+    from app.modules.artifacts.pre_submit_attempts import PreSubmitAttemptClaim
+
 
 def validate_predecessor_lineage(
     task_context: TaskSubmissionContextFacts,
@@ -171,7 +175,9 @@ class PreSubmitEvidenceContext:
         if self.storage_scheme not in ALLOWED_PRE_SUBMIT_STORAGE_SCHEMES:
             raise ValueError("pre-submit evidence storage scheme is invalid")
 
-    def operation_identity(self, *, effective_plan_sha256: str) -> str:
+    def operation_identity(
+        self, *, effective_plan_sha256: str, attempt_id: UUID, attempt_request_digest: str
+    ) -> str:
         """Derive the sole replay namespace from every custody and policy fact."""
         return canonical_json_hash(
             {
@@ -181,6 +187,8 @@ class PreSubmitEvidenceContext:
                     for key, value in asdict(self).items()
                 },
                 "effective_plan_sha256": effective_plan_sha256,
+                "attempt_id": str(attempt_id),
+                "attempt_request_digest": attempt_request_digest,
             }
         )
 
@@ -193,8 +201,8 @@ class PersistedPreSubmitEvidence:
 
 
 @dataclass(frozen=True, slots=True)
-class PreSubmitEvidencePersistenceRequest:
-    """Process-local execution and custody facts supplied after scratch cleanup."""
+class PreSubmitEvidenceInput:
+    """Exact custody and plan facts resolved before and after execution."""
 
     actor_profile_id: UUID
     identity_link_id: UUID
@@ -207,7 +215,14 @@ class PreSubmitEvidencePersistenceRequest:
     archive_byte_count: int
     semantic_manifest_sha256: str
     plan: EffectivePreSubmissionExecutionPlan
+
+
+@dataclass(frozen=True, slots=True)
+class PreSubmitEvidencePersistenceRequest(PreSubmitEvidenceInput):
+    """Persist only the execution issued by the committed ART attempt claim."""
+
     execution: PreSubmitExecutionResult
+    attempt: PreSubmitAttemptClaim
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,6 +232,7 @@ class PreSubmitEvidencePersistenceResult:
     evidence: PersistedPreSubmitEvidence
     pass_capability: PreSubmitPassCapability | None
     failure_audit: dict[str, object] | None
+    execution: PreSubmitExecutionResult
 
 
 def pre_submit_failure_audit_payload(
@@ -446,8 +462,10 @@ class _PreSubmitEvidenceRepository:
         context: PreSubmitEvidenceContext,
         plan: EffectivePreSubmissionExecutionPlan,
         execution: PreSubmitExecutionResult,
+        attempt_id: UUID,
+        attempt_request_digest: str,
     ) -> PersistedPreSubmitEvidence:
-        """Persist exact results once; changed facts under the identity fail closed."""
+        """Write the winning attempt's result once; the attempt owner handles replay."""
         transaction = self._session.sync_session.get_transaction()
         if (
             transaction is None
@@ -456,50 +474,16 @@ class _PreSubmitEvidenceRepository:
         ):
             raise RuntimeError("pre-submit evidence requires one root transaction")
         _validate_execution(plan, execution)
-        operation_identity = context.operation_identity(effective_plan_sha256=execution.plan_sha256)
-        values = self._set_values(context, plan, execution, operation_identity)
-        evidence_set_id = uuid4()
-        inserted_id = await self._session.scalar(
-            insert(PreSubmitEvidenceSet)
-            .values(id=str(evidence_set_id), **values)
-            .on_conflict_do_nothing(index_elements=["operation_identity"])
-            .returning(PreSubmitEvidenceSet.id)
+        operation_identity = context.operation_identity(
+            effective_plan_sha256=execution.plan_sha256, attempt_id=attempt_id,
+            attempt_request_digest=attempt_request_digest,
         )
-        if inserted_id is None:
-            existing = await self._session.scalar(
-                select(PreSubmitEvidenceSet).where(
-                    PreSubmitEvidenceSet.operation_identity == operation_identity
-                )
-            )
-            if existing is None or any(
-                getattr(existing, key) != value for key, value in values.items()
-            ):
-                raise PreSubmitEvidenceConflict("pre_submit_evidence_operation_conflict")
-            persisted_results = tuple(
-                (
-                    await self._session.scalars(
-                        select(PreSubmitEvidenceResult)
-                        .where(PreSubmitEvidenceResult.evidence_set_id == existing.id)
-                        .order_by(PreSubmitEvidenceResult.result_order)
-                    )
-                ).all()
-            )
-            expected_results = tuple(
-                self._result_values(result_order, result, plan_entry.result_schema)
-                for result_order, (plan_entry, result) in enumerate(
-                    zip(plan.entries, execution.entries, strict=True)
-                )
-            )
-            if len(persisted_results) != len(expected_results) or any(
-                any(getattr(persisted, key) != value for key, value in expected.items())
-                for persisted, expected in zip(persisted_results, expected_results, strict=True)
-            ):
-                raise PreSubmitEvidenceConflict("pre_submit_evidence_result_conflict")
-            return PersistedPreSubmitEvidence(
-                evidence_set_id=UUID(existing.id),
-                operation_identity=operation_identity,
-                replayed=True,
-            )
+        values = self._set_values(context, plan, execution, operation_identity)
+        values.update(attempt_id=str(attempt_id), attempt_request_digest=attempt_request_digest)
+        evidence_set_id = uuid4()
+        await self._session.execute(
+            insert(PreSubmitEvidenceSet).values(id=str(evidence_set_id), **values)
+        )
         for result_order, (plan_entry, result) in enumerate(
             zip(plan.entries, execution.entries, strict=True)
         ):
@@ -525,6 +509,8 @@ class _PreSubmitEvidenceRepository:
     ) -> dict[str, object]:
         return {
             "result_order": result_order,
+            "checker_order": result.order,
+            "metadata_json": [list(item) for item in result.metadata],
             "schema_version": schema_version,
             "dispatch_authority": result.dispatch_authority,
             "definition_id": result.definition_id,
@@ -688,6 +674,58 @@ class PreSubmitEvidenceService:
             or request.semantic_manifest_sha256 != custody.semantic_manifest_sha256
         ):
             raise PreSubmitEvidenceConflict("pre_submit_execution_custody_changed")
+        context = await self.lock_context(request, storage_scheme=custody.storage_scheme)
+        from app.modules.artifacts.pre_submit_attempts import PreSubmitAttemptClaim
+
+        if type(request.attempt) is not PreSubmitAttemptClaim:
+            raise PreSubmitEvidenceConflict("pre_submit_attempt_claim_invalid")
+        await request.attempt.validate_completion(self._session, request)
+        evidence = await self._repository.persist(
+            context=context,
+            plan=request.plan,
+            execution=request.execution,
+            attempt_id=request.attempt.attempt_id,
+            attempt_request_digest=request.attempt.request_digest,
+        )
+        await request.attempt.complete(self._session, evidence.evidence_set_id)
+        pass_capability = (
+            self._mint_pass_capability(
+                evidence_set_id=evidence.evidence_set_id,
+                prepared_generation_id=request.prepared_generation_id,
+                predecessor_submission_id=request.predecessor_submission_id,
+                effective_plan_sha256=request.plan.plan_sha256,
+                archive_sha256=custody.archive_sha256,
+                semantic_manifest_sha256=custody.semantic_manifest_sha256,
+                storage_scheme=custody.storage_scheme,
+            )
+            if request.execution.eligible
+            else None
+        )
+        failure_audit = (
+            None
+            if request.execution.eligible
+            else pre_submit_failure_audit_payload(
+                actor_profile_id=request.actor_profile_id,
+                project_id=context.project_id,
+                task_id=request.task_id,
+                prepared_generation_id=request.prepared_generation_id,
+                evidence=evidence,
+                execution=request.execution,
+                catalogue_id=request.plan.catalogue_id,
+                catalogue_version=request.plan.catalogue_version,
+            )
+        )
+        return PreSubmitEvidencePersistenceResult(
+            evidence=evidence,
+            pass_capability=pass_capability,
+            failure_audit=failure_audit,
+            execution=request.execution,
+        )
+
+    async def lock_context(
+        self, request: PreSubmitEvidenceInput, *, storage_scheme: str
+    ) -> PreSubmitEvidenceContext:
+        """Use the same TASK then PROJECT lineage locks for reservation and completion."""
         try:
             task_context = await self._task_contexts.lock_submission_context(
                 TaskSubmissionContextRequest(
@@ -744,7 +782,7 @@ class PreSubmitEvidenceService:
                 "source_snapshot_sha256": project_context.source_snapshot_hash,
             }
         )
-        context = PreSubmitEvidenceContext(
+        return PreSubmitEvidenceContext(
             actor_profile_id=request.actor_profile_id,
             identity_link_id=request.identity_link_id,
             project_id=project_context.project_id,
@@ -773,42 +811,5 @@ class PreSubmitEvidenceService:
             catalogue_id=request.plan.catalogue_id,
             catalogue_version=request.plan.catalogue_version,
             catalogue_manifest_sha256=request.plan.catalogue_manifest_sha256,
-            storage_scheme=custody.storage_scheme,
-        )
-        evidence = await self._repository.persist(
-            context=context,
-            plan=request.plan,
-            execution=request.execution,
-        )
-        pass_capability = (
-            self._mint_pass_capability(
-                evidence_set_id=evidence.evidence_set_id,
-                prepared_generation_id=request.prepared_generation_id,
-                predecessor_submission_id=request.predecessor_submission_id,
-                effective_plan_sha256=request.plan.plan_sha256,
-                archive_sha256=custody.archive_sha256,
-                semantic_manifest_sha256=custody.semantic_manifest_sha256,
-                storage_scheme=custody.storage_scheme,
-            )
-            if request.execution.eligible and not evidence.replayed
-            else None
-        )
-        failure_audit = (
-            None
-            if request.execution.eligible
-            else pre_submit_failure_audit_payload(
-                actor_profile_id=request.actor_profile_id,
-                project_id=project_context.project_id,
-                task_id=request.task_id,
-                prepared_generation_id=request.prepared_generation_id,
-                evidence=evidence,
-                execution=request.execution,
-                catalogue_id=request.plan.catalogue_id,
-                catalogue_version=request.plan.catalogue_version,
-            )
-        )
-        return PreSubmitEvidencePersistenceResult(
-            evidence=evidence,
-            pass_capability=pass_capability,
-            failure_audit=failure_audit,
+            storage_scheme=storage_scheme,
         )

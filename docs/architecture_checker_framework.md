@@ -312,17 +312,25 @@ Workstream default submission artifact rules require:
   advisory or locked project-specific unless an exact generic custody risk is
   proven
 
-The hidden 04B2 executor consumes the exact 04B1 plan identity and only its
-`custody`, `identity`, `materialization`, and `default_policy` phase slice. It
-validates the 04A commitment, inspection, semantic manifest, and change-gate
-facts, projects one callback-scoped sealed tree through ART scratch custody, and
-returns bounded entry results: `passed`, `warning`, `failed`,
-`advisory_disabled`, or `dependency_not_run`. It does not consult the legacy
-checker registry or standalone precheck, does not run `project_policy`
-primitives, and does not persist checker evidence. XINT-06A activates only the
-fixed pre-submit materializer through two-stage PREP: scalar service/resource
-facts are locked before ZIP inspection, and the same handle consumes the final
-server-computed semantic-manifest fact before scratch or checker execution.
+The hidden pre-submit executor consumes one exact effective plan under ART
+scratch custody. It validates the commitment, inspection, semantic manifest and
+change-gate facts and returns bounded entry results. ART owns the immutable
+pre-submit evidence; these results are separate from post-submit CheckerRuns.
+
+POL-07A commits an ART attempt reservation after bounded ZIP inspection and
+before invoking any checker. Only the original request can consume the winning
+claim. The fixed materializer consumes fresh authorization for inspected custody
+and obtains another transaction-bound authorization before execution. Evidence
+and attempt completion commit together after a fresh locked-context check.
+
+An exact completed retry verifies its uploaded bytes and manifest, revalidates
+contributor and fixed-service authority, and reconstructs the original result
+from canonical evidence, including member metadata and definition order. It
+invokes no checker and receives no new pass capability. An existing durable put
+receipt may continue recovery; absent continuation is unavailable. A reservation
+without committed completion remains unavailable under the same key, including
+a crash after checker return. A new authorized attempt requires a new key.
+Retained evidence is not rewritten or assigned invented attempt metadata.
 
 Project policy adds required artifacts, evidence requirements, stricter forbidden artifacts, stricter packaging rules, and project-specific attestation requirements.
 
@@ -332,10 +340,9 @@ contributor pipeline. Tasks lock references to the shared project's compiled che
 bundle hash. It runs inside continuous submission-bundle preparation before
 Workstream creates a submission. Failures return the bounded same-request code
 `pre_submission_checker_failed` with status, eligibility, and structured
-pass/fail/warning details. Until deferred WS-ARCH-001-02I, the old standalone preflight route is
-frozen legacy behavior and is not an authoritative result for the new path.
-WS-ARCH-001-02I removes it completely after every submission context and
-downstream prerequisite is live; this result is not a review decision value.
+pass/fail/warning details. The standalone JSON preflight remains an obsolete caller scheduled for removal
+by POL-07 facade integration; it is not authoritative intake evidence. Broader
+Submission caller migration remains WS-ARCH-001-02I; this result is not a review decision value.
 Pre-submit results do not create durable `CheckerRun` records, do not move a
 task to `review_pending`, and do not return review decision values: `accept`,
 `needs_revision`, or `reject`.

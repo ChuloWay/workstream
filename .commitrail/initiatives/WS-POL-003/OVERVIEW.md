@@ -1,6 +1,7 @@
 # WS-POL-003 — Unified project-guide compilation
 
-Latest completed POL behavior: [POL-06B public post-policy review](WS-POL-003-06B.md),
+Latest completed POL behavior: [POL-07A pre-submit attempt recovery](WS-POL-003-07A.md),
+building on [POL-06B public post-policy review](WS-POL-003-06B.md),
 building on [POL-06A post-policy custody](WS-POL-003-06A.md),
 building on [POL-05B public manager operations](WS-POL-003-05B.md),
 building on [POL-05A proposal custody](WS-POL-003-05A.md),
@@ -19,10 +20,12 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   creation/document-upload flow; hidden complete-proposal review, pre-submission
   approval custody and correction successors; public exact manager review,
   pre-submission approval and manual dispatch through the same runtime; automatic
-  post-policy derivation, public complete policy read, separate approval and correction.
+  post-policy derivation, public complete policy read, separate approval and correction;
+  ART-owned pre-submit reservation and completed evidence recovery without rerunning checks.
 - Intent: compile one locked guide and its policies into authoritative,
   versioned project behavior without circular subsystem authority.
-- Next usable boundary: POL-07 single checker-service port. POL-06B public
+- Next usable boundary: POL-07 single checker-service port, consuming the
+  completed POL-07A ART attempt prerequisite. POL-06B public
   policy review and automatic derivation use completed
   [AUTH-12G authority](../WS-AUTH-001/WS-AUTH-001-12G.md). POL-05B connects manager review, pre-submit
   approval and manual correction dispatch to AUTH-12F4 and POL-05A.

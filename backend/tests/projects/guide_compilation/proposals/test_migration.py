@@ -1,6 +1,8 @@
 """Forward/reverse schema proof with retained-evidence protection."""
 
 import pytest
+
+from tests.migration_fixtures import current_schema_revision
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -74,7 +76,7 @@ async def test_downgrade_refuses_retained_approval_without_mutation(clean_postgr
             await run_alembic_revision("downgrade", "0018_guide_document_creation")
         assert "retained guide proposal evidence prevents downgrade" in capfd.readouterr().err
         async with factory() as session:
-            assert await session.scalar(text("SELECT version_num FROM alembic_version")) == "0020_post_submit_policy_custody"
+            assert await session.scalar(text("SELECT version_num FROM alembic_version")) == current_schema_revision()
         assert await approve(factory, command, actor, grant, payload) == receipt
 
 

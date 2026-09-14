@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Protocol, final
 from uuid import UUID
 
@@ -15,12 +15,16 @@ from app.modules.artifacts.schemas import ArtifactAuthorityDeniedError
 from app.modules.artifacts.preparation import ArtifactPreparationService
 from app.modules.artifacts.sources import PreparedArtifact
 from app.modules.artifacts.pre_submit_evidence import (
+    PreSubmitEvidenceInput,
+    PreSubmitEvidenceConflict,
     PreSubmitExecutionCustody,
     PreSubmitExecutionResult,
     PreSubmitEvidencePersistenceRequest,
     PreSubmitEvidencePersistenceResult,
     PreSubmitEvidenceService,
 )
+from app.modules.artifacts.pre_submit_attempts import PreSubmitAttemptClaim, PreSubmitAttemptStore
+from app.modules.artifacts.models import PreSubmitExecutionAttempt
 from app.modules.artifacts.submission_archive import (
     SubmissionArchiveInspectionResult,
 )
@@ -203,12 +207,14 @@ class PreparedBundleMaterializationService:
     def __init__(
         self,
         *,
+        session: AsyncSession,
         authorization: PreSubmitMaterializationAuthorization,
         preparation: ArtifactPreparationService,
         checker_execution: PreSubmitCheckerExecutionFactory,
         storage_scheme: str,
     ) -> None:
         """Compose the bounded materializer from its AUTH and ART dependencies."""
+        self._session = session
         self._authorization = authorization
         self._preparation = preparation
         self._checker_execution = checker_execution
@@ -219,13 +225,18 @@ class PreparedBundleMaterializationService:
     async def materialize_prepared_bundle(
         self,
         request: PreparedBundleMaterializationRequest,
+        *,
+        claim: PreSubmitAttemptClaim,
     ) -> PreSubmitExecutionResult:
         """Consume fixed-service authority before any byte or workspace access."""
+        if type(claim) is not PreSubmitAttemptClaim:
+            raise PreSubmitEvidenceConflict("pre_submit_attempt_claim_invalid")
         facts = self._authority_facts(request)
         await self._authorization.consume(
             prepared_authorization=request.prepared_authorization,
             facts=facts,
         )
+        await claim.consume(self._session, request)
         processor = self._checker_execution.build(
             PreSubmitCheckerExecutionRequest(
                 plan=request.effective_plan,
@@ -246,7 +257,7 @@ class PreparedBundleMaterializationService:
             reserved_bytes=request.manifest.total_expanded_bytes,
             maximum_entries=request.manifest.entry_count,
         )
-        return PreSubmitExecutionResult(
+        execution = PreSubmitExecutionResult(
             custody=PreSubmitExecutionCustody(
                 prepared_generation_id=request.prepared_artifact.generation_id,
                 archive_sha256=request.prepared_artifact.commitment.sha256,
@@ -256,6 +267,23 @@ class PreparedBundleMaterializationService:
             ),
             checker_facts=checker_facts,
         )
+        claim.finish(execution)
+        return execution
+
+    async def authorize_inspected(self, request: PreparedBundleMaterializationRequest) -> None:
+        """Authorize inspected custody for reservation without invoking checker members."""
+        await self._authorization.consume(
+            prepared_authorization=request.prepared_authorization,
+            facts=self._authority_facts(request),
+        )
+
+    async def authorize_original_replay(
+        self, request: PreparedBundleMaterializationRequest, *, generation_id: UUID, key: UUID,
+    ) -> None:
+        """Check original stored service facts; this grants no retry-byte capability."""
+        facts = replace(self._authority_facts(request), prepared_generation_id=generation_id)
+        handle = await self._authorization.prepare(facts=facts.preparation, idempotency_key=key)
+        await self._authorization.consume(prepared_authorization=handle, facts=facts)
 
     async def prepare_authorization(
         self,
@@ -376,69 +404,94 @@ class PreparedBundlePreSubmitEvidenceService:
         self._preparation_authorization = preparation_authorization
         self._task_contexts = task_contexts
         self._project_contexts = project_contexts
+        self._attempts = PreSubmitAttemptStore(session)
 
-    async def execute(
-        self,
-        request: PreparedBundleMaterializationRequest,
-        *,
-        preparation_request: SubmissionBundlePreparationRequest,
-    ) -> PreSubmitEvidencePersistenceResult:
-        """Persist only after materialization has returned and cleaned its scratch lease."""
-        if self._session.in_transaction():
-            raise RuntimeError(
-                "pre-submit evidence orchestration requires a transaction-free session"
-            )
-        execution = await self.materialize(request)
-        return await self.persist(
-            request,
-            execution=execution,
-            preparation_request=preparation_request,
+    def _evidence_service(self) -> PreSubmitEvidenceService:
+        """Use the sole evidence owner for both lineage reads and completion."""
+        return PreSubmitEvidenceService(
+            self._session, task_contexts=self._task_contexts,
+            project_contexts=self._project_contexts,
         )
 
-    async def materialize(
-        self, request: PreparedBundleMaterializationRequest
-    ) -> PreSubmitExecutionResult:
-        """Consume fixed-service authority while its owning transaction is active."""
-        return await self._materialization.materialize_prepared_bundle(request)
-
-    async def persist(
-        self,
+    @staticmethod
+    def _input(
         request: PreparedBundleMaterializationRequest,
-        *,
-        execution: PreSubmitExecutionResult,
+        preparation_request: SubmissionBundlePreparationRequest,
+    ) -> PreSubmitEvidenceInput:
+        if (
+            request.task_id != preparation_request.task_id
+            or request.assignment_id != preparation_request.assignment_id
+            or request.packet.summary != preparation_request.summary
+            or request.packet.contributor_attestation != preparation_request.contributor_attestation
+        ):
+            raise PreSubmitEvidenceConflict("pre_submit_attempt_request_conflict")
+        commitment = request.prepared_artifact.commitment
+        return PreSubmitEvidenceInput(
+            actor_profile_id=preparation_request.actor.actor_profile_id,
+            identity_link_id=preparation_request.actor.identity_link_id,
+            task_id=request.task_id, assignment_id=request.assignment_id,
+            predecessor_submission_id=preparation_request.predecessor_submission_id,
+            expected_predecessor_submission_version=request.predecessor_submission_version,
+            prepared_generation_id=request.prepared_artifact.generation_id,
+            archive_sha256=commitment.sha256, archive_byte_count=commitment.byte_count,
+            semantic_manifest_sha256=request.manifest.sha256, plan=request.effective_plan,
+        )
+
+    async def reserve(
+        self, request: PreparedBundleMaterializationRequest, *,
+        preparation_request: SubmissionBundlePreparationRequest,
+    ) -> object:
+        """Consume inspected authority and reserve; the caller must commit before execution."""
+        await self._preparation_authorization.revalidate(request=preparation_request)
+        await self._materialization.authorize_inspected(request)
+        context = await self._evidence_service().lock_context(
+            self._input(request, preparation_request),
+            storage_scheme=self._materialization._storage_scheme,
+        )
+        selected = await self._attempts.reserve(
+            context=context, plan=request.effective_plan, packet=request.packet,
+            idempotency_key=preparation_request.idempotency_key, request=request,
+        )
+        if isinstance(selected, PreSubmitExecutionAttempt):
+            await self._materialization.authorize_original_replay(
+                request, generation_id=UUID(selected.prepared_generation_id),
+                key=preparation_request.idempotency_key,
+            )
+            return await self._attempts.read_completed(
+                row=selected, context=context, plan=request.effective_plan,
+            )
+        return selected
+
+    async def execute_reserved(
+        self, request: PreparedBundleMaterializationRequest, reservation: object, *,
         preparation_request: SubmissionBundlePreparationRequest,
     ) -> PreSubmitEvidencePersistenceResult:
-        """Persist completed, cleaned execution evidence in a fresh transaction."""
+        """Run a committed winning claim, then atomically persist its canonical evidence."""
         if self._session.in_transaction():
-            raise RuntimeError(
-                "pre-submit evidence persistence requires a transaction-free session"
+            raise RuntimeError("pre-submit execution requires a transaction-free session")
+        claim = await self._attempts.committed_claim(reservation)
+        async with self._session.begin():
+            await self._preparation_authorization.revalidate(request=preparation_request)
+            await self._evidence_service().lock_context(
+                self._input(request, preparation_request),
+                storage_scheme=self._materialization._storage_scheme,
             )
-        commitment = request.prepared_artifact.commitment
-        prepared_generation_id = request.prepared_artifact.generation_id
+            handle = await self._materialization.prepare_authorization(
+                task_id=request.task_id, assignment_id=request.assignment_id,
+                submission_artifact_policy_id=request.submission_artifact_policy_id,
+                checker_policy_id=request.checker_policy_id,
+                prepared_artifact=request.prepared_artifact,
+                effective_plan=request.effective_plan,
+                idempotency_key=preparation_request.idempotency_key,
+            )
+            execution = await self._materialization.materialize_prepared_bundle(
+                replace(request, prepared_authorization=handle), claim=claim,
+            )
         async with self._session.begin():
             await self._session.execute(text("set transaction isolation level read committed"))
             await self._preparation_authorization.revalidate(request=preparation_request)
-            return await PreSubmitEvidenceService(
-                self._session,
-                task_contexts=self._task_contexts,
-                project_contexts=self._project_contexts,
-            ).persist(
-                PreSubmitEvidencePersistenceRequest(
-                    actor_profile_id=preparation_request.actor.actor_profile_id,
-                    identity_link_id=preparation_request.actor.identity_link_id,
-                    task_id=request.task_id,
-                    assignment_id=request.assignment_id,
-                    predecessor_submission_id=(
-                        preparation_request.predecessor_submission_id
-                    ),
-                    expected_predecessor_submission_version=(
-                        request.predecessor_submission_version
-                    ),
-                    prepared_generation_id=prepared_generation_id,
-                    archive_sha256=commitment.sha256,
-                    archive_byte_count=commitment.byte_count,
-                    semantic_manifest_sha256=request.manifest.sha256,
-                    plan=request.effective_plan,
-                    execution=execution,
-                )
-            )
+            values = self._input(request, preparation_request)
+            return await self._evidence_service().persist(PreSubmitEvidencePersistenceRequest(
+                **{name: getattr(values, name) for name in values.__dataclass_fields__},
+                execution=execution, attempt=claim,
+            ))

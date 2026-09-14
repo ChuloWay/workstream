@@ -14,6 +14,7 @@ from app.core.api_controls import request_ids
 from app.modules.artifacts.api import (
     SubmissionBundlePreparationCommand,
     SubmissionBundlePreparationRejected,
+    SubmissionBundlePreparationInfrastructureUnavailable,
     SubmissionBundlePreparationRequest,
     SubmissionBundlePreparationStatus,
     SubmissionBundlePreparationUnavailable,
@@ -89,6 +90,8 @@ async def prepare_submission_bundle(
                 byte_source=request.stream(),
             )
         )
+    except SubmissionBundlePreparationInfrastructureUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except SubmissionBundlePreparationUnavailable as exc:
         raise HTTPException(status_code=404, detail="Task not found") from exc
     except SubmissionBundlePreparationRejected as exc:
