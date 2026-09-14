@@ -240,3 +240,57 @@ superseded test requiring contributor AUTH before context locks is replaced
 with context-first denial proof: denied authority still prevents fixed-service
 consume and attempt reservation. Initial contributor preflight remains before
 context or byte access.
+
+### AUTH role issuance lock-order correction plan
+
+Re-review source-traced a second cycle: ART holds PROJECT while requesting the
+contributor profile; project-role issuance holds that profile while requesting
+PROJECT. The previous ART/ART regression does not prove this AUTH/ART case.
+Moving contributor authority ahead of TASK would conflict with existing TASK
+commands, which lock TASK/assignment before contributor authority.
+
+The required common order is TASK/assignment, contributor profile and identity
+link, PROJECT policy context, submitter role grant, fixed-materializer AUTH, then
+attempt/evidence. Full contributor revalidation cannot move before PROJECT:
+role revocation locks PROJECT before the exact grant. Split the existing ART
+context acquisition at TASK/PROJECT; expose a transaction-bound actor-only lock
+on the existing authorization port, shared with initial preflight. Full project
+authorization remains after PROJECT. No alternate authorization path is added.
+
+Denied role issuance must also preserve the order. The AUTH principal selector
+currently locks a service target before PROJECT even though services cannot
+receive project roles. Filter the target row by immutable human actor kind
+before FOR UPDATE. The existing final eligibility guard remains unchanged.
+Move the existing final human eligibility lock before PROJECT as well: a
+previously absent target may be provisioned after principal selection. Actor
+kind is database-immutable; no unlocked mutable eligibility decision is
+introduced. This narrow AUTH repository correction prevents the same cycle
+through an ineligible request targeting the fixed materializer.
+
+Allowed repair files are the existing ART command, materialization, evidence,
+authorization adapter and port; AUTH repository principal selection and the existing role-issuance router lock
+sequence; affected
+tests/helpers and exact test-lane inventory; this record and checker architecture
+wording. No kernel or role-mutation workflow replacement, permission relaxation,
+schema change, retained-data deletion, or retry reset is authorized.
+
+Required proof adds real PostgreSQL role issuance versus execution through
+production AUTH: valid issuance and evidence complete, one checker invocation;
+service-target issuance denies without aborting execution. The same regressions
+must expose the pre-repair cycles. Retain the real ART/ART regression, and prove
+TASK precedes actor locking while PROJECT precedes role-grant revalidation.
+Exercise actual `AuthorizedTaskCommands.work_context` against the same actor/task
+and actual `revoke_project_role_grant` against the submitter grant in PostgreSQL.
+The former must expose an actor-before-TASK mutant; the latter must expose a
+grant-before-PROJECT mutant. Revocation may cause fresh authority denial before
+checker execution, but must not deadlock or cause another invocation. Verify
+role-issuance eligibility is locked before PROJECT even when a target was absent
+during the preliminary principal lookup.
+
+Risk remains L1. Architecture/reuse and security plan review trace issue/revoke,
+TASK consumers and ineligible service targets before implementation. After
+focused SQL/unit verification, freeze the candidate for architecture/reuse,
+security, QA/test-delta, CI integrity and affected documentation review; run
+final-head hosted CI. Human review focus is the complete cross-owner lock order
+and preservation of immutable invocation custody. This repair changes no
+capability exposure or next roadmap dependency.
