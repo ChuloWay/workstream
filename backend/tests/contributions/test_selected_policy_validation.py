@@ -275,6 +275,7 @@ async def test_project_eligibility_fails_before_policy_disclosure(failure):
 def test_composition_and_public_contract_have_no_compatibility_alias():
     from app.modules.contributions import api
 
+    assert {purpose.value for purpose in Purpose} == {"guide_activation", "revision_adoption"}
     assert not hasattr(api, "ContributionPolicyProjectEligibilityPort")
     port = contribution_policy_validation_port(SimpleNamespace())
     assert isinstance(port, SelectedContributionPolicyValidation)

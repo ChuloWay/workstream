@@ -96,8 +96,9 @@ No CI workflow or gate changes; retry-artifact work belongs to open PR #408.
   must reach the target guard and include valid controls; deliberate removal
   of selector equality must be detected by a contract-level regression with
   an otherwise-published requested version (a retired version alone would hit
-  a different guard). A real PostgreSQL preloaded-unit fixture must deny after
-  concurrent retirement, with an active-unit valid control.
+  a different guard). Real PostgreSQL preloaded rule/definition fixtures must
+  refresh after supported draft edits and publication; current unit retirement
+  is database-blocked, so no test may bypass that guard to manufacture a race.
 - Preserve publication/retirement regression coverage, current authority and
   immutable evidence. Run relevant lint, boundaries, test inventory, links and
   stale wording checks; final hosted lanes and coverage floors remain required.
@@ -116,13 +117,21 @@ No CI workflow or gate changes; retry-artifact work belongs to open PR #408.
 The typed contract tests require exact selection, both actor rules, valid
 resources and caller transaction custody. Real PostgreSQL tests exercise
 authorized publication/retirement races, resource fences, caller rollback and
-stale identity-map refresh. Existing publication/authority tests protect the
+stale graph identity-map refresh. Existing publication/authority tests protect the
 shared-rule extraction. A selector negative control removes only equality:
 the stale-selector test fails while both valid-purpose controls pass.
 Database-owned UUID subclasses are normalized for the canonical graph-input
 validator; public requests accept UUID instances without accepting strings.
 Final exact-head
 commands, hosted results and review freshness belong in the PR trust summary.
+
+The initial unit-retirement fixture was infeasible: the database explicitly
+keeps that lifecycle unavailable. The replacement proof edits mutable draft
+rule/definition rows before authorized publication. Unit lock refresh remains
+consistent with all owner reads; no enabled retirement lifecycle is claimed.
+The existing publication binding-lock test used a nonexistent column and
+accepted any database error. It now uses the actual binding lifecycle column
+and requires PostgreSQL lock-timeout `55P03`, not an unrelated SQL error.
 
 ## Plan reconciliation
 

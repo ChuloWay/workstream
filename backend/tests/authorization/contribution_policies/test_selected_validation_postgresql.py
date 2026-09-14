@@ -14,9 +14,10 @@ from app.modules.contributions.api import (
     ContributionPolicyValidationPurpose as Purpose,
     ContributionPolicyValidationRequest as Request,
 )
-from app.modules.contributions.models import ProjectCompensationUnit
+from app.modules.contributions.models import ContributionAwardDefinition, ContributionRule
 from .postgresql_support import world, snapshot
 from .concurrency import ordered_policy_calls
+from .foreign_fixtures import foreign_project
 
 
 async def published_world(admin_access, *, compensated=True):
@@ -87,7 +88,24 @@ async def test_later_publication_preserves_bound_version_but_blocks_new_stale_bi
 )
 async def test_selection_denies_each_foreign_identifier(admin_access, auth_database_env, field):
     target, _, request = await published_world(admin_access)
-    _, _, foreign = await published_world(admin_access)
+    foreign_id, _ = await foreign_project(target)
+    await admin_access.signed.grant(
+        admin_access.admin,
+        admin_access.target,
+        role="finance_authority",
+        project_id=foreign_id,
+    )
+    other = replace(target, project=foreign_id)
+    draft = await other.execute("create_draft", other.request("create_draft"))
+    draft = await other.execute("update_draft", other.request("update_draft", draft))
+    published = await other.execute("publish", other.request("publish", draft))
+    foreign = replace(
+        request,
+        project_id=foreign_id,
+        contribution_policy_id=published.contribution_policy_id,
+        contribution_policy_version_id=published.contribution_policy_version_id,
+    )
+    assert (await validate(foreign)).project_id == foreign_id
     before = await snapshot(target.project)
     with pytest.raises(ContributionPolicyUnavailable, match="^contribution_policy_unavailable$"):
         await validate(replace(request, **{field: getattr(foreign, field)}))
@@ -120,37 +138,74 @@ async def test_validation_and_late_caller_effect_roll_back_together(
 
 
 @pytest.mark.asyncio
-async def test_preloaded_unit_is_refreshed_after_concurrent_retirement(
-    admin_access, auth_database_env
+@pytest.mark.parametrize("changed_row", ["definition", "rule"])
+async def test_preloaded_graph_is_refreshed_after_draft_edit_and_publication(
+    admin_access, auth_database_env, changed_row
 ):
-    target, _, request = await published_world(admin_access)
+    target = await world(admin_access)
+    draft = await target.execute("create_draft", target.request("create_draft"))
+    draft = await target.execute(
+        "update_draft", target.request("update_draft", draft, compensated=True)
+    )
+    request = Request(
+        project_id=target.project,
+        contribution_policy_id=draft.contribution_policy_id,
+        contribution_policy_version_id=draft.contribution_policy_version_id,
+        purpose=Purpose.GUIDE_ACTIVATION,
+    )
     async with db_session.get_session_factory()() as session, session.begin():
-        unit = await session.scalar(
-            select(ProjectCompensationUnit).where(
-                ProjectCompensationUnit.project_id == str(target.project),
-                ProjectCompensationUnit.instrument_type == "money",
+        definition = await session.scalar(
+            select(ContributionAwardDefinition).where(
+                ContributionAwardDefinition.contribution_policy_version_id
+                == draft.contribution_policy_version_id
             )
         )
-        assert unit.status == "active"
+        rule = await session.scalar(
+            select(ContributionRule).where(
+                ContributionRule.contribution_policy_version_id
+                == draft.contribution_policy_version_id,
+                ContributionRule.contribution_type == "completed_review",
+            )
+        )
+        assert definition.quantity == 2 and rule.compensation_mode == "unpaid"
         async with db_session.get_session_factory()() as concurrent, concurrent.begin():
-            await concurrent.execute(
-                text(
-                    "update project_compensation_units set status='retired' where project_id=:p and instrument_type='money'"
-                ),
-                {"p": str(target.project)},
-            )
-        assert unit.status == "active"  # Preloaded identity map is intentionally stale.
-        with pytest.raises(ContributionPolicyUnavailable):
-            await contribution_policy_validation_port(session).validate_contribution_policy(request)
-        assert unit.status == "retired"
-    async with db_session.get_session_factory()() as session, session.begin():
-        await session.execute(
-            text(
-                "update project_compensation_units set status='active' where project_id=:p and instrument_type='money'"
-            ),
-            {"p": str(target.project)},
+            if changed_row == "definition":
+                await concurrent.execute(
+                    text("update contribution_award_definitions set quantity=3 where id=:id"),
+                    {"id": definition.id},
+                )
+            else:
+                await concurrent.execute(
+                    text(
+                        "update contribution_rules set compensation_mode='compensated' where id=:id"
+                    ),
+                    {"id": rule.id},
+                )
+                concurrent.add(
+                    ContributionAwardDefinition(
+                        id=uuid4(),
+                        contribution_rule_id=rule.id,
+                        contribution_policy_version_id=draft.contribution_policy_version_id,
+                        project_id=str(target.project),
+                        contribution_type="completed_review",
+                        instrument_type="money",
+                        unit_code="USD",
+                        quantity=2,
+                        adapter_binding_id=target.binding,
+                    )
+                )
+                await concurrent.flush()
+            await target.service(concurrent).publish(target.request("publish", draft))
+        expected = await validate(request)
+        assert definition.quantity == 2 and rule.compensation_mode == "unpaid"
+        result = await contribution_policy_validation_port(session).validate_contribution_policy(
+            request
         )
-    assert (await validate(request)).adapter_binding_ids == (target.binding,)
+        assert result == expected
+        if changed_row == "definition":
+            assert definition.quantity == 3
+        else:
+            assert rule.compensation_mode == "compensated"
 
 
 @pytest.mark.asyncio
@@ -163,11 +218,11 @@ async def test_validation_retains_unit_and_binding_locks_until_caller_rollback(
         await contribution_policy_validation_port(session).validate_contribution_policy(request)
         for sql, params in (
             (
-                "update project_compensation_units set status='retired' where project_id=:p and instrument_type='money'",
+                "select unit_code from project_compensation_units where project_id=:p and instrument_type='money' for update",
                 {"p": str(target.project)},
             ),
             (
-                "update project_compensation_adapter_bindings set lifecycle_version=lifecycle_version where id=:b",
+                "select id from project_compensation_adapter_bindings where id=:b for update",
                 {"b": target.binding},
             ),
         ):
