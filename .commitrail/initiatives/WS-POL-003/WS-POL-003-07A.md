@@ -204,3 +204,31 @@ currently returns a checker-failure code; structured public feedback remains
 pending the canonical public intake cutover. ART constructs the bounded failure-audit projection, but publishing
 it as a TASK audit event remains pending; current documentation distinguishes
 that implementation gap from the target contract.
+
+
+### Cross-request lock-order correction
+
+Human review identified an execution/reservation cycle missed by the same-task
+concurrency fixture: one request could hold the shared materializer principal
+while waiting for project context, and another could hold project context while
+waiting for that principal. A database deadlock abort after reservation commit
+would leave the key unresolved. The correction stays in the existing ART command
+and workflow, with no retry reset, AUTH relaxation, migration or second lock owner.
+
+The proposed order is TASK context, PROJECT policy context, contributor AUTH,
+fixed-materializer AUTH, then attempt/evidence custody. Apply it to the initial
+context check, pre-inspection reservation transaction, execution transaction and
+completion transaction; reacquiring an already held lock cannot replace the
+required initial order. Fixed-service authorization must still precede ZIP
+inspection and checker construction. Trace every actual materializer-preparation
+caller and update affected tests together.
+
+Add real PostgreSQL and production AUTH proof with two contributors, different
+tasks/assignments and distinct idempotency keys in one project. Coordinate a
+reservation with another request's committed-attempt execution using explicit
+barriers and observed database waits, not timing guesses. Both attempts must
+complete with one checker invocation each and completed canonical evidence;
+restoring the old ordering must fail the regression. Retain same-key concurrency,
+replay, revocation and rollback tests. Required repair reviews are architecture/
+reuse, security, QA/test-delta, CI integrity and affected docs/product operations.
+This paragraph records the repair plan; runtime proof must establish the result.
