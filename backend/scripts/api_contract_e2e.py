@@ -2182,8 +2182,8 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             "hidden submission creation must not be advertised as a public action",
         )
         ensure(
-            active_work_context["lifecycle"]["can_run_pre_submit_check"] is False,
-            "the current command surface must not advertise hidden intake",
+            "can_run_pre_submit_check" not in active_work_context["lifecycle"],
+            "work context must omit the removed JSON-precheck capability",
         )
         ensure(
             active_work_context["lifecycle"]["next_actions"] == [],

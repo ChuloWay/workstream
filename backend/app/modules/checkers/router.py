@@ -16,8 +16,6 @@ from app.modules.checkers.schemas import (
     CheckerRunRequest,
     CheckerRunPublicResponse,
     CheckerRunResponse,
-    PreSubmitCheckRequest,
-    PreSubmitCheckResponse,
 )
 from app.modules.checkers.service import CheckerService, CheckerServiceError
 from app.schemas.auth import ActorContext
@@ -63,22 +61,6 @@ def permission_http_error(exc: PermissionDenied) -> HTTPException:
 def checker_run_response(payload: CheckerRunResponse | list[CheckerRunResponse]) -> JSONResponse:
     """Serialize role-sensitive checker-run responses without null hidden fields."""
     return JSONResponse(content=jsonable_encoder(payload, exclude_none=True))
-
-
-@router.post("/tasks/{task_id}/submission-precheck", response_model=PreSubmitCheckResponse)
-async def pre_submit_check(
-    task_id: str,
-    payload: PreSubmitCheckRequest,
-    actor: Annotated[ActorContext, Depends(get_registered_actor)],
-    session: Annotated[AsyncSession, Depends(get_db_session)],
-) -> PreSubmitCheckResponse:
-    """Return non-authoritative static checker feedback for a draft packet."""
-    try:
-        return await CheckerService(session).pre_submit_check(actor, task_id, payload.submission)
-    except PermissionDenied as exc:
-        raise permission_http_error(exc) from exc
-    except CheckerServiceError as exc:
-        raise checker_http_error(exc) from exc
 
 
 @router.post(

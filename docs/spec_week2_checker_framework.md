@@ -65,22 +65,19 @@ The checker binding includes:
 
 Workstream has two checker moments.
 
-Pre-submit static checks run before Workstream creates a submission. They execute the task's locked project `PreSubmitCheckerPolicy`, which was generated from the effective project submission artifact policy during project setup, and give immediate feedback on packet shape and policy issues:
+Pre-submit intake checks run against one uploaded ZIP in ART-managed bounded
+scratch before Workstream creates a Submission. They execute the locked
+platform/project effective plan and retain canonical ART evidence for packet
+fields, safe archive members, size limits, required outputs/evidence and
+contributor attestation. A caller-owned manifest or storage reference is not
+proof of uploaded bytes.
 
-- required field presence
-- package hash presence
-- artifact hash manifest shape
-- evidence references
-- worker attestation
-- storage reference safety
-- task assignment and state compatibility
-
-Blocking pre-submit failures prevent submission creation. Preflight failures
-return `PreSubmitCheckResponse(status="failed", eligible_to_submit=false,
-results=[...])`. Blocked submission-create attempts return
-`DomainError(code="pre_submission_checker_failed")` with structured
-pass/fail/warning details, create no submission row, no submission version, no
-task transition to `submitted`, and no submission-created audit event.
+Blocking pre-submit failures prevent submission creation. POL-07B removes the
+standalone JSON precheck and its response schema. Hidden ZIP preparation
+returns `pre_submission_checker_failed`, while ART retains bounded evidence.
+Structured public feedback remains pending the canonical intake cutover.
+Failure creates no Submission row or version, task transition to `submitted`,
+or submission-created audit event.
 
 Pre-submit failures do not create review decisions, do not return `accept`,
 `needs_revision`, or `reject`, and do not create durable post-submit checker
@@ -157,14 +154,16 @@ Week 2 does not build the product frontend page for checker results. The planned
 
 ### Chunk 6: Checker Contract And Records
 
-Creates the durable checker run/result model, pre-submit response contract, API schemas, service boundaries, and migration.
+Creates the durable post-submit checker run/result model, API schemas, service
+boundaries and migration. Current pre-submit results belong to ART's separate
+internal evidence contract, not a public precheck response.
 
 Conditions of satisfaction:
 
 - checker runs are tied to one submission version
 - checker results are immutable after persistence
 - status and severity values are canonical
-- pre-submit feedback has a response contract but is not authoritative review-gate proof
+- ART retains bounded pre-submit evidence; it cannot substitute for post-submit review-gate proof
 - post-submit checker runs can record `allow_review`, `needs_revision`, `checker_retry`, or `task_setup_blocked` as routing recommendations
 - `allow_review` is not stored as `accept`; it only means the submission can proceed to human review
 - checker-caused `needs_revision` stores `outcome_source = auto_checker`
@@ -172,14 +171,16 @@ Conditions of satisfaction:
 
 ### Chunk 7: Checker Runner And Registry
 
-Creates the checker interface, registry, pre-submit static checker path, runner service, and first structural checkers.
+Creates the checker interface, registry, runner service and first structural
+checkers. Current pre-submit execution uses hidden ZIP preparation and the
+internal phase service; the standalone JSON precheck is removed.
 
 Detailed spec: [Chunk 7 Checker Runner And Registry](spec_chunk_7_checker_runner_registry.md).
 
 Conditions of satisfaction:
 
 - registered checker names cannot drift from policy names
-- pre-submit checks return immediate feedback before final submission
+- hidden pre-submit ZIP failures return `pre_submission_checker_failed`; ART retains bounded evidence, and structured public feedback remains pending
 - `check_submission_packet` runs against real submission data
 - failed structural checks produce stored checker results
 - worker-fixable submission failures and locked task setup failures are blocked before human review with distinct routing recommendations

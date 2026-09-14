@@ -10,6 +10,9 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+
+from app.adapters.artifacts import CheckerPhaseService
+from app.modules.checkers.api import UnavailablePostSubmissionExecution
 from sqlalchemy import func, insert, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -200,6 +203,10 @@ async def _configure_participants(
         catalogue=harness.catalogue,
         materialization=second_workflow._materialization,
         evidence=evidence_owner,
+        checker_service=CheckerPhaseService(
+            pre_submission=evidence_owner,
+            post_submission=UnavailablePostSubmissionExecution(),
+        ),
         durable_put=object(),
     )
 

@@ -176,9 +176,9 @@ attempt ID, effective-plan hash, terminal status, pass/warning/failure counts,
 and a bounded ordered list of catalogue ID/version plus stable outcome code.
 It excludes filenames, archive paths, scratch/provider references, credentials,
 raw checker output, evidence content, and free-form or unbounded messages. This
-is audit evidence, not a product review decision. The independently invocable
-standalone preflight route is not authoritative intake evidence. POL-07 removes
-it when connecting the single checker-service port. WS-ARCH-001-02I retains the
+is audit evidence, not a product review decision. POL-07B removes the independently invocable
+JSON precheck. The internal pre-submit phase command uses ART's existing
+execution or completed-evidence recovery after reservation commits. WS-ARCH-001-02I retains the
 broader Submission caller migration and its downstream prerequisites.
 
 Hidden ART-04B2 uses XINT-06A's two-stage fixed-materializer PREP. It locks the

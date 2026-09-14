@@ -12,11 +12,13 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   [ARCH-04A consolidation](WS-ARCH-001-04A.md) canonical post-submit contracts/conformance.
 - Intent: keep product modules behind explicit ports and composition roots.
 - Current boundary: one CHECKERS catalogue, compiler/parser and implementation
-  per checker ID serve active policy consumers; phase execution remains unavailable.
-- Next usable boundary: POL-04B consumes the consolidated catalogue and connects
-  unified setup, deleting superseded inference implementations. The adopted POL
-  approval/facade sequence follows. Return to independent CP06/CP07 after POL-07, then
-  connect guide activation through AUTH-12H.
+  per checker ID serve active policy consumers; production post-submit phase
+  execution remains unavailable.
+- Next usable boundary: CP06 selected ContributionPolicy validation and CP07
+  guide binding, then AUTH-12H activation. POL-04B unified setup, POL-05/06
+  manager operations and POL-07B internal phase composition are delivered.
+  The production post-submit phase remains unavailable until its separately
+  sequenced ART/CHECKER/AUTH execution boundaries land.
 - Governing sources: `docs/architecture_lockdown.md`, accepted ADRs, code, and
   architecture tests.
 - Preserve: no concrete-adapter imports in product services and no duplicate

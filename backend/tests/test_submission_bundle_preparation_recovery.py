@@ -6,6 +6,9 @@ from unittest.mock import AsyncMock, Mock, call
 from uuid import uuid4
 
 import pytest
+
+from app.adapters.artifacts import CheckerPhaseService
+from app.modules.checkers.api import UnavailablePostSubmissionExecution
 from fastapi import HTTPException
 from starlette.requests import Request
 
@@ -76,7 +79,7 @@ async def test_hidden_preparation_maps_context_custody_and_authority_distinctly(
 
 def _preparation_replay_runtime(prepare_bytes, evidence_id, *, eligible):
     """Supply bounded ART outcome doubles for command routing proof."""
-    return SimpleNamespace(
+    runtime = SimpleNamespace(
         preparation=SimpleNamespace(prepare=AsyncMock(side_effect=prepare_bytes)),
         inspector=object(),
         catalogue=object(),
@@ -94,13 +97,20 @@ def _preparation_replay_runtime(prepare_bytes, evidence_id, *, eligible):
         durable_put=object(),
     )
 
+    runtime.checker_service = CheckerPhaseService(
+        pre_submission=runtime.evidence,
+        post_submission=UnavailablePostSubmissionExecution(),
+    )
+    runtime.checker_service.evaluate_pre_submission = AsyncMock(
+        wraps=runtime.checker_service.evaluate_pre_submission,
+    )
+    return runtime
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("outcome", ("completed", "blocked", "unresolved", "no_continuation", "corrupt_evidence"))
 async def test_hidden_preparation_replays_persisted_checked_custody(monkeypatch, outcome) -> None:
-    actor_id = uuid4()
-    task_id = uuid4()
-    assignment_id = uuid4()
+    actor_id, task_id, assignment_id = uuid4(), uuid4(), uuid4()
     evidence_id = uuid4()
     expected = SubmissionBundlePreparationResult(
         put_attempt_id=uuid4(),
@@ -206,6 +216,13 @@ async def test_hidden_preparation_replays_persisted_checked_custody(monkeypatch,
     ]
     assert events[:2] == ["revalidate", "prepare_bytes"]
     runtime.evidence.reserve.assert_awaited_once()
+    if outcome in {"unresolved", "corrupt_evidence"}:
+        runtime.checker_service.evaluate_pre_submission.assert_not_awaited()
+    else:
+        runtime.checker_service.evaluate_pre_submission.assert_awaited_once()
+        phase_request, selection = runtime.checker_service.evaluate_pre_submission.await_args.args
+        assert phase_request.prepared_authorization is None
+        assert selection is runtime.evidence.reserve.return_value
     if outcome in {"completed", "unresolved", "corrupt_evidence"}:
         runtime.evidence.execute_reserved.assert_not_awaited()
     else:

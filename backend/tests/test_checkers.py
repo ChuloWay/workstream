@@ -28,7 +28,6 @@ from app.db import session as db_session
 from app.db.base import Base
 from app.main import create_app
 from app.modules.checkers import compiler as checker_compiler_module
-from app.modules.checkers import service as checker_service_module
 from app.modules.checkers.compiler import (
     PRE_SUBMIT_COMPILER_VERSION,
     PreSubmitCheckerCompilerError,
@@ -74,7 +73,6 @@ from app.modules.projects.post_submit_policy import (
     parse_locked_post_submit_checker_policy_body,
 )
 from app.modules.tasks.models import AuditEvent, EvidenceItem, Submission, WorkstreamTask
-from app.modules.tasks.schemas import SubmissionCreate
 from tests.submission_fixtures import seed_finalized_submission_for_checker_test
 from tests.test_tasks import (
     auth_headers,
@@ -534,8 +532,6 @@ def test_locked_post_submit_policy_parser_rejects_self_consistent_default_drift(
     # Recomputed digest proves the canonical catalogue rejects changed defaults.
     with pytest.raises(ValueError):
         _parse_test_post_body(body)
-
-
 
 
 def test_locked_post_submit_policy_parser_rejects_unsupported_compiler_version() -> None:
@@ -1026,38 +1022,6 @@ def test_forbidden_file_checker_classifies_without_leaking_paths() -> None:
     assert "client.pem" not in outcome.message
 
 
-def test_packet_limits_and_packaging_return_actionable_failures() -> None:
-    file_limit = checker_runner_module._size_limit_outcome(
-        [{"artifact": "large.bin", "size_bytes": 11}],
-        {"maximum_file_size_bytes": 10},
-    )
-    package_limit = checker_runner_module._size_limit_outcome(
-        [
-            {"artifact": "one.bin", "size_bytes": 6},
-            {"artifact": "two.bin", "size_bytes": 5},
-        ],
-        {"maximum_package_size_bytes": 10},
-    )
-    payload = SimpleNamespace(package_uri=None)
-    required_package = checker_runner_module._packaging_outcome(
-        cast(Any, payload),
-        {"packaging": {"package_required": True}},
-    )
-    payload.package_uri = "s3://bucket/work.tar"
-    invalid_format = checker_runner_module._packaging_outcome(
-        cast(Any, payload),
-        {"packaging": {"allowed_package_formats": ["zip"]}},
-    )
-
-    assert file_limit is not None
-    assert file_limit.metadata == {"oversized_artifacts": ["large.bin"]}
-    assert package_limit is not None
-    assert package_limit.metadata == {"known_manifest_size_bytes": 11}
-    assert required_package is not None and required_package.blocks_review
-    assert invalid_format is not None
-    assert invalid_format.metadata == {"allowed_package_formats": ["zip"]}
-
-
 def test_packet_shape_reports_all_required_fields_without_echoing_values() -> None:
     outcome = checker_runner_module._packet_shape_outcome("", "", [])
 
@@ -1065,75 +1029,6 @@ def test_packet_shape_reports_all_required_fields_without_echoing_values() -> No
     assert outcome.metadata == {
         "missing_fields": ["summary", "package_hash", "artifact_hash_manifest"]
     }
-
-
-def test_pre_submit_packet_applies_required_storage_size_and_package_rules() -> None:
-    payload = SimpleNamespace(
-        summary="complete",
-        package_hash="sha256:package",
-        worker_attestation="",
-        package_uri="ftp://bucket/work.zip",
-    )
-    manifest = [{"artifact": "answer.md", "hash": "sha256:a", "size_bytes": 11}]
-
-    missing_base_packet = checker_runner_module._pre_submit_packet_outcome(
-        cast(
-            Any,
-            SimpleNamespace(
-                summary="",
-                package_hash="",
-                worker_attestation="",
-                package_uri=None,
-            ),
-        ),
-        [],
-        [],
-        {},
-    )
-
-    missing_field = checker_runner_module._pre_submit_packet_outcome(
-        cast(Any, payload),
-        manifest,
-        [],
-        {
-            "required_packet_fields": ["worker_attestation"],
-            "allowed_storage_schemes": ["s3"],
-        },
-    )
-    payload.worker_attestation = "original work"
-    invalid_storage = checker_runner_module._pre_submit_packet_outcome(
-        cast(Any, payload),
-        manifest,
-        [],
-        {"allowed_storage_schemes": ["s3"]},
-    )
-    payload.package_uri = "s3://bucket/work.zip"
-    oversized = checker_runner_module._pre_submit_packet_outcome(
-        cast(Any, payload),
-        manifest,
-        [],
-        {
-            "allowed_storage_schemes": ["s3"],
-            "maximum_file_size_bytes": 10,
-        },
-    )
-    wrong_package = checker_runner_module._pre_submit_packet_outcome(
-        cast(Any, payload),
-        [{"artifact": "answer.md", "hash": "sha256:a", "size_bytes": 1}],
-        [],
-        {
-            "allowed_storage_schemes": ["s3"],
-            "packaging": {"allowed_package_formats": ["tar"]},
-        },
-    )
-
-    assert missing_base_packet.metadata == {
-        "missing_fields": ["summary", "package_hash", "artifact_hash_manifest"]
-    }
-    assert missing_field.metadata == {"missing_fields": ["worker_attestation"]}
-    assert invalid_storage.metadata == {"invalid_storage_refs": ["ftp://bucket/work.zip"]}
-    assert oversized.metadata == {"oversized_artifacts": ["answer.md"]}
-    assert wrong_package.metadata == {"allowed_package_formats": ["tar"]}
 
 
 def test_artifact_path_and_pattern_normalization_fail_closed() -> None:
@@ -1163,19 +1058,6 @@ async def test_policy_context_checker_blocks_incomplete_lock_without_exposing_de
     assert outcome.worker_visible is False
     assert outcome.routing_recommendation == "task_setup_blocked"
     assert outcome.metadata == {"invalid_context": ["pre_policy_id"]}
-
-
-@pytest.mark.asyncio
-async def test_pre_submit_feedback_rejects_unsupported_compiled_checker_name() -> None:
-    payload = SubmissionCreate.model_validate(complete_submission_payload())
-
-    with pytest.raises(UnknownChecker, match="unsupported checker names: unknown_checker"):
-        await checker_runner_module.pre_submit_static_feedback(
-            cast(Any, SimpleNamespace()),
-            payload,
-            {},
-            ["unknown_checker"],
-        )
 
 
 def test_attestation_and_policy_projection_helpers_preserve_required_only_rules() -> None:
@@ -1460,79 +1342,6 @@ def test_checker_transition_guard_maps_invalid_transition() -> None:
     CheckerService._ensure_transition_allowed("submitted", "evaluation_pending")
     with pytest.raises(CheckerExecutionBlocked):
         CheckerService._ensure_transition_allowed("draft", "accepted")
-
-
-@pytest.mark.asyncio
-async def test_worker_pre_submit_check_requires_checkable_task_state() -> None:
-    actor = pre_review_gate_system_actor().model_copy(
-        update={
-            "actor_id": "worker-1",
-            "external_subject": "worker-1",
-            "external_issuer": "flow",
-            "roles": ("worker",),
-            "auth_source": "flow",
-        }
-    )
-    service = object.__new__(CheckerService)
-    service._get_task_for_actor = AsyncMock(
-        return_value=SimpleNamespace(id="task-1", status="available")
-    )
-
-    with pytest.raises(CheckerExecutionBlocked, match="must be in progress"):
-        await service.pre_submit_check(actor, "task-1", cast(Any, object()))
-
-
-@pytest.mark.asyncio
-async def test_pre_submit_check_summarizes_blocking_feedback(monkeypatch: pytest.MonkeyPatch) -> None:
-    actor = pre_review_gate_system_actor()
-    task = SimpleNamespace(id="task-1", status="in_progress")
-    service = object.__new__(CheckerService)
-    service._get_task_for_actor = AsyncMock(return_value=task)
-    service._load_locked_pre_submit_context = AsyncMock(
-        return_value=(
-            SimpleNamespace(effective_policy={"manifest_required": True}),
-            SimpleNamespace(checker_names=["required"]),
-        )
-    )
-    monkeypatch.setattr(
-        checker_service_module,
-        "pre_submit_static_feedback",
-        AsyncMock(return_value=[_checker_outcome("required", blocks_review=True)]),
-    )
-
-    response = await service.pre_submit_check(actor, "task-1", cast(Any, object()))
-
-    assert response.status == "failed"
-    assert response.eligible_to_submit is False
-    assert response.results[0].would_block_if_submitted is True
-
-
-@pytest.mark.asyncio
-async def test_pre_submit_check_maps_unregistered_locked_checker(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    service = object.__new__(CheckerService)
-    service._get_task_for_actor = AsyncMock(
-        return_value=SimpleNamespace(id="task-1", status="in_progress")
-    )
-    service._load_locked_pre_submit_context = AsyncMock(
-        return_value=(
-            SimpleNamespace(effective_policy={}),
-            SimpleNamespace(checker_names=["unknown"]),
-        )
-    )
-    monkeypatch.setattr(
-        checker_service_module,
-        "pre_submit_static_feedback",
-        AsyncMock(side_effect=UnknownChecker("unknown")),
-    )
-
-    with pytest.raises(CheckerPolicyInvalid, match="unregistered checker"):
-        await service.pre_submit_check(
-            pre_review_gate_system_actor(),
-            "task-1",
-            cast(Any, object()),
-        )
 
 
 def _locked_post_submit_context() -> tuple[SimpleNamespace, SimpleNamespace]:
@@ -2891,93 +2700,6 @@ async def create_checker_trial_project(
     return project
 
 
-async def test_pre_submit_check_returns_feedback_without_durable_run(
-    checker_client: AsyncClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project = await create_active_project(checker_client)
-    started_task = await create_started_task(checker_client, project["id"], monkeypatch)
-    payload = complete_submission_payload()
-    payload["artifact_hash_manifest"].append(
-        {
-            "artifact": "answer.md",
-            "hash": "sha256:duplicate",
-            "size_bytes": 129,
-            "notes": "duplicate",
-        }
-    )
-
-    response = await checker_client.post(
-        f"/api/v1/tasks/{started_task['id']}/submission-precheck",
-        headers=auth_headers(),
-        json={"submission": payload},
-    )
-
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["authoritative"] is False
-    assert body["status"] == "failed"
-    assert body["eligible_to_submit"] is False
-    result_names = {result["checker_name"] for result in body["results"]}
-    assert {
-        "check_submission_packet",
-        "check_evidence_present",
-        "check_evidence_integrity",
-        "check_required_files",
-        "check_forbidden_files",
-        "check_confidentiality_attestation",
-    }.issubset(result_names)
-    assert any(
-        result["checker_name"] == "check_evidence_integrity"
-        and result["would_block_if_submitted"] is True
-        for result in body["results"]
-    )
-
-    async with db_session.get_session_factory()() as session:
-        rows = (await session.execute(CheckerRun.__table__.select())).all()
-    assert rows == []
-
-
-async def test_pre_submit_chunk8_matrix_flags_missing_evidence_and_warning(
-    checker_client: AsyncClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project = await create_active_project(checker_client)
-    started_task = await create_started_task(checker_client, project["id"], monkeypatch)
-    payload = complete_submission_payload()
-    payload["evidence_items"] = []
-    payload["summary"] = "Completed the proof evaluation with a placeholder note."
-
-    response = await checker_client.post(
-        f"/api/v1/tasks/{started_task['id']}/submission-precheck",
-        headers=auth_headers(),
-        json={"submission": payload},
-    )
-
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["authoritative"] is False
-    assert body["status"] == "failed"
-    assert body["eligible_to_submit"] is False
-    result_by_name = {result["checker_name"]: result for result in body["results"]}
-    assert result_by_name["check_evidence_present"]["status"] == "failed"
-    assert result_by_name["check_evidence_present"]["would_block_if_submitted"] is True
-    assert result_by_name["check_required_files"]["status"] == "passed"
-    assert result_by_name["check_forbidden_files"]["status"] == "passed"
-    assert result_by_name["check_confidentiality_attestation"]["status"] == "passed"
-    assert result_by_name["check_low_quality_generated_artifacts"]["status"] == "warning"
-    assert (
-        result_by_name["check_low_quality_generated_artifacts"][
-            "would_block_if_submitted"
-        ]
-        is False
-    )
-
-    async with db_session.get_session_factory()() as session:
-        rows = (await session.execute(CheckerRun.__table__.select())).all()
-    assert rows == []
-
-
 async def test_locked_submission_checker_run_persists_results_and_allows_review(
     checker_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -3440,17 +3162,9 @@ async def test_checker_revision_routing_and_reads_for_retained_packet_versions(
     )
     started_task = await create_started_task(checker_client, project["id"], monkeypatch)
     v1_payload = complete_submission_payload()
-    precheck_v1 = await checker_client.post(
-        f"/api/v1/tasks/{started_task['id']}/submission-precheck",
-        headers=auth_headers(),
-        json={"submission": v1_payload},
-    )
-    assert precheck_v1.status_code == 200, precheck_v1.text
-    assert precheck_v1.json()["eligible_to_submit"] is True, precheck_v1.text
 
-    # This fixture isolates post-submit routing from intake. The valid packet above
-    # is the intake control; the retained packet below deliberately lacks the
-    # required evidence key so the canonical required checker reports a failure.
+    # This fixture isolates post-submit routing from intake. The retained packet
+    # deliberately lacks the required evidence key so its required checker fails.
     v1_payload["evidence_items"][0]["metadata"]["policy_key"] = "other_evidence"
     v1_id = await seed_finalized_submission_for_checker_test(
         started_task["id"], v1_payload,
@@ -3555,11 +3269,6 @@ async def test_checker_revision_routing_and_reads_for_retained_packet_versions(
     await seed_task_test_actor("worker-two")
     set_dev_actor(monkeypatch, roles="worker", subject="worker-two")
     denied_before = await task_side_effect_snapshot(started_task["id"])
-    denied_precheck = await checker_client.post(
-        f"/api/v1/tasks/{started_task['id']}/submission-precheck",
-        headers=auth_headers(),
-        json={"submission": complete_submission_payload("sha256:intruder-package")},
-    )
     denied_submit = await checker_client.post(
         f"/api/v1/tasks/{started_task['id']}/submissions",
         headers=auth_headers(),
@@ -3577,7 +3286,6 @@ async def test_checker_revision_routing_and_reads_for_retained_packet_versions(
         f"/api/v1/tasks/{started_task['id']}/audit-events",
         headers=auth_headers(),
     )
-    assert denied_precheck.status_code == 404
     assert denied_submit.status_code == 405
     assert denied_submissions.status_code == 404
     assert denied_run.status_code == 404
@@ -3588,13 +3296,6 @@ async def test_checker_revision_routing_and_reads_for_retained_packet_versions(
     v2_payload = complete_submission_payload("sha256:package-v2")
     v2_payload["summary"] = "Completed the proof evaluation with task-specific final notes."
     v2_payload["artifact_hash_manifest"][0]["hash"] = "sha256:answer-v2"
-    precheck_v2 = await checker_client.post(
-        f"/api/v1/tasks/{started_task['id']}/submission-precheck",
-        headers=auth_headers(),
-        json={"submission": v2_payload},
-    )
-    assert precheck_v2.status_code == 200, precheck_v2.text
-    assert precheck_v2.json()["eligible_to_submit"] is True
     v2_id = await seed_finalized_submission_for_checker_test(
         started_task["id"], v2_payload, predecessor_id=v1_id,
     )
@@ -4061,12 +3762,6 @@ async def test_checker_endpoints_reject_unassigned_worker_and_fake_result_payloa
     payload["results"] = [{"checker_name": "fake", "status": "passed"}]
 
     rejected_payload_snapshot = await task_side_effect_snapshot(started_task["id"])
-    fake_precheck = await checker_client.post(
-        f"/api/v1/tasks/{started_task['id']}/submission-precheck",
-        headers=auth_headers(),
-        json={"submission": payload},
-    )
-    assert fake_precheck.status_code == 422
     fake_submission = await checker_client.post(
         f"/api/v1/tasks/{started_task['id']}/submissions",
         headers=auth_headers(),
@@ -4110,12 +3805,6 @@ async def test_checker_endpoints_reject_unassigned_worker_and_fake_result_payloa
 
     await seed_task_test_actor("worker-two")
     set_dev_actor(monkeypatch, roles="worker", subject="worker-two")
-    denied = await checker_client.post(
-        f"/api/v1/tasks/{started_task['id']}/submission-precheck",
-        headers=auth_headers(),
-        json={"submission": complete_submission_payload()},
-    )
-    assert denied.status_code == 404
 
     set_dev_actor(monkeypatch, roles="auditor", subject="auditor-subject")
     no_role_existing = await checker_client.get(

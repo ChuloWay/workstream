@@ -1,6 +1,7 @@
 # WS-POL-003 — Unified project-guide compilation
 
-Latest completed POL behavior: [POL-07A pre-submit attempt recovery](WS-POL-003-07A.md),
+Latest completed POL behavior: [POL-07B checker phase service](WS-POL-003-07B.md),
+building on [POL-07A pre-submit attempt recovery](WS-POL-003-07A.md),
 building on [POL-06B public post-policy review](WS-POL-003-06B.md),
 building on [POL-06A post-policy custody](WS-POL-003-06A.md),
 building on [POL-05B public manager operations](WS-POL-003-05B.md),
@@ -21,11 +22,14 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   approval custody and correction successors; public exact manager review,
   pre-submission approval and manual dispatch through the same runtime; automatic
   post-policy derivation, public complete policy read, separate approval and correction;
-  ART-owned pre-submit reservation and completed evidence recovery without rerunning checks.
+  ART-owned pre-submit reservation and completed evidence recovery without rerunning checks;
+  one internal command per phase and removal of the standalone JSON precheck.
+  Production post-submit phase execution remains unavailable.
 - Intent: compile one locked guide and its policies into authoritative,
   versioned project behavior without circular subsystem authority.
-- Next usable boundary: POL-07 single checker-service port, consuming the
-  completed POL-07A ART attempt prerequisite. POL-06B public
+- Next usable boundary: CP06 selected ContributionPolicy validation, then CP07
+  guide binding and AUTH-12H activation. POL-07B consumes the completed POL-07A
+  ART attempt prerequisite and ARCH-04A value contracts. POL-06B public
   policy review and automatic derivation use completed
   [AUTH-12G authority](../WS-AUTH-001/WS-AUTH-001-12G.md). POL-05B connects manager review, pre-submit
   approval and manual correction dispatch to AUTH-12F4 and POL-05A.
@@ -72,8 +76,9 @@ POL-05/06 and AUTH-12F4/12G deliver public proposal and post-policy visibility,
 separate approvals and shared corrections. Automatic derivation and recovery
 consume committed upstream approvals while finalized setup remains immutable.
 
-1. POL-07 facade consumes independent ARCH-04A registered-capability proof;
-   ARCH-04C alone owns durable post-submit persistence. AUTH-12H activates
-   CP07's hidden complete guide command without a Task/CheckerRun dependency.
+1. CP06 validates the selected ContributionPolicy; CP07 binds that exact version
+   to the complete guide. AUTH-12H activates CP07's hidden command without a
+   Task/CheckerRun dependency. POL-07B supplies the internal phase service;
+   ARCH-04C alone owns later durable post-submit persistence.
    Remove obsolete owner code in each replacement chunk; no compatibility or
    deferred duplicate implementation is permitted.

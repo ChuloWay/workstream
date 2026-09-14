@@ -304,8 +304,8 @@ Workstream default submission artifact rules require:
   `package_hash`, and `artifact_hash_manifest` fields together so checkers
   consume Workstream artifact bindings only; the transitional `artifact_hash`
   column is handled separately by a schema-removal migration after every
-  reader uses exact binding/content identity. POL-07 removes the standalone
-  caller-owned precheck when connecting the single checker-service port
+  reader uses exact binding/content identity. POL-07B removes the standalone
+  caller-owned JSON precheck and connects the internal checker phase service
 - no credentials, signed URLs, query strings, raw local filesystem paths, or token-bearing references
 - narrowly high-confidence sensitive-file exclusions such as `.env`, `.git`,
   exact known credential/private-key files, `.pem`, and `.key`; broad
@@ -317,6 +317,20 @@ The hidden pre-submit executor consumes one exact effective plan under ART
 scratch custody. It validates the commitment, inspection, semantic manifest and
 change-gate facts and returns bounded entry results. ART owns the immutable
 pre-submit evidence; these results are separate from post-submit CheckerRuns.
+
+POL-07B composes exactly two internal commands, `evaluate_pre_submission` and
+`evaluate_post_submission`. Hidden preparation calls the pre command once after
+reservation commits, including completed replay. The composition passes the
+same opaque reservation to the same ART evidence owner; it clears the consumed
+prepared authorization and opens no transaction before ART's existing executor
+obtains fresh authority. Replay returns ART's canonical result unchanged.
+
+The post command validates and delegates CHECKER's closed value contract.
+Production explicitly uses `UnavailablePostSubmissionExecution`; this does not
+install durable post-submit execution, authorize material reads, or prove attempt and
+currentness ownership. ARCH-04B/04C/04D/04E own that cutover. Existing post-submit
+run and history consumers remain until their replacement lands; the facade
+neither wraps their execution nor adds another policy compiler.
 
 POL-07A commits an ART attempt reservation after bounded ZIP inspection and
 before invoking any checker. Only the original request can consume the winning
@@ -356,8 +370,8 @@ bundle hash. It runs inside continuous submission-bundle preparation before
 Workstream creates a submission. ART retains bounded status, eligibility and
 pass/fail/warning results. The existing hidden route returns only the code
 `pre_submission_checker_failed`; structured public intake feedback remains
-pending. The standalone JSON preflight remains an obsolete caller scheduled for removal
-by POL-07 facade integration; it is not authoritative intake evidence. Broader
+pending. The standalone JSON precheck and its exclusive implementation are removed
+by POL-07B. Broader
 Submission caller migration remains WS-ARCH-001-02I; this result is not a review decision value.
 Pre-submit results do not create durable `CheckerRun` records, do not move a
 task to `review_pending`, and do not return review decision values: `accept`,
@@ -675,7 +689,7 @@ The checker interface is async-first from the start so storage reads, external
 checks, and later agent evaluation do not require a contract rewrite.
 
 Background checker execution uses Celery. FastAPI background tasks are not the
-Workstream product-job boundary. Request-bound pre-submit feedback can remain
+Workstream product-job boundary. Request-bound pre-submit evaluation can remain
 fast and deterministic because it runs before submission creation, but any
 long-running setup or post-submit checker work must go through the durable
 worker boundary.

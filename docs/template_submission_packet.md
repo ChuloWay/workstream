@@ -58,9 +58,9 @@ outer ZIP in bounded scratch before creating the submission. The existing hidden
 public intake feedback remains pending. Failed preparation creates no
 submission row, no submission version, and no submission-created audit event,
 and does not return review decision values: `accept`, `needs_revision`, or
-`reject`. POL-07 removes the standalone preflight endpoint when connecting the single
-checker-service port. Broader Submission caller migration remains WS-ARCH-001-02I;
-the standalone endpoint is not authoritative intake evidence for this packet.
+`reject`. POL-07B connects the internal checker phase service and removes the
+standalone JSON precheck. Broader public Submission caller migration remains
+WS-ARCH-001-02I.
 
 The hidden default phase first validates ART's server-generated commitment,
 semantic manifest, change result, and one sealed scratch projection. Its

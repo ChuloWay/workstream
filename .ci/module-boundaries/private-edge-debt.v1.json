@@ -314,24 +314,6 @@
       "repair_owner": "WS-ARCH-001-04"
     },
     {
-      "source_file": "backend/app/modules/checkers/runner.py",
-      "target_module": "tasks",
-      "imported_private_path": "app.modules.tasks.models",
-      "repair_owner": "WS-ARCH-001-03"
-    },
-    {
-      "source_file": "backend/app/modules/checkers/runner.py",
-      "target_module": "tasks",
-      "imported_private_path": "app.modules.tasks.schemas",
-      "repair_owner": "WS-ARCH-001-03"
-    },
-    {
-      "source_file": "backend/app/modules/checkers/schemas.py",
-      "target_module": "tasks",
-      "imported_private_path": "app.modules.tasks.schemas",
-      "repair_owner": "WS-ARCH-001-03"
-    },
-    {
       "source_file": "backend/app/modules/checkers/service.py",
       "target_module": "projects",
       "imported_private_path": "app.modules.projects.models",
@@ -371,12 +353,6 @@
       "source_file": "backend/app/modules/checkers/service.py",
       "target_module": "tasks",
       "imported_private_path": "app.modules.tasks.repository",
-      "repair_owner": "WS-ARCH-001-03"
-    },
-    {
-      "source_file": "backend/app/modules/checkers/service.py",
-      "target_module": "tasks",
-      "imported_private_path": "app.modules.tasks.schemas",
       "repair_owner": "WS-ARCH-001-03"
     },
     {

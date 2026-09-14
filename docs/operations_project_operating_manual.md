@@ -342,9 +342,9 @@ Before locking a submission packet:
 - effective project submission artifact policy is loaded
 - generated project pre-submit checker policy runs
 - failed preparation currently returns only `pre_submission_checker_failed` through the hidden route; ART retains bounded results and structured public feedback remains pending the canonical public intake cutover
-- POL-07 removes the non-authoritative standalone preflight endpoint when
-  connecting the single checker-service port; broader Submission caller
-  migration remains WS-ARCH-001-02I
+- POL-07B removes the standalone JSON precheck; the hidden preparation
+  flow uses one internal pre-submit phase command with ART-owned evidence.
+  Broader public Submission caller migration remains WS-ARCH-001-02I
 - no submission row is created until blocking pre-submit checks pass
 - successful submission creation stamps the immutable submission boundary and queues the Celery pre-review gate
 - the intended Operator repair/requeue operation for an already locked submission

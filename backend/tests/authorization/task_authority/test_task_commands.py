@@ -143,7 +143,7 @@ async def test_project_grant_drives_claim_start_and_current_action_hints(task_cl
     assert context.status_code == 200, context.text
     assert context.json()["lifecycle"]["next_actions"] == []
     assert context.json()["lifecycle"]["can_submit"] is False
-    assert context.json()["lifecycle"]["can_run_pre_submit_check"] is False
+    assert "can_run_pre_submit_check" not in context.json()["lifecycle"]
 
     async with db_session.get_session_factory()() as session:
         assert (

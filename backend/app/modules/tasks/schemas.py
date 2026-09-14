@@ -261,7 +261,6 @@ class TaskWorkerLifecycleContext(BaseModel):
 
     status: str
     assigned_to_current_actor: bool
-    can_run_pre_submit_check: bool
     can_submit: bool
     next_actions: list[str]
 
