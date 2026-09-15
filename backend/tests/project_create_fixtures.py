@@ -433,3 +433,13 @@ async def grant_fixture_admin_role(session, actor_id, *, role="project_manager",
     session.add(grant)
     await session.flush()
     return grant
+
+
+async def activate_retained_project_for_test(connection, project_id):
+    """Arrange only the retained Project prerequisite in an owned test database."""
+    async with suspend_historical_product_custody(
+        connection, table="projects", triggers=("project_activation_custody",),
+    ):
+        await connection.execute(
+            text("update projects set status='active' where id=:project"), {"project": str(project_id)},
+        )

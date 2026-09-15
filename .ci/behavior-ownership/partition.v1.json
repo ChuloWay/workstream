@@ -45,6 +45,10 @@
       "target": "backend/app/adapters/project_agents/provider_resilience.py"
     },
     {
+      "group": "lifecycle",
+      "target": "backend/app/adapters/projects/contribution_validation.py"
+    },
+    {
       "group": "shared",
       "target": "backend/app/api/deps/api_controls.py"
     },
@@ -814,6 +818,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/guide_activation.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/projects/api/guide_compilation.py"
     },
     {
@@ -875,6 +883,14 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/projects/document_upload.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_activation/custody.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_activation/service.py"
     },
     {
       "group": "lifecycle",
@@ -1293,7 +1309,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "8607985116c78cd472248b1384a0dbc35727b57f7ca7323eb08193ea5ee0f182",
+  "authority_digest": "32afa8788f550051a9050c36e6244342323c9238d880adbe3671804d4d8d40f6",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

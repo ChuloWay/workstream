@@ -36,7 +36,8 @@ actual Task/Submission/CheckerRun is required for activation.
 
 - PROJECTS `api/guide_activation.py` and a focused `guide_activation/` owner
   package for contracts, operation custody, repository and service; PROJECTS
-  models/schemas/readiness/read composition, existing guide mutation ledger and
+  models/schemas/readiness/read composition, canonical Project row-lock refresh,
+  shared owner-local catalogue comparison, existing guide mutation ledger and
   repository, and exact adapter root wiring.
 - A PROJECTS-owned local CON validation contract and application adapter using
   only CON's public API; existing CHECKERS public planners/catalogues.
@@ -49,7 +50,7 @@ actual Task/Submission/CheckerRun is required for activation.
   Retained PaymentPolicy persistence and downstream economic consumers remain
   until their own replacement; this command never uses them.
 - Focused PROJECTS tests, real PostgreSQL custody/concurrency/replay/migration
-  tests and necessary shared prerequisite fixtures, exact lane/debt inventories;
+  tests and necessary shared prerequisite fixtures, exact lane/debt/behavior-ownership inventories;
   canonical guide/AUTH/CON docs, README, roadmap and initiative navigation.
 
 ### Not allowed
@@ -210,12 +211,18 @@ composition, followed by CP08 and task lineage work in the adopted sequence.
   activation without PaymentPolicy/Task/Submission prerequisites, serialized
   binding discovery, exact replay and read/replay after CON retirement.
 - `test_successor.py` proves distinct guide versions, explicit predecessor
-  selection, atomic supersession and replay of both immutable receipts.
+  selection, atomic supersession and replay of both immutable receipts. Its
+  two-session case proves a waiting activation refreshes a cached Project status
+  before recording the immutable prior-state receipt.
 - `test_rejections.py`, `test_admission.py` and `test_direct_sql.py` cover exact
   selector rejection, unavailable/invalid authority, close failure, caller
   rollback, forbidden direct lifecycle writes, missing commit custody and
   immutable binding/audit evidence. The missing-receipt test leaves all product
   pointers and consumed authority present and checks its specific deferred error.
+  Malformed nested receipt tests preserve operational selections and matching
+  command/facts/audit digests, require shape rejection and rollback, then prove
+  the same valid input commits and remains readable. SQL preserves structural
+  receipt validity; CON remains the owner of graph semantics.
 - `test_concurrency.py` observes PostgreSQL blocking edges between activation
   and real Finance-authorized publication, retirement or binding suspension,
   and proves duplicate activation delivery has one effect.

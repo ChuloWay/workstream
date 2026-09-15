@@ -241,3 +241,93 @@ async def test_binding_model_and_migration_share_exact_foreign_keys(clean_postgr
             await connection.run_sync(compare)
     finally:
         await engine.dispose()
+
+
+@pytest.mark.parametrize(("path", "value"), [
+    (("command", "review", "extra"), "unrequested"),
+    (("command", "revision", "extra"), "unrequested"),
+    (("command", "review", "generation"), "1"),
+    (("command", "revision", "generation"), True),
+    (("contribution", "rules_and_definitions_digest"), "not-a-digest"),
+    (("contribution", "adapter_binding_ids"), {}),
+    (("contribution", "adapter_binding_ids"), ["not-a-uuid"]),
+    (("contribution", "adapter_binding_ids"), [None]),
+    (("contribution", "version_number"), "1"),
+    (("command", "guide_mutation_generation"), "as_text"),
+    (("activation_generation",), "as_text"),
+    (("effective_at",), "without_timezone"),
+])
+async def test_database_rejects_unreadable_nested_receipt(
+    clean_postgres_database, monkeypatch, path, value,
+):
+    """A faulty serializer cannot strand a binding with otherwise consistent custody."""
+    from copy import deepcopy
+    from app.core.hashing import canonical_json_hash
+    from app.modules.projects.api.guide_activation import GuideActivationFacts
+    from app.modules.projects.guide_activation.custody import load_guide_activation
+    from app.modules.projects.guide_mutation_repository import GuideMutationRepository
+
+    original_facts = GuideActivationFacts.resource_json
+    original_reserve = GuideMutationRepository.reserve
+    original_complete = GuideMutationRepository.complete
+
+    def corrupt(receipt):
+        body = deepcopy(receipt)
+        parent = body
+        for key in path[:-1]:
+            parent = parent[key]
+        if value == "as_text":
+            parent[path[-1]] = str(parent[path[-1]])
+        elif value == "without_timezone":
+            parent[path[-1]] = parent[path[-1]].removesuffix("+00:00").removesuffix("Z")
+        else:
+            parent[path[-1]] = value
+        return body
+
+    def malformed_facts(self):
+        body = original_facts(self)
+        body["receipt"] = corrupt(body["receipt"])
+        return body
+
+    async def reserve(self, **kwargs):
+        # The real authority participant records this altered facts digest in its
+        # fresh audit decision. Match the command digest too, isolating shape.
+        kwargs["request_digest"] = canonical_json_hash(
+            kwargs["activation_facts_json"]["receipt"]["command"]
+        )
+        return await original_reserve(self, **kwargs)
+
+    async def complete(self, record, *, response_json):
+        body = corrupt(response_json)
+        assert record.request_digest == canonical_json_hash(body["command"])
+        assert record.activation_facts_json["receipt"] == body
+        assert record.resource_context_digest == canonical_json_hash(record.activation_facts_json)
+        assert record.activation_authority_json["resource_context_digest"] == record.resource_context_digest
+        return await original_complete(self, record, response_json=body)
+
+    async with activation_case(clean_postgres_database) as (factory, command, actor, grant, _, _):
+        with monkeypatch.context() as patch:
+            patch.setattr(GuideActivationFacts, "resource_json", malformed_facts)
+            patch.setattr(GuideMutationRepository, "reserve", reserve)
+            patch.setattr(GuideMutationRepository, "complete", complete)
+            with pytest.raises(DBAPIError, match="guide activation nested receipt shape mismatch"):
+                async with factory() as session, session.begin():
+                    await activation_service(session, actor, command, grant).activate(
+                        command, actor=actor, request_id=uuid4()
+                    )
+        async with factory() as session:
+            assert (await session.get(ProjectGuide, str(command.target.proposal.guide_id))).status == "draft"
+            assert await session.scalar(text(
+                "SELECT count(*) FROM guide_mutation_idempotency_records WHERE action_id='project.guide.activate'"
+            )) == 0
+            assert await session.scalar(text(
+                "SELECT count(*) FROM audit_events WHERE action_id='project.guide.activate'"
+            )) == 0
+        # The same exact approved input commits and remains readable after repair.
+        async with factory() as session, session.begin():
+            receipt = await activation_service(session, actor, command, grant).activate(
+                command, actor=actor, request_id=uuid4()
+            )
+        async with factory() as session:
+            guide = await session.get(ProjectGuide, str(command.target.proposal.guide_id))
+            assert await load_guide_activation(session, guide) == receipt

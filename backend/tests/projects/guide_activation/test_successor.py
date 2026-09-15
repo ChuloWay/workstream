@@ -115,3 +115,49 @@ async def test_distinct_guide_supersession_and_historical_replay(clean_postgres_
                     )
                     == expected
                 )
+
+
+async def test_waiting_successor_refreshes_cached_project_status(clean_postgres_database):
+    """A clean identity map cannot preserve draft after another activation commits."""
+    import asyncio
+    from app.modules.projects.models import Project
+    from tests.auth_concurrency_support import wait_for_named_database_lock
+
+    async with activation_case(clean_postgres_database) as (factory, first, actor, grant, _, policy):
+        next_command = await successor_command(factory, first, actor, grant, policy)
+        task = None
+        try:
+            async with factory() as waiting, waiting.begin():
+                cached = await waiting.get(Project, str(first.target.proposal.project_id))
+                assert cached.status == "draft"
+                label = "cp07-cached-project-" + uuid4().hex
+                await waiting.execute(text("select set_config('application_name',:name,true)"), dict(name=label))
+                waiting_pid = await waiting.scalar(text("select pg_backend_pid()"))
+                async with factory() as first_session, first_session.begin():
+                    first_pid = await first_session.scalar(text("select pg_backend_pid()"))
+                    first_receipt = await activation_service(first_session, actor, first, grant).activate(
+                        first, actor=actor, request_id=uuid4()
+                    )
+                    next_command = next_command.model_copy(update={
+                        "expected_previous_active_guide_id": first.target.proposal.guide_id,
+                        "expected_previous_active_guide_generation": first_receipt.activation_generation,
+                    })
+                    task = asyncio.create_task(activation_service(waiting, actor, next_command, grant).activate(
+                        next_command, actor=actor, request_id=uuid4()
+                    ))
+                    await asyncio.wait_for(wait_for_named_database_lock(
+                        clean_postgres_database, label,
+                        expected_waiter_pid=waiting_pid, expected_blocker_pid=first_pid,
+                    ), 10)
+                    assert not task.done()
+                successor = await asyncio.wait_for(task, 20)
+                assert first_receipt.prior_project_status == "draft"
+                assert successor.prior_project_status == "active"
+                assert cached.status == "active"
+            async with factory() as session:
+                guide = await session.get(ProjectGuide, str(next_command.target.proposal.guide_id))
+                assert await load_guide_activation(session, guide) == successor
+        finally:
+            if task is not None and not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)

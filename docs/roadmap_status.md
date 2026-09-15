@@ -421,8 +421,8 @@ Setup receipts remain immutable. The next guide boundary is:
    inputs and an explicitly selected published ContributionPolicyVersion.
    Registered checker implementations and configuration are checked without a
    Task, Submission, completed checker run or live REV implementation.
-   The hidden operation removes PaymentPolicy readiness. Retained PaymentPolicy
-   data and downstream TASK/economic consumers remain until their scoped cutover;
+   The hidden operation replaces superseded economic readiness. Retained economic
+   data and downstream TASK consumers remain until their scoped cutover;
    deleting retained data is not authorized by code cleanup.
 2. **Make tasks claimable from that generation.** TASK locks the complete guide
    and policy context before `READY`. Claim copies it to TaskAssignment; it

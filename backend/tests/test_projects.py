@@ -2825,7 +2825,7 @@ async def test_guide_source_metadata_database_rejects_unattributed_and_mismatche
         persisted = await session.get(ProjectGuide, guide["id"])
         assert persisted is not None
         persisted.version = "stale-lineage-rewrite"
-        with pytest.raises(IntegrityError, match="identity and lineage are immutable"):
+        with pytest.raises(DBAPIError, match="guide lineage is immutable"):
             await session.commit()
         await session.rollback()
 

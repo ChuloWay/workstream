@@ -549,7 +549,7 @@ exact separate pre/post approvals, review/revision selections and the published
 ContributionPolicyVersion become one immutable guide binding. It atomically
 supersedes the explicitly selected prior guide and activates a draft Project.
 Replay preserves the original binding after supersession or policy retirement;
-active-guide reads require that custody. PaymentPolicy is not an activation input.
+active-guide reads require that custody. Activation no longer uses the superseded economic readiness guard.
 Default activation composition remains unavailable. AUTH-12H supplies live manager
 authority next; controlled revision integration remains pending.
 

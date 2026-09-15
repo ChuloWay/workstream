@@ -187,7 +187,7 @@ def _guards():
       CREATE FUNCTION require_guide_activation_custody(operation uuid, new_binding boolean) RETURNS void LANGUAGE plpgsql AS $$
       DECLARE r guide_mutation_idempotency_records%rowtype; g project_guides%rowtype;
         post project_post_policy_operations%rowtype; upstream project_guide_proposal_approvals%rowtype;
-        f jsonb; a jsonb; receipt jsonb; command jsonb; target jsonb; locator jsonb; con jsonb;
+        f jsonb; a jsonb; receipt jsonb; command jsonb; target jsonb; locator jsonb; con jsonb; selection jsonb;
       BEGIN
         SELECT * INTO r FROM guide_mutation_idempotency_records WHERE operation_id=operation;
         SELECT * INTO g FROM project_guides WHERE id=r.resource_id;
@@ -210,6 +210,43 @@ def _guards():
         IF (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(con) k)
            IS DISTINCT FROM ARRAY['adapter_binding_ids','contribution_policy_id','contribution_policy_version_id','project_id','purpose','rules_and_definitions_digest','version_number'] THEN
           RAISE EXCEPTION 'guide activation receipt shape mismatch' USING ERRCODE='23514';
+        END IF;
+        -- The immutable receipt must remain parseable by the closed application contract.
+        -- CON owns graph validation; these checks only preserve its serialized facts.
+        FOR selection IN SELECT command->'review' UNION ALL SELECT command->'revision' LOOP
+          IF jsonb_typeof(selection) IS DISTINCT FROM 'object' THEN
+            RAISE EXCEPTION 'guide activation nested receipt shape mismatch' USING ERRCODE='23514';
+          END IF;
+          IF (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(selection) k)
+               IS DISTINCT FROM ARRAY['generation','policy_hash','policy_id']
+             OR jsonb_typeof(selection->'generation') IS DISTINCT FROM 'number'
+             OR (selection->>'generation') !~ '^[1-9][0-9]*$'
+             OR (selection->>'policy_hash') !~ '^sha256:[0-9a-f]{64}$' THEN
+            RAISE EXCEPTION 'guide activation nested receipt shape mismatch' USING ERRCODE='23514';
+          END IF;
+        END LOOP;
+        IF jsonb_typeof(con->'adapter_binding_ids') IS DISTINCT FROM 'array'
+           OR jsonb_typeof(con->'rules_and_definitions_digest') IS DISTINCT FROM 'string'
+           OR (con->>'rules_and_definitions_digest') !~ '^sha256:[0-9a-f]{64}$'
+           OR jsonb_typeof(con->'version_number') IS DISTINCT FROM 'number'
+           OR (con->>'version_number') !~ '^[1-9][0-9]*$'
+           OR jsonb_typeof(command->'guide_mutation_generation') IS DISTINCT FROM 'number'
+           OR (command->>'guide_mutation_generation') !~ '^[1-9][0-9]*$'
+           OR jsonb_typeof(receipt->'activation_generation') IS DISTINCT FROM 'number'
+           OR (receipt->>'activation_generation') !~ '^[1-9][0-9]*$'
+           OR jsonb_typeof(receipt->'effective_at') IS DISTINCT FROM 'string'
+           OR (receipt->>'effective_at') !~ '(Z|[+-][0-9]{2}:[0-9]{2})$'
+           OR (command->'expected_previous_active_guide_generation' <> 'null'::jsonb AND
+               (jsonb_typeof(command->'expected_previous_active_guide_generation') IS DISTINCT FROM 'number'
+                OR (command->>'expected_previous_active_guide_generation') !~ '^[1-9][0-9]*$'))
+           OR (command->'expected_previous_active_guide_id' = 'null'::jsonb
+               AND command->'expected_previous_active_guide_generation' <> 'null'::jsonb) THEN
+          RAISE EXCEPTION 'guide activation nested receipt shape mismatch' USING ERRCODE='23514';
+        END IF;
+        IF EXISTS (SELECT 1 FROM jsonb_array_elements(con->'adapter_binding_ids') item
+            WHERE jsonb_typeof(item) IS DISTINCT FROM 'string'
+               OR (item #>> '{}') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') THEN
+          RAISE EXCEPTION 'guide activation nested receipt shape mismatch' USING ERRCODE='23514';
         END IF;
         IF r.id IS NULL OR r.action_id IS DISTINCT FROM 'project.guide.activate'
            OR r.status IS DISTINCT FROM 'committed' OR r.setup_run_id IS NOT NULL

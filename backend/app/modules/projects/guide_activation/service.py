@@ -15,7 +15,7 @@ from app.modules.projects.api.guide_activation import (
 )
 from app.modules.projects.api.guide_proposals import GuideProposalError
 from app.modules.projects.api.post_policy import PostPolicySelection
-from app.modules.projects.guide_compilation.proposal_approval import _require_catalogues
+from app.modules.projects.guide_compilation.proposal_approval import require_catalogues
 from app.modules.projects.guide_compilation.proposal_service import GuideProposalService
 from app.modules.projects.guide_mutation_repository import GuideMutationRepository
 from app.modules.projects.post_policy.repository import PostPolicyRepository
@@ -208,7 +208,7 @@ class GuideActivationService:
 
     def _readiness(self, command, locked, policy, post, review, revision):
         target, approval = command.target.proposal, locked.view.approval_custody
-        _require_catalogues(target, self.pre_catalogue, self.post_catalogue)
+        require_catalogues(target, self.pre_catalogue, self.post_catalogue)
         post.compiled.validate_catalogue(self.post_catalogue)
         ProjectService(self.session).validate_activation_ready(
             locked.view.guide,

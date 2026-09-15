@@ -26,9 +26,19 @@ def _config() -> Config:
     return Config(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 
-async def _seed_retained_evidence(tmp_path: Path, database_url: str) -> str:
-    """Create real pre-0021 evidence against its locked project/task lineage."""
-    harness = await _harness(tmp_path, database_url)
+def _seed_retained_evidence(tmp_path: Path, database_url: str) -> str:
+    """Prepare current owners, then insert the actual pre-0021 evidence shape."""
+    async def prepare():
+        harness = await _harness(tmp_path, database_url)
+        await harness.close()
+        return harness
+
+    harness = asyncio.run(prepare())
+    command.downgrade(_config(), PRIOR)
+    return asyncio.run(_insert_retained_evidence(harness))
+
+
+async def _insert_retained_evidence(harness) -> str:
     evidence_id = str(uuid4())
     lineage = harness.request.effective_plan.lineage
     digest = "sha256:" + "a" * 64
@@ -84,7 +94,7 @@ async def _seed_retained_evidence(tmp_path: Path, database_url: str) -> str:
                   'blocking','passed','retained.passed',:digest,:digest)
             """), values)
     finally:
-        await harness.close()
+        await harness.engine.dispose()
     return evidence_id
 
 
@@ -136,8 +146,8 @@ def test_retained_evidence_round_trip_does_not_invent_attempt_or_result_details(
     tmp_path: Path, isolated_database_env: str, migration_lock, migration_schema_at,
 ) -> None:
     with migration_lock():
-        migration_schema_at(PRIOR)
-        evidence_id = asyncio.run(_seed_retained_evidence(tmp_path, isolated_database_env))
+        migration_schema_at("head")
+        evidence_id = _seed_retained_evidence(tmp_path, isolated_database_env)
         original = asyncio.run(_snapshot(isolated_database_env, evidence_id, upgraded=False))
         old_audit = asyncio.run(_audit_privacy_constraint(isolated_database_env))
         assert "pre_submit_checker_input" not in old_audit
@@ -157,8 +167,8 @@ def test_retained_reservation_refuses_downgrade_without_mutation(
     tmp_path: Path, isolated_database_env: str, migration_lock, migration_schema_at,
 ) -> None:
     with migration_lock():
-        migration_schema_at(PRIOR)
-        evidence_id = asyncio.run(_seed_retained_evidence(tmp_path, isolated_database_env))
+        migration_schema_at("head")
+        evidence_id = _seed_retained_evidence(tmp_path, isolated_database_env)
         command.upgrade(_config(), OWN)
 
     async def reserve() -> str:
@@ -218,8 +228,8 @@ def test_new_result_rows_require_valid_order_and_bounded_metadata(
     tmp_path: Path, isolated_database_env: str, migration_lock, migration_schema_at,
 ) -> None:
     with migration_lock():
-        migration_schema_at(PRIOR)
-        retained_id = asyncio.run(_seed_retained_evidence(tmp_path, isolated_database_env))
+        migration_schema_at("head")
+        retained_id = _seed_retained_evidence(tmp_path, isolated_database_env)
         command.upgrade(_config(), OWN)
 
     async def probe() -> None:

@@ -91,7 +91,7 @@ class ProjectRepository:
         if not for_update:
             return await self._session.get(Project, project_id)
         return await self._session.scalar(
-            select(Project).where(Project.id == project_id).with_for_update()
+            select(Project).where(Project.id == project_id).with_for_update().execution_options(populate_existing=True)
         )
 
     async def add_guide(self, guide: ProjectGuide) -> ProjectGuide:
