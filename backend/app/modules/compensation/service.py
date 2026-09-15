@@ -103,6 +103,9 @@ class AdapterBindingService:
         recovered = await self._recover(action, request, digest)
         if recovered is not None:
             return recovered
+        await self._mutation_authorization.lock_adapter_binding_mutation_scope(
+            action=action, actor_profile_id=request.actor_profile_id, project_id=request.project_id,
+        )
         if self._projects is None or self._actors is None:
             raise AdapterBindingUnavailable("compensation_adapter_binding_unavailable")
         binding_id = uuid4()
@@ -176,6 +179,9 @@ class AdapterBindingService:
         recovered = await self._recover(action, request, digest)
         if recovered is not None:
             return recovered
+        await self._mutation_authorization.lock_adapter_binding_mutation_scope(
+            action=action, actor_profile_id=request.actor_profile_id, project_id=request.project_id,
+        )
         binding = await self._lock_transition_binding(request)
         if (
             binding.status != "active"
@@ -217,6 +223,9 @@ class AdapterBindingService:
         recovered = await self._recover(action, request, digest)
         if recovered is not None:
             return recovered
+        await self._mutation_authorization.lock_adapter_binding_mutation_scope(
+            action=action, actor_profile_id=request.actor_profile_id, project_id=request.project_id,
+        )
         if self._projects is None or self._actors is None:
             raise AdapterBindingUnavailable("compensation_adapter_binding_unavailable")
         try:

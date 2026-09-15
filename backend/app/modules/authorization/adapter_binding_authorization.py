@@ -154,6 +154,19 @@ class AdapterBindingAuthorizationAdapter:
         except AuthorizationEvidenceUnavailable as exc:
             raise AuthorizationUnavailable("adapter-binding authority unavailable") from exc
 
+    async def lock_mutation_scope(
+        self, *, action_id, actor_profile_id: UUID, project_id: UUID,
+    ) -> None:
+        """Fence current scoped authority before product locks without authorizing effects."""
+        if not isinstance(actor_profile_id, UUID) or not isinstance(project_id, UUID):
+            raise BoundaryAuthorizationDenied("invalid mutation scope")
+        self._assert_human_actor(actor_profile_id)
+        action = self._action(str(action_id))
+        await self._invoke(self._prepared.lock_mutation_scope(
+            action,
+            PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.PROJECT, project_id=project_id),
+        ))
+
     async def prepare_mutation(
         self, facts: AdapterBindingMutationAuthorityFacts
     ) -> PreparedAuthorizationHandle:

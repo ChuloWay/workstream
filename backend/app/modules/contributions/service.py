@@ -358,6 +358,8 @@ class ContributionPolicyService:
         return await begin_and_recover_policy_mutation(
             repository=self._repository,
             read_authorization=self._read_authorization,
+            mutation_authorization=self._mutation_authorization,
+            action=action,
             request=request,
             request_digest=digest,
             expected_event_type=expected,

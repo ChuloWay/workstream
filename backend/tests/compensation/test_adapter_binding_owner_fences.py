@@ -90,6 +90,10 @@ class _BlockingAuthorization:
     async def authorize_adapter_binding_read(self, request) -> None:
         del request
 
+    async def lock_adapter_binding_mutation_scope(self, **scope) -> None:
+        """Record scope acquisition separately from resource-bound mutation authority."""
+        self.locked_scope = scope
+
     async def prepare_adapter_binding_mutation(
         self, facts: AdapterBindingMutationAuthorizationFacts
     ) -> object:

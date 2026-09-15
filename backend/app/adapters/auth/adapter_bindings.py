@@ -57,6 +57,17 @@ class CompensationAdapterBindingAuthorization:
             expected_lifecycle_version=facts.expected_lifecycle_version,
         )
 
+    async def lock_adapter_binding_mutation_scope(
+        self, *, action: str, actor_profile_id: UUID, project_id: UUID,
+    ) -> None:
+        """Acquire AUTH-owned scope locks before any product owner lock."""
+        try:
+            await self._authorization.lock_mutation_scope(
+                action_id=action_id(action), actor_profile_id=actor_profile_id, project_id=project_id,
+            )
+        except (AuthorizationBoundaryError, ValueError) as exc:
+            raise AdapterBindingUnavailable('compensation_adapter_binding_unavailable') from exc
+
     async def prepare_adapter_binding_mutation(
         self, facts: AdapterBindingMutationAuthorizationFacts
     ) -> object:

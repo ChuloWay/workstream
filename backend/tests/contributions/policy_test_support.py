@@ -43,6 +43,7 @@ class AllowAuthorization:
 
     def __init__(self, actor_id: UUID) -> None:
         self.actor_id = actor_id
+        self.scopes = []
         self.prepared: list[ContributionPolicyAuthorizationFacts] = []
         self.prepared_handles: list[object] = []
         self.consumed: list[ContributionPolicyAuthorizationFacts] = []
@@ -54,6 +55,10 @@ class AllowAuthorization:
         self, request: ContributionPolicyReadRequest
     ) -> None:
         self.reads.append(request)
+
+    async def lock_contribution_policy_mutation_scope(self, **scope) -> None:
+        """Record scope acquisition separately from resource-bound mutation authority."""
+        self.scopes.append(scope)
 
     async def prepare_contribution_policy_mutation(
         self, facts: ContributionPolicyAuthorizationFacts
