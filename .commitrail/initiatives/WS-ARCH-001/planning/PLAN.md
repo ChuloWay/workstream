@@ -27,9 +27,9 @@ checker-remediation boundary before public Submission cutover.
 | POL-06B | POL-06A, AUTH-12G | PROJECTS live post-policy configuration, zero evaluator calls |
 | POL-07 | POL-06B, ARCH-04A, merged ART pre executor | One facade over ART pre and CHECKERS post contracts; no new persistence |
 | [AUTH-12H](../../WS-AUTH-001/WS-AUTH-001-12H.md) | POL-07, CP07, merged AUTH-12B2 | Complete: exact manager authority and internal composition for CP07; ARCH-03A completes internal guide facts; HTTP exposure remains pending |
-| CP08 | CP07 | TASK-owned policy-lineage fields and public facts, no readiness commands |
-| ARCH-03A | AUTH-12H, CP08 | PROJECTS current active-generation public facts |
-| ARCH-03B | ARCH-03A, CP08 | TASK readiness/claim/assignment/Submission command lineage |
+| CP08 | ARCH-03A | TASK initial-attempt lineage schema, public facts and minimal existing writers together |
+| [ARCH-03A](../WS-ARCH-001-03A.md) | AUTH-12H, CP07 | Complete active and exact frozen PROJECTS guide facts before CP08 |
+| ARCH-03B | ARCH-03A, CP08 | Remaining TASK queues, projections and assignment invalidation |
 | ARCH-03C | ARCH-03B, AUTH-OUTBOX-02 | AUTH exact task/assignment activation and integrated readiness proof |
 | CP09 (later cleanup coordination) | All legacy consumers replaced, including CHECKER and public 02I path | Physical economic deletion; not on the allow_review critical path |
 | ARCH-04B | ARCH-04A, POL-07, ARCH-03C, merged ARCH-02H | ART exact stored Submission materialization |
@@ -124,7 +124,7 @@ guide; they never become permissive fallback checks.
 - CON validates that the explicit expected policy version matches the active
   aggregate's current published selector under lock; PROJECTS binds it on
   activation. Existing work retains its frozen version. CP08 owns TASK lineage
-  schema, ARCH-03B writes it. Neither CON
+  schema and minimal existing writers together after ARCH-03A. ARCH-03B owns remaining task surfaces. Neither CON
   nor AUTH calls back into PROJECTS activation.
 - ARCH-04B/04D/04F replace historical ART-06A, XINT-06B/AUTH-14 and XINT-05C
   respectively; those old plans do not open parallel implementation lanes.

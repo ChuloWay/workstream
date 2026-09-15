@@ -1,7 +1,8 @@
 # Chunk Contract: WS-ARCH-001-03A PROJECT Current Generation API
 
-Status: non-executable planning skeleton after AUTH-12H and CP08; POL-08 cleanup remains
-later. Risk: L1. Outcome: PROJECTS exposes immutable current approved unified
+Adopted implementation contract: [ARCH-03A](../../WS-ARCH-001-03A.md).
+
+Status: planned after AUTH-12H and before CP08; POL-08 cleanup remains later. Risk: L1. Outcome: PROJECTS exposes immutable current approved unified
 guide, its exact guide-bound ContributionPolicyVersion, setup, pre-submit and
 post-submit identities/hashes through its public API.
 
@@ -25,8 +26,7 @@ deny. Return contribution, review and revision policy lineage alongside both
 checker policies, not just a ContributionPolicy identifier. CP07 already owns
 activation writes and its response; do not implement them again here.
 
-The complete public internal fact graph includes guide ID/version/activation
-sequence; source snapshot/setup/compilation and result/component identities;
+The complete public internal fact graph includes guide ID/version and CP07 activation operation, per-guide generation and timestamp; source snapshot/setup/compilation and result/component identities;
 artifact/effective/pre/post policy IDs, canonical hashes, required locked bodies
 and catalogue snapshots; review/revision ID-generation-hash triples; and the
 guide-bound ContributionPolicy version plus activation provenance. Fields use
