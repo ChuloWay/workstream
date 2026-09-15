@@ -78,6 +78,29 @@ compatibility paths, unrelated old-code cleanup, weakened CI or tests.
 
 ## Review and human focus
 
+### Owner and proof map
+
+Paths below are relative to `backend/`. New tests are planned implementation
+proof, not claims of execution. PostgreSQL tests use `clean_postgres_database`
+and the existing complete CP07 `activation_case`; no authority guards are mocked
+in that integration layer. Unit custody tests retain the real kernel/PREP while
+substituting only principal storage and audit persistence.
+
+| Owner / exact implementation | Planned proof |
+| --- | --- |
+| `app/modules/authorization/domain/guide_activation.py`: `ProjectGuideActivationResourceContext`, `activation_resource`, `activation_selectors`, `parse_activation_prepare`, `activation_matches` | `tests/authorization/guide_activation/test_context.py`: exact digest parity, independently mismatched resource/locator/receipt, nested invalid model instances |
+| `app/modules/authorization/guide_activation_authorization.py`: `GuideActivationAuthorizationAdapter.lock_activation_scope`, nominal `_PreparedGuideActivation.consume_new/validate_replay` | `tests/authorization/guide_activation/test_prepared.py`: positive consume/replay, invalid caller/locator, sibling action/resource, copied/closed/reused handle, foreign session/root, evidence failure |
+| `runtime.py`: remove old resource class and import replacement in existing union/mapping; `domain/action_groups.py`: `GUIDE_BOUND_PROJECT_MANAGER_ACTIONS`; `kernel.py`: `_prepare_project_manager` | Same PREP tests: wrong role, exact versus system/foreign project scope, suspended actor and revoked link/grant; direct kernel cannot authorize |
+| `prepared.py`: `_PreparedAuthorizationBinding`, `_binding`, `consume`, `validate_replay`; `prepared_proposal_replay.py`: `parse_review_bindings`, `review_context_matches`, `validate_review_replay` | Same PREP tests: selector substitution, one-use replay, original decision substitution, refreshed request and live grant |
+| `domain/resource_digest.py`: `authorization_resource_digest`; `domain/audit_targets.py`: `project_authority_audit_target` | Context tests and existing `tests/projects/guide_activation/test_audit_contract.py`: exact receipt digest and closed, privacy-bounded audit target |
+| `app/adapters/auth/__init__.py`: `guide_activation_authorization`; existing `app/adapters/projects/__init__.py`: `project_guide_activation_port` (consumer, no second operation) | `tests/authorization/guide_activation/test_postgresql.py`: `test_complete_activation_and_live_replay`, `test_live_authority_denial_preserves_draft`, `test_live_activation_keeps_product_readiness_guards`, `test_caller_rollback_removes_activation_evidence` |
+| `catalogue.py`: `_index_actions`; no service allowlist additions | Existing exact active inventory in `tests/authorization/setup_finalization/test_catalogue.py`, all-pairs resource fixture in `tests/test_authorization.py`, new service-denial controls |
+| CP07 service / SQL 0023 unchanged owners | `tests/authorization/guide_activation/test_concurrency.py`: `test_activation_and_revocation_serialize` (both orders, two real DB sessions, observed PostgreSQL waiter/blocker); `test_concurrent_activation_replays_once`; existing CP07 negative chain and supersession tests retained |
+
+Inspection of SQL 0023 confirms action, resource, bounded audit facts and exact
+activation custody already agree with this design. **No migration is expected**;
+real live-composition commit and audit-contract tests must prove that parity.
+
 Before implementation: architecture/reuse and security plan review, including
 import direction, digest parity, lock order and reachable positive/negative
 fixtures. After deterministic checks: focused security, architecture/reuse,
