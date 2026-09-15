@@ -62,8 +62,8 @@ drill intentionally does not load `.env` or make model calls.
 ## What this does not establish
 
 - A working passthrough request does not prove compliance with standard remote
-  MCP authorization. This is deliberately an isolated experiment of that pattern,
-  not a silently adopted replacement for the existing MCP proposal.
+  MCP authorization. The maintainer has selected this custom caller-token
+  integration for WS-MCP-002; clients must support explicit bearer headers.
 - Local HMAC verification needs no Flow network endpoint. Production Workstream
   has separate JWKS/introspection configuration; its network behavior is not
   measured here.
@@ -72,6 +72,7 @@ drill intentionally does not load `.env` or make model calls.
 - One self-profile tool does not certify project permissions, lifecycle changes,
   all Workstream APIs or all MCP clients. No public rollout follows this test.
 
-Keep the [MCP proposal](../../.commitrail/initiatives/WS-MCP-002/OVERVIEW.md)
-and [experiment record](../../.commitrail/changes/mcp-caller-token-experiment.md)
-distinct. This experiment changes no roadmap capability or product exposure.
+Continue through the [MCP initiative](../../.commitrail/initiatives/WS-MCP-002/OVERVIEW.md)
+and [first foundation contract](../../.commitrail/initiatives/WS-MCP-002/WS-MCP-002-01.md).
+The experiment supplies local evidence; independent production packaging and
+deployment verification remain contributor work. No public MCP exposure is claimed.

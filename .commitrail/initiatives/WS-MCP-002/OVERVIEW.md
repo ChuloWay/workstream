@@ -2,8 +2,8 @@
 
 - Disposition: Planned
 - Prepared by: OxVictor
-- Purpose: Review and agreement before implementation
-- Repository baseline reconciled: `a3e4c696`
+- Purpose: Contributor implementation guide with confirmed caller-token design
+- Repository baseline reconciled: `723c88ff125b7692163891a1dea3d7eb81b07cb3`
 - Pinned API handoff baseline: `6feef39834737eed106773fdaed6003561fd021a`
 - Current change: [Combined planning and first-chunk contract](WS-MCP-002-01.md)
 
@@ -29,7 +29,7 @@ I have also reviewed both complete Flow Identity designs. The architecture walkt
 
 The planning PR is reconciled with main `6feef398`, including merged PR #400 and the updated API drill handoff. Public guide proposal review, pre-submission approval, correction and manual dispatch are exposed but outside the fixed 29-operation census and the proposed 27 tools. Guide creation itself has changed and is accounted for in the mapping. Recheck concurrent owner work before implementation; open work is not proof that an API is live.
 
-This is a fresh initiative. Closed contributor MCP PR #149 remains historical design evidence. Its runtime and old contribution process are not the implementation baseline. Main risks are API contract drift, the unresolved credential boundary, exposing hidden capabilities, unsafe mutation retries, and treating future agent support as available.
+Closed contributor MCP PR #149 remains historical evidence, not an implementation baseline. The maintainer has now confirmed the caller-token design in section 5. Main risks are API contract drift, credential leakage, exposing hidden capabilities, unsafe mutation retries, and treating future agent support as available.
 
 ## 3. First Release Scope
 
@@ -57,13 +57,14 @@ User through an MCP client
           |
           v
 Standalone MCP adapter
-  - checks the incoming credential
+  - checks the request header shape, not the token signature
   - validates the selected tool's input
   - calls its fixed Workstream API operation
   - checks and returns the API result
           |
           v
 Workstream API
+  - verifies the forwarded Flow token
   - resolves the caller's identity
   - checks current permissions and resource access
   - applies business rules
@@ -79,39 +80,59 @@ The package will have a few clear responsibilities:
 | Part | Responsibility |
 | --- | --- |
 | Server | Register tools and serve MCP requests using the official SDK |
-| Authentication boundary | Validate incoming credentials and obtain the approved API credential |
+| Credential transport | Read the individual caller's bearer per request and forward it unchanged; Workstream verifies it |
 | Tool contracts | Define accepted inputs, expected outputs, and fixed API mappings |
 | HTTP client | Manage connections, timeouts, declared headers, and bounded responses |
 | Error mapping | Return safe, accurate failures without leaking internal data |
-| Configuration | Validate the API address, identity settings, and deployment limits |
+| Configuration | Validate the trusted API address, transport settings, and deployment limits |
 
-I will use the official Python MCP SDK v2 and verify and lock the exact supported release when implementation starts. The SDK will handle protocol behavior. The intended protocol baseline is `2026-07-28`; supported clients will be recorded and tested explicitly.
+Use the official Python MCP SDK with a pinned package lock. The executed local baseline is MCP SDK 1.29.0 with OpenAI Agents SDK 0.22.2 and Streamable HTTP protocol `2025-11-25`. Start from this tested baseline; verify the selected package release and client/protocol behavior when packaging it. An untested SDK-major or newer protocol is not a prerequisite. This is Streamable HTTP, not the superseded HTTP+SSE transport.
 
 ## 5. Identity and Permissions
 
 Flow Identity will remain responsible for issuing credentials. Workstream will remain responsible for deciding what the caller may do to a particular project or resource.
 
-### Human access in v0.1
+### Confirmed caller-token flow in v0.1
 
-The shared design uses one public Flow issuer and one public key set, called JWKS. Better Auth handles sign-in, consent, and OAuth protocol state. The Rust identity core owns stable subject IDs and final token signing. The MCP adapter consumes that public contract; it will not call the private signer or build another authentication service.
+The maintainer's decision is a thin REST adapter with custom request-level
+authentication. Each protected MCP invocation carries the caller's existing
+Flow-issued Workstream access token in `Authorization: Bearer <token>`.
+The adapter forwards that bearer unchanged to the fixed Workstream API operation.
+Workstream verifies the token, resolves the actor/link, and checks current
+authorization and lifecycle rules. The adapter never calls Flow Identity, obtains
+another token, verifies JWTs locally, or probes a second API to authenticate first.
 
-A registered client signs the human in through Flow. Browser access uses an authorization code with PKCE, and the design also supports a device flow for CLI access. An existing Flow session can avoid another sign-in, but the client still requests an access token for the intended resource. An ID token identifies the user to the client; it is not the credential sent to a product API.
+Missing, duplicate or malformed Authorization headers can be rejected before API
+dispatch. A well-formed bearer with an invalid signature, issuer, audience or
+expiry is rejected by Workstream after dispatch; preserve that denial. Do not
+weaken Workstream's configured verifier to make forwarding succeed.
 
-The proposed issuer is `https://identity.flowresearch.tech`, with one authoritative `/.well-known/jwks.json`. The design explicitly says deployment remains to be established, so these will be verified configuration values before live testing. Clients are preregistered in v0.1. Dynamic client onboarding, UserInfo, and profile/email scopes are deferred.
+The client supplies a fresh request header on every protected call. Connections,
+initialization and discovery never establish a shared authenticated identity.
+Static initialization and tool listing may expose only the fixed public catalogue,
+without product data or permission-dependent results. A later call must still
+supply its own bearer. No cached grant, profile or earlier token authorizes it.
 
-Token checks must follow the agreed Flow profile: signature, trusted issuer, intended audience, access-token type `at+jwt`, `client_id`, admission scopes, `subject_kind=human`, and bounded timestamps. The design limits access tokens to 300 seconds and verifier clock tolerance to 30 seconds. Identity resolution uses stable `(iss, sub)`, not email. The architecture also identifies token-type, client-ID, and maximum-lifetime validation as known Workstream consumer work; I will verify their current status and coordinate any backend gap with its owner.
+This deliberately does **not** implement the standard remote MCP OAuth
+authorization profile, whose token-passthrough restriction differs from this
+design. It supports clients explicitly configured to send the caller's API bearer;
+do not promise compatibility with clients requiring OAuth discovery. Separate
+container deployment does not change this trade-off or require a second identity
+system. A future standards-profile change would need its own explicit design.
 
-For example, a signed-in user may read their own profile but still be denied when creating a project. Likewise, a grant for one project must not allow changes to another project. A scope or a cached list of permissions will not replace Workstream's live authorization checks.
+Tokens stay out of tool arguments, results, URLs, logs and traces. Use only a
+trusted configured Workstream destination, disable redirects and environment
+proxy inheritance, and keep credentials request-local. Public deployment requires
+HTTPS and the deployment bounds in section 7; the local experiment is loopback-only.
+The client and Flow own token acquisition/refresh; the adapter holds no refresh
+token, signing key, issuer/JWKS configuration or privileged fallback credential.
+Workstream's own verification may use JWKS or introspection; this design makes no
+claim that production verification performs zero Flow network calls.
 
-The adapter will validate credentials before dispatching a protected tool. It will not accept a caller-supplied actor ID as a replacement for the authenticated caller. Target actor IDs remain valid inputs where the API explicitly requires them, such as granting another person project access.
-
-One detail needs agreement before implementing authentication: which credential the adapter presents to the Workstream API. The MCP authorization specification requires an access token intended for the MCP resource. We should not assume that an API token can be accepted by the adapter, or that the same token is automatically valid at both services.
-
-The Flow design describes resource-specific tokens but does not settle the separately deployed MCP-to-API credential boundary. It explicitly avoids adding a public token-exchange step in its current identity bridge. I will therefore confirm the resource registration and downstream credential contract with the Flow Identity and Workstream owners before implementing that part. I will not introduce token exchange, invent a shared audience, or treat forwarding the same token as already approved by these documents. The API request must preserve the correct caller without substituting a privileged service identity.
-
-Tokens will remain outside tool arguments, results, URLs, logs, and trace attributes. Credentials will be kept per request so concurrent users cannot share authentication state. Sign-in and refresh belong to the registered client and Flow Identity. The adapter will not store the human's refresh token. The design uses strict refresh rotation without a retry grace period; a lost successful refresh response requires reauthorization rather than blindly retrying the consumed credential.
-
-Issuer suspension and Workstream permission revocation are separate. The design allows an already-issued access token to remain valid until its expiry and allowed clock tolerance, bounded at 330 seconds. The adapter must not promise immediate global logout or suspension enforcement from offline signature checks alone. Workstream still checks its own current grants and identity state on guarded actions.
+An AI-assisted client may use the human's supplied token: the resulting actor is
+that human, exactly as with REST. This does not create separate agent identity or
+delegation. Target actor IDs remain valid only where the fixed API explicitly
+requires them; self-profile reading takes no actor selector.
 
 ### Future agent access
 
@@ -252,7 +273,7 @@ For the 14 keyed mutations, retain the original key, normalized request semantic
 2. **This catalogue does not complete guide setup.** Creating a guide returns `awaiting_documents`; there is no upload tool among the 27. Upload/setup/findings and the four proposal APIs from PR #400 are outside the handed-off 29-operation census. Confirm that the first release deliberately stops at declarations and draft policy configuration, with uploads handled outside MCP. Adding that workflow requires an explicitly agreed scope change.
 3. **Policy omission and selector behavior matter.** Review input/output now includes `human_review_required` and response semantics metadata. Omission of the mode preserves a selected predecessor's setting; ordinary omitted optional fields use backend defaults. Do not fill defaults in the adapter. First creation uses the quoted `"no-current-policy"` selector. A later selector is the quoted policy ID, generation and hash without its `sha256:` prefix, joined by dots, as specified by the [policy owner](../../../backend/app/modules/projects/policy_mutation_service.py). Forward a caller-supplied selector unchanged. The 27 tools have no policy-read operation for recovering a lost/stale selector; confirm an outside-MCP recovery path or separately agree a read tool. Never use a write as discovery.
 4. **Refresh all schemas, not just guide names.** Current validation also includes NUL rejection, qualification limits and revision-policy constraints. Before freezing generated tool JSON, compare the selected operations and their transitive schemas against `/openapi.json` from the exact pinned backend build. The source mapping here is complete; running-server schema capture and MCP conformance execution have not been performed in this planning change. Do not describe the old HTML JSON as the approved current schema.
-5. **Credential handoff remains an owner decision.** The API list does not resolve MCP resource registration, audience or the credential presented to Workstream. Keep the caller's authority intact without inventing token exchange, accepting a wrong-audience token or substituting an administrator identity.
+5. **Credential flow is settled in section 5.** Forward the individual caller's existing Workstream Flow bearer unchanged. No new audience, exchange, adapter-side verifier or administrator identity is introduced; Workstream retains its normal audience checks.
 
 For implementation evidence, reuse [the drill setup](../../../docs/engineering/external-api-drill.md#run) and per-row assertions through an actual MCP client and independently running adapter. Keep health, local bootstrap and service-actor fixture provisioning outside the 27-tool count. Setup may need backend-only calls, but tools must dispatch only their agreed endpoint. Retain direct-API parity checks, state/audit checks, rejection-before-write assertions and same-key recovery. Existing historical backend runs are useful evidence, not proof that the new MCP path or live Flow deployment passes.
 
@@ -262,13 +283,13 @@ For implementation evidence, reuse [the drill setup](../../../docs/engineering/e
 Every protected invocation follows this path:
 
 1. Receive one request on the declared POST Streamable HTTP endpoint.
-2. Validate protocol version, required transport metadata, Origin policy and bearer credential. `Mcp-Method` is required for every MCP request. In this tools-only release, `Mcp-Name` is required for `tools/call` and must match `params.name`; discovery and tool listing do not require it.
+2. Validate the selected protocol's transport metadata, Origin policy and bearer header shape. Use the SDK's negotiated Streamable HTTP revision; do not require headers from an unimplemented later protocol.
 3. Establish caller context for this request only. Shared connection pools must not retain a caller's credentials or actor context.
 4. Resolve the tool from a fixed typed registry. Unknown tools cause no API dispatch.
 5. Validate arguments against the tool's closed input schema.
 6. Select the registry's fixed public API method and route under the configured base URL.
 7. Encode path and query selectors in their declared locations and serialize only the declared model under the typed `body` argument.
-8. Add only adapter-controlled headers: approved downstream credentials, content type, required operation key and `If-Match`, and safe correlation identifiers. Arbitrary authorization, forwarding, host or destination headers are not tool inputs.
+8. Add only adapter-controlled headers: the unchanged request bearer, content type, required operation key and `If-Match`, and safe correlation identifiers. Arbitrary authorization, forwarding, host or destination headers are not tool inputs.
 9. Send one bounded HTTP attempt.
 10. Validate response status, content type, byte size, JSON shape and the declared success or error contract.
 11. Return the structured MCP result, preserving the API's meaning and excluding credentials and internal exceptions.
@@ -295,17 +316,17 @@ I will test the complete route from an MCP client, through the adapter, to a sep
 | --- | --- |
 | Tool catalogue | Exactly the agreed tools and schemas; no unintended tools, resources, or prompts |
 | HTTP mapping | Correct routes, bodies, query parameters, and required headers |
-| Authentication | Invalid, expired, or wrong-audience credentials stop before tool dispatch |
-| Flow token profile | ID tokens, wrong subject kinds, missing required claims, and excessive token lifetimes are rejected under the agreed profile |
+| Authentication | Missing/malformed headers cause no API dispatch; invalid, expired or wrong-audience bearers receive Workstream's denial after dispatch |
+| Flow token profile | Workstream's configured verifier remains authoritative; the adapter neither duplicates nor bypasses its token policy |
 | User isolation | Concurrent callers retain their own credentials and results |
 | Product authorization | Allowed caller succeeds; missing, revoked, and cross-project authority is denied by the real API |
 | Replay and conflict | Same-key retries follow backend behavior; changed payloads and stale policy selectors preserve conflicts |
 | Dependency failures | Timeouts and malformed or oversized responses produce bounded, accurate failures |
 | Privacy | Credentials never appear in results or telemetry; authorized API result fields remain distinct from prohibited diagnostic leakage, as confirmed in the response-data policy below |
-| Key rotation | Trusted new and still-valid retiring keys work within the agreed cache policy; unknown keys or unavailable verification never trigger a fallback signer |
+| Key rotation | Verification and key rotation stay with Workstream; API verification failures never trigger an adapter fallback credential |
 | Independent deployment | Adapter builds and starts separately and reports Workstream unavailability correctly |
 
-The actual Flow Identity integration also needs an agreed test environment, preregistered clients, and credentials for representative callers. Tests using locally signed fixtures will be identified as fixture-based tests, not evidence that the deployed identity service works. Agent support will later need separate tests for missing delegation, human-grant removal, project restrictions, caller attribution, and revoked links that cannot be recreated by reconnecting.
+Deployed integration uses valid caller credentials accepted by the configured Workstream API; it does not require a new MCP identity registration or token exchange. Locally signed fixtures are not certification of the deployed Flow service. Separate agent identity/delegation remains future work.
 
 ### Required conformance suites
 
@@ -314,14 +335,14 @@ The following are acceptance requirements from the review addendum, not claims t
 | Suite | Required proof |
 | --- | --- |
 | 1. Catalogue | Exactly 27 unique tools, 12 reads, 15 mutations, 14 keyed mutations and one fixed binding per tool. No resources, prompts, login tool, generic HTTP tool, hidden route or extra capability. Input and structured-output schemas are complete and self-contained; references resolve locally; closed schemas reject unknown fields. Read-only, destructive, idempotent and open-world annotations match actual behavior. |
-| 2. MCP protocol | Explicit `2026-07-28` support on one POST Streamable HTTP endpoint. Test missing, unsupported and mismatched `MCP-Protocol-Version`; `Mcp-Method` required for every request and matching its method; `Mcp-Name` required for `tools/call` and matching `params.name`; positive `server/discover` and `tools/list` cases without `Mcp-Name`, and negative tool-call cases with missing or mismatched names; invalid present Origin; Accept and content-type rules. Test unknown methods/tools, malformed JSON-RPC, notifications, cancellation and bounded SSE according to the selected revision. No unapproved legacy GET event stream, session ID, DELETE session endpoint or resumable stream. `tools/list` is deterministic across clients and restarts. |
-| 3. OAuth and Flow | Publish protected-resource metadata for the canonical MCP resource. Missing or invalid bearer gets the correct 401 challenge. Validate the full Flow profile. Distinguish safe failures for wrong issuer/audience, ID token, expired or premature token, malformed token, unknown key and verifier/JWKS unavailability. Prove current/retiring-key cache behavior, stable issuer/subject resolution and concurrent caller isolation across credentials, results, actor context and telemetry. Protected dispatch is incomplete until the downstream credential contract is approved and tested. |
+| 2. MCP protocol | Test the selected Streamable HTTP revision and actual supported clients: initialize, initialized notification, tools/list and tools/call; protocol negotiation, Origin, Accept/content type, malformed JSON-RPC, unknown tools/methods, cancellation and request/response limits. First foundation is stateless, with no authenticated session or resumable event stream. Catalogue is fixed across callers/restarts. Do not claim newer protocol features from SDK transport success. |
+| 3. Caller-token transport | Exact per-request bearer forwarding, no JWT/JWKS verifier or extra authentication API request. Missing/malformed headers do not dispatch; Workstream denies invalid signature, issuer, audience, expiry and premature tokens. Prove first admission grants no authority, concurrent/alternating caller isolation, no retained credential on a later missing-token request, no redirects/environment-proxy leakage, and safe API denial propagation. This custom integration does not publish OAuth discovery as if that profile were implemented. |
 | 4. All tool bindings | At least one positive wire-level case per tool proving exact method, encoded path, query omission/defaults, typed body, headers, successful status and structured response, with no extra API call. Cover both permitted project-response projections and every maximum-valid bounded input. Mock assertions support this proof but do not replace the release drill. |
 | 5. Real authorization and lifecycle | Use the real API and PostgreSQL path. Prove first human profile/link provisioning grants no authority; self-edit remains self-only; missing authority, wrong administrative role, wrong scope and cross-project access are denied. Revoked grants and inactive actors/links stop subsequent actions. Preserve administrative self-grant/self-revoke guards and final effective Access Administrator protection. Contributor/admin projections must not leak into one another. Workstream guards and audit remain authoritative. |
 | 6. Replay and concurrency | Same key and identical payload follows canonical replay; changed input conflicts. Concurrent duplicates match direct-API outcomes. Both policy writes preserve stale `If-Match` conflicts. Lost responses after possible commit report uncertainty without claiming rollback. No automatic mutation retry. Client restart preserves caller-retained keys, cursors, grant/resource IDs and policy selectors. |
 | 7. Network failures | Bound connection refusal, DNS/TLS failures, connect/read/total/cancellation timeouts, applicable API 429/401/403/404/409/412/422/5xx responses, malformed JSON, wrong content type, schema-invalid success and oversized responses. Test API failure during a call and adapter shutdown with in-flight work. Never claim rollback of a possibly committed write. |
 | 8. Privacy and observability | No credentials or authorization headers in results, logs, traces, exceptions, metric labels or URLs. Do not echo raw arguments or sensitive bodies into diagnostics. Profile data, guide content, reasons and cursor payloads must not enter telemetry. Allow only bounded tool name, fixed method/route template, duration, response size, safe status/error code and approved correlation IDs. Return the declared API fields the caller is authorized to receive, even when a field value also appeared in the request. Prove authorized profile/guide/cursor results are preserved while credentials and sensitive diagnostic content are excluded. Workstream remains audit authority. |
-| 9. Independent deployment | Build, install and start without the backend package. Run in a separate process/container using only the configured public API. Invalid API URL or identity configuration fails startup safely. API unavailability affects readiness/calls without crashing catalogue discovery. No Garden-specific or client-name conditional behavior. Two MCP clients see the same catalogue and are independently authorized. Authenticated success and error responses carry `Cache-Control: no-store`; verify proxy/CDN preservation and no cross-caller reuse through the deployed HTTP path. |
+| 9. Independent deployment | Build, install and start without the backend package. Run in a separate process/container using only the configured public API. Invalid API URL or transport configuration fails startup safely. API unavailability affects readiness/calls without crashing catalogue discovery. No client-name-specific behavior. Two MCP clients see the same catalogue and are independently authorized. Authenticated success and error responses carry `Cache-Control: no-store`; verify proxy/CDN preservation and no cross-caller reuse through the deployed HTTP path. |
 | 10. Contract drift | Use the source mapping in section 6 and jointly freeze the exact 27-tool definitions against the pinned running backend schemas, including routes, schemas, headers, statuses, authorization and API drill evidence. CI must fail on route, method, input/output, header, status, annotation or capability drift. Regeneration must not silently accept a changed contract. Changes require deliberate review and renewed proof. |
 
 For annotations, a logical read is not automatically side-effect-free: first profile access may provision identity records. The annotation tests must reflect the actual API operation rather than its HTTP method alone. The implementation contract will trace the requested protocol assertions to the selected SDK and protocol sources; any mismatch must be raised for review before freezing behavior.
@@ -345,13 +366,13 @@ The maintainer's [clarification](https://github.com/Flow-Research/workstream/pul
 
 ## 9. Chunk Map and PR Boundaries
 
-Before runtime work, jointly review the completed source mapping and its schema/workflow differences, capture the pinned running backend schemas, freeze the tool definitions, and agree the MCP-to-API credential contract. The API-list handoff is complete; the mapping does not itself settle those remaining decisions. Then proceed through the following proposed implementation PRs:
+The caller-token decision is settled. Continue with the first profile binding below: capture its current OpenAPI schema and custom semantics, package the proven path, and test it. Reconcile each later binding with its public API when that chunk starts; do not reopen credential architecture or require all 27 implementations before the first one.
 
 The following stable IDs replace the four broad headings. Each row is one intended implementation PR and one observable outcome. Paths are proposed ownership under the new `mcp_server/` package, not claims that those files exist. Tool names below omit only the common `workstream_` prefix. Every one of the 27 names in section 6 appears exactly once. All chunks also own their matching combined change record and directly affected tests/docs; they do not own backend product behavior.
 
 | Change ID and outcome | Depends on | Owned modules and exact new tools | PR acceptance evidence and next usable boundary |
 | --- | --- | --- | --- |
-| WS-MCP-002-01: one authenticated self-profile read through an independently installed adapter | Catalogue/schema agreement and credential decision below; [first contract](WS-MCP-002-01.md) | Package/container/configuration, `workstream_mcp/{server,auth,http_gateway,errors,schemas}.py`, `tools/profile.py`; `profile_get` only | Package-only install/container, protocol/credential isolation/privacy tests, real profile API parity and rejected-token no-dispatch proof. Leaves one protected path and test harness for later bindings, not 27 working tools. |
+| WS-MCP-002-01: one authenticated self-profile read through an independently installed adapter | Selected profile schema capture and confirmed section 5 design; [first contract](WS-MCP-002-01.md) | Package/container/configuration, `workstream_mcp/{server,auth,http_gateway,errors,schemas}.py`, `tools/profile.py`; `profile_get` only | Package-only install/container, protocol/credential isolation/privacy tests, real profile API parity, missing-header no-dispatch and invalid-token API-denial proof. Leaves one protected path and test harness for later bindings, not 27 working tools. |
 | WS-MCP-002-02: own profile editing and project authorization context | 01 | `tools/profile.py`, `tools/context.py`, their schemas/registry entries; `profile_update`, `authorization_context_get` | Profile omission/null/normalization/atomic rejection, unkeyed PATCH and no automatic retry; exact-project context, revoked/foreign access and safe data tests. Leaves complete self-service surface. |
 | WS-MCP-002-03: inspect authorization definitions and administrative projections | 01 | `tools/access_reads.py`; `permissions_list`, `admin_roles_list`, `admin_grants_list`, `actor_admin_grants_list`, `actor_get`, `actor_identity_link_get` | Frozen catalogue/projection fields, pagination/cursor behavior, admin/audit/ordinary denial matrix and no contact/subject leakage. Leaves administrative readback for mutation proofs. |
 | WS-MCP-002-04: issue and revoke administrative grants | 03 | `tools/admin_grants.py`; `admin_grants_issue`, `admin_grants_revoke` | Exact receipts/history, scope and self-grant checks, last-admin protection, key mismatch/replay/current-authority checks and lost-response handling. Leaves HTTP-owned administrative authority changes. |
@@ -369,26 +390,37 @@ Every binding chunk includes its route/body/query/header/status tests, public AP
 ### Decisions before dependent code
 
 - **Catalogue and schemas:** jointly agree the 27-name mapping and its corrected guide/policy schemas. Capture selected operations and transitive schemas from `/openapi.json` of the pinned backend, with source SHA and explicit differences if a newer runtime target is selected. Main reconciliation alone does not silently replace the handoff baseline or approve drift.
-- **Credential contract:** record MCP resource/audience, downstream Workstream resource/audience, the owner-supported credential mechanism, preservation of human caller identity, issuer/JWKS/client configuration and the test environment. Do not assume forwarding, exchange or shared audience. This must be settled before 01 implements protected dispatch.
+- **Credential contract (settled):** use section 5 unchanged caller-token forwarding. No further resource registration, token exchange or owner credential decision is required for this design.
 - **Workflow limits:** agree that document upload/setup completion and recovery of lost/stale policy selectors remain outside this catalogue. No automatic extra endpoint, hidden route or write-as-read workaround.
 
-The first record is authored here as a proposed contract, with runtime acceptance still unchecked. Its implementation PR will update that same `WS-MCP-002-01.md` record, not introduce a second intent/plan/risk bundle. Before each later chunk starts, create its own combined record from the current template. The earlier planning record is consolidated into this first contract so this planning PR and each future implementation PR contain exactly one change record.
+The first record now includes the executed local experiment and the still-planned production foundation. Its implementation PR will update that same `WS-MCP-002-01.md` record, not introduce a second intent/plan/risk bundle. Before each later chunk starts, create its own combined record from the current template. The earlier planning and unpublished experiment records are consolidated here; each PR contains one change record.
 
 I will follow the current Commitrail process: one initiative overview for this multi-PR effort and one change record for each implementation PR. Each record will state the allowed files, non-goals, acceptance criteria, risks, and required review. Open PRs will be checked for overlapping changes before each boundary starts.
 
 Review will follow the repository's risk routing, including security and architecture for the foundation. Relevant lint, type checks, tests, coverage requirements, and repository gates will be preserved. Roadmap impact will be assessed in the same PR. GitHub will hold current checks and approvals; the repository records will hold durable decisions. Merge remains a human decision.
 
-## 10. Points for Your Review
+## 10. Contributor continuation
 
-The addendum confirms the human-only, 27-tool release and independently packaged deployment within this repository. The remaining questions are:
+Start with [WS-MCP-002-01](WS-MCP-002-01.md) and the
+[executable local drill](../../../experiments/mcp_caller_token/README.md).
+The local proof passed 15 named real-process checks and 24 focused tests using
+unmodified Workstream and isolated PostgreSQL. Three distinct callers include
+first admission through MCP; concurrent clients and alternating credentials on
+one HTTP client preserve identity and denial. These tests use local signed
+fixtures, not a deployed Flow issuer or a live model call.
 
-1. How should the separately deployed MCP adapter and Workstream API be registered as resources, and which credential should the adapter use for the API call? Which test environment and preregistered MCP clients should prove that contract?
+Package only `workstream_profile_get` first: closed empty input, fixed
+`GET /api/v1/actors/me`, and the exact authorized `ActorProfileSelfResponse`.
+Capture the current profile schema and preserve API semantics, including first
+admission without grants. The existing experiment is a reproducible starting
+point, not the production package: independent installation/container execution,
+deployment hardening, full response-schema validation, lifecycle integration and
+supported-client evidence remain required by the first contract.
 
-2. Can we freeze the mapped 27 names with the corrected guide/policy schemas, leaving document uploads and lost-policy-selector recovery outside MCP for this release? These workflow limits are detailed in section 6; adding tools needs explicit agreement.
-
-The public API list is received and the source mapping is complete. Joint catalogue review remains. Privacy, conditional MCP headers and `no-store` response caching are settled by the linked clarification.
-
-The proposal follows the documents' human-only v0.1 baseline and keeps the future agent extension explicit. The chunk map and first contract are ready for review. Runtime work starts only after the relevant catalogue, schema and credential decisions are recorded; this proposal is not merge approval.
+Keep the 27-tool inventory and later mutation boundaries. Guide uploads/setup
+completion and missing policy-selector recovery remain outside that inventory;
+do not silently add tools to repair those workflow limits. GitHub permissions
+govern contribution; these technical prerequisites are not another approval system.
 
 ## References
 
@@ -396,7 +428,7 @@ The proposal follows the documents' human-only v0.1 baseline and keeps the futur
 - [Fixed public API drill and cases](../../../docs/engineering/external-api-drill.md)
 - [API drill findings and fixes](../../../docs/engineering/external-api-drill-findings.md)
 - [Maintainer clarification: privacy, API handoff, headers and caching](https://github.com/Flow-Research/workstream/pull/401#issuecomment-5654493551)
-- [MCP standard request headers](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#standard-request-headers)
+- [Tested Streamable HTTP protocol baseline](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)
 - [Maintainer review addendum: dispatch and conformance requirements](https://github.com/Flow-Research/workstream/pull/401#issuecomment-5653317895)
 - [Workstream contribution guide](../../../CONTRIBUTING.md)
 - [Commitrail guidance](../../README.md)
@@ -405,4 +437,4 @@ The proposal follows the documents' human-only v0.1 baseline and keeps the futur
 - `Flow-Identity-v0.1-Interactive.html`, approved architecture dated 10 September 2026. Used for issuer ownership, token validation, client registration, renewal, suspension, and key rotation.
 - `Flow-Identity-Human-and-Agent-Experience.html`, future extension design dated 11 September 2026. Used for separate agent credentials, shared human accountability, identity links, local delegation, and the boundary between agreed direction and pending implementation.
 - [Official Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk)
-- [MCP authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization)
+- [MCP authorization specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)
