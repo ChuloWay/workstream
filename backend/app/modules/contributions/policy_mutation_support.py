@@ -6,6 +6,7 @@ from uuid import UUID
 
 from app.modules.contributions.api import (
     ContributionPolicyAuthorizationFacts,
+    PolicyAction,
     ContributionPolicyConflict,
     ContributionPolicyMutationResult,
     ContributionPolicyMutationAuthorizationPort,
@@ -45,6 +46,8 @@ async def begin_and_recover_policy_mutation(
     *,
     repository: PolicyRecoveryRepository,
     read_authorization: ContributionPolicyReadAuthorizationPort,
+    mutation_authorization: ContributionPolicyMutationAuthorizationPort,
+    action: PolicyAction,
     request: object,
     request_digest: str,
     expected_event_type: str,
@@ -55,6 +58,10 @@ async def begin_and_recover_policy_mutation(
     await repository.lock_operation(operation_id)
     event = await repository.get_event_by_operation(operation_id)
     if event is None:
+        await mutation_authorization.lock_contribution_policy_mutation_scope(
+            action=action, actor_profile_id=getattr(request, "actor_profile_id"),
+            project_id=getattr(request, "project_id"),
+        )
         return None
     if (
         event.event_type != expected_event_type

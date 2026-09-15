@@ -38,6 +38,9 @@ class _Authorization:
     async def authorize_read(self, **kwargs) -> None:
         self.calls.append(("read", kwargs))
 
+    async def lock_mutation_scope(self, **scope) -> None:
+        self.locked_scope = scope
+
     async def prepare_mutation(self, facts):
         self.calls.append(("prepare", facts))
         return self.handle

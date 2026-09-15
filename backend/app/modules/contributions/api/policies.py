@@ -230,6 +230,11 @@ class ContributionPolicyReadAuthorizationPort(Protocol):
 class ContributionPolicyMutationAuthorizationPort(Protocol):
     """Prepare, consume, and close opaque mutation authority."""
 
+    async def lock_contribution_policy_mutation_scope(
+        self, *, action: PolicyAction, actor_profile_id: UUID, project_id: UUID,
+    ) -> None:
+        """Retain scoped authority locks before product rows without issuing a handle."""
+
     async def prepare_contribution_policy_mutation(
         self, facts: ContributionPolicyAuthorizationFacts
     ) -> object:
@@ -253,6 +258,13 @@ class DenyContributionPolicyAuthorization:
         """Deny reads without explicit authorization composition."""
         del request
         raise ContributionPolicyUnavailable("contribution_policy_unavailable")
+
+    async def lock_contribution_policy_mutation_scope(
+        self, *, action: PolicyAction, actor_profile_id: UUID, project_id: UUID,
+    ) -> None:
+        """Retain scoped authority locks before product rows without issuing a handle."""
+
+        raise ContributionPolicyUnavailable('contribution_policy_unavailable')
 
     async def prepare_contribution_policy_mutation(
         self, facts: ContributionPolicyAuthorizationFacts

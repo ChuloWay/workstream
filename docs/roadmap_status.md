@@ -355,7 +355,9 @@ cannot be reused as post-submission review-gate evidence. See the
 ### Contribution and review foundations
 
 - Finance Authority can manage compensation adapter bindings through the
-  hidden, authorized boundary.
+  hidden, authorized boundary. CP07A aligns policy/binding mutations with AUTH
+  by locking authority before product resources, and reconciles the database
+  audit vocabulary for the existing binding actions. Guide binding remains CP07.
 - Complete hidden ContributionPolicy draft/publication/retirement behavior is
   persisted with immutable lifecycle history. All five actions have exact human
   Finance Authority through explicit AUTH composition; default composition denies

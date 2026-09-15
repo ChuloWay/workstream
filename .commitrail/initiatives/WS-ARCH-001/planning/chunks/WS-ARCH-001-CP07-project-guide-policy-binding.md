@@ -1,6 +1,7 @@
 # Chunk Contract: WS-ARCH-001-CP07 — Project Guide Policy Binding
 
-Status: proposed non-executable skeleton after CP06. Risk: L1.
+Status: proposed non-executable skeleton after CP06 and
+[CP07A lock-order/audit repair](../../WS-ARCH-001-CP07A.md). Risk: L1.
 
 Preserve the ReviewPolicy setting change's activation guard:
 `human_review_required=false` may exist in draft, but activation must fail
@@ -49,11 +50,15 @@ complete and consistent. CP07 replaces the legacy PaymentPolicy requirement
 for this new path before AUTH-12H activates it; CP09 only removes unreachable
 legacy schema/consumers later. No missing-policy bypass flag or dual fallback.
 Reuse existing selected review/revision fields rather than duplicating them.
-Provide the canonical activation response/read projection without a required
-`payment_policy`: the current `ActiveGuideResponse` and load/refresh/serialize
-path still require it. The replacement must reach successful activation and
-response serialization without that legacy row, not just bypass one boolean
-guard. AUTH-12H wires this complete command/response, not the old service path.
+Current source reconciliation: the dormant activation command and its response
+are already removed. `ActiveGuideReadResponse` does not expose PaymentPolicy;
+its readiness helper still accepts payment parameters for existing read
+consumers. CP07 must build the canonical hidden activation command, reconcile
+that shared readiness helper and affected callers, and provide a complete
+response without PaymentPolicy. Do not resurrect the removed command or add
+a parallel readiness path. AUTH-12H wires this complete command. The hidden
+policy/binding mutations now acquire their AUTH scope before product locks;
+CP07 must preserve that ordering when composing guide authority and CON facts.
 
 Within one caller transaction, lock and validate the selected immutable CON
 version/eligibility, consume exact activation authority, bind the version and

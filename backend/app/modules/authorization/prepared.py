@@ -417,6 +417,22 @@ class PreparedAuthorizationService:
             context=context,
         )
 
+    async def lock_mutation_scope(
+        self, action_id: ActionId, scope: PreparedAuthorityScope,
+    ) -> None:
+        """Retain policy authority locks without issuing a mutation capability."""
+        self._root_transaction()
+        if (
+            action_id not in CONTRIBUTION_POLICY_MUTATION_ACTIONS | ADAPTER_BINDING_MUTATION_ACTIONS
+            or scope.kind is not PreparedAuthorityScopeKind.PROJECT
+            or not isinstance(scope.project_id, UUID)
+        ):
+            raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.RESOURCE_GUARD_DENIED)
+        authority = await self._authorization._prepare_prelocked(
+            self._consumer_token, action_id, scope
+        )
+        self._authorization._discard_prelocked(authority)
+
     async def prepare(
         self,
         action_id: ActionId,

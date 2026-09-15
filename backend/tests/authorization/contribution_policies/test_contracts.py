@@ -75,11 +75,12 @@ async def test_public_adapter_translates_exact_con_facts_through_real_auth(opera
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("method", ("read", "prepare", "consume", "close"))
+@pytest.mark.parametrize("method", ("read", "scope", "prepare", "consume", "close"))
 async def test_public_adapter_conceals_authorization_boundary_failures(method):
     facts = mutation(uuid4(), uuid4())
     port = Mock(
         authorize_read=AsyncMock(side_effect=AuthorizationDenied("private")),
+        lock_mutation_scope=AsyncMock(side_effect=AuthorizationDenied("private")),
         prepare_mutation=AsyncMock(side_effect=AuthorizationDenied("private")),
         consume_mutation=AsyncMock(side_effect=PreparedAuthorizationInvalid("private")),
         close_mutation=Mock(side_effect=PreparedAuthorizationInvalid("private")),
@@ -93,6 +94,11 @@ async def test_public_adapter_conceals_authorization_boundary_failures(method):
                     project_id=facts.project_id,
                     contribution_policy_id=facts.contribution_policy_id,
                 )
+            )
+        elif method == "scope":
+            await bridge.lock_contribution_policy_mutation_scope(
+                action="contribution.policy.create_draft", actor_profile_id=facts.actor_profile_id,
+                project_id=facts.project_id,
             )
         elif method == "prepare":
             await bridge.prepare_contribution_policy_mutation(con_facts(facts, "create_draft"))

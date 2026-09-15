@@ -294,6 +294,11 @@ committed replay requires fresh read authority. Registration custody remains
 CP01B. No permission, service membership or policy HTTP route is added. Migration `0012_contribution_policy_audit_resource`
 adds the exact policy resource token and five existing action/permission pairs
 to the two closed database audit constraints, preserving their other clauses. Downgrade refuses while policy audit history exists.
+CP07A migration `0022_adapter_binding_audit_resource` similarly admits the existing
+`compensation_adapter_binding` resource and its read/create/suspend/resume action
+pairs with `compensation.adapter_binding.manage`. It preserves all other audit
+clauses and refuses downgrade while either a binding action or binding resource
+remains in retained audit evidence.
 AUTH-10A added five project-role read/manage rows;
 AUTH-10B owns and activates the three reads, while AUTH-10C owns and activates
 the two reason-bound, idempotent project-role mutations. AUTH-11A adds eleven
