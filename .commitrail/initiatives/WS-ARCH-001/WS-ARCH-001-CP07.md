@@ -98,7 +98,10 @@ actual Task/Submission/CheckerRun is required for activation.
    The committed ledger operation and complete result are the canonical immutable
    binding, correlated with exact actor/link/grant and consumed audit decision. The existing audit
    schema already admits `project.guide.activate` / `project.guide.manage`;
-   registration is not live evaluator authority. Hidden tests supply controlled
+   its privacy resource allowlist does not admit the canonical
+   `project_guide_activation` token yet. Add only that resource token in 0023
+   using the existing shape-preserving constraint update pattern; no action or
+   permission expansion. Registration is not live evaluator authority. Hidden tests supply controlled
    participants and real audit persistence, without claiming live AUTH activation.
 6. Bind non-null CON identity for successful activation, preserve exact existing
    review/revision selectors, supersede only the expected prior active guide,
@@ -157,6 +160,9 @@ actual Task/Submission/CheckerRun is required for activation.
   and prove a fresh authorized activation can supersede it without backfill.
   Migration roundtrip preserves unrelated schema; downgrade refuses retained
   activation evidence. Fresh valid activation is readable after CON retirement.
+- Prove the canonical activation audit resource can persist in PostgreSQL, an
+  adjacent unsupported resource is rejected with otherwise valid facts, and
+  downgrade refuses retained activation audit history as well as ledger evidence.
 - No live endpoint/action or downstream TASK/Submission capability is claimed.
 
 ## Risk and review routing
