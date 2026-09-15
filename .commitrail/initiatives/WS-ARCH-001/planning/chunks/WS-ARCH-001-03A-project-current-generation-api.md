@@ -28,14 +28,14 @@ activation writes and its response; do not implement them again here.
 
 The complete public internal fact graph includes guide ID/version and CP07 activation operation, per-guide generation and timestamp; source snapshot/setup/compilation and result/component identities;
 artifact/effective/pre/post policy IDs, canonical hashes, required locked bodies
-and catalogue snapshots; review/revision ID-generation-hash triples; and the
+and persisted catalogue identity/version/schema/manifest-hash tuples; review/revision ID-generation-hash triples; and the
 guide-bound ContributionPolicy version plus activation provenance. Fields use
 canonical typed immutable values and are not automatically public HTTP fields.
 Historical resolution accepts the caller's exact locked selectors without
 reading TASK internals or consulting global CON selection.
 
-Before implementation, replace this skeleton with a current-main contract that
-enumerates exact files, commands, migration head and reviewers.
+The adopted implementation contract above enumerates exact files, commands,
+migration head, future proof and reviewers.
 
 Acceptance: one transaction-bound port returns only canonical immutable facts;
 guide activation has validated and bound one same-project published, complete,

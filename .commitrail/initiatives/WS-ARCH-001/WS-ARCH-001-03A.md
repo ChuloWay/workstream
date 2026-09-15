@@ -75,7 +75,10 @@ claiming complete human revision rebase or introducing activation chronology.
    frozen reads admit active/superseded exact custody, including later CON
    retirement, without rerunning current eligibility.
 3. Extend the current fact type with required immutable activation receipt and
-   canonical artifact/post-submit/review/revision bodies and catalogue snapshots.
+   canonical artifact/post-submit/review/revision bodies. Catalogue facts are the
+   exact saved ID/version/schema-version/manifest-hash tuples in that receipt,
+   compared with the compilation attempt; full historical catalogue bodies are
+   not persisted and must not be reconstructed from the current registry.
    The receipt supplies exact setup/finalization/result/component identities,
    approval custody and contribution-policy selectors. Existing direct pre-policy
    projections remain validated against that same receipt for ART consumption.
@@ -83,10 +86,24 @@ claiming complete human revision rebase or introducing activation chronology.
 4. Use actual CP07 operation ID, per-guide activation generation and timestamp.
    Do not rename per-guide generation as project-wide chronology. The old planned
    activation-sequence field has no source and is deferred with revision semantics.
-5. Require a caller transaction; never commit or mutate product state. Trace
-   Project/attempt/guide/source/policy lock order against existing mutations;
-   retain fresh reads after waiting. No new AUTH lock is acquired by this reader.
-6. Replace affected fabricated-positive guide fixtures with real saved approval,
+5. Require a caller root transaction; never commit or mutate product state.
+   Lock Project first and discover the candidate guide without a Guide row lock.
+   Read its exact activation target, then reuse the canonical order: Attempt ->
+   Request -> Guide -> exact source/setup/compilation/projections and approval
+   custody -> finalization -> post-policy custody -> review/revision policies.
+   Re-fetch and validate the guide and activation receipt after waiting. Project
+   fencing stabilizes active selection; exact frozen selection never changes its
+   target. Refresh reused custody rows rather than trusting the identity map.
+   Never hold Guide while newly acquiring Attempt. Existing ART TASK/actor/link
+   locks remain before PROJECT; this reader acquires no AUTH locks.
+6. Reuse `policy_lineage.require_complete_policy` and its persisted-format-aware
+   digest for exact review/revision bodies. Do not call activation-time
+   `validate_activation_ready`, consult current CON eligibility, or apply today's
+   automated-acceptance availability as a historical-read condition. Persisted
+   business policy/hash formats are evidence, not a second implementation.
+   Mutation callers retain their existing draft-only defaults; only this complete
+   context read supplies active/superseded eligibility.
+7. Replace affected fabricated-positive guide fixtures with real saved approval,
    CON publication and CP07 activation. Retain deliberate unbound/corrupt fixtures
    only as negative or migration-preservation tests. No guard disabling to make a
    positive complete-context test pass.
@@ -121,9 +138,94 @@ claiming complete human revision rebase or introducing activation chronology.
 Lead runs relevant unit and real isolated PostgreSQL tests, Ruff, module/AUTH
 boundaries, Markdown links, stale wording, Commitrail records, exact inventories
 and hosted complete coverage. New/materially changed modules remain at least 90%.
-Concrete named tests will be recorded with implementation. Required falsification:
+Current migration head is `0023_guide_activation_custody`; no migration changes.
+Required falsification:
 remove activation-custody validation and prove the positive-shape unbound-guide
 negative fails; substitute one exact receipt/policy selector while preserving all
 other valid fields; and remove row refresh to expose a stale identity-map read.
 Full suite and aggregate coverage remain hosted. Local evidence records exact
 head and resource cleanup; no private guide documents or live providers are used.
+
+
+## Exact implementation and proof map
+
+Product edit paths (unused paths need no change):
+
+- `backend/app/modules/projects/api/locked_policy.py`
+- `backend/app/modules/projects/api/__init__.py`
+- `backend/app/modules/projects/locked_policy_repository.py`
+- `backend/app/modules/projects/locked_policy_projection.py` (same-owner canonical projection)
+- `backend/app/modules/projects/guide_activation/custody.py`
+- `backend/app/modules/projects/guide_compilation/proposal_repository.py`
+- `backend/app/modules/projects/guide_compilation/repository.py`
+- `backend/app/modules/projects/guide_compilation/approval_custody.py`
+- `backend/app/modules/projects/post_policy/repository.py`
+- `backend/app/modules/projects/post_policy/custody.py`
+- `backend/app/modules/projects/repository.py`
+
+The composition root and ART callers already consume the port and are inspection
+scope, not new business behavior. `policy_lineage.py` is a reused unchanged owner.
+Any additional product file requires an explicit contract correction first.
+
+Test edits are limited to `backend/tests/` paths below:
+
+- `projects/test_locked_policy_contract.py`, `projects/test_locked_policy_context.py`
+- `projects/test_locked_policy_custody.py`, `projects/test_locked_policy_concurrency.py`
+- `projects/locked_policy_fixtures.py` (shared real activation fixture)
+- `projects/guide_activation/source_fixtures.py`, `projects/guide_activation/pg_support.py`
+- `projects/guide_activation/test_successor.py` (extract reusable successor setup)
+- `projects/unified_policy_fixtures.py`, `project_create_fixtures.py`
+- `pre_submit_test_helpers.py`, `test_default_pre_submit_execution.py`
+- `test_pre_submit_attempt_recovery.py`, `test_artifact_admission.py`, `test_artifact_recovery.py`
+- `test_pre_submit_attempt_lock_order.py`, `test_pre_submit_related_lock_order.py`
+- `authorization/contribution_policies/test_cross_owner_lock_order.py`
+
+Replace the affected complete-context positives, not every historical fixture.
+The existing `activation_case` and real AUTH `guide_activation.pg_support.activate`
+provide valid controls. Shared ART packet policy customization remains explicit.
+No fake activation, disabled guide guards, or incomplete semantics may support a
+positive complete-context proof. Existing deliberate SQL corruption fixtures may
+remain only for negative or retention tests.
+
+Future named tests (not yet executed):
+
+| Test | Required behavior and discriminating control |
+| --- | --- |
+| `test_active_and_frozen_context_are_complete` | Real finalization, separate approvals, CON publication and CP07 activation; compare every returned body and exact receipt/catalogue identity with stored source. |
+| `test_frozen_context_survives_successor_and_retirement` | Activate a genuine successor; active read returns successor, frozen read returns original; retire CON version and preserve frozen facts. |
+| `test_new_publication_does_not_reselect_context` | Publish a new CON version while guide binding remains unchanged; both reads retain exact activation binding. |
+| `test_context_rejects_missing_or_substituted_custody` | Parameterized missing activation/pre approval/post approval/finalization, crossed project or policy, catalogue mismatch, invalid body/hash and lifecycle; start with valid activated graph and alter only the selected boundary through controlled read corruption where DB forbids direct mutation. Assert bounded context error and no mutation. |
+| `test_context_result_is_deeply_immutable` | Attempt nested receipt/body changes and show source/result identities cannot be mutated. |
+| `test_context_preserves_persisted_review_semantics` | Format-aware stored review/revision hashes match exact bodies; incomplete semantics and altered human-review mode deny. Preserve retained policy hash identities, without adding runtime compatibility code. |
+| `test_context_read_does_not_allow_activated_proposal_mutations` | Read valid active/superseded guides, then invoke proposal approve/correct defaults and require denial; valid draft operations still pass. |
+| `test_context_refreshes_preloaded_custody` | Preload rows, change the test-visible cached state, reread persisted exact state; removing the required refresh makes the exact assertion fail. |
+| `test_context_serializes_guide_replacement` | Reader-first and activation-first transactions, observed waiter/blocker PIDs, no Guide/Attempt inversion, successor freshness after wait. |
+| `test_context_serializes_project_archival` | Reader-first and writer-first Project lifecycle change; frozen read cannot return stale active Project state. |
+| `test_context_and_finalization_share_lock_order` | Real finalization replay on an activated target and context read in both orders: finalizer denies state normally; no deadlock, partial writes or hidden provider calls. Observe database locks before releasing participants. |
+
+ART admission, execution/recovery and real-AUTH cross-owner lock regressions run
+through the strengthened port with real activation fixtures. Retain their original
+ownership, replay, rollback and actual-ZIP assertions. Contract-only fake-session
+coverage of the superseded partial reader is replaced by complete-graph tests.
+
+Required test-of-the-test probes: bypass activation validation and require the
+otherwise valid unbound-guide negative to fail; substitute one receipt selector
+while keeping every other field valid; remove required fresh-read behavior and
+require its named stale-cache test to fail. Record exact modified guard and test
+output, then restore before the review candidate.
+
+Lead commands: `pytest` on the four locked-policy modules plus affected ART/AUTH
+modules through `backend/scripts/run_isolated_tests.py`; Ruff on touched Python;
+`python3 scripts/check_commitrail_records.py --base-ref origin/main`;
+`python3 scripts/check_markdown_links.py`; stale wording/authorization/artifact
+contract checks; module/AUTH boundary validators; hosted complete test/coverage
+lanes. Exact inventory edits may touch `backend/scripts/test_lane_catalogue.py`,
+`.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json` and the existing
+`.ci/behavior-ownership/lifecycle/project-guide-compilation-repository.json` only
+when changed ownership or shrinking measurements require it, never weaker gates.
+
+Current documentation edits are README, `docs/roadmap_status.md`,
+`docs/architecture_data_model.md`, `docs/architecture_checker_framework.md`,
+`docs/operations_project_operating_manual.md`, ARCH/AUTH/CON/POL overviews,
+`.commitrail/INDEX.md`, and adopted ARCH/AUTH planning dependency tables. Preserve
+main's MCP entries. Assess local sheet exports only if present.

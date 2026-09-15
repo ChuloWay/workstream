@@ -57,8 +57,9 @@ queues or decisions, so this extension adds no REV-admission dependency cycle.
 CP05 and ARCH-04A have independent prerequisites. POL-04B consumes the corrected
 ARCH-04A catalogue/schema before producing approval-eligible generations. Owners may
 work concurrently if allowed paths do not overlap; shared catalogue/schema
-changes must be serialized or rebased, not implemented twice. CP08 can proceed
-after CP07 while policy setup finishes; it does not activate claims. Subsequent
+changes must be serialized or rebased, not implemented twice. ARCH-03A completes the existing internal guide-context port after AUTH-12H.
+CP08 then adds its schema and minimal existing writers together; ARCH-03B retains
+queues/invalidation and broader projections. Subsequent
 PR-sized contracts name exact files, public types, current migration head and
 runnable proof before implementation; they refine this design, not create a
 new permission requirement.
