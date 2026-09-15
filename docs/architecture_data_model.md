@@ -1274,13 +1274,22 @@ Status:
 
 ## Task
 
+Complete-context activation references for Task, Submission and revision adoption
+remain a future contract. CP07 binds `ProjectGuide.activation_operation_id` to
+an immutable activation receipt and generation; it does not create an activation
+sequence counter. Future consumers must lock that exact activation identity and
+generation. Forward/backward adoption must follow the validated predecessor
+receipt chain, rather than infer chronology from guide version labels or UUIDs.
+The Task/Submission and revision-adoption chunks must define their persisted
+references and custody together; CP07 does not implement those downstream
+activation references.
+
 Fields:
 
 - `id`
 - `project_id`
 - `locked_guide_id`
 - `locked_guide_version`
-- `locked_guide_activation_sequence`
 - `locked_guide_source_snapshot_id`
 - `locked_guide_source_snapshot_hash`
 - `locked_effective_project_submission_artifact_policy_id`
@@ -1417,7 +1426,6 @@ Fields:
 - `contributor_attestation`
 - `locked_guide_version`
 - `locked_guide_id`
-- `locked_guide_activation_sequence`
 - `locked_guide_source_snapshot_id`
 - `locked_guide_source_snapshot_hash`
 - `locked_effective_project_submission_artifact_policy_id`
@@ -1850,11 +1858,9 @@ Fields:
 - `next_submission_version`
 - `prior_locked_guide_id`
 - `prior_locked_guide_version`
-- `prior_locked_guide_activation_sequence`
 - `prior_locked_guide_source_snapshot_id` and hash
 - `next_locked_guide_id`
 - `next_locked_guide_version`
-- `next_locked_guide_activation_sequence`
 - `next_locked_guide_source_snapshot_id` and hash
 - prior and next locked submission-artifact-policy identity and hash
 - `prior_locked_effective_project_submission_artifact_policy_hash`

@@ -6,8 +6,37 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
+from app.modules.projects.guide_activation.custody import load_guide_activation
 from app.modules.projects.models import ProjectGuide
 from .pg_support import activation_case, activation_service
+
+
+async def test_active_guide_cannot_be_superseded_without_exact_successor(clean_postgres_database):
+    async with activation_case(clean_postgres_database) as (factory, command, actor, grant, _, _):
+        async with factory() as session, session.begin():
+            receipt = await activation_service(session, actor, command, grant).activate(
+                command, actor=actor, request_id=uuid4()
+            )
+        guide_id = str(command.target.proposal.guide_id)
+        # Preserve the valid activation binding; omit only successor activation.
+        # The immediate lifecycle guard permits the shape, then commit must fail.
+        with pytest.raises(DBAPIError, match="guide supersession requires exact successor activation"):
+            async with factory() as session, session.begin():
+                status = await session.scalar(
+                    text("UPDATE project_guides SET status='superseded',superseded_at=now() "
+                         "WHERE id=:id RETURNING status"),
+                    dict(id=guide_id),
+                )
+                assert status == "superseded"
+        async with factory() as session:
+            guide = await session.get(ProjectGuide, guide_id)
+            assert guide.status == "active"
+            assert guide.superseded_at is None
+            assert guide.mutation_generation == receipt.activation_generation
+            assert await load_guide_activation(session, guide) == receipt
+            assert await session.scalar(text(
+                "SELECT count(*) FROM project_guides WHERE project_id=:project AND status='active'"
+            ), dict(project=guide.project_id)) == 1
 
 
 async def test_project_and_guide_cannot_activate_without_custody(clean_postgres_database):
@@ -264,7 +293,6 @@ async def test_database_rejects_unreadable_nested_receipt(
     from copy import deepcopy
     from app.core.hashing import canonical_json_hash
     from app.modules.projects.api.guide_activation import GuideActivationFacts
-    from app.modules.projects.guide_activation.custody import load_guide_activation
     from app.modules.projects.guide_mutation_repository import GuideMutationRepository
 
     original_facts = GuideActivationFacts.resource_json

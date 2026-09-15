@@ -225,6 +225,9 @@ composition, followed by CP08 and task lineage work in the adopted sequence.
   rollback, forbidden direct lifecycle writes, missing commit custody and
   immutable binding/audit evidence. The missing-receipt test leaves all product
   pointers and consumed authority present and checks its specific deferred error.
+  The standalone supersession test starts with a committed active guide, changes
+  only status and supersession time, and requires the exact deferred missing-successor
+  error at commit; rollback preserves the active guide and its immutable receipt.
   Malformed nested receipt tests preserve operational selections and matching
   command/facts/audit digests, require shape rejection and rollback, then prove
   the same valid input commits and remains readable. SQL preserves structural
