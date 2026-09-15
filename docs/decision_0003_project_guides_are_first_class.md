@@ -27,10 +27,6 @@ The guide drives:
 - separately approved post-submit checker policy with exact upstream approval custody
 - review policy
 - revision policy
-- explicitly selected current published ContributionPolicyVersion
-
-CP07 delivers this hidden activation/binding contract; AUTH-12H live authority
-remains pending. See the [current guide contract](spec_chunk_3_project_guide_foundation.md).
 - common rejection reasons
 
 The submission artifact, checker, review, and revision policies are guide-version
