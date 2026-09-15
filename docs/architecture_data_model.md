@@ -1274,15 +1274,18 @@ Status:
 
 ## Task
 
-Complete-context activation references for Task, Submission and revision adoption
-remain a future contract. CP07 binds `ProjectGuide.activation_operation_id` to
-an immutable activation receipt and generation; it does not create an activation
-sequence counter. Future consumers must lock that exact activation identity and
-generation. Forward/backward adoption must follow the validated predecessor
-receipt chain, rather than infer chronology from guide version labels or UUIDs.
-The Task/Submission and revision-adoption chunks must define their persisted
-references and custody together; CP07 does not implement those downstream
-activation references.
+Activation chronology in the Task, Submission and RevisionContextPreparation
+sections is a **future lineage contract**, not a claim that those activation
+fields are implemented. CP07 persists `ProjectGuide.activation_operation_id`
+and its immutable activation receipt/generation; it creates no activation-sequence
+counter. The downstream `...activation_sequence` names below are planned
+chronology fields, not references to an existing ProjectGuide source column.
+Before implementing or exposing those fields, the Task/Submission and revision
+chunks must reconcile the authoritative chronology source and immutable
+same-project references with CP07 custody, and implement source and stamps
+together. Guide version strings are not chronological counters. ADR 0010's
+planned revision behavior remains normative; this clarification does not choose
+a new chronology mechanism or claim downstream runtime integration.
 
 Fields:
 
@@ -1290,6 +1293,7 @@ Fields:
 - `project_id`
 - `locked_guide_id`
 - `locked_guide_version`
+- `locked_guide_activation_sequence` (planned; see the future lineage contract above)
 - `locked_guide_source_snapshot_id`
 - `locked_guide_source_snapshot_hash`
 - `locked_effective_project_submission_artifact_policy_id`
@@ -1426,6 +1430,7 @@ Fields:
 - `contributor_attestation`
 - `locked_guide_version`
 - `locked_guide_id`
+- `locked_guide_activation_sequence` (planned; see the future lineage contract above)
 - `locked_guide_source_snapshot_id`
 - `locked_guide_source_snapshot_hash`
 - `locked_effective_project_submission_artifact_policy_id`
@@ -1846,6 +1851,9 @@ bounded rationale/evidence and never edits the finding or response.
 
 ## RevisionContextPreparation
 
+Prior/next activation chronology remains subject to the future lineage contract
+described under Task; these fields are not delivered by CP07.
+
 Fields:
 
 - `id`
@@ -1858,9 +1866,11 @@ Fields:
 - `next_submission_version`
 - `prior_locked_guide_id`
 - `prior_locked_guide_version`
+- `prior_locked_guide_activation_sequence` (planned chronology)
 - `prior_locked_guide_source_snapshot_id` and hash
 - `next_locked_guide_id`
 - `next_locked_guide_version`
+- `next_locked_guide_activation_sequence` (planned chronology)
 - `next_locked_guide_source_snapshot_id` and hash
 - prior and next locked submission-artifact-policy identity and hash
 - `prior_locked_effective_project_submission_artifact_policy_hash`
