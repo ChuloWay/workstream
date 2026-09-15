@@ -40,7 +40,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Governing sources: project-guide specifications, authorization and
   contribution-policy specifications, code, migrations, and tests.
 - Preserve: trusted policy compilation, explicit ownership, atomic persistence,
-  no hidden activation, and no concrete adapter leakage.
+  no public activation route or default live-authority composition, and no concrete
+  adapter leakage.
 
 ## Delivered
 
