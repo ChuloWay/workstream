@@ -9,8 +9,8 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   immutable ContributionRecords and optional
   project-policy-driven compensation awards without coupling lifecycle truth to
   an economic provider.
-- Next usable boundary: ARCH-03A complete internal guide context, then CP08
-  lineage and minimal writers after completed
+- Next usable boundary: CP08 lineage and minimal writers after completed
+  ARCH-03A internal guide context,
   [CP07 activation/binding](../WS-ARCH-001/WS-ARCH-001-CP07.md) and
   [AUTH-12H live authority](../WS-AUTH-001/WS-AUTH-001-12H.md), before task readiness.
 - Governing sources: `docs/spec_contribution_compensation.md`,

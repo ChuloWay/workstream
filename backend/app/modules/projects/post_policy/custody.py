@@ -85,7 +85,7 @@ def operation_receipt(operation: PostPolicyOperation) -> PostPolicyReceipt:
 async def load_post_policy_custody(session, policy) -> PostPolicyCustody:
     """Require complete projection/approval/supersession evidence, even for reads."""
     operations = {row.kind: row for row in await session.scalars(
-        select(PostPolicyOperation).where(PostPolicyOperation.policy_id == policy.id).with_for_update()
+        select(PostPolicyOperation).where(PostPolicyOperation.policy_id == policy.id).with_for_update().execution_options(populate_existing=True)
     )}
     projection = operations.get("derive")
     if projection is None or policy.projection_operation_id != projection.operation_id:
@@ -126,7 +126,7 @@ async def load_post_policy_custody(session, policy) -> PostPolicyCustody:
     ):
         raise GuideProposalError("proposal_unavailable")
     if policy.lifecycle_status == "superseded":
-        successor = await session.get(PostPolicyOperation, policy.supersession_operation_id)
+        successor = await session.get(PostPolicyOperation, policy.supersession_operation_id, populate_existing=True)
         if successor is None:
             raise GuideProposalError("proposal_unavailable")
         receipt = operation_receipt(successor)

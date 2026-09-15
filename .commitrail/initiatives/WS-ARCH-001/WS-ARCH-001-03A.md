@@ -1,7 +1,7 @@
 # WS-ARCH-001-03A — Complete active and frozen guide context
 
 - Initiative: WS-ARCH-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: the existing PROJECTS internal context port resolves
   the complete approved, activated guide graph for new work or exact frozen work.
 
@@ -140,8 +140,8 @@ boundaries, Markdown links, stale wording, Commitrail records, exact inventories
 and hosted complete coverage. New/materially changed modules remain at least 90%.
 Current migration head is `0023_guide_activation_custody`; no migration changes.
 Required falsification:
-remove activation-custody validation and prove the positive-shape unbound-guide
-negative fails; substitute one exact receipt/policy selector while preserving all
+remove the activation receipt/ledger digest check and prove the otherwise-valid
+activation-custody negative fails; substitute one exact receipt/policy selector while preserving all
 other valid fields; and remove row refresh to expose a stale identity-map read.
 Full suite and aggregate coverage remain hosted. Local evidence records exact
 head and resource cleanup; no private guide documents or live providers are used.
@@ -187,7 +187,7 @@ No fake activation, disabled guide guards, or incomplete semantics may support a
 positive complete-context proof. Existing deliberate SQL corruption fixtures may
 remain only for negative or retention tests.
 
-Future named tests (not yet executed):
+Named verification:
 
 | Test | Required behavior and discriminating control |
 | --- | --- |
@@ -208,11 +208,12 @@ through the strengthened port with real activation fixtures. Retain their origin
 ownership, replay, rollback and actual-ZIP assertions. Contract-only fake-session
 coverage of the superseded partial reader is replaced by complete-graph tests.
 
-Required test-of-the-test probes: bypass activation validation and require the
-otherwise valid unbound-guide negative to fail; substitute one receipt selector
+Required test-of-the-test probes: remove the activation receipt/ledger digest
+comparison and require its otherwise-valid negative to fail; substitute one receipt selector
 while keeping every other field valid; remove required fresh-read behavior and
 require its named stale-cache test to fail. Record exact modified guard and test
-output, then restore before the review candidate.
+output, then restore before the review candidate. Missing activation is also tested
+separately; it cannot supply the exact target for this port and has no fallback.
 
 Lead commands: `pytest` on the four locked-policy modules plus affected ART/AUTH
 modules through `backend/scripts/run_isolated_tests.py`; Ruff on touched Python;
@@ -229,3 +230,36 @@ Current documentation edits are README, `docs/roadmap_status.md`,
 `docs/operations_project_operating_manual.md`, ARCH/AUTH/CON/POL overviews,
 `.commitrail/INDEX.md`, and adopted ARCH/AUTH planning dependency tables. Preserve
 main's MCP entries. Assess local sheet exports only if present.
+
+
+## Implementation outcome and proof custody
+
+ARCH-03A replaces the partial context reader with one complete active/frozen
+loader and immutable result. Existing ART callers keep the same port and exact
+request selectors. Shared approval reads retain effective/pre-policy locks and
+refresh exact rows; mutation callers retain draft-only defaults. Exact-source
+selection is extracted inside the existing finalization repository, keeping its
+method below the existing structural limit without changing the limit.
+
+Affected ART fixtures now create real guide/source/finalization, separate
+approvals, selected review/revision policies, published CON policy and real AUTH
+activation. The old trigger-disabled positive activation helper is replaced,
+and the partial-reader fake-session tests are replaced by complete graph tests.
+Required JSON-value, failure, row-lock, immutable-history, authority, real-ZIP,
+replay and rollback assertions remain. One artifact receipt assertion now targets
+its exact put attempt instead of assuming how many guide documents exist.
+
+Local discriminating probes executed in an owned isolated PostgreSQL database:
+removing the activation digest comparison made the named `activation_digest`
+negative fail with DID NOT RAISE; removing activation-ledger refresh made the
+preloaded-custody test fail; adding Guide-before-Attempt locking made the
+finalization/context test fail with an actual PostgreSQL deadlock. All mutations
+were restored. These are guard-specific test-of-the-test results, not claims of
+production defects in the restored candidate. Shared final verification and
+hosted aggregate custody belong to the PR trust bundle.
+
+The approved plan was reviewed at `936080ee` by architecture/reuse and security/QA.
+Its lock-order, catalogue-identity, exact-scope/proof and sequence findings were
+resolved before implementation. This record describes its intended merged
+outcome; CP08 is the next bounded change and is not implemented here. No local
+spreadsheet exports are present, so no XLSX or CSV update applies.
