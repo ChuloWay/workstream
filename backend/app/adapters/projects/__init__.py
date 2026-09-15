@@ -1,5 +1,10 @@
 """PROJECT-owned composition adapters."""
 
+from app.modules.projects.api.guide_activation import (
+    GuideActivationAuthorizationPort, GuideActivationPort, GuideContributionPolicyPort,
+)
+
+
 from app.modules.projects.api.guide_documents import ProjectGuideDocumentScopePort
 from app.modules.projects.api.guide_proposals import GuideProposalOperationsPort, GuideCorrectionDispatchPort
 from app.modules.authorization.api.guide_proposal_review import GuideProposalAuthorizationPort
@@ -196,3 +201,17 @@ async def dispatch_post_policy_derivation_after_commit(approval_operation_id: UU
     from app.modules.projects.post_policy.queue import dispatch_after_commit
 
     return await dispatch_after_commit(approval_operation_id)
+
+
+def project_guide_activation_port(
+    session: AsyncSession, *, contribution: GuideContributionPolicyPort, planner: PreSubmissionPolicyCompilationPort,
+    pre_catalogue: PreSubmissionCapabilityProjection, post_catalogue: PostSubmitCatalogue,
+    authorization: GuideActivationAuthorizationPort | None = None,
+) -> GuideActivationPort[ActorIdentityFacts]:
+    """Compose hidden activation with explicit CON validation and unavailable default authority."""
+    from app.modules.projects.guide_activation.service import GuideActivationService
+
+    return GuideActivationService(
+        session, contribution=contribution, planner=planner, pre_catalogue=pre_catalogue,
+        post_catalogue=post_catalogue, authorization=authorization,
+    )

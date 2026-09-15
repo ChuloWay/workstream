@@ -182,11 +182,11 @@
     },
     {
       "capability": "unassigned_legacy_auth",
-      "content_sha256": "860b37ca2b9dc24fa748c146f6aa5a00ef4c0db570914c351be7a6dc14d30908",
-      "end_line": 6005,
+      "content_sha256": "0ffeab84516f73fdd001b6cc0b2d00e914291098601e772e50b932e5efb28c29",
+      "end_line": 6003,
       "hard_limit": 1200,
       "kind": "test_file",
-      "observed_lines": 6005,
+      "observed_lines": 6003,
       "path": "backend/tests/test_projects.py",
       "qualified_symbol": null,
       "removal_chunk": "WS-AUTH-003-CLOSE",
@@ -579,38 +579,38 @@
     {
       "capability": "unassigned_legacy_auth",
       "content_sha256": "e723bd10cd20ba716fb75edda2a5b0c21a78dfce771efd55154834063c08b4b4",
-      "end_line": 2334,
+      "end_line": 2335,
       "hard_limit": 120,
       "kind": "test_function",
       "observed_lines": 128,
       "path": "backend/tests/test_projects.py",
       "qualified_symbol": "test_guide_mutation_service_executes_all_three_authorized_happy_paths",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 2207
+      "start_line": 2208
     },
     {
       "capability": "unassigned_legacy_auth",
       "content_sha256": "6acc7f192d003f5b93b101286829c8d2222faef5317b814dffb81f91c27622a8",
-      "end_line": 1144,
+      "end_line": 1145,
       "hard_limit": 120,
       "kind": "test_function",
       "observed_lines": 158,
       "path": "backend/tests/test_projects.py",
       "qualified_symbol": "test_project_role_grant_repository_filters_and_uses_strict_keyset",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 987
+      "start_line": 988
     },
     {
       "capability": "unassigned_legacy_auth",
       "content_sha256": "10292b6ed6f73baae351efbcb13102da0bd21eea2926587cef48e784baa95803",
-      "end_line": 361,
+      "end_line": 363,
       "hard_limit": 100,
       "kind": "test_helper",
       "observed_lines": 104,
       "path": "backend/tests/project_create_fixtures.py",
       "qualified_symbol": "seed_authorized_project",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 258
+      "start_line": 260
     },
     {
       "capability": "unassigned_legacy_auth",

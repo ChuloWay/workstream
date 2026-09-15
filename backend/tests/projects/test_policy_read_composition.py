@@ -167,8 +167,6 @@ def test_activation_readiness_normalizes_hash_valid_malformed_policy_body() -> N
             repository.post_submit,
             repository.review,
             repository.revision,
-            None,
-            require_payment_policy=False,
             approval_custody=SimpleNamespace(
                 operation=SimpleNamespace(artifact_policy_id=repository.submission.id),
                 effective=repository.effective, pre=repository.checker,

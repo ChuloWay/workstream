@@ -177,6 +177,13 @@ send `"<id>.<generation>.<policy_hash_without_sha256_prefix>"`. An authorized Pr
 Manager may attach review and revision policies in either order while the guide
 is draft; activation remains blocked until both are complete.
 
+Complete guide activation now has one internal transaction that binds the exact
+separate approvals, review/revision inputs and selected published contribution
+policy. It supersedes the selected prior guide and activates a draft Project
+atomically. The public manager activation operation remains unavailable until
+AUTH-12H supplies its live authority. An active-guide read requires the committed
+binding; historical rows without that binding are unavailable.
+
 The intended unified flow uses one compilation result for sufficiency and
 artifact/pre-submit/post-submit proposals. Once finalized, its `ProjectSetupRun`,
 receipt, timestamps and output references are immutable. Approval cannot resume

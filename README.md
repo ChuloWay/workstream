@@ -544,8 +544,14 @@ boundaries land. CON now provides internal exact selected-policy validation: a
 new guide binding must match the active policy’s current published version;
 the revision-adoption purpose validates an explicitly supplied historical version
 without reselection. Both validate complete rules and current unit/binding
-eligibility in the caller transaction. Guide custody and controlled revision
-integration remain pending. The next guide boundary is CP07 binding, then AUTH-12H activation.
+eligibility in the caller transaction. CP07 adds one hidden activation operation:
+exact separate pre/post approvals, review/revision selections and the published
+ContributionPolicyVersion become one immutable guide binding. It atomically
+supersedes the explicitly selected prior guide and activates a draft Project.
+Replay preserves the original binding after supersession or policy retirement;
+active-guide reads require that custody. PaymentPolicy is not an activation input.
+Default activation composition remains unavailable. AUTH-12H supplies live manager
+authority next; controlled revision integration remains pending.
 
 ## v0.1 Success Standard
 

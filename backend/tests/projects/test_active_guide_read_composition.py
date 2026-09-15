@@ -24,6 +24,9 @@ def _validator() -> SimpleNamespace:
     return SimpleNamespace(
         validate_source_snapshot_integrity=AsyncMock(),
         validate_activation_ready=Mock(),
+        lock_active_binding=AsyncMock(return_value=SimpleNamespace(
+            operation_id=UUID(int=777), model_dump=lambda **kwargs: {"activation": "bound"},
+        )),
         lock_active_post_policy=AsyncMock(return_value=object()),
         lock_active_approval=AsyncMock(return_value=SimpleNamespace(
             operation=SimpleNamespace(operation_id=UUID(int=91), output_digest='sha256:' + 'e' * 64),
@@ -68,7 +71,9 @@ def _expected_binding_payload(repository: _PolicyReadRepository) -> list[dict[st
         {"type": "SimpleNamespace", "id": repository.review.id},
         {"type": "SimpleNamespace", "id": repository.revision.id},
         {"approval_operation_id": str(UUID(int=91)), "approval_output_digest": 'sha256:' + 'e' * 64,
-         "reservation_operation_id": str(UUID(int=91))},
+         "reservation_operation_id": str(UUID(int=91)),
+         "activation_operation_id": str(UUID(int=777)),
+         "activation_output_digest": canonical_json_hash({"activation": "bound"})},
     ]
 
 
@@ -158,8 +163,7 @@ async def test_active_guide_read_validates_readiness() -> None:
     service.validate_activation_ready.assert_called_once_with(
         repository.guide, repository.snapshot, repository.sufficiency,
         repository.submission, repository.effective, repository.checker,
-        repository.post_submit, repository.review, repository.revision, None,
-        require_payment_policy=False,
+        repository.post_submit, repository.review, repository.revision,
         approval_custody=service.lock_active_approval.return_value,
         post_policy_custody=service.lock_active_post_policy.return_value,
     )
@@ -216,3 +220,15 @@ async def test_active_guide_read_propagates_authorizer_exception() -> None:
     authorization.require.assert_awaited_once()
     assert authorization.require.await_args.args[0] is ActionId.PROJECT_ACTIVE_GUIDE_READ
     assert authorization.require.await_args.args[1].target_exists is True
+
+
+@pytest.mark.asyncio
+async def test_unbound_retained_guide_is_unavailable_to_active_read():
+    repository = _PolicyReadRepository()
+    service = _validator()
+    service.lock_active_binding.side_effect = ValueError("guide activation binding unavailable")
+    authorization = SimpleNamespace(require=AsyncMock())
+    with pytest.raises(RuntimeError, match="missing active-guide authorization unexpectedly allowed"):
+        await _read(repository, authorization, service)
+    assert authorization.require.await_args.args[1].target_exists is False
+    service.validate_activation_ready.assert_not_called()

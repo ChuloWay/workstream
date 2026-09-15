@@ -89,6 +89,7 @@ async def suspend_historical_product_custody(
 ) -> AsyncIterator[None]:
     """Suspend named custody triggers only inside an isolated test database."""
     allowed = {
+        "projects": {"project_activation_custody"},
         "project_guides": {
             "guide_mutation_product_custody",
             "guide_task_examples_create_custody",
@@ -143,7 +144,8 @@ async def seed_active_guide_for_downstream_test(
         project = await session.get(Project, project_id)
         assert guide is not None and project is not None and guide.project_id == project.id
         now = datetime.now(UTC)
-        async with suspend_historical_product_custody(session, table="project_guides",
+        async with suspend_historical_product_custody(session, table="projects",
+            triggers=("project_activation_custody",)), suspend_historical_product_custody(session, table="project_guides",
             triggers=("guide_mutation_product_custody", "guide_lineage_lifecycle_guard")):
             for prior in await session.scalars(select(ProjectGuide).where(
                 ProjectGuide.project_id == project_id, ProjectGuide.status == "active")):

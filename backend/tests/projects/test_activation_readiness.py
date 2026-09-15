@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Iterator
 from copy import deepcopy
 from datetime import UTC, datetime
-from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID, uuid4
@@ -158,12 +157,6 @@ def _activation_ready_bundle() -> dict[str, Any]:
     )
     post_submit = _post_submit_policy(guide, snapshot, effective, pre_submit)
     review, revision = _review_and_revision_policies()
-    payment = SimpleNamespace(
-        base_amount=Decimal("1.00"),
-        currency="USD",
-        payout_type="fixed",
-        accepted_payment_rule="pay base amount",
-    )
     return {
         "guide": guide,
         "source_snapshot": snapshot,
@@ -174,7 +167,6 @@ def _activation_ready_bundle() -> dict[str, Any]:
         "post_submit_checker_policy": post_submit,
         "review_policy": review,
         "revision_policy": revision,
-        "payment_policy": payment,
         # Structural validator delegation only; PostgreSQL proposal tests prove custody.
         "post_policy_custody": SimpleNamespace(
             approval=SimpleNamespace(operation_id=post_submit.approval_operation_id),
@@ -248,8 +240,6 @@ def _set_activation_fact(bundle: dict[str, Any], fact: str, value: Any) -> None:
             ["accepted"],
             "invalid resubmission states",
         ),
-        ("payment_policy.base_amount", Decimal("-1"), "payment policy is incomplete"),
-        ("payment_policy.currency", "", "payment policy is incomplete"),
     ],
 )
 def test_activation_readiness_rejects_broken_chain_fact(
@@ -288,5 +278,4 @@ def test_activation_readiness_accepts_complete_chain_without_payment(
     )
     monkeypatch.setattr(project_service_module, "require_complete_policy", lambda **_: None)
 
-    bundle["payment_policy"] = None
-    service.validate_activation_ready(**bundle, require_payment_policy=False)
+    service.validate_activation_ready(**bundle)

@@ -1,7 +1,7 @@
 # WS-ARCH-001-CP07 — Bind and activate one complete guide generation
 
 - Initiative: WS-ARCH-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: one hidden, deny-default PROJECTS operation atomically
   activates the explicitly approved guide generation and binds its selected
   published ContributionPolicyVersion; AUTH-12H supplies live activation authority later.
@@ -14,7 +14,7 @@ one immutable guide binding, without selecting a newer policy behind their back.
 CP07A on main `6e7e157b` repaired the prerequisite cross-owner lock order.
 This is one activation operation, not a separate binding workflow.
 
-## Current behavior
+## Baseline assessed before implementation
 
 `ProjectService.validate_activation_ready` validates the approved unified chain
 but retains an obsolete PaymentPolicy parameter and bypass flag. Its sole
@@ -202,3 +202,39 @@ Plan review chose the existing guide lifecycle trigger, narrow Project activatio
 commit guard and existing guide mutation ledger to preserve one operation owner. The next
 usable boundary after this hidden command is AUTH-12H's exact live activation
 composition, followed by CP08 and task lineage work in the adopted sequence.
+
+
+## Implementation proof map
+
+- `backend/tests/projects/guide_activation/test_postgresql.py` proves complete
+  activation without PaymentPolicy/Task/Submission prerequisites, serialized
+  binding discovery, exact replay and read/replay after CON retirement.
+- `test_successor.py` proves distinct guide versions, explicit predecessor
+  selection, atomic supersession and replay of both immutable receipts.
+- `test_rejections.py`, `test_admission.py` and `test_direct_sql.py` cover exact
+  selector rejection, unavailable/invalid authority, close failure, caller
+  rollback, forbidden direct lifecycle writes, missing commit custody and
+  immutable binding/audit evidence. The missing-receipt test leaves all product
+  pointers and consumed authority present and checks its specific deferred error.
+- `test_concurrency.py` observes PostgreSQL blocking edges between activation
+  and real Finance-authorized publication, retirement or binding suspension,
+  and proves duplicate activation delivery has one effect.
+- `test_migration.py` compares the prior schema after downgrade, preserves an
+  actual pre-0023 unbound active guide through upgrade, denies its active read,
+  and replaces it through a new guide without inventing prior custody. Retained
+  ledger or audit evidence prevents downgrade.
+- `test_audit_contract.py` checks exact Python audit vocabulary and target
+  mapping without enabling the planned action. Direct-SQL tests check the
+  corresponding database resource/privacy guards and model/FK parity.
+- Existing `backend/tests/test_projects.py` active-guide body and policy
+  immutability tests now invoke CP07 through `read_fixtures.py`; their assertions
+  are retained. Only obsolete payment-readiness cases are removed.
+
+Activation fixtures create document declarations through the real guide owner
+and reuse committed-original, compilation, projection and finalization helpers.
+They do not disable guide activation guards. Storage and model outputs are
+scripted and queue readiness is an arranged prerequisite: this is database and
+owner-composition proof, not live broker/provider proof. The activation authority
+participant is deliberately test-only until AUTH-12H. Downstream tests that only
+need a retained active row keep their explicit historical fixture; current
+active-read proofs require real activation custody.

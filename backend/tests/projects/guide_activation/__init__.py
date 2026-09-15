@@ -1,0 +1,1 @@
+"""Complete-guide activation proofs."""

@@ -6,7 +6,6 @@ from app.modules.projects.api.guide_documents import GuideDocumentMediaType
 from app.modules.projects.api.task_examples import ProjectGuideTaskExamples
 
 from datetime import datetime
-from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
@@ -47,19 +46,6 @@ class RevisionPolicyInput(BaseModel):
         max_length=1,
     )
     reviewer_reassignment_rule: str | None = None
-
-
-class PaymentPolicyInput(BaseModel):
-    """Input schema for payout rules on a guide version."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    base_amount: Decimal | None = None
-    currency: str | None = None
-    payout_type: str | None = None
-    revision_payment_rule: str | None = None
-    rejection_payment_rule: str | None = None
-    accepted_payment_rule: str | None = None
 
 
 class ProjectGuideDocumentInput(BaseModel):
@@ -484,6 +470,9 @@ class ProjectGuideResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 
+    contribution_policy_id: UUID | None = None
+    contribution_policy_version_id: UUID | None = None
+    activation_operation_id: UUID | None = None
     id: str
     project_id: str
     version: str
@@ -617,25 +606,6 @@ class RevisionPolicyResponse(BaseModel):
     allowed_resubmission_states: list[str]
     reviewer_reassignment_rule: str | None
     created_at: datetime
-
-
-class PaymentPolicyResponse(BaseModel):
-    """Response schema for payment policy records."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: str
-    project_id: str
-    guide_version: str
-    base_amount: Decimal | None
-    currency: str | None
-    payout_type: str | None
-    revision_payment_rule: str | None
-    rejection_payment_rule: str | None
-    accepted_payment_rule: str | None
-    created_at: datetime
-
-
 
 
 class ActiveGuideReadResponse(BaseModel):

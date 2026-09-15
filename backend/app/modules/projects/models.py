@@ -126,9 +126,18 @@ class GuideMutationIdempotencyRecord(Base):
             name="uq_guide_mutation_replay_namespace",
         ),
         UniqueConstraint("operation_id", name="uq_guide_mutation_operation_identity"),
+        UniqueConstraint("operation_id", "project_id", "resource_id", name="uq_guide_mutation_operation_resource"),
+        Index("uq_guide_activation_audit_decision", text("(activation_authority_json->>'authorization_decision_event_id')"),
+              unique=True, postgresql_where=text("action_id='project.guide.activate'")),
+        CheckConstraint(
+            "(action_id='project.guide.activate' and activation_facts_json is not null "
+            "and activation_authority_json is not null) or "
+            "(action_id<>'project.guide.activate' and activation_facts_json is null "
+            "and activation_authority_json is null)", name="activation_evidence_shape",
+        ),
         CheckConstraint(
             "action_id in ('project.guide.create','project.guide.update',"
-            "'project.guide_source_snapshot.create')",
+            "'project.guide_source_snapshot.create','project.guide.activate')",
             name="ck_guide_mutation_action",
         ),
         CheckConstraint(
@@ -163,6 +172,8 @@ class GuideMutationIdempotencyRecord(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     response_json: Mapped[dict | None] = mapped_column(JSON)
     setup_run_id: Mapped[str | None] = mapped_column(ForeignKey("project_setup_runs.id"))
+    activation_facts_json: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
+    activation_authority_json: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -398,6 +409,24 @@ class ProjectGuide(Base):
 
     __tablename__ = "project_guides"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["contribution_policy_version_id", "contribution_policy_id", "project_id"],
+            ["contribution_policy_versions.id", "contribution_policy_versions.contribution_policy_id",
+             "contribution_policy_versions.project_id"],
+            name="fk_project_guides_contribution_policy", use_alter=True,
+        ),
+        ForeignKeyConstraint(
+            ["activation_operation_id", "project_id", "id"],
+            ["guide_mutation_idempotency_records.operation_id", "guide_mutation_idempotency_records.project_id",
+             "guide_mutation_idempotency_records.resource_id"],
+            name="fk_project_guides_activation_operation", use_alter=True,
+        ),
+        CheckConstraint(
+            "(contribution_policy_id is null and contribution_policy_version_id is null "
+            "and activation_operation_id is null) or (contribution_policy_id is not null "
+            "and contribution_policy_version_id is not null and activation_operation_id is not null)",
+            name="activation_binding_shape",
+        ),
         CheckConstraint(
             "(task_examples is null and task_examples_hash is null) or "
             "(task_examples is not null and task_examples_hash is not null and "
@@ -516,6 +545,10 @@ class ProjectGuide(Base):
     selected_revision_policy_id: Mapped[str | None] = mapped_column(String(36))
     selected_revision_policy_generation: Mapped[int | None] = mapped_column(Integer)
     selected_revision_policy_hash: Mapped[str | None] = mapped_column(String(71))
+
+    contribution_policy_id: Mapped[UUID | None] = mapped_column(Uuid())
+    contribution_policy_version_id: Mapped[UUID | None] = mapped_column(Uuid())
+    activation_operation_id: Mapped[UUID | None] = mapped_column(Uuid())
 
     project: Mapped[Project] = relationship(back_populates="guides")
 

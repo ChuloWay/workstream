@@ -44,6 +44,8 @@ class GuideMutationRepository:
         project_id: str,
         resource_id: str,
         operation_generation: int,
+        activation_facts_json: dict | None = None,
+        activation_authority_json: dict | None = None,
     ) -> tuple[str, GuideMutationIdempotencyRecord]:
         """Claim or lock one actor/action replay namespace."""
         values = {
@@ -59,6 +61,8 @@ class GuideMutationRepository:
             "resource_id": resource_id,
             "operation_generation": operation_generation,
             "status": "pending",
+            "activation_facts_json": activation_facts_json,
+            "activation_authority_json": activation_authority_json,
         }
         record_id = await self._session.scalar(
             insert(GuideMutationIdempotencyRecord)
