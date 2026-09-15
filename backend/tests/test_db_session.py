@@ -58,6 +58,7 @@ async def test_get_engine_requires_workstream_database_url(monkeypatch) -> None:
 def test_fresh_runtime_process_resolves_model_graph(entrypoint):
     """API and worker startup must not depend on pytest or Alembic model imports."""
     from pathlib import Path
+    import os
     import subprocess
     import sys
 
@@ -71,6 +72,7 @@ def test_fresh_runtime_process_resolves_model_graph(entrypoint):
     result = subprocess.run(
         [sys.executable, "-c", code],
         cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "WORKSTREAM_CELERY_BROKER_URL": "memory://"},
         capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 0, result.stderr
