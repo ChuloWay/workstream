@@ -21,6 +21,7 @@ async def test_current_manager_consumes_and_replays_exact_evidence(monkeypatch):
     case = Case(monkeypatch)
     async with case.prepare() as handle:
         receipt = await handle.consume_new(case.facts)
+    assert case.locks == ["control", "principal", "grant"]
     assert receipt.resource_context_digest == case.facts.digest
     assert receipt.admin_role_grant_id == case.grant.id
     assert case.last_filters["exact_project_scope"] is True
@@ -34,6 +35,7 @@ async def test_current_manager_consumes_and_replays_exact_evidence(monkeypatch):
         await handle.validate_replay(facts, receipt.authorization_decision_event_id)
         with pytest.raises(PreparedAuthorizationInvalid):
             await handle.validate_replay(facts, receipt.authorization_decision_event_id)
+    assert case.locks == ["control", "principal", "grant"] * 2
     assert len(case.events) == 1
     case.grant.status = "revoked"
     with pytest.raises(AuthorizationDenied):
@@ -205,3 +207,14 @@ async def test_raw_prep_rejects_wrong_final_resource(monkeypatch, resource_kind)
         with pytest.raises(PreparedAuthorizationHandleInvalid):
             await handle._service.consume(handle._handle, ActionId.PROJECT_GUIDE_ACTIVATE, handle._input, resource)
     assert case.events == []
+
+
+async def test_replay_acquires_control_before_principal_and_grant(monkeypatch):
+    case = Case(monkeypatch)
+    async with case.prepare() as handle:
+        receipt = await handle.consume_new(case.facts)
+    case.locks.clear()
+    async with case.prepare() as handle:
+        await handle.validate_replay(case.facts, receipt.authorization_decision_event_id)
+    assert case.locks == ["control", "principal", "grant"]
+    assert len(case.events) == 1

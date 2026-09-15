@@ -109,7 +109,7 @@ substituting only principal storage and audit persistence.
 | `domain/resource_digest.py`: `authorization_resource_digest`; `domain/audit_targets.py`: `project_authority_audit_target` | Context tests and existing `tests/projects/guide_activation/test_audit_contract.py`: exact receipt digest and closed, privacy-bounded audit target |
 | `app/adapters/auth/__init__.py`: `guide_activation_authorization`; existing `app/adapters/projects/__init__.py`: `project_guide_activation_port` (consumer, no second operation) | `tests/authorization/guide_activation/test_postgresql.py`: `test_complete_activation_and_live_replay`, `test_live_authority_denial_preserves_draft`, `test_live_activation_keeps_product_readiness_guards`, `test_caller_rollback_removes_activation_evidence` |
 | `catalogue.py`: `_index_actions`; no service allowlist additions | Existing exact active inventory in `tests/authorization/setup_finalization/test_catalogue.py`, all-pairs resource fixture in `tests/test_authorization.py`, new service-denial controls |
-| CP07 service / SQL 0023 unchanged owners | `tests/authorization/guide_activation/test_concurrency.py`: `test_activation_and_revocation_serialize` (both orders, two real DB sessions, observed PostgreSQL waiter/blocker); `test_concurrent_activation_replays_once`; existing CP07 negative chain and supersession tests retained |
+| CP07 service / SQL 0023 unchanged owners | `tests/authorization/guide_activation/test_concurrency.py`: `test_activation_and_revocation_serialize` (real admin reserve/require/complete path, both orders, observed wait on `authority_control(1)`); `test_activation_and_grant_row_revocation_serialize` retains direct grant-row proof; `test_concurrent_activation_replays_once`; existing CP07 negative chain and supersession tests retained |
 
 Inspection of SQL 0023 confirms action, resource, bounded audit facts and exact
 activation custody already agree with this design. **No migration is expected**;
@@ -124,3 +124,19 @@ clean candidate. Lead owns implementation and shared verification.
 Human focus: only exact project-manager authority becomes live; the sole CP07
 transaction, separate pre/post approvals and false-branch denial remain intact.
 Public activation exposure and downstream task lineage remain subsequent work.
+
+
+### Implementation reconciliation
+
+The shared manager helper did not previously acquire AuthorityControl. Activation
+now acquires that existing singleton narrowly, before actor/link and grant locks;
+other manager operations keep their existing behavior. Direct order assertions
+cover both new consumption and replay. Counterfactual removal or reordering of
+Control must fail those assertions.
+
+The direct grant-row concurrency test proves last-moment grant serialization.
+A separate real admin-grant reserve/authorize/revoke test pauses after the first
+Control lock, before principal/product locks, and observes the competing session
+waiting on AuthorityControl itself. Both operation orders then prove committed
+revocation and the expected activation state. This is service/transaction proof;
+it does not claim an HTTP activation endpoint or an observed prior deadlock.

@@ -45,8 +45,9 @@ Project guide activation requires the guide plus its required policy context bef
 - revision policy
 - explicitly selected current published ContributionPolicyVersion
 
-CP07 delivers this hidden activation/binding contract; AUTH-12H live authority
-remains pending. See the [current guide contract](spec_chunk_3_project_guide_foundation.md).
+CP07 delivers this hidden activation/binding contract, and AUTH-12H supplies
+explicit live exact-project manager authority. Composition without that adapter
+still denies; HTTP activation exposure remains pending. See the [current guide contract](spec_chunk_3_project_guide_foundation.md).
 
 The Workstream-derived submission artifact policy defines project-level intake
 rules. Project owners provide open-ended project material and business terms.

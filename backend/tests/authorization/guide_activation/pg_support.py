@@ -53,3 +53,31 @@ async def activation_state(factory):
                 "WHERE action_id='project.guide.activate' ORDER BY id"
             ))).all(),
         }
+
+
+async def revoke_manager_grant(session, context, grant):
+    """Run the real admin reserve/require/complete path; caller commits as in the route."""
+    from app.modules.authorization.admin_service import AdminRoleGrantService
+    from app.modules.authorization.catalogue import ActionId
+    from app.modules.authorization.kernel import AuthorizationService
+    from app.modules.authorization.runtime import AdminRoleGrantResourceContext
+    from app.modules.authorization.schemas import AdminRoleGrantRevokeRequest, AuthorityOperation, derive_reason_digest
+
+    reason = "Manager authority revoked"
+    request = AdminRoleGrantRevokeRequest(
+        operation=AuthorityOperation.ADMIN_ROLE_GRANT_REVOKE, grant_id=grant,
+        reason_digest=derive_reason_digest(reason),
+    )
+    owner = AdminRoleGrantService(session)
+    reservation = await owner.reserve(
+        idempotency_key=uuid4(), actor_profile_id=context.actor_profile_id, request=request,
+    )
+    assert reservation.outcome == "claimed"
+    decision = await AuthorizationService(session, context).require(
+        ActionId.ADMIN_ROLE_GRANT_REVOKE,
+        AdminRoleGrantResourceContext(resource_type="admin_role_grant", resource_id=grant),
+    )
+    return await owner.complete_revoke(
+        claim=reservation.claim, request=request, decision=decision,
+        actor_profile_id=context.actor_profile_id, reason=reason,
+    )

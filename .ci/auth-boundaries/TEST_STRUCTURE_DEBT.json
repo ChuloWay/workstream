@@ -2,11 +2,11 @@
   "entries": [
     {
       "capability": "unassigned_legacy_auth",
-      "content_sha256": "7ec73656f0478683b33c70dd989fca359cb80846365e81e41960c11e2809416d",
-      "end_line": 1488,
+      "content_sha256": "8f23c527642d4fb2fb68060333daef3abd89eda44b9b337f2b4d7c3f79f13e57",
+      "end_line": 1490,
       "hard_limit": 1200,
       "kind": "production_file",
-      "observed_lines": 1488,
+      "observed_lines": 1490,
       "path": "backend/app/modules/authorization/kernel.py",
       "qualified_symbol": null,
       "removal_chunk": "WS-AUTH-003-CLOSE",
@@ -51,14 +51,14 @@
     {
       "capability": "unassigned_legacy_auth",
       "content_sha256": "8d1c9f70f6e339d9187d0e4baeb2c5ec50c82b8d6a108ff921937c59bd734fc8",
-      "end_line": 1034,
+      "end_line": 1036,
       "hard_limit": 100,
       "kind": "production_function",
       "observed_lines": 126,
       "path": "backend/app/modules/authorization/kernel.py",
       "qualified_symbol": "AuthorizationService._require_prelocked",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 909
+      "start_line": 911
     },
     {
       "capability": "unassigned_legacy_auth",

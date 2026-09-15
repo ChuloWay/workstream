@@ -39,6 +39,7 @@ class Case(ProposalCase):
     def __init__(self, monkeypatch):
         super().__init__(monkeypatch)
         self.facts = activation_facts()
+        self.locks = []
         self.context = self.context.model_copy(update=dict(
             actor_profile_id=self.facts.locator.actor_profile_id,
             identity_link_id=self.facts.locator.identity_link_id,
@@ -55,9 +56,17 @@ class Case(ProposalCase):
 
         monkeypatch.setattr(adapters, "AuthorizationService", kernel)
 
+    async def lock_control(self):
+        self.locks.append("control")
+
+    async def lock_request_actor(self, link, actor):
+        self.locks.append("principal")
+        return await super().lock_request_actor(link, actor)
+
     async def find_effective_grant(self, actor, permission, **filters):
         # Model the real repository's system-scope alternative: this must not
         # silently reject system grants when the caller forgot exact scope.
+        self.locks.append("grant")
         self.last_filters = filters
         if self.role not in filters["allowed_roles"] or self.grant.status != "active":
             return None

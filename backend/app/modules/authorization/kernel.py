@@ -549,6 +549,8 @@ class AuthorizationService:
             or scope.project_id is None
         ):
             raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.SCOPE_NOT_AUTHORIZED)
+        if action_id is ActionId.PROJECT_GUIDE_ACTIVATE:
+            await self._admin.lock_control()
         locked = await self._admin.lock_request_actor(
             context.identity_link_id, context.actor_profile_id
         )
