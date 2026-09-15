@@ -550,8 +550,11 @@ ContributionPolicyVersion become one immutable guide binding. It atomically
 supersedes the explicitly selected prior guide and activates a draft Project.
 Replay preserves the original binding after supersession or policy retirement;
 active-guide reads require that custody. Activation no longer uses the superseded economic readiness guard.
-Default activation composition remains unavailable. AUTH-12H supplies live manager
-authority next; controlled revision integration remains pending.
+AUTH-12H supplies explicit live authority for an active Project Manager scoped to
+that exact project. Shared prepared authorization locks current identity and grant
+before product resources, binds the complete activation digest and rechecks live
+authority on replay. Composition without an authority adapter still denies.
+Public activation wiring and downstream task/revision integration remain pending.
 
 ## v0.1 Success Standard
 

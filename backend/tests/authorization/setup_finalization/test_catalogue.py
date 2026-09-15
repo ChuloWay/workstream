@@ -117,7 +117,7 @@ def test_setup_existing_active_pairs_and_downstream_plans_are_preserved():
         ACTION_BY_ID[ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE].availability
         is ActionAvailability.ACTIVE
     )
-    assert ACTION_BY_ID[ActionId.PROJECT_GUIDE_ACTIVATE].availability is ActionAvailability.PLANNED
+    assert ACTION_BY_ID[ActionId.PROJECT_GUIDE_ACTIVATE].availability is ActionAvailability.ACTIVE
 
 
 def test_exact_active_action_inventory():
@@ -129,6 +129,7 @@ def test_exact_active_action_inventory():
         for definition in ACTION_DEFINITIONS
         if definition.availability is ActionAvailability.ACTIVE
     } == {
+        ActionId.PROJECT_GUIDE_ACTIVATE,
         ActionId.ACTOR_PROFILE_READ_SELF,
         ActionId.ACTOR_PROFILE_UPDATE_SELF,
         ActionId.AUTHORIZATION_PERMISSION_CATALOGUE_READ,

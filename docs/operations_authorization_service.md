@@ -1241,3 +1241,26 @@ AUTH-12F4 supplies exact-project Project Manager authority; POL-05B supplies pub
 proposal content requires current exact-project manager authority; Operator and
 Audit diagnostic permissions do not grant it. Proposal services require explicit
 authority injection; there is no unconfigured construction path.
+
+
+### Complete-guide activation authority
+
+AUTH-12H activates only `project.guide.activate` with `project.guide.manage`
+through the explicit `guide_activation_authorization` adapter. It authorizes the
+existing CP07 internal operation; it does not expose a new public endpoint.
+Only a current human Project Manager grant scoped to the exact project qualifies.
+System scope, other administrative roles and fixed services do not qualify.
+
+Shared PREP locks authority control, actor/link and the manager grant before CP07
+locks project and policy resources. A nominal one-use handle binds the operation,
+request, identity, session and root transaction. The complete CP07 facts digest is
+the exact digest saved in the allow event, mutation ledger and activation receipt.
+CP07 still owns complete-chain readiness, separate approvals, ContributionPolicy
+validation and atomic activation/supersession. `human_review_required=false`
+remains activation-blocked under the current capability guard.
+
+Exact replay acquires fresh live authority and validates the retained decision;
+it returns the original receipt without a second allow or activation. Supersession
+or later ContributionPolicy retirement does not rewrite that evidence. Revoked
+actor/link/grant authority denies replay. Composition without the explicit adapter
+continues to deny; public activation and downstream task lineage remain pending.

@@ -9,8 +9,9 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   immutable ContributionRecords and optional
   project-policy-driven compensation awards without coupling lifecycle truth to
   an economic provider.
-- Next usable boundary: AUTH-12H live authority for completed
-  [CP07 activation/binding](../WS-ARCH-001/WS-ARCH-001-CP07.md), before task readiness.
+- Next usable boundary: CP08 task-attempt lineage after completed
+  [CP07 activation/binding](../WS-ARCH-001/WS-ARCH-001-CP07.md) and
+  [AUTH-12H live authority](../WS-AUTH-001/WS-AUTH-001-12H.md), before task readiness.
 - Governing sources: `docs/spec_contribution_compensation.md`,
   [`CONFORMANCE.md`](CONFORMANCE.md), code, migrations, and tests.
 - Preserve: exact policy-version lineage, no claim-time drift, decimal-string
@@ -39,7 +40,7 @@ the hidden policy behavior.
 1. Completed CP06 validates the expected version against the active policy's current
    published selector for new guide activation, without reselecting existing
    frozen work; CP07 supplies hidden PROJECTS
-   activation/binding, and AUTH-12H supplies its live authority next. CP08 supplies lineage fields;
+   activation/binding, and AUTH-12H supplies its live manager authority. CP08 supplies lineage fields;
    ARCH-03B locks/copies them through TaskAssignment and Submission. CP09 removes the replaced legacy
    economic path only after all consumers are replaced, including CHECKERS and
    public Submission cutover; it does not block canonical `allow_review`.

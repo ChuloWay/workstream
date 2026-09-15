@@ -1,5 +1,8 @@
 # Chunk Contract: WS-AUTH-001-12H - Unified Guide Activation Cutover
 
+Adopted and reconciled by the [current AUTH-12H change record](../../WS-AUTH-001-12H.md).
+The earlier design below is historical; current scope and proof are in that record.
+
 Status: Proposed after POL-07, merged 12B2, CP05 active
 ContributionPolicy behavior, CP06 validation, and CP07 ProjectGuide binding;
 inactive. Risk: L1. CP08, WS-ARCH-001-03A/03B/03C, and CP09 are downstream and

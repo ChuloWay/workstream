@@ -438,6 +438,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/domain/guide_activation.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/domain/guide_compilation.py"
     },
     {
@@ -499,6 +503,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/task_authority.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/guide_activation_authorization.py"
     },
     {
       "group": "auth",
@@ -1309,7 +1317,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "32afa8788f550051a9050c36e6244342323c9238d880adbe3671804d4d8d40f6",
+  "authority_digest": "7ffc098471cf45d88cfe75cf5405ef14dec93bec644fcb8ef8abd69e3efa0e14",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

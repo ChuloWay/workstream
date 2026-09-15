@@ -221,6 +221,7 @@ class _PreparedAuthorizationBinding:
     guide_compilation_resource_digest: str | None = None
     proposal_prepare_context: dict | None = None
     post_policy_prepare_context: dict | None = None
+    activation_prepare_context: dict | None = None
     contribution_policy_context: dict | None = None
     contribution_policy_resource_digest: str | None = None
     adapter_binding_context: dict | None = None
@@ -614,7 +615,7 @@ class PreparedAuthorizationService:
         issuance = self._live_issuance(handle)
         self._issued[handle] = _CONSUMED
         try:
-            replay = validate_review_replay if expected_action_id in GUIDE_PROPOSAL_ACTION_IDS | POST_POLICY_ACTION_IDS else validate_projection_replay
+            replay = validate_review_replay if expected_action_id in GUIDE_PROPOSAL_ACTION_IDS | POST_POLICY_ACTION_IDS | {ActionId.PROJECT_GUIDE_ACTIVATE} else validate_projection_replay
             await replay(
                 self,
                 issuance,

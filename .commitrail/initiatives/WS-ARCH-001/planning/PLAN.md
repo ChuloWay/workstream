@@ -17,7 +17,7 @@ checker-remediation boundary before public Submission cutover.
 | POL-04B | POL-04B1 plus merged POL-04A/04A3/04A2, AUTH-12I/12J/12B2, ARCH-04A catalogue/schema foundation | PROJECTS live unified setup wiring, no new compiler/finalizer |
 | CP05 | Merged CP04A/CP04B | AUTH exact policy-action activation |
 | [CP06](../WS-ARCH-001-CP06.md) | CP05 | Complete CON exact-version validation facts; no guide/attempt write |
-| [CP07](../WS-ARCH-001-CP07.md) | CP06 | Complete: PROJECTS hidden activation/binding and replacement readiness guard; live authority remains AUTH-12H |
+| [CP07](../WS-ARCH-001-CP07.md) | CP06 | Complete: PROJECTS hidden activation/binding and replacement readiness guard; live authority is delivered by AUTH-12H |
 | ARCH-04A | Merged canonical CHECKER catalogue and unified compilation contracts | CHECKERS post-phase public facts and registered evaluator conformance, no live run |
 | POL-05A | POL-04B | PROJECTS hidden effective/pre approval and separate immutable operation provenance |
 | AUTH-12F4 | POL-05A | AUTH approval adapter |
@@ -26,7 +26,7 @@ checker-remediation boundary before public Submission cutover.
 | AUTH-12G | POL-06A | AUTH exact post-policy action adapters |
 | POL-06B | POL-06A, AUTH-12G | PROJECTS live post-policy configuration, zero evaluator calls |
 | POL-07 | POL-06B, ARCH-04A, merged ART pre executor | One facade over ART pre and CHECKERS post contracts; no new persistence |
-| AUTH-12H | POL-07, CP07, merged AUTH-12B2 | Exact authority and live composition for the CP07 guide activation command |
+| [AUTH-12H](../../WS-AUTH-001/WS-AUTH-001-12H.md) | POL-07, CP07, merged AUTH-12B2 | Complete: exact manager authority and internal composition for CP07; ARCH-03A completes internal guide facts; HTTP exposure remains pending |
 | CP08 | CP07 | TASK-owned policy-lineage fields and public facts, no readiness commands |
 | ARCH-03A | AUTH-12H, CP08 | PROJECTS current active-generation public facts |
 | ARCH-03B | ARCH-03A, CP08 | TASK readiness/claim/assignment/Submission command lineage |

@@ -30,6 +30,7 @@ from app.modules.authorization.domain.guide_mutations import (
 )
 from app.modules.actors.service_identities import ServiceIdentity
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
+from app.modules.authorization.domain.guide_activation import ProjectGuideActivationResourceContext
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.schemas import AdminRole, AdminScope, ProjectRole
 from app.modules.authorization.submission_preparation import SubmissionBundlePreparationPreflightResourceContext, SubmissionBundlePreparationResourceContext
@@ -780,34 +781,6 @@ class ProjectSetupRunMutationResourceContext(BaseModel):
         """Bind setup ledger authority to the exact active run."""
         if self.resource_id != self.setup_run_id:
             raise ValueError("setup-run resource must match run")
-        return self
-
-
-class ProjectGuideActivationResourceContext(BaseModel):
-    """Complete guide and active-bundle identity for terminal activation."""
-
-    model_config = _STRICT_FROZEN
-
-    resource_type: Literal["project_guide_activation"]
-    resource_id: UUID
-    scope_project_id: UUID
-    guide_id: UUID
-    guide_version: str
-    source_snapshot_id: UUID
-    sufficiency_report_id: UUID
-    submission_artifact_policy_id: UUID
-    pre_submit_checker_policy_id: UUID
-    post_submit_checker_policy_id: UUID
-    review_policy_id: UUID
-    revision_policy_id: UUID
-    active_bundle_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    activation_generation: int = Field(ge=1)
-
-    @model_validator(mode="after")
-    def require_activation_identity(self):
-        """Bind terminal activation to the selected guide."""
-        if self.resource_id != self.guide_id:
-            raise ValueError("guide activation resource must match guide")
         return self
 
 

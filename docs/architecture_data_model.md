@@ -273,8 +273,9 @@ binding and additionally records `superseded_at`.
 Migration 0023 enforces this custody. Retained unbound active rows remain stored
 without invented evidence; current active-guide reads require an exact committed
 activation receipt and exclude those rows. A valid successor may supersede an
-explicitly selected retained predecessor without backfilling it. Live activation
-authority remains AUTH-12H work.
+explicitly selected retained predecessor without backfilling it. AUTH-12H supplies
+explicit internal activation authority for a live exact-project Project Manager;
+composition without an authority adapter and HTTP activation remain unavailable.
 
 Draft guides may have no selected review/revision policy while the authorized
 policy writer is unavailable. Active and superseded guides require both exact

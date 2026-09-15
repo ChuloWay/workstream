@@ -443,8 +443,9 @@ it does not require an active project merely to stop new binding use.
 
 During authorized Project Guide activation, PROJECTS calls the narrow CON
 validation participant. CP06 implements this internal caller-transaction
-dependency; CP07 delivers hidden guide binding, while AUTH-12H live activation
-authority remains pending.
+dependency; CP07 delivers hidden guide binding, and AUTH-12H supplies explicit
+live exact-project manager authority. Activation takes the authority-control and
+principal/grant locks before these product locks. HTTP activation remains pending.
 It first obtains the PROJECTS project fence, then the CON project-scope fence,
 and locks the explicitly selected active ContributionPolicy,
 its current published version, both rules, referenced definitions, and

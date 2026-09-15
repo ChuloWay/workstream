@@ -26,7 +26,7 @@ from .custody import ACTION, activation_custody, load_guide_activation, require_
 
 
 class GuideActivationService:
-    """Default-deny composition; AUTH-12H supplies a live nominal participant later."""
+    """AUTH-12H supplies live manager authority; composition without it denies."""
 
     def __init__(
         self, session, *, contribution, planner, pre_catalogue, post_catalogue, authorization=None

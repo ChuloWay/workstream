@@ -575,7 +575,7 @@ ACTION_DEFINITIONS = (
         PermissionId.PROJECT_GUIDE_MANAGE,
         ActionOwner.AUTH_12B2,
     ),
-    _planned(
+    _active(
         ActionId.PROJECT_GUIDE_ACTIVATE,
         PermissionId.PROJECT_GUIDE_MANAGE,
         ActionOwner.AUTH_12H,
@@ -911,6 +911,7 @@ def _index_actions(
     if len(indexed) != len(definitions) or set(indexed) != ACTION_IDS:
         raise RuntimeError("authorization action catalogue is incomplete")
     active_actions = {
+        ActionId.PROJECT_GUIDE_ACTIVATE,
         *_CONTRIBUTION_POLICY_ACTION_IDS,
         *GUIDE_PROPOSAL_ACTION_IDS,
         *POST_POLICY_MUTATION_ACTION_IDS,

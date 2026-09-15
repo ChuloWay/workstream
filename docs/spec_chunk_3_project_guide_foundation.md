@@ -227,7 +227,8 @@ guide and its compiled/approved policy context, including the guide's bound
 ContributionPolicy/version and activation operation identifiers. It requires
 immutable activation custody; retained unbound rows are unavailable. The GET is
 available only to a covered Project Manager or Audit Authority grant, or a
-system-scoped Operator grant. AUTH-12H live activation authority remains pending.
+system-scoped Operator grant. AUTH-12H supplies internal activation authority only
+for a live exact-project Project Manager. HTTP activation exposure remains pending.
 
 ## Lifecycle Impact
 
@@ -299,5 +300,6 @@ Each immutable operation binds finalization, source, result, upstream approval,
 catalogue and canonical policy hash. Correction reuses the unified successor;
 no operation reopens finalization or calls an evaluator. Affected active-guide
 reads require this operation custody instead of role-string approval fields.
-AUTH-12G and POL-06B own live post-policy authority and public exposure; AUTH-12H
-owns complete-guide activation after the remaining owner prerequisites.
+AUTH-12G and POL-06B supply live post-policy authority and public exposure.
+AUTH-12H supplies live exact-project manager authority for the existing internal
+complete-guide activation operation; no HTTP activation endpoint is exposed.

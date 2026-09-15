@@ -223,7 +223,6 @@ from app.modules.authorization.runtime import (
     ProjectDiagnosticReadResourceContext,
     PROJECT_MUTATION_RESOURCE_BY_ACTION,
     ProjectCreateResourceContext,
-    ProjectGuideActivationResourceContext,
     ProjectGuideMutationResourceContext,
     ProjectGuideSourceSnapshotMutationResourceContext,
     ProjectGuideSufficiencyMutationResourceContext,
@@ -1864,22 +1863,9 @@ def test_project_mutation_resources_and_prepared_scopes_are_closed() -> None:
     from app.modules.authorization.domain.project_setup_finalization import finalization_resource_context
     from tests.authorization.setup_finalization.support import finalization_facts
     setup_resource = finalization_resource_context(finalization_facts(project_id), uuid4(), uuid4())
-    activation_resource = ProjectGuideActivationResourceContext(
-        resource_type="project_guide_activation",
-        resource_id=guide_id,
-        scope_project_id=project_id,
-        guide_id=guide_id,
-        guide_version="1",
-        source_snapshot_id=snapshot_id,
-        sufficiency_report_id=report_id,
-        submission_artifact_policy_id=submission_policy_id,
-        pre_submit_checker_policy_id=uuid4(),
-        post_submit_checker_policy_id=checker_policy_id,
-        review_policy_id=review_id,
-        revision_policy_id=revision_id,
-        active_bundle_digest=DIGEST,
-        activation_generation=1,
-    )
+    from app.modules.authorization.domain.guide_activation import activation_resource as live_activation_resource
+    from tests.authorization.guide_activation.support import activation_facts
+    activation_resource = live_activation_resource(activation_facts(project_id))
     resources = {
         ActionId.PROJECT_CREATE: create_resource,
         **guide_resources,

@@ -1259,7 +1259,7 @@ execution task, calls no provider, and does not make the hidden POL workflow liv
 | `project.post_submit_checker_policy.correction.request` | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
 | `project.post_submit_checker_policy.derive` | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
 | `project.setup_run.update` (active) | `project.guide.manage` | `WS-AUTH-001-12B2` |
-| `project.guide.activate` | `project.guide.manage` | `WS-AUTH-001-12H` |
+| `project.guide.activate` (active internally) | `project.guide.manage` | `WS-AUTH-001-12H` |
 
 The v0.1 baseline preserves historical sufficiency
 rows as readable, unattributed records while requiring complete creation or
@@ -1498,3 +1498,20 @@ actor's current authority, held through receipt classification. Automatic input
 is resolved from owned source/setup rows and verified ART material; callers
 cannot supply provider input or claimed context hashes. Neither trigger approves
 or activates guide policies.
+
+
+### Complete guide activation custody
+
+`project.guide.activate` is active internally through AUTH-12H's explicit adapter
+for CP07's sole activation operation. Only a live human Project Manager with an
+exact-project grant may prepare it. System-scoped manager grants and service
+identities are insufficient. The operation acquires shared authority locks before
+product resources and consumes one request/session/root-transaction-bound PREP
+handle over CP07's complete immutable facts. AUTH uses the owner's exact digest,
+not a separately reconstructed policy chain. The allow event contains bounded
+selectors and that digest, never the policy body or guide material.
+
+Replay validates the original event under fresh live authority and returns the
+original receipt without another activation or decision. Readiness and policy
+selection remain CP07 responsibilities; unavailable automated acceptance still
+blocks `human_review_required=false`. Public activation wiring remains pending.

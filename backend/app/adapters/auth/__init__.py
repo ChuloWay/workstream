@@ -1,5 +1,6 @@
 """Authorization application adapters and same-owner composition."""
 
+from app.modules.projects.api.guide_activation import GuideActivationAuthorizationPort
 from contextlib import asynccontextmanager
 from uuid import UUID, uuid5
 from app.modules.actors.api import ServiceIdentity
@@ -177,3 +178,12 @@ async def post_policy_service_authority(session: AsyncSession, request_id: UUID)
         )
     except PreparedAuthorizationUnsupported:
         raise AuthorizationDenied("post-policy service authority denied") from None
+
+
+def guide_activation_authorization(
+    session: AsyncSession, context: AuthorizationContext,
+) -> GuideActivationAuthorizationPort:
+    """Compose live manager authority for the sole complete-guide operation."""
+    from app.modules.authorization.guide_activation_authorization import GuideActivationAuthorizationAdapter
+
+    return GuideActivationAuthorizationAdapter(session, context)
