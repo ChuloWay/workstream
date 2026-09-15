@@ -161,3 +161,55 @@ async def test_waiting_successor_refreshes_cached_project_status(clean_postgres_
             if task is not None and not task.done():
                 task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_waiting_activation_denies_refreshed_unavailable_project_before_policy_reads(
+    clean_postgres_database,
+):
+    """Current locked Project state controls admission before another owner is read."""
+    import asyncio
+    from unittest.mock import AsyncMock
+    from app.modules.projects.models import Project
+    from tests.auth_concurrency_support import wait_for_named_database_lock
+
+    async with activation_case(clean_postgres_database) as (factory, command, actor, grant, _, _):
+        task = None
+        try:
+            async with factory() as waiting:
+                await waiting.begin()
+                cached = await waiting.get(Project, str(command.target.proposal.project_id))
+                assert cached.status == "draft"
+                label = "cp07-unavailable-project-" + uuid4().hex
+                await waiting.execute(text("select set_config('application_name',:name,true)"), dict(name=label))
+                waiting_pid = await waiting.scalar(text("select pg_backend_pid()"))
+                service = activation_service(waiting, actor, command, grant)
+                service.post.lock_policy = AsyncMock(side_effect=AssertionError(
+                    "unavailable Project reached downstream policy reads"
+                ))
+                async with factory() as changer, changer.begin():
+                    changer_pid = await changer.scalar(text("select pg_backend_pid()"))
+                    await changer.execute(text("UPDATE projects SET status='archived' WHERE id=:id"),
+                                          dict(id=str(command.target.proposal.project_id)))
+                    task = asyncio.create_task(service.activate(command, actor=actor, request_id=uuid4()))
+                    await asyncio.wait_for(wait_for_named_database_lock(
+                        clean_postgres_database, label,
+                        expected_waiter_pid=waiting_pid, expected_blocker_pid=changer_pid,
+                    ), 10)
+                    assert not task.done()
+                with pytest.raises(GuideProposalError, match="approval_blocked"):
+                    await asyncio.wait_for(task, 20)
+                service.post.lock_policy.assert_not_awaited()
+                assert cached.status == "archived"
+                await waiting.rollback()
+            async with factory() as session:
+                assert (await session.get(ProjectGuide, str(command.target.proposal.guide_id))).status == "draft"
+                assert await session.scalar(text(
+                    "SELECT count(*) FROM guide_mutation_idempotency_records WHERE action_id='project.guide.activate'"
+                )) == 0
+                assert await session.scalar(text(
+                    "SELECT count(*) FROM audit_events WHERE action_id='project.guide.activate'"
+                )) == 0
+        finally:
+            if task is not None and not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)

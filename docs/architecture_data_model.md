@@ -219,7 +219,16 @@ Fields:
 - `version`
 - `contribution_policy_version_id`
 - `status`
-- `activation_sequence` (nullable only while draft; immutable after allocation)
+- `contribution_policy_id`
+- `activation_operation_id` (the committed guide mutation ledger operation)
+- `mutation_generation`
+- `last_mutated_by_actor_profile_id`
+- `last_mutated_via_identity_link_id`
+- `last_mutated_by_admin_role_grant_id`
+- `last_mutation_action_id`
+- `last_mutation_scope_type`
+- `last_mutation_scope_project_id`
+- `last_authorization_decision_event_id`
 - `retained_content_markdown` (read-only retained data; excluded from current APIs)
 - `task_examples` (required ordered JSON list on new guide versions)
 - `task_examples_hash` (domain-separated canonical commitment to that list)
@@ -253,12 +262,19 @@ extracted into PostgreSQL.
 `approved_by` and `effective_at` are server-written activation provenance, not
 request-body fields and not contributor-facing guide content.
 
-Guide status is exactly `draft | active | superseded`. Draft rows have null
-activation sequence/approval/effective/superseded provenance. Active and
-superseded rows retain one positive per-project activation sequence plus original
-approval/effective provenance; superseded rows additionally retain
-`superseded_at`. The planned 02A migration enforces this shape and immutable
-chronology before Task stamping consumes it.
+Guide status is exactly `draft | active | superseded`. New draft rows have null
+activation operation, ContributionPolicy binding, approval, effective and
+superseded provenance. CP07 activation advances the guide mutation generation
+and freezes the exact policy/version binding, consumed authority and original
+approval/effective provenance in the committed guide mutation ledger. A successor
+supersedes only its explicitly selected predecessor; that predecessor retains its
+binding and additionally records `superseded_at`.
+
+Migration 0023 enforces this custody. Retained unbound active rows remain stored
+without invented evidence; current active-guide reads require an exact committed
+activation receipt and exclude those rows. A valid successor may supersede an
+explicitly selected retained predecessor without backfilling it. Live activation
+authority remains AUTH-12H work.
 
 Draft guides may have no selected review/revision policy while the authorized
 policy writer is unavailable. Active and superseded guides require both exact

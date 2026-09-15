@@ -51,7 +51,8 @@ actual Task/Submission/CheckerRun is required for activation.
   until their own replacement; this command never uses them.
 - Focused PROJECTS tests, real PostgreSQL custody/concurrency/replay/migration
   tests and necessary shared prerequisite/API-drill fixtures, exact lane/debt/behavior-ownership inventories;
-  canonical guide/AUTH/CON docs, README, roadmap and initiative navigation.
+  canonical guide/AUTH/CON and data-model docs, current data-flow view, README,
+  roadmap and initiative navigation.
 
 ### Not allowed
 
@@ -212,8 +213,9 @@ composition, followed by CP08 and task lineage work in the adopted sequence.
   binding discovery, exact replay and read/replay after CON retirement.
 - `test_successor.py` proves distinct guide versions, explicit predecessor
   selection, atomic supersession and replay of both immutable receipts. Its
-  two-session case proves a waiting activation refreshes a cached Project status
-  before recording the immutable prior-state receipt.
+  two-session successor case proves serialization and the resulting prior-state
+  receipt. A separate unavailable-Project case proves refreshed state denies
+  admission before downstream policy reads; later CON refresh cannot mask it.
 - `test_rejections.py`, `test_admission.py` and `test_direct_sql.py` cover exact
   selector rejection, unavailable/invalid authority, close failure, caller
   rollback, forbidden direct lifecycle writes, missing commit custody and

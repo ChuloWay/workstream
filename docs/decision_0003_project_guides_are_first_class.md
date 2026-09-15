@@ -24,9 +24,13 @@ The guide drives:
 - submission artifact policy
 - guide source snapshot and effective project submission artifact policy
 - project pre-submit checker policy generated from the effective project submission artifact policy
-- post-submit checker policy
+- separately approved post-submit checker policy with exact upstream approval custody
 - review policy
 - revision policy
+- explicitly selected current published ContributionPolicyVersion
+
+CP07 delivers this hidden activation/binding contract; AUTH-12H live authority
+remains pending. See the [current guide contract](spec_chunk_3_project_guide_foundation.md).
 - common rejection reasons
 
 The submission artifact, checker, review, and revision policies are guide-version
@@ -40,9 +44,13 @@ Project guide activation requires the guide plus its required policy context bef
 - submission artifact policy
 - effective project submission artifact policy hash
 - project pre-submit checker bundle hash
-- post-submit checker policy
+- separately approved post-submit checker policy with exact upstream approval custody
 - review policy
 - revision policy
+- explicitly selected current published ContributionPolicyVersion
+
+CP07 delivers this hidden activation/binding contract; AUTH-12H live authority
+remains pending. See the [current guide contract](spec_chunk_3_project_guide_foundation.md).
 
 The Workstream-derived submission artifact policy defines project-level intake
 rules. Project owners provide open-ended project material and business terms.

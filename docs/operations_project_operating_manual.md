@@ -69,11 +69,10 @@ remaining setup/activation work:
 - each task locks the guide snapshot, effective project submission artifact policy hash, and pre-submit checker bundle hash before entering `READY`
 
 The existing versioned ReviewPolicy setting `human_review_required` defaults
-true. False may be configured in draft, but guide activation requires the
-authorized automated FinalAcceptance/CON path and adequate configured checks;
-it does not require a human reviewer pool, lease or decision endpoint.
-Unsupported false activation is rejected rather than silently switched to
-true. See the [implementation handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
+true. False may be configured in draft, but CP07 currently rejects false guide
+activation: automated acceptance is unavailable. Supporting it requires the
+future authorized shared FinalAcceptance/CON path and adequate configured checks.
+The setting is never silently switched to true. See the [implementation handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
 
 Guide creation freezes the declared document set internally; there is no separate
 public source-snapshot creation step. The internal guide source snapshot freezes the declared document metadata and
