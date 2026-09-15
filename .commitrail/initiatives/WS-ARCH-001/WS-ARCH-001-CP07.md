@@ -36,7 +36,8 @@ actual Task/Submission/CheckerRun is required for activation.
 
 - PROJECTS `api/guide_activation.py` and a focused `guide_activation/` owner
   package for contracts, operation custody, repository and service; PROJECTS
-  models/schemas/readiness/read composition and exact adapter root wiring.
+  models/schemas/readiness/read composition, existing guide mutation ledger and
+  repository, and exact adapter root wiring.
 - A PROJECTS-owned local CON validation contract and application adapter using
   only CON's public API; existing CHECKERS public planners/catalogues.
 - One `0023` activation-custody migration, exact Alembic head/graph and measured
@@ -67,9 +68,13 @@ actual Task/Submission/CheckerRun is required for activation.
    CON policy/version and expected previous active guide. Reject malformed,
    missing, stale and mixed-project selectors; do not infer latest selections.
 2. Introduce a narrow nominal activation authorization participant, default
-   unavailable. Enter its authority scope before owner locks, then lock Project
-   and the existing finalized proposal chain. Consume exact resource-bound
-   authority after all readiness/CON facts are locked. The participant owns
+   unavailable. Acquire the full authority scope (control, caller, link, grant)
+   before Project or product rows, then Project, draft/proposal/current approvals,
+   and CON policy/version/graph/bindings. Prepare and consume exact resource-bound
+   authority only after all readiness/CON facts are locked; close the prepared
+   handle in `finally`. The strong immutable receipt binds actor, identity link,
+   matched administrative grant, scope, audit decision and resource digest.
+   The participant owns
    authority locks and fresh replay checks; PROJECTS owns product writes and the
    caller-owned root transaction. AUTH-12H implements the live participant.
 3. Reuse canonical current-upstream/post-approval custody and catalogue checks;
@@ -81,8 +86,17 @@ actual Task/Submission/CheckerRun is required for activation.
 4. Call CON through an injected PROJECTS-local port. Always request
    `guide_activation`, verify returned exact identity/purpose and preserve its
    locks. Never use revision adoption to admit a retired or stale selection.
-5. Persist an immutable activation operation and complete result, correlated
-   with exact actor/link/grant and consumed audit decision. The existing audit
+   The bridge imports only CON public APIs; outer composition injects its port.
+   Do not import the CON adapter root from the PROJECTS adapter root: CON already
+   depends on PROJECTS eligibility, so that would introduce a cycle.
+5. Extend `GuideMutationIdempotencyRecord` and `GuideMutationRepository` for
+   `project.guide.activate`; do not create a second replay ledger. Reuse the
+   actor/action/key namespace, pending-to-committed reservation and immutable
+   response. Add activation-only exact binding, prior guide/generation and prior
+   Project status fields as needed, with action-specific shape constraints.
+   Extend the existing mutation guard and custody functions for this action.
+   The committed ledger operation and complete result are the canonical immutable
+   binding, correlated with exact actor/link/grant and consumed audit decision. The existing audit
    schema already admits `project.guide.activate` / `project.guide.manage`;
    registration is not live evaluator authority. Hidden tests supply controlled
    participants and real audit persistence, without claiming live AUTH activation.
@@ -93,13 +107,26 @@ actual Task/Submission/CheckerRun is required for activation.
 7. Completed replay verifies immutable request/result custody and fresh scoped
    authority, returns the original receipt and creates no new effects. It must
    remain possible after the guide is superseded or CON policy retired; replay
-   is not a new binding and must not silently consult current policy selection.
-8. Migration guards tie lifecycle writes to exact immutable activation custody,
-   enforce same-project CON foreign keys, reject missing/extra/mismatched rows,
-   and preserve retained data. Drafts cannot require a policy before selection.
-   Do not manufacture CON lineage for existing rows. Resolve enforcement for
-   retained active rows explicitly in plan review before implementation; old
-   unbound rows cannot satisfy the new activation/read contract.
+   is not a new binding and must not silently consult current policy selection
+   or invoke the draft-only `GuideProposalRepository.lock` path.
+8. Add nullable guide selectors for exact CON policy/version and activation
+   operation, with same-project composite foreign keys. Replace the existing
+   `guide_lineage_lifecycle_guard` under the same name for INSERT and UPDATE:
+   insertion requires draft/unbound; an update ending active requires complete
+   non-null binding selectors and exact deferred committed activation custody.
+   Admit draft-to-active and active-to-superseded lifecycle transitions only.
+   Freeze bound selectors, including CON identity. No NOT VALID constraint or
+   backfill is needed: untouched retained active rows stay unchanged; an explicit
+   retained unbound predecessor may become superseded without fabricated lineage.
+   Active-read composition must load the immutable operation and exact binding;
+   unbound retained rows are unavailable. Reads do not rerun current CON eligibility.
+9. Add a narrow deferred Project draft-to-active custody trigger requiring the
+   same committed activation operation and final exact active bound guide.
+   Existing Project creation already requires draft. Active guide replacement
+   leaves the Project active; the service denies other Project states. Do not
+   introduce a general Project lifecycle subsystem. Extend only the existing
+   isolated downstream fixture's named trigger suspension for this new guard;
+   CP07 activation proofs must use the real custody path, never that helper.
 
 ## Acceptance criteria
 
@@ -119,9 +146,14 @@ actual Task/Submission/CheckerRun is required for activation.
 - Same-key exact replay after lost response returns original evidence once;
   changed payload/actor and revoked authority deny. Supersession/retirement
   does not rewrite the original receipt or rebind its policy.
-- Direct SQL rejects incomplete/mismatched activation custody and later binding
-  changes. Migration roundtrip preserves unrelated schema, downgrade refuses
-  retained activation evidence, and upgrade never invents historical bindings.
+- Direct SQL rejects active guide insertion, activation without committed exact
+  custody, missing/foreign CON selectors, copied audit decisions, pending records
+  at commit, partial Project/guide transitions and later binding mutation/deletion.
+  Positive controls reach each targeted guard with other required facts intact.
+- Upgrade an actual 0022 unbound active guide unchanged, prove active-read denial,
+  and prove a fresh authorized activation can supersede it without backfill.
+  Migration roundtrip preserves unrelated schema; downgrade refuses retained
+  activation evidence. Fresh valid activation is readable after CON retirement.
 - No live endpoint/action or downstream TASK/Submission capability is claimed.
 
 ## Risk and review routing
@@ -149,7 +181,8 @@ in the PR trust summary.
 ## Reconciliation
 
 The adopted CP07 skeleton is planning history, not an executable contract.
-This record replaces its ambiguous non-null-at-creation and payment wording;
-retained-schema enforcement is the remaining plan-review decision. The next
+This record replaces its ambiguous non-null-at-creation and payment wording.
+Plan review chose the existing guide lifecycle trigger, narrow Project activation
+commit guard and existing guide mutation ledger to preserve one operation owner. The next
 usable boundary after this hidden command is AUTH-12H's exact live activation
 composition, followed by CP08 and task lineage work in the adopted sequence.
