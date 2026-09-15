@@ -203,14 +203,17 @@ async def test_policy_audit_sql_retains_resource_and_private_fact_guards(
 @pytest.mark.parametrize(
     "shape", ("missing_anchor", "duplicate_anchor", "existing_token", "first_token")
 )
-def test_audit_resource_migration_rejects_ambiguous_constraint_shape(monkeypatch, shape):
+@pytest.mark.parametrize("migration_name", (
+    "0012_contribution_policy_audit_resource", "0022_adapter_binding_audit_resource",
+))
+def test_audit_resource_migration_rejects_ambiguous_constraint_shape(monkeypatch, shape, migration_name):
     """A malformed installed expression cannot reach either constraint DDL call."""
     import importlib.util
     from unittest.mock import Mock
 
     path = (
         Path(__file__).resolve().parents[3]
-        / "alembic/versions/0012_contribution_policy_audit_resource.py"
+        / f"alembic/versions/{migration_name}.py"
     )
     spec = importlib.util.spec_from_file_location("cp05_audit_migration", path)
     module = importlib.util.module_from_spec(spec)
@@ -238,14 +241,17 @@ def test_audit_resource_migration_rejects_ambiguous_constraint_shape(monkeypatch
 @pytest.mark.parametrize(
     "shape", ("valid", "missing_anchor", "extra_anchor", "partial_pair", "unexpected_pair")
 )
-def test_action_constraint_amendment_preserves_exact_existing_branches(shape):
+@pytest.mark.parametrize("migration_name", (
+    "0012_contribution_policy_audit_resource", "0022_adapter_binding_audit_resource",
+))
+def test_action_constraint_amendment_preserves_exact_existing_branches(shape, migration_name):
     """Exercise the installed-baseline expression without running a database locally."""
     import importlib.util
 
     root = Path(__file__).resolve().parents[3]
     spec = importlib.util.spec_from_file_location(
         "cp05_action_migration",
-        root / "alembic/versions/0012_contribution_policy_audit_resource.py",
+        root / f"alembic/versions/{migration_name}.py",
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -257,15 +263,15 @@ def test_action_constraint_amendment_preserves_exact_existing_branches(shape):
     )
     if shape == "valid":
         amended = module._action_evidence(original, add=True)
-        for fragment in ACTION_FRAGMENTS:
-            assert amended.count(fragment) == 2
+        for pair in module._ACTION_PAIRS:
+            assert amended.count(" OR " + pair) == 2
         assert module._action_evidence(amended, add=False) == original
         return
     malformed = {
         "missing_anchor": original.replace(module._ACTION_ANCHOR, "true", 1),
         "extra_anchor": original + module._ACTION_ANCHOR,
         "partial_pair": original + module._ACTION_PAIRS[0],
-        "unexpected_pair": original + "'contribution.policy.read'",
+        "unexpected_pair": original + "'" + module._ACTIONS[0] + "'",
     }[shape]
     with pytest.raises(RuntimeError, match="audit action constraint shape changed"):
         module._action_evidence(malformed, add=True)

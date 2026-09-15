@@ -95,6 +95,17 @@ class ContributionPolicyAuthorization:
             resource_facts=resource,
         )
 
+    async def lock_contribution_policy_mutation_scope(
+        self, *, action: str, actor_profile_id: UUID, project_id: UUID,
+    ) -> None:
+        """Acquire AUTH-owned scope locks before any product owner lock."""
+        try:
+            await self._authorization.lock_mutation_scope(
+                action_id=action_id(action), actor_profile_id=actor_profile_id, project_id=project_id,
+            )
+        except (AuthorizationBoundaryError, ValueError) as exc:
+            raise ContributionPolicyUnavailable('contribution_policy_unavailable') from exc
+
     async def prepare_contribution_policy_mutation(
         self, facts: ContributionPolicyAuthorizationFacts
     ) -> object:

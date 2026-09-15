@@ -53,6 +53,10 @@ class _FailureAuthorization:
         self.phase = phase
         self.closed = 0
 
+    async def lock_contribution_policy_mutation_scope(self, **scope) -> None:
+        """Record scope acquisition separately from resource-bound mutation authority."""
+        self.locked_scope = scope
+
     async def prepare_contribution_policy_mutation(self, facts):
         if self.phase == "prepare":
             raise ContributionPolicyUnavailable("contribution_policy_unavailable")

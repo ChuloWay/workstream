@@ -54,6 +54,7 @@ class Prepared:
 class Authorization:
     def __init__(self) -> None:
         self.prepared = 0
+        self.scopes = []
         self.consumed = 0
         self.closed = 0
         self.read_authorized = 0
@@ -75,6 +76,10 @@ class Authorization:
         self.read_authorized += 1
         if not self.read_available:
             raise AdapterBindingUnavailable("read_denied")
+
+    async def lock_adapter_binding_mutation_scope(self, **scope) -> None:
+        """Record scope acquisition separately from resource-bound mutation authority."""
+        self.scopes.append(scope)
 
     async def prepare_adapter_binding_mutation(
         self, facts: AdapterBindingMutationAuthorizationFacts
