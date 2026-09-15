@@ -50,7 +50,7 @@ actual Task/Submission/CheckerRun is required for activation.
   Retained PaymentPolicy persistence and downstream economic consumers remain
   until their own replacement; this command never uses them.
 - Focused PROJECTS tests, real PostgreSQL custody/concurrency/replay/migration
-  tests and necessary shared prerequisite fixtures, exact lane/debt/behavior-ownership inventories;
+  tests and necessary shared prerequisite/API-drill fixtures, exact lane/debt/behavior-ownership inventories;
   canonical guide/AUTH/CON docs, README, roadmap and initiative navigation.
 
 ### Not allowed
@@ -235,7 +235,9 @@ composition, followed by CP08 and task lineage work in the adopted sequence.
   corresponding database resource/privacy guards and model/FK parity.
 - Existing `backend/tests/test_projects.py` active-guide body and policy
   immutability tests now invoke CP07 through `read_fixtures.py`; their assertions
-  are retained. Only obsolete payment-readiness cases are removed.
+  are retained. The API contract drill uses the same real hidden activation
+  fixture; it no longer invents an active guide by suspending lifecycle guards.
+  Only obsolete payment-readiness cases are removed.
 
 Activation fixtures create document declarations through the real guide owner
 and reuse committed-original, compilation, projection and finalization helpers.
