@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 
+import httpx
 from agents import Agent, Runner, set_tracing_disabled
 from agents.mcp import MCPServerStreamableHttp
 
@@ -14,12 +15,18 @@ from server import TOOL, local_url
 set_tracing_disabled(True)
 
 
+def local_http_client(headers=None, timeout=None, auth=None):
+    return httpx.AsyncClient(headers=headers, timeout=timeout or httpx.Timeout(15),
+                             auth=auth, trust_env=False, follow_redirects=False)
+
+
 def connection(url: str, token: str | None):
     return MCPServerStreamableHttp(
         name="local-workstream-experiment", params={
             "url": local_url(url) + "/mcp",
             "headers": {"Authorization": "Bearer " + token} if token else {},
             "timeout": 15,
+            "httpx_client_factory": local_http_client,
         }, client_session_timeout_seconds=20, max_retry_attempts=0,
         use_structured_content=True,
     )

@@ -11,7 +11,7 @@ MCP receives no signing key, database credential or shared administrator token.
 
 ## Run
 
-Use the repository's installed backend environment (`uv sync --frozen --extra dev`
+Use the repository's installed backend environment (`uv sync --frozen --extra dev --extra agents`
 from `backend/` if it is not already installed). Dependencies are already pinned
 there; this experiment changes no package requirements. From repository root:
 

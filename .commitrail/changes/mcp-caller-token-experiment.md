@@ -4,12 +4,14 @@
 - Durable disposition: Complete
 - Intended merge outcome: A reproducible local-only experiment, not a deployed MCP adapter or a change to WS-MCP-002's credential contract.
 
-## Intent and boundary
+## Intent
 
 Test the human's concrete design: each caller supplies their own Flow-compatible
 bearer in transport headers; a separate MCP process calls Workstream's public
 self-profile API. Use the installed OpenAI Agents SDK as the separate client.
 Distinguish observed API behavior from remote MCP authorization conformance.
+
+## Bounded change
 
 Allowed: `experiments/mcp_caller_token/server.py`, `client.py`, `drill.py`,
 `test_server.py`, `README.md` and this record. No backend runtime, dependency, CI, existing MCP
@@ -52,7 +54,7 @@ backend, with the local admin DB URL supplied only to the isolation runner.
 The README supplies a concrete mktemp-based invocation without fixed evidence
 paths. SDK client discovery, negative cases and timing all run in that drill.
 
-## Acceptance and verification
+## Acceptance criteria
 
 - Real HTTP processes and real isolated PostgreSQL, not a mocked Workstream API.
 - The observed actor matches each caller, including concurrent calls.
@@ -63,7 +65,7 @@ paths. SDK client discovery, negative cases and timing all run in that drill.
 - Local request and response bounds, timeouts, loopback and no-store protections.
 - Rerunnable commands and honest measurements documented with explicit limits.
 
-## Risk and review
+## Risk and review routing
 
 - Risk class: L1 (authentication experiment, strictly isolated).
 - Required reviewers: security, architecture, QA/test delta (combined focused
@@ -77,7 +79,7 @@ Based on main after PR #412. The existing MCP proposal stays unchanged. The
 roadmap has no product exposure change: an experiment is not a delivered MCP
 capability. No spreadsheet export changes are needed.
 
-## Evidence and limits
+## Evidence
 
 The local real-process drill passed all 13 named checks using OpenAI Agents SDK
 0.22.2, OpenAI 3.11.0, MCP SDK 1.29.0 and HTTPX 0.28.1. Both actors were admitted
@@ -95,3 +97,11 @@ median 470.98 ms on this loaded developer machine. This is local observation,
 not a production budget or an isolated estimate of adapter CPU overhead.
 The live model-driven path remains optional and unexecuted. No remote OAuth or
 production Flow certification is claimed. The existing MCP contract is unchanged.
+
+## Review findings
+
+- MCP-SEC-001: disable environment proxy inheritance explicitly in the OpenAI
+  SDK HTTP client factory; keep redirects disabled. Add a hostile-proxy probe.
+- MCP-QA-001: clean setup requires both backend `dev` and `agents` extras;
+  corrected the README command without changing dependencies.
+- The token-retention test rejected a simulated sticky-authorization defect.

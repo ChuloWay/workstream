@@ -1,12 +1,16 @@
 """Adapter boundary tests; real Workstream evidence is separately in drill.py."""
 
 import json
+import asyncio
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import httpx
 import pytest
 from starlette.testclient import TestClient
 
 import server
+from client import local_http_client
 
 
 @pytest.fixture
@@ -124,3 +128,48 @@ def test_transport_rejection(adapter, headers, status):
 def test_nonlocal_configuration_rejected(url):
     with pytest.raises(ValueError):
         server.create_app(url)
+
+
+def test_client_ignores_environment_proxy(monkeypatch):
+    received = []
+
+    class Endpoint(BaseHTTPRequestHandler):
+        def do_GET(self):
+            received.append(self.headers.get("Authorization"))
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"local")
+
+        def log_message(self, *args):
+            pass
+
+    with ThreadingHTTPServer(("127.0.0.1", 0), Endpoint) as target:
+        thread = threading.Thread(target=target.serve_forever, daemon=True)
+        thread.start()
+        # A closed local socket represents an unusable proxy. The counterfactual
+        # default client must fail, proving NO_PROXY isn't masking this test.
+        import socket
+        with socket.socket() as blocked:
+            blocked.bind(("127.0.0.1", 0))
+            proxy_url = f"http://127.0.0.1:{blocked.getsockname()[1]}"
+            for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+                monkeypatch.setenv(name, proxy_url)
+            monkeypatch.setenv("NO_PROXY", "")
+            monkeypatch.setenv("no_proxy", "")
+
+            async def probe():
+                url = f"http://127.0.0.1:{target.server_port}"
+                async with httpx.AsyncClient(timeout=1) as vulnerable:
+                    with pytest.raises(httpx.ConnectError):
+                        await vulnerable.get(url)
+                assert received == []
+                async with local_http_client(headers={"Authorization": "Bearer local-fixture"}) as safe:
+                    response = await safe.get(url)
+                    assert response.status_code == 200
+                    assert not safe.follow_redirects
+                assert received == ["Bearer local-fixture"]
+            try:
+                asyncio.run(probe())
+            finally:
+                target.shutdown()
+                thread.join(timeout=3)
