@@ -40,6 +40,11 @@ unknown tools and warm request latency. Focused tests additionally prove no
 dispatch on injected arguments, no credential retention, no redirects, safe
 denials, request/response limits and loopback/Origin protection.
 
+The drill additionally admits a third caller through MCP first and verifies that
+REST subsequently resolves the same profile. A single HTTP client then sends
+Alice, Bob, missing-token, expired-token and Alice requests in sequence: transport
+reuse must not substitute earlier credentials or cache a prior caller's profile.
+
 ## Optional model-driven client
 
 For a separately running **local test** API/MCP pair, `client.py` accepts

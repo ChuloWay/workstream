@@ -32,6 +32,11 @@ permission cache, database access from MCP, or token in tool arguments/model tex
    Report whether any Flow network call is needed by the fixture configuration.
 5. Add an optional explicit model-driven client run; do not require a model call
    to test transport. Keep credentials out of prompts, results and tracing.
+6. Extend only the drill: admit a third caller through MCP before any direct API
+   request, then prove REST resolves that same actor. Reuse one HTTP client for
+   Alice, Bob, missing, expired and Alice again; assert per-request identity and
+   denial without changing server/client implementation. Existing verification
+   commands cover this extension; replay QA/test-delta for the changed proof.
 
 The passthrough experiment deliberately does not implement standard remote MCP
 OAuth authorization. It cannot settle production credential design merely by
@@ -58,6 +63,9 @@ paths. SDK client discovery, negative cases and timing all run in that drill.
 
 - Real HTTP processes and real isolated PostgreSQL, not a mocked Workstream API.
 - The observed actor matches each caller, including concurrent calls.
+- First access through MCP creates a distinct profile that REST then resolves.
+- Reusing an HTTP client never substitutes a prior caller for missing/expired
+  credentials; the next valid request still returns its own profile.
 - Invalid credentials never produce profile data; unknown arguments never select
   another actor or destination. No fallback credential or redirects.
 - Tool errors preserve denial status without reflecting bearer tokens.

@@ -16,6 +16,7 @@ import tempfile
 import time
 
 import httpx
+from mcp.types import CallToolResult
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend" / "scripts"))
@@ -111,6 +112,20 @@ async def exercise(api, mcp, env):
         checks += ["two_real_actors", "all_profile_fields", "concurrent_caller_isolation",
                    "closed_tool_input", "unknown_tool_rejected"]
 
+        # Unlike A/B, this actor's FIRST API access is through the MCP tool.
+        new_token = token("mcp-carol")
+        async with connection(mcp, new_token) as sdk:
+            admitted = profile(await sdk.call_tool(TOOL, {}))
+        require(admitted["actor_profile_id"] not in {p["actor_profile_id"] for p in expected},
+                "MCP first admission reused another actor")
+        require(admitted["admin_roles"] == [] and admitted["project_role_grants"] == [],
+                "MCP first admission created authority")
+        response = await direct.get("/api/v1/actors/me", headers={"Authorization": "Bearer " + new_token})
+        require(response.status_code == 200, "direct lookup after MCP admission rejected")
+        require(response.json()["actor_profile_id"] == admitted["actor_profile_id"],
+                "REST did not resolve the MCP-admitted actor")
+        checks.append("mcp_first_admission_same_rest_actor")
+
         now = datetime.now(UTC)
         invalid = {
             "missing": None, "malformed": "not-a-jwt",
@@ -128,6 +143,36 @@ async def exercise(api, mcp, env):
             async with connection(mcp, bearer) as sdk:
                 denial(await sdk.call_tool(TOOL, {}), 401)
             checks.append(label + "_denied")
+
+        # One HTTP client, changing only the request credential. An established
+        # transport must never stand in for the current caller's authentication.
+        async with httpx.AsyncClient(base_url=mcp, trust_env=False, timeout=20,
+                                     headers={"Accept": "application/json, text/event-stream"}) as transport:
+            initialized = await transport.post("/mcp", headers={"Authorization": "Bearer " + tokens[0]},
+                json={"jsonrpc": "2.0", "id": 100, "method": "initialize", "params": {
+                    "protocolVersion": "2025-11-25", "capabilities": {},
+                    "clientInfo": {"name": "caller-switch-drill", "version": "0.1"}}})
+            require(initialized.status_code == 200, "raw MCP initialization rejected")
+            transport.headers["MCP-Protocol-Version"] = initialized.json()["result"]["protocolVersion"]
+            notified = await transport.post("/mcp", headers={"Authorization": "Bearer " + tokens[0]},
+                                            json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+            require(notified.status_code == 202, "MCP initialized notification rejected")
+            sequence = [(tokens[0], expected[0]), (tokens[1], expected[1]),
+                        (None, None), (invalid["expired"], None), (tokens[0], expected[0])]
+            for index, (bearer, known) in enumerate(sequence):
+                response = await transport.post("/mcp",
+                    headers={"Authorization": "Bearer " + bearer} if bearer else {},
+                    json={"jsonrpc": "2.0", "id": 101 + index, "method": "tools/call",
+                          "params": {"name": TOOL, "arguments": {}}})
+                require(response.status_code == 200, "MCP tool envelope missing")
+                require(response.headers.get("cache-control") == "no-store", "private response cacheable")
+                result = CallToolResult.model_validate(response.json()["result"])
+                if known is None:
+                    denial(result, 401)
+                else:
+                    require(profile(result)["actor_profile_id"] == known["actor_profile_id"],
+                            "HTTP client reused a prior caller identity")
+        checks.append("same_http_client_reauthenticates_each_request")
 
         # Warm samples exclude SDK handshake and first actor admission.
         timings = {"direct": [], "mcp": []}
