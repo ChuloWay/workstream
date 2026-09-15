@@ -44,7 +44,8 @@ actual Task/Submission/CheckerRun is required for activation.
 - Exact activation resource parity in existing AUDIT schemas and AUTH audit domain
   vocabularies/target mapping; no action activation or new audit path.
 - One `0023` activation-custody migration, exact Alembic head/graph and measured
-  strict schema fingerprint updates; model registration and affected fixtures.
+  strict schema fingerprint updates; canonical `app/db/models.py` registry reuse
+  from `app/db/session.py`, with fresh-process API/worker mapper tests and affected fixtures.
 - Remove PaymentPolicy readiness parameters/branch and dead builder/input/response
   declarations after tracing consumers; update affected callers and tests.
   Retained PaymentPolicy persistence and downstream economic consumers remain
@@ -92,7 +93,10 @@ actual Task/Submission/CheckerRun is required for activation.
    locks. Never use revision adoption to admit a retired or stale selection.
    The bridge imports only CON public APIs; outer composition injects its port.
    Do not import the CON adapter root from the PROJECTS adapter root: CON already
-   depends on PROJECTS eligibility, so that would introduce a cycle.
+   depends on PROJECTS eligibility, so that would introduce a cycle. Runtime DB
+   composition imports the existing full model registry before mapped instances
+   are created. API and standalone workers must resolve the new cross-owner FKs
+   without relying on Alembic or pytest having imported other model owners.
 5. Extend `GuideMutationIdempotencyRecord` and `GuideMutationRepository` for
    `project.guide.activate`; do not create a second replay ledger. Reuse the
    actor/action/key namespace, pending-to-committed reservation and immutable
@@ -249,3 +253,8 @@ owner-composition proof, not live broker/provider proof. The activation authorit
 participant is deliberately test-only until AUTH-12H. Downstream tests that only
 need a retained active row keep their explicit historical fixture; current
 active-read proofs require real activation custody.
+
+Fresh-process tests in `backend/tests/test_db_session.py` import the API and
+standalone setup, post-policy and checker worker entry points, resolve every foreign key and configure all
+mappers without pytest's preloaded model graph. The API drill uses canonical
+package-qualified shared fixture imports, without adding search-path aliases.

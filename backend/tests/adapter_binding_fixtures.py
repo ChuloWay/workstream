@@ -11,7 +11,7 @@ from app.core.config import get_settings
 from app.db import session as db_session
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.compensation.models import CompensationAdapterBindingLifecycleEvent
-from project_create_fixtures import insert_historical_project
+from tests.project_create_fixtures import insert_historical_project
 from scripts.schema_baseline_manifest import build_manifest, canonical_bytes
 
 BindingSeed = Callable[[], Awaitable[tuple[UUID, UUID, UUID]]]

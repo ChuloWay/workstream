@@ -317,7 +317,7 @@ async def seed_review_actor(factory, project_id, *, actor=None, role="project_ma
     """Seed stored grant variants; request/approval authority guards remain enabled."""
     from datetime import UTC, datetime
     from app.modules.actors.models import ActorProfile, ActorIdentityLink
-    from project_create_fixtures import grant_fixture_admin_role
+    from tests.project_create_fixtures import grant_fixture_admin_role
 
     async with factory() as session, session.begin():
         if actor is None:
