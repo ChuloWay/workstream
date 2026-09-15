@@ -45,7 +45,10 @@ Allowed files: AUTH catalogue/runtime/kernel/PREP, AUTH domain resource and
 replay helpers, new activation authorization implementation, AUTH adapter root;
 CP07 public contract documentation only if required; focused AUTH/CP07 tests and
 their existing shared fixtures; affected current architecture/authorization/
-operating documentation, roadmap and initiative navigation. A migration is
+operating documentation, roadmap and initiative navigation; exact new-module
+registration in `backend/scripts/test_lane_catalogue.py`,
+`backend/scripts/behavior_ownership.py`, `.ci/behavior-ownership/partition.v1.json`
+and its negative inventory test (no threshold or exception expansion). A migration is
 allowed only if inspection proves existing 0023 audit/custody parity insufficient.
 
 Prohibited: new public routes, policy/compiler semantics, duplicate activation

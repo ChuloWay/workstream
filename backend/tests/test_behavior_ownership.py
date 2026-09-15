@@ -1899,3 +1899,18 @@ def test_partition_accepts_only_exact_cp07_guide_activation_targets() -> None:
             _partition(sorted({retained, *expected, "backend/app/modules/projects/guide_activation/extra.py"})),
             trusted,
         )
+
+
+def test_partition_accepts_only_exact_auth12h_activation_targets() -> None:
+    expected = {
+        "backend/app/modules/authorization/domain/guide_activation.py",
+        "backend/app/modules/authorization/guide_activation_authorization.py",
+    }
+    assert ownership.AUTH_12H_PARTITION_TARGETS == expected
+    retained = "backend/app/modules/authorization/api/facts.py"
+    ownership._validate_additive_partition_transition(_partition(sorted({retained, *expected})), _partition([retained]))
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted({retained, *expected, "backend/app/modules/authorization/domain/activation_extra.py"})),
+            _partition([retained]),
+        )

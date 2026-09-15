@@ -10,7 +10,7 @@ work and historical proposals.
 | AUTH-12B2 | Complete; POL-04B is the live consumer |
 | [AUTH-12F4](chunks/WS-AUTH-001-12F4-submission-policy-approval.md) | AUTH full-proposal read, setup-wide correction and approval after hidden POL-05A, before POL-05B |
 | [AUTH-12G](chunks/WS-AUTH-001-12G-post-submit-checker-policy-mutations.md) | AUTH post-policy adapters after hidden POL-06A, before POL-06B |
-| AUTH-12H | AUTH exact activation of hidden CP07 after POL-07 |
+| [AUTH-12H](../WS-AUTH-001-12H.md) | Complete: exact manager authority for hidden CP07; HTTP exposure remains pending |
 | CP05 | AUTH exact five policy actions after merged CP04A/CP04B |
 | ARCH-03C | AUTH task/assignment activation after ARCH-03B and AUTH-OUTBOX-02 (active CON-02B dispatcher mechanics); replaces broad AUTH-13 |
 | ARCH-04D | AUTH materialization/output plus CHECKERS execute/finalize activation after ARCH-04B/04B2/04C; replaces AUTH-14/XINT-06B |

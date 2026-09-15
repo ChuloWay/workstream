@@ -1,4 +1,4 @@
-"""Activation audit vocabulary is exact while the action remains unavailable."""
+"""Activation audit vocabulary is exact and allow evidence remains digest-bound."""
 
 from uuid import uuid4
 
@@ -21,7 +21,8 @@ from app.modules.authorization.domain.audit import (
     CONTEXT_DIGEST_RESOURCE_TYPES,
 )
 from app.modules.authorization.domain.audit_targets import project_authority_audit_target
-from app.modules.authorization.runtime import ProjectGuideActivationResourceContext
+from app.modules.authorization.domain.guide_activation import activation_resource
+from tests.authorization.guide_activation.support import activation_facts
 
 
 @pytest.mark.parametrize(
@@ -56,7 +57,10 @@ def test_activation_audit_python_vocabularies_are_closed(token, valid):
             denial_code=None,
             after_facts={"allowed": True},
         )
-        with pytest.raises(ValidationError, match="planned action cannot produce allowed evidence"):
+        values["after_facts"] = {"allowed": True, "resource_context_digest": "sha256:" + "a" * 64}
+        assert AuthorityAuditEventInput(**values).after_facts == values["after_facts"]
+        values["after_facts"] = {**values["after_facts"], "private_material": "forbidden"}
+        with pytest.raises(TypeError, match="invalid authority audit input"):
             AuthorityAuditEventInput(**values)
     else:
         with pytest.raises(TypeError, match="invalid authority audit input"):
@@ -66,24 +70,10 @@ def test_activation_audit_python_vocabularies_are_closed(token, valid):
         assert token not in CONTEXT_DIGEST_RESOURCE_TYPES
 
 
-def test_activation_audit_mapping_does_not_activate_authority():
-    project, guide = uuid4(), uuid4()
-    context = ProjectGuideActivationResourceContext(
-        resource_type="project_guide_activation",
-        resource_id=guide,
-        scope_project_id=project,
-        guide_id=guide,
-        guide_version="guide-A",
-        source_snapshot_id=uuid4(),
-        sufficiency_report_id=uuid4(),
-        submission_artifact_policy_id=uuid4(),
-        pre_submit_checker_policy_id=uuid4(),
-        post_submit_checker_policy_id=uuid4(),
-        review_policy_id=uuid4(),
-        revision_policy_id=uuid4(),
-        active_bundle_digest="sha256:" + "a" * 64,
-        activation_generation=1,
-    )
+def test_activation_audit_maps_exact_project_and_guide():
+    facts = activation_facts()
+    project, guide = facts.locator.project_id, facts.locator.guide_id
+    context = activation_resource(facts)
     assert project_authority_audit_target(context, ActionId.PROJECT_GUIDE_ACTIVATE) == (
         str(project),
         "project_guide_activation",
@@ -91,4 +81,4 @@ def test_activation_audit_mapping_does_not_activate_authority():
         "project",
         str(project),
     )
-    assert ACTION_BY_ID[ActionId.PROJECT_GUIDE_ACTIVATE].availability is ActionAvailability.PLANNED
+    assert ACTION_BY_ID[ActionId.PROJECT_GUIDE_ACTIVATE].availability is ActionAvailability.ACTIVE

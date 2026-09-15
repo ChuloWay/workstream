@@ -7,6 +7,7 @@ from app.modules.authorization.runtime import PROJECT_SUBMISSION_POLICY_TARGET_K
 
 GUIDE_BOUND_PROJECT_MANAGER_ACTIONS = frozenset(
     {
+        ActionId.PROJECT_GUIDE_ACTIVATE,
         ActionId.PROJECT_GUIDE_CREATE,
         ActionId.PROJECT_GUIDE_UPDATE,
         ActionId.PROJECT_GUIDE_SOURCE_SNAPSHOT_CREATE,

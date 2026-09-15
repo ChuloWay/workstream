@@ -24,7 +24,7 @@ from tests.projects.guide_compilation.proposals.pg_support import (
 
 
 class ActivationAuthority:
-    """Test-only participant; production activation action remains planned."""
+    """Test-only participant for isolated product-owner failure injection."""
 
     def __init__(self, session, actor, project_id, grant, *, close_error=False):
         self.session, self.actor, self.project_id, self.grant = session, actor, project_id, grant

@@ -8,7 +8,8 @@ from app.modules.authorization.catalogue import (
 
 from uuid import UUID
 
-from app.modules.authorization.catalogue import ACTION_BY_ID
+from app.modules.authorization.catalogue import ACTION_BY_ID, ActionId
+from app.modules.authorization.domain.guide_activation import activation_matches, parse_activation_prepare
 from app.modules.authorization.domain.guide_proposals import (
     proposal_matches,
     parse_proposal_prepare,
@@ -27,9 +28,10 @@ from app.modules.actors.api import ServiceIdentity
 
 
 def parse_review_bindings(action, caller_input, scope, context):
-    """Parse the two existing operations sharing the manager review permission."""
+    """Parse exact guide operations sharing the manager permission."""
     try:
         return {
+            "activation_prepare_context": parse_activation_prepare(action, caller_input, scope, context),
             "proposal_prepare_context": parse_proposal_prepare(
                 action, caller_input, scope, context
             ),
@@ -42,7 +44,7 @@ def parse_review_bindings(action, caller_input, scope, context):
 
 
 def review_context_matches(binding, resource):
-    return proposal_matches(binding.proposal_prepare_context, resource) and post_policy_matches(
+    return activation_matches(binding.activation_prepare_context, resource) and proposal_matches(binding.proposal_prepare_context, resource) and post_policy_matches(
         binding.post_policy_prepare_context,
         resource,
     )
@@ -72,7 +74,7 @@ async def validate_review_replay(owner, issuance, action, caller_input, resource
     """Validate the exact original allow under freshly locked project-manager authority."""
     invalid = PreparedAuthorizationHandleInvalid("invalid prepared proposal replay")
     if (
-        action not in GUIDE_PROPOSAL_ACTION_IDS | POST_POLICY_MUTATION_ACTION_IDS
+        action not in GUIDE_PROPOSAL_ACTION_IDS | POST_POLICY_MUTATION_ACTION_IDS | {ActionId.PROJECT_GUIDE_ACTIVATE}
         or issuance.binding.action_id is not action
         or owner._binding(action, caller_input, issuance.binding.scope) != issuance.binding
         or owner._root_transaction() is not issuance.transaction

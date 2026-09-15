@@ -179,9 +179,11 @@ is draft; activation remains blocked until both are complete.
 Complete guide activation now has one internal transaction that binds the exact
 separate approvals, review/revision inputs and selected published contribution
 policy. It supersedes the selected prior guide and activates a draft Project
-atomically. The public manager activation operation remains unavailable until
-AUTH-12H supplies its live authority. An active-guide read requires the committed
-binding; historical rows without that binding are unavailable.
+atomically. AUTH-12H now supplies live authorization for an active Project Manager
+with a grant scoped to that exact project. System-scoped managers, other roles and
+services cannot activate. Replay requires current authority and returns the original
+receipt. Public activation API wiring remains pending. An active-guide read requires
+the committed binding; historical rows without that binding are unavailable.
 
 The intended unified flow uses one compilation result for sufficiency and
 artifact/pre-submit/post-submit proposals. Once finalized, its `ProjectSetupRun`,

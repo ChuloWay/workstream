@@ -559,13 +559,13 @@ class AuthorizationService:
             scope_project_id=scope.project_id,
             for_update=True,
             allowed_roles=frozenset({AdminRole.PROJECT_MANAGER}),
-            exact_project_scope=(action_id is ActionId.PROJECT_GUIDE_COMPILATION_REQUEST or action_id in GUIDE_PROPOSAL_ACTION_IDS | POST_POLICY_HUMAN_ACTION_IDS),
+            exact_project_scope=(action_id in {ActionId.PROJECT_GUIDE_COMPILATION_REQUEST, ActionId.PROJECT_GUIDE_ACTIVATE} | GUIDE_PROPOSAL_ACTION_IDS | POST_POLICY_HUMAN_ACTION_IDS),
         )
         if grant is None:
             raise PreparedAuthorizationUnsupported(
                 AuthorizationDenialCode.PERMISSION_NOT_GRANTED
             )
-        if (action_id is ActionId.PROJECT_GUIDE_COMPILATION_REQUEST or action_id in GUIDE_PROPOSAL_ACTION_IDS | POST_POLICY_HUMAN_ACTION_IDS) and (
+        if (action_id in {ActionId.PROJECT_GUIDE_COMPILATION_REQUEST, ActionId.PROJECT_GUIDE_ACTIVATE} | GUIDE_PROPOSAL_ACTION_IDS | POST_POLICY_HUMAN_ACTION_IDS) and (
             grant.scope_type != "project" or grant.scope_project_id != str(scope.project_id)
         ):
             raise PreparedAuthorizationUnsupported(

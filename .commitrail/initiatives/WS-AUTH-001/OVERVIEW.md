@@ -1,7 +1,7 @@
 # WS-AUTH-001 — Workstream authorization service
 
-Latest completed activation: [AUTH-12G post-policy authority](WS-AUTH-001-12G.md),
-following [AUTH-12F4 proposal authority](WS-AUTH-001-12F4.md).
+Latest completed activation: [AUTH-12H complete-guide authority](WS-AUTH-001-12H.md),
+following [AUTH-12G post-policy authority](WS-AUTH-001-12G.md).
 Current remaining [plan](planning/PLAN.md) and [activation map](planning/CHUNK_MAP.md).
 
 Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
@@ -19,8 +19,10 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Completed post-policy boundary: AUTH-12G fixed setup derivation and exact-project
   manager read, approval and correction authority over POL-06A.
 - Public post-policy composition: POL-06B delivered using existing AUTH-12G.
-- Next usable boundary: AUTH-12H live guide activation authority after completed
-  CP06 validation and CP07 hidden activation/binding; POL-07B internal phase composition is delivered.
+- Completed activation boundary: AUTH-12H exact-project manager authority for
+  CP07 complete-guide activation/binding, with live-authority replay.
+- Next usable boundary: CP08 task-attempt lineage, then ARCH-03A complete internal
+  guide facts. POL-07B internal phase composition is delivered.
   Unavailable dispatcher contracts remain a separate contribution boundary.
 - Governing source: `docs/spec_authorization_service.md`, authorization code,
   migrations, and tests.
@@ -52,8 +54,8 @@ POL-06B exposes completed POL-06A operations with AUTH-12G authority.
 POL-04B/05A/05B and AUTH-12F4 supply live unified setup and public
 manager proposal review, pre-submit approval and manual correction dispatch.
 
-1. After delivered POL-07B phase composition and CON CP06 validation, CP07 supplies
-   complete hidden guide activation/binding. AUTH-12H enables its live authority.
+1. CP07 complete-guide activation/binding and AUTH-12H live authority are delivered.
+   CP08 supplies task-attempt lineage before ARCH-03A complete internal guide facts.
 2. ARCH-03B/03C replace broad AUTH-13 and ARCH-04D replaces AUTH-14/XINT-06B.
    AUTH-OUTBOX-01/02 bracket hidden CON-02B dispatch; ARCH-04E2 activates only
    the proven TASK routing handler before ARCH-04E3 live composition.
