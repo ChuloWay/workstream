@@ -117,12 +117,15 @@ actual Task/Submission/CheckerRun is required for activation.
    Admit draft-to-active and active-to-superseded lifecycle transitions only.
    Freeze bound selectors, including CON identity. No NOT VALID constraint or
    backfill is needed: untouched retained active rows stay unchanged; an explicit
-   retained unbound predecessor may become superseded without fabricated lineage.
+   retained unbound predecessor may become superseded only when the same committed
+   successor activation names it exactly, without fabricated predecessor lineage.
    Active-read composition must load the immutable operation and exact binding;
    unbound retained rows are unavailable. Reads do not rerun current CON eligibility.
 9. Add a narrow deferred Project draft-to-active custody trigger requiring the
    same committed activation operation and final exact active bound guide.
-   Existing Project creation already requires draft. Active guide replacement
+   Extend existing Project insert custody to require draft: the creation service
+   sets draft today, but its database custody does not enforce that status.
+   Guide and Project transitions must resolve to the same ledger row. Active guide replacement
    leaves the Project active; the service denies other Project states. Do not
    introduce a general Project lifecycle subsystem. Extend only the existing
    isolated downstream fixture's named trigger suspension for this new guard;
