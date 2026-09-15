@@ -161,6 +161,13 @@ ARCH_CP04A_CONTRIBUTION_POLICY_TARGETS = frozenset(
         "backend/app/modules/projects/contribution_policy.py",
     }
 )
+ARCH_CP07_GUIDE_ACTIVATION_TARGETS = frozenset({
+    "backend/app/adapters/projects/contribution_validation.py",
+    "backend/app/modules/projects/api/guide_activation.py",
+    "backend/app/modules/projects/guide_activation/custody.py",
+    "backend/app/modules/projects/guide_activation/service.py",
+})
+
 ARCH_CP06_SELECTED_POLICY_TARGETS = frozenset(
     {
         "backend/app/modules/contributions/api/validation.py",
@@ -579,6 +586,7 @@ def _validate_additive_partition_transition(
         | ARCH_04A_POST_SUBMIT_TARGETS
         | ARCH_CP05_POLICY_AUTH_TARGETS
         | ARCH_CP06_SELECTED_POLICY_TARGETS
+        | ARCH_CP07_GUIDE_ACTIVATION_TARGETS
         | V01_BASELINE_ADDED_TARGETS
         | TASK_PROJECT_AUTHORITY_TARGETS
     )

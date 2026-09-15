@@ -69,30 +69,28 @@ content only. Submission artifact requirements live in `SubmissionArtifactPolicy
 and compile into the project `PreSubmitCheckerPolicy`.
 
 Migration note: the migration history now creates the current guide and task
-contract directly. Project payment terms belong to `PaymentPolicy`; task
-artifact requirements come from the locked project policy and checker bundle.
+contract directly. Guide activation binds an explicit published ContributionPolicyVersion;
+task artifact requirements come from the locked project policy and checker bundle.
 
 The guide version is the join key for the guide-specific policies.
 
-Project guide activation requires:
+The hidden CP07 guide activation operation requires:
 
-- guide is still draft
-- immutable guide source snapshot exists for the exact source material being activated
-- guide sufficiency report is passed or warnings are acknowledged by `admin` or `project_manager`
-- Workstream-derived submission artifact policy is approved for the guide version with `admin` or `project_manager` approval provenance
-- effective project submission artifact policy hash exists for the guide source snapshot
-- project pre-submit checker policy is compiled for the effective project policy
-  and has a persisted compiled bundle hash
-- post-submit checker policy exists for the guide version
-- review policy exists for the guide version
-- revision policy exists for the guide version
-- payment policy exists for the guide version
-- revision policy has max revision rounds, revision deadline hours, and allowed resubmission states
-- payment policy has base amount, currency, payout type, and accepted payment rule
+- a draft guide in a draft or active Project, with an exact mutation generation
+- an intact source manifest and finalized current unified compilation
+- sufficient guide findings with required warning acknowledgements
+- the exact pre-submit approval and compiled effective intake plan
+- a separate exact post-submit policy approval and supported catalogue selections
+- selected complete review/revision policy generations and hashes
+- `human_review_required=true`; automated acceptance remains unavailable
+- an explicitly selected current published ContributionPolicyVersion validated
+  by CON, including its complete rules and binding eligibility
+- the exact expected prior active guide and generation, if replacing one
+- a nominal prepared activation authority participant and immutable audit receipt
 
-Implementation sequencing: Chunk 1 models the project pre-submit checker
-dependency and fails activation unless compiler-owned compiled bundle fields are
-present. Chunk 2 adds the trusted compiler path that writes those fields.
+No PaymentPolicy row, Task, Submission, provider invocation or completed checker
+run is required. Default composition denies activation; AUTH-12H supplies the
+live manager authority for this same operation.
 
 Activating a new guide supersedes the prior active guide for that project without mutating its content.
 
@@ -111,7 +109,7 @@ Limit or deadline exhaustion blocks later preparation and submission. It never
 creates a reject Review; the current active contract defines reason-bound
 manager/Operator cancellation paths.
 
-Activation requires a revision policy before the guide can become active. The active guide response returns revision policy beside submission artifact policy, checker policy, review policy, and payment policy so future task records can lock the full policy context. The Non-Scope section keeps only revision workflow execution out of this chunk, not revision policy itself.
+Activation requires a revision policy before the guide can become active. The active guide response returns revision policy beside submission artifact policy, checker policy, and review policy so future task records can lock the full policy context. The Non-Scope section keeps only revision workflow execution out of this chunk, not revision policy itself.
 
 ## Submission Artifact Policy
 
@@ -216,27 +214,20 @@ may be corrected but cannot be approved, and uncertain provider attempts are
 not correction targets. Guide activation still requires a complete compiled
 pre-submission policy and the separately governed post-submission policy.
 
-Guide activation is unavailable until AUTH-12H installs its prepared mutation
-boundary. The following retained legacy response shape is not the replacement
-activation contract. CP07 owns the complete hidden unified command/response,
-including guide-bound ContributionPolicy and no required PaymentPolicy row;
-AUTH-12H activates that command. The legacy shape contains:
+CP07 provides the hidden complete-guide activation command and immutable receipt.
+Its command selects both approval receipts, review/revision generations, exact
+ContributionPolicy/version, guide mutation generation and expected predecessor.
+The receipt preserves those inputs, CON validation facts and activation time.
+One caller-owned transaction commits audit custody, guide binding, predecessor
+supersession and draft-Project activation. Exact replay requires current authority
+but does not reselect CON after retirement or guide supersession.
 
-- `guide_source_snapshot`
-- `guide_sufficiency_report`
-- `submission_artifact_policy`
-- `effective_submission_artifact_policy`
-- `pre_submit_checker_policy`
-- `post_submit_checker_policy`
-- `review_policy`
-- `revision_policy`
-- `payment_policy`
-
-The AUTH-11C2 administrative `GET /active-guide` projection returns the same
-current guide context except `payment_policy`. Compensation configuration is
-not part of this read authority. The GET is available only to a covered Project
-Manager or Audit Authority grant, or a system-scoped Operator grant; other
-principals receive concealed denial.
+The AUTH-11C2 administrative `GET /active-guide` projection returns the current
+guide and its compiled/approved policy context, including the guide's bound
+ContributionPolicy/version and activation operation identifiers. It requires
+immutable activation custody; retained unbound rows are unavailable. The GET is
+available only to a covered Project Manager or Audit Authority grant, or a
+system-scoped Operator grant. AUTH-12H live activation authority remains pending.
 
 ## Lifecycle Impact
 
@@ -257,10 +248,10 @@ The active guide response becomes the future source for task-owned locked guide 
 - project can be created
 - draft guide can be created
 - guide activation is blocked when submission artifact policy is missing
-- guide activation is blocked when checker/review/revision/payment policies are missing
+- guide activation is blocked when checker/review/revision/contribution policies are missing
 - guide activation is blocked when revision policy is missing
 - guide activation is blocked when revision policy is incomplete
-- guide activation is blocked when payment policy is incomplete
+- guide activation is blocked when the selected ContributionPolicy is unavailable or incomplete
 - guide activation or policy approval is blocked when project submission artifact policy removes Workstream hash requirements
 - guide activation or policy approval is blocked when project submission artifact policy permits unsafe storage references
 - guide activation or policy approval is blocked when project submission artifact policy requires default-forbidden artifacts

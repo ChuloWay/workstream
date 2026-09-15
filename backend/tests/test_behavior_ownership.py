@@ -1877,3 +1877,25 @@ def test_partition_accepts_only_exact_cp06_selected_policy_targets() -> None:
             _partition(sorted({retained, *expected, "backend/app/modules/contributions/extra.py"})),
             trusted,
         )
+
+
+
+def test_partition_accepts_only_exact_cp07_guide_activation_targets() -> None:
+    """Register four activation owners without admitting an adjacent module."""
+    expected = frozenset({
+        "backend/app/adapters/projects/contribution_validation.py",
+        "backend/app/modules/projects/api/guide_activation.py",
+        "backend/app/modules/projects/guide_activation/custody.py",
+        "backend/app/modules/projects/guide_activation/service.py",
+    })
+    assert ownership.ARCH_CP07_GUIDE_ACTIVATION_TARGETS == expected
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *expected})), trusted
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted({retained, *expected, "backend/app/modules/projects/guide_activation/extra.py"})),
+            trusted,
+        )

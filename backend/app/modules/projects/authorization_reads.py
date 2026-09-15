@@ -352,6 +352,7 @@ async def authorize_project_active_guide_read(
         )
     if target_exists:
         try:
+            activation = await project_service.lock_active_binding(guide)
             await project_service.validate_source_snapshot_integrity(
                 snapshot,
                 GuideActivationBlocked,
@@ -371,8 +372,7 @@ async def authorize_project_active_guide_read(
                 post_submit,
                 review,
                 revision,
-                None,
-                require_payment_policy=False,
+
                 approval_custody=approval,
                 post_policy_custody=post_approval,
             )
@@ -398,7 +398,9 @@ async def authorize_project_active_guide_read(
                 for row in rows
             ] + [{"approval_operation_id": str(approval.operation.operation_id),
                   "approval_output_digest": approval.operation.output_digest,
-                  "reservation_operation_id": str(approval.reservation.operation_id)}]
+                  "reservation_operation_id": str(approval.reservation.operation_id),
+                  "activation_operation_id": str(activation.operation_id),
+                  "activation_output_digest": canonical_json_hash(activation.model_dump(mode="json"))}]
         )
         if target_exists
         else None

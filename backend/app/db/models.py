@@ -1,4 +1,4 @@
-"""Import domain models so Alembic can discover metadata."""
+"""Register the complete model graph for runtime database composition and Alembic."""
 
 from app.modules.actors.models import (  # noqa: F401
     ActorIdentityLink,

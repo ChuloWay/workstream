@@ -6,7 +6,6 @@ import fnmatch
 import logging
 import re
 from collections.abc import Sequence
-from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
@@ -25,7 +24,6 @@ from app.modules.projects.models import (
     GuideSourceSnapshot,
     GuideSourceSnapshotItem,
     GuideSufficiencyReport,
-    PaymentPolicy,
     PostSubmitCheckerPolicy,
     PreSubmitCheckerPolicy,
     Project,
@@ -45,7 +43,6 @@ from app.modules.projects.schemas import (
     GuideSourceSnapshotResponse,
     GuideSufficiencyReportCreate,
     GuideSufficiencyReportResponse,
-    PaymentPolicyInput,
     PostSubmitCheckerPolicyResponse,
     ContributorProjectResponse,
     ProjectGuideResponse,
@@ -1015,6 +1012,11 @@ class ProjectService:
 
 
 
+    async def lock_active_binding(self, guide):
+        """Resolve immutable binding custody without selecting current CON policy."""
+        from .guide_activation.custody import load_guide_activation
+        return await load_guide_activation(self._session, guide)
+
     async def lock_active_approval(self, guide, snapshot, policy, effective, pre):
         """Validate the canonical approval custody for the already locked read chain."""
         from .guide_compilation.approval_custody import lock_policy_approval
@@ -1051,9 +1053,7 @@ class ProjectService:
         post_submit_checker_policy: PostSubmitCheckerPolicy | None,
         review_policy: ReviewPolicy | None,
         revision_policy: RevisionPolicy | None,
-        payment_policy: PaymentPolicy | None,
         *,
-        require_payment_policy: bool = True,
         approval_custody=None,
         post_policy_custody=None,
     ) -> None:
@@ -1069,8 +1069,6 @@ class ProjectService:
             post_submit_checker_policy: Post-submit checker policy for the guide version.
             review_policy: Review policy for the guide version.
             revision_policy: Revision policy for the guide version.
-            payment_policy: Payment policy for the guide version.
-            require_payment_policy: Whether payment completeness is part of readiness.
 
         Raises:
             GuideActivationBlocked: If a required field or policy is missing.
@@ -1260,47 +1258,6 @@ class ProjectService:
             ALLOWED_REVISION_RESUBMISSION_STATES
         ):
             raise GuideActivationBlocked("revision policy contains invalid resubmission states")
-        if not require_payment_policy:
-            return
-        if payment_policy is None:
-            raise GuideActivationBlocked("payment policy is required")
-        if (
-            payment_policy.base_amount is None
-            or payment_policy.base_amount < Decimal("0")
-            or not payment_policy.currency
-            or not payment_policy.payout_type
-            or not payment_policy.accepted_payment_rule
-        ):
-            raise GuideActivationBlocked("payment policy is incomplete")
-
-
-    def _payment_policy_model(
-        self,
-        project_id: str,
-        guide_version: str,
-        payload: PaymentPolicyInput,
-    ) -> PaymentPolicy:
-        """Build a payment policy model from API input.
-
-        Args:
-            project_id: Project that owns the policy.
-            guide_version: Guide version the policy applies to.
-            payload: Validated payment policy input.
-
-        Returns:
-            Unsaved payment policy model.
-        """
-        return PaymentPolicy(
-            id=str(uuid4()),
-            project_id=project_id,
-            guide_version=guide_version,
-            base_amount=payload.base_amount,
-            currency=payload.currency,
-            payout_type=payload.payout_type,
-            revision_payment_rule=payload.revision_payment_rule,
-            rejection_payment_rule=payload.rejection_payment_rule,
-            accepted_payment_rule=payload.accepted_payment_rule,
-        )
 
 
 def build_guide_source_snapshot_manifest(

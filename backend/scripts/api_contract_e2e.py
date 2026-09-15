@@ -25,7 +25,6 @@ from sqlalchemy import select, text
 
 from app.db import session as db_session
 from app.core.config import get_settings
-from app.modules.actors.models import ActorIdentityLink
 from app.modules.api_controls.service import (
     FIRST_ACCESS_SCOPE,
     RateControlService,
@@ -33,8 +32,6 @@ from app.modules.api_controls.service import (
 )
 from app.modules.projects.models import (
     PaymentPolicy,
-    Project,
-    ProjectGuide,
     PreSubmitCheckerPolicy,
 )
 from run_isolated_tests import NAME_RE as DERIVED_DATABASE_NAME
@@ -61,65 +58,28 @@ GUIDE_ARTIFACT_PIPELINE_SERVICE_IDENTITIES = (
 )
 
 
-async def seed_active_guide_for_pre_12h_e2e(
-    project_id: str,
-    guide_id: str,
-    manager_subject: str,
-    manager_issuer: str,
-    fixture_bundle: dict,
-) -> dict:
-    """Seed downstream active state while the public activation route is unavailable."""
-    async with db_session.get_session_factory()() as session:
+async def activate_guide_for_e2e(project_id: str, guide_id: str, fixture_bundle: dict) -> dict:
+    """Use hidden activation custody while live authority remains AUTH-12H work."""
+    from tests.projects.guide_activation.read_fixtures import activate_approved_guide
+    from tests.projects.post_submit_fixtures import seed_post_submit_policy_for_downstream_tests
+
+    sessions = db_session.get_session_factory()
+    async with sessions() as session:
         database_name = await session.scalar(text("select current_database()"))
         if DERIVED_DATABASE_NAME.fullmatch(str(database_name)) is None:
-            raise RuntimeError("pre-12H activation seed requires an isolated E2E database")
+            raise RuntimeError("activation fixture requires an isolated E2E database")
         finalized = await session.scalar(
             text("select 1 from project_guide_setup_finalizations where guide_id=:guide"),
             {"guide": guide_id},
         )
         ensure(finalized is not None, "task fixture requires unified finalization")
-        from tests.projects.post_submit_fixtures import seed_post_submit_policy_for_downstream_tests
-        await seed_post_submit_policy_for_downstream_tests(
-            project_id=project_id, guide_id=guide_id,
-            source_snapshot=fixture_bundle["source_snapshot"],
-            pre_submit_checker_policy=fixture_bundle["pre_submit_checker_policy"],
-            sessions=db_session.get_session_factory(),
-        )
-        link = await session.scalar(
-            select(ActorIdentityLink).where(
-                ActorIdentityLink.issuer == manager_issuer,
-                ActorIdentityLink.subject == manager_subject,
-            )
-        )
-        if link is None:
-            raise RuntimeError("pre-12H activation seed requires an admitted actor")
-        guide = await session.get(ProjectGuide, guide_id)
-        project = await session.get(Project, project_id)
-        ensure(guide is not None and project is not None and guide.project_id == project.id,
-               "active guide fixture requires exact project lineage")
-        triggers = ("guide_mutation_product_custody", "guide_lineage_lifecycle_guard")
-        try:
-            for trigger in triggers:
-                await session.execute(text(f"alter table project_guides disable trigger {trigger}"))
-            now = datetime.now(UTC)
-            for prior in await session.scalars(select(ProjectGuide).where(
-                    ProjectGuide.project_id == project_id, ProjectGuide.status == "active")):
-                prior.status = "superseded"
-                prior.superseded_at = now
-            await session.flush()
-            guide.status = "active"
-            guide.approved_by = link.actor_profile_id
-            guide.effective_at = now
-            project.status = "active"
-            await session.flush()
-            seeded = {"guide": {"id": guide.id, "version": guide.version}}
-            for trigger in reversed(triggers):
-                await session.execute(text(f"alter table project_guides enable trigger {trigger}"))
-            await session.commit()
-            return seeded
-        except BaseException:
-            await session.rollback()
-            raise
+    await seed_post_submit_policy_for_downstream_tests(
+        project_id=project_id, guide_id=guide_id,
+        source_snapshot=fixture_bundle["source_snapshot"],
+        pre_submit_checker_policy=fixture_bundle["pre_submit_checker_policy"],
+        sessions=sessions,
+    )
+    return await activate_approved_guide(sessions, project_id=project_id, guide_id=guide_id)
 
 
 DEFAULT_FLOW_ISSUER = "https://auth.flow.local/e2e"
@@ -1703,8 +1663,8 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             documents=guide["documents"],
             task_fixture=True,
         )
-        active = await seed_active_guide_for_pre_12h_e2e(
-            project["id"], guide["id"], manager_subject, flow_issuer, fixture_bundle
+        active = await activate_guide_for_e2e(
+            project["id"], guide["id"], fixture_bundle
         )
         assert active["guide"]["version"] == "v1"
         assert active["guide"]["id"] == guide["id"] != live_guide_id

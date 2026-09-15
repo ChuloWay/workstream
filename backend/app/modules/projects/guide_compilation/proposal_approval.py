@@ -96,7 +96,7 @@ async def approve_proposal(
             )
         if not locked.current:
             raise GuideProposalError("proposal_stale")
-        _require_catalogues(target, pre_capabilities, post_capabilities)
+        require_catalogues(target, pre_capabilities, post_capabilities)
         if (
             locked.result.status == "guide_blocked"
             or locked.view.policy is None
@@ -301,7 +301,7 @@ def _facts(locator, target, request_digest, receipt, command):
     )
 
 
-def _require_catalogues(target, pre, post):
+def require_catalogues(target, pre, post):
     if (
         not pre.available
         or (pre.catalogue_id, pre.version, pre.schema_version, pre.manifest_sha256)

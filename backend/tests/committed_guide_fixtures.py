@@ -24,9 +24,10 @@ def sha256_hash(seed: str) -> str:
     return "sha256:" + hashlib.sha256(seed.encode()).hexdigest()
 
 
-async def create_committed_document_fixture(source_snapshot_id: str):
+async def create_committed_document_fixture(source_snapshot_id: str, *, sessions=None):
     """Persist exact committed upload receipts; never mark a replica verified."""
-    async with db_session.get_session_factory()() as session:
+    sessions = sessions or db_session.get_session_factory()
+    async with sessions() as session:
         snapshot = await session.get(GuideSourceSnapshot, source_snapshot_id)
         setup = await session.scalar(select(ProjectSetupRun).where(ProjectSetupRun.source_snapshot_id == source_snapshot_id).order_by(ProjectSetupRun.setup_generation.desc()).limit(1))
         assert snapshot is not None and setup is not None

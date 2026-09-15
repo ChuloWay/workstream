@@ -317,7 +317,7 @@ async def seed_review_actor(factory, project_id, *, actor=None, role="project_ma
     """Seed stored grant variants; request/approval authority guards remain enabled."""
     from datetime import UTC, datetime
     from app.modules.actors.models import ActorProfile, ActorIdentityLink
-    from project_create_fixtures import grant_fixture_admin_role
+    from tests.project_create_fixtures import grant_fixture_admin_role
 
     async with factory() as session, session.begin():
         if actor is None:
@@ -346,7 +346,7 @@ async def revoke_review_grant(factory, actor, grant):
         assert result.rowcount == 1
 
 
-async def seed_selected_review_revision_inputs(factory, command, actor):
+async def seed_selected_review_revision_inputs(factory, command, actor, *, human_review_required=True):
     """Select valid review/revision inputs through their authorized mutation owner."""
     from app.modules.actors.models import ActorProfile, ActorIdentityLink
     from app.modules.actors.service import ResolvedActor
@@ -358,7 +358,7 @@ async def seed_selected_review_revision_inputs(factory, command, actor):
     from app.modules.projects.schemas import ReviewPolicyInput, RevisionPolicyInput
 
     for kind, payload in (
-        ("review", ReviewPolicyInput(review_preference_window_seconds=3600, review_lease_duration_seconds=1800,
+        ("review", ReviewPolicyInput(human_review_required=human_review_required, review_preference_window_seconds=3600, review_lease_duration_seconds=1800,
                                    allowed_decisions=["accept", "needs_revision", "reject"])),
         ("revision", RevisionPolicyInput(max_revision_rounds=2, revision_deadline_hours=48,
                                        allowed_resubmission_states=["needs_revision"])),

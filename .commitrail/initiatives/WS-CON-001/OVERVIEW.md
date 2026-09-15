@@ -4,13 +4,13 @@ Current pre-review work follows the [cross-owner dependency contract](../WS-ARCH
 and the [capability ledger](../../../docs/roadmap_status.md).
 
 - Disposition: Planned
-- Completed boundary: hidden policy behavior, exact Finance Authority and CP06 selected-policy validation.
+- Completed boundary: hidden policy behavior, exact Finance Authority, CP06 selected-policy validation and CP07 hidden guide activation/binding.
 - Intent: record completed authorized reviews and accepted submissions as
   immutable ContributionRecords and optional
   project-policy-driven compensation awards without coupling lifecycle truth to
   an economic provider.
-- Next usable boundary: CP07 guide-activation persistence, consuming completed
-  [CP06 validation](../WS-ARCH-001/WS-ARCH-001-CP06.md), before task readiness.
+- Next usable boundary: AUTH-12H live authority for completed
+  [CP07 activation/binding](../WS-ARCH-001/WS-ARCH-001-CP07.md), before task readiness.
 - Governing sources: `docs/spec_contribution_compensation.md`,
   [`CONFORMANCE.md`](CONFORMANCE.md), code, migrations, and tests.
 - Preserve: exact policy-version lineage, no claim-time drift, decimal-string
@@ -31,15 +31,15 @@ and the [capability ledger](../../../docs/roadmap_status.md).
 ## Remaining v0.1 sequence
 
 Use the [current cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
-for the remaining CP07-CP09 work; CON does not create a second policy/binding lane.
+for the remaining CP08-CP09 work; CON does not create a second policy/binding lane.
 
 [CP05](../WS-ARCH-001/WS-ARCH-001-CP05.md) delivered exact authorization for
 the hidden policy behavior.
 
 1. Completed CP06 validates the expected version against the active policy's current
    published selector for new guide activation, without reselecting existing
-   frozen work; CP07 builds hidden PROJECTS
-   activation/binding, and AUTH-12H activates it. CP08 supplies lineage fields;
+   frozen work; CP07 supplies hidden PROJECTS
+   activation/binding, and AUTH-12H supplies its live authority next. CP08 supplies lineage fields;
    ARCH-03B locks/copies them through TaskAssignment and Submission. CP09 removes the replaced legacy
    economic path only after all consumers are replaced, including CHECKERS and
    public Submission cutover; it does not block canonical `allow_review`.

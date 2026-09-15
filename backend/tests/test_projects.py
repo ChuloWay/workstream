@@ -116,6 +116,7 @@ from committed_guide_fixtures import (
     create_committed_document_fixture,
     create_compiled_report_fixture,
 )
+from tests.projects.guide_activation.read_fixtures import activate_approved_guide
 from projects.client_fixtures import (
     auth_headers,
     clear_project_settings_cache_after_test as clear_project_settings_cache_after_test,
@@ -2824,7 +2825,7 @@ async def test_guide_source_metadata_database_rejects_unattributed_and_mismatche
         persisted = await session.get(ProjectGuide, guide["id"])
         assert persisted is not None
         persisted.version = "stale-lineage-rewrite"
-        with pytest.raises(IntegrityError, match="identity and lineage are immutable"):
+        with pytest.raises(DBAPIError, match="guide lineage is immutable"):
             await session.commit()
         await session.rollback()
 
@@ -5523,10 +5524,9 @@ async def test_active_guide_read_rejects_mismatched_effective_policy_body_hash(
     project_client: AsyncClient,
 ) -> None:
     project = await create_project(project_client)
-    await add_project_manager_admin_grant(project["id"])
     guide = await create_guide(project_client, project["id"], complete_guide_payload())
     bundle = await create_approved_policy_bundle(project_client, project["id"], guide["id"])
-    await seed_active_guide_for_downstream_test(
+    await activate_approved_guide(
         db_session.get_session_factory(),
         project_id=project["id"],
         guide_id=guide["id"],
@@ -5558,10 +5558,9 @@ async def test_active_guide_read_revalidates_policy_context(
     project_client: AsyncClient,
 ) -> None:
     project = await create_project(project_client)
-    await add_project_manager_admin_grant(project["id"])
     guide = await create_guide(project_client, project["id"], complete_guide_payload())
     bundle = await create_approved_policy_bundle(project_client, project["id"], guide["id"])
-    await seed_active_guide_for_downstream_test(
+    await activate_approved_guide(
         db_session.get_session_factory(),
         project_id=project["id"],
         guide_id=guide["id"],
@@ -5590,11 +5589,10 @@ async def test_active_guide_read_revalidates_policy_context(
 
 async def test_active_guide_retrieval_returns_exact_policy_bundle(project_client: AsyncClient) -> None:
     project = await create_project(project_client)
-    await add_project_manager_admin_grant(project["id"])
     guide = await create_guide(project_client, project["id"], complete_guide_payload())
     bundle = await create_approved_policy_bundle(project_client, project["id"], guide["id"])
 
-    activation = await seed_active_guide_for_downstream_test(
+    activation = await activate_approved_guide(
         db_session.get_session_factory(),
         project_id=project["id"],
         guide_id=guide["id"],

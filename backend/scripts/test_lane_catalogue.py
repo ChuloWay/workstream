@@ -214,6 +214,16 @@ SHARED_FOUNDATION_MODULES = (
 )
 
 PROJECT_MODULES = (
+    "tests/projects/guide_activation/test_admission.py",
+    "tests/projects/guide_activation/test_audit_contract.py",
+    "tests/projects/guide_activation/test_concurrency.py",
+    "tests/projects/guide_activation/test_contracts.py",
+    "tests/projects/guide_activation/test_custody.py",
+    "tests/projects/guide_activation/test_direct_sql.py",
+    "tests/projects/guide_activation/test_migration.py",
+    "tests/projects/guide_activation/test_postgresql.py",
+    "tests/projects/guide_activation/test_rejections.py",
+    "tests/projects/guide_activation/test_successor.py",
     "tests/projects/guide_compilation/test_capability_growth.py",
     "tests/projects/guide_compilation/test_capability_growth_postgresql.py",
     "tests/projects/guide_compilation/test_compilation_storage_limit.py",

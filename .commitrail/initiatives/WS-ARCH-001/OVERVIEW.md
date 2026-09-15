@@ -8,14 +8,14 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 [`planning/chunk contracts`](pre-cutover/chunks/).
 
 - Disposition: Planned
-- Completed boundary: through 02H, [CP05](WS-ARCH-001-CP05.md), [CP06](WS-ARCH-001-CP06.md), and
+- Completed boundary: through 02H, [CP05](WS-ARCH-001-CP05.md), [CP06](WS-ARCH-001-CP06.md), [CP07](WS-ARCH-001-CP07.md), and
   [ARCH-04A consolidation](WS-ARCH-001-04A.md) canonical post-submit contracts/conformance.
 - Intent: keep product modules behind explicit ports and composition roots.
 - Current boundary: one CHECKERS catalogue, compiler/parser and implementation
   per checker ID serve active policy consumers; production post-submit phase
   execution remains unavailable.
-- Next usable boundary: CP07 guide binding, then AUTH-12H activation, using
-  completed CP06 selected ContributionPolicy validation. POL-04B unified setup, POL-05/06
+- Next usable boundary: AUTH-12H live authority for the delivered CP07 hidden
+  guide activation/binding operation. POL-04B unified setup, POL-05/06
   manager operations and POL-07B internal phase composition are delivered.
   The production post-submit phase remains unavailable until its separately
   sequenced ART/CHECKER/AUTH execution boundaries land.
@@ -32,8 +32,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   02H; the public route remains unchanged.
 - Adapter-binding behavior and activation and hidden ContributionPolicy
   draft/publication behavior and exact Finance Authority are complete.
-  CP06 exact selected-policy validation is complete. CP07-CP09 remain:
-  hidden guide binding/activation and task-attempt lineage.
+  CP06 exact selected-policy validation and CP07 hidden complete-guide activation
+  are complete. CP08-CP09 task-attempt lineage and scoped removal remain.
   [CP07A](WS-ARCH-001-CP07A.md) supplies the cross-owner authority lock repair
   and binding audit schema parity required before guide composition.
   CP09 physical removal follows zero legacy consumers, including checker/public

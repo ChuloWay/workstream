@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from project_create_fixtures import guide_snapshot_columns
+from project_create_fixtures import guide_snapshot_columns, activate_retained_project_for_test
 
 import asyncio
 from io import BytesIO
@@ -513,7 +513,7 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
             )
             for table, trigger in custody_triggers:
                 await connection.execute(text(f"alter table {table} disable trigger {trigger}"))
-            await connection.execute(text("update projects set status='active' where id=:project"), params)
+            await activate_retained_project_for_test(connection, lineage.project_id)
             await connection.execute(text(
                 "update project_guides set status='active',approved_by=:actor,effective_at=now() where id=:guide"
             ), params)
@@ -968,9 +968,7 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
             try:
                 async with engine.begin() as connection:
                     for table, trigger in reversed(custody_triggers):
-                        await connection.execute(
-                            text(f"alter table {table} enable trigger {trigger}")
-                        )
+                        await connection.execute(text(f"alter table {table} enable trigger {trigger}"))
             finally:
                 await engine.dispose()
 

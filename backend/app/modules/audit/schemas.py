@@ -36,7 +36,7 @@ _RESOURCE_TYPES = frozenset(
     """actor_profile actor_identity_link admin_role_grant project qualification_snapshot project_role_grant task
     submission review contribution compensation_award compensation_delivery compensation_adapter_binding contribution_policy operations
     audit_event project_create_operation project_submission_artifact_policy_mutation
-    pre_submit_checker_input project_guide_compilation_request
+    project_guide_activation pre_submit_checker_input project_guide_compilation_request
     project_guide_compilation_attempt project_guide_sufficiency_projection
     project_submission_artifact_policy_projection project_guide_setup_finalization
     project_guide_compilation_review_package project_guide_compilation_correction

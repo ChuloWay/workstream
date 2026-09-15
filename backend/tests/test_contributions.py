@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import delete, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
-from adapter_binding_fixtures import created_binding_events
+from tests.adapter_binding_fixtures import created_binding_events
 from app.core.config import get_settings
 from app.adapters.compensation import policy_adapter_binding_port
 from app.adapters.projects import project_contribution_policy_eligibility_port
@@ -40,7 +40,7 @@ from app.modules.contributions.schemas import (
     ISO_4217_CURRENCY_CODES,
     ProjectCompensationUnitInput,
 )
-from project_create_fixtures import insert_historical_project
+from tests.project_create_fixtures import insert_historical_project
 from tests.contributions.policy_test_support import AllowAuthorization
 
 

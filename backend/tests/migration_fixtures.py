@@ -45,4 +45,4 @@ async def run_alembic_revision(direction, revision):
     process = await asyncio.create_subprocess_exec(sys.executable, "-m", "alembic", direction, revision,
                                                    cwd=Path(__file__).resolve().parents[1])
     if await process.wait() != 0:
-        raise RuntimeError("isolated migration subprocess failed")
+        raise RuntimeError(f"isolated migration subprocess failed (exit {process.returncode})")
