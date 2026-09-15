@@ -6,7 +6,7 @@ for current product capability.
 
 | Initiative | Durable disposition | Next usable boundary |
 |---|---|---|
-| [WS-MCP-002](initiatives/WS-MCP-002/OVERVIEW.md) | Planned | Review chunk map and first profile-read contract; settle schema/catalogue and credentials before WS-MCP-002-01 |
+| [WS-MCP-002](initiatives/WS-MCP-002/OVERVIEW.md) | Planned | Caller-token design and local profile proof recorded; continue WS-MCP-002-01 with selected schema verification and independent one-tool packaging |
 | [WS-ARCH-001](initiatives/WS-ARCH-001/OVERVIEW.md) | Planned | Canonical ARCH-04A delivered; Automatic unified setup delivered; POL-05/06 manager review and separate approvals delivered; POL-07B internal checker phase service delivered; CP06 validation delivered; CP07 hidden activation/binding delivered; AUTH-12H live manager authority delivered; CP08 task-attempt lineage next |
 | [WS-ART-001](initiatives/WS-ART-001/OVERVIEW.md) | Planned | Exact post-submit materialization after guide/checker contracts |
 | [WS-AUTH-001](initiatives/WS-AUTH-001/OVERVIEW.md) | Planned | Unavailable shared-dispatcher contracts after delivered CP05; POL-04B consumes completed finalization authority; AUTH-12F4 supplies proposal authority; POL-05B public composition delivered; AUTH-12G post-policy authority delivered; POL-06B public composition delivered; POL-07B internal phase service delivered; CP06 validation delivered; CP07 hidden activation/binding delivered; AUTH-12H live manager authority delivered; CP08 task-attempt lineage next |

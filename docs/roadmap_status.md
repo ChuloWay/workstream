@@ -206,6 +206,13 @@ cannot be reused as post-submission review-gate evidence. See the
   provider-dependent operations require their own evidence;
   they do not repeatedly reopen this original selection. Route discovery alone
   is not readiness.
+  The [MCP initiative](../.commitrail/initiatives/WS-MCP-002/OVERVIEW.md)
+  now fixes the caller-token design: the adapter forwards each caller's Flow
+  bearer unchanged and Workstream verifies it. The
+  [local one-tool experiment](../experiments/mcp_caller_token/README.md) passed
+  15 real-process checks and 24 focused tests, including first admission and
+  caller isolation. Independent profile-tool packaging remains planned; this
+  is custom authentication proof, not a deployed MCP service or a 27-tool release.
   The public-client drill targets currently usable APIs only; hidden and
   unfinished lifecycle routes are not completion targets. Draft-guide policy
   probes additionally cover optional fields, conditional headers and exact
