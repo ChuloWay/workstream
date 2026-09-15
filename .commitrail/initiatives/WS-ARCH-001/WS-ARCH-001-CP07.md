@@ -40,6 +40,8 @@ actual Task/Submission/CheckerRun is required for activation.
   repository, and exact adapter root wiring.
 - A PROJECTS-owned local CON validation contract and application adapter using
   only CON's public API; existing CHECKERS public planners/catalogues.
+- Exact activation resource parity in existing AUDIT schemas and AUTH audit domain
+  vocabularies/target mapping; no action activation or new audit path.
 - One `0023` activation-custody migration, exact Alembic head/graph and measured
   strict schema fingerprint updates; model registration and affected fixtures.
 - Remove PaymentPolicy readiness parameters/branch and dead builder/input/response
@@ -101,7 +103,12 @@ actual Task/Submission/CheckerRun is required for activation.
    its privacy resource allowlist does not admit the canonical
    `project_guide_activation` token yet. Add only that resource token in 0023
    using the existing shape-preserving constraint update pattern; no action or
-   permission expansion. Registration is not live evaluator authority. Hidden tests supply controlled
+   permission expansion. Add the same token to existing AUDIT `_RESOURCE_TYPES`,
+   AUTH `AuthorizationDecisionResourceType` and `CONTEXT_DIGEST_RESOURCE_TYPES`.
+   Extend `project_authority_audit_target` with an exact activation-context branch
+   returning the project scope, guide activation resource/id and project target;
+   do not broaden `GUIDE_BOUND_PROJECT_MANAGER_ACTIONS` or activate the action.
+   Verify Python schema/domain/SQL parity. Registration is not live evaluator authority. Hidden tests supply controlled
    participants and real audit persistence, without claiming live AUTH activation.
 6. Bind non-null CON identity for successful activation, preserve exact existing
    review/revision selectors, supersede only the expected prior active guide,
