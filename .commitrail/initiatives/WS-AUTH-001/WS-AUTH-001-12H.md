@@ -1,10 +1,11 @@
 # AUTH-12H — Live manager authority for complete guide activation
 
-Initiative: WS-AUTH-001
-Status: Planned
-Risk: L1 (authorization and immutable activation evidence)
+- Initiative: WS-AUTH-001
+- Durable disposition: Complete
+- Risk: L1 (authorization and immutable activation evidence)
+- Intended merge outcome: live exact-project manager authority for CP07; HTTP exposure remains pending.
 
-## Intent and reconciliation
+## Intent
 
 Connect the existing CP07 activation operation to live, exact-project
 Project Manager authority. This adopts and reconciles the
@@ -26,7 +27,7 @@ work, not fabricated capabilities in this chunk. True needs no Task, Submission,
 CheckerRun or PaymentPolicy. Downstream chronology remains a future contract;
 guide-local generation is not a project-wide activation sequence.
 
-## Bounded implementation
+## Bounded change
 
 1. Replace the obsolete activation resource with a closed AUTH resource wrapping
    the existing public CP07 facts. Revalidate nested facts and bind locator to
@@ -48,7 +49,10 @@ their existing shared fixtures; affected current architecture/authorization/
 operating documentation, roadmap and initiative navigation; exact new-module
 registration in `backend/scripts/test_lane_catalogue.py`,
 `backend/scripts/behavior_ownership.py`, `.ci/behavior-ownership/partition.v1.json`
-and its negative inventory test (no threshold or exception expansion). A migration is
+and its negative inventory test; exact shrinking/unchanged measurements in
+`.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json` (no threshold or exception expansion).
+The manager scope action set and duplicate grant-denial branches are consolidated
+so the touched kernel shrinks while retaining both query and returned-grant checks. A migration is
 allowed only if inspection proves existing 0023 audit/custody parity insufficient.
 
 Prohibited: new public routes, policy/compiler semantics, duplicate activation
@@ -56,7 +60,7 @@ or replay storage, new service permissions, CON redesign, provider calls,
 TASK/Submission/REV execution or chronology changes, retained-data deletion,
 compatibility paths, unrelated old-code cleanup, weakened CI or tests.
 
-## Acceptance and proof
+## Acceptance criteria
 
 - An active exact-project manager activates a complete approved chain through
   real AUTH and CP07, with one matching decision, receipt and immutable binding.
@@ -79,17 +83,24 @@ compatibility paths, unrelated old-code cleanup, weakened CI or tests.
   Markdown-link checks, and hosted full CI remain green. New/materially changed
   subsystem coverage remains at least 90 percent.
 
-## Review and human focus
+## Risk and review routing
+
+L1 authorization and immutable-evidence impact requires focused security,
+architecture/reuse, QA/test-delta, documentation/product-operations and CI-integrity
+review. Human focus is exact-project manager authority through the existing CP07
+transaction, with no public HTTP activation or automated-acceptance expansion.
+
+## Evidence
 
 ### Owner and proof map
 
-Paths below are relative to `backend/`. New tests are planned implementation
-proof, not claims of execution. PostgreSQL tests use `clean_postgres_database`
+Paths below are relative to `backend/`. The named tests provide implementation
+proof; exact-head execution and review results remain in the PR. PostgreSQL tests use `clean_postgres_database`
 and the existing complete CP07 `activation_case`; no authority guards are mocked
 in that integration layer. Unit custody tests retain the real kernel/PREP while
 substituting only principal storage and audit persistence.
 
-| Owner / exact implementation | Planned proof |
+| Owner / exact implementation | Proof |
 | --- | --- |
 | `app/modules/authorization/domain/guide_activation.py`: `ProjectGuideActivationResourceContext`, `activation_resource`, `activation_selectors`, `parse_activation_prepare`, `activation_matches` | `tests/authorization/guide_activation/test_context.py`: exact digest parity, independently mismatched resource/locator/receipt, nested invalid model instances |
 | `app/modules/authorization/guide_activation_authorization.py`: `GuideActivationAuthorizationAdapter.lock_activation_scope`, nominal `_PreparedGuideActivation.consume_new/validate_replay` | `tests/authorization/guide_activation/test_prepared.py`: positive consume/replay, invalid caller/locator, sibling action/resource, copied/closed/reused handle, foreign session/root, evidence failure |

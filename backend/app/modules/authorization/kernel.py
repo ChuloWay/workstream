@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from app.modules.authorization.domain.guide_proposals import GUIDE_PROPOSAL_RESOURCE_BY_ACTION
-from app.modules.authorization.catalogue import GUIDE_PROPOSAL_ACTION_IDS, POST_POLICY_HUMAN_ACTION_IDS, POST_POLICY_ACTION_IDS
+from app.modules.authorization.catalogue import POST_POLICY_ACTION_IDS
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
 
 from collections.abc import Awaitable, Callable
@@ -27,7 +27,7 @@ from app.modules.authorization.domain import adapter_bindings, contribution_poli
 from app.modules.authorization.domain.action_groups import (
     GUIDE_BOUND_PROJECT_MANAGER_ACTIONS as _GUIDE_BOUND_PROJECT_MANAGER_ACTIONS,
     SUBMISSION_POLICY_MUTATIONS as _SUBMISSION_POLICY_MUTATIONS,
-    PROJECT_SCOPED_ADMIN_MUTATIONS, CONTEXT_DIGEST_ACTIONS,
+    PROJECT_SCOPED_ADMIN_MUTATIONS, CONTEXT_DIGEST_ACTIONS, EXACT_PROJECT_MANAGER_SCOPE_ACTIONS,
 )
 from app.modules.authorization.domain.audit import CONTEXT_DIGEST_RESOURCE_TYPES
 from app.modules.authorization.domain.audit_targets import project_authority_audit_target
@@ -559,15 +559,11 @@ class AuthorizationService:
             scope_project_id=scope.project_id,
             for_update=True,
             allowed_roles=frozenset({AdminRole.PROJECT_MANAGER}),
-            exact_project_scope=(action_id in {ActionId.PROJECT_GUIDE_COMPILATION_REQUEST, ActionId.PROJECT_GUIDE_ACTIVATE} | GUIDE_PROPOSAL_ACTION_IDS | POST_POLICY_HUMAN_ACTION_IDS),
+            exact_project_scope=(action_id in EXACT_PROJECT_MANAGER_SCOPE_ACTIONS),
         )
-        if grant is None:
-            raise PreparedAuthorizationUnsupported(
-                AuthorizationDenialCode.PERMISSION_NOT_GRANTED
-            )
-        if (action_id in {ActionId.PROJECT_GUIDE_COMPILATION_REQUEST, ActionId.PROJECT_GUIDE_ACTIVATE} | GUIDE_PROPOSAL_ACTION_IDS | POST_POLICY_HUMAN_ACTION_IDS) and (
+        if grant is None or (action_id in EXACT_PROJECT_MANAGER_SCOPE_ACTIONS and (
             grant.scope_type != "project" or grant.scope_project_id != str(scope.project_id)
-        ):
+        )):
             raise PreparedAuthorizationUnsupported(
                 AuthorizationDenialCode.PERMISSION_NOT_GRANTED
             )
