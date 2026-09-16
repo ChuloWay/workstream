@@ -32,7 +32,7 @@ linkage; database checks must account for that same-transaction staging.
 - `backend/app/modules/projects/models.py`: unique guide/project/selected-version key for the exact TASK foreign key.
 - `backend/app/modules/checkers/models.py`: nullable retained payment-version field, so downstream runs can copy new no-PaymentPolicy Submissions without fabrication.
 - `backend/app/modules/authorization/{submission_consumption,submission_creation_authorization}.py`: bind the exact attempt contribution version into existing prepared/final Submission authority; no new action or permission.
-- One `0024` Alembic revision: same-project/stable-identity constraints, immutable policy stamps, retained-data validation and justified derivation/refusal. No prior migration edits.
+- One `0024` Alembic revision: same-project/stable-identity constraints, immutable policy stamps, retained-data validation and justified derivation/refusal. Update `backend/alembic/env.py` current-head acceptance and exact migration-graph tests. No prior migration or frozen baseline edits: baseline parity is checked at revision 0001, not head.
 - Existing affected TASK/ART/AUTH public-value constructors and test fixtures: populate required exact fields from actual activated guides and assignments. Remove tests solely protecting superseded payment-policy readiness; preserve authorization, real-ZIP, recovery, rollback, immutable-history and concurrency assertions.
 - Focused `backend/tests/tasks/` lineage/migration tests and existing task, Submission composition, authorization/task-authority, artifact and policy-context tests. Exact ownership/lane/debt registrations only when needed, no gate relaxation.
 - This record, adopted CP08 contract, initiative navigation, README and affected canonical data-model/operations/roadmap sections. Update ignored sheet exports if present.
@@ -61,8 +61,8 @@ authorization cutovers; this change preserves existing authority boundaries.
    Submission uses a stable assignment/task/contributor FK, never a permanent FK
    involving the mutable current assignment policy value. A deferred creation
    guard verifies the exact copied assignment policy and complete final artifact
-   linkage; an update guard preserves each committed Submission policy stamp.
-   Closed assignments cannot be restamped. Continuing-assignment rebase remains
+   linkage by re-selecting the final Submission row by ID when the deferred trigger fires (not the queued INSERT tuple). It locks the assignment against stamp changes before comparison; an update guard preserves each committed Submission policy stamp.
+   CP08 rejects assignment stamp changes; a future authorized rebase must replace that guard rather than introduce a parallel path. Closed assignments cannot be restamped. Continuing-assignment rebase remains
    the future qualified human-needs_revision operation, not a CP08 endpoint.
 2. Screening resolves complete active PROJECTS facts in the same transaction,
    verifies installed pre-submit planning and post-submit catalogue capability,
@@ -72,7 +72,7 @@ authorization cutovers; this change preserves existing authority boundaries.
 3. Claim copies the already frozen Task policy to the new assignment. Hidden
    Submission creation copies the exact active assignment stamp, not the latest
    guide or CON policy. Public immutable TASK facts include these identities and
-   reject inconsistent assignment/task references.
+   reject inconsistent assignment/task references and require UUID policy identities. Add the task stamp to `LOCKED_CONTEXT_REQUIRED_FIELDS`, so the existing claim authorization digest binds it. PROJECTS activation receipt contribution identity must equal the task stamp on claim and both task/assignment stamps on Submission.
 4. Replace the affected private policy/payment loading and stamping paths with
    the existing PROJECTS port. Existing project/guide display metadata reads may
    remain as an explicitly identified ARCH-03B dependency; they cannot select or
@@ -92,14 +92,15 @@ authorization cutovers; this change preserves existing authority boundaries.
    existing root transaction. Start the prepared-handle `try/finally` before the
    PROJECTS call, so any custody failure closes it. TASK public facts carry exact
    task and assignment policy IDs with equality validation; AUTH resource facts
-   retain the assignment contribution version in their digest. Verify the precise order against unchanged owners
-   during plan review before implementation.
-7. Migration evidence must come from exact immutable activation and original
-   work custody. Present-day guide/CON selection is not proof of an old attempt.
-   If any required preexisting reference cannot be proven uniquely, fail before
-   schema/data mutation and leave all retained evidence unchanged. No nullable
-   execution escape path. The exact SQL proof predicate and constraints are
-   completed from the schema inventory before the implementation candidate.
+   retain the assignment contribution version in their digest. Claim locks Task then active assignment, prepares/consumes AUTH, then reads PROJECTS frozen context. Submission locks Task, assignment and latest Submission before AUTH preparation, then PROJECTS, insertion, ART consumption and final AUTH consumption. Existing role issuance takes actor/grant locks before Project and never TASK; this ordering avoids introducing Project-to-actor inversions.
+7. Before any upgrade DDL, refuse if any Task has `status <> 'draft'`,
+   any TaskAssignment exists, or any Submission exists. There is no defensible
+   historical contribution stamp in prior screening audit; do not reconstruct it.
+   Preserve draft tasks and all guide/policy/activation/audit evidence unchanged.
+   On refusal, schema, rows and Alembic marker must remain unchanged. Downgrade
+   likewise refuses before DDL if any Task stamp, Assignment or Submission exists;
+   also refuse if retained nullable payment values cannot satisfy the restored
+   non-null constraints. Never delete data to make migration possible.
 8. `needs_revision` is the only future complete-context rebase boundary. CP08
    proves at most narrow selector-schema capability; it does not claim complete
    authorized rebase while old Submission-to-Task context FKs remain.
@@ -154,5 +155,16 @@ commands and review freshness in the PR; no secrets/private guide material.
   is reused, not reimplemented. Open #410 is unrelated CI impact reporting.
 - Next usable boundary: ARCH-03B/03C task readiness/read/authorization cutover,
   following the adopted sequence; no next chunk begins automatically.
-- Remaining decisions to close before product code: exact migration proof
-  predicate/constraint timing and precise existing lock-order reconciliation.
+- Plan finding dispositions: SEC-CP08-PLAN-01 is addressed by exact UUID facts,
+  claim digest inclusion and prepared Submission resource binding;
+  SEC-CP08-PLAN-02 by AUTH-before-PROJECTS ordering and handle cleanup.
+  CP08-ARCH-001 is addressed by the explicit refusal predicate;
+  CP08-ARCH-002 by final-row deferred validation and stable assignment identity.
+  CP08-ARCH-003 is retracted: baseline resources describe frozen 0001, not head.
+- Named future proofs: draft/evidence migration preservation; pre-DDL refusal with
+  row/schema/marker snapshots; wrong same-project assignment stamp; staged flush
+  versus incomplete commit; exact committed Submission stamp immutability;
+  no-payment Submission reaching CheckerRun; role issuance versus claim in both
+  lock orders; claim versus successor activation; two competing claimants;
+  duplicate hidden Submission creation against one predecessor. These are planned
+  runtime proofs, not claims of tests already executed.
