@@ -2,7 +2,7 @@
 
 - Initiative: WS-ARCH-001
 - Durable disposition: Planned
-- Intended merge outcome: TASK consumes immutable PROJECTS-owned display facts through the existing guide-context port, with no private PROJECTS model or repository dependency.
+- Intended merge outcome: TaskService consumes immutable PROJECTS-owned display facts through the existing guide-context port, removing its private PROJECTS model and repository dependencies.
 
 ## Intent
 
@@ -38,7 +38,8 @@ originating invalidation-event append and public activation.
   ORM-valued context; remove all superseded imports/fields/calls together.
 - Existing affected composition or fixtures only where required by the changed
   port. Focused PROJECTS context and TASK HTTP/read tests, including
-  `backend/tests/test_tasks.py` and `backend/tests/projects/test_locked_policy_*.py` and its fixtures.
+  `backend/tests/test_tasks.py`, new `backend/tests/tasks/test_project_display.py`,
+  and existing `backend/tests/projects/test_locked_policy_*.py` and their fixtures.
   Register new tests in the existing exact lane catalogue if needed.
 - Existing module-boundary machine/human ledgers: remove only retired edges;
   no new debt, raised thresholds or exemptions.
@@ -62,12 +63,22 @@ project and guide already validated by the owner. Their identities must match
 the existing context and activation receipt. Descriptive project metadata is
 current display data, not a new policy hash or immutable business-policy input.
 Guide metadata is from the selected historical guide, never the current guide.
-Use only scalar strings, UUIDs and datetimes; no ORM/session objects.
+Use one frozen `ProjectDisplayFacts` (id, name, slug, description) for draft
+lookup and complete context, plus frozen `GuideDisplayFacts` (id, project_id,
+version, change_summary, effective_at) for complete context. Their UUID identity,
+guide version and guide effective time must match the validated activation
+context. Specifically project.id equals context.project_id;
+guide.(project_id, id, version) equals the receipt-bound context tuple;
+guide.effective_at equals activation_receipt.effective_at. Use only scalar strings, UUIDs and datetimes; no ORM/session objects.
 
 Draft creation needs only project existence, not an activated guide. Add a
 bounded project-metadata lookup to this same port that returns a detached
 project value or absence. It must not acquire a new lock or require readiness,
-and must not flush/commit the caller's work. TASK retains its current validation
+and must not flush/commit the caller's work. Name the method
+`read_project_display(project_id: UUID) -> ProjectDisplayFacts | None`. It may
+be the first DB operation: do not reuse `_resolve`'s pre-existing-root-transaction
+or active-project guard. Malformed project-ID strings map to the existing
+`TaskProjectNotReady` error after current authorization checks. TASK retains its current validation
 and authorization order. This avoids making draft creation depend on a guide
 that the project manager has not yet configured.
 
@@ -100,15 +111,30 @@ that the project manager has not yet configured.
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
 | Current owner/dependency trace | Inspect TASK context/service, PROJECTS context port, OUTBOX exports | Private display reads and append-only outbox confirmed | Plan review before code |
-| Detached exact display facts | Focused existing PROJECTS context tests plus identity-substitution negatives | Planned | Runtime proof required |
-| Stable public workflow | Real PostgreSQL TASK creation and contributor/manager frozen-context reads | Planned | Runtime proof required |
-| No gate or boundary weakening | Ruff, module/authorization/structure validators, lane equality, stale wording, markdown links, hosted full tests/coverage | Planned | Exact implementation head required |
+| Nested display identity and immutability | `test_context_display_identity_and_immutability`: real activated context, positive replacement; independently replace nested project.id and guide.project_id/id/version/effective_at while original top-level receipt stays intact; frozen mutation rejects | Planned | Future runtime proof, not a prior test result |
+| Existence-only draft lookup | `test_project_display_lookup_preserves_draft_and_transaction`: real PostgreSQL draft Project without Guide, missing UUID; pending invalid object remains unflushed; flushed uncommitted marker disappears on rollback | Planned | Future runtime proof |
+| No new Project lock | `test_project_display_lookup_does_not_wait_for_project_lock`: session A holds Project FOR UPDATE; bounded session B metadata read completes before A releases | Planned | Future two-session proof |
+| Draft create/absence/error order | `test_task_creation_before_guide_and_missing_project_atomicity`: HTTP valid draft create then missing/malformed project IDs, unauthorized malformed request; Task/Audit counts unchanged on denial | Planned | Real PostgreSQL/HTTP proof required |
+| Exact historical public display | `test_task_display_survives_guide_successor_for_contributor_and_manager`: activate first guide, create/screen/claim task, then activate distinct successor; both authorized routes return predecessor id/version/summary/effective_at and existing exact response keys; foreign scope denies | Planned | Replace the narrower existing successor test, retain requirements assertions |
+| No gate or boundary weakening | Ruff; module/authorization/structure validators; exact lane equality; stale wording; markdown links; hosted full tests/coverage | Planned | Exact implementation head required |
 
 ## Review findings
+
+Architecture review narrowed the cleanup claim to TaskService. The unchanged
+private `ProjectGuide` import in `tasks/pre_submit_context.py` remains an explicit
+later AUTH/public-intake consumer; this change does not claim all TASK private
+PROJECTS edges are retired. The draft lookup's first-read and inactive-project
+semantics are preserved, distinct from activated-context readiness.
 
 Plan discovery found that the old 03B skeleton requires a committed outbox claim
 that does not exist and repeats CP08 writers. Keep completed lineage out of
 03B implementation and order invalidation after its actual shared owner.
+Actor-wide invalidation also needs explicit per-project TASK event fan-out under
+the existing project-scoped outbox; no arbitrary project or shared TASK/REV
+acknowledgement may be invented by the later handler contract.
+Security/QA review required the independent nested substitutions and exact
+transaction/HTTP proof names above; existing top-level receipt tests alone do
+not prove the new nested display boundary.
 
 ## Reconciliation
 
