@@ -263,12 +263,16 @@ async def test_assignment_insert_rejects_foreign_project_tuples_direct_sql(task_
         )
         params = dict(id=str(uuid4()), task=local.id, project=local.project_id,
                       actor=local.created_by, policy=local.locked_contribution_policy_version_id)
-        for project_id in (other.project_id, local.project_id):
+        # Isolate each selector, then also reject an internally valid foreign
+        # tuple. A policy mismatch alone cannot prove project binding.
+        for changed in (
+            {"project": other.project_id},
+            {"policy": other.locked_contribution_policy_version_id},
+            {"project": other.project_id, "policy": other.locked_contribution_policy_version_id},
+        ):
             with pytest.raises(DBAPIError, match="assignment contribution stamp differs from task"):
                 async with session.begin_nested():
-                    await session.execute(statement, params | {
-                        "project": project_id, "policy": other.locked_contribution_policy_version_id,
-                    })
+                    await session.execute(statement, params | changed)
             assert await session.get(TaskAssignment, params["id"]) is None
         await session.execute(statement, params)
         await session.commit()
