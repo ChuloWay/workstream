@@ -1,12 +1,13 @@
 """Fail closed at exact complete-context boundaries using real activated sources."""
 
+import json
 from dataclasses import replace
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm.attributes import set_committed_value
 
-from app.modules.projects.api import ProjectLockedPolicyContextUnavailable
+from app.modules.projects.api import CanonicalJsonObject, ProjectLockedPolicyContextUnavailable
 from app.modules.projects.locked_policy_repository import ProjectLockedPolicyRepository
 from app.modules.projects.models import (
     EffectiveProjectSubmissionArtifactPolicy,
@@ -226,6 +227,11 @@ async def test_context_refreshes_preloaded_custody(clean_postgres_database):
                 statement = select(model)
                 if model is GuideMutationIdempotencyRecord:
                     statement = statement.where(model.operation_id == receipt.operation_id)
+                elif model is SubmissionPolicyMutationIdempotencyRecord:
+                    statement = statement.where(
+                        model.operation_id
+                        == receipt.command.target.upstream.operation_id
+                    )
                 rows = list(await session.scalars(statement))
                 assert rows
                 for row in rows:
@@ -236,3 +242,16 @@ async def test_context_refreshes_preloaded_custody(clean_postgres_database):
             for row, field, original in held:
                 assert getattr(row, field) == original, (type(row).__name__, field)
             assert not session.dirty
+
+
+async def test_context_rejects_substituted_post_policy_body(clean_postgres_database):
+    async with activated_context(clean_postgres_database) as (factory, receipt, *_):
+        async with factory() as session, session.begin():
+            facts = await ProjectLockedPolicyRepository(session).lock_locked_policy_context(
+                frozen_request(receipt)
+            )
+        assert replace(facts) == facts
+        body = json.loads(facts.compiled_post_submit_policy.value)
+        body["guide_version"] = "different-guide"
+        with pytest.raises(ValueError, match="project locked policy facts differ from activation"):
+            replace(facts, compiled_post_submit_policy=CanonicalJsonObject.from_mapping(body))

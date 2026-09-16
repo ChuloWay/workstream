@@ -193,6 +193,7 @@ class ProjectLockedPolicyContextFacts:
             or self.effective_policy.sha256 != self.effective_policy_hash
             or self.compiled_pre_submit_bundle.sha256 != self.pre_submit_policy_bundle_hash
             or self.artifact_policy.sha256 != target.artifact_policy_hash
+            or self.compiled_post_submit_policy.sha256 != receipt.command.target.policy_hash
         ):
             raise ValueError("project locked policy facts differ from activation")
         object.__setattr__(self, "activation_receipt", receipt)
