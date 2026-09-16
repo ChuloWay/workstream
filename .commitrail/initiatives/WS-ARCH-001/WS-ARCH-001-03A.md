@@ -45,6 +45,9 @@ Retained work must never acquire invented lineage from a current selector.
 - The existing post-policy body parser and its CHECKERS/activation callers:
   separate retained schema/hash custody from live catalogue eligibility; preserve
   current execution and activation rejection behavior without a second parser.
+- `backend/app/modules/tasks/service.py`: preserve the current-catalogue checks
+  inherited by existing screening/ready helpers from the shared parser; remove
+  its uncalled pre-Submission helper. No new TASK writer or cutover belongs here.
 - Exact affected ART consumers only if a required type adaptation is necessary;
   no ART business/authority behavior. Existing TASK selector persistence is not
   changed in this chunk.
@@ -166,6 +169,7 @@ Product edit paths (unused paths need no change):
 - `backend/app/modules/projects/post_policy/custody.py`
 - `backend/app/modules/projects/post_submit_policy.py`
 - `backend/app/modules/checkers/service.py` (preserve live catalogue validation at execution)
+- `backend/app/modules/tasks/service.py` (preserve affected live caller guards only)
 - `backend/app/modules/projects/repository.py`
 
 The composition root and ART callers already consume the port and are inspection
@@ -186,6 +190,7 @@ Test edits are limited to `backend/tests/` paths below:
 - `authorization/contribution_policies/test_cross_owner_lock_order.py`
 - `test_checkers.py`, `checkers/post_submit/test_compiled_policy.py` (saved parsing versus live validation)
 - `test_ci_lane_catalogue.py` (exact owner set maintenance)
+- `test_tasks.py` (catalogue-rollout screening/ready atomic denial)
 
 Replace the affected complete-context positives, not every historical fixture.
 The existing `activation_case` and real AUTH `guide_activation.pg_support.activate`
@@ -201,6 +206,7 @@ Named verification:
 | `test_active_and_frozen_context_are_complete` | Real finalization, separate approvals, CON publication and CP07 activation; compare every returned body and exact receipt/catalogue identity with stored source. |
 | `test_frozen_context_survives_successor_and_retirement` | Activate a genuine successor; active read returns successor, frozen read returns original; retire CON version and preserve frozen facts. |
 | `test_catalogue_rollout_preserves_context_but_blocks_new_activation` | Change current catalogue after saving exact custody; historical and active reads retain their bodies, while new activation denies and rolls back. Restoring current-registry validation inside the parser must make this test fail. |
+| `test_catalogue_rollout_blocks_task_transition_without_writes` | Real HTTP screening/release denies the obsolete installed catalogue; independent PostgreSQL reads prove unchanged task fields and audit rows. Removing the live checks must make the exact cases fail. |
 | `test_canonical_policy_sidecars_deny_before_manual_execution[catalogue-crossed]` | Valid saved policy cannot execute against a different installed catalogue; denial precedes lifecycle changes, audit writes and checker invocation. |
 | `test_project_context_contract_does_not_cycle_agent_port_import` | Import the agent port in a fresh interpreter without relying on test collection order. |
 | `test_new_publication_does_not_reselect_context` | Publish a new CON version while guide binding remains unchanged; both reads retain exact activation binding. |
@@ -285,3 +291,13 @@ construction, removing a collection-order-dependent cycle through the agent port
 Exact ownership registries include the projection and tests without changing
 thresholds or weakening equality. The orphaned trigger-disabled Project helper
 and stale sequence wording are removed within this affected scope.
+
+
+Shared-caller reconciliation preserves current-catalogue validation in both
+existing TASK screening and locked-context helpers, including the latter's ready
+transition and reads. Their intentional custody/readiness separation belongs to
+CP08's port cutover. The uncalled `_validate_locked_post_submit_policy_context`
+helper is removed; it supplied no live Submission protection and has no callers
+or tests to preserve. A PROJECTS active-context read supplies saved facts, not
+permission or execution eligibility for a new task. CP08 requires CHECKERS-owned
+pre/post installed-capability validation before its initial lineage/status writes.

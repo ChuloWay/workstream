@@ -19,8 +19,19 @@ It reuses `TaskService` screening/context locking, `AuthorizedTaskCommands.claim
 Replace affected obsolete private policy/payment context paths with the existing
 PROJECTS port; no parallel command or compatibility branch.
 
-Screening takes the complete active guide context once. Ready/claim validate
-that frozen context, not a current CON selector. Claim copies the task stamp;
+Screening takes the complete active guide context once. This PROJECTS read
+supplies exact custody, not readiness authority. Before initial lineage or a
+screening/ready state is written, TASK must validate that installed CHECKERS
+capabilities can execute both saved plans. Reuse
+`EffectivePreSubmissionPlanningPort.compile_effective_plan` for pre-submit and
+CHECKERS public `CompiledPostSubmitPolicy.validate_catalogue` for post-submit,
+using the installed catalogue built from registered implementations at the
+composition root. No new readiness workflow or parallel parser is needed. This validation performs no
+checker execution or provider call. Fail before lineage, status, assignment or
+audit writes. Keep historical reads independent of current availability; do not
+make their success sufficient authority to advance new work.
+
+Ready/claim validate the exact frozen context, not a current CON selector. Claim copies the task stamp;
 Submission copies the exact active assignment stamp. Ordinary claim/Submission
 perform no CON lookup. Keep authorization and atomic operation ownership intact.
 ARCH-03B retains queues, invalidation and broader task projections; ARCH-03C
@@ -52,7 +63,9 @@ Before implementation enumerate exact files, constraints, migration head,
 retained-data handling and affected consumers in the combined CP08 record.
 Prove real screening/claim/Submission copy paths; missing/foreign/mismatched
 lineage rejection; no CON lookup at claim/Submission; immutable prior evidence;
-caller rollback; concurrency and migration preservation/refusal. Account for
+caller rollback; concurrency and migration preservation/refusal. Prove that a
+catalogue rollout leaves frozen PROJECTS reads intact while screening/ready
+refuses new work atomically for unavailable pre-submit or post-submit capabilities. Account for
 Submission's current staged flush-before-artifact-linkage transaction when
 designing immediate versus deferred constraints. Use a discriminating faulty
 stamp mutation, not merely invalid fixtures rejected by earlier guards.
