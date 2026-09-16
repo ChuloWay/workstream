@@ -55,7 +55,11 @@ authorization cutovers; this change preserves existing authority boundaries.
    contributor identity with stable composite keys. Task requires a guide version
    whenever its contribution stamp is populated, and binds `(project_id,
    locked_guide_version,locked_contribution_policy_version_id)` to the selected
-   guide triple. Assignment carries its owning `project_id`, bound to Task and
+   guide triple. CP08 permits the initial null-to-exact Task stamp only during
+   draft-to-screening and rejects later Task stamp changes. Future authorized
+   complete-context rebase must replace that guard together with the Assignment
+   guard. A direct-SQL valid-successor substitution test proves this boundary.
+   Assignment carries its owning `project_id`, bound to Task and
    ContributionPolicyVersion, and freezes Task/project/contributor identity.
    Insert-time assignment equality verifies the then-current Task stamp.
    Submission uses a stable assignment/task/contributor FK, never a permanent FK
