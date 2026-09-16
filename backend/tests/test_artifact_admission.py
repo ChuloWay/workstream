@@ -2526,6 +2526,10 @@ async def test_checker_output_requires_exact_active_fixed_service_identity(
                 await session.commit()
             await session.rollback()
 
+            baseline = {model: await _count(session, model) for model in (
+                ArtifactPutAttempt, ArtifactContent, ArtifactReplica, ArtifactOperationReceipt,
+            )}
+            await session.rollback()
             async with minted_source(tmp_path / "scratch-source", b"checker") as source:
                 service = ArtifactAdmissionService(session, settings, namespace)
                 forged = context.model_copy(update={"identity_link_id": uuid4()})
@@ -2544,7 +2548,7 @@ async def test_checker_output_requires_exact_active_fixed_service_identity(
                 assert await _count(session, ArtifactStorageNamespace) == 1
                 assert await _count(session, ArtifactAdmissionScope) == 0
                 assert await _count(session, ArtifactAdmissionCharge) == 0
-                assert await _count(session, ArtifactPutAttempt) == 1
+                assert await _count(session, ArtifactPutAttempt) == baseline[ArtifactPutAttempt]
                 await session.rollback()
 
                 request = CheckerOutputArtifactAdmissionRequest(
@@ -2557,29 +2561,12 @@ async def test_checker_output_requires_exact_active_fixed_service_identity(
                 replay = await service.admit(request)
 
             attempt = await session.get(ArtifactPutAttempt, str(result.attempt_id))
-            scopes = (
-                (
-                    await session.execute(
-                        select(ArtifactAdmissionScope).order_by(
-                            ArtifactAdmissionScope.scope_type,
-                            ArtifactAdmissionScope.scope_id,
-                        )
-                    )
-                )
-                .scalars()
-                .all()
-            )
-            links = (
-                (
-                    await session.execute(
-                        select(ArtifactPutAttemptCharge).where(
-                            ArtifactPutAttemptCharge.attempt_id == str(result.attempt_id)
-                        )
-                    )
-                )
-                .scalars()
-                .all()
-            )
+            scopes = (await session.scalars(select(ArtifactAdmissionScope).order_by(
+                ArtifactAdmissionScope.scope_type, ArtifactAdmissionScope.scope_id,
+            ))).all()
+            links = (await session.scalars(select(ArtifactPutAttemptCharge).where(
+                ArtifactPutAttemptCharge.attempt_id == str(result.attempt_id),
+            ))).all()
             assert attempt is not None
             assert replay.attempt_id == result.attempt_id
             assert replay.charge_ids == result.charge_ids
@@ -2603,11 +2590,11 @@ async def test_checker_output_requires_exact_active_fixed_service_identity(
             }
             assert len(result.charge_ids) == 4
             assert len(links) == 4
-            assert await _count(session, ArtifactPutAttempt) == 2
+            assert await _count(session, ArtifactPutAttempt) == baseline[ArtifactPutAttempt] + 1
             assert await _count(session, ArtifactAdmissionCharge) == 4
-            assert await _count(session, ArtifactContent) == 1
-            assert await _count(session, ArtifactReplica) == 1
-            assert await _count(session, ArtifactOperationReceipt) == 1
+            assert await _count(session, ArtifactContent) == baseline[ArtifactContent]
+            assert await _count(session, ArtifactReplica) == baseline[ArtifactReplica]
+            assert await _count(session, ArtifactOperationReceipt) == baseline[ArtifactOperationReceipt]
     finally:
         await engine.dispose()
 

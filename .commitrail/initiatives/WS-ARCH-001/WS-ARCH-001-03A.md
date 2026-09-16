@@ -191,6 +191,9 @@ Test edits are limited to `backend/tests/` paths below:
 - `test_checkers.py`, `checkers/post_submit/test_compiled_policy.py` (saved parsing versus live validation)
 - `test_ci_lane_catalogue.py` (exact owner set maintenance)
 - `test_tasks.py` (catalogue-rollout screening/ready atomic denial)
+- `test_review_lease_persistence.py` (reuse real guide-bound publication)
+- `test_pre_submit_attempt_migration.py`, `migration_fixtures.py`
+  (isolate the 0021 retained-evidence boundary from later 0023 activation custody)
 
 Replace the affected complete-context positives, not every historical fixture.
 The existing `activation_case` and real AUTH `guide_activation.pg_support.activate`
@@ -301,3 +304,14 @@ helper is removed; it supplied no live Submission protection and has no callers
 or tests to preserve. A PROJECTS active-context read supplies saved facts, not
 permission or execution eligibility for a new task. CP08 requires CHECKERS-owned
 pre/post installed-capability validation before its initial lineage/status writes.
+
+
+Downstream fixture repairs reuse the real guide-bound published CON version for
+ReviewLease prerequisites instead of publishing a second active policy. Checker
+output admission compares attempt/content/replica/receipt counts with the exact
+starting graph; denial adds nothing and admit/replay adds one prepared attempt.
+The 0021 retention tests execute only that revision's unchanged upgrade/downgrade
+bodies in transactions, preserving later 0023 activation rows, authority events
+and the Alembic head marker. They still prove byte-exact retained evidence,
+absence of invented new fields, downgrade refusal and result bounds. No
+production migration or retained data is changed by this fixture reconciliation.
