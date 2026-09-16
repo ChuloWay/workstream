@@ -47,7 +47,7 @@ needs-revision obligations and manager reassignment remain REV-owned work;
 there is no new direct manager assignment feature here.
 
 Build this only after AUTH-OUTBOX-01 and CON-02B deliver the shared committed
-claim and typed-handler contracts. Current OUTBOX has append only, and AUTH
+claim and typed-handler contracts. Current OUTBOX provides append-only persistence, and AUTH
 invalidation audit rows are not dispatched events. Actor-wide invalidation needs
 explicit per-project TASK fan-out; TASK and REV effects cannot share an implicit
 acknowledgement. The hidden TASK-owned event handler receives exact fixed-service

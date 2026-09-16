@@ -427,8 +427,9 @@ Setup receipts remain immutable. The next guide boundary is:
    live manager authority and ARCH-03A complete internal guide context are complete.
    CP08 task-attempt lineage and its minimal existing writers are complete.
    ARCH-03B1 detached project/guide display is complete. Next are the remaining
-   ARCH-03B queues and actor-specific projections, then invalidation after the shared
-   committed-claim contract and ARCH-03C authorization/public cutover. HTTP activation exposure remains
+   ARCH-03B queues and actor-specific projections. Invalidation follows delivery of
+   the shared committed-claim contract, before the ARCH-03C authorization/public
+   cutover. HTTP activation exposure remains
    pending and is not implied by an internal public port. The operation requires exact
    current compilation, sufficiency, separate pre/post approvals, review/revision
    inputs and an explicitly selected published ContributionPolicyVersion.
