@@ -163,6 +163,10 @@ ARCH_CP04A_CONTRIBUTION_POLICY_TARGETS = frozenset(
 )
 ARCH_03A_GUIDE_CONTEXT_TARGETS = frozenset({
     "backend/app/modules/projects/locked_policy_projection.py",
+    "backend/app/modules/projects/api/policy_lineage.py",
+})
+ARCH_03A_GUIDE_CONTEXT_REMOVED_TARGETS = frozenset({
+    "backend/app/modules/projects/policy_lineage.py",
 })
 
 ARCH_CP07_GUIDE_ACTIVATION_TARGETS = frozenset({
@@ -516,6 +520,22 @@ def _read_json(path: Path, error: str) -> Any:
         raise BehaviorOwnershipError(error) from exc
 
 
+def _validate_policy_lineage_relocation(trusted_targets: set[str], current_targets: set[str]) -> None:
+    """Permit only the one-way relocation of the sole canonical policy hash owner."""
+    old = "backend/app/modules/projects/policy_lineage.py"
+    new = "backend/app/modules/projects/api/policy_lineage.py"
+    before = (old in trusted_targets, new in trusted_targets)
+    after = (old in current_targets, new in current_targets)
+    if before == after == (False, False):
+        return
+    if (before, after) not in {
+        ((True, False), (True, False)),
+        ((True, False), (False, True)),
+        ((False, True), (False, True)),
+    }:
+        raise BehaviorOwnershipError("untrusted_partition_change")
+
+
 def _validate_additive_partition_transition(
     current: dict[str, Any],
     trusted: Any,
@@ -548,13 +568,14 @@ def _validate_additive_partition_transition(
         raise BehaviorOwnershipError("invalid_trusted_partition")
     current_assignments = current["assignments"]
     current_by_target = {item["target"]: item for item in current_assignments}
+    _validate_policy_lineage_relocation(set(trusted_targets), set(current_by_target))
     removed = set(trusted_targets) - set(current_by_target)
     retained_trusted = [
         item for item in trusted_assignments if item["target"] not in removed
     ]
     if (
         trusted_targets != sorted(trusted_targets)
-        or removed - (V01_BASELINE_REMOVED_TARGETS | POL_03B_REMOVED_TARGETS | POL_04B_REMOVED_TARGETS | POL_05A_REMOVED_TARGETS)
+        or removed - (V01_BASELINE_REMOVED_TARGETS | POL_03B_REMOVED_TARGETS | POL_04B_REMOVED_TARGETS | POL_05A_REMOVED_TARGETS | ARCH_03A_GUIDE_CONTEXT_REMOVED_TARGETS)
         or [current_by_target[item["target"]] for item in retained_trusted]
         != retained_trusted
     ):

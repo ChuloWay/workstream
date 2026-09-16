@@ -854,6 +854,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/policy_lineage.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/projects/api/post_policy.py"
     },
     {
@@ -1039,10 +1043,6 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/projects/models.py"
-    },
-    {
-      "group": "lifecycle",
-      "target": "backend/app/modules/projects/policy_lineage.py"
     },
     {
       "group": "lifecycle",
@@ -1321,7 +1321,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "ece8b16d83a4f24a046ecaa47c64ae68ad668b23f610816934b93236ff36a24f",
+  "authority_digest": "54a2edb9588f599931d277f5243561f912b5c8830f4d3e74d3d692b2786bf281",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

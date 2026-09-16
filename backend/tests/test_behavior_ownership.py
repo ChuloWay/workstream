@@ -1914,3 +1914,17 @@ def test_partition_accepts_only_exact_auth12h_activation_targets() -> None:
             _partition(sorted({retained, *expected, "backend/app/modules/authorization/domain/activation_extra.py"})),
             _partition([retained]),
         )
+
+
+def test_arch03a_partition_transition_accepts_only_exact_policy_lineage_relocation():
+    old = "backend/app/modules/projects/policy_lineage.py"
+    new = "backend/app/modules/projects/api/policy_lineage.py"
+    for before, after in (([old], [old]), ([old], [new]), ([new], [new])):
+        ownership._validate_additive_partition_transition(_partition(after), _partition(before))
+    for before, after in (
+        ([old], sorted([old, new])), ([old], []), ([new], [old]),
+        ([], [new]), ([new], []), (sorted([old, new]), [new]),
+        ([old], sorted([new, "backend/scripts/unapproved_owner.py"])),
+    ):
+        with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+            ownership._validate_additive_partition_transition(_partition(after), _partition(before))

@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.modules.authorization.catalogue import ACTION_BY_ID, ActionAvailability, ActionId
-from app.modules.projects.policy_lineage import (
+from app.modules.projects.api.policy_lineage import (
     ReviewPolicySemantics,
     RevisionPolicySemantics,
     policy_digest,

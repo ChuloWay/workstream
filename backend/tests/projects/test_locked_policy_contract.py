@@ -87,7 +87,7 @@ def test_context_preserves_persisted_review_semantics(semantics_format):
     from types import SimpleNamespace
     from app.modules.projects.api.guide_activation import GuidePolicySelection
     from app.modules.projects.locked_policy_projection import _policy_body
-    from app.modules.projects.policy_lineage import ReviewPolicySemantics, policy_digest
+    from app.modules.projects.api.policy_lineage import ReviewPolicySemantics, policy_digest
 
     semantics = ReviewPolicySemantics(
         review_preference_window_seconds=3600,

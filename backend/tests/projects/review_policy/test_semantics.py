@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.hashing import canonical_json_hash
-from app.modules.projects.policy_lineage import (
+from app.modules.projects.api.policy_lineage import (
     ReviewPolicySemantics,
     policy_digest,
     require_complete_policy,

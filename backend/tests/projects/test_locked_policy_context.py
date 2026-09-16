@@ -255,3 +255,64 @@ async def test_context_rejects_substituted_post_policy_body(clean_postgres_datab
         body["guide_version"] = "different-guide"
         with pytest.raises(ValueError, match="project locked policy facts differ from activation"):
             replace(facts, compiled_post_submit_policy=CanonicalJsonObject.from_mapping(body))
+
+
+async def test_context_rejects_substituted_review_body(clean_postgres_database):
+    async with activated_context(clean_postgres_database) as (factory, receipt, *_):
+        async with factory() as session, session.begin():
+            facts = await ProjectLockedPolicyRepository(session).lock_locked_policy_context(
+                frozen_request(receipt)
+            )
+        assert replace(facts) == facts
+        body = json.loads(facts.review_policy.value)
+        assert body["human_review_required"] is True
+        body["human_review_required"] = False
+        with pytest.raises(ValueError, match="policy semantics digest mismatch"):
+            replace(facts, review_policy=CanonicalJsonObject.from_mapping(body))
+
+
+async def test_context_rejects_substituted_revision_body(clean_postgres_database):
+    async with activated_context(clean_postgres_database) as (factory, receipt, *_):
+        async with factory() as session, session.begin():
+            facts = await ProjectLockedPolicyRepository(session).lock_locked_policy_context(
+                frozen_request(receipt)
+            )
+        assert replace(facts) == facts
+        body = json.loads(facts.revision_policy.value)
+        assert body["max_revision_rounds"] != 999
+        body["max_revision_rounds"] = 999
+        with pytest.raises(ValueError, match="policy semantics digest mismatch"):
+            replace(facts, revision_policy=CanonicalJsonObject.from_mapping(body))
+
+
+@pytest.mark.parametrize("semantics_format,human_review_required", [("v1", True), ("v2", True), ("v2", False)])
+async def test_context_binds_explicit_review_format(
+    clean_postgres_database, semantics_format, human_review_required,
+):
+    """Public value reconstruction is not authorization to activate changed policies."""
+    from app.modules.projects.api.guide_activation import GuideActivationReceipt
+    from app.modules.projects.api.policy_lineage import ReviewPolicySemantics, policy_digest
+
+    async with activated_context(clean_postgres_database) as (factory, receipt, *_):
+        async with factory() as session, session.begin():
+            facts = await ProjectLockedPolicyRepository(session).lock_locked_policy_context(
+                frozen_request(receipt)
+            )
+        assert facts.review_semantics_format == "v2"
+        body = json.loads(facts.review_policy.value)
+        body["human_review_required"] = human_review_required
+        values = receipt.model_dump(mode="json")
+        values["command"]["review"]["policy_hash"] = policy_digest(
+            "review", ReviewPolicySemantics.model_validate(body),
+            review_semantics_format=semantics_format,
+        )
+        consistent = replace(
+            facts, activation_receipt=GuideActivationReceipt.model_validate(values),
+            review_policy=CanonicalJsonObject.from_mapping(body),
+            review_semantics_format=semantics_format,
+        )
+        assert replace(consistent) == consistent
+        if human_review_required:
+            wrong_format = "v2" if semantics_format == "v1" else "v1"
+            with pytest.raises(ValueError, match="policy semantics digest mismatch"):
+                replace(consistent, review_semantics_format=wrong_format)

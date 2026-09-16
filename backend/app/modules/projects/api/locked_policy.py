@@ -8,6 +8,8 @@ import json
 from typing import TYPE_CHECKING, Literal, Mapping, Protocol, get_args
 from uuid import UUID
 
+from app.modules.projects.api.policy_lineage import ReviewSemanticsFormat, require_complete_policy
+
 if TYPE_CHECKING:
     from .guide_activation import GuideActivationReceipt
 
@@ -125,6 +127,7 @@ class ProjectLockedPolicyContextFacts:
     artifact_policy: CanonicalJsonObject
     compiled_post_submit_policy: CanonicalJsonObject
     review_policy: CanonicalJsonObject
+    review_semantics_format: ReviewSemanticsFormat
     revision_policy: CanonicalJsonObject
 
     def __post_init__(self) -> None:
@@ -196,6 +199,15 @@ class ProjectLockedPolicyContextFacts:
             or self.compiled_post_submit_policy.sha256 != receipt.command.target.policy_hash
         ):
             raise ValueError("project locked policy facts differ from activation")
+        require_complete_policy(
+            kind="review", status="complete", policy_hash=receipt.command.review.policy_hash,
+            semantic_values=json.loads(self.review_policy.value),
+            review_semantics_format=self.review_semantics_format,
+        )
+        require_complete_policy(
+            kind="revision", status="complete", policy_hash=receipt.command.revision.policy_hash,
+            semantic_values=json.loads(self.revision_policy.value),
+        )
         object.__setattr__(self, "activation_receipt", receipt)
 
 

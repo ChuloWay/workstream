@@ -34,7 +34,8 @@ Retained work must never acquire invented lineage from a current selector.
 
 ### Allowed
 
-- `backend/app/modules/projects/api/locked_policy.py` and exports: extend the
+- `backend/app/modules/projects/api/locked_policy.py`
+- `backend/app/modules/projects/policy_lineage.py` -> `backend/app/modules/projects/api/policy_lineage.py` (canonical owner move, plus affected imports and exact ownership registration) and exports: extend the
   existing immutable facts and port with an active-for-new-work read; retain the
   exact frozen selector operation with one canonical result contract.
 - `backend/app/modules/projects/locked_policy_repository.py` and a small same-owner
@@ -90,6 +91,15 @@ claiming complete human revision rebase or introducing activation chronology.
    projections remain validated against that same receipt for ART consumption.
    The immutable result independently binds its post-submit body hash to the
    selected activation target; canonical serialization alone is insufficient.
+   Review and revision bodies independently match their receipt-selected hashes
+   through `require_complete_policy`. The result carries the required stored
+   review semantics format from the selected row; never infer a format or try
+   alternative hashes. Separate substitutions of human-review mode and revision
+   limits must reject, with positive retained-format and guard-removal proofs.
+   Move the sole pure `policy_lineage.py` owner into PROJECTS `api/` because
+   public contracts cannot import private modules. Update its affected imports
+   and exact ownership partition together; remove the old path without an alias.
+   The digest implementation and persisted evidence remain unchanged.
    No ORM, session, mutable body, raw guide content or provider handle escapes.
 4. Use actual CP07 operation ID, per-guide activation generation and timestamp.
    Do not rename per-guide generation as project-wide chronology. The old planned
@@ -160,6 +170,7 @@ head and resource cleanup; no private guide documents or live providers are used
 Product edit paths (unused paths need no change):
 
 - `backend/app/modules/projects/api/locked_policy.py`
+- `backend/app/modules/projects/policy_lineage.py` -> `backend/app/modules/projects/api/policy_lineage.py` (canonical owner move, plus affected imports and exact ownership registration)
 - `backend/app/modules/projects/api/__init__.py`
 - `backend/app/modules/projects/locked_policy_repository.py`
 - `backend/app/modules/projects/locked_policy_projection.py` (same-owner canonical projection)
@@ -218,6 +229,9 @@ Named verification:
 | `test_context_rejects_missing_or_substituted_custody` | Parameterized missing activation/pre approval/post approval/finalization, crossed project or policy, catalogue mismatch, invalid body/hash and lifecycle; start with valid activated graph and alter only the selected boundary through controlled read corruption where DB forbids direct mutation. Assert bounded context error and no mutation. |
 | `test_context_result_is_deeply_immutable` | Attempt nested receipt/body changes and show source/result identities cannot be mutated. |
 | `test_context_rejects_substituted_post_policy_body` | Preserve valid activated facts and receipt, replace only the canonical post-submit body, and assert the specific activation mismatch. Removing the body-hash check must make this assertion fail. |
+| `test_context_rejects_substituted_review_body` | Change only `human_review_required` to false with the receipt unchanged; require the semantic digest mismatch. Removing review validation independently must expose the substitution. |
+| `test_context_rejects_substituted_revision_body` | Change only `max_revision_rounds` to 999 with the receipt unchanged; require the semantic digest mismatch. Removing revision validation independently must expose the substitution. |
+| `test_context_binds_explicit_review_format` | Consistent public values for stored review formats and supported modes construct successfully; changing only the declared supported format rejects. This proves value consistency, not activation authority. |
 | `test_context_preserves_persisted_review_semantics` | Format-aware stored review/revision hashes match exact bodies; incomplete semantics and altered human-review mode deny. Preserve retained policy hash identities, without adding runtime compatibility code. |
 | `test_context_read_does_not_allow_activated_proposal_mutations` | Read valid active/superseded guides, then invoke proposal approve/correct defaults and require denial; valid draft operations still pass. |
 | `test_context_refreshes_preloaded_custody` | Preload rows, change the test-visible cached state, reread persisted exact state; removing the required refresh makes the exact assertion fail. |

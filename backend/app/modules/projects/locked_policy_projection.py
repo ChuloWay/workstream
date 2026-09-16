@@ -7,7 +7,7 @@ from app.modules.projects.api.locked_policy import (
     ProjectLockedPolicyContextFacts,
 )
 from app.modules.projects.guide_compilation.approval_custody import approved_projection_digest
-from app.modules.projects.policy_lineage import (
+from app.modules.projects.api.policy_lineage import (
     ReviewPolicySemantics,
     RevisionPolicySemantics,
     require_complete_policy,
@@ -72,5 +72,6 @@ def complete_context(locked, post_policy, post_custody, receipt, review, revisio
         artifact_policy=CanonicalJsonObject.from_mapping(view.policy.policy_body),
         compiled_post_submit_policy=CanonicalJsonObject.from_mapping(post_policy.policy_body),
         review_policy=_policy_body("review", review, command.review, view.guide),
+        review_semantics_format=review.semantics_format,
         revision_policy=_policy_body("revision", revision, command.revision, view.guide),
     )
