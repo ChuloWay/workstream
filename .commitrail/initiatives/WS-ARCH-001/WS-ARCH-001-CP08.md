@@ -269,3 +269,8 @@ new dependency, permissive test exception or compatibility implementation.
   the kernel delegates issue/revoke only. The existing lexical lock unit proof
   moves into its focused task-authority concurrency module. Both extractions
   shrink touched structural debt without adding an exception or raising a limit.
+- The existing ART/revocation proof now observes the shared contributor fence
+  in both orders. Revocation before materialization prevents checker execution;
+  revocation between materialization and separately authorized persistence
+  prevents evidence even after a checker ran. The obsolete payment-stamp fixture
+  is removed from the accompanying TASK work-context race.

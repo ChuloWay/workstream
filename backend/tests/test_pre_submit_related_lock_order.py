@@ -32,13 +32,12 @@ from app.modules.authorization.runtime import (
     ActorKind, ActorStatus, HumanAuthorizationContext, IdentityLinkStatus,
 )
 from app.modules.authorization.task_authorization import PreparedTaskAuthorization
-from app.modules.projects.models import PaymentPolicy
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
-from app.modules.tasks.models import WorkstreamTask
 from project_create_fixtures import grant_fixture_admin_role
 from tests.authorization.test_pre_submit_attempt_authority import _seed_materializer
 from tests.test_pre_submit_attempt_authority_integration import _reserve_with_real_materializer
 from tests.test_pre_submit_attempt_lock_order import _wait_for_project_block
+from tests.auth_concurrency_support import wait_for_named_database_lock
 from tests.test_pre_submit_attempt_recovery import _harness
 
 
@@ -55,7 +54,7 @@ class _PauseBeforeProject:
 
 
 async def _assert_row_locked(engine, table: str, row_id: UUID) -> None:
-    """NOWAIT proves ART really owns C, rather than merely reaching a test hook."""
+    """NOWAIT proves the first operation owns the contributor fence."""
     assert table in {"actor_profiles", "actor_identity_links"}
     async with engine.connect() as observer:
         try:
@@ -66,7 +65,7 @@ async def _assert_row_locked(engine, table: str, row_id: UUID) -> None:
         except DBAPIError as exc:
             assert getattr(exc.orig, "sqlstate", None) == "55P03", exc
         else:
-            pytest.fail(f"ART did not lock {table} before PROJECT")
+            pytest.fail(f"First operation did not lock {table} before PROJECT")
 
 
 async def _ready_workflow(harness, session, calls):
@@ -125,29 +124,40 @@ async def _manager_runtime(harness, session):
     return prepared, ResolvedActor(profile, link)
 
 
-async def _install_task_payment_lock(harness) -> None:
-    """Complete the TASK read context absent from the focused ART seed."""
-    guide_version = harness.request.effective_plan.lineage.guide_version
+async def _submitter_grant(harness):
+    """Read the exact active grant whose revocation races with ART."""
     async with harness.factory() as session:
-        session.add(PaymentPolicy(
-            id=str(uuid4()),
-            project_id=str(harness.request.effective_plan.lineage.project_id),
-            guide_version=guide_version,
-            base_amount="25.00", currency="USD", payout_type="fixed",
-            revision_payment_rule="none", rejection_payment_rule="none",
-            accepted_payment_rule="pay base amount",
+        grant_id = await session.scalar(select(ProjectRoleGrant.id).where(
+            ProjectRoleGrant.project_id == str(harness.request.effective_plan.lineage.project_id),
+            ProjectRoleGrant.actor_profile_id == str(harness.actor_id),
+            ProjectRoleGrant.role == "submitter", ProjectRoleGrant.status == "active",
         ))
-        task = await session.get(WorkstreamTask, str(harness.request.task_id))
-        assert task is not None
-        task.locked_payment_policy_version = guide_version
-        await session.commit()
+    assert grant_id is not None
+    return grant_id
+
+
+def _named_factory(database_url, name):
+    """Give each competing owner an independently observable database session."""
+    engine = create_async_engine(database_url, connect_args={"server_settings": {"application_name": name}})
+    return engine, async_sessionmaker(engine, expire_on_commit=False)
+
+
+async def _wait_for_named_owner(harness, database_url, waiter, blocker):
+    """Bind the actual waiter to the independently observed blocking backend."""
+    async with harness.engine.connect() as observer:
+        pid = await observer.scalar(text(
+            "select pid from pg_stat_activity where application_name=:name"
+        ), {"name": blocker})
+    assert pid is not None
+    await wait_for_named_database_lock(database_url, waiter, expected_blocker_pid=pid)
 
 
 @pytest.mark.asyncio
-async def test_revoke_after_project_lock_denies_art_before_checker(
-    tmp_path: Path, isolated_database_env: str, monkeypatch,
+@pytest.mark.parametrize("ordering", ["materialization_first", "revoke_first"])
+async def test_revocation_fences_art_materialization_and_evidence_persistence(
+    tmp_path: Path, isolated_database_env: str, monkeypatch, ordering: str,
 ) -> None:
-    """P before G prevents a revoke/ART cycle and preserves current-grant denial."""
+    """Revocation fences both checking and the later evidence-persistence transaction."""
     harness = await _harness(tmp_path, isolated_database_env)
     art_engine = revoke_engine = None
     art_task = revoke_task = None
@@ -155,26 +165,11 @@ async def test_revoke_after_project_lock_denies_art_before_checker(
     try:
         await _seed_materializer(harness.factory)
         project_id = harness.request.effective_plan.lineage.project_id
-        async with harness.factory() as setup:
-            grant_id = await setup.scalar(select(ProjectRoleGrant.id).where(
-                ProjectRoleGrant.project_id == str(project_id),
-                ProjectRoleGrant.actor_profile_id == str(harness.actor_id),
-                ProjectRoleGrant.role == "submitter",
-                ProjectRoleGrant.status == "active",
-            ))
-        assert grant_id is not None
+        grant_id = await _submitter_grant(harness)
         revoke_name = f"pol07a_revoke_{uuid4().hex[:12]}"
         art_name = f"pol07a_revoke_art_{uuid4().hex[:12]}"
-        art_engine = create_async_engine(
-            isolated_database_env,
-            connect_args={"server_settings": {"application_name": art_name}},
-        )
-        art_factory = async_sessionmaker(art_engine, expire_on_commit=False)
-        revoke_engine = create_async_engine(
-            isolated_database_env,
-            connect_args={"server_settings": {"application_name": revoke_name}},
-        )
-        revoke_factory = async_sessionmaker(revoke_engine, expire_on_commit=False)
+        art_engine, art_factory = _named_factory(isolated_database_env, art_name)
+        revoke_engine, revoke_factory = _named_factory(isolated_database_env, revoke_name)
         art_before_project, revoke_has_project = asyncio.Event(), asyncio.Event()
         async with art_factory() as art_session, revoke_factory() as revoke_session:
             calls: list[int] = []
@@ -202,43 +197,63 @@ async def test_revoke_after_project_lock_denies_art_before_checker(
                 AdminAuthorizationRepository, "lock_project", pause_revoke_project,
             )
             try:
-                art_task = asyncio.create_task(workflow.execute_reserved(
-                    harness.request, reservation,
-                    preparation_request=harness.preparation_request,
-                ))
-                await asyncio.wait_for(art_before_project.wait(), timeout=30)
-                await _assert_row_locked(harness.engine, "actor_profiles", harness.actor_id)
-                await _assert_row_locked(
-                    harness.engine, "actor_identity_links", harness.identity_link_id,
-                )
-                revoke_task = asyncio.create_task(
-                    authorization_router.revoke_project_role_grant(
+                async def execute_art():
+                    return await workflow.execute_reserved(
+                        harness.request, reservation,
+                        preparation_request=harness.preparation_request,
+                    )
+
+                async def revoke():
+                    return await authorization_router.revoke_project_role_grant(
                         project_id=project_id, grant_id=UUID(str(grant_id)),
-                        payload=ProjectRoleGrantRevokeBody(
-                            reason="Concurrent pre-submit grant revocation",
-                        ),
+                        payload=ProjectRoleGrantRevokeBody(reason="Concurrent pre-submit grant revocation"),
                         idempotency_key=uuid4(), resolved=resolved_manager,
                         prepared=prepared_revoke, session=revoke_session,
                     )
-                )
-                await asyncio.wait_for(revoke_has_project.wait(), timeout=30)
-                assert revoke_pid is not None
-                release_art.set()
-                await _wait_for_project_block(
-                    harness.engine, application_name=art_name, blocker_pid=revoke_pid,
-                )
+
+                if ordering == "materialization_first":
+                    art_task = asyncio.create_task(execute_art())
+                    await asyncio.wait_for(art_before_project.wait(), timeout=30)
+                    await _assert_row_locked(harness.engine, "actor_profiles", harness.actor_id)
+                    await _assert_row_locked(harness.engine, "actor_identity_links", harness.identity_link_id)
+                    revoke_task = asyncio.create_task(revoke())
+                    await _wait_for_named_owner(harness, isolated_database_env, revoke_name, art_name)
+                    assert not revoke_has_project.is_set()
+                    release_art.set()
+                    await asyncio.wait_for(revoke_has_project.wait(), timeout=30)
+                    assert revoke_pid is not None
+                    await wait_for_named_database_lock(
+                        isolated_database_env, art_name, expected_blocker_pid=revoke_pid,
+                    )
+                else:
+                    revoke_task = asyncio.create_task(revoke())
+                    await asyncio.wait_for(revoke_has_project.wait(), timeout=30)
+                    await _assert_row_locked(harness.engine, "actor_profiles", harness.actor_id)
+                    await _assert_row_locked(harness.engine, "actor_identity_links", harness.identity_link_id)
+                    release_art.set()
+                    art_task = asyncio.create_task(execute_art())
+                    assert revoke_pid is not None
+                    await wait_for_named_database_lock(
+                        isolated_database_env, art_name, expected_blocker_pid=revoke_pid,
+                    )
+                    assert not art_before_project.is_set()
                 release_revoke.set()
                 art_outcome, revoke_outcome = await asyncio.wait_for(
                     asyncio.gather(art_task, revoke_task, return_exceptions=True),
                     timeout=30,
                 )
+                # Materialization and evidence persistence reauthorize in separate
+                # transactions. Revocation after checking still prevents evidence.
                 assert isinstance(art_outcome, ArtifactAuthorityDeniedError), art_outcome
+                assert calls == ([1] if ordering == "materialization_first" else [])
                 assert not isinstance(revoke_outcome, BaseException), revoke_outcome
                 assert revoke_outcome.status == "revoked"
-                assert calls == []
             finally:
                 release_art.set()
                 release_revoke.set()
+                for pending in (art_task, revoke_task):
+                    if pending is not None and not pending.done():
+                        pending.cancel()
                 await asyncio.gather(
                     *(task for task in (art_task, revoke_task) if task is not None),
                     return_exceptions=True,
@@ -270,7 +285,6 @@ async def test_work_context_task_lock_precedes_art_actor_lock(
     release_task = asyncio.Event()
     try:
         await _seed_materializer(harness.factory)
-        await _install_task_payment_lock(harness)
         art_name = f"pol07a_task_art_{uuid4().hex[:12]}"
         art_engine = create_async_engine(
             isolated_database_env,
