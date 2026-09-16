@@ -2096,7 +2096,8 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             worker_token,
             {"reason": "real worker claim"},
         )
-        assert claim["assignment"]["locked_contribution_policy_version_id"] == screened[
+        assert claim["task"]["locked_contribution_policy_version_id"] == active["contribution_policy_version_id"]
+        assert claim["assignment"]["submitter_contribution_policy_version_id"] == screened[
             "locked_contribution_policy_version_id"
         ]
         ensure(
