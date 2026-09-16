@@ -1,8 +1,12 @@
 """Focused behavior proof for hidden admission-backed Submission composition."""
 
+from app.core.config import get_settings
+
+from app.adapters.tasks import task_service
+
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -50,11 +54,11 @@ def _request():
 
 
 def _context(request):
-    return TaskSubmissionContextFacts(
+    return TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
         task_id=request.task_id, assignment_id=request.assignment_id,
         contributor_id=request.contributor_id, status="in_progress", kind="initial",
         predecessor=None,
-        locked_project_context=TaskLockedProjectContextReferences(
+        locked_project_context=TaskLockedProjectContextReferences(locked_contribution_policy_version_id=UUID(int=100),
             project_id=uuid4(), guide_version="1", source_snapshot_id=uuid4(),
             source_snapshot_hash="sha256:" + "1" * 64, effective_policy_id=uuid4(),
             effective_policy_hash="sha256:" + "2" * 64,
@@ -108,7 +112,10 @@ async def test_human_lifecycle_denial_precedes_task_state(
     )
     authority = PreparedSubmissionCreationAuthorization(object(), context)
     service = TaskSubmissionCreationService(
-        _Session(), authorization=authority, admissions=None
+        _Session(),
+        authorization=authority,
+        admissions=None,
+        contexts=task_service(_Session(), settings=get_settings()),
     )
     service._repository = SimpleNamespace(
         lock_submission_context=lambda value: pytest.fail("TASK state was revealed")
@@ -127,8 +134,10 @@ async def test_foreign_contributor_denial_precedes_task_lookup():
         request_id=uuid4(), correlation_id=uuid4(),
     )
     service = TaskSubmissionCreationService(
-        _Session(), authorization=PreparedSubmissionCreationAuthorization(object(), context),
+        _Session(),
+        authorization=PreparedSubmissionCreationAuthorization(object(), context),
         admissions=None,
+        contexts=task_service(_Session(), settings=get_settings()),
     )
     service._repository = SimpleNamespace(
         lock_submission_context=lambda value: pytest.fail("foreign task was inspected"),
@@ -157,7 +166,12 @@ async def test_command_orders_authority_task_art_persistence_and_final_consumpti
             events.append(("art", value.submission_version))
             return SubmissionArtifactAdmissionResult(binding_id=uuid4(), content_id=uuid4())
 
-    service = TaskSubmissionCreationService(_Session(), authorization=Authority(), admissions=Admissions())
+    service = TaskSubmissionCreationService(
+        _Session(),
+        authorization=Authority(),
+        admissions=Admissions(),
+        contexts=task_service(_Session(), settings=get_settings()),
+    )
 
     class Repository:
         async def lock_submission_context(self, value):
@@ -174,7 +188,7 @@ async def test_command_orders_authority_task_art_persistence_and_final_consumpti
     )
     result = await service.create(request)
     assert [event[0] for event in events] == [
-        "authorize", "task", "policy", "prepare", "persist", "art", "final"
+        "authorize", "task", "prepare", "policy", "persist", "art", "final"
     ]
     assert result.submission_version == 1
 
@@ -187,7 +201,12 @@ async def test_denial_precedes_task_lock_and_all_mutation():
         async def consume(self, handle, facts): raise AssertionError("unreachable")
         def close(self, handle): raise AssertionError("unreachable")
 
-    service = TaskSubmissionCreationService(_Session(), authorization=Authority(), admissions=None)
+    service = TaskSubmissionCreationService(
+        _Session(),
+        authorization=Authority(),
+        admissions=None,
+        contexts=task_service(_Session(), settings=get_settings()),
+    )
     service._repository = SimpleNamespace(
         lock_submission_context=lambda value: pytest.fail("TASK state was revealed")
     )
@@ -213,7 +232,12 @@ async def test_fresh_authority_denial_precedes_art_and_mutation(revocation):
         async def consume(self, value):
             raise AssertionError("ART admission state was inspected")
 
-    service = TaskSubmissionCreationService(_Session(), authorization=Authority(), admissions=Admissions())
+    service = TaskSubmissionCreationService(
+        _Session(),
+        authorization=Authority(),
+        admissions=Admissions(),
+        contexts=task_service(_Session(), settings=get_settings()),
+    )
     persisted = []
 
     class Repository:
@@ -249,7 +273,10 @@ async def test_invalid_admission_result_denies_before_lineage_and_final_authorit
             return SimpleNamespace(binding_id=None, content_id=uuid4())
 
     service = TaskSubmissionCreationService(
-        _Session(), authorization=Authority(), admissions=Admissions()
+        _Session(),
+        authorization=Authority(),
+        admissions=Admissions(),
+        contexts=task_service(_Session(), settings=get_settings()),
     )
     persisted = []
 
@@ -291,7 +318,7 @@ async def test_revision_increments_and_binds_the_exact_predecessor():
         summary=initial.summary, contributor_attestation=initial.contributor_attestation,
     )
     context = _context(request)
-    context = TaskSubmissionContextFacts(
+    context = TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
         task_id=context.task_id, assignment_id=context.assignment_id,
         contributor_id=context.contributor_id, status="needs_revision", kind="revision",
         predecessor=predecessor, locked_project_context=context.locked_project_context,
@@ -313,7 +340,12 @@ async def test_revision_increments_and_binds_the_exact_predecessor():
             seen["art"] = value
             return SubmissionArtifactAdmissionResult(binding_id=uuid4(), content_id=uuid4())
 
-    service = TaskSubmissionCreationService(_Session(), authorization=Authority(), admissions=Admissions())
+    service = TaskSubmissionCreationService(
+        _Session(),
+        authorization=Authority(),
+        admissions=Admissions(),
+        contexts=task_service(_Session(), settings=get_settings()),
+    )
 
     class Repository:
         async def lock_submission_context(self, value): return context
@@ -328,3 +360,45 @@ async def test_revision_increments_and_binds_the_exact_predecessor():
     assert seen["submission"].supersedes_submission_id == str(predecessor.submission_id)
     assert seen["art"].submission_version == 2
     assert seen["final"].predecessor_submission_id == predecessor.submission_id
+
+
+@pytest.mark.asyncio
+async def test_policy_failure_closes_prepared_authority_before_any_submission_or_art_write():
+    request = _request()
+    authority = SimpleNamespace(
+        authorize=AsyncMock(), prepare=AsyncMock(return_value=object()),
+        consume=AsyncMock(), close=lambda handle: closed.append(handle),
+    )
+    closed = []
+    admissions = SimpleNamespace(consume=AsyncMock())
+    service = TaskSubmissionCreationService(
+        _Session(),
+        authorization=authority,
+        admissions=admissions,
+        contexts=SimpleNamespace(
+            _load_locked_task_context=AsyncMock(side_effect=ValueError("custody changed"))
+        ),
+    )
+    service._repository = SimpleNamespace(
+        lock_submission_context=AsyncMock(return_value=_context(request)),
+        get_task=AsyncMock(return_value=_task()), add_submission=AsyncMock(),
+    )
+    with pytest.raises(ValueError, match="custody changed"):
+        await service.create(request)
+    assert closed == [authority.prepare.return_value]
+    service._repository.add_submission.assert_not_awaited()
+    admissions.consume.assert_not_awaited()
+    authority.consume.assert_not_awaited()
+
+
+def test_task_and_assignment_policy_facts_reject_substitution():
+    from dataclasses import replace
+
+    facts = _context(_request())
+    assert facts.submitter_contribution_policy_version_id == facts.locked_project_context.locked_contribution_policy_version_id
+    for invalid in (None, str(facts.submitter_contribution_policy_version_id), uuid4()):
+        with pytest.raises(ValueError, match="assignment contribution policy differs from task"):
+            replace(facts, submitter_contribution_policy_version_id=invalid)
+    for invalid in (None, str(facts.locked_project_context.locked_contribution_policy_version_id)):
+        with pytest.raises(ValueError, match="task contribution policy identity is invalid"):
+            replace(facts.locked_project_context, locked_contribution_policy_version_id=invalid)

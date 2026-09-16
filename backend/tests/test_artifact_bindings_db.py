@@ -218,8 +218,11 @@ async def test_composed_final_denial_rolls_back_task_and_art_rows(
         async with factory() as session:
             await session.execute(text(f'set search_path to "{schema}"'))
             await session.commit()
+            from app.core.config import get_settings
+
             command = TransactionalSubmissionCreationCommand(
-                session, authorization=_FinalDeny(),
+                session,
+                settings=get_settings(), authorization=_FinalDeny(),
                 admissions=SubmissionAdmissionConsumptionService(session, _Allow()),
             )
             with pytest.raises(SubmissionCreationUnavailable):

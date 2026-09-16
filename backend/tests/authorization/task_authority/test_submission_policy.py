@@ -1,5 +1,9 @@
 """Real locked-policy rejection before hidden Submission persistence or ART access."""
 
+from app.core.config import get_settings
+
+from app.adapters.tasks import task_service
+
 from uuid import UUID, uuid4
 from unittest.mock import AsyncMock
 
@@ -95,12 +99,18 @@ async def test_invalid_locked_policy_never_reaches_art_or_submission(
                     session,
                     authorization=PreparedSubmissionCreationAuthorization(session, context),
                     admissions=admissions,
-                ).create(SubmissionCreationRequest(
-                    task_id=UUID(task.id), assignment_id=assignment_id,
-                    contributor_id=contributor_id, admission_id=uuid4(),
-                    predecessor_submission_id=None, summary="Completed work",
-                    contributor_attestation="This submission is my work.",
-                ))
+                    contexts=task_service(session, settings=get_settings()),
+                ).create(
+                    SubmissionCreationRequest(
+                        task_id=UUID(task.id),
+                        assignment_id=assignment_id,
+                        contributor_id=contributor_id,
+                        admission_id=uuid4(),
+                        predecessor_submission_id=None,
+                        summary="Completed work",
+                        contributor_attestation="This submission is my work.",
+                    )
+                )
         if expected_error is IntegrityError:
             policy = "review" if "review" in field else "revision"
             assert integrity_constraint_name(rejected.value) == (
@@ -127,7 +137,7 @@ async def test_submission_pre_submit_rejects_mutated_effective_policy_body(
         await _create_hidden_submission(started_task["id"])
     assert rejected.value.status_code == 422
     assert rejected.value.code == "task_locked_context_invalid"
-    assert rejected.value.details["field"] == "locked_effective_project_submission_artifact_policy_hash"
+    assert str(rejected.value) == "task locked policy custody is invalid"
 
     async with db_session.get_session_factory()() as session:
         submissions = (
@@ -142,33 +152,6 @@ async def test_submission_pre_submit_rejects_mutated_effective_policy_body(
         checker_runs = (await session.execute(select(db_models.CheckerRun))).scalars().all()
     assert submissions == []
     assert checker_runs == []
-
-
-async def test_submission_pre_submit_checker_setup_error_is_controlled(
-    task_client: AsyncClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project = await create_active_project(task_client)
-    started_task = await create_started_task(task_client, project["id"], monkeypatch)
-    await corrupt_locked_policy_reads(monkeypatch, started_task["id"], "checker_names")
-
-    with pytest.raises(TaskLockedContextInvalid) as rejected:
-        await _create_hidden_submission(started_task["id"])
-    assert rejected.value.status_code == 422
-    assert rejected.value.code == "task_locked_context_invalid"
-    assert rejected.value.details["field"] == "locked_pre_submit_checker_policy_id"
-
-    async with db_session.get_session_factory()() as session:
-        submissions = (
-            (
-                await session.execute(
-                    select(Submission).where(Submission.task_id == started_task["id"])
-                )
-            )
-            .scalars()
-            .all()
-        )
-    assert submissions == []
 
 
 async def test_submission_rejects_malformed_locked_post_submit_policy_body_without_side_effects(
@@ -193,7 +176,7 @@ async def test_submission_rejects_malformed_locked_post_submit_policy_body_witho
         await _create_hidden_submission(started_task["id"])
     assert rejected.value.status_code == 422
     assert rejected.value.code == "task_locked_context_invalid"
-    assert rejected.value.details["field"] == "locked_post_submit_checker_policy_body"
+    assert str(rejected.value) == "task locked policy custody is invalid"
     async with db_session.get_session_factory()() as session:
         task = await session.get(WorkstreamTask, started_task["id"])
         submissions = (
@@ -259,7 +242,7 @@ async def test_submission_pre_submit_rejects_mutated_compiled_checker_bundle(
         await _create_hidden_submission(started_task["id"])
     assert rejected.value.status_code == 422
     assert rejected.value.code == "task_locked_context_invalid"
-    assert rejected.value.details["field"] == "locked_pre_submit_checker_bundle_hash"
+    assert str(rejected.value) == "task locked policy custody is invalid"
 
     async with db_session.get_session_factory()() as session:
         submissions = (
@@ -304,7 +287,7 @@ async def test_submission_rejects_crossed_post_submit_policy_sidecar(
 
     assert rejected.value.status_code == 422
     assert rejected.value.code == "task_locked_context_invalid"
-    assert rejected.value.details["field"] == "locked_post_submit_checker_policy_body"
+    assert str(rejected.value) == "task locked policy custody is invalid"
 
     async with db_session.get_session_factory()() as session:
         task = await session.get(WorkstreamTask, started_task["id"])

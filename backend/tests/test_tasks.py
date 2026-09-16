@@ -1,4 +1,7 @@
+
 from __future__ import annotations
+
+from app.adapters.tasks import task_service
 
 import asyncio
 import hashlib
@@ -7,7 +10,6 @@ from collections.abc import AsyncIterator, Iterator
 from contextlib import suppress
 from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, call
@@ -47,7 +49,6 @@ from app.modules.actors.models import (
 from app.modules.projects.models import (
     EffectiveProjectSubmissionArtifactPolicy,
     GuideSourceSnapshot,
-    PaymentPolicy,
     PostSubmitCheckerPolicy,
     PreSubmitCheckerPolicy,
     ProjectGuide,
@@ -76,7 +77,6 @@ from app.modules.tasks.submission_composition import build_submission
 from app.modules.tasks.schemas import TaskCreate
 from app.modules.tasks.service import (
     TaskLockedContextInvalid,
-    TaskService,
     TaskServiceError,
     TaskTransitionBlocked,
 )
@@ -85,7 +85,7 @@ from app.schemas.auth import ActorContext
 
 def _locked_task_context_references() -> TaskLockedProjectContextReferences:
     """Build complete immutable locked references for focused unit tests."""
-    return TaskLockedProjectContextReferences(
+    return TaskLockedProjectContextReferences(locked_contribution_policy_version_id=UUID(int=100),
         project_id=uuid4(),
         guide_version="v1",
         source_snapshot_id=uuid4(),
@@ -100,7 +100,7 @@ def _locked_task_context_references() -> TaskLockedProjectContextReferences:
 def test_task_submission_context_public_facts_are_immutable_and_consistent() -> None:
     """Reject mutation, invalid failures, and inconsistent lifecycle facts."""
     predecessor = SubmissionPredecessorFacts(submission_id=uuid4(), version=2)
-    facts = TaskSubmissionContextFacts(
+    facts = TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
         task_id=uuid4(),
         assignment_id=uuid4(),
         contributor_id=uuid4(),
@@ -120,7 +120,7 @@ def test_task_submission_context_public_facts_are_immutable_and_consistent() -> 
     with pytest.raises(ValueError, match="version is invalid"):
         SubmissionPredecessorFacts(submission_id=uuid4(), version=0)
     with pytest.raises(ValueError, match="reference is empty"):
-        TaskLockedProjectContextReferences(
+        TaskLockedProjectContextReferences(locked_contribution_policy_version_id=UUID(int=100),
             project_id=uuid4(),
             guide_version=" ",
             source_snapshot_id=uuid4(),
@@ -131,7 +131,7 @@ def test_task_submission_context_public_facts_are_immutable_and_consistent() -> 
             pre_submit_policy_bundle_hash="sha256:" + "3" * 64,
         )
     with pytest.raises(ValueError, match="predecessor is inconsistent"):
-        TaskSubmissionContextFacts(
+        TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
             task_id=uuid4(),
             assignment_id=uuid4(),
             contributor_id=uuid4(),
@@ -141,7 +141,7 @@ def test_task_submission_context_public_facts_are_immutable_and_consistent() -> 
             locked_project_context=_locked_task_context_references(),
         )
     with pytest.raises(ValueError, match="predecessor is inconsistent"):
-        TaskSubmissionContextFacts(
+        TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
             task_id=uuid4(),
             assignment_id=uuid4(),
             contributor_id=uuid4(),
@@ -162,6 +162,7 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
     references = _locked_task_context_references()
     task = MagicMock(
         project_id=str(references.project_id),
+        locked_contribution_policy_version_id=references.locked_contribution_policy_version_id,
         assigned_to=str(contributor_id),
         status="in_progress",
         locked_guide_version=references.guide_version,
@@ -173,6 +174,8 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
         locked_pre_submit_checker_bundle_hash=references.pre_submit_policy_bundle_hash,
     )
     assignment = MagicMock(
+        project_id=str(references.project_id),
+        submitter_contribution_policy_version_id=references.locked_contribution_policy_version_id,
         task_id=str(task_id),
         contributor_id=str(contributor_id),
         status="active",
@@ -200,7 +203,7 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
             predecessor_submission_id=None,
         )
     )
-    assert initial == TaskSubmissionContextFacts(
+    assert initial == TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
         task_id=task_id,
         assignment_id=assignment_id,
         contributor_id=contributor_id,
@@ -218,7 +221,7 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
             predecessor_submission_id=predecessor_id,
         )
     )
-    assert revision == TaskSubmissionContextFacts(
+    assert revision == TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
         task_id=task_id,
         assignment_id=assignment_id,
         contributor_id=contributor_id,
@@ -253,9 +256,11 @@ async def test_task_repository_rejects_stale_submission_predecessor() -> None:
     task_id = uuid4()
     contributor_id = uuid4()
     assignment_id = uuid4()
-    task = MagicMock(assigned_to=str(contributor_id), status="in_progress")
+    task = MagicMock(assigned_to=str(contributor_id), status="in_progress",
+                     project_id="same-project", locked_contribution_policy_version_id=UUID(int=100))
     assignment = MagicMock(
-        task_id=str(task_id), contributor_id=str(contributor_id), status="active"
+        task_id=str(task_id), contributor_id=str(contributor_id), status="active",
+        project_id="same-project", submitter_contribution_policy_version_id=UUID(int=100)
     )
     session = MagicMock()
     session.scalar = AsyncMock(return_value=assignment)
@@ -357,7 +362,7 @@ async def test_task_service_create_persists_canonical_attribution_and_audit() ->
     session = MagicMock(spec=AsyncSession)
     session.commit = AsyncMock()
     session.refresh = AsyncMock()
-    service = TaskService(session)
+    service = task_service(session, settings=get_settings())
     service._project_repo.get_project = AsyncMock(return_value=MagicMock())
     service._repo.add_task = AsyncMock(side_effect=lambda task: task)
     service._write_task_audit = AsyncMock()
@@ -392,7 +397,7 @@ async def test_task_service_create_persists_canonical_attribution_and_audit() ->
 async def test_task_service_read_contexts_preserve_visibility_and_operator_scope() -> None:
     actor = task_service_actor("project_manager")
     session = MagicMock(spec=AsyncSession)
-    service = TaskService(session)
+    service = task_service(session, settings=get_settings())
     task = MagicMock(spec=WorkstreamTask)
     task.id = "task-1"
     task.created_by = actor.actor_id
@@ -423,7 +428,7 @@ async def test_task_service_screen_and_release_own_transaction_boundaries() -> N
     session = MagicMock(spec=AsyncSession)
     session.commit = AsyncMock()
     session.refresh = AsyncMock()
-    service = TaskService(session)
+    service = task_service(session, settings=get_settings())
     draft_task = MagicMock(spec=WorkstreamTask)
     draft_task.id = "task-1"
     draft_task.project_id = "project-1"
@@ -432,7 +437,7 @@ async def test_task_service_screen_and_release_own_transaction_boundaries() -> N
     screened_task.id = draft_task.id
     screened_task.project_id = draft_task.project_id
     screened_task.status = "screening"
-    active_context = tuple(MagicMock(name=f"policy_{index}") for index in range(8))
+    active_context = MagicMock(name="activated_policy_facts")
     screen_response = MagicMock(name="screen_response")
     release_response = MagicMock(name="release_response")
     service._get_task = AsyncMock(side_effect=(draft_task, screened_task))
@@ -440,6 +445,7 @@ async def test_task_service_screen_and_release_own_transaction_boundaries() -> N
     service._load_active_policy_context = AsyncMock(return_value=active_context)
     service._validate_task_contract_fields = MagicMock()
     service._stamp_locked_context = MagicMock()
+    service._validate_installed_plans = MagicMock()
     service._change_task_status = AsyncMock()
     service._ensure_locked_context = MagicMock()
     service._load_locked_task_context = AsyncMock(return_value=MagicMock())
@@ -454,7 +460,7 @@ async def test_task_service_screen_and_release_own_transaction_boundaries() -> N
         is release_response
     )
 
-    service._stamp_locked_context.assert_called_once_with(draft_task, *active_context)
+    service._stamp_locked_context.assert_called_once_with(draft_task, active_context)
     assert service._change_task_status.await_args_list[0].args == (
         actor,
         draft_task,
@@ -481,7 +487,7 @@ async def test_task_service_finalize_requeues_locked_latest_submission(
 ) -> None:
     actor = task_service_actor("project_manager")
     session = MagicMock(spec=AsyncSession)
-    service = TaskService(session)
+    service = task_service(session, settings=get_settings())
     task = MagicMock(spec=WorkstreamTask)
     task.id = "task-1"
     task.created_by = actor.actor_id
@@ -540,7 +546,7 @@ async def test_task_service_dispatch_failure_records_bounded_repair_evidence(
 ) -> None:
     session = MagicMock(spec=AsyncSession)
     session.commit = AsyncMock()
-    service = TaskService(session)
+    service = task_service(session, settings=get_settings())
     submission = MagicMock(spec=Submission)
     submission.id = "submission-1"
     submission.task_id = "task-1"
@@ -602,7 +608,7 @@ async def test_task_service_finalization_provenance_fails_closed_without_lock_au
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     session = MagicMock(spec=AsyncSession)
-    service = TaskService(session)
+    service = task_service(session, settings=get_settings())
     task = MagicMock(spec=WorkstreamTask)
     task.id = "task-1"
     submission = MagicMock(spec=Submission)
@@ -632,7 +638,7 @@ async def test_task_service_finalization_provenance_fails_closed_without_lock_au
 async def test_task_service_submission_lock_conflict_recovers_only_persisted_lock() -> None:
     actor = task_service_actor("project_manager")
     session = MagicMock(spec=AsyncSession)
-    service = TaskService(session)
+    service = task_service(session, settings=get_settings())
     task = MagicMock(spec=WorkstreamTask)
     task.status = "submitted"
     submission = MagicMock(spec=Submission)
@@ -700,7 +706,7 @@ def test_task_service_locked_policy_helpers_fail_closed_on_wrong_types(
     args: tuple[object, ...],
     expected_field: str,
 ) -> None:
-    service = TaskService(MagicMock(spec=AsyncSession))
+    service = task_service(MagicMock(spec=AsyncSession), settings=get_settings())
 
     with pytest.raises(TaskLockedContextInvalid) as failure:
         getattr(service, method_name)(*args)
@@ -709,7 +715,7 @@ def test_task_service_locked_policy_helpers_fail_closed_on_wrong_types(
 
 
 def test_task_service_optional_locked_policy_helpers_preserve_absence() -> None:
-    service = TaskService(MagicMock(spec=AsyncSession))
+    service = task_service(MagicMock(spec=AsyncSession), settings=get_settings())
 
     assert service._optional_policy_text({}, "note") is None
     assert service._optional_policy_non_negative_int({}, "limit") is None
@@ -917,27 +923,6 @@ async def create_policy_bundle_for_guide(
             json=body,
         )
         assert response.status_code == 200, response.text
-    async with db_session.get_session_factory()() as session:
-        guide = await session.get(ProjectGuide, guide_id)
-        assert guide is not None
-        session.add_all(
-            [
-                PaymentPolicy(
-                    id=str(uuid4()),
-                    project_id=project_id,
-                    guide_version=guide.version,
-                    base_amount="25.00",
-                    currency="USD",
-                    payout_type="fixed",
-                    revision_payment_rule="none",
-                    rejection_payment_rule="none",
-                    accepted_payment_rule="pay base amount",
-                ),
-            ]
-        )
-        await session.flush()
-        await session.commit()
-
     from projects.policy_bundle_fixtures import create_approved_policy_bundle
     from project_create_fixtures import grant_fixture_admin_role
     async with db_session.get_session_factory()() as session, session.begin():
@@ -1003,13 +988,13 @@ def complete_submission_payload(package_hash: str = "sha256:package-v1") -> dict
     }
 
 
-async def create_active_project(client: AsyncClient) -> dict:
+async def create_active_project(client: AsyncClient, *, slug: str = "task-queue-project") -> dict:
     project_response = await client.post(
         "/api/v1/projects",
         headers=auth_headers() | {"Idempotency-Key": str(uuid4())},
         json={
             "name": "Task Queue Project",
-            "slug": "task-queue-project",
+            "slug": slug,
             "description": "Project for task queue tests",
         },
     )
@@ -1305,12 +1290,20 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
 
     replacement_subject = "worker-submission-context-replacement"
     replacement_contributor_id = await seed_task_test_actor(replacement_subject)
+    replacement_assignment_id = str(uuid4())
     async with db_session.get_session_factory()() as session:
         await session.execute(
             update(TaskAssignment)
             .where(TaskAssignment.id == str(revision_request.assignment_id))
-            .values(contributor_id=replacement_contributor_id)
+            .values(status="released")
         )
+        stored_task = await session.get(WorkstreamTask, task["id"])
+        session.add(TaskAssignment(
+            id=replacement_assignment_id, task_id=stored_task.id,
+            project_id=stored_task.project_id, contributor_id=replacement_contributor_id,
+            assigned_by=stored_task.created_by, status="active",
+            submitter_contribution_policy_version_id=stored_task.locked_contribution_policy_version_id,
+        ))
         await session.execute(
             update(WorkstreamTask)
             .where(WorkstreamTask.id == task["id"])
@@ -1322,7 +1315,7 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
         await session.commit()
     cross_contributor_request = TaskSubmissionContextRequest(
         task_id=revision_request.task_id,
-        assignment_id=revision_request.assignment_id,
+        assignment_id=UUID(replacement_assignment_id),
         contributor_id=UUID(replacement_contributor_id),
         predecessor_submission_id=revision_request.predecessor_submission_id,
     )
@@ -1569,7 +1562,7 @@ async def test_task_router_service_errors_use_canonical_request_context(
     ]
 
     for service_method, method, path, payload in cases:
-        monkeypatch.setattr(TaskService, service_method, fail_with_service_error)
+        monkeypatch.setattr("app.modules.tasks.service.TaskService." + service_method, fail_with_service_error)
         response = await task_client.request(
             method,
             path,
@@ -1585,7 +1578,7 @@ async def test_task_router_service_errors_use_canonical_request_context(
     async def fail_with_permission_error(*_args, **_kwargs):
         raise PermissionDenied("bounded permission failure")
 
-    monkeypatch.setattr(TaskService, "get_task", fail_with_permission_error)
+    monkeypatch.setattr("app.modules.tasks.service.TaskService.get_task", fail_with_permission_error)
     denied = await task_client.get("/api/v1/tasks/task-id", headers=auth_headers())
 
     assert denied.status_code == 403
@@ -1690,26 +1683,26 @@ async def test_screening_requires_active_guide_context(task_client: AsyncClient)
     assert "active guide" in response.json()["detail"]
 
 
-async def test_screening_maps_ambiguous_active_policy_context_to_controlled_error(
+async def test_screening_maps_unavailable_active_policy_context_to_controlled_error(
     task_client: AsyncClient,
 ) -> None:
+    from app.modules.projects.api import ProjectLockedPolicyContextUnavailable
+    from app.modules.projects.locked_policy_repository import ProjectLockedPolicyRepository
+
     project = await create_active_project(task_client)
     task = await create_draft_task(task_client, project["id"])
-
-    from app.modules.projects.repository import ProjectRepository
-    from types import SimpleNamespace
     with pytest.MonkeyPatch.context() as patch:
-        async def ambiguous(repository, *args, **kwargs):
-            return repository._resolve_current_append_only_row(
-                [SimpleNamespace(id=str(uuid4()), predecessor=None) for _ in range(2)],
-                "predecessor", "ambiguous approved policies",
-            )
-        patch.setattr(ProjectRepository, "get_current_approved_submission_artifact_policy", ambiguous)
+        async def unavailable(*args, **kwargs):
+            raise ProjectLockedPolicyContextUnavailable("invalid activation custody")
+        patch.setattr(ProjectLockedPolicyRepository, "lock_active_policy_context", unavailable)
         response = await task_client.post(
             f"/api/v1/tasks/{task['id']}/screen", headers=auth_headers(), json={"reason": "screen"},
         )
     assert response.status_code == 422
-    assert "ambiguous" in response.json()["detail"]
+    async with db_session.get_session_factory()() as session:
+        stored = await session.get(WorkstreamTask, task["id"])
+        assert stored.status == "draft"
+        assert stored.locked_contribution_policy_version_id is None
 
 
 async def test_screening_rejects_missing_task_contract_fields(task_client: AsyncClient) -> None:
@@ -1728,7 +1721,7 @@ async def test_screening_rejects_missing_task_contract_fields(task_client: Async
     assert "acceptance_criteria" in response.json()["detail"]
 
 
-async def test_screening_locks_guide_policy_context_and_payment_fields(
+async def test_screening_locks_exact_activated_policy_context(
     task_client: AsyncClient,
 ) -> None:
     project = await create_active_project(task_client)
@@ -1750,7 +1743,8 @@ async def test_screening_locks_guide_policy_context_and_payment_fields(
     assert body["locked_revision_policy_id"]
     assert body["locked_revision_policy_generation"] == 1
     assert body["locked_revision_policy_hash"].startswith("sha256:")
-    assert body["locked_payment_policy_version"] == "v1"
+    assert "locked_payment_policy_version" not in body
+    assert UUID(body["locked_contribution_policy_version_id"])
     assert body["locked_guide_source_snapshot_id"]
     assert body["locked_guide_source_snapshot_hash"].startswith("sha256:")
     assert body["locked_effective_project_submission_artifact_policy_id"]
@@ -1791,9 +1785,9 @@ async def test_screening_locks_guide_policy_context_and_payment_fields(
         persisted_task.locked_post_submit_checker_policy_hash
         == expected_post_submit_policy["policy_hash"]
     )
-    assert body["base_amount"] == "25.00"
-    assert body["currency"] == "USD"
-    assert body["payout_type"] == "fixed"
+    assert persisted_task.base_amount is None
+    assert persisted_task.currency is None
+    assert persisted_task.payout_type is None
 
 
 async def test_release_rejects_crossed_post_submit_policy_sidecar(
@@ -1832,7 +1826,7 @@ async def test_release_rejects_crossed_post_submit_policy_sidecar(
 
     assert release.status_code == 422, release.text
     assert release.json()["error"]["code"] == "task_locked_context_invalid"
-    assert "summaries are invalid" in release.json()["detail"]
+    assert "task locked policy custody is invalid" in release.json()["detail"]
     async with db_session.get_session_factory()() as session:
         persisted_task = await session.get(WorkstreamTask, task["id"])
         assert sorted(await session.scalars(select(AuditEvent.id))) == audit_ids
@@ -1927,7 +1921,7 @@ async def test_task_context_apis_return_worker_requirements_and_operator_provena
     assert work_body["guide"]["version"] == "v1"
     assert work_body["guide"]["change_summary"] == "Initial v1"
     assert "content_markdown" not in work_body["guide"]
-    assert work_body["payment_policy"]["base_amount"] == "25.00"
+    assert "payment_policy" not in work_body
     assert work_body["lifecycle"]["can_submit"] is False
     assert "can_run_pre_submit_check" not in work_body["lifecycle"]
     assert work_body["lifecycle"]["next_actions"] == []
@@ -2048,47 +2042,6 @@ async def test_ready_worker_work_context_omits_private_task_source_fields(
         assert private_field not in body["task"]
 
 
-async def test_work_context_uses_stamped_policy_values_after_payment_policy_mutation(
-    task_client: AsyncClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project = await create_active_project(task_client)
-    started_task = await create_started_task(task_client, project["id"], monkeypatch)
-    before_response = await task_client.get(
-        f"/api/v1/tasks/{started_task['id']}/work-context",
-        headers=auth_headers(),
-    )
-    assert before_response.status_code == 200, before_response.text
-    before = before_response.json()
-
-    async with db_session.get_session_factory()() as session:
-        payment_policy = await session.scalar(
-            select(PaymentPolicy).where(
-                PaymentPolicy.project_id == project["id"],
-                PaymentPolicy.guide_version == "v1",
-            )
-        )
-        assert payment_policy is not None
-        payment_policy.base_amount = Decimal("999.00")
-        payment_policy.currency = "EUR"
-        payment_policy.payout_type = "manual"
-        await session.commit()
-
-    after_response = await task_client.get(
-        f"/api/v1/tasks/{started_task['id']}/work-context",
-        headers=auth_headers(),
-    )
-
-    assert after_response.status_code == 200, after_response.text
-    after = after_response.json()
-    assert after["review_policy"] == before["review_policy"]
-    assert after["revision_policy"] == before["revision_policy"]
-    assert after["payment_policy"] == before["payment_policy"]
-    assert after["payment_policy"]["base_amount"] == "25.00"
-    assert after["payment_policy"]["currency"] == "USD"
-    assert after["payment_policy"]["payout_type"] == "fixed"
-
-
 async def test_task_context_apis_fail_closed_when_locked_context_is_missing(
     task_client: AsyncClient,
 ) -> None:
@@ -2181,7 +2134,7 @@ async def test_task_context_apis_fail_closed_on_stale_locked_context_rows(
     assert response.json()["code"] == "task_locked_context_invalid"
 
 
-async def test_submission_requirements_fail_closed_on_hash_consistent_malformed_policy_shape(
+async def test_submission_requirements_reject_detached_policy_not_matching_approval(
     task_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2197,7 +2150,7 @@ async def test_submission_requirements_fail_closed_on_hash_consistent_malformed_
     assert response.status_code == 422
     body = response.json()
     assert body["code"] == "task_locked_context_invalid"
-    assert body["details"]["field"] == "effective_policy.schema_version"
+    assert body["error"]["message"] == "Task locked context is invalid"
 
 
 async def test_task_context_apis_use_v1_locked_requirements_after_v2_activation(
@@ -2368,7 +2321,7 @@ async def test_full_task_claim_start_flow_writes_audit_events(
         assert event["event_payload"]["locked_revision_policy_id"]
         assert event["event_payload"]["locked_revision_policy_generation"] == 1
         assert event["event_payload"]["locked_revision_policy_hash"].startswith("sha256:")
-        assert event["event_payload"]["locked_payment_policy_version"] == "v1"
+        assert UUID(event["event_payload"]["locked_contribution_policy_version_id"])
     claim_event = next(event for event in events if event["to_status"] == "claimed")
     assert claim_event["actor_id"] == worker_actor_id
     assert claim_event["actor_roles"] == []
@@ -2650,7 +2603,7 @@ async def test_retained_packet_reads_preserve_locked_lineage_and_redact_audit(
             external_issuer="flow-test", roles=("worker",), claim_snapshot={},
             auth_source="dev_mock", is_dev_auth=True,
         )
-        service = TaskService(session)
+        service = task_service(session, settings=get_settings())
         await service._write_task_audit(
             actor, stored_task, event_type="submission_created",
             from_status="in_progress", to_status="submitted", reason=None,
@@ -2815,7 +2768,7 @@ async def test_retained_packet_reads_preserve_locked_lineage_and_redact_audit(
     assert gate_started_event["event_payload"]["requester_external_subject"] == "worker-one"
 
 
-async def test_submission_pre_submit_rejects_hash_consistent_malformed_effective_policy(
+async def test_release_rejects_detached_effective_policy_not_matching_approval(
     task_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2836,7 +2789,7 @@ async def test_submission_pre_submit_rejects_hash_consistent_malformed_effective
     )
 
     assert response.status_code == 422, response.text
-    assert "locked project pre-submit checker policy" in response.json()["detail"]
+    assert response.json()["detail"] == "task locked policy custody is invalid"
 
     async with db_session.get_session_factory()() as session:
         submissions = (
@@ -2870,7 +2823,7 @@ async def test_submission_pre_submit_rejects_hash_consistent_malformed_packaging
     )
 
     assert response.status_code == 422, response.text
-    assert "locked project pre-submit checker policy" in response.json()["detail"]
+    assert response.json()["detail"] == "task locked policy custody is invalid"
 
     async with db_session.get_session_factory()() as session:
         submissions = (
@@ -2904,7 +2857,7 @@ async def test_submission_pre_submit_rejects_hash_consistent_incomplete_checker_
     )
 
     assert response.status_code == 422, response.text
-    assert "locked project pre-submit checker policy" in response.json()["detail"]
+    assert response.json()["detail"] == "task locked policy custody is invalid"
 
     async with db_session.get_session_factory()() as session:
         submissions = (
@@ -2960,13 +2913,16 @@ async def test_database_rejects_submission_without_post_submit_policy_context(
     async with db_session.get_session_factory()() as session:
         task = await session.get(WorkstreamTask, started_task["id"])
         assert task is not None
+        assignment = await session.scalar(select(TaskAssignment).where(TaskAssignment.task_id == task.id))
         submission = Submission(
             id=str(uuid4()),
             task_id=task.id,
+            task_assignment_id=assignment.id,
             contributor_id=actor_id("worker-one"),
             version=1,
             status="submitted",
             summary="Bypass submission without post-submit policy provenance.",
+            contribution_policy_version_id=task.locked_contribution_policy_version_id,
             package_hash="sha256:package-bypass",
             artifact_hash_manifest=[{"artifact": "answer.md", "hash": "sha256:answer-bypass"}],
             worker_attestation="Bypass attestation.",
@@ -3347,7 +3303,6 @@ async def test_database_blocks_task_locked_context_mutation_after_submission(
         task.locked_guide_version = "v2"
         task.locked_review_policy_hash = "sha256:" + "f" * 64
         task.locked_revision_policy_hash = "sha256:" + "e" * 64
-        task.locked_payment_policy_version = "v2"
         with pytest.raises(IntegrityError):
             await session.commit()
 
@@ -4810,6 +4765,8 @@ async def test_database_enforces_unique_submission_version(
         task = await session.get(WorkstreamTask, persisted.task_id)
         session.add(build_submission(
             submission_id=str(uuid4()), task=task, contributor_id=persisted.contributor_id,
+            task_assignment_id=persisted.task_assignment_id,
+            contribution_policy_version_id=persisted.contribution_policy_version_id,
             version=persisted.version, summary="duplicate",
             worker_attestation=persisted.worker_attestation,
             package_uri=persisted.package_uri, package_hash=persisted.package_hash,
@@ -4895,6 +4852,8 @@ async def test_database_enforces_one_active_assignment_per_task(task_client: Asy
                 TaskAssignment(
                     id=str(uuid4()),
                     task_id=ready_task["id"],
+                    project_id=project["id"],
+                    submitter_contribution_policy_version_id=UUID(ready_task["locked_contribution_policy_version_id"]),
                     contributor_id=first_contributor_id,
                     assigned_by="operator",
                     status="active",
@@ -4902,6 +4861,8 @@ async def test_database_enforces_one_active_assignment_per_task(task_client: Asy
                 TaskAssignment(
                     id=str(uuid4()),
                     task_id=ready_task["id"],
+                    project_id=project["id"],
+                    submitter_contribution_policy_version_id=UUID(ready_task["locked_contribution_policy_version_id"]),
                     contributor_id=second_contributor_id,
                     assigned_by="operator",
                     status="active",
@@ -4926,6 +4887,8 @@ async def test_released_assignment_does_not_block_new_active_assignment(
                 TaskAssignment(
                     id=str(uuid4()),
                     task_id=ready_task["id"],
+                    project_id=project["id"],
+                    submitter_contribution_policy_version_id=UUID(ready_task["locked_contribution_policy_version_id"]),
                     contributor_id=first_contributor_id,
                     assigned_by="operator",
                     status="released",
@@ -4933,6 +4896,8 @@ async def test_released_assignment_does_not_block_new_active_assignment(
                 TaskAssignment(
                     id=str(uuid4()),
                     task_id=ready_task["id"],
+                    project_id=project["id"],
+                    submitter_contribution_policy_version_id=UUID(ready_task["locked_contribution_policy_version_id"]),
                     contributor_id=second_contributor_id,
                     assigned_by="operator",
                     status="active",
@@ -4942,7 +4907,7 @@ async def test_released_assignment_does_not_block_new_active_assignment(
         await session.commit()
 
 
-async def test_json_and_numeric_fields_round_trip_under_postgres(task_client: AsyncClient) -> None:
+async def test_task_metadata_round_trips_without_obsolete_payment_stamping(task_client: AsyncClient) -> None:
     project = await create_active_project(task_client)
     ready_task = await create_ready_task(task_client, project["id"])
 
@@ -4952,14 +4917,16 @@ async def test_json_and_numeric_fields_round_trip_under_postgres(task_client: As
     assert task is not None
     assert task.skill_tags == ["stem", "proofs"]
     assert task.source_payload_hash == "hash-123"
-    assert task.base_amount == Decimal("25.00")
+    assert task.base_amount is None
 
 
 @pytest.mark.parametrize("transition", ("screen", "release"))
+@pytest.mark.parametrize("phase", ("pre", "post_missing", "post_substituted"))
 async def test_catalogue_rollout_blocks_task_transition_without_writes(
-    task_client: AsyncClient, monkeypatch: pytest.MonkeyPatch, transition: str,
+    task_client: AsyncClient, monkeypatch: pytest.MonkeyPatch, transition: str, phase: str,
 ) -> None:
-    from tests.checkers.post_submit.support import altered_catalogue
+    from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+    from app.modules.checkers.runner import default_checker_registry
 
     project = await create_active_project(task_client)
     task = await create_draft_task(task_client, project["id"])
@@ -4979,16 +4946,35 @@ async def test_catalogue_rollout_blocks_task_transition_without_writes(
         assert all(value is None for key, value in before.items() if key.startswith("locked_"))
     else:
         assert before["status"] == "screening"
-    newer = altered_catalogue(index=8, state="disabled")
-    monkeypatch.setattr("app.modules.tasks.service.current_post_submit_catalogue", lambda: newer)
+    if phase.startswith("post_"):
+        metadata = current_post_submit_catalogue()
+        registry = default_checker_registry()
+        missing = "check_acceptance_criteria_present"
+        if phase == "post_missing":
+            registry._checkers.pop(missing)
+        else:
+            registry._checkers[missing] = registry.resolve("check_evidence_present")
+        monkeypatch.setattr("app.modules.checkers.runner.default_checker_registry", lambda: registry)
+        assert current_post_submit_catalogue() == metadata
+    else:
+        from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue
+        disabled = build_pre_submission_checker_catalogue().entries[0].stable_id
+        monkeypatch.setattr(get_settings(), "artifact_pre_submission_checker_disabled_ids", disabled)
+    if transition == "release":
+        historical = await task_client.get(
+            f"/api/v1/tasks/{task['id']}/locked-context", headers=auth_headers(),
+        )
+        assert historical.status_code == 200, historical.text
     response = await task_client.post(
         f"/api/v1/tasks/{task['id']}/{transition}", headers=auth_headers(),
         json={"reason": "must remain unchanged"},
     )
     assert response.status_code == 422, response.text
-    expected = ("active post-submit checker policy hash is invalid" if transition == "screen"
-                else "task locked post-submit checker policy body is invalid")
+    expected = "installed checkers cannot execute the locked policies"
     assert expected in response.text
     async with db_session.get_session_factory()() as session:
         assert dict((await session.execute(task_query)).mappings().one()) == before
         assert list(await session.scalars(audit_query)) == audits
+        assert list(await session.scalars(select(TaskAssignment.id).where(
+            TaskAssignment.task_id == task["id"],
+        ))) == []

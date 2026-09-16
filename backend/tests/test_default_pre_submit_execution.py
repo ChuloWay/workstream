@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
+
 from project_create_fixtures import guide_snapshot_columns
 
 import asyncio
@@ -507,38 +509,7 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                 ),
                 params,
             )
-            await connection.execute(
-                text(
-                    "insert into workstream_tasks "
-                    "(id,project_id,locked_guide_version,locked_guide_source_snapshot_id,"
-                    "locked_guide_source_snapshot_hash,"
-                    "locked_effective_project_submission_artifact_policy_id,"
-                    "locked_effective_project_submission_artifact_policy_hash,"
-                    "locked_pre_submit_checker_policy_id,locked_pre_submit_checker_bundle_hash,"
-                    "locked_post_submit_checker_policy_id,"
-                    "locked_post_submit_checker_policy_version,"
-                    "locked_post_submit_checker_policy_hash,"
-                    "locked_post_submit_checker_policy_body,"
-                    "locked_review_policy_id,locked_review_policy_generation,"
-                    "locked_review_policy_hash,locked_revision_policy_id,"
-                    "locked_revision_policy_generation,locked_revision_policy_hash,"
-                    "source_type,title,description,skill_tags,status,assigned_to,created_by) values "
-                    "(:task,:project,:guide_version,:snapshot,:snapshot_hash,:effective_policy,"
-                    ":effective_hash,:checker_policy,:checker_hash,:post_policy,:guide_version,"
-                    ":post_policy_hash,CAST(:post_policy_body AS json),:review_policy,1,:review_policy_hash,"
-                    ":revision_policy,1,:revision_policy_hash,'manual','Evidence task',"
-                    "'Evidence test task','[]'::json,'in_progress',:actor,'test')"
-                ),
-                params,
-            )
-            await connection.execute(
-                text(
-                    "insert into task_assignments "
-                    "(id,task_id,contributor_id,assigned_by,status) values "
-                    "(:assignment,:task,:actor,'test','active')"
-                ),
-                params,
-            )
+            await seed_started_task_for_artifact_test(connection, params)
             await install_submitter_grant(connection, params)
             before = await table_counts(connection, tables)
         session_factory = async_sessionmaker(engine, expire_on_commit=False)

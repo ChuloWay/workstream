@@ -26,7 +26,8 @@ from app.modules.tasks.schemas import (
     TaskWorkContextResponse,
     TaskWithAssignmentResponse,
 )
-from app.modules.tasks.service import TaskService, TaskServiceError
+from app.modules.tasks.service import TaskServiceError
+from app.adapters.tasks import task_service
 from app.schemas.auth import ActorContext
 
 router = APIRouter(tags=["tasks"])
@@ -124,6 +125,7 @@ def permission_http_error(exc: PermissionDenied) -> HTTPException:
     status_code=201,
 )
 async def create_task(
+    request: Request,
     project_id: str,
     payload: TaskCreate,
     actor: Annotated[ActorContext, Depends(get_registered_actor)],
@@ -131,7 +133,7 @@ async def create_task(
 ) -> TaskResponse:
     """Create a draft task under a project."""
     try:
-        return await TaskService(session).create_task(actor, project_id, payload)
+        return await task_service(session, settings=request.app.state.settings).create_task(actor, project_id, payload)
     except PermissionDenied as exc:
         raise permission_http_error(exc) from exc
     except TaskServiceError as exc:
@@ -140,13 +142,14 @@ async def create_task(
 
 @router.get("/tasks/{task_id}", response_model=TaskResponse, response_model_exclude_none=True)
 async def get_task(
+    request: Request,
     task_id: str,
     actor: Annotated[ActorContext, Depends(get_registered_actor)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> TaskResponse:
     """Return one task by id."""
     try:
-        return await TaskService(session).get_task(actor, task_id)
+        return await task_service(session, settings=request.app.state.settings).get_task(actor, task_id)
     except PermissionDenied as exc:
         raise permission_http_error(exc) from exc
     except TaskServiceError as exc:
@@ -167,7 +170,7 @@ async def get_task_submission_requirements(
 ) -> SubmissionRequirementsResponse | JSONResponse:
     """Return exact contributor submission requirements from locked policy context."""
     try:
-        return await TaskService(session).get_task_submission_requirements(actor, task_id)
+        return await task_service(session, settings=request.app.state.settings).get_task_submission_requirements(actor, task_id)
     except PermissionDenied as exc:
         raise permission_http_error(exc) from exc
     except TaskServiceError as exc:
@@ -190,7 +193,7 @@ async def get_task_locked_context(
 ) -> TaskLockedContextResponse | JSONResponse:
     """Return operator-only locked task provenance."""
     try:
-        return await TaskService(session).get_task_locked_context(actor, task_id)
+        return await task_service(session, settings=request.app.state.settings).get_task_locked_context(actor, task_id)
     except PermissionDenied as exc:
         raise permission_http_error(exc) from exc
     except TaskServiceError as exc:
@@ -205,6 +208,7 @@ async def get_task_locked_context(
     response_model_exclude_none=True,
 )
 async def screen_task(
+    request: Request,
     task_id: str,
     actor: Annotated[ActorContext, Depends(get_registered_actor)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
@@ -212,7 +216,7 @@ async def screen_task(
 ) -> TaskResponse:
     """Move a draft task into screening."""
     try:
-        return await TaskService(session).move_to_screening(
+        return await task_service(session, settings=request.app.state.settings).move_to_screening(
             actor,
             task_id,
             None if payload is None else payload.reason,
@@ -229,6 +233,7 @@ async def screen_task(
     response_model_exclude_none=True,
 )
 async def release_task(
+    request: Request,
     task_id: str,
     actor: Annotated[ActorContext, Depends(get_registered_actor)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
@@ -236,7 +241,7 @@ async def release_task(
 ) -> TaskResponse:
     """Move a screened task into the ready queue."""
     try:
-        return await TaskService(session).release_to_ready(
+        return await task_service(session, settings=request.app.state.settings).release_to_ready(
             actor,
             task_id,
             None if payload is None else payload.reason,
@@ -253,13 +258,14 @@ async def release_task(
     response_model_exclude_none=True,
 )
 async def list_task_submissions(
+    request: Request,
     task_id: str,
     actor: Annotated[ActorContext, Depends(get_registered_actor)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> list[SubmissionResponse]:
     """Return submission packet versions for one task."""
     try:
-        return await TaskService(session).list_task_submissions(actor, task_id)
+        return await task_service(session, settings=request.app.state.settings).list_task_submissions(actor, task_id)
     except PermissionDenied as exc:
         raise permission_http_error(exc) from exc
     except TaskServiceError as exc:
@@ -272,13 +278,14 @@ async def list_task_submissions(
     response_model_exclude_none=True,
 )
 async def get_submission(
+    request: Request,
     submission_id: str,
     actor: Annotated[ActorContext, Depends(get_registered_actor)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> SubmissionResponse:
     """Return one submission packet version."""
     try:
-        return await TaskService(session).get_submission(actor, submission_id)
+        return await task_service(session, settings=request.app.state.settings).get_submission(actor, submission_id)
     except PermissionDenied as exc:
         raise permission_http_error(exc) from exc
     except TaskServiceError as exc:
@@ -291,13 +298,14 @@ async def get_submission(
     response_model_exclude_none=True,
 )
 async def finalize_submission(
+    request: Request,
     submission_id: str,
     actor: Annotated[ActorContext, Depends(get_registered_actor)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> SubmissionResponse:
     """Repair or re-check the automatic pre-review gate for a locked submission."""
     try:
-        return await TaskService(session).finalize_submission(actor, submission_id)
+        return await task_service(session, settings=request.app.state.settings).finalize_submission(actor, submission_id)
     except PermissionDenied as exc:
         raise permission_http_error(exc) from exc
     except TaskServiceError as exc:
@@ -306,13 +314,14 @@ async def finalize_submission(
 
 @router.get("/tasks/{task_id}/audit-events", response_model=list[AuditEventResponse])
 async def list_task_audit_events(
+    request: Request,
     task_id: str,
     actor: Annotated[ActorContext, Depends(get_registered_actor)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> list[AuditEventResponse]:
     """Return audit events for one task."""
     try:
-        return await TaskService(session).list_task_audit_events(actor, task_id)
+        return await task_service(session, settings=request.app.state.settings).list_task_audit_events(actor, task_id)
     except PermissionDenied as exc:
         raise permission_http_error(exc) from exc
     except TaskServiceError as exc:

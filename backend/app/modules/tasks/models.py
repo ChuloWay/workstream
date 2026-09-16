@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from uuid import UUID
 
 from sqlalchemy import (
     Boolean,
@@ -32,6 +33,20 @@ class WorkstreamTask(Base):
 
     __tablename__ = "workstream_tasks"
     __table_args__ = (
+        CheckConstraint(
+            "status = 'draft' or locked_contribution_policy_version_id is not null",
+            name="contribution_policy_required",
+        ),
+        CheckConstraint(
+            "locked_contribution_policy_version_id is null or locked_guide_version is not null",
+            name="contribution_policy_guide_required",
+        ),
+        ForeignKeyConstraint(
+            ["project_id", "locked_guide_version", "locked_contribution_policy_version_id"],
+            ["project_guides.project_id", "project_guides.version",
+             "project_guides.contribution_policy_version_id"],
+            name="fk_tasks_guide_contribution_policy",
+        ),
         CheckConstraint(
             "(locked_review_policy_id is null and locked_review_policy_generation is null "
             "and locked_review_policy_hash is null and locked_revision_policy_id is null "
@@ -207,6 +222,7 @@ class WorkstreamTask(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    locked_contribution_policy_version_id: Mapped[UUID | None] = mapped_column(Uuid())
     locked_guide_version: Mapped[str | None] = mapped_column(String(50))
     locked_post_submit_checker_policy_id: Mapped[str | None] = mapped_column(String(36))
     locked_post_submit_checker_policy_version: Mapped[str | None] = mapped_column(String(50))
@@ -261,6 +277,7 @@ class WorkstreamTask(Base):
     assignments: Mapped[list[TaskAssignment]] = relationship(
         back_populates="task",
         cascade="all, delete-orphan",
+        foreign_keys="TaskAssignment.task_id",
     )
     submissions: Mapped[list[Submission]] = relationship(
         back_populates="task",
@@ -274,6 +291,15 @@ class TaskAssignment(Base):
 
     __tablename__ = "task_assignments"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["task_id", "project_id"], ["workstream_tasks.id", "workstream_tasks.project_id"],
+            name="fk_assignments_task_project",
+        ),
+        ForeignKeyConstraint(
+            ["submitter_contribution_policy_version_id", "project_id"],
+            ["contribution_policy_versions.id", "contribution_policy_versions.project_id"],
+            name="fk_assignments_contribution_project",
+        ),
         UniqueConstraint(
             "id", "task_id", "contributor_id", name="uq_task_assignments_id_task_contributor"
         ),
@@ -286,6 +312,8 @@ class TaskAssignment(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    submitter_contribution_policy_version_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
     task_id: Mapped[str] = mapped_column(
         ForeignKey("workstream_tasks.id"),
         nullable=False,
@@ -305,7 +333,7 @@ class TaskAssignment(Base):
     released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active", index=True)
 
-    task: Mapped[WorkstreamTask] = relationship(back_populates="assignments")
+    task: Mapped[WorkstreamTask] = relationship(back_populates="assignments", foreign_keys=[task_id])
 
 
 class Submission(Base):
@@ -313,6 +341,11 @@ class Submission(Base):
 
     __tablename__ = "submissions"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["task_assignment_id", "task_id", "contributor_id"],
+            ["task_assignments.id", "task_assignments.task_id", "task_assignments.contributor_id"],
+            name="fk_submissions_assignment_identity",
+        ),
         ForeignKeyConstraint(
             ["task_id", "locked_guide_version"],
             ["workstream_tasks.id", "workstream_tasks.locked_guide_version"],
@@ -459,9 +492,9 @@ class Submission(Base):
             name="post_submit_policy_lock_complete",
         ),
         CheckConstraint(
-            "(task_assignment_id is null and submission_bundle_admission_id is null "
+            "(submission_bundle_admission_id is null "
             "and artifact_binding_id is null and artifact_content_id is null) or "
-            "(task_assignment_id is not null and submission_bundle_admission_id is not null "
+            "(submission_bundle_admission_id is not null "
             "and artifact_binding_id is not null and artifact_content_id is not null)",
             name="artifact_lineage_shape",
         ),
@@ -484,8 +517,9 @@ class Submission(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    task_assignment_id: Mapped[str | None] = mapped_column(
-        ForeignKey("task_assignments.id"), index=True
+    contribution_policy_version_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
+    task_assignment_id: Mapped[str] = mapped_column(
+        ForeignKey("task_assignments.id"), nullable=False, index=True
     )
     submission_bundle_admission_id: Mapped[str | None] = mapped_column(
         String(36), unique=True, index=True
@@ -522,7 +556,7 @@ class Submission(Base):
     locked_revision_policy_id: Mapped[str] = mapped_column(String(36), nullable=False)
     locked_revision_policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
     locked_revision_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
-    locked_payment_policy_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    locked_payment_policy_version: Mapped[str | None] = mapped_column(String(50))
     locked_guide_source_snapshot_id: Mapped[str | None] = mapped_column(String(36))
     locked_guide_source_snapshot_hash: Mapped[str | None] = mapped_column(String(71))
     locked_effective_project_submission_artifact_policy_id: Mapped[str | None] = mapped_column(

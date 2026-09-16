@@ -189,8 +189,12 @@ Internal task/intake integrations now resolve that complete binding through one
 PROJECTS context port. New work selects the active guide; frozen work keeps its
 exact guide and approved policy identities after a successor is activated.
 Retiring a contribution policy does not silently replace that binding. This is
-an internal contract, not a new manager API. Task-attempt lineage persistence
-and its existing writers are the next CP08 boundary.
+an internal contract, not a new manager API. Screening now records that exact
+contribution-policy version; claim and hidden Submission creation retain it through
+the assignment. Screening and release check that the installed pre/post policies
+are supported; historical reads do not rerun availability. No superseded economic configuration is
+required. Remaining task projections and authorization/public cutover follow in
+ARCH-03B/03C.
 
 The intended unified flow uses one compilation result for sufficiency and
 artifact/pre-submit/post-submit proposals. Once finalized, its `ProjectSetupRun`,

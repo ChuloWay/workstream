@@ -460,12 +460,6 @@
     {
       "source_file": "backend/app/modules/tasks/service.py",
       "target_module": "checkers",
-      "imported_private_path": "app.modules.checkers.compiler",
-      "repair_owner": "WS-ARCH-001-04"
-    },
-    {
-      "source_file": "backend/app/modules/tasks/service.py",
-      "target_module": "checkers",
       "imported_private_path": "app.modules.checkers.gate_queue",
       "repair_owner": "WS-ARCH-001-04"
     },
@@ -485,12 +479,6 @@
       "source_file": "backend/app/modules/tasks/service.py",
       "target_module": "projects",
       "imported_private_path": "app.modules.projects.models",
-      "repair_owner": "WS-ARCH-001-03"
-    },
-    {
-      "source_file": "backend/app/modules/tasks/service.py",
-      "target_module": "projects",
-      "imported_private_path": "app.modules.projects.post_submit_policy",
       "repair_owner": "WS-ARCH-001-03"
     },
     {

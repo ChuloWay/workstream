@@ -1,6 +1,8 @@
 # Chunk Contract: WS-ARCH-001-CP08 — Initial Attempt Policy Lineage
 
-Status: planned after ARCH-03A. Risk: L1.
+Status: Complete. Risk: L1.
+
+Implemented by the [combined CP08 change record](../../WS-ARCH-001-CP08.md).
 
 ## Reconciled boundary
 
@@ -38,6 +40,12 @@ ARCH-03B retains queues, invalidation and broader task projections; ARCH-03C
 retains their later exact authorization/public cutover.
 
 ## Persistence and retained evidence
+
+The initial Task stamp is write-once at draft-to-screening. Submission requires
+its assignment identity and copied contribution version on INSERT; its three ART
+references are separately staged and completed by the production transaction.
+The upgrade refuses any retained non-draft Task, assignment or Submission before
+DDL, rather than inferring missing historical provenance.
 
 A draft task may lack a complete lock; new claimable tasks, assignments and
 Submissions may not. Use same-project policy and stable Task/Assignment/contributor

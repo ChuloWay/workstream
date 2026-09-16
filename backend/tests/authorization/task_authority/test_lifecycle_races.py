@@ -1,5 +1,9 @@
 """Independent-session contributor lifecycle versus task-authority races."""
 
+from app.core.config import get_settings
+
+from app.adapters.tasks import task_service
+
 import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -267,6 +271,7 @@ async def _run_task_contributor_write(
                     authorization=PreparedTaskAuthorization(session, context),
                     audit=task_transition_audit(session),
                     actor_profile_id=context.actor_profile_id,
+                    contexts=task_service(session, settings=get_settings()),
                 ).claim(UUID(task_id), "contributor lock race")
             assert operation == "submission_authority"
             return await _consume_submission_authority(session, context, task_id)

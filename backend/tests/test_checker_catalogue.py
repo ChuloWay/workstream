@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from app.core.config import get_settings
+
+from app.adapters.tasks import task_service
+
 from dataclasses import replace
 import json
 from uuid import uuid4
@@ -160,13 +164,13 @@ def test_archive_limit_compiler_rejects_rule_substitution(alteration, field, pri
 @pytest.mark.parametrize("value", [True, 0, -1, "2", 2.5])
 @pytest.mark.parametrize("field", ["maximum_archive_entries", "maximum_archive_size_bytes"])
 def test_locked_archive_limit_rejects_malformed_values(value, field):
-    from app.modules.tasks.service import TaskService, TaskLockedContextInvalid
+    from app.modules.tasks.service import TaskLockedContextInvalid
     from app.modules.checkers.service import CheckerService
 
     policy = {**_effective_policy(), field: value}
     assert not CheckerService._effective_policy_shape_is_valid(policy)
     with pytest.raises(TaskLockedContextInvalid):
-        TaskService(None)._optional_policy_non_negative_int(policy, field, minimum=1)
+        task_service(None, settings=get_settings())._optional_policy_non_negative_int(policy, field, minimum=1)
 
 
 @pytest.mark.parametrize("field, primitive", [
@@ -174,7 +178,6 @@ def test_locked_archive_limit_rejects_malformed_values(value, field):
     ("maximum_archive_size_bytes", "limit_archive_size"),
 ])
 def test_archive_limit_changes_locked_hashes_and_preserves_null_semantics(field, primitive):
-    from app.modules.tasks.service import TaskService
 
     hashes = set()
     for limit in (None, 1, 100):
@@ -184,7 +187,7 @@ def test_archive_limit_changes_locked_hashes_and_preserves_null_semantics(field,
         rules = [item for item in compiled.compiled_bundle["rules"]
                  if item["primitive"] == primitive]
         assert len(rules) == (0 if limit is None else 1)
-        assert TaskService(None)._optional_policy_non_negative_int(
+        assert task_service(None, settings=get_settings())._optional_policy_non_negative_int(
             policy, field, minimum=1,
         ) == limit
         hashes.add((digest, compiled.compiled_bundle_hash))

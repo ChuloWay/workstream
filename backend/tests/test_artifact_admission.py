@@ -92,12 +92,11 @@ from app.modules.projects.models import (
     GuideSourceArtifactIngest,
     GuideSourceSnapshot,
     GuideSourceSnapshotItem,
-    PaymentPolicy,
     PostSubmitCheckerPolicy,
     ProjectGuide,
 )
 from project_create_fixtures import seed_historical_project, suspend_historical_product_custody
-from app.modules.tasks.models import AuditEvent, Submission, WorkstreamTask
+from app.modules.tasks.models import AuditEvent, WorkstreamTask
 from tests.artifact_store_helpers import (
     artifact_admission_limit_settings,
     minted_source,
@@ -339,19 +338,15 @@ async def _seed_checker_output_relationships(session, namespace, *, policy_bundl
         policy_bundle = await create_standalone_unified_policy(
             async_sessionmaker(session.bind, expire_on_commit=False), namespace,
         )
-    values, effective, pre = policy_bundle
-    project_id, guide_id, snapshot_id = (str(values[key]) for key in ("project", "guide", "snapshot"))
+    values, effective, _pre = policy_bundle
+    project_id, guide_id = (str(values[key]) for key in ("project", "guide"))
     effective_policy_id = effective["id"]
-    pre_submit_policy_id = pre.id
     task_id = str(uuid4())
     submission_id = str(uuid4())
     contributor_id = str(uuid4())
     contributor_link_id = str(uuid4())
     checker_run_id = str(uuid4())
     guide_version = "v1"
-    snapshot_hash = effective["source_snapshot_hash"]
-    effective_policy_hash = effective["effective_policy_hash"]
-    pre_submit_bundle_hash = pre.compiled_bundle_hash
     now = datetime.now(UTC)
     existing_post = await session.scalar(select(PostSubmitCheckerPolicy).where(
         PostSubmitCheckerPolicy.effective_policy_id == effective_policy_id,
@@ -364,40 +359,6 @@ async def _seed_checker_output_relationships(session, namespace, *, policy_bundl
     assert guide is not None and guide.status == "active" and guide.activation_operation_id is not None
     review_policy_id, review_hash = guide.selected_review_policy_id, guide.selected_review_policy_hash
     revision_policy_id, revision_hash = guide.selected_revision_policy_id, guide.selected_revision_policy_hash
-    payment = await session.scalar(select(PaymentPolicy).where(
-        PaymentPolicy.project_id == project_id, PaymentPolicy.guide_version == guide_version,
-    ))
-    if payment is None:
-        session.add(PaymentPolicy(id=str(uuid4()), project_id=project_id, guide_version=guide_version))
-    session.add(
-        WorkstreamTask(
-            id=task_id,
-            project_id=project_id,
-            locked_guide_version=guide_version,
-            locked_post_submit_checker_policy_id=post_submit_policy_id,
-            locked_post_submit_checker_policy_version=guide_version,
-            locked_post_submit_checker_policy_hash=post_submit_policy_hash,
-            locked_post_submit_checker_policy_body=post_submit_policy_body,
-            locked_review_policy_id=review_policy_id,
-            locked_review_policy_generation=1,
-            locked_review_policy_hash=review_hash,
-            locked_revision_policy_id=revision_policy_id,
-            locked_revision_policy_generation=1,
-            locked_revision_policy_hash=revision_hash,
-            locked_payment_policy_version=guide_version,
-            locked_guide_source_snapshot_id=snapshot_id,
-            locked_guide_source_snapshot_hash=snapshot_hash,
-            locked_effective_project_submission_artifact_policy_id=effective_policy_id,
-            locked_effective_project_submission_artifact_policy_hash=effective_policy_hash,
-            locked_pre_submit_checker_policy_id=pre_submit_policy_id,
-            locked_pre_submit_checker_bundle_hash=pre_submit_bundle_hash,
-            title="Checker admission task",
-            description="Prove checker output admission.",
-            status="draft",
-            created_by="setup-actor",
-        )
-    )
-    await session.flush()
     session.add(
         ActorProfile(
             id=contributor_id,
@@ -422,37 +383,24 @@ async def _seed_checker_output_relationships(session, namespace, *, policy_bundl
         )
     )
     await session.flush()
-    session.add(
-        Submission(
-            id=submission_id,
-            task_id=task_id,
-            contributor_id=contributor_id,
-            version=1,
-            status="submitted",
-            summary="Checker source submission",
-            package_hash=canonical_json_hash({"submission": submission_id}),
-            artifact_hash_manifest=[],
-            worker_attestation="complete",
-            locked_guide_version=guide_version,
-            locked_post_submit_checker_policy_id=post_submit_policy_id,
-            locked_post_submit_checker_policy_version=guide_version,
-            locked_post_submit_checker_policy_hash=post_submit_policy_hash,
-            locked_post_submit_checker_policy_body=post_submit_policy_body,
-            locked_review_policy_id=review_policy_id,
-            locked_review_policy_generation=1,
-            locked_review_policy_hash=review_hash,
-            locked_revision_policy_id=revision_policy_id,
-            locked_revision_policy_generation=1,
-            locked_revision_policy_hash=revision_hash,
-            locked_payment_policy_version=guide_version,
-            locked_guide_source_snapshot_id=snapshot_id,
-            locked_guide_source_snapshot_hash=snapshot_hash,
-            locked_effective_project_submission_artifact_policy_id=effective_policy_id,
-            locked_effective_project_submission_artifact_policy_hash=effective_policy_hash,
-            locked_pre_submit_checker_policy_id=pre_submit_policy_id,
-            locked_pre_submit_checker_bundle_hash=pre_submit_bundle_hash,
-        )
-    )
+    from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
+    from app.modules.tasks.submission_composition import build_submission
+
+    assignment_id = str(uuid4())
+    await seed_started_task_for_artifact_test(await session.connection(), {
+        "task": task_id, "assignment": assignment_id, "project": project_id,
+        "actor": contributor_id,
+    })
+    task = await session.get(WorkstreamTask, task_id)
+    # Stored CHECKERS prerequisites only: canonical ART-to-CHECKERS packet
+    # materialization belongs to ARCH-04B/04C. Do not invent ART admission facts.
+    session.add(build_submission(
+        submission_id=submission_id, task=task, contributor_id=contributor_id,
+        task_assignment_id=assignment_id,
+        contribution_policy_version_id=task.locked_contribution_policy_version_id,
+        version=1, summary="Checker source submission", worker_attestation="complete",
+        supersedes_submission_id=None, package_hash=canonical_json_hash({"submission": submission_id}),
+    ))
     await session.flush()
     session.add(
         CheckerRun(
@@ -481,7 +429,7 @@ async def _seed_checker_output_relationships(session, namespace, *, policy_bundl
             locked_revision_policy_id=revision_policy_id,
             locked_revision_policy_generation=1,
             locked_revision_policy_hash=revision_hash,
-            locked_payment_policy_version=guide_version,
+            locked_payment_policy_version=None,
             package_hash=canonical_json_hash({"submission": submission_id}),
             artifact_hash_manifest=[],
             artifact_manifest_hash=canonical_json_hash([]),

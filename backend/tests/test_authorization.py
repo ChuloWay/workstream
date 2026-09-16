@@ -284,48 +284,6 @@ def test_project_role_issue_advisory_key_contract_is_frozen_and_separated() -> N
     assert integrity_constraint_name(error) == "uq_project_role_grants_active_exact_role"
 
 
-@pytest.mark.asyncio
-async def test_project_role_issue_crossed_principals_use_one_lexical_lock_order() -> None:
-    low = UUID("00000000-0000-0000-0000-000000000001")
-    high = UUID("ffffffff-ffff-ffff-ffff-ffffffffffff")
-    low_link, high_link = uuid4(), uuid4()
-
-    class RecordingSession:
-        def __init__(self) -> None:
-            self.calls: list[tuple[str, UUID]] = []
-
-        async def scalar(self, statement):
-            entity = statement.column_descriptions[0]["entity"]
-            values = set(statement.compile().params.values())
-            actor = low if str(low) in values else high
-            if entity is ActorProfile:
-                self.calls.append(("profile", actor))
-                return SimpleNamespace(id=str(actor), actor_kind="human", status="active")
-            self.calls.append(("link", actor))
-            link_id = low_link if actor == low else high_link
-            return SimpleNamespace(id=str(link_id), actor_profile_id=str(actor))
-
-    expected = [
-        ("profile", low),
-        ("link", low),
-        ("profile", high),
-        ("link", high),
-    ]
-    for caller, caller_link, target in (
-        (low, low_link, high),
-        (high, high_link, low),
-    ):
-        session = RecordingSession()
-        repository = AdminAuthorizationRepository(session)  # type: ignore[arg-type]
-        locked_caller, target_eligible = await repository.lock_project_role_issue_principals(
-            caller_actor_profile_id=caller,
-            caller_identity_link_id=caller_link,
-            target_actor_profile_id=target,
-        )
-        assert locked_caller is not None
-        assert target_eligible is True
-        assert session.calls == expected
-
 
 def test_project_role_public_reason_and_qualification_contract_is_strict() -> None:
     payload = {

@@ -279,14 +279,14 @@ class AdminAuthorizationRepository:
             return None
         return link, profile
 
-    async def lock_project_role_issue_principals(
+    async def lock_project_role_principals(
         self,
         *,
         caller_actor_profile_id: UUID,
         caller_identity_link_id: UUID,
         target_actor_profile_id: UUID,
     ) -> tuple[tuple[ActorIdentityLink, ActorProfile] | None, bool]:
-        """Lock caller and issue target in one lexical profile/link order."""
+        """Lock caller and role target in one lexical profile/link order."""
         caller = None
         target_eligible = False
         for actor_profile_id in sorted(

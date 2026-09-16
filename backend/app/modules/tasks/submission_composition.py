@@ -33,7 +33,8 @@ def build_submission(
     summary: str,
     worker_attestation: str,
     supersedes_submission_id: str | None,
-    task_assignment_id: str | None = None,
+    contribution_policy_version_id: UUID,
+    task_assignment_id: str,
     package_uri: str | None = None,
     package_hash: str | None = None,
     artifact_hash_manifest: list[dict[str, Any]] | None = None,
@@ -42,6 +43,7 @@ def build_submission(
     """Build a Submission with one canonical copy of the task policy locks."""
     return Submission(
         id=submission_id,
+        contribution_policy_version_id=contribution_policy_version_id,
         task_id=task.id,
         task_assignment_id=task_assignment_id,
         contributor_id=contributor_id,
@@ -88,12 +90,13 @@ class TaskSubmissionCreationService:
         *,
         authorization: SubmissionCreationAuthorizationPort,
         admissions: SubmissionArtifactAdmissionPort,
+        contexts: TaskService,
     ) -> None:
         self._session = session
         self._authorization = authorization
         self._admissions = admissions
         self._repository = TaskRepository(session)
-        self._contexts = TaskService(session)
+        self._contexts = contexts
 
     async def create(self, request: SubmissionCreationRequest) -> SubmissionCreationResult:
         """Create one Submission without opening or committing a transaction."""
@@ -118,16 +121,8 @@ class TaskSubmissionCreationService:
         task = await self._repository.get_task(str(request.task_id))
         if task is None:
             raise RuntimeError("locked task disappeared")
-        await self._contexts._load_locked_task_context(task)
         version = 1 if context.predecessor is None else context.predecessor.version + 1
         submission_id = uuid4()
-        submission = build_submission(
-            submission_id=str(submission_id), task=task,
-            contributor_id=str(request.contributor_id), version=version,
-            summary=request.summary, worker_attestation=request.contributor_attestation,
-            supersedes_submission_id=(str(context.predecessor.submission_id)
-                                      if context.predecessor else None),
-        )
         final = SubmissionCreationAuthorityFacts(
             task_id=preliminary.task_id,
             assignment_id=preliminary.assignment_id,
@@ -140,6 +135,16 @@ class TaskSubmissionCreationService:
         )
         prepared_authorization = await self._authorization.prepare(final)
         try:
+            await self._contexts._load_locked_task_context(task)
+            submission = build_submission(
+                submission_id=str(submission_id), task=task,
+                contribution_policy_version_id=context.submitter_contribution_policy_version_id,
+                task_assignment_id=str(context.assignment_id),
+                contributor_id=str(request.contributor_id), version=version,
+                summary=request.summary, worker_attestation=request.contributor_attestation,
+                supersedes_submission_id=(str(context.predecessor.submission_id)
+                                          if context.predecessor else None),
+            )
             await self._repository.add_submission(submission)
             consumed = await self._admissions.consume(
                 SubmissionArtifactAdmissionRequest(
@@ -156,7 +161,6 @@ class TaskSubmissionCreationService:
             ):
                 raise RuntimeError("artifact admission did not produce exact binding facts")
             submission.submission_bundle_admission_id = str(request.admission_id)
-            submission.task_assignment_id = str(request.assignment_id)
             submission.artifact_binding_id = str(consumed.binding_id)
             submission.artifact_content_id = str(consumed.content_id)
             await self._session.flush()

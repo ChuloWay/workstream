@@ -292,8 +292,31 @@ refreshes persisted rows after waiting and retains the caller's locks without
 committing. A successor changes active selection but does not redirect frozen
 lookup; contribution-policy retirement does not rewrite its saved activation
 facts. Inactive Projects and incomplete or inconsistent custody remain
-unavailable. This port adds no Task/Assignment/Submission columns or writers;
-CP08 owns that next change, including its minimal production copy paths.
+unavailable. CP08 consumes this port in the existing task lifecycle writers.
+
+Migration 0024 adds `WorkstreamTask.locked_contribution_policy_version_id`,
+`TaskAssignment.project_id` and `submitter_contribution_policy_version_id`, and
+`Submission.contribution_policy_version_id`. Draft Tasks begin without a stamp;
+initial screening binds the exact guide/project/contribution version. Every
+non-draft Task requires it. Claim copies it to an assignment in the same project;
+Submission requires its exact assignment and copied version at initial insertion.
+Assignment and Submission identities and stamps cannot be rewritten. CP08 permits
+only the initial draft-to-screening Task stamp; a future authorized rebase must
+replace the Task and Assignment guards together.
+
+Submission's three ART references remain all-null during transaction staging or
+all-present. The production creation command consumes the exact ART admission and
+fills all three before its root transaction commits. This is separate from the
+required initial assignment identity. Canonical ART-to-CHECKERS materialization
+remains ARCH-04B/04C work. Retained payment columns on Submission and CheckerRun
+are nullable, so new unified-guide work requires no invented economic configuration.
+CP09 owns physical economic-schema removal after its remaining consumers change.
+
+The upgrade refuses before DDL if any non-draft Task, assignment or Submission
+already exists: earlier attempts lack defensible contribution-policy provenance.
+It preserves draft Tasks and all guide/policy/activation evidence without
+backfilling or deleting retained data. Downgrade likewise refuses before dropping
+stored stamps or restoring incompatible payment constraints.
 
 Draft guides may have no selected review/revision policy while the authorized
 policy writer is unavailable. Active and superseded guides require both exact
@@ -1403,6 +1426,7 @@ Fields:
 
 - `id`
 - `task_id`
+- `project_id`
 - `contributor_id`
 - `assigned_by`
 - `submitter_contribution_policy_version_id`
@@ -1422,8 +1446,8 @@ column preserves historical attribution rather than current authority.
 
 At initial claim, `submitter_contribution_policy_version_id` must equal the
 Task's locked version. It remains fixed throughout that submission attempt.
-Only human `needs_revision` complete-context preparation may atomically rebase
-the continuing assignment field for the next attempt; ordinary publication,
+Future human `needs_revision` complete-context preparation must replace the
+current write-once guards before rebasing the continuing assignment field; ordinary publication,
 task claim, submission, and review claim cannot change it.
 
 ## Submission

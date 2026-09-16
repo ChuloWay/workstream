@@ -561,8 +561,13 @@ one active activated guide; existing work resolves its exact frozen guide and
 policy selectors, including after a successor or contribution-policy retirement.
 The result includes the saved activation receipt, both checker-policy bodies,
 artifact/effective policy, review/revision semantics and recorded catalogue
-identities. It never substitutes current policies or reruns inference. CP08 next
-adds task-attempt lineage fields and their minimal existing writers together.
+identities. It never substitutes current policies or reruns inference. CP08 uses
+that port in the existing TASK writers: screening stamps the activated contribution
+policy, claim copies it to the assignment, and hidden Submission creation copies
+the assignment's exact stamp. PostgreSQL rejects mismatched or replaced stamps.
+New work requires no superseded economic configuration. Remaining task projections and public authority
+cutover follow in ARCH-03B/03C; canonical checker materialization follows in
+ARCH-04B/04C.
 
 ## v0.1 Success Standard
 

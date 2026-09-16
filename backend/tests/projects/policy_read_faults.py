@@ -1,5 +1,9 @@
 """Inject detached corrupt reads without rewriting immutable approval evidence."""
 
+from app.core.config import get_settings
+
+from app.adapters.tasks import task_service
+
 from copy import deepcopy
 from types import SimpleNamespace
 
@@ -8,10 +12,9 @@ from sqlalchemy import inspect
 from app.core.hashing import canonical_json_hash
 from app.db import session as db_session
 from app.modules.projects.models import EffectiveProjectSubmissionArtifactPolicy, PreSubmitCheckerPolicy
-from app.modules.projects.repository import ProjectRepository
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.tasks.models import WorkstreamTask
 from app.modules.tasks.repository import TaskRepository
-from app.modules.tasks.service import TaskService
 
 
 def _detached(row):
@@ -24,14 +27,14 @@ def _detached(row):
 async def corrupt_locked_policy_reads(monkeypatch, task_id, mutation):
     """Exercise consumer validation after valid canonical setup; never persist faults.
 
-    Hash-consistent faults update the detached task's matching pointers too, so
-    digest checks cannot mask malformed-policy validation. Stale-bundle faults
-    retain the locked hash and exercise that independent integrity boundary.
+    Detached field/hash substitutions remain bound to the unchanged approval
+    and activation receipts. PROJECTS must reject them before TASK uses them;
+    this fixture never claims TASK independently recompiles malformed policies.
     """
     async with db_session.get_session_factory()() as session:
         stored_task = await session.get(WorkstreamTask, task_id)
         assert stored_task is not None
-        await TaskService(session)._load_locked_task_context(stored_task)
+        await task_service(session, settings=get_settings())._load_locked_task_context(stored_task)
         task = _detached(stored_task)
         effective = _detached(await session.get(
             EffectiveProjectSubmissionArtifactPolicy,
@@ -54,8 +57,6 @@ async def corrupt_locked_policy_reads(monkeypatch, task_id, mutation):
         ]
     elif mutation == "stale_effective":
         effective.effective_policy["required_evidence"] = []
-    elif mutation == "checker_names":
-        pre.checker_names = ["unknown_project_checker"]
     elif mutation == "stale_bundle":
         pre.compiled_bundle["tampered"] = True
     else:
@@ -78,7 +79,15 @@ async def corrupt_locked_policy_reads(monkeypatch, task_id, mutation):
 
         monkeypatch.setattr(owner, name, read)
 
-    replace_read(ProjectRepository, "get_effective_submission_artifact_policy_by_id", effective)
-    replace_read(ProjectRepository, "get_pre_submit_checker_policy", pre)
+    original_get = AsyncSession.get
+
+    async def read_policy(session, entity, identifier, *args, **kwargs):
+        if entity is EffectiveProjectSubmissionArtifactPolicy and identifier == effective.id:
+            return effective
+        if entity is PreSubmitCheckerPolicy and identifier == pre.id:
+            return pre
+        return await original_get(session, entity, identifier, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, "get", read_policy)
     if mutation in {"schema", "evidence", "packaging", "bundle"}:
         replace_read(TaskRepository, "get_task", task)

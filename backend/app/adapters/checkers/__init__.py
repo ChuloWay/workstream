@@ -16,6 +16,7 @@ from app.modules.checkers.catalogue import (
     PreSubmissionCheckerCatalogue,
     project_guide_pre_submission_capabilities,
     build_pre_submission_checker_catalogue,
+    parse_disabled_pre_submission_checker_ids,
 )
 from app.modules.checkers.pre_submit_execution import (
     DefaultPreSubmissionExecutionError,
@@ -87,11 +88,21 @@ def project_guide_pre_submission_catalogue() -> PreSubmissionCapabilityProjectio
     return project_guide_pre_submission_capabilities(build_pre_submission_checker_catalogue())
 
 
-def project_guide_approval_compiler() -> tuple[
+def project_guide_approval_compiler(*, disabled_checker_ids: str = "") -> tuple[
     PreSubmissionPolicyCompilationPort, PreSubmissionCapabilityProjection, PostSubmitCatalogue,
 ]:
     """Compose one canonical planner and its matching pre/post capabilities."""
     from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
 
-    planner = build_pre_submission_checker_catalogue()
+    planner = build_pre_submission_checker_catalogue(
+        disabled_entry_ids=parse_disabled_pre_submission_checker_ids(disabled_checker_ids),
+    )
     return planner, project_guide_pre_submission_capabilities(planner), current_post_submit_catalogue()
+
+
+def installed_post_submit_catalogue() -> PostSubmitCatalogue:
+    """Resolve catalogue facts only after checking the installed handler registry."""
+    from app.modules.checkers.post_submit_catalogue import build_post_submit_catalogue
+    from app.modules.checkers.runner import default_checker_registry
+
+    return build_post_submit_catalogue(default_checker_registry())

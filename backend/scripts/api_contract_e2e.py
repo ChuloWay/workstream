@@ -31,7 +31,7 @@ from app.modules.api_controls.service import (
     rate_key_digest,
 )
 from app.modules.projects.models import (
-    PaymentPolicy,
+    ProjectGuide,
     PreSubmitCheckerPolicy,
 )
 from run_isolated_tests import NAME_RE as DERIVED_DATABASE_NAME
@@ -59,7 +59,7 @@ GUIDE_ARTIFACT_PIPELINE_SERVICE_IDENTITIES = (
 
 
 async def activate_guide_for_e2e(project_id: str, guide_id: str, fixture_bundle: dict) -> dict:
-    """Use hidden activation custody while live authority remains AUTH-12H work."""
+    """Use authorized internal activation while its HTTP exposure remains deferred."""
     from tests.projects.guide_activation.read_fixtures import activate_approved_guide
     from tests.projects.post_submit_fixtures import seed_post_submit_policy_for_downstream_tests
 
@@ -79,7 +79,12 @@ async def activate_guide_for_e2e(project_id: str, guide_id: str, fixture_bundle:
         pre_submit_checker_policy=fixture_bundle["pre_submit_checker_policy"],
         sessions=sessions,
     )
-    return await activate_approved_guide(sessions, project_id=project_id, guide_id=guide_id)
+    active = await activate_approved_guide(sessions, project_id=project_id, guide_id=guide_id)
+    async with sessions() as session:
+        guide = await session.get(ProjectGuide, guide_id)
+        ensure(guide.contribution_policy_version_id is not None, "activation omitted CON custody")
+        active["contribution_policy_version_id"] = str(guide.contribution_policy_version_id)
+    return active
 
 
 DEFAULT_FLOW_ISSUER = "https://auth.flow.local/e2e"
@@ -613,7 +618,6 @@ async def configure_policy_boundaries(
     token: str,
     project_id: str,
     guide_id: str,
-    guide_version: str,
 ) -> None:
     """Configure both policies through their sole active HTTP boundaries.
 
@@ -622,7 +626,6 @@ async def configure_policy_boundaries(
         token: Project Manager Flow bearer token.
         project_id: Project whose draft guide is configured.
         guide_id: Exact draft guide receiving both policies.
-        guide_version: Guide version used by the direct PaymentPolicy fixture.
     """
     await request_json(
         client,
@@ -657,21 +660,6 @@ async def configure_policy_boundaries(
         idempotency_key=str(uuid4()),
         if_match='"no-current-policy"',
     )
-    async with db_session.get_session_factory()() as session:
-        session.add(
-            PaymentPolicy(
-                id=str(uuid4()),
-                project_id=project_id,
-                guide_version=guide_version,
-                base_amount="25.00",
-                currency="USD",
-                payout_type="fixed",
-                revision_payment_rule="none",
-                rejection_payment_rule="none",
-                accepted_payment_rule="pay base amount",
-            )
-        )
-        await session.commit()
 
 
 def sha256_token(seed: str) -> str:
@@ -1598,7 +1586,6 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             project_reader_token,
             project["id"],
             guide["id"],
-            guide["version"],
         )
         patched_guide = await request_json(
             client,
@@ -1646,7 +1633,6 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             project_reader_token,
             project["id"],
             guide["id"],
-            guide["version"],
         )
         fixture_bundle = await exercise_guide_setup_contract(
             client,
@@ -1762,10 +1748,7 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
         assert screened["locked_review_policy_hash"].startswith("sha256:")
         assert screened["locked_revision_policy_generation"] == 1
         assert screened["locked_revision_policy_hash"].startswith("sha256:")
-        assert screened["locked_payment_policy_version"] == "v1"
-        assert screened["base_amount"] == "25.00"
-        assert screened["currency"] == "USD"
-        assert screened["payout_type"] == "fixed"
+        assert screened["locked_contribution_policy_version_id"] == active["contribution_policy_version_id"]
         await request_json(
             client,
             "POST",
@@ -2113,6 +2096,10 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             worker_token,
             {"reason": "real worker claim"},
         )
+        assert claim["task"]["locked_contribution_policy_version_id"] == active["contribution_policy_version_id"]
+        assert claim["assignment"]["submitter_contribution_policy_version_id"] == screened[
+            "locked_contribution_policy_version_id"
+        ]
         ensure(
             claim["assignment"]["contributor_id"] == canonical_actor["actor_profile_id"],
             "task claim did not return canonical contributor attribution",

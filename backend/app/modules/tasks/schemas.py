@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
+from uuid import UUID
 from urllib.parse import unquote, urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -152,6 +153,7 @@ class TaskResponse(BaseModel):
 
     id: str
     project_id: str
+    locked_contribution_policy_version_id: UUID | None
     locked_guide_version: str | None
     locked_review_policy_id: str | None
     locked_review_policy_generation: int | None
@@ -247,15 +249,6 @@ class TaskRevisionPolicyContext(BaseModel):
     policy_hash: str
 
 
-class TaskPaymentPolicyContext(BaseModel):
-    """Contributor-safe payment terms stamped onto the task at screening."""
-
-    guide_version: str
-    base_amount: Decimal | None
-    currency: str | None
-    payout_type: str | None
-
-
 class TaskWorkerLifecycleContext(BaseModel):
     """Contributor-facing lifecycle state for a task."""
 
@@ -273,7 +266,6 @@ class TaskWorkContextResponse(BaseModel):
     guide: TaskGuideContext
     review_policy: TaskReviewPolicyContext
     revision_policy: TaskRevisionPolicyContext
-    payment_policy: TaskPaymentPolicyContext
     lifecycle: TaskWorkerLifecycleContext
 
 
@@ -375,7 +367,7 @@ class TaskLockedContextResponse(BaseModel):
     locked_revision_policy_id: str
     locked_revision_policy_generation: int
     locked_revision_policy_hash: str
-    locked_payment_policy_version: str
+    locked_contribution_policy_version_id: UUID
 
 
 class AssignmentResponse(BaseModel):
@@ -385,6 +377,8 @@ class AssignmentResponse(BaseModel):
 
     id: str
     task_id: str
+    project_id: str
+    submitter_contribution_policy_version_id: UUID
     contributor_id: str
     assigned_by: str
     assigned_at: datetime
@@ -432,6 +426,7 @@ class SubmissionResponse(BaseModel):
 
     id: str
     task_id: str
+    contribution_policy_version_id: UUID
     contributor_id: str
     version: int
     status: str

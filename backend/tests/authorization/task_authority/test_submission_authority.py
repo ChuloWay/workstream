@@ -1,6 +1,6 @@
 """Real grant custody at the hidden AUTH port, not TASK/ART creation proof."""
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select
@@ -21,10 +21,10 @@ from tests.authorization.task_authority.test_postgresql import context, grant, p
 def authority_facts(actor_id, project_id):
     """Supply TASK-port facts; this fixture does not claim to load or lock TASK rows."""
     task_id, assignment_id = uuid4(), uuid4()
-    task_context = TaskSubmissionContextFacts(
+    task_context = TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
         task_id=task_id, assignment_id=assignment_id, contributor_id=actor_id,
         status="in_progress", kind="initial", predecessor=None,
-        locked_project_context=TaskLockedProjectContextReferences(
+        locked_project_context=TaskLockedProjectContextReferences(locked_contribution_policy_version_id=UUID(int=100),
             project_id=project_id, guide_version="1", source_snapshot_id=uuid4(),
             source_snapshot_hash="sha256:" + "1" * 64, effective_policy_id=uuid4(),
             effective_policy_hash="sha256:" + "2" * 64, pre_submit_policy_id=uuid4(),

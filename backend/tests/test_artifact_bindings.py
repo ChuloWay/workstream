@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -27,7 +27,7 @@ def _sha(character: str) -> str:
 
 
 def _request(*, submission_id=None) -> SubmissionAdmissionConsumptionRequest:
-    references = TaskLockedProjectContextReferences(
+    references = TaskLockedProjectContextReferences(locked_contribution_policy_version_id=UUID(int=100),
         project_id=uuid4(),
         guide_version="1",
         source_snapshot_id=uuid4(),
@@ -41,7 +41,7 @@ def _request(*, submission_id=None) -> SubmissionAdmissionConsumptionRequest:
         admission_id=uuid4(),
         submission_id=submission_id or uuid4(),
         submission_version=1,
-        task_context=TaskSubmissionContextFacts(
+        task_context=TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
             task_id=uuid4(),
             assignment_id=uuid4(),
             contributor_id=uuid4(),
