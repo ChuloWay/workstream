@@ -19,8 +19,9 @@ policy rows and requires the superseded PaymentPolicy. `AuthorizedTaskCommands`
 uses that private context for claim/start/work-context. Hidden
 `TaskSubmissionCreationService` also calls it before preparing final authority.
 The Task/Assignment/Submission models have no contribution-policy version stamp.
-The Submission builder initially flushes before ART assigns its immutable bundle
-linkage; database checks must account for that same-transaction staging.
+The Submission builder currently delays its already-known assignment identity
+until ART supplies bundle linkage. CP08 separates required TASK assignment
+lineage from the three ART references staged in that same transaction.
 
 ## Bounded change
 
@@ -30,7 +31,7 @@ linkage; database checks must account for that same-transaction staging.
 - `backend/app/modules/tasks/policy_context.py` only if separating the existing context/readiness logic removes service coupling; no second context implementation.
 - `backend/app/adapters/tasks/__init__.py`, existing API dependency/composition roots and exact existing Submission composition callers: inject PROJECTS and CHECKERS ports with required dependencies, no fallback constructors.
 - `backend/app/modules/projects/models.py`: unique guide/project/selected-version key for the exact TASK foreign key.
-- `backend/app/modules/checkers/models.py`: nullable retained payment-version field, so downstream runs can copy new no-PaymentPolicy Submissions without fabrication.
+- `backend/app/modules/checkers/models.py`: nullable retained payment-version field, so remaining downstream packet prerequisites do not require invented payment versions. This does not claim canonical hidden Submission-to-CheckerRun integration.
 - `backend/app/modules/authorization/{submission_consumption,submission_creation_authorization}.py`: bind the exact attempt contribution version into existing prepared/final Submission authority; no new action or permission.
 - One `0024` Alembic revision: same-project/stable-identity constraints, immutable policy stamps, retained-data validation and justified derivation/refusal. Update `backend/alembic/env.py` current-head acceptance and exact migration-graph tests. No prior migration or frozen baseline edits: baseline parity is checked at revision 0001, not head.
 - Existing affected TASK/ART/AUTH public-value constructors and test fixtures: populate required exact fields from actual activated guides and assignments. Remove tests solely protecting superseded payment-policy readiness; preserve authorization, real-ZIP, recovery, rollback, immutable-history and concurrency assertions.
@@ -62,12 +63,18 @@ authorization cutovers; this change preserves existing authority boundaries.
    Assignment carries its owning `project_id`, bound to Task and
    ContributionPolicyVersion, and freezes Task/project/contributor identity.
    Insert-time assignment equality verifies the then-current Task stamp.
-   Submission uses a stable assignment/task/contributor FK, never a permanent FK
-   involving the mutable current assignment policy value. A deferred creation
-   guard verifies the exact copied assignment policy and complete final artifact
-   linkage by re-selecting the final Submission row by ID when the deferred trigger fires (not the queued INSERT tuple). It locks the assignment against stamp changes before comparison; an update guard preserves each committed Submission policy stamp.
-   CP08 rejects assignment stamp changes; a future authorized rebase must replace that guard rather than introduce a parallel path. Closed assignments cannot be restamped. Continuing-assignment rebase remains
-   the future qualified human-needs_revision operation, not a CP08 endpoint.
+   Submission requires assignment identity and its copied contribution stamp at
+   construction, with a stable assignment/task/contributor FK. An INSERT guard
+   locks the assignment and compares the exact stamp immediately. There is no
+   permanent FK to the assignment's mutable future policy value. Assignment ID,
+   Task/contributor identity and the copied Submission stamp are immutable.
+   The existing artifact shape check covers only the three ART-owned references:
+   all-null while staged, or all-present. The hidden production service must
+   consume ART and fill all three in its root transaction before returning;
+   CP08 does not introduce a database-wide ART-completeness claim ahead of its
+   later materialization owner. CP08 rejects assignment stamp changes; a future
+   authorized rebase replaces the Task and Assignment guards together. Closed
+   assignments cannot be restamped.
 2. Screening resolves complete active PROJECTS facts in the same transaction,
    verifies installed pre-submit planning and post-submit catalogue capability,
    then stamps the receipt-selected policy identity and existing exact locks.
@@ -87,6 +94,15 @@ authorization cutovers; this change preserves existing authority boundaries.
    `CheckerRun.locked_payment_policy_version` become nullable (Task already is);
    retain existing values and MATCH SIMPLE foreign keys for the CP09 cutover.
    Never fabricate a payment version for new unified-guide work.
+   Remaining CHECKERS/REV packet fields and their test-only stored prerequisites
+   are an explicit ARCH-04B/04C dependency. Their canonical materialization does
+   not exist yet and cannot move before CP08/03C without creating a sequence
+   cycle. Downstream fixture rows copy exact assignment/CON custody, keep ART
+   references absent and prove only their downstream owner's existing behavior.
+   They never call themselves admission/creation proof, patch canonical hidden
+   submissions afterward, or promote caller package hashes into verified facts.
+   Production-writer proofs separately use real ART admission and require all
+   three resulting references. No production alternate writer is added.
 5. Inject dependencies through existing composition roots. One TASK context
    operation serves its existing triggers; no ad hoc factory or second parser.
 6. Preserve Task/assignment -> AUTH actor/control -> Project -> Attempt -> Request
@@ -117,7 +133,8 @@ authorization cutovers; this change preserves existing authority boundaries.
   without CON lookup or a current-guide substitution.
 - Missing, foreign-project and inconsistent stamps reject at service and direct
   PostgreSQL boundaries; otherwise valid wrong-stamp probes reach the intended
-  guard. The staged Submission flush cannot commit incomplete lineage.
+  guard. Submission cannot be inserted without exact assignment/policy lineage;
+  a failed ART consumption rolls back the production creation transaction.
 - Previously closed assignment and Submission stamps are immutable and remain
   valid after successor guide activation or policy retirement.
 - Frozen reads still work after catalogue rollout; screening/ready with an
@@ -163,12 +180,25 @@ commands and review freshness in the PR; no secrets/private guide material.
   claim digest inclusion and prepared Submission resource binding;
   SEC-CP08-PLAN-02 by AUTH-before-PROJECTS ordering and handle cleanup.
   CP08-ARCH-001 is addressed by the explicit refusal predicate;
-  CP08-ARCH-002 by final-row deferred validation and stable assignment identity.
+  CP08-ARCH-002 by required initial assignment identity and immediate stamp validation,
+  replacing the unnecessary deferred coupling to ART references.
   CP08-ARCH-003 is retracted: baseline resources describe frozen 0001, not head.
 - Named future proofs: draft/evidence migration preservation; pre-DDL refusal with
-  row/schema/marker snapshots; wrong same-project assignment stamp; staged flush
-  versus incomplete commit; exact committed Submission stamp immutability;
-  no-payment Submission reaching CheckerRun; role issuance versus claim in both
+  row/schema/marker snapshots; wrong same-project assignment stamp; missing or
+  mismatched Submission assignment/stamp; exact committed stamp immutability;
+  canonical hidden creation with complete ART references; isolated downstream
+  CheckerRun payment nullability (not canonical materialization integration); role issuance versus claim in both
   lock orders; claim versus successor activation; two competing claimants;
   duplicate hidden Submission creation against one predecessor. These are planned
   runtime proofs, not claims of tests already executed.
+
+### Scoped dependency correction
+
+Implementation-time fixture tracing found that the earlier proposed universal
+deferred ART-completeness guard would force CHECKERS/REV fixture migration before
+their ARCH-04B/04C replacement exists. Those chunks depend on CP08 and ARCH-03C.
+The correction strengthens TASK's own initial assignment/policy requirements,
+keeps ART's existing three-reference staging contract, and leaves its unfinished
+consumer replacement explicit. It neither adds compatibility behavior nor
+weakens the hidden writer's required ART consumption. This replaces the earlier
+plan assumption that assignment identity must wait for artifact consumption.
