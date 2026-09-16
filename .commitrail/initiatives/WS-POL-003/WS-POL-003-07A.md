@@ -159,7 +159,7 @@ separate from controlled doubles used for command/error routing.
 | Independent sessions allow one invocation | `test_independent_sessions_same_key_invoke_members_once` |
 | Different contributors/tasks/keys in one project cannot deadlock reservation against execution | `test_same_project_reservation_and_execution_complete_without_auth_project_deadlock` with real AUTH and an observed PostgreSQL lock wait |
 | Real role issuance cannot deadlock pre-submit execution; service targets deny | `test_role_issue_and_pre_submit_execution_complete_without_project_contributor_deadlock` with production AUTH and PostgreSQL blocking observation |
-| Revocation fences materialization and the separately authorized evidence persistence without a lock cycle | `test_revocation_fences_art_materialization_and_evidence_persistence` using the actual revoke operation and both principal-lock orders |
+| Revocation wins the project lock without deadlocking the grant lock | `test_revoke_after_project_lock_denies_art_before_checker` using the actual revoke operation |
 | TASK work-context and ART agree on TASK-before-actor order | `test_work_context_task_lock_precedes_art_actor_lock` using the actual authorized TASK command |
 | Newly provisioned role target is locked before PROJECT | `test_target_created_after_prepare_is_locked_before_project` with PostgreSQL NOWAIT probes |
 | Actor denial stops before PROJECT; grant denial stops before fixed-service consume | `test_authority_denial_preserves_task_actor_project_grant_order` |
