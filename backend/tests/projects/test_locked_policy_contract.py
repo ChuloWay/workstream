@@ -113,3 +113,14 @@ def test_context_preserves_persisted_review_semantics(semantics_format):
     policy.human_review_required = False
     with pytest.raises(ValueError):
         _policy_body("review", policy, selection, guide)
+
+
+def test_project_context_contract_does_not_cycle_agent_port_import():
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-c", "import app.interfaces.project_agents"],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr

@@ -2,7 +2,7 @@
 
 Adopted implementation contract: [ARCH-03A](../../WS-ARCH-001-03A.md).
 
-Status: Complete; CP08 is next; POL-08 cleanup remains later. Risk: L1. Outcome: PROJECTS exposes immutable current approved unified
+Status: Complete; CP08 is next; CP09 cleanup remains later. Risk: L1. Outcome: PROJECTS exposes immutable current approved unified
 guide, its exact guide-bound ContributionPolicyVersion, setup, pre-submit and
 post-submit identities/hashes through its public API.
 

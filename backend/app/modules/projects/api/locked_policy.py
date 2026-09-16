@@ -5,10 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
-from typing import Literal, Mapping, Protocol, get_args
+from typing import TYPE_CHECKING, Literal, Mapping, Protocol, get_args
 from uuid import UUID
 
-from .guide_activation import GuideActivationReceipt
+if TYPE_CHECKING:
+    from .guide_activation import GuideActivationReceipt
 
 ProjectLockedPolicyGuideStatus = Literal["active", "superseded"]
 ProjectLockedPolicyEffectiveStatus = Literal["approved", "superseded"]
@@ -156,6 +157,8 @@ class ProjectLockedPolicyContextFacts:
             )
         ):
             raise ValueError("project locked policy bodies must be canonical immutable values")
+        from .guide_activation import GuideActivationReceipt
+
         receipt = GuideActivationReceipt.model_validate(
             self.activation_receipt.model_dump(mode="json")
         )

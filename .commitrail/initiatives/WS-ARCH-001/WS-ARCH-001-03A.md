@@ -42,6 +42,9 @@ Retained work must never acquire invented lineage from a current selector.
 - Existing activation, proposal/finalization and post-policy custody readers:
   narrowly reuse their exact validation for active/superseded guide reads,
   refresh cached ORM values, and preserve draft-only mutation guards.
+- The existing post-policy body parser and its CHECKERS/activation callers:
+  separate retained schema/hash custody from live catalogue eligibility; preserve
+  current execution and activation rejection behavior without a second parser.
 - Exact affected ART consumers only if a required type adaptation is necessary;
   no ART business/authority behavior. Existing TASK selector persistence is not
   changed in this chunk.
@@ -161,6 +164,8 @@ Product edit paths (unused paths need no change):
 - `backend/app/modules/projects/guide_compilation/approval_custody.py`
 - `backend/app/modules/projects/post_policy/repository.py`
 - `backend/app/modules/projects/post_policy/custody.py`
+- `backend/app/modules/projects/post_submit_policy.py`
+- `backend/app/modules/checkers/service.py` (preserve live catalogue validation at execution)
 - `backend/app/modules/projects/repository.py`
 
 The composition root and ART callers already consume the port and are inspection
@@ -179,6 +184,8 @@ Test edits are limited to `backend/tests/` paths below:
 - `test_pre_submit_attempt_recovery.py`, `test_artifact_admission.py`, `test_artifact_recovery.py`
 - `test_pre_submit_attempt_lock_order.py`, `test_pre_submit_related_lock_order.py`
 - `authorization/contribution_policies/test_cross_owner_lock_order.py`
+- `test_checkers.py`, `checkers/post_submit/test_compiled_policy.py` (saved parsing versus live validation)
+- `test_ci_lane_catalogue.py` (exact owner set maintenance)
 
 Replace the affected complete-context positives, not every historical fixture.
 The existing `activation_case` and real AUTH `guide_activation.pg_support.activate`
@@ -193,6 +200,9 @@ Named verification:
 | --- | --- |
 | `test_active_and_frozen_context_are_complete` | Real finalization, separate approvals, CON publication and CP07 activation; compare every returned body and exact receipt/catalogue identity with stored source. |
 | `test_frozen_context_survives_successor_and_retirement` | Activate a genuine successor; active read returns successor, frozen read returns original; retire CON version and preserve frozen facts. |
+| `test_catalogue_rollout_preserves_context_but_blocks_new_activation` | Change current catalogue after saving exact custody; historical and active reads retain their bodies, while new activation denies and rolls back. Restoring current-registry validation inside the parser must make this test fail. |
+| `test_canonical_policy_sidecars_deny_before_manual_execution[catalogue-crossed]` | Valid saved policy cannot execute against a different installed catalogue; denial precedes lifecycle changes, audit writes and checker invocation. |
+| `test_project_context_contract_does_not_cycle_agent_port_import` | Import the agent port in a fresh interpreter without relying on test collection order. |
 | `test_new_publication_does_not_reselect_context` | Publish a new CON version while guide binding remains unchanged; both reads retain exact activation binding. |
 | `test_context_rejects_missing_or_substituted_custody` | Parameterized missing activation/pre approval/post approval/finalization, crossed project or policy, catalogue mismatch, invalid body/hash and lifecycle; start with valid activated graph and alter only the selected boundary through controlled read corruption where DB forbids direct mutation. Assert bounded context error and no mutation. |
 | `test_context_result_is_deeply_immutable` | Attempt nested receipt/body changes and show source/result identities cannot be mutated. |
@@ -221,6 +231,7 @@ modules through `backend/scripts/run_isolated_tests.py`; Ruff on touched Python;
 `python3 scripts/check_markdown_links.py`; stale wording/authorization/artifact
 contract checks; module/AUTH boundary validators; hosted complete test/coverage
 lanes. Exact inventory edits may touch `backend/scripts/test_lane_catalogue.py`,
+`backend/scripts/behavior_ownership.py`, `.ci/behavior-ownership/partition.v1.json`,
 `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json` and the existing
 `.ci/behavior-ownership/lifecycle/project-guide-compilation-repository.json` only
 when changed ownership or shrinking measurements require it, never weaker gates.
@@ -263,3 +274,14 @@ Its lock-order, catalogue-identity, exact-scope/proof and sequence findings were
 resolved before implementation. This record describes its intended merged
 outcome; CP08 is the next bounded change and is not implemented here. No local
 spreadsheet exports are present, so no XLSX or CSV update applies.
+
+
+Review corrections separate saved post-policy schema/hash/sidecar custody from
+live catalogue eligibility. The saved catalogue tuple is bound to the immutable
+proposal/attempt; activation and execution retain explicit current-catalogue
+validation. No optional bypass flag or second parser is introduced. The public
+facts keep their typed, validated receipt while deferring its runtime import to
+construction, removing a collection-order-dependent cycle through the agent port.
+Exact ownership registries include the projection and tests without changing
+thresholds or weakening equality. The orphaned trigger-disabled Project helper
+and stale sequence wording are removed within this affected scope.

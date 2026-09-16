@@ -40,6 +40,6 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   CP09 physical removal follows zero legacy consumers, including checker/public
   Submission cutover; it is not on the `allow_review` critical path.
 - Consolidated ARCH-04A supplies one current catalogue, immutable phase contracts and
-  registered structural conformance, not durable runs. ARCH-03A-03C then ARCH-04B-04F build project/task readiness,
+  registered structural conformance, not durable runs. CP08, then ARCH-03B/03C and ARCH-04B-04F build task readiness,
   post-submit checker/materialization, remediation, and `allow_review` before
   final public 02I cutover and later REV admission.

@@ -27,8 +27,8 @@ checker-remediation boundary before public Submission cutover.
 | POL-06B | POL-06A, AUTH-12G | PROJECTS live post-policy configuration, zero evaluator calls |
 | POL-07 | POL-06B, ARCH-04A, merged ART pre executor | One facade over ART pre and CHECKERS post contracts; no new persistence |
 | [AUTH-12H](../../WS-AUTH-001/WS-AUTH-001-12H.md) | POL-07, CP07, merged AUTH-12B2 | Complete: exact manager authority and internal composition for CP07; ARCH-03A completes internal guide facts; HTTP exposure remains pending |
-| CP08 | ARCH-03A | TASK initial-attempt lineage schema, public facts and minimal existing writers together |
 | [ARCH-03A](../WS-ARCH-001-03A.md) | AUTH-12H, CP07 | Complete active and exact frozen PROJECTS guide facts before CP08 |
+| CP08 | ARCH-03A | TASK initial-attempt lineage schema, public facts and minimal existing writers together |
 | ARCH-03B | ARCH-03A, CP08 | Remaining TASK queues, projections and assignment invalidation |
 | ARCH-03C | ARCH-03B, AUTH-OUTBOX-02 | AUTH exact task/assignment activation and integrated readiness proof |
 | CP09 (later cleanup coordination) | All legacy consumers replaced, including CHECKER and public 02I path | Physical economic deletion; not on the allow_review critical path |

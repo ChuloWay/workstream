@@ -202,3 +202,41 @@ async def test_context_read_does_not_allow_activated_proposal_mutations(clean_po
                         }
                     ),
                 )
+
+
+async def test_catalogue_rollout_preserves_context_but_blocks_new_activation(
+    clean_postgres_database, monkeypatch,
+):
+    import pytest
+    from app.modules.projects.api.guide_proposals import GuideProposalError
+    from app.modules.projects import post_submit_policy
+    from app.modules.projects.post_policy import custody
+    from tests.checkers.post_submit.support import altered_catalogue
+    from tests.projects.guide_activation.pg_support import activation_case
+    from tests.authorization.guide_activation.pg_support import (
+        activate, activation_state, service,
+    )
+
+    async with activation_case(clean_postgres_database) as (
+        factory, command, actor, *_
+    ):
+        newer = altered_catalogue(index=8, state="disabled")
+        assert newer.manifest_sha256 != command.target.proposal.post_catalogue_manifest_hash
+        before = await activation_state(factory)
+        with pytest.raises(GuideProposalError):
+            async with service(factory, actor) as (_, owner, request_id, _):
+                owner.post_catalogue = newer
+                await owner.activate(command, actor=actor, request_id=request_id)
+        assert await activation_state(factory) == before
+        receipt = await activate(factory, actor, command)
+        async with factory() as session, session.begin():
+            original = await ProjectLockedPolicyRepository(session).lock_locked_policy_context(
+                frozen_request(receipt)
+            )
+        monkeypatch.setattr(post_submit_policy, "current_post_submit_catalogue", lambda: newer)
+        monkeypatch.setattr(custody, "current_post_submit_catalogue", lambda: newer)
+        async with factory() as session, session.begin():
+            owner = ProjectLockedPolicyRepository(session)
+            assert await owner.lock_locked_policy_context(frozen_request(receipt)) == original
+            assert await owner.lock_active_policy_context(receipt.contribution.project_id) == original
+            assert not session.new and not session.dirty and not session.deleted
