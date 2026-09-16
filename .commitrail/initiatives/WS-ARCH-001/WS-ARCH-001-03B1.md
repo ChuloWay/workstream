@@ -1,7 +1,7 @@
 # ARCH-03B1 — Detach TASK project and guide display context
 
 - Initiative: WS-ARCH-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: TaskService consumes immutable PROJECTS-owned display facts through the existing guide-context port, removing its private PROJECTS model and repository dependencies.
 
 ## Intent
@@ -63,7 +63,7 @@ project and guide already validated by the owner. Their identities must match
 the existing context and activation receipt. Descriptive project metadata is
 current display data, not a new policy hash or immutable business-policy input.
 Guide metadata is from the selected historical guide, never the current guide.
-Use one frozen `ProjectDisplayFacts` (id, name, slug, description) for draft
+The implementation uses one frozen `ProjectDisplayFacts` (id, name, slug, description) for draft
 lookup and complete context, plus frozen `GuideDisplayFacts` (id, project_id,
 version, change_summary, effective_at) for complete context. Their UUID identity,
 guide version and guide effective time must match the validated activation
@@ -71,7 +71,7 @@ context. Specifically project.id equals context.project_id;
 guide.(project_id, id, version) equals the receipt-bound context tuple;
 guide.effective_at equals activation_receipt.effective_at. Use only scalar strings, UUIDs and datetimes; no ORM/session objects.
 
-Draft creation needs only project existence, not an activated guide. Add a
+Draft creation needs only project existence, not an activated guide. Use the
 bounded project-metadata lookup to this same port that returns a detached
 project value or absence. It must not acquire a new lock or require readiness,
 and must not flush/commit the caller's work. Name the method
@@ -110,13 +110,13 @@ that the project manager has not yet configured.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Current owner/dependency trace | Inspect TASK context/service, PROJECTS context port, OUTBOX exports | Private display reads and append-only outbox confirmed | Plan review before code |
-| Nested display identity and immutability | `test_context_display_identity_and_immutability`: real activated context, positive replacement; independently replace nested project.id and guide.project_id/id/version/effective_at while original top-level receipt stays intact; frozen mutation rejects | Planned | Future runtime proof, not a prior test result |
-| Existence-only draft lookup | `test_project_display_lookup_preserves_draft_and_transaction`: real PostgreSQL draft Project without Guide, missing UUID; pending invalid object remains unflushed; flushed uncommitted marker disappears on rollback | Planned | Future runtime proof |
-| No new Project lock | `test_project_display_lookup_does_not_wait_for_project_lock`: session A holds Project FOR UPDATE; bounded session B metadata read completes before A releases | Planned | Future two-session proof |
-| Draft create/absence/error order | `test_task_creation_before_guide_and_missing_project_atomicity`: HTTP valid draft create then missing/malformed project IDs, unauthorized malformed request; Task/Audit counts unchanged on denial | Planned | Real PostgreSQL/HTTP proof required |
-| Exact historical public display | `test_task_display_survives_guide_successor_for_contributor_and_manager`: activate first guide, create/screen/claim task, then activate distinct successor; both authorized routes return predecessor id/version/summary/effective_at and existing exact response keys; foreign scope denies | Planned | Replace the narrower existing successor test, retain requirements assertions |
-| No gate or boundary weakening | Ruff; module/authorization/structure validators; exact lane equality; stale wording; markdown links; hosted full tests/coverage | Planned | Exact implementation head required |
+| Current owner/dependency trace | Inspect TASK context/service, PROJECTS context port, OUTBOX exports | Private display reads and append-only outbox confirmed | Plan findings reconciled before code |
+| Nested display identity and immutability | `test_context_display_identity_and_immutability`: real activated context, positive replacement; independently replace nested project.id and guide.project_id/id/version/effective_at while original top-level receipt stays intact; frozen mutation rejects | Regression implemented | Exact execution evidence in PR |
+| Existence-only draft lookup | `test_project_display_lookup_preserves_draft_and_transaction`: real PostgreSQL draft Project without Guide, missing UUID; pending invalid object remains unflushed; flushed uncommitted marker disappears on rollback | Regression implemented | Exact execution evidence in PR |
+| No new Project lock | `test_project_display_lookup_does_not_wait_for_project_lock`: session A holds Project FOR UPDATE; bounded session B metadata read completes before A releases | Regression implemented | Exact execution evidence in PR |
+| Draft create/absence/error order | `test_task_creation_before_guide_and_missing_project_atomicity`: HTTP valid draft create then missing/malformed project IDs, unauthorized malformed request; Task/Audit counts unchanged on denial | Regression implemented | Exact execution evidence in PR |
+| Exact historical public display | `test_task_display_survives_guide_successor_for_contributor_and_manager`: activate first guide, create/screen/claim task, then activate distinct successor; both authorized routes return predecessor id/version/summary/effective_at and existing exact response keys; foreign scope denies | Narrower predecessor test replaced; requirements assertions retained | Exact execution evidence in PR |
+| No gate or boundary weakening | Ruff; module/authorization/structure validators; exact lane equality; stale wording; markdown links; hosted full tests/coverage | Required checks preserved | Exact execution evidence in PR |
 
 ## Review findings
 
