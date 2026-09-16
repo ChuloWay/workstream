@@ -1,6 +1,7 @@
 """TASK-owned composition adapters and transaction roots."""
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.config import Settings
 from uuid import UUID
 
 from app.modules.artifacts.api import (
@@ -19,25 +20,42 @@ from app.modules.tasks.api import (
     TaskSubmissionContextPort,
 )
 from app.modules.tasks.repository import TaskRepository
+from app.modules.tasks.service import TaskService
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.api import TaskAuthorizationPort, TaskTransitionAuditPort
 from app.modules.tasks.submission_composition import TaskSubmissionCreationService
 
 __all__ = (
     "task_commands",
+    "task_service",
     "DenySubmissionCreationAuthorization",
     "TransactionalSubmissionCreationCommand",
     "task_submission_context_port",
 )
 
 
+def task_service(session: AsyncSession, *, settings: Settings) -> TaskService:
+    """Compose exact PROJECTS custody and installed CHECKERS at the existing TASK root."""
+    from app.adapters.projects import project_locked_policy_context_port
+    from app.adapters.checkers import project_guide_approval_compiler
+
+    planner, _, catalogue = project_guide_approval_compiler(
+        disabled_checker_ids=settings.artifact_pre_submission_checker_disabled_ids,
+    )
+    return TaskService(
+        session, project_contexts=project_locked_policy_context_port(session),
+        pre_submit_planner=planner, post_submit_catalogue=catalogue,
+    )
+
+
 def task_commands(
     session: AsyncSession, *, authorization: TaskAuthorizationPort,
-    audit: TaskTransitionAuditPort, actor_profile_id: UUID,
+    audit: TaskTransitionAuditPort, actor_profile_id: UUID, settings: Settings,
 ) -> AuthorizedTaskCommands:
     """Compose TASK commands without exposing private product imports to delivery."""
     return AuthorizedTaskCommands(
         session, authorization=authorization, audit=audit, actor_profile_id=actor_profile_id,
+        contexts=task_service(session, settings=settings),
     )
 
 
@@ -98,8 +116,10 @@ class TransactionalSubmissionCreationCommand:
         *,
         authorization: SubmissionCreationAuthorizationPort,
         admissions: SubmissionAdmissionConsumptionPort,
+        settings: Settings,
     ) -> None:
         self._session = session
+        self._settings = settings
         self._authorization = authorization
         self._admissions = admissions
 
@@ -109,6 +129,7 @@ class TransactionalSubmissionCreationCommand:
         async with self._session.begin():
             return await TaskSubmissionCreationService(
                 self._session,
+                contexts=task_service(self._session, settings=self._settings),
                 authorization=self._authorization,
                 admissions=_ArtifactAdmissionAdapter(self._admissions),
             ).create(request)

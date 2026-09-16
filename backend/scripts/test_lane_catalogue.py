@@ -333,6 +333,10 @@ PROJECT_MODULES = (
 )
 
 TASK_MODULES = (
+    "tests/tasks/test_contribution_lineage.py",
+    "tests/tasks/test_contribution_lineage_migration.py",
+    "tests/tasks/test_contribution_claim_races.py",
+    "tests/tasks/test_submission_lineage.py",
     "tests/checkers/post_submit/test_catalogue.py",
     "tests/checkers/post_submit/test_compiled_policy.py",
     "tests/checkers/post_submit/test_configuration.py",

@@ -1,7 +1,7 @@
 # WS-ARCH-001-CP08 — Bind initial work attempts to the approved contribution policy
 
 - Initiative: WS-ARCH-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Screening stamps the exact activated contribution-policy version; claim and Submission copy it with relational and immutable-evidence safeguards.
 
 ## Intent
@@ -29,7 +29,7 @@ lineage from the three ART references staged in that same transaction.
 
 - `backend/app/modules/tasks/{models,repository,service,authorized_commands,submission_composition,schemas,router}.py` and `api/{submission_context,submission_command}.py`: exact policy stamps, canonical copies, context cutover and directly affected response fields.
 - `backend/app/modules/tasks/policy_context.py` only if separating the existing context/readiness logic removes service coupling; no second context implementation.
-- `backend/app/adapters/tasks/__init__.py`, existing API dependency/composition roots and exact existing Submission composition callers: inject PROJECTS and CHECKERS ports with required dependencies, no fallback constructors.
+- `backend/app/adapters/tasks/__init__.py`, `backend/app/adapters/checkers/__init__.py`, existing API dependency/composition roots and exact existing Submission composition callers: inject PROJECTS and CHECKERS ports with required dependencies, no fallback constructors.
 - `backend/app/modules/projects/models.py`: unique guide/project/selected-version key for the exact TASK foreign key.
 - `backend/app/modules/checkers/models.py`: nullable retained payment-version field, so remaining downstream packet prerequisites do not require invented payment versions. This does not claim canonical hidden Submission-to-CheckerRun integration.
 - `backend/app/modules/authorization/{submission_consumption,submission_creation_authorization}.py`: bind the exact attempt contribution version into existing prepared/final Submission authority; no new action or permission.
@@ -202,3 +202,41 @@ keeps ART's existing three-reference staging contract, and leaves its unfinished
 consumer replacement explicit. It neither adds compatibility behavior nor
 weakens the hidden writer's required ART consumption. This replaces the earlier
 plan assumption that assignment identity must wait for artifact consumption.
+
+### Implementation proof boundaries
+
+- PostgreSQL tests exercise guide-to-Task screening and claim without any
+  PaymentPolicy, same-project wrong-stamp rejection, valid successor substitution,
+  closed-assignment immutability and exact initial Submission assignment custody.
+- A synthetic real ZIP traverses the composed ART preparation command, local
+  provider write, independent verification and hidden TASK creation with real
+  contributor/fixed-service AUTH. It proves ART rejection rolls back staging
+  and competing initial requests create one Submission with complete ART links.
+  It does not claim subsequent CHECKERS packet materialization.
+- Removing each Task, Assignment and Submission INSERT stamp guard independently
+  makes its otherwise-valid negative regression fail with an accepted write.
+- Required records and service facts copy UUIDs from the activated guide and
+  assignment. Downstream stored CHECKERS/REV fixture packets remain explicitly
+  limited to those owners' behavior pending ARCH-04B/04C.
+- Removed private TASK compiler/parser edges are deleted from the exact import
+  ledger; reduced ART fixture size updates its existing debt inventory. Neither
+  change adds an exception or raises a limit. New tests use the task lane and
+  the existing migration marker routing. No new coverage or CI bypass is added.
+- The roadmap changes because initial lineage persistence and minimal writers
+  are delivered by this PR. The next usable boundary is ARCH-03B; public
+  authorization/cutover and canonical post-submit materialization remain separate.
+
+- Readiness composition takes explicit settings. HTTP calls supply the actual
+  application's settings; the existing CHECKERS factory honors configured
+  disabled pre-submit definitions. This closes an implementation-time default-
+  catalogue assumption; historical reads still do not compile availability.
+
+### Review size
+
+This authorized schema-plus-writers cutover exceeds the ordinary L1 size guide.
+The database and minimal writers must ship together: splitting them would leave
+required stamps unwritten or preserve a superseded execution path. The larger
+delta includes deletion of the private TASK policy loader, required updates to
+its existing fixture consumers, migration preservation/refusal and concurrency
+proofs, and current capability navigation. It adds no second product boundary,
+new dependency, permissive test exception or compatibility implementation.

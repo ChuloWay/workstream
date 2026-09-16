@@ -86,6 +86,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0023_guide_activation_custody",
         "0022_adapter_binding_audit_resource",
         "0021_pre_submit_attempts",
         "0020_post_submit_policy_custody",
@@ -178,6 +179,11 @@ def test_current_head_installs_submission_lineage_contract(
                     "task_assignment_id",
                 ],
             )
+            for required in ("task_assignment_id", "contribution_policy_version_id"):
+                assert await connection.fetchval(
+                    "select is_nullable from information_schema.columns where "
+                    "table_schema='public' and table_name='submissions' and column_name=$1", required,
+                ) == "NO"
             lineage_shape = await connection.fetchval(
                 "select pg_get_constraintdef(c.oid) from pg_constraint c "
                 "join pg_class t on t.oid=c.conrelid "
@@ -224,7 +230,10 @@ def test_current_head_installs_submission_lineage_contract(
         "submission_bundle_admission_id",
         "task_assignment_id",
     ]
-    assert "task_assignment_id IS NULL" in lineage_shape
+    assert "task_assignment_id" not in lineage_shape
+    for reference in ("submission_bundle_admission_id", "artifact_binding_id", "artifact_content_id"):
+        assert f"{reference} IS NULL" in lineage_shape
+        assert f"{reference} IS NOT NULL" in lineage_shape
     assert "artifact_content_id IS NOT NULL" in lineage_shape
     assert objects == {
         "fk_submissions_task_assignment_id_task_assignments",

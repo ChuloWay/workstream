@@ -43,13 +43,14 @@ class AuthorizedTaskCommands:
         authorization: TaskAuthorizationPort,
         audit: TaskTransitionAuditPort,
         actor_profile_id: UUID,
+        contexts: TaskService,
     ) -> None:
         self._session = session
         self._authorization = authorization
         self._audit = audit
         self._actor_id = actor_profile_id
         self._repo = TaskRepository(session)
-        self._contexts = TaskService(session)
+        self._contexts = contexts
 
     def _facts(
         self,
@@ -68,7 +69,8 @@ class AuthorizedTaskCommands:
             assignment_id=UUID(assignment.id) if assignment else None,
             assignment_contributor_id=UUID(assignment.contributor_id) if assignment else None,
             locked_context_hash=canonical_json_hash(
-                {field: getattr(task, field) for field in LOCKED_CONTEXT_REQUIRED_FIELDS}
+                {field: (str(getattr(task, field)) if isinstance(getattr(task, field), UUID)
+                         else getattr(task, field)) for field in LOCKED_CONTEXT_REQUIRED_FIELDS}
             ),
             reason=reason,
         )
@@ -109,6 +111,8 @@ class AuthorizedTaskCommands:
                     TaskAssignment(
                         id=str(uuid4()),
                         task_id=task.id,
+                        project_id=task.project_id,
+                        submitter_contribution_policy_version_id=task.locked_contribution_policy_version_id,
                         contributor_id=str(self._actor_id),
                         assigned_by=str(self._actor_id),
                         accepted_at=datetime.now(UTC),

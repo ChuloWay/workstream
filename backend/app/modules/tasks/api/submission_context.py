@@ -40,6 +40,7 @@ class TaskLockedProjectContextReferences:
     """Immutable project-policy references locked onto one TASK row."""
 
     project_id: UUID
+    locked_contribution_policy_version_id: UUID
     guide_version: str
     source_snapshot_id: UUID
     source_snapshot_hash: str
@@ -50,6 +51,8 @@ class TaskLockedProjectContextReferences:
 
     def __post_init__(self) -> None:
         """Reject incomplete locked string references."""
+        if not isinstance(self.locked_contribution_policy_version_id, UUID):
+            raise ValueError("task contribution policy identity is invalid")
         values = (
             self.guide_version,
             self.source_snapshot_hash,
@@ -83,10 +86,17 @@ class TaskSubmissionContextFacts:
     status: TaskSubmissionContextStatus
     kind: TaskSubmissionContextKind
     predecessor: SubmissionPredecessorFacts | None
+    submitter_contribution_policy_version_id: UUID
     locked_project_context: TaskLockedProjectContextReferences
 
     def __post_init__(self) -> None:
         """Enforce the exact initial-or-revision lifecycle shape."""
+        if (
+            not isinstance(self.submitter_contribution_policy_version_id, UUID)
+            or self.submitter_contribution_policy_version_id
+            != self.locked_project_context.locked_contribution_policy_version_id
+        ):
+            raise ValueError("assignment contribution policy differs from task")
         is_initial = (
             self.status == "in_progress"
             and self.kind == "initial"

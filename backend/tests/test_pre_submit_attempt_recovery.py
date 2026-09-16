@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
+
 import asyncio
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
@@ -192,29 +194,7 @@ async def _harness(tmp_path: Path, database_url: str) -> _Harness:
             "(id,actor_profile_id,issuer,subject,subject_kind,status,linked_by,last_verified_at) "
             "values (:link,:actor,'flow-test',:actor,'human','active','test',now())"
         ), params)
-        await connection.execute(text(
-            "insert into workstream_tasks "
-            "(id,project_id,locked_guide_version,locked_guide_source_snapshot_id,"
-            "locked_guide_source_snapshot_hash,"
-            "locked_effective_project_submission_artifact_policy_id,"
-            "locked_effective_project_submission_artifact_policy_hash,"
-            "locked_pre_submit_checker_policy_id,locked_pre_submit_checker_bundle_hash,"
-            "locked_post_submit_checker_policy_id,locked_post_submit_checker_policy_version,"
-            "locked_post_submit_checker_policy_hash,locked_post_submit_checker_policy_body,"
-            "locked_review_policy_id,locked_review_policy_generation,locked_review_policy_hash,"
-            "locked_revision_policy_id,locked_revision_policy_generation,locked_revision_policy_hash,"
-            "source_type,title,description,skill_tags,status,assigned_to,created_by) values "
-            "(:task,:project,:guide_version,:snapshot,:snapshot_hash,:effective_policy,"
-            ":effective_hash,:checker_policy,:checker_hash,:post_policy,:guide_version,"
-            ":post_policy_hash,CAST(:post_policy_body AS json),:review_policy,1,:review_policy_hash,"
-            ":revision_policy,1,:revision_policy_hash,'manual','Evidence task',"
-            "'Evidence test task','[]'::json,'in_progress',:actor,'test')"
-        ), params)
-        await connection.execute(text(
-            "insert into task_assignments "
-            "(id,task_id,contributor_id,assigned_by,status) values "
-            "(:assignment,:task,:actor,'test','active')"
-        ), params)
+        await seed_started_task_for_artifact_test(connection, params)
         await install_submitter_grant(connection, params)
     preparation_request = submission_preparation_request(
         request, actor_profile_id=actor_id, identity_link_id=identity_link_id,

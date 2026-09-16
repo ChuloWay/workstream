@@ -28,7 +28,7 @@ checker-remediation boundary before public Submission cutover.
 | POL-07 | POL-06B, ARCH-04A, merged ART pre executor | One facade over ART pre and CHECKERS post contracts; no new persistence |
 | [AUTH-12H](../../WS-AUTH-001/WS-AUTH-001-12H.md) | POL-07, CP07, merged AUTH-12B2 | Complete: exact manager authority and internal composition for CP07; ARCH-03A completes internal guide facts; HTTP exposure remains pending |
 | [ARCH-03A](../WS-ARCH-001-03A.md) | AUTH-12H, CP07 | Complete active and exact frozen PROJECTS guide facts before CP08 |
-| CP08 | ARCH-03A | TASK initial-attempt lineage schema, public facts and minimal existing writers together |
+| [CP08](../WS-ARCH-001-CP08.md) | ARCH-03A | Complete: TASK initial-attempt lineage schema, public facts and minimal existing writers together |
 | ARCH-03B | ARCH-03A, CP08 | Remaining TASK queues, projections and assignment invalidation |
 | ARCH-03C | ARCH-03B, AUTH-OUTBOX-02 | AUTH exact task/assignment activation and integrated readiness proof |
 | CP09 (later cleanup coordination) | All legacy consumers replaced, including CHECKER and public 02I path | Physical economic deletion; not on the allow_review critical path |
@@ -58,7 +58,7 @@ CP05 and ARCH-04A have independent prerequisites. POL-04B consumes the corrected
 ARCH-04A catalogue/schema before producing approval-eligible generations. Owners may
 work concurrently if allowed paths do not overlap; shared catalogue/schema
 changes must be serialized or rebased, not implemented twice. ARCH-03A completes the existing internal guide-context port after AUTH-12H.
-CP08 then adds its schema and minimal existing writers together; ARCH-03B retains
+CP08 completes its schema and minimal existing writers together; ARCH-03B retains
 queues/invalidation and broader projections. Subsequent
 PR-sized contracts name exact files, public types, current migration head and
 runnable proof before implementation; they refine this design, not create a

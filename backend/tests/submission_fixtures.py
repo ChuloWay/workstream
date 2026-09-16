@@ -5,6 +5,10 @@ HTTP response, or make a hidden endpoint public. They seed a stored Submission
 and exercise the existing finalization/enqueue owners for downstream tests.
 """
 
+from app.core.config import get_settings
+
+from app.adapters.tasks import task_service
+
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -13,7 +17,6 @@ from app.db import session as db_session
 from app.modules.actors.models import ActorIdentityLink
 from app.modules.tasks.models import EvidenceItem, Submission, TaskAssignment, WorkstreamTask
 from app.modules.tasks.schemas import SubmissionCreate
-from app.modules.tasks.service import TaskService
 from app.modules.tasks.submission_composition import build_submission
 from app.schemas.auth import ActorContext
 
@@ -46,12 +49,15 @@ async def seed_finalized_submission_for_checker_test(
             external_issuer=link.issuer, roles=("worker",), claim_snapshot={},
             auth_source="dev_mock", is_dev_auth=True,
         )
-        service = TaskService(session)
+        service = task_service(session, settings=get_settings())
         await service._load_locked_task_context(task)
         submission = build_submission(
             submission_id=submission_id, task=task, contributor_id=task.assigned_to,
-            # Retained packets have no ART lineage group. Do not invent half
-            # of that group or claim this fixture proves admission-backed writes.
+            task_assignment_id=assignment.id,
+            contribution_policy_version_id=assignment.submitter_contribution_policy_version_id,
+            # Existing CHECKERS/REV prerequisites, pending ARCH-04B/04C. Exact
+            # TASK assignment custody is required; no ART facts are invented and
+            # this fixture does not prove canonical intake or hidden creation.
             version=predecessor.version + 1 if predecessor else 1, summary=packet.summary,
             worker_attestation=packet.worker_attestation,
             package_uri=packet.package_uri, package_hash=packet.package_hash,

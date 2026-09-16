@@ -1,5 +1,9 @@
 """Real command/database races, with barriers only at observed owner boundaries."""
 
+from app.core.config import get_settings
+
+from app.adapters.tasks import task_service
+
 import asyncio
 from uuid import UUID, uuid4
 
@@ -64,9 +68,11 @@ async def test_two_granted_claimants_have_one_atomic_winner(task_client, monkeyp
     async def claim(context):
         async with db_session.get_session_factory()() as session:
             return await AuthorizedTaskCommands(
-                session, authorization=PreparedTaskAuthorization(session, context),
+                session,
+                authorization=PreparedTaskAuthorization(session, context),
                 audit=task_transition_audit(session),
                 actor_profile_id=context.actor_profile_id,
+                contexts=task_service(session, settings=get_settings()),
             ).claim(UUID(task["id"]), "Competing claim")
 
     results = await asyncio.wait_for(
@@ -148,8 +154,11 @@ async def test_project_grant_revocation_serializes_with_claim(
     async def claim():
         async with AsyncSession(engine, expire_on_commit=False) as session:
             return await AuthorizedTaskCommands(
-                session, authorization=PreparedTaskAuthorization(session, context),
-                audit=task_transition_audit(session), actor_profile_id=context.actor_profile_id,
+                session,
+                authorization=PreparedTaskAuthorization(session, context),
+                audit=task_transition_audit(session),
+                actor_profile_id=context.actor_profile_id,
+                contexts=task_service(session, settings=get_settings()),
             ).claim(UUID(task["id"]), "Claim racing with authority revocation")
 
     async def revoke():

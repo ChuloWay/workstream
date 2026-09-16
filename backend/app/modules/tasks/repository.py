@@ -147,6 +147,9 @@ class TaskRepository:
         if (
             task is None
             or assignment is None
+            or assignment.project_id != task.project_id
+            or assignment.submitter_contribution_policy_version_id is None
+            or assignment.submitter_contribution_policy_version_id != task.locked_contribution_policy_version_id
             or assignment.task_id != str(request.task_id)
             or assignment.contributor_id != contributor_id
             or assignment.status != "active"
@@ -188,6 +191,7 @@ class TaskRepository:
         try:
             locked_project_context = TaskLockedProjectContextReferences(
                 project_id=UUID(task.project_id),
+                locked_contribution_policy_version_id=task.locked_contribution_policy_version_id,
                 guide_version=task.locked_guide_version,
                 source_snapshot_id=UUID(task.locked_guide_source_snapshot_id),
                 source_snapshot_hash=task.locked_guide_source_snapshot_hash,
@@ -216,6 +220,7 @@ class TaskRepository:
                 kind="revision" if predecessor is not None else "initial",
                 predecessor=predecessor,
                 locked_project_context=locked_project_context,
+                submitter_contribution_policy_version_id=assignment.submitter_contribution_policy_version_id,
             )
         except (TypeError, ValueError) as exc:
             raise TaskSubmissionContextUnavailable(

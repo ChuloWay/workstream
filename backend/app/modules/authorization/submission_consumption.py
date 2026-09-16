@@ -22,6 +22,7 @@ class SubmissionCreationResourceContext(BaseModel):
     identity_link_id: UUID
     task_id: UUID
     assignment_id: UUID
+    contribution_policy_version_id: UUID
     admission_id: UUID
     predecessor_submission_id: UUID | None
     predecessor_submission_version: int | None = Field(default=None, ge=1)

@@ -67,8 +67,11 @@ def compose_hidden_submission_creation_command(
         PreparedSubmissionCreationAuthorization,
     )
 
+    from app.core.config import get_settings
+
     return TransactionalSubmissionCreationCommand(
         session,
+        settings=get_settings(),
         authorization=PreparedSubmissionCreationAuthorization(session, context),
         admissions=submission_admission_consumption_port(
             session,
@@ -130,6 +133,7 @@ async def get_task_commands(
     try:
         yield task_commands(
             session,
+            settings=request.app.state.settings,
             authorization=authority,
             audit=task_transition_audit(session),
             actor_profile_id=context.actor_profile_id,

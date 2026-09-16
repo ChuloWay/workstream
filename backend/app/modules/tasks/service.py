@@ -3,20 +3,23 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.hashing import canonical_json_hash
 from app.core.permissions import PermissionDenied, require_any_role
-from app.modules.checkers.compiler import (
-    PreSubmitCheckerCompilerError,
-    validate_compiled_pre_submit_checker_bundle,
+from app.modules.checkers.api.pre_submit import (
+    EffectivePreSubmissionPlanningPort, EffectivePreSubmissionPlanLineage,
 )
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPolicy, PostSubmitCatalogue
+from app.modules.projects.api.locked_policy import (
+    ProjectLockedPolicyContextFacts, ProjectLockedPolicyContextPort,
+    ProjectLockedPolicyContextRequest, ProjectLockedPolicyContextUnavailable,
+)
 from app.modules.checkers.gate_queue import PreReviewGateQueueError, enqueue_pre_review_gate
 from app.modules.checkers.pre_review_gate import (
     find_submission_requester_provenance,
@@ -26,21 +29,8 @@ from app.modules.checkers.service import (
     CheckerService,
     pre_review_gate_system_actor,
 )
-from app.modules.projects.models import (
-    EffectiveProjectSubmissionArtifactPolicy,
-    GuideSourceSnapshot,
-    PaymentPolicy,
-    PostSubmitCheckerPolicy,
-    PreSubmitCheckerPolicy,
-    Project,
-    ProjectGuide,
-    RevisionPolicy,
-    ReviewPolicy,
-)
-from app.modules.projects.post_submit_policy import (
-    parse_locked_post_submit_checker_policy_body,
-)
-from app.modules.projects.repository import ProjectRepository, ProjectRepositoryIntegrityError
+from app.modules.projects.models import Project, ProjectGuide
+from app.modules.projects.repository import ProjectRepository
 from app.modules.tasks.authorization import can_admin_or_task_creator_manage
 from app.modules.tasks.lifecycle import (
     TASK_STATUS_DRAFT,
@@ -69,7 +59,6 @@ from app.modules.tasks.schemas import (
     TaskCreate,
     TaskGuideContext,
     TaskLockedContextResponse,
-    TaskPaymentPolicyContext,
     TaskProjectContext,
     TaskResponse,
     TaskReviewPolicyContext,
@@ -94,7 +83,7 @@ CONTRIBUTOR_VISIBLE_AUDIT_PAYLOAD_KEYS = {
     "locked_revision_policy_id",
     "locked_revision_policy_generation",
     "locked_revision_policy_hash",
-    "locked_payment_policy_version",
+    "locked_contribution_policy_version_id",
     "source_type",
     "submission_id",
     "submission_version",
@@ -127,7 +116,7 @@ LOCKED_CONTEXT_REQUIRED_FIELDS = (
     "locked_revision_policy_id",
     "locked_revision_policy_generation",
     "locked_revision_policy_hash",
-    "locked_payment_policy_version",
+    "locked_contribution_policy_version_id",
     "locked_guide_source_snapshot_id",
     "locked_guide_source_snapshot_hash",
     "locked_effective_project_submission_artifact_policy_id",
@@ -222,25 +211,25 @@ class LockedTaskContext:
 
     project: Project
     guide: ProjectGuide
-    source_snapshot: GuideSourceSnapshot
-    effective_policy: EffectiveProjectSubmissionArtifactPolicy
-    pre_submit_checker_policy: PreSubmitCheckerPolicy
-    post_submit_checker_policy: PostSubmitCheckerPolicy
+    facts: ProjectLockedPolicyContextFacts
     locked_post_submit_policy_body: PostSubmitPolicyBodySummary
-    review_policy: ReviewPolicy
-    revision_policy: RevisionPolicy
-    payment_policy: PaymentPolicy
 
 
 class TaskService:
     """Coordinates task lifecycle rules, assignment, and audit writes."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self, session: AsyncSession, *, project_contexts: ProjectLockedPolicyContextPort,
+        pre_submit_planner: EffectivePreSubmissionPlanningPort, post_submit_catalogue: PostSubmitCatalogue,
+    ) -> None:
         """Create a service instance bound to one database session.
 
         Args:
             session: Async SQLAlchemy session for the current request.
         """
+        self._project_contexts = project_contexts
+        self._pre_submit_planner = pre_submit_planner
+        self._post_submit_catalogue = post_submit_catalogue
         self._session = session
         self._repo = TaskRepository(session)
         self._project_repo = ProjectRepository(session)
@@ -397,31 +386,12 @@ class TaskService:
             TaskValidationError: If required task fields are incomplete.
         """
         require_any_role(actor, PROJECT_OPERATOR_ROLES)
-        task = await self._get_task(task_id)
+        task = await self._get_task(task_id, for_update=True)
         self._ensure_transition_allowed(task.status, TASK_STATUS_SCREENING)
 
-        (
-            guide,
-            checker_policy,
-            review_policy,
-            revision_policy,
-            payment_policy,
-            source_snapshot,
-            effective_policy,
-            pre_submit_checker_policy,
-        ) = await self._load_active_policy_context(task.project_id)
+        facts = await self._load_active_policy_context(task.project_id)
         self._validate_task_contract_fields(task)
-        self._stamp_locked_context(
-            task,
-            guide,
-            checker_policy,
-            review_policy,
-            revision_policy,
-            payment_policy,
-            source_snapshot,
-            effective_policy,
-            pre_submit_checker_policy,
-        )
+        self._stamp_locked_context(task, facts)
         await self._change_task_status(actor, task, TASK_STATUS_SCREENING, reason)
         await self._session.commit()
         await self._session.refresh(task)
@@ -448,12 +418,13 @@ class TaskService:
             TaskTransitionBlocked: If locked policy context is incomplete.
         """
         require_any_role(actor, PROJECT_OPERATOR_ROLES)
-        task = await self._get_task(task_id)
+        task = await self._get_task(task_id, for_update=True)
         self._ensure_transition_allowed(task.status, TASK_STATUS_READY)
         if reason is None or not reason.strip():
             raise TaskValidationError("release decision reason is required")
         self._ensure_locked_context(task)
-        await self._load_locked_task_context(task)
+        context = await self._load_locked_task_context(task)
+        self._validate_installed_plans(context.facts)
         await self._change_task_status(actor, task, TASK_STATUS_READY, reason)
         await self._session.commit()
         await self._session.refresh(task)
@@ -877,322 +848,73 @@ class TaskService:
             ),
         }
 
-    async def _load_active_policy_context(
-        self,
-        project_id: str,
-    ) -> tuple[
-        ProjectGuide,
-        PostSubmitCheckerPolicy,
-        ReviewPolicy,
-        RevisionPolicy,
-        PaymentPolicy,
-        GuideSourceSnapshot,
-        EffectiveProjectSubmissionArtifactPolicy,
-        PreSubmitCheckerPolicy,
-    ]:
-        """Load the active guide plus every policy needed for task locking.
-
-        Args:
-            project_id: Project whose active context should be loaded.
-
-        Returns:
-            Active guide and policy models.
-
-        Raises:
-            TaskProjectNotReady: If any required context is missing.
-        """
+    async def _load_active_policy_context(self, project_id: str) -> ProjectLockedPolicyContextFacts:
+        """Resolve exact activated custody and verify both installed checker plans."""
         try:
-            guide = await self._project_repo.get_active_guide(project_id)
-            if guide is None:
-                raise TaskProjectNotReady("project has no active guide")
-            checker_policy = await self._project_repo.get_post_submit_checker_policy(
-                project_id,
-                guide.version,
-            )
-            review_policy = await self._project_repo.get_review_policy(project_id, guide.version)
-            revision_policy = await self._project_repo.get_revision_policy(
-                project_id,
-                guide.version,
-            )
-            payment_policy = await self._project_repo.get_payment_policy(project_id, guide.version)
-            submission_artifact_policy = (
-                await self._project_repo.get_current_approved_submission_artifact_policy(
-                    project_id,
-                    guide.version,
-                )
-            )
-            if (
-                checker_policy is None
-                or review_policy is None
-                or revision_policy is None
-                or payment_policy is None
-                or submission_artifact_policy is None
-            ):
-                raise TaskProjectNotReady("active guide policy context is incomplete")
-            source_snapshot = await self._project_repo.get_guide_source_snapshot(
-                submission_artifact_policy.source_snapshot_id
-            )
-            if (
-                source_snapshot is None
-                or source_snapshot.bundle_hash != submission_artifact_policy.source_snapshot_hash
-            ):
-                raise TaskProjectNotReady("active guide source snapshot context is incomplete")
-            effective_policy = await self._project_repo.get_effective_submission_artifact_policy(
-                project_id,
-                guide.version,
-                source_snapshot.id,
-            )
-            if effective_policy is None:
-                raise TaskProjectNotReady(
-                    "active effective submission artifact policy is incomplete"
-                )
-            pre_submit_checker_policy = (
-                await self._project_repo.get_pre_submit_checker_policy_for_effective_policy(
-                    effective_policy.id
-                )
-            )
-        except ProjectRepositoryIntegrityError as exc:
-            raise TaskProjectNotReady("active guide policy context is ambiguous") from exc
-        if (
-            pre_submit_checker_policy is None
-            or pre_submit_checker_policy.lifecycle_status != "compiled"
-            or not pre_submit_checker_policy.compiled_bundle_hash
-        ):
-            raise TaskProjectNotReady("active project pre-submit checker policy is incomplete")
-        if not checker_policy.policy_hash or not checker_policy.policy_body:
-            raise TaskProjectNotReady("active post-submit checker policy hash is incomplete")
+            facts = await self._project_contexts.lock_active_policy_context(UUID(project_id))
+            self._validate_installed_plans(facts)
+            return facts
+        except (ProjectLockedPolicyContextUnavailable, ValueError) as exc:
+            raise TaskProjectNotReady("active guide policy context is unavailable") from exc
+
+    def _validate_installed_plans(self, facts: ProjectLockedPolicyContextFacts) -> None:
+        """Check deployment capability before new readiness, without executing checks."""
         try:
-            parsed_checker_policy = parse_locked_post_submit_checker_policy_body(
-                checker_policy.policy_body,
-                project_id=checker_policy.project_id,
-                guide_version=checker_policy.guide_version,
-                policy_hash=checker_policy.policy_hash,
+            self._pre_submit_planner.compile_effective_plan(
+                lineage=EffectivePreSubmissionPlanLineage(
+                    project_id=facts.project_id, guide_id=facts.guide_id,
+                    guide_version=facts.guide_version, source_snapshot_id=facts.source_snapshot_id,
+                    source_snapshot_hash=facts.source_snapshot_hash,
+                    effective_policy_id=facts.effective_policy_id,
+                    effective_policy_hash=facts.effective_policy_hash,
+                    pre_submit_policy_id=facts.pre_submit_policy_id,
+                    pre_submit_policy_bundle_hash=facts.pre_submit_policy_bundle_hash,
+                ),
+                effective_policy=json.loads(facts.effective_policy.value),
+                compiled_bundle=json.loads(facts.compiled_pre_submit_bundle.value),
             )
-            parsed_checker_policy.validate_catalogue(current_post_submit_catalogue())
+            CompiledPostSubmitPolicy.model_validate_json(
+                facts.compiled_post_submit_policy.value,
+            ).validate_catalogue(self._post_submit_catalogue)
         except ValueError as exc:
-            raise TaskProjectNotReady("active post-submit checker policy hash is invalid") from exc
-        try:
-            parsed_checker_policy.validate_sidecars(
-                required_checkers=checker_policy.required_checkers,
-                warning_checkers=checker_policy.warning_checkers,
-                blocking_severities=checker_policy.blocking_severities,
-            )
-        except ValueError as exc:
-            raise TaskProjectNotReady("active post-submit checker policy hash is invalid") from exc
-        return (
-            guide,
-            checker_policy,
-            review_policy,
-            revision_policy,
-            payment_policy,
-            source_snapshot,
-            effective_policy,
-            pre_submit_checker_policy,
-        )
+            raise TaskProjectNotReady("installed checkers cannot execute the locked policies") from exc
 
     async def _load_locked_task_context(self, task: WorkstreamTask) -> LockedTaskContext:
-        """Load and validate every row stamped into a task's locked context.
-
-        Args:
-            task: Task whose locked context is authoritative.
-
-        Returns:
-            Validated locked task context rows.
-
-        Raises:
-            TaskLockedContextInvalid: If any stamped row is missing, stale, or
-                inconsistent with the task's locked ids and hashes.
-        """
+        """Resolve frozen custody without selecting current policy or deployment capabilities."""
         missing = self._missing_locked_context_fields(task)
         if missing:
-            raise TaskLockedContextInvalid(
-                "task locked context is incomplete",
-                {"missing_fields": missing},
+            raise TaskLockedContextInvalid("task locked context is incomplete", {"missing_fields": missing})
+        try:
+            facts = await self._project_contexts.lock_locked_policy_context(
+                ProjectLockedPolicyContextRequest(
+                    project_id=UUID(task.project_id), guide_version=task.locked_guide_version,
+                    source_snapshot_id=UUID(task.locked_guide_source_snapshot_id),
+                    source_snapshot_hash=task.locked_guide_source_snapshot_hash,
+                    effective_policy_id=UUID(task.locked_effective_project_submission_artifact_policy_id),
+                    effective_policy_hash=task.locked_effective_project_submission_artifact_policy_hash,
+                    pre_submit_policy_id=UUID(task.locked_pre_submit_checker_policy_id),
+                    pre_submit_policy_bundle_hash=task.locked_pre_submit_checker_bundle_hash,
+                ),
             )
-
+            expected = self._policy_stamps(facts)
+            if any(getattr(task, name) != value for name, value in expected.items()):
+                raise ValueError("task policy stamps differ from activation receipt")
+            parsed = CompiledPostSubmitPolicy.model_validate_json(facts.compiled_post_submit_policy.value)
+        except (ProjectLockedPolicyContextUnavailable, ValueError, TypeError) as exc:
+            raise TaskLockedContextInvalid("task locked policy custody is invalid") from exc
+        # Display metadata only; ARCH-03B owns replacing the remaining private display reads.
         project = await self._project_repo.get_project(task.project_id)
-        guide = await self._project_repo.get_guide_by_version(
-            task.project_id,
-            task.locked_guide_version or "",
-        )
-        if project is None or guide is None or guide.project_id != task.project_id:
-            raise TaskLockedContextInvalid(
-                "task locked guide context is invalid",
-                {"field": "locked_guide_version"},
-            )
-
-        source_snapshot = await self._project_repo.get_guide_source_snapshot(
-            task.locked_guide_source_snapshot_id or "",
-        )
-        if (
-            source_snapshot is None
-            or source_snapshot.project_id != task.project_id
-            or source_snapshot.guide_version != task.locked_guide_version
-            or source_snapshot.bundle_hash != task.locked_guide_source_snapshot_hash
-            or canonical_json_hash(source_snapshot.manifest_json) != source_snapshot.bundle_hash
-        ):
-            raise TaskLockedContextInvalid(
-                "task locked guide source snapshot is invalid",
-                {"field": "locked_guide_source_snapshot_hash"},
-            )
-
-        effective_policy = await self._project_repo.get_effective_submission_artifact_policy_by_id(
-            task.locked_effective_project_submission_artifact_policy_id or "",
-        )
-        if (
-            effective_policy is None
-            or effective_policy.project_id != task.project_id
-            or effective_policy.guide_version != task.locked_guide_version
-            or effective_policy.source_snapshot_id != source_snapshot.id
-            or effective_policy.source_snapshot_hash != source_snapshot.bundle_hash
-            or effective_policy.effective_policy_hash
-            != task.locked_effective_project_submission_artifact_policy_hash
-            or effective_policy.lifecycle_status not in {"approved", "superseded"}
-            or canonical_json_hash(effective_policy.effective_policy)
-            != task.locked_effective_project_submission_artifact_policy_hash
-        ):
-            raise TaskLockedContextInvalid(
-                "task locked effective project submission artifact policy is invalid",
-                {"field": "locked_effective_project_submission_artifact_policy_hash"},
-            )
-
-        pre_submit_checker_policy = await self._project_repo.get_pre_submit_checker_policy(
-            task.locked_pre_submit_checker_policy_id or "",
-        )
-        compiled_bundle = (
-            pre_submit_checker_policy.compiled_bundle
-            if pre_submit_checker_policy is not None
-            else None
-        )
-        if (
-            pre_submit_checker_policy is None
-            or pre_submit_checker_policy.project_id != task.project_id
-            or pre_submit_checker_policy.guide_version != task.locked_guide_version
-            or pre_submit_checker_policy.source_snapshot_id != source_snapshot.id
-            or pre_submit_checker_policy.source_snapshot_hash != source_snapshot.bundle_hash
-            or pre_submit_checker_policy.effective_policy_id != effective_policy.id
-            or pre_submit_checker_policy.effective_policy_hash
-            != effective_policy.effective_policy_hash
-            or pre_submit_checker_policy.lifecycle_status not in {"compiled", "superseded"}
-            or pre_submit_checker_policy.compiled_bundle_hash
-            != task.locked_pre_submit_checker_bundle_hash
-            or not isinstance(compiled_bundle, dict)
-            or canonical_json_hash(compiled_bundle) != task.locked_pre_submit_checker_bundle_hash
-        ):
-            raise TaskLockedContextInvalid(
-                "task locked project pre-submit checker policy is invalid",
-                {"field": "locked_pre_submit_checker_bundle_hash"},
-            )
-        try:
-            compiled_checker_names = validate_compiled_pre_submit_checker_bundle(
-                effective_policy.effective_policy,
-                effective_policy.effective_policy_hash,
-                compiled_bundle,
-                compiler_version=pre_submit_checker_policy.compiler_version,
-            )
-        except PreSubmitCheckerCompilerError as exc:
-            raise TaskLockedContextInvalid(
-                "task locked project pre-submit checker policy is invalid",
-                {"field": "locked_pre_submit_checker_bundle_hash"},
-            ) from exc
-        if list(pre_submit_checker_policy.checker_names or []) != compiled_checker_names:
-            raise TaskLockedContextInvalid(
-                "task locked project pre-submit checker projection is invalid",
-                {"field": "locked_pre_submit_checker_policy_id"},
-            )
-
-        post_submit_checker_policy = await self._project_repo.get_post_submit_checker_policy_by_id(
-            task.locked_post_submit_checker_policy_id or "",
-        )
-        if (
-            post_submit_checker_policy is None
-            or post_submit_checker_policy.project_id != task.project_id
-            or post_submit_checker_policy.guide_version
-            != task.locked_post_submit_checker_policy_version
-            or post_submit_checker_policy.guide_version != task.locked_guide_version
-            or post_submit_checker_policy.policy_hash != task.locked_post_submit_checker_policy_hash
-        ):
-            raise TaskLockedContextInvalid(
-                "task locked post-submit checker policy is invalid",
-                {"field": "locked_post_submit_checker_policy_hash"},
-            )
-        try:
-            parsed_post_submit_body = parse_locked_post_submit_checker_policy_body(
-                task.locked_post_submit_checker_policy_body,
-                project_id=task.project_id,
-                guide_version=task.locked_post_submit_checker_policy_version or "",
-                policy_hash=task.locked_post_submit_checker_policy_hash or "",
-            )
-            parsed_post_submit_body.validate_catalogue(current_post_submit_catalogue())
-        except ValueError as exc:
-            raise TaskLockedContextInvalid(
-                "task locked post-submit checker policy body is invalid",
-                {"field": "locked_post_submit_checker_policy_body"},
-            ) from exc
-        try:
-            if post_submit_checker_policy.policy_body != parsed_post_submit_body.policy_body:
-                raise ValueError("persisted post-submit policy body differs from lock")
-            parsed_post_submit_body.validate_sidecars(
-                required_checkers=post_submit_checker_policy.required_checkers,
-                warning_checkers=post_submit_checker_policy.warning_checkers,
-                blocking_severities=post_submit_checker_policy.blocking_severities,
-            )
-        except ValueError as exc:
-            raise TaskLockedContextInvalid(
-                "task locked post-submit checker policy summaries are invalid",
-                {"field": "locked_post_submit_checker_policy_body"},
-            ) from exc
-        post_submit_summary = PostSubmitPolicyBodySummary(
-            schema_version=(task.locked_post_submit_checker_policy_body or {}).get(
-                "schema_version"
-            ),
-            default_checkers=parsed_post_submit_body.default_checkers,
-            required_checkers=parsed_post_submit_body.required_checkers,
-            warning_checkers=parsed_post_submit_body.warning_checkers,
-            execution_checkers=parsed_post_submit_body.execution_checkers,
-            blocking_severities=parsed_post_submit_body.blocking_severities,
-        )
-
-        review_policy = await self._project_repo.get_review_policy_by_id(
-            task.locked_review_policy_id or ""
-        )
-        revision_policy = await self._project_repo.get_revision_policy_by_id(
-            task.locked_revision_policy_id or ""
-        )
-        payment_policy = await self._project_repo.get_payment_policy(
-            task.project_id,
-            task.locked_payment_policy_version or "",
-        )
-        if (
-            review_policy is None
-            or review_policy.project_id != task.project_id
-            or review_policy.guide_version != task.locked_guide_version
-            or review_policy.policy_generation != task.locked_review_policy_generation
-            or review_policy.policy_hash != task.locked_review_policy_hash
-            or revision_policy is None
-            or revision_policy.project_id != task.project_id
-            or revision_policy.guide_version != task.locked_guide_version
-            or revision_policy.policy_generation != task.locked_revision_policy_generation
-            or revision_policy.policy_hash != task.locked_revision_policy_hash
-            or payment_policy is None
-            or payment_policy.guide_version != task.locked_guide_version
-        ):
-            raise TaskLockedContextInvalid(
-                "task locked review, revision, or payment policy is invalid",
-                {"field": "locked_policy_versions"},
-            )
-
+        guide = await self._project_repo.get_guide_by_version(task.project_id, facts.guide_version)
+        if project is None or guide is None or guide.id != str(facts.guide_id):
+            raise TaskLockedContextInvalid("task locked guide display context is invalid")
         return LockedTaskContext(
-            project=project,
-            guide=guide,
-            source_snapshot=source_snapshot,
-            effective_policy=effective_policy,
-            pre_submit_checker_policy=pre_submit_checker_policy,
-            post_submit_checker_policy=post_submit_checker_policy,
-            locked_post_submit_policy_body=post_submit_summary,
-            review_policy=review_policy,
-            revision_policy=revision_policy,
-            payment_policy=payment_policy,
+            project=project, guide=guide, facts=facts,
+            locked_post_submit_policy_body=PostSubmitPolicyBodySummary(
+                schema_version=parsed.schema_version, default_checkers=parsed.default_checkers,
+                required_checkers=parsed.required_checkers, warning_checkers=parsed.warning_checkers,
+                execution_checkers=parsed.execution_checkers,
+                blocking_severities=list(parsed.blocking_severities),
+            ),
         )
 
     def _missing_locked_context_fields(self, task: WorkstreamTask) -> list[str]:
@@ -1231,12 +953,6 @@ class TaskService:
                 policy_generation=task.locked_revision_policy_generation or 0,
                 policy_hash=task.locked_revision_policy_hash or "",
             ),
-            payment_policy=TaskPaymentPolicyContext(
-                guide_version=task.locked_payment_policy_version or "",
-                base_amount=task.base_amount,
-                currency=task.currency,
-                payout_type=task.payout_type,
-            ),
             lifecycle=lifecycle,
         )
 
@@ -1246,7 +962,7 @@ class TaskService:
         context: LockedTaskContext,
     ) -> SubmissionRequirementsResponse:
         """Build Contributor-facing requirements from the locked effective policy."""
-        policy = context.effective_policy.effective_policy
+        policy = json.loads(context.facts.effective_policy.value)
         if not isinstance(policy, dict):
             raise TaskLockedContextInvalid(
                 "task locked effective project submission artifact policy is invalid",
@@ -1549,7 +1265,7 @@ class TaskService:
             locked_revision_policy_id=task.locked_revision_policy_id or "",
             locked_revision_policy_generation=task.locked_revision_policy_generation or 0,
             locked_revision_policy_hash=task.locked_revision_policy_hash or "",
-            locked_payment_policy_version=task.locked_payment_policy_version or "",
+            locked_contribution_policy_version_id=task.locked_contribution_policy_version_id,
         )
 
     def _worker_safe_task_response(self, task: WorkstreamTask) -> TaskWorkerTaskContext:
@@ -1616,54 +1332,35 @@ class TaskService:
             return bool(value)
         return True
 
-    def _stamp_locked_context(
-        self,
-        task: WorkstreamTask,
-        guide: ProjectGuide,
-        checker_policy: PostSubmitCheckerPolicy,
-        review_policy: ReviewPolicy,
-        revision_policy: RevisionPolicy,
-        payment_policy: PaymentPolicy,
-        source_snapshot: GuideSourceSnapshot,
-        effective_policy: EffectiveProjectSubmissionArtifactPolicy,
-        pre_submit_checker_policy: PreSubmitCheckerPolicy,
-    ) -> None:
-        """Stamp server-owned guide and policy context onto a task.
+    @staticmethod
+    def _policy_stamps(facts: ProjectLockedPolicyContextFacts) -> dict[str, object]:
+        """Project the single activation receipt and exact frozen inputs onto TASK locks."""
+        command = facts.activation_receipt.command
+        return {
+            "locked_contribution_policy_version_id": command.contribution_policy_version_id,
+            "locked_guide_version": facts.guide_version,
+            "locked_post_submit_checker_policy_id": str(command.target.policy_id),
+            "locked_post_submit_checker_policy_version": facts.guide_version,
+            "locked_post_submit_checker_policy_hash": command.target.policy_hash,
+            "locked_post_submit_checker_policy_body": json.loads(facts.compiled_post_submit_policy.value),
+            "locked_review_policy_id": str(command.review.policy_id),
+            "locked_review_policy_generation": command.review.generation,
+            "locked_review_policy_hash": command.review.policy_hash,
+            "locked_revision_policy_id": str(command.revision.policy_id),
+            "locked_revision_policy_generation": command.revision.generation,
+            "locked_revision_policy_hash": command.revision.policy_hash,
+            "locked_guide_source_snapshot_id": str(facts.source_snapshot_id),
+            "locked_guide_source_snapshot_hash": facts.source_snapshot_hash,
+            "locked_effective_project_submission_artifact_policy_id": str(facts.effective_policy_id),
+            "locked_effective_project_submission_artifact_policy_hash": facts.effective_policy_hash,
+            "locked_pre_submit_checker_policy_id": str(facts.pre_submit_policy_id),
+            "locked_pre_submit_checker_bundle_hash": facts.pre_submit_policy_bundle_hash,
+        }
 
-        Args:
-            task: Task receiving locked context.
-            guide: Active guide.
-            checker_policy: Checker policy for the guide version.
-            review_policy: Review policy for the guide version.
-            revision_policy: Revision policy for the guide version.
-            payment_policy: Payment policy for the guide version.
-            source_snapshot: Immutable guide source snapshot for the active setup.
-            effective_policy: Effective project submission artifact policy.
-            pre_submit_checker_policy: Compiled project pre-submit checker policy.
-        """
-        task.locked_guide_version = guide.version
-        task.locked_post_submit_checker_policy_id = checker_policy.id
-        task.locked_post_submit_checker_policy_version = checker_policy.guide_version
-        task.locked_post_submit_checker_policy_hash = checker_policy.policy_hash
-        task.locked_post_submit_checker_policy_body = dict(checker_policy.policy_body or {})
-        task.locked_review_policy_id = review_policy.id
-        task.locked_review_policy_generation = review_policy.policy_generation
-        task.locked_review_policy_hash = review_policy.policy_hash
-        task.locked_revision_policy_id = revision_policy.id
-        task.locked_revision_policy_generation = revision_policy.policy_generation
-        task.locked_revision_policy_hash = revision_policy.policy_hash
-        task.locked_payment_policy_version = payment_policy.guide_version
-        task.locked_guide_source_snapshot_id = source_snapshot.id
-        task.locked_guide_source_snapshot_hash = source_snapshot.bundle_hash
-        task.locked_effective_project_submission_artifact_policy_id = effective_policy.id
-        task.locked_effective_project_submission_artifact_policy_hash = (
-            effective_policy.effective_policy_hash
-        )
-        task.locked_pre_submit_checker_policy_id = pre_submit_checker_policy.id
-        task.locked_pre_submit_checker_bundle_hash = pre_submit_checker_policy.compiled_bundle_hash
-        task.base_amount = payment_policy.base_amount
-        task.currency = payment_policy.currency
-        task.payout_type = payment_policy.payout_type
+    def _stamp_locked_context(self, task: WorkstreamTask, facts: ProjectLockedPolicyContextFacts) -> None:
+        """Copy the exact activated context without obsolete PaymentPolicy readiness."""
+        for name, value in self._policy_stamps(facts).items():
+            setattr(task, name, value)
 
     def _ensure_locked_context(self, task: WorkstreamTask) -> None:
         """Ensure all guide and policy version fields are locked.
@@ -1745,7 +1442,10 @@ class TaskService:
             "locked_revision_policy_id": task.locked_revision_policy_id,
             "locked_revision_policy_generation": task.locked_revision_policy_generation,
             "locked_revision_policy_hash": task.locked_revision_policy_hash,
-            "locked_payment_policy_version": task.locked_payment_policy_version,
+            "locked_contribution_policy_version_id": (
+                str(task.locked_contribution_policy_version_id)
+                if task.locked_contribution_policy_version_id else None
+            ),
             "locked_guide_source_snapshot_id": task.locked_guide_source_snapshot_id,
             "locked_guide_source_snapshot_hash": task.locked_guide_source_snapshot_hash,
             "locked_effective_project_submission_artifact_policy_id": (

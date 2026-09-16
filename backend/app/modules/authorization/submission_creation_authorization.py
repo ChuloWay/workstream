@@ -156,6 +156,7 @@ def _creation_resource(
         identity_link_id=context.identity_link_id,
         task_id=facts.task_id,
         assignment_id=facts.assignment_id,
+        contribution_policy_version_id=task.submitter_contribution_policy_version_id,
         admission_id=facts.admission_id,
         predecessor_submission_id=facts.predecessor_submission_id,
         predecessor_submission_version=(predecessor.version if predecessor else None),

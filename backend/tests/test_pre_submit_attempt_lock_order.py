@@ -13,7 +13,7 @@ import pytest
 
 from app.adapters.artifacts import CheckerPhaseService
 from app.modules.checkers.api import UnavailablePostSubmissionExecution
-from sqlalchemy import func, insert, select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.modules.artifacts.authorization import (
@@ -28,7 +28,7 @@ from app.modules.artifacts.submission_admission import (
 from app.modules.authorization.runtime import (
     ActorKind, ActorStatus, HumanAuthorizationContext, IdentityLinkStatus,
 )
-from app.modules.tasks.models import WorkstreamTask
+from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
 from tests.authorization.test_pre_submit_attempt_authority import _seed_materializer
 from tests.pre_submit_test_helpers import submission_preparation_request
 from tests.submission_preparation_auth_helpers import install_submitter_grant
@@ -104,21 +104,10 @@ async def _seed_second_contributor_task(harness):
             "(id,actor_profile_id,issuer,subject,subject_kind,status,linked_by,last_verified_at) "
             "values (:link,:actor,'flow-test',:actor,'human','active','test',now())"
         ), {"actor": str(actor_id), "link": str(link_id)})
-        original = (await connection.execute(
-            select(WorkstreamTask.__table__).where(
-                WorkstreamTask.id == str(harness.request.task_id)
-            )
-        )).mappings().one()
-        cloned = {key: original[key] for key in original
-                  if key not in {"id", "assigned_to", "created_at", "updated_at"}}
-        await connection.execute(insert(WorkstreamTask.__table__).values(
-            **cloned, id=str(task_id), assigned_to=str(actor_id),
-        ))
-        await connection.execute(text(
-            "insert into task_assignments "
-            "(id,task_id,contributor_id,assigned_by,status) values "
-            "(:assignment,:task,:actor,'test','active')"
-        ), {"assignment": str(assignment_id), "task": str(task_id), "actor": str(actor_id)})
+        await seed_started_task_for_artifact_test(connection, {
+            "project": str(project_id), "task": str(task_id),
+            "assignment": str(assignment_id), "actor": str(actor_id),
+        })
         await install_submitter_grant(connection, {
             "project": str(project_id), "actor": str(actor_id),
         })

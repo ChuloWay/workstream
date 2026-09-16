@@ -425,7 +425,8 @@ Setup receipts remain immutable. The next guide boundary is:
 1. **Complete the guide and task lineage contracts.** CP05 authorization,
    CP06 selected-policy validation, CP07 hidden activation/binding and AUTH-12H
    live manager authority and ARCH-03A complete internal guide context are complete.
-   Next is CP08 task-attempt lineage and its minimal existing writers. HTTP activation exposure remains
+   CP08 task-attempt lineage and its minimal existing writers are complete.
+   Next are ARCH-03B task projections and ARCH-03C authorization/public cutover. HTTP activation exposure remains
    pending and is not implied by an internal public port. The operation requires exact
    current compilation, sufficiency, separate pre/post approvals, review/revision
    inputs and an explicitly selected published ContributionPolicyVersion.
@@ -578,13 +579,14 @@ remaining trace sequence is:
 
 - Unified guide: POL-04B1/04B/04B2, POL-05A/AUTH-12F4/POL-05B,
   POL-06A/AUTH-12G/POL-06B, POL-07A/07B, AUTH-12H and ARCH-03A are delivered.
-  The complete internal guide context is available; next is `CP08` task-attempt
-  lineage and minimal existing writers. ARCH-04A supplies registered-capability
+  The complete internal guide context and `CP08` exact task/assignment/Submission
+  contribution-policy stamps are available; next are ARCH-03B/03C. ARCH-04A supplies registered-capability
   contracts; activation does not require a Task, Submission or completed run.
 - Contribution lineage: CP05 authorization, CP06 validation and hidden `CP07` activation
   and `AUTH-12H` live manager authority are complete. `ARCH-03A` has completed
-  the existing internal guide-context port. `CP08` next adds lineage fields
-  and minimal Task/Assignment/Submission writers together, followed by remaining
+  the existing internal guide-context port. `CP08` delivers lineage fields
+  and minimal Task/Assignment/Submission writers together without superseded economic
+  readiness. Remaining work includes
   queues/projections in `ARCH-03B` and authorization/public cutover in `ARCH-03C`. `CP09` physical cleanup waits for all remaining
   legacy consumers to be replaced; it is outside the `allow_review` critical path.
   Live assignment invalidation also requires shared dispatch and its exact

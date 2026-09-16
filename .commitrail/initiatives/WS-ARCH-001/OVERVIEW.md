@@ -14,8 +14,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Current boundary: one CHECKERS catalogue, compiler/parser and implementation
   per checker ID serve active policy consumers; production post-submit phase
   execution remains unavailable.
-- Next usable boundary: CP08 task-attempt lineage and minimal writers after
-  completed ARCH-03A internal guide context, following delivered CP07 activation and AUTH-12H live manager authority. POL-04B unified setup, POL-05/06
+- Next usable boundary: ARCH-03B task projections after completed CP08 lineage
+  and minimal writers and ARCH-03A internal guide context, following delivered CP07 activation and AUTH-12H live manager authority. POL-04B unified setup, POL-05/06
   manager operations and POL-07B internal phase composition are delivered.
   The production post-submit phase remains unavailable until its separately
   sequenced ART/CHECKER/AUTH execution boundaries land.
@@ -34,12 +34,13 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   draft/publication behavior and exact Finance Authority are complete.
   CP06 exact selected-policy validation and CP07 hidden complete-guide activation
   and [AUTH-12H live authority](../WS-AUTH-001/WS-AUTH-001-12H.md) are complete.
-  CP08-CP09 task-attempt lineage and scoped removal remain.
+  [CP08](WS-ARCH-001-CP08.md) exact task-attempt lineage and minimal writers are complete.
+  CP09 scoped economic removal remains.
   [CP07A](WS-ARCH-001-CP07A.md) supplies the cross-owner authority lock repair
   and binding audit schema parity required before guide composition.
   CP09 physical removal follows zero legacy consumers, including checker/public
   Submission cutover; it is not on the `allow_review` critical path.
 - Consolidated ARCH-04A supplies one current catalogue, immutable phase contracts and
-  registered structural conformance, not durable runs. CP08, then ARCH-03B/03C and ARCH-04B-04F build task readiness,
+  registered structural conformance, not durable runs. Following CP08, ARCH-03B/03C and ARCH-04B-04F build task readiness,
   post-submit checker/materialization, remediation, and `allow_review` before
   final public 02I cutover and later REV admission.

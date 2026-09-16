@@ -171,7 +171,7 @@ class CheckerRun(Base):
     locked_revision_policy_id: Mapped[str] = mapped_column(String(36), nullable=False)
     locked_revision_policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
     locked_revision_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
-    locked_payment_policy_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    locked_payment_policy_version: Mapped[str | None] = mapped_column(String(50))
     package_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     artifact_hash_manifest: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
     artifact_manifest_hash: Mapped[str] = mapped_column(String(128), nullable=False)

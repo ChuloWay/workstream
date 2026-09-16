@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from app.core.config import get_settings
+
+from app.adapters.tasks import task_service
+
 import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
@@ -300,8 +304,11 @@ async def test_work_context_task_lock_precedes_art_actor_lock(
 
             task_authority.prepare = pause_before_auth
             commands = AuthorizedTaskCommands(
-                task_session, authorization=task_authority,
-                audit=task_transition_audit(task_session), actor_profile_id=harness.actor_id,
+                task_session,
+                authorization=task_authority,
+                audit=task_transition_audit(task_session),
+                actor_profile_id=harness.actor_id,
+                contexts=task_service(task_session, settings=get_settings()),
             )
             try:
                 task_command = asyncio.create_task(commands.work_context(harness.request.task_id))

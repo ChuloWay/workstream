@@ -1,4 +1,9 @@
+
 from __future__ import annotations
+
+from app.core.config import get_settings
+
+from app.adapters.tasks import task_service
 
 from app.modules.checkers.catalogue import project_guide_pre_submission_capabilities
 
@@ -114,20 +119,21 @@ def test_task_requirements_response_carries_valid_locked_archive_limit(limit, fi
     from types import SimpleNamespace
     from app.modules.projects.service import ProjectService
     from app.modules.projects.schemas import SubmissionArtifactPolicyInput
-    from app.modules.tasks.service import TaskService, TaskLockedContextInvalid
+    from app.modules.tasks.service import TaskLockedContextInvalid
 
     owner = ProjectService(None)
     policy = owner._merge_effective_submission_artifact_policy(
         owner._canonical_policy_body(SubmissionArtifactPolicyInput().model_dump())
     )
     policy[field] = limit
-    context = SimpleNamespace(effective_policy=SimpleNamespace(effective_policy=policy))
+    from app.modules.projects.api.locked_policy import CanonicalJsonObject
+    context = SimpleNamespace(facts=SimpleNamespace(effective_policy=CanonicalJsonObject.from_mapping(policy)))
     task = SimpleNamespace(id=str(uuid4()), project_id=str(uuid4()), locked_guide_version="v0.1")
     if limit is not None and (type(limit) is not int or limit <= 0):
         with pytest.raises(TaskLockedContextInvalid):
-            TaskService(None)._submission_requirements_response(task, context)
+            task_service(None, settings=get_settings())._submission_requirements_response(task, context)
     else:
-        response = TaskService(None)._submission_requirements_response(task, context)
+        response = task_service(None, settings=get_settings())._submission_requirements_response(task, context)
         assert response.model_dump(mode="json")[field] == limit
 SOURCE_ITEM_ID = UUID("11111111-1111-1111-1111-111111111111")
 DOCUMENT_VERSION_ID = UUID("22222222-2222-2222-2222-222222222222")

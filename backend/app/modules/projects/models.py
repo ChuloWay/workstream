@@ -409,6 +409,10 @@ class ProjectGuide(Base):
 
     __tablename__ = "project_guides"
     __table_args__ = (
+        UniqueConstraint(
+            "project_id", "version", "contribution_policy_version_id",
+            name="uq_guides_project_version_contribution",
+        ),
         ForeignKeyConstraint(
             ["contribution_policy_version_id", "contribution_policy_id", "project_id"],
             ["contribution_policy_versions.id", "contribution_policy_versions.contribution_policy_id",

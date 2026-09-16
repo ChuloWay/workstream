@@ -101,7 +101,7 @@ def test_evidence_operation_identity_binds_every_custody_fact() -> None:
 
 def test_post_byte_relock_rejects_advanced_predecessor_version() -> None:
     predecessor_id = uuid4()
-    task_context = TaskSubmissionContextFacts(
+    task_context = TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
         task_id=uuid4(),
         assignment_id=uuid4(),
         contributor_id=uuid4(),
@@ -111,7 +111,7 @@ def test_post_byte_relock_rejects_advanced_predecessor_version() -> None:
             submission_id=predecessor_id,
             version=2,
         ),
-        locked_project_context=TaskLockedProjectContextReferences(
+        locked_project_context=TaskLockedProjectContextReferences(locked_contribution_policy_version_id=UUID(int=100),
             project_id=uuid4(),
             guide_version="1",
             source_snapshot_id=uuid4(),
