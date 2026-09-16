@@ -1,0 +1,158 @@
+# WS-ARCH-001-CP08 — Bind initial work attempts to the approved contribution policy
+
+- Initiative: WS-ARCH-001
+- Durable disposition: Planned
+- Intended merge outcome: Screening stamps the exact activated contribution-policy version; claim and Submission copy it with relational and immutable-evidence safeguards.
+
+## Intent
+
+Complete the approved ARCH-03A -> CP08 sequence. A policy reference is useful only
+when the existing writers supply it atomically. This change joins the schema and
+minimal screening/assignment/Submission writers; no schema-only half-cutover.
+
+## Current behavior
+
+Main `7bc76ede` includes ARCH-03A's complete active/frozen PROJECTS context, including
+receipt-bound review/revision semantics. Migration head is
+`0023_guide_activation_custody`. `TaskService` still discovers private PROJECTS
+policy rows and requires the superseded PaymentPolicy. `AuthorizedTaskCommands`
+uses that private context for claim/start/work-context. Hidden
+`TaskSubmissionCreationService` also calls it before preparing final authority.
+The Task/Assignment/Submission models have no contribution-policy version stamp.
+The Submission builder initially flushes before ART assigns its immutable bundle
+linkage; database checks must account for that same-transaction staging.
+
+## Bounded change
+
+### Allowed
+
+- `backend/app/modules/tasks/{models,repository,service,authorized_commands,submission_composition,schemas,router}.py` and `api/{submission_context,submission_command}.py`: exact policy stamps, canonical copies, context cutover and directly affected response fields.
+- `backend/app/modules/tasks/policy_context.py` only if separating the existing context/readiness logic removes service coupling; no second context implementation.
+- `backend/app/adapters/tasks/__init__.py`, existing API dependency/composition roots and exact existing Submission composition callers: inject PROJECTS and CHECKERS ports with required dependencies, no fallback constructors.
+- `backend/app/modules/projects/models.py`: unique guide/project/selected-version key for the exact TASK foreign key.
+- `backend/app/modules/checkers/models.py`: nullable retained payment-version field, so downstream runs can copy new no-PaymentPolicy Submissions without fabrication.
+- `backend/app/modules/authorization/{submission_consumption,submission_creation_authorization}.py`: bind the exact attempt contribution version into existing prepared/final Submission authority; no new action or permission.
+- One `0024` Alembic revision: same-project/stable-identity constraints, immutable policy stamps, retained-data validation and justified derivation/refusal. No prior migration edits.
+- Existing affected TASK/ART/AUTH public-value constructors and test fixtures: populate required exact fields from actual activated guides and assignments. Remove tests solely protecting superseded payment-policy readiness; preserve authorization, real-ZIP, recovery, rollback, immutable-history and concurrency assertions.
+- Focused `backend/tests/tasks/` lineage/migration tests and existing task, Submission composition, authorization/task-authority, artifact and policy-context tests. Exact ownership/lane/debt registrations only when needed, no gate relaxation.
+- This record, adopted CP08 contract, initiative navigation, README and affected canonical data-model/operations/roadmap sections. Update ignored sheet exports if present.
+
+### Not allowed
+
+No new public operation, contribution-policy selector at claim/Submission,
+checker execution/provider call, automated acceptance, compensation fulfillment,
+revision operation, compatibility branch, retained-data deletion or fabricated
+policy lineage. CP09 owns remaining physical economic-schema removal once its
+remaining consumers are removed. ARCH-03B/03C own broader task read/queue and
+authorization cutovers; this change preserves existing authority boundaries.
+
+## Design and decisions
+
+1. Add required lineage to non-draft tasks, assignments and Submissions:
+   `WorkstreamTask.locked_contribution_policy_version_id`,
+   `TaskAssignment.submitter_contribution_policy_version_id`, and
+   `Submission.contribution_policy_version_id`. Bind project/Task/assignment/
+   contributor identity with stable composite keys. Task requires a guide version
+   whenever its contribution stamp is populated, and binds `(project_id,
+   locked_guide_version,locked_contribution_policy_version_id)` to the selected
+   guide triple. Assignment carries its owning `project_id`, bound to Task and
+   ContributionPolicyVersion, and freezes Task/project/contributor identity.
+   Insert-time assignment equality verifies the then-current Task stamp.
+   Submission uses a stable assignment/task/contributor FK, never a permanent FK
+   involving the mutable current assignment policy value. A deferred creation
+   guard verifies the exact copied assignment policy and complete final artifact
+   linkage; an update guard preserves each committed Submission policy stamp.
+   Closed assignments cannot be restamped. Continuing-assignment rebase remains
+   the future qualified human-needs_revision operation, not a CP08 endpoint.
+2. Screening resolves complete active PROJECTS facts in the same transaction,
+   verifies installed pre-submit planning and post-submit catalogue capability,
+   then stamps the receipt-selected policy identity and existing exact locks.
+   Ready verifies the frozen context and both installed plans before writes.
+   Historical reads do not rerun availability or use current CON selection.
+3. Claim copies the already frozen Task policy to the new assignment. Hidden
+   Submission creation copies the exact active assignment stamp, not the latest
+   guide or CON policy. Public immutable TASK facts include these identities and
+   reject inconsistent assignment/task references.
+4. Replace the affected private policy/payment loading and stamping paths with
+   the existing PROJECTS port. Existing project/guide display metadata reads may
+   remain as an explicitly identified ARCH-03B dependency; they cannot select or
+   authorize policies. Remove obsolete payment-policy readiness and the payment
+   section from the affected work-context/locked-context projections. Retain
+   stored economic evidence needed by separately scoped downstream consumers.
+   `Submission.locked_payment_policy_version` and the directly consuming
+   `CheckerRun.locked_payment_policy_version` become nullable (Task already is);
+   retain existing values and MATCH SIMPLE foreign keys for the CP09 cutover.
+   Never fabricate a payment version for new unified-guide work.
+5. Inject dependencies through existing composition roots. One TASK context
+   operation serves its existing triggers; no ad hoc factory or second parser.
+6. Preserve Task/assignment -> AUTH actor/control -> Project -> Attempt -> Request
+   -> Guide lock ordering wherever those owners participate. In hidden Submission
+   creation prepare final authority before taking PROJECTS locks; all preparation,
+   validation, insertion, ART linkage and authority consumption remain inside the
+   existing root transaction. Start the prepared-handle `try/finally` before the
+   PROJECTS call, so any custody failure closes it. TASK public facts carry exact
+   task and assignment policy IDs with equality validation; AUTH resource facts
+   retain the assignment contribution version in their digest. Verify the precise order against unchanged owners
+   during plan review before implementation.
+7. Migration evidence must come from exact immutable activation and original
+   work custody. Present-day guide/CON selection is not proof of an old attempt.
+   If any required preexisting reference cannot be proven uniquely, fail before
+   schema/data mutation and leave all retained evidence unchanged. No nullable
+   execution escape path. The exact SQL proof predicate and constraints are
+   completed from the schema inventory before the implementation candidate.
+8. `needs_revision` is the only future complete-context rebase boundary. CP08
+   proves at most narrow selector-schema capability; it does not claim complete
+   authorized rebase while old Submission-to-Task context FKs remain.
+
+## Acceptance criteria
+
+- Real unified guide without a PaymentPolicy can screen and reach ready; the
+  exact selected ContributionPolicyVersion is stamped before claimability.
+- Claim and hidden Submission creation copy the exact task/assignment policy,
+  without CON lookup or a current-guide substitution.
+- Missing, foreign-project and inconsistent stamps reject at service and direct
+  PostgreSQL boundaries; otherwise valid wrong-stamp probes reach the intended
+  guard. The staged Submission flush cannot commit incomplete lineage.
+- Previously closed assignment and Submission stamps are immutable and remain
+  valid after successor guide activation or policy retirement.
+- Frozen reads still work after catalogue rollout; screening/ready with an
+  unavailable pre- or post-submit implementation deny without status, lineage,
+  assignment or audit writes.
+- Authorization, concurrent claim/role issuance/guide activity and rollback are
+  proven with real owners. No new lock cycle or duplicate assignment/Submission.
+- Migration preserves draft tasks and exact guide/policy/activation evidence,
+  and atomically refuses any earlier non-draft task, assignment or Submission
+  before DDL; all row snapshots and the Alembic marker remain unchanged on refusal.
+  New constraints and payment-column nullability agree with ORM metadata.
+- Old affected policy/payment context path is deleted and all affected callers
+  use the canonical port; remaining dependencies are named explicitly.
+
+## Risk and review routing
+
+- Risk class: L1 (schema, policy lineage, authorization-adjacent transactions).
+- Plan: architecture/reuse schema inventory and security/QA lock/fixture
+  feasibility, then review the completed combined contract before product code.
+- Implementation: architecture/reuse, security, QA/test-delta, product/operations,
+  documentation and CI-integrity for migrations, tests and exact registrations.
+- Human review focus: correct provenance rather than current-policy guessing,
+  same-transaction copy/rollback, stable historical references, no obsolete
+  payment readiness, and honest separation from later revision/public cutovers.
+
+## Evidence
+
+Use real PostgreSQL screening/claim/Submission tests, direct-SQL malformed and
+foreign stamps, retained migration preserve/refuse cases, real-AUTH concurrency,
+exact immutable public-contract tests and independent guard-removal probes.
+Lead runs shared Ruff, module/AUTH boundaries, ownership/test structure, docs/link
+and stale-wording checks once on the candidate. Hosted full lanes/coverage must
+pass with zero skips/deselections and changed subsystems >=90%. Record exact
+commands and review freshness in the PR; no secrets/private guide material.
+
+## Reconciliation
+
+- Current source: ARCH-03A/#415 is merged; its exact receipt and hash validation
+  is reused, not reimplemented. Open #410 is unrelated CI impact reporting.
+- Next usable boundary: ARCH-03B/03C task readiness/read/authorization cutover,
+  following the adopted sequence; no next chunk begins automatically.
+- Remaining decisions to close before product code: exact migration proof
+  predicate/constraint timing and precise existing lock-order reconciliation.
