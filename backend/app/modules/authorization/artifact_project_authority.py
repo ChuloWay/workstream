@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from app.modules.authorization.catalogue import ActionAvailability, ActionId
 from app.modules.authorization.domain.task_authority import (
     TASK_ACTIONS, TASK_SUBMITTER_ACTIONS, evaluate_task_authority,
@@ -147,3 +149,34 @@ def evaluate_submitter_authority(action, context, authority, resource, lifecycle
         authority.matched_grant_id,
         authority.scope_project_id,
     )
+
+
+async def lock_project_role_mutation_principals(repository, context, scope, action_id):
+    """Fence role targets before Project access; AuthorityControl is already held."""
+    target_actor_profile_id = None
+    if action_id is ActionId.PROJECT_ROLE_GRANT_ISSUE:
+        if scope.target_actor_profile_id is None or scope.role is None:
+            raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.RESOURCE_GUARD_DENIED)
+        target_actor_profile_id = scope.target_actor_profile_id
+    elif action_id is ActionId.PROJECT_ROLE_GRANT_REVOKE:
+        if scope.project_id is not None and scope.grant_id is not None:
+            # Only the stored exact-project target can select this lock. Grant
+            # identity is immutable; the router still locks and validates the
+            # final resource before consume. No new public selector is needed.
+            target = await repository.get_project_role_grant(
+                project_id=scope.project_id, grant_id=scope.grant_id,
+            )
+            if target is not None:
+                target_actor_profile_id = UUID(target[0].actor_profile_id)
+    else:
+        raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.ACTION_UNAVAILABLE)
+    if target_actor_profile_id is not None:
+        locked, _target_eligible = await repository.lock_project_role_principals(
+            caller_actor_profile_id=context.actor_profile_id,
+            caller_identity_link_id=context.identity_link_id,
+            target_actor_profile_id=target_actor_profile_id,
+        )
+        # Target eligibility is an issuance decision, never a revocation guard.
+        return locked
+    # Missing or foreign targets retain the concealed final resource denial.
+    return await repository.lock_request_actor(context.identity_link_id, context.actor_profile_id)

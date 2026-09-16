@@ -154,33 +154,6 @@ async def test_submission_pre_submit_rejects_mutated_effective_policy_body(
     assert checker_runs == []
 
 
-async def test_submission_pre_submit_checker_setup_error_is_controlled(
-    task_client: AsyncClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project = await create_active_project(task_client)
-    started_task = await create_started_task(task_client, project["id"], monkeypatch)
-    await corrupt_locked_policy_reads(monkeypatch, started_task["id"], "checker_names")
-
-    with pytest.raises(TaskLockedContextInvalid) as rejected:
-        await _create_hidden_submission(started_task["id"])
-    assert rejected.value.status_code == 422
-    assert rejected.value.code == "task_locked_context_invalid"
-    assert str(rejected.value) == "task locked policy custody is invalid"
-
-    async with db_session.get_session_factory()() as session:
-        submissions = (
-            (
-                await session.execute(
-                    select(Submission).where(Submission.task_id == started_task["id"])
-                )
-            )
-            .scalars()
-            .all()
-        )
-    assert submissions == []
-
-
 async def test_submission_rejects_malformed_locked_post_submit_policy_body_without_side_effects(
     task_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,

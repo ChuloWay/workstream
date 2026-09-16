@@ -13,13 +13,14 @@ from app.adapters.projects import project_locked_policy_context_port
 from scripts.schema_baseline_manifest import build_manifest
 from tests.migration_fixtures import run_alembic_revision, run_scoped_revision_upgrade
 from tests.projects.locked_policy_fixtures import activated_context
+from tests.test_tasks import task_client as task_client, task_database_env as task_database_env
 
 pytestmark = pytest.mark.postgres_schema_contract
 PRIOR = "0023_guide_activation_custody"
 OWN = "0024_task_policy_lineage"
 
 
-async def _rows(factory):
+async def _rows(factory, *, normalize_task=True):
     """Snapshot every retained product row, normalizing only the new nullable Task column."""
     async with factory() as session:
         names = list(
@@ -33,7 +34,7 @@ async def _rows(factory):
         for name in names:
             value = (
                 "to_jsonb(t) - 'locked_contribution_policy_version_id'"
-                if name == "workstream_tasks"
+                if name == "workstream_tasks" and normalize_task
                 else "to_jsonb(t)"
             )
             result[name] = list(
@@ -178,3 +179,75 @@ async def test_0024_refuses_retained_attempt_without_schema_or_row_mutation(
         assert await _rows(factory) == before_rows
         async with factory() as session:
             assert await session.scalar(text("SELECT version_num FROM alembic_version")) == PRIOR
+
+
+async def _retained_attempt_for_downgrade(task_client, monkeypatch, kind):
+    """Arrange reachable retained custody; this is not ART creation/execution proof."""
+    from app.db import session as db_session
+    from app.modules.tasks.models import WorkstreamTask, TaskAssignment
+    from app.modules.tasks.submission_composition import build_submission
+    from sqlalchemy import select
+    from tests.test_tasks import create_active_project, create_ready_task, create_started_task
+
+    project = await create_active_project(task_client)
+    task_data = (
+        await create_ready_task(task_client, project["id"])
+        if kind == "task"
+        else await create_started_task(task_client, project["id"], monkeypatch)
+    )
+    factory = db_session.get_session_factory()
+    async with factory() as session:
+        task = await session.get(WorkstreamTask, task_data["id"])
+        assert task.locked_contribution_policy_version_id is not None
+        if kind in ("submission", "checker"):
+            assignment = await session.scalar(select(TaskAssignment).where(TaskAssignment.task_id == task.id))
+            submission = build_submission(
+                submission_id=str(uuid4()), task=task, contributor_id=assignment.contributor_id,
+                task_assignment_id=assignment.id,
+                contribution_policy_version_id=assignment.submitter_contribution_policy_version_id,
+                version=1, summary="Retained migration evidence", worker_attestation="Migration fixture",
+                supersedes_submission_id=None,
+            )
+            session.add(submission)
+            await session.flush()
+            if kind == "checker":
+                _add_retained_checker(session, submission)
+            await session.commit()
+    return factory
+
+
+def _add_retained_checker(session, submission):
+    """Keep a nullable economic stamp on a valid downstream checker prerequisite."""
+    from app.modules.checkers.models import CheckerRun
+    from app.core.hashing import canonical_json_hash
+
+    locks = {column.name: getattr(submission, column.name)
+             for column in CheckerRun.__table__.columns if column.name.startswith("locked_")}
+    assert locks["locked_payment_policy_version"] is None
+    session.add(CheckerRun(
+        id=str(uuid4()), task_id=submission.task_id, submission_id=submission.id,
+        submission_version=submission.version, trigger_source="submission_finalized",
+        triggered_by=submission.contributor_id, triggered_by_subject="migration-fixture",
+        triggered_by_issuer="flow-test", trigger_auth_source="dev_mock", attempt_number=1,
+        package_hash="sha256:" + "a" * 64, artifact_hash_manifest=[],
+        artifact_manifest_hash=canonical_json_hash([]), **locks,
+    ))
+
+
+@pytest.mark.parametrize("kind", ["task", "assignment", "submission", "checker"])
+async def test_0024_downgrade_refuses_reachable_retained_custody_without_mutation(
+    task_client, clean_postgres_database, monkeypatch, kind,
+):
+    from tests.migration_fixtures import run_guarded_revision_downgrade
+
+    # Later valid states imply earlier custody: do not break FKs to isolate
+    # redundant defensive SQL clauses. Each reachable retained class is real.
+    factory = await _retained_attempt_for_downgrade(task_client, monkeypatch, kind)
+    before_rows = await _rows(factory, normalize_task=False)
+    before_schema = await build_manifest(clean_postgres_database)
+    with pytest.raises(RuntimeError, match="CP08 contribution or payment evidence prevents downgrade"):
+        await run_guarded_revision_downgrade(clean_postgres_database, OWN)
+    assert await build_manifest(clean_postgres_database) == before_schema
+    assert await _rows(factory, normalize_task=False) == before_rows
+    async with factory() as session:
+        assert await session.scalar(text("SELECT version_num FROM alembic_version")) == OWN

@@ -102,6 +102,7 @@ from app.modules.authorization.artifact_project_authority import (
     PROJECT_AUTHORITY_ACTIONS,
     evaluate_project_authority,
     lock_project_authority,
+    lock_project_role_mutation_principals,
 )
 
 ContextRevalidator = Callable[
@@ -449,15 +450,9 @@ class AuthorizationService:
             if scope.kind is PreparedAuthorityScopeKind.PROJECT and action_id not in PROJECT_SCOPED_ADMIN_MUTATIONS:
                 raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.SCOPE_NOT_AUTHORIZED)
             await self._admin.lock_control()
-            if action_id is ActionId.PROJECT_ROLE_GRANT_ISSUE:
-                if scope.target_actor_profile_id is None or scope.role is None:
-                    raise PreparedAuthorizationUnsupported(
-                        AuthorizationDenialCode.RESOURCE_GUARD_DENIED
-                    )
-                locked, _target_eligible = await self._admin.lock_project_role_issue_principals(
-                    caller_actor_profile_id=context.actor_profile_id,
-                    caller_identity_link_id=context.identity_link_id,
-                    target_actor_profile_id=scope.target_actor_profile_id,
+            if action_id in {ActionId.PROJECT_ROLE_GRANT_ISSUE, ActionId.PROJECT_ROLE_GRANT_REVOKE}:
+                locked = await lock_project_role_mutation_principals(
+                    self._admin, context, scope, action_id,
                 )
             else:
                 locked = await self._admin.lock_request_actor(

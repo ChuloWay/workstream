@@ -988,13 +988,13 @@ def complete_submission_payload(package_hash: str = "sha256:package-v1") -> dict
     }
 
 
-async def create_active_project(client: AsyncClient) -> dict:
+async def create_active_project(client: AsyncClient, *, slug: str = "task-queue-project") -> dict:
     project_response = await client.post(
         "/api/v1/projects",
         headers=auth_headers() | {"Idempotency-Key": str(uuid4())},
         json={
             "name": "Task Queue Project",
-            "slug": "task-queue-project",
+            "slug": slug,
             "description": "Project for task queue tests",
         },
     )
@@ -1290,12 +1290,20 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
 
     replacement_subject = "worker-submission-context-replacement"
     replacement_contributor_id = await seed_task_test_actor(replacement_subject)
+    replacement_assignment_id = str(uuid4())
     async with db_session.get_session_factory()() as session:
         await session.execute(
             update(TaskAssignment)
             .where(TaskAssignment.id == str(revision_request.assignment_id))
-            .values(contributor_id=replacement_contributor_id)
+            .values(status="released")
         )
+        stored_task = await session.get(WorkstreamTask, task["id"])
+        session.add(TaskAssignment(
+            id=replacement_assignment_id, task_id=stored_task.id,
+            project_id=stored_task.project_id, contributor_id=replacement_contributor_id,
+            assigned_by=stored_task.created_by, status="active",
+            submitter_contribution_policy_version_id=stored_task.locked_contribution_policy_version_id,
+        ))
         await session.execute(
             update(WorkstreamTask)
             .where(WorkstreamTask.id == task["id"])
@@ -1307,7 +1315,7 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
         await session.commit()
     cross_contributor_request = TaskSubmissionContextRequest(
         task_id=revision_request.task_id,
-        assignment_id=revision_request.assignment_id,
+        assignment_id=UUID(replacement_assignment_id),
         contributor_id=UUID(replacement_contributor_id),
         predecessor_submission_id=revision_request.predecessor_submission_id,
     )
@@ -4913,11 +4921,12 @@ async def test_task_metadata_round_trips_without_obsolete_payment_stamping(task_
 
 
 @pytest.mark.parametrize("transition", ("screen", "release"))
-@pytest.mark.parametrize("phase", ("pre", "post"))
+@pytest.mark.parametrize("phase", ("pre", "post_missing", "post_substituted"))
 async def test_catalogue_rollout_blocks_task_transition_without_writes(
     task_client: AsyncClient, monkeypatch: pytest.MonkeyPatch, transition: str, phase: str,
 ) -> None:
-    from tests.checkers.post_submit.support import altered_catalogue
+    from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+    from app.modules.checkers.runner import default_checker_registry
 
     project = await create_active_project(task_client)
     task = await create_draft_task(task_client, project["id"])
@@ -4937,9 +4946,16 @@ async def test_catalogue_rollout_blocks_task_transition_without_writes(
         assert all(value is None for key, value in before.items() if key.startswith("locked_"))
     else:
         assert before["status"] == "screening"
-    if phase == "post":
-        newer = altered_catalogue(index=8, state="disabled")
-        monkeypatch.setattr("app.modules.checkers.api.post_submit_catalogue.current_post_submit_catalogue", lambda: newer)
+    if phase.startswith("post_"):
+        metadata = current_post_submit_catalogue()
+        registry = default_checker_registry()
+        missing = "check_acceptance_criteria_present"
+        if phase == "post_missing":
+            registry._checkers.pop(missing)
+        else:
+            registry._checkers[missing] = registry.resolve("check_evidence_present")
+        monkeypatch.setattr("app.modules.checkers.runner.default_checker_registry", lambda: registry)
+        assert current_post_submit_catalogue() == metadata
     else:
         from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue
         disabled = build_pre_submission_checker_catalogue().entries[0].stable_id
@@ -4959,3 +4975,6 @@ async def test_catalogue_rollout_blocks_task_transition_without_writes(
     async with db_session.get_session_factory()() as session:
         assert dict((await session.execute(task_query)).mappings().one()) == before
         assert list(await session.scalars(audit_query)) == audits
+        assert list(await session.scalars(select(TaskAssignment.id).where(
+            TaskAssignment.task_id == task["id"],
+        ))) == []

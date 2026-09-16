@@ -5,6 +5,8 @@ from app.core.config import get_settings
 from app.adapters.tasks import task_service
 
 import asyncio
+from types import SimpleNamespace
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -15,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from app.db import session as db_session
 from app.db.session import get_db_session
 from app.adapters.audit import task_transition_audit
-from app.modules.actors.models import ActorIdentityLink
+from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.authorization.runtime import (
     ActorKind, ActorStatus, HumanAuthorizationContext, IdentityLinkStatus,
 )
@@ -213,3 +215,111 @@ async def test_project_grant_revocation_serializes_with_claim(
             assert stored_task.assigned_to == grant["actor_profile_id"]
             assert len(assignments) == 1
             assert assignments[0].id == claim_result.assignment.id
+
+
+@pytest.mark.parametrize("case", ["active", "suspended", "revoked_link", "missing", "foreign", "unauthorized"])
+async def test_role_revocation_target_fence_preserves_authority_and_replay(task_client, monkeypatch, case):
+    """Stored target discovery must not widen access or require target eligibility."""
+    project = await create_active_project(task_client)
+    granted = await admit_and_grant_project_submitter(
+        task_client, monkeypatch, project["id"], "revocation-target",
+    )
+    target_id = granted["actor_profile_id"]
+    set_dev_actor(monkeypatch, roles="project_manager", subject="project-manager-subject")
+    selected_project = project["id"]
+    selected_grant = granted["grant_id"]
+    if case == "foreign":
+        selected_project = (await create_active_project(task_client, slug="foreign-revoke"))["id"]
+    elif case == "missing":
+        selected_grant = str(uuid4())
+    elif case == "unauthorized":
+        set_dev_actor(monkeypatch, roles="worker", subject="revocation-target")
+    async with db_session.get_session_factory()() as session:
+        if case == "suspended":
+            target = await session.get(ActorProfile, target_id)
+            target.status = "suspended"
+            target.suspended_by = target_id
+            target.suspended_at = datetime.now(UTC)
+            target.suspension_reason = "Revocation target fixture"
+        elif case == "revoked_link":
+            link = await session.scalar(select(ActorIdentityLink).where(
+                ActorIdentityLink.actor_profile_id == target_id,
+            ))
+            link.status = "revoked"
+            link.revoked_by = target_id
+            link.revoked_at = datetime.now(UTC)
+            link.revoked_reason = "Revocation target fixture"
+        await session.commit()
+        before = (await session.execute(select(ProjectRoleGrant.__table__).where(
+            ProjectRoleGrant.id == UUID(granted["grant_id"]),
+        ))).mappings().one()
+    locked_targets = []
+    original_principals = AdminAuthorizationRepository.lock_project_role_principals
+
+    async def observe_target(repository, **kwargs):
+        locked_targets.append(kwargs["target_actor_profile_id"])
+        return await original_principals(repository, **kwargs)
+
+    monkeypatch.setattr(AdminAuthorizationRepository, "lock_project_role_principals", observe_target)
+    headers = auth_headers() | {"Idempotency-Key": str(uuid4())}
+    url = f"/api/v1/projects/{selected_project}/role-grants/{selected_grant}/revoke"
+    response = await task_client.post(url, headers=headers, json={"reason": "Revoke target authority"})
+    allowed = case in {"active", "suspended", "revoked_link"}
+    assert response.status_code == (200 if allowed else 404), response.text
+    assert locked_targets == ([] if case in {"missing", "foreign"} else [UUID(target_id)])
+    async with db_session.get_session_factory()() as session:
+        after = (await session.execute(select(ProjectRoleGrant.__table__).where(
+            ProjectRoleGrant.id == UUID(granted["grant_id"]),
+        ))).mappings().one()
+        if allowed:
+            assert after["status"] == "revoked"
+            assert after["actor_profile_id"] == before["actor_profile_id"]
+        else:
+            assert after == before
+    if allowed:
+        replay = await task_client.post(url, headers=headers, json={"reason": "Revoke target authority"})
+        assert replay.status_code == 200, replay.text
+        assert replay.json() == response.json()
+
+
+@pytest.mark.asyncio
+async def test_project_role_issue_crossed_principals_use_one_lexical_lock_order() -> None:
+    low = UUID("00000000-0000-0000-0000-000000000001")
+    high = UUID("ffffffff-ffff-ffff-ffff-ffffffffffff")
+    low_link, high_link = uuid4(), uuid4()
+
+    class RecordingSession:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, UUID]] = []
+
+        async def scalar(self, statement):
+            entity = statement.column_descriptions[0]["entity"]
+            values = set(statement.compile().params.values())
+            actor = low if str(low) in values else high
+            if entity is ActorProfile:
+                self.calls.append(("profile", actor))
+                return SimpleNamespace(id=str(actor), actor_kind="human", status="active")
+            self.calls.append(("link", actor))
+            link_id = low_link if actor == low else high_link
+            return SimpleNamespace(id=str(link_id), actor_profile_id=str(actor))
+
+    expected = [
+        ("profile", low),
+        ("link", low),
+        ("profile", high),
+        ("link", high),
+    ]
+    for caller, caller_link, target in (
+        (low, low_link, high),
+        (high, high_link, low),
+    ):
+        session = RecordingSession()
+        repository = AdminAuthorizationRepository(session)  # type: ignore[arg-type]
+        locked_caller, target_eligible = await repository.lock_project_role_principals(
+            caller_actor_profile_id=caller,
+            caller_identity_link_id=caller_link,
+            target_actor_profile_id=target,
+        )
+        assert locked_caller is not None
+        assert target_eligible is True
+        assert session.calls == expected

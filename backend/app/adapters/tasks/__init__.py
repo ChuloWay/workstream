@@ -37,14 +37,14 @@ __all__ = (
 def task_service(session: AsyncSession, *, settings: Settings) -> TaskService:
     """Compose exact PROJECTS custody and installed CHECKERS at the existing TASK root."""
     from app.adapters.projects import project_locked_policy_context_port
-    from app.adapters.checkers import project_guide_approval_compiler
+    from app.adapters.checkers import project_guide_approval_compiler, installed_post_submit_catalogue
 
-    planner, _, catalogue = project_guide_approval_compiler(
+    planner, _, _ = project_guide_approval_compiler(
         disabled_checker_ids=settings.artifact_pre_submission_checker_disabled_ids,
     )
     return TaskService(
         session, project_contexts=project_locked_policy_context_port(session),
-        pre_submit_planner=planner, post_submit_catalogue=catalogue,
+        pre_submit_planner=planner, post_submit_catalogue=installed_post_submit_catalogue,
     )
 
 

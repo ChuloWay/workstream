@@ -33,6 +33,7 @@ lineage from the three ART references staged in that same transaction.
 - `backend/app/modules/projects/models.py`: unique guide/project/selected-version key for the exact TASK foreign key.
 - `backend/app/modules/checkers/models.py`: nullable retained payment-version field, so remaining downstream packet prerequisites do not require invented payment versions. This does not claim canonical hidden Submission-to-CheckerRun integration.
 - `backend/app/modules/authorization/{submission_consumption,submission_creation_authorization}.py`: bind the exact attempt contribution version into existing prepared/final Submission authority; no new action or permission.
+- `backend/app/modules/authorization/{kernel,repository,artifact_project_authority}.py`: reuse lexical caller/target principal locking for role revocation before Project access, repairing the claim/revocation cycle exposed by canonical PROJECTS custody; no permission or decision changes.
 - One `0024` Alembic revision: same-project/stable-identity constraints, immutable policy stamps, retained-data validation and justified derivation/refusal. Update `backend/alembic/env.py` current-head acceptance and exact migration-graph tests. No prior migration or frozen baseline edits: baseline parity is checked at revision 0001, not head.
 - Existing affected TASK/ART/AUTH public-value constructors and test fixtures: populate required exact fields from actual activated guides and assignments. Remove tests solely protecting superseded payment-policy readiness; preserve authorization, real-ZIP, recovery, rollback, immutable-history and concurrency assertions.
 - Focused `backend/tests/tasks/` lineage/migration tests and existing task, Submission composition, authorization/task-authority, artifact and policy-context tests. Exact ownership/lane/debt registrations only when needed, no gate relaxation.
@@ -183,14 +184,13 @@ commands and review freshness in the PR; no secrets/private guide material.
   CP08-ARCH-002 by required initial assignment identity and immediate stamp validation,
   replacing the unnecessary deferred coupling to ART references.
   CP08-ARCH-003 is retracted: baseline resources describe frozen 0001, not head.
-- Named future proofs: draft/evidence migration preservation; pre-DDL refusal with
+- Implementation proof inventory: draft/evidence migration preservation; pre-DDL refusal with
   row/schema/marker snapshots; wrong same-project assignment stamp; missing or
   mismatched Submission assignment/stamp; exact committed stamp immutability;
   canonical hidden creation with complete ART references; isolated downstream
   CheckerRun payment nullability (not canonical materialization integration); role issuance versus claim in both
   lock orders; claim versus successor activation; two competing claimants;
-  duplicate hidden Submission creation against one predecessor. These are planned
-  runtime proofs, not claims of tests already executed.
+  duplicate hidden Submission creation against one predecessor. Exact candidate execution results and review freshness belong in the PR evidence.
 
 ### Scoped dependency correction
 
@@ -240,3 +240,32 @@ delta includes deletion of the private TASK policy loader, required updates to
 its existing fixture consumers, migration preservation/refusal and concurrency
 proofs, and current capability navigation. It adds no second product boundary,
 new dependency, permissive test exception or compatibility implementation.
+
+### Implementation review corrections
+
+- Readiness resolves the existing CHECKERS installed-handler catalogue only when
+  screening or releasing. Metadata alone does not prove installation; frozen
+  context reads remain independent of deployment availability. Tests remove or
+  substitute a registered handler while preserving catalogue metadata.
+- Direct PostgreSQL assignment tests include two real projects and both foreign
+  project/policy substitutions, with an otherwise identical local positive control.
+- Downgrade preservation covers reachable stamped Task, Assignment, Submission
+  and nullable-payment CheckerRun states. Later valid states imply the earlier
+  custody rows; this proves retained classes, not independent isolation of the
+  redundant defensive SQL predicates by breaking constraints.
+- The crossed-predecessor fixture creates a replacement assignment instead of
+  rewriting an immutable contributor. The obsolete detached `checker_names`
+  projection test is removed: canonical policy custody uses the exact compiled
+  bundle and receipts, whose corruption regressions remain. The stored projection
+  still serves guide proposal/read consumers; this change does not remove their
+  field or claim that display metadata determines execution.
+- Claim/revocation concurrency exposed a Project/grant lock cycle. AUTH now
+  resolves the exact-project stored revocation target under AuthorityControl and
+  locks caller/target principals lexically before Project and grant. It reuses
+  issuance locking, retains the final locked-resource decision, and does not
+  require an active target to revoke a grant. Missing/foreign targets retain
+  concealed denial. Existing real revocation races prove both serial outcomes.
+- The shared AUTH project-authority owner holds role-mutation principal selection;
+  the kernel delegates issue/revoke only. The existing lexical lock unit proof
+  moves into its focused task-authority concurrency module. Both extractions
+  shrink touched structural debt without adding an exception or raising a limit.

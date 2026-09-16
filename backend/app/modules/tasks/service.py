@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -220,7 +221,7 @@ class TaskService:
 
     def __init__(
         self, session: AsyncSession, *, project_contexts: ProjectLockedPolicyContextPort,
-        pre_submit_planner: EffectivePreSubmissionPlanningPort, post_submit_catalogue: PostSubmitCatalogue,
+        pre_submit_planner: EffectivePreSubmissionPlanningPort, post_submit_catalogue: Callable[[], PostSubmitCatalogue],
     ) -> None:
         """Create a service instance bound to one database session.
 
@@ -875,7 +876,7 @@ class TaskService:
             )
             CompiledPostSubmitPolicy.model_validate_json(
                 facts.compiled_post_submit_policy.value,
-            ).validate_catalogue(self._post_submit_catalogue)
+            ).validate_catalogue(self._post_submit_catalogue())
         except ValueError as exc:
             raise TaskProjectNotReady("installed checkers cannot execute the locked policies") from exc
 

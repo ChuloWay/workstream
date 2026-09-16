@@ -244,3 +244,34 @@ async def test_submission_sql_requires_exact_initial_assignment_and_freezes_its_
         assert original.contribution_policy_version_id == stamp
         assert original.task_assignment_id == assignment.id
         assert list(await session.scalars(select(Submission.id))) == [original.id]
+
+
+async def test_assignment_insert_rejects_foreign_project_tuples_direct_sql(task_client):
+    project = await create_active_project(task_client)
+    task = await create_ready_task(task_client, project["id"])
+    foreign = await create_active_project(task_client, slug="foreign-project")
+    foreign_task = await create_ready_task(task_client, foreign["id"])
+    factory = db_session.get_session_factory()
+    async with factory() as session:
+        local = await session.get(WorkstreamTask, task["id"])
+        other = await session.get(WorkstreamTask, foreign_task["id"])
+        assert local.project_id != other.project_id
+        assert local.locked_contribution_policy_version_id != other.locked_contribution_policy_version_id
+        statement = text(
+            "INSERT INTO task_assignments(id,task_id,project_id,contributor_id,assigned_by,status,"
+            "submitter_contribution_policy_version_id) VALUES(:id,:task,:project,:actor,:actor,'active',:policy)"
+        )
+        params = dict(id=str(uuid4()), task=local.id, project=local.project_id,
+                      actor=local.created_by, policy=local.locked_contribution_policy_version_id)
+        for project_id in (other.project_id, local.project_id):
+            with pytest.raises(DBAPIError, match="assignment contribution stamp differs from task"):
+                async with session.begin_nested():
+                    await session.execute(statement, params | {
+                        "project": project_id, "policy": other.locked_contribution_policy_version_id,
+                    })
+            assert await session.get(TaskAssignment, params["id"]) is None
+        await session.execute(statement, params)
+        await session.commit()
+        assignment = await session.get(TaskAssignment, params["id"])
+        assert assignment.project_id == local.project_id
+        assert assignment.submitter_contribution_policy_version_id == local.locked_contribution_policy_version_id

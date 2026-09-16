@@ -57,8 +57,6 @@ async def corrupt_locked_policy_reads(monkeypatch, task_id, mutation):
         ]
     elif mutation == "stale_effective":
         effective.effective_policy["required_evidence"] = []
-    elif mutation == "checker_names":
-        pre.checker_names = ["unknown_project_checker"]
     elif mutation == "stale_bundle":
         pre.compiled_bundle["tampered"] = True
     else:

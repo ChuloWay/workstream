@@ -98,3 +98,11 @@ def project_guide_approval_compiler(*, disabled_checker_ids: str = "") -> tuple[
         disabled_entry_ids=parse_disabled_pre_submission_checker_ids(disabled_checker_ids),
     )
     return planner, project_guide_pre_submission_capabilities(planner), current_post_submit_catalogue()
+
+
+def installed_post_submit_catalogue() -> PostSubmitCatalogue:
+    """Resolve catalogue facts only after checking the installed handler registry."""
+    from app.modules.checkers.post_submit_catalogue import build_post_submit_catalogue
+    from app.modules.checkers.runner import default_checker_registry
+
+    return build_post_submit_catalogue(default_checker_registry())
