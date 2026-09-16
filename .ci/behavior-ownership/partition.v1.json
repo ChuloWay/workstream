@@ -854,6 +854,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/policy_lineage.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/projects/api/post_policy.py"
     },
     {
@@ -1030,15 +1034,15 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/projects/locked_policy_projection.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/projects/locked_policy_repository.py"
     },
     {
       "group": "lifecycle",
       "target": "backend/app/modules/projects/models.py"
-    },
-    {
-      "group": "lifecycle",
-      "target": "backend/app/modules/projects/policy_lineage.py"
     },
     {
       "group": "lifecycle",
@@ -1317,7 +1321,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "7ffc098471cf45d88cfe75cf5405ef14dec93bec644fcb8ef8abd69e3efa0e14",
+  "authority_digest": "54a2edb9588f599931d277f5243561f912b5c8830f4d3e74d3d692b2786bf281",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

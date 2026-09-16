@@ -12,7 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.exc import DBAPIError
 
-from app.modules.projects.policy_lineage import (
+from app.modules.projects.api.policy_lineage import (
     ReviewPolicySemantics,
     policy_digest,
     require_complete_policy,

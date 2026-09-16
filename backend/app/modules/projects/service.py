@@ -32,7 +32,7 @@ from app.modules.projects.models import (
     ReviewPolicy,
     SubmissionArtifactPolicy,
 )
-from app.modules.projects.policy_lineage import require_complete_policy
+from app.modules.projects.api.policy_lineage import require_complete_policy
 from app.modules.projects.repository import ProjectRepository, ProjectRepositoryIntegrityError
 from app.modules.projects.schemas import (
     ActiveGuideReadResponse,

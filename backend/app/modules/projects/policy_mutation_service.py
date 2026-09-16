@@ -25,7 +25,7 @@ from app.modules.authorization.runtime import (
     authorization_resource_digest,
 )
 from app.modules.projects.models import ProjectGuide, ReviewPolicy, RevisionPolicy
-from app.modules.projects.policy_lineage import (
+from app.modules.projects.api.policy_lineage import (
     ReviewPolicySemantics,
     RevisionPolicySemantics,
     policy_digest,

@@ -107,7 +107,7 @@ async def test_legacy_response_recovery_defaults_true_and_retains_v1_hash():
     old = result.response.model_dump(
         mode="json", exclude={"human_review_required", "semantics_format"}
     )
-    from app.modules.projects.policy_lineage import ReviewPolicySemantics, policy_digest
+    from app.modules.projects.api.policy_lineage import ReviewPolicySemantics, policy_digest
 
     old["policy_hash"] = policy_digest(
         "review",
