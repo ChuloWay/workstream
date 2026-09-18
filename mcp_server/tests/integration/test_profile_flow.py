@@ -61,8 +61,17 @@ async def _call(mcp_url: str, token: str) -> tuple[dict[str, Any], bool]:
             async with ClientSession(streams[0], streams[1]) as session:
                 await session.initialize()
                 result = await session.call_tool("workstream_profile_get", {})
-    assert result.structuredContent is not None
-    return result.structuredContent, bool(result.isError)
+    dump = result.model_dump()
+    if "structuredContent" in dump and dump["structuredContent"] is not None:
+        content = dump["structuredContent"]
+    elif "structured_content" in dump and dump["structured_content"] is not None:
+        content = dump["structured_content"]
+    else:
+        import json
+        content = json.loads(dump["content"][0]["text"])
+
+    is_error = dump.get("isError", dump.get("is_error", False))
+    return content, bool(is_error)
 
 
 def _bootstrap_access_administrator(actor_id: str, environment: dict[str, str]) -> None:
