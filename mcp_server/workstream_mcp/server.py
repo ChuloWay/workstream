@@ -31,18 +31,30 @@ class IngressLimitError(Exception):
 
 class _McpPrivacyFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        if record.levelno >= logging.WARNING:
-            record.msg = "MCP request processing failed"
-            record.args = ()
-            record.exc_info = None
-            record.exc_text = None
+        if record.name == "mcp" or record.name.startswith("mcp."):
+            if record.levelno >= logging.WARNING:
+                record.msg = "MCP request processing failed"
+                record.args = ()
+                record.exc_info = None
+                record.exc_text = None
         return True
 
 
 def _install_sdk_log_filter() -> None:
-    logger = logging.getLogger("mcp")
-    if not any(isinstance(item, _McpPrivacyFilter) for item in logger.filters):
-        logger.addFilter(_McpPrivacyFilter())
+    filter_ = _McpPrivacyFilter()
+    handlers = logging.getLogger().handlers + logging.getLogger("uvicorn.error").handlers
+    for handler in handlers:
+        if not any(isinstance(item, _McpPrivacyFilter) for item in handler.filters):
+            handler.addFilter(filter_)
+
+    loggers = [logging.getLogger("mcp")]
+    for name, logger in logging.root.manager.loggerDict.items():
+        if isinstance(logger, logging.Logger) and name.startswith("mcp."):
+            loggers.append(logger)
+
+    for logger in loggers:
+        if not any(isinstance(item, _McpPrivacyFilter) for item in logger.filters):
+            logger.addFilter(filter_)
 
 
 def create_app(settings: Settings) -> Starlette:

@@ -68,6 +68,7 @@ def test_invalid_limits_and_allowed_hosts_fail_closed(changes: dict[str, object]
 def test_environment_requires_origin_and_parses_all_settings(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("WORKSTREAM_API_URL", raising=False)
     with pytest.raises(ConfigurationError):
         Settings.from_env()
 
