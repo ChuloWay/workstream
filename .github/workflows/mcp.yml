@@ -165,4 +165,4 @@ jobs:
           python scripts/run_isolated_tests.py \
             --metadata-json "${RUNNER_TEMP}/workstream-mcp-isolated-evidence.json" \
             --timeout-seconds 240 \
-            -- python -m pytest -q ../mcp_server/tests/integration/test_profile_flow.py
+            -- env PYTHONPATH="../mcp_server" python -m pytest -q ../mcp_server/tests/integration/test_profile_flow.py
