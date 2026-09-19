@@ -3,6 +3,7 @@ name: MCP Foundation
 on:
   pull_request:
     paths:
+      - "backend/**"
       - "mcp_server/**"
       - ".commitrail/initiatives/WS-MCP-002/**"
       - "docs/roadmap_status.md"
@@ -10,6 +11,7 @@ on:
   push:
     branches: [main]
     paths:
+      - "backend/**"
       - "mcp_server/**"
       - ".commitrail/initiatives/WS-MCP-002/**"
       - "docs/roadmap_status.md"

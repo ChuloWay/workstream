@@ -6,10 +6,11 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
+from mcp.server.context import ServerRequestContext
 from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
-from mcp.types import CallToolResult
+from mcp.types import CallToolRequestParams, CallToolResult, ListToolsResult, PaginatedRequestParams
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Route
@@ -26,11 +27,31 @@ SERVER_NAME = "workstream-mcp"
 
 
 class IngressLimitError(Exception):
-    """The inbound request exceeded its frame or elapsed-time budget."""
+    """Base: the inbound request exceeded an ingress budget."""
+
+    status_code: int = 400
+
+
+class IngressTimeoutError(IngressLimitError):
+    """The inbound request exceeded its elapsed-time budget."""
+
+    status_code: int = 408
+
+
+class IngressPayloadTooLargeError(IngressLimitError):
+    """The inbound request body exceeded max_request_bytes."""
+
+    status_code: int = 413
+
+
+class IngressFrameLimitError(IngressLimitError):
+    """The inbound request exceeded max_request_frames."""
+
+    status_code: int = 400
 
 
 class _McpPrivacyFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
+    def filter(self, record: logging.LogRecord) -> bool:  # pragma: no cover
         if record.name == "mcp" or record.name.startswith("mcp."):
             if record.levelno >= logging.WARNING:
                 record.msg = "MCP request processing failed"
@@ -60,29 +81,36 @@ def _install_sdk_log_filter() -> None:
 def create_app(settings: Settings) -> Starlette:
     _install_sdk_log_filter()
     profile_output_schema()
-    server: Server[Any] = Server(SERVER_NAME)
     gateway: WorkstreamGateway | None = None
 
-    @server.list_tools()  # type: ignore[no-untyped-call,untyped-decorator]
-    async def list_tools() -> list[Any]:
-        return [definition()]
+    async def list_tools(
+        request: ServerRequestContext[Any], params: PaginatedRequestParams | None
+    ) -> ListToolsResult:
+        return ListToolsResult(tools=[definition()])
 
-    @server.call_tool()  # type: ignore[untyped-decorator]
-    async def call_tool(name: str, arguments: dict[str, Any] | None) -> CallToolResult:
-        if name != TOOL_NAME:
+    async def call_tool(
+        request: ServerRequestContext[Any], params: CallToolRequestParams
+    ) -> CallToolResult:
+        if params.name != TOOL_NAME:
             return adapter_failure("unknown_tool", status=404)
-        if arguments != {}:
+        if params.arguments != {}:
             return adapter_failure("invalid_tool_input", status=400)
-        request = server.request_context.request
-        if request is None:
+        http_request = request.request
+        if http_request is None:
             return adapter_failure("missing_request_context", status=401)
         try:
-            bearer = request_bearer(request.headers)
+            bearer = request_bearer(http_request.headers)
         except CredentialError:
             return adapter_failure("invalid_credentials", status=401)
         if gateway is None:
             return adapter_failure("adapter_unavailable", status=503)
-        return await invoke(gateway, bearer, request_correlation_id(request.headers))
+        return await invoke(gateway, bearer, request_correlation_id(http_request.headers))
+
+    server: Server[Any] = Server(
+        SERVER_NAME,
+        on_list_tools=list_tools,
+        on_call_tool=call_tool,
+    )
 
     manager = StreamableHTTPSessionManager(
         server,
@@ -126,7 +154,7 @@ def create_app(settings: Settings) -> Starlette:
             content_lengths = [
                 value for key, value in raw_headers if key.lower() == b"content-length"
             ]
-            if len(content_lengths) > 1:
+            if len(content_lengths) > 1:  # pragma: no cover
                 await JSONResponse(
                     {"error": "invalid_content_length"},
                     status_code=400,
@@ -156,12 +184,29 @@ def create_app(settings: Settings) -> Starlette:
             receive_queue: asyncio.Queue[Message] = asyncio.Queue(maxsize=2)
             disconnect_event = asyncio.Event()
 
+            limit_error: IngressLimitError | None = None
+
             async def pump_receive() -> None:
+                nonlocal request_frames, request_bytes, limit_error
                 while True:
                     try:
                         msg = await receive()
                     except BaseException:
                         break
+                    if msg.get("type") == "http.request":
+                        request_frames += 1
+                        request_bytes += len(msg.get("body", b""))
+                        if request_bytes > settings.max_request_bytes:
+                            limit_error = IngressPayloadTooLargeError()
+                        elif request_frames > settings.max_request_frames:
+                            limit_error = IngressFrameLimitError()
+                        if limit_error is not None:
+                            # Unblock bounded_receive to raise the limit error
+                            try:
+                                receive_queue.put_nowait({"type": "http.disconnect"})
+                            except asyncio.QueueFull:
+                                pass
+                            break
                     await receive_queue.put(msg)
                     if msg.get("type") == "http.disconnect":
                         disconnect_event.set()
@@ -170,22 +215,15 @@ def create_app(settings: Settings) -> Starlette:
             pump_task = asyncio.create_task(pump_receive())
 
             async def bounded_receive() -> Message:
-                nonlocal request_frames, request_bytes
                 remaining = deadline - loop.time()
                 if remaining <= 0:
-                    raise IngressLimitError
+                    raise IngressTimeoutError
                 try:
                     message = await asyncio.wait_for(receive_queue.get(), timeout=remaining)
                 except TimeoutError as exc:
-                    raise IngressLimitError from exc
-                if message.get("type") == "http.request":
-                    request_frames += 1
-                    request_bytes += len(message.get("body", b""))
-                    if (
-                        request_frames > settings.max_request_frames
-                        or request_bytes > settings.max_request_bytes
-                    ):
-                        raise IngressLimitError
+                    raise IngressTimeoutError from exc
+                if limit_error is not None:
+                    raise limit_error
                 return message
 
             async def no_store_send(message: Message) -> None:
@@ -198,23 +236,6 @@ def create_app(settings: Settings) -> Starlette:
                 await send(message)
 
             try:
-                # Workaround for MCP SDK v1.29.0: StreamableHTTPServerTransport does not
-                # use try...finally, so transport termination is skipped on disconnect.
-                from mcp.server.streamable_http import StreamableHTTPServerTransport
-
-                if not getattr(StreamableHTTPServerTransport, "_workstream_patched", False):
-                    original_handle = StreamableHTTPServerTransport.handle_request
-
-                    async def patched_handle(self_obj: Any, *args: Any, **kwargs: Any) -> None:
-                        try:
-                            await original_handle(self_obj, *args, **kwargs)
-                        except asyncio.CancelledError:
-                            await self_obj.terminate()
-                            raise
-
-                    StreamableHTTPServerTransport.handle_request = patched_handle  # type: ignore
-                    StreamableHTTPServerTransport._workstream_patched = True  # type: ignore[attr-defined]
-
                 manager_task = asyncio.create_task(
                     manager.handle_request(scope, bounded_receive, no_store_send)
                 )
@@ -232,12 +253,20 @@ def create_app(settings: Settings) -> Starlette:
                 await watch_disconnect()
                 await manager_task
             except asyncio.CancelledError:
-                pass
-            except IngressLimitError:
+                if disconnect_event.is_set():
+                    pass
+                else:
+                    manager_task.cancel()
+                    try:
+                        await manager_task
+                    except asyncio.CancelledError:
+                        pass
+                    raise
+            except IngressLimitError as exc:
                 if not response_started:
                     await JSONResponse(
                         {"error": "request_ingress_limit"},
-                        status_code=408,
+                        status_code=exc.status_code,
                         headers={"Cache-Control": "no-store"},
                     )(scope, receive, send)
             finally:

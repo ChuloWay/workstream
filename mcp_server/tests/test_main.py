@@ -20,9 +20,7 @@ def test_main_loads_settings_and_starts_hardened_uvicorn(monkeypatch: Any) -> No
 
     monkeypatch.setattr(__main__, "Settings", Settings)
     monkeypatch.setattr(__main__, "create_app", lambda settings: ("app", settings))
-    monkeypatch.setattr(
-        __main__.uvicorn, "run", lambda app, **kwargs: captured.update(app=app, **kwargs)
-    )
+    monkeypatch.setattr("uvicorn.run", lambda app, **kwargs: captured.update(app=app, **kwargs))
     __main__.main()
     app, passed_settings = captured.pop("app")
     assert app == "app"

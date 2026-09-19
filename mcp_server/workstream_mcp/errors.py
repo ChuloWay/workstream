@@ -28,12 +28,11 @@ class SafeFailure:
     def result(self) -> CallToolResult:
         payload = self.payload()
         return CallToolResult(
-            isError=True,
+            is_error=True,
             content=[TextContent(type="text", text=json.dumps(payload, separators=(",", ":")))],
-            structuredContent=payload,
+            structured_content=payload,
         )
 
 
 def adapter_failure(error: str, *, status: int | None = None) -> CallToolResult:
     return SafeFailure(error=error, status=status).result()
-

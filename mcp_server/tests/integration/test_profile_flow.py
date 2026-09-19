@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import IO, Any
 from uuid import uuid4
 
-import httpx
+import httpx2 as httpx
 import pytest
-from mcp import ClientSession
+from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -42,7 +42,7 @@ async def _ready(url: str, process: subprocess.Popen[str]) -> None:
         for _ in range(160):
             assert process.poll() is None, "subprocess exited before readiness"
             try:
-                if (await client.get(url)).status_code < 500:
+                if (await client.head(url)).status_code < 500:
                     return
             except httpx.HTTPError:
                 pass
@@ -56,11 +56,11 @@ async def _call(mcp_url: str, token: str) -> tuple[dict[str, Any], bool]:
         follow_redirects=False,
         trust_env=False,
         timeout=20,
-    ) as client:
-        async with streamable_http_client(mcp_url + "/mcp", http_client=client) as streams:
-            async with ClientSession(streams[0], streams[1]) as session:
-                await session.initialize()
-                result = await session.call_tool("workstream_profile_get", {})
+    ) as http_client:
+        transport = streamable_http_client(mcp_url + "/mcp", http_client=http_client)
+        async with Client(server=transport, mode="2026-07-28") as client:
+            assert client.protocol_version == "2026-07-28"
+            result = await client.call_tool("workstream_profile_get", {})
     dump = result.model_dump()
     if "structuredContent" in dump and dump["structuredContent"] is not None:
         content = dump["structuredContent"]
@@ -68,6 +68,7 @@ async def _call(mcp_url: str, token: str) -> tuple[dict[str, Any], bool]:
         content = dump["structured_content"]
     else:
         import json
+
         content = json.loads(dump["content"][0]["text"])
 
     is_error = dump.get("isError", dump.get("is_error", False))
@@ -166,9 +167,13 @@ async def test_installed_mcp_preserves_profile_and_lifecycle_parity() -> None:
         )
     }
     api_port, mcp_port = find_free_port(), find_free_port()
-    while api_port == mcp_port:
+    proxy_port = find_free_port()
+    while api_port == mcp_port or proxy_port in (api_port, mcp_port):
         mcp_port = find_free_port()
-    api_url, mcp_url = f"http://127.0.0.1:{api_port}", f"http://127.0.0.1:{mcp_port}"
+        proxy_port = find_free_port()
+    api_url = f"http://127.0.0.1:{api_port}"
+    mcp_url = f"http://127.0.0.1:{mcp_port}"
+    proxy_url = f"http://127.0.0.1:{proxy_port}"
     executable = os.environ.get("WORKSTREAM_MCP_EXECUTABLE") or shutil.which("workstream-mcp")
     assert executable, "install the workstream-mcp wheel before running integration tests"
 
@@ -177,7 +182,7 @@ async def test_installed_mcp_preserves_profile_and_lifecycle_parity() -> None:
             key: value for key, value in os.environ.items() if key in {"PATH", "LANG", "LC_ALL"}
         }
         clean_mcp_env.update(
-            WORKSTREAM_API_URL=api_url,
+            WORKSTREAM_API_URL=proxy_url,
             WORKSTREAM_MCP_HOST="127.0.0.1",
             WORKSTREAM_MCP_PORT=str(mcp_port),
         )
@@ -189,13 +194,94 @@ async def test_installed_mcp_preserves_profile_and_lifecycle_parity() -> None:
             executable=executable,
             scratch=scratch,
         )
+        proxy_task: asyncio.Task[Any] | None = None
         try:
+            import uvicorn
+            from starlette.applications import Starlette
+            from starlette.requests import Request
+            from starlette.responses import Response
+
+            proxy_app = Starlette()
+            proxy_in_flight = 0
+            proxy_max_in_flight = 0
+            proxy_barrier = asyncio.Barrier(2)
+
+            async def proxy_forward(request: Request) -> Response:
+                nonlocal proxy_in_flight, proxy_max_in_flight
+
+                # Intercept the target profile request
+                if request.url.path == "/api/v1/actors/me" and request.method == "GET":
+                    proxy_in_flight += 1
+                    if proxy_in_flight > proxy_max_in_flight:
+                        proxy_max_in_flight = proxy_in_flight
+
+                    try:
+                        await asyncio.wait_for(proxy_barrier.wait(), timeout=5.0)
+                    except (TimeoutError, asyncio.BrokenBarrierError):
+                        pass
+
+                    proxy_in_flight -= 1
+
+                async with httpx.AsyncClient() as client:
+                    headers = dict(request.headers)
+                    headers.pop("host", None)
+                    url = f"{api_url}{request.url.path}"
+                    if request.url.query:
+                        url += f"?{request.url.query}"
+
+                    response = await client.request(
+                        method=request.method,
+                        url=url,
+                        headers=headers,
+                        content=await request.body(),
+                    )
+                    return Response(
+                        content=response.content,
+                        status_code=response.status_code,
+                        headers=dict(response.headers),
+                    )
+
+            from starlette.routing import Route
+
+            proxy_app = Starlette(
+                routes=[
+                    Route(
+                        "/{path:path}",
+                        proxy_forward,
+                        methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+                    )
+                ]
+            )
+
+            config = uvicorn.Config(
+                app=proxy_app, host="127.0.0.1", port=proxy_port, log_level="critical"
+            )
+            proxy_server = uvicorn.Server(config)
+            proxy_task = asyncio.create_task(proxy_server.serve())
+
+            # Wait for proxy to bind
+            async with httpx.AsyncClient() as client:
+                for _ in range(20):
+                    try:
+                        await client.get(proxy_url)
+                        break
+                    except httpx.HTTPError:
+                        await asyncio.sleep(0.1)
+
             await _ready(api_url + "/api/v1/health", api)
             await _ready(mcp_url + "/mcp", mcp)
             async with httpx.AsyncClient(base_url=api_url, trust_env=False, timeout=10) as direct:
                 first: dict[str, dict[str, Any]] = {}
-                for name in tokens:
-                    profile, failed = await _call(mcp_url, tokens[name])
+                names = list(tokens.keys())
+
+                # Prove overlapping concurrency: start all requests in parallel
+                tasks = [asyncio.create_task(_call(mcp_url, tokens[name])) for name in names]
+                results = await asyncio.gather(*tasks)
+                assert proxy_max_in_flight >= 2, (
+                    f"Expected overlapping backend requests, but max was {proxy_max_in_flight}"
+                )
+
+                for name, (profile, failed) in zip(names, results, strict=True):
                     assert not failed
                     assert profile["display_name"] is None and profile["contact_email"] is None
                     assert profile["admin_roles"] == [] and profile["project_role_grants"] == []
@@ -253,6 +339,8 @@ async def test_installed_mcp_preserves_profile_and_lifecycle_parity() -> None:
                     assert failed
                     assert failure["status"] == 403 and failure["code"] == code
         finally:
+            if proxy_task:
+                proxy_task.cancel()
             _stop(mcp)
             _stop(api)
             api_log.close()

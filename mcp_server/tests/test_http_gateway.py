@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import typing
 
-import httpx
+import httpx2 as httpx
 import pytest
 from conftest import profile_fixture
 
@@ -10,10 +11,10 @@ from workstream_mcp.config import Settings
 from workstream_mcp.http_gateway import WorkstreamGateway, create_http_client
 
 
-def settings(**changes: object) -> Settings:
-    values: dict[str, object] = {"api_url": "http://127.0.0.1:8000"}
+def settings(**changes: typing.Any) -> Settings:
+    values: dict[str, typing.Any] = {"api_url": "http://127.0.0.1:8000"}
     values.update(changes)
-    return Settings(**values)  # type: ignore[arg-type]
+    return Settings(**values)
 
 
 @pytest.mark.asyncio
@@ -95,10 +96,10 @@ async def test_gateway_returns_only_safe_upstream_failure(
         ),
     ],
 )
-async def test_gateway_rejects_invalid_or_oversized_success(response: object) -> None:
+async def test_gateway_rejects_invalid_or_oversized_success(response: typing.Any) -> None:
     client = httpx.AsyncClient(
         base_url="http://api.test", transport=httpx.MockTransport(lambda _: response())
-    )  # type: ignore[operator]
+    )
     try:
         result = await WorkstreamGateway(settings(max_response_bytes=1024), client).profile_get(
             "Bearer opaque"
@@ -112,32 +113,40 @@ async def test_gateway_rejects_invalid_or_oversized_success(response: object) ->
 
 @pytest.mark.asyncio
 async def test_gateway_timeout_and_cancellation_have_distinct_outcomes() -> None:
-    async def timeout_handler(_: httpx.Request) -> httpx.Response:
+    async def handler(_: httpx.Request) -> httpx.Response:
         await asyncio.sleep(1)
         return httpx.Response(
             200, json=profile_fixture(), headers={"content-type": "application/json"}
         )
 
-    client = httpx.AsyncClient(
-        base_url="http://api.test", transport=httpx.MockTransport(timeout_handler)
-    )
+    client = httpx.AsyncClient(base_url="http://api.test", transport=httpx.MockTransport(handler))
     try:
-        result = await WorkstreamGateway(
+        gateway = WorkstreamGateway(
             settings(
                 total_timeout_seconds=0.1, connect_timeout_seconds=0.1, read_timeout_seconds=0.1
             ),
             client,
-        ).profile_get("Bearer opaque")
+        )
+        # Timeout outcome
+        result = await gateway.profile_get("Bearer opaque")
+        assert result.failure is not None
+        assert result.failure.status == 504
+
+        # Cancellation outcome
+        gateway_no_timeout = WorkstreamGateway(settings(), client)
+        task = asyncio.create_task(gateway_no_timeout.profile_get("Bearer opaque"))
+        await asyncio.sleep(0)  # Yield to let the task start
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
     finally:
         await client.aclose()
-    assert result.failure is not None
-    assert result.failure.status == 504
 
 
 def test_outbound_client_disables_environment_proxy_and_redirects() -> None:
     client = create_http_client(settings())
     try:
         assert client.follow_redirects is False
-        assert client._trust_env is False  # type: ignore[attr-defined]
+        assert client._trust_env is False
     finally:
         asyncio.run(client.aclose())
