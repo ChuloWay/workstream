@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import IO, Any
 from uuid import uuid4
 
-import httpx
+import httpx2 as httpx
 import pytest
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
@@ -42,7 +42,7 @@ async def _ready(url: str, process: subprocess.Popen[str]) -> None:
         for _ in range(160):
             assert process.poll() is None, "subprocess exited before readiness"
             try:
-                if (await client.get(url)).status_code < 500:
+                if (await client.head(url)).status_code < 500:
                     return
             except httpx.HTTPError:
                 pass
@@ -68,6 +68,7 @@ async def _call(mcp_url: str, token: str) -> tuple[dict[str, Any], bool]:
         content = dump["structured_content"]
     else:
         import json
+
         content = json.loads(dump["content"][0]["text"])
 
     is_error = dump.get("isError", dump.get("is_error", False))
@@ -194,8 +195,13 @@ async def test_installed_mcp_preserves_profile_and_lifecycle_parity() -> None:
             await _ready(mcp_url + "/mcp", mcp)
             async with httpx.AsyncClient(base_url=api_url, trust_env=False, timeout=10) as direct:
                 first: dict[str, dict[str, Any]] = {}
-                for name in tokens:
-                    profile, failed = await _call(mcp_url, tokens[name])
+                names = list(tokens.keys())
+                
+                # Prove overlapping concurrency: start all requests in parallel
+                tasks = [asyncio.create_task(_call(mcp_url, tokens[name])) for name in names]
+                results = await asyncio.gather(*tasks)
+                
+                for name, (profile, failed) in zip(names, results, strict=True):
                     assert not failed
                     assert profile["display_name"] is None and profile["contact_email"] is None
                     assert profile["admin_roles"] == [] and profile["project_role_grants"] == []

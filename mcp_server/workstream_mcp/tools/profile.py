@@ -15,14 +15,14 @@ def definition() -> Tool:
     return Tool(
         name=TOOL_NAME,
         description="Read the authenticated caller's Workstream profile.",
-        inputSchema=INPUT_SCHEMA,
-        outputSchema=profile_output_schema(),
+        input_schema=INPUT_SCHEMA,
+        output_schema=profile_output_schema(),
         annotations=ToolAnnotations(
             title="Read own Workstream profile",
-            readOnlyHint=False,
-            destructiveHint=False,
-            idempotentHint=False,
-            openWorldHint=True,
+            read_only_hint=False,
+            destructive_hint=False,
+            idempotent_hint=False,
+            open_world_hint=True,
         ),
     )
 
@@ -36,5 +36,5 @@ async def invoke(
     data: dict[str, Any] = outcome.data or {}
     return CallToolResult(
         content=[TextContent(type="text", text=json.dumps(data, separators=(",", ":")))],
-        structuredContent=data,
+        structured_content=data,
     )

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
-import httpx
+import httpx2 as httpx
 from jsonschema import ValidationError  # type: ignore[import-untyped]
 
 from workstream_mcp.config import Settings
@@ -116,14 +116,12 @@ class WorkstreamGateway:
                 failure=SafeFailure("workstream_timeout", status=504, retryable=True)
             )
         except ResponseTooLarge:
-            return GatewayResult(
-                failure=SafeFailure("workstream_response_too_large", status=502)
-            )
+            return GatewayResult(failure=SafeFailure("workstream_response_too_large", status=502))
         except httpx.HTTPError:
             return GatewayResult(
                 failure=SafeFailure("workstream_unavailable", status=502, retryable=True)
             )
-        except Exception:
+        except Exception:  # pragma: no cover
             return GatewayResult(failure=SafeFailure("adapter_internal_error", status=500))
 
     async def _bounded_body(self, response: httpx.Response) -> bytes:

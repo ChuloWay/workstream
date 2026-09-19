@@ -12,7 +12,7 @@ def test_only_profile_tool_has_closed_empty_input_and_selected_output() -> None:
     tool = definition()
     assert tool.name == TOOL_NAME
     assert (
-        tool.inputSchema
+        tool.input_schema
         == INPUT_SCHEMA
         == {
             "type": "object",
@@ -20,10 +20,10 @@ def test_only_profile_tool_has_closed_empty_input_and_selected_output() -> None:
             "additionalProperties": False,
         }
     )
-    assert tool.outputSchema == profile_output_schema()
+    assert tool.output_schema == profile_output_schema()
     assert tool.annotations is not None
     # First admission can create an actor/link, so this must not be advertised as side-effect-free.
-    assert tool.annotations.readOnlyHint is False
+    assert tool.annotations.read_only_hint is False
 
 
 def test_mcp_tool_listing_exposes_exactly_one_tool(
@@ -42,7 +42,7 @@ def test_mcp_tool_listing_exposes_exactly_one_tool(
     assert listed[0]["outputSchema"] == profile_output_schema()
 
 
-def test_capabilities_expose_tools_but_no_resources_or_prompts(
+def test_capabilities_expose_tools_but_no_resources_or_prompts_legacy(
     adapter: tuple[TestClient, list[Any], dict[str, Any]],
 ) -> None:
     client, _, _ = adapter
@@ -54,7 +54,7 @@ def test_capabilities_expose_tools_but_no_resources_or_prompts(
             "id": 1,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-03-26",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {},
                 "clientInfo": {"name": "catalogue-test", "version": "0"},
             },
@@ -65,3 +65,38 @@ def test_capabilities_expose_tools_but_no_resources_or_prompts(
     assert "tools" in capabilities
     assert "resources" not in capabilities
     assert "prompts" not in capabilities
+
+
+def test_discover_exposes_capabilities_on_modern_2026_path(
+    adapter: tuple[TestClient, list[Any], dict[str, Any]],
+) -> None:
+    client, _, _ = adapter
+    response = client.post(
+        "/mcp",
+        headers={
+            "accept": "application/json, text/event-stream",
+            "mcp-protocol-version": "2026-07-28",
+            "mcp-method": "server/discover",
+        },
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "server/discover",
+            "params": {
+                "_meta": {
+                    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                    "io.modelcontextprotocol/clientInfo": {
+                        "name": "catalogue-test",
+                        "version": "0",
+                    },
+                    "io.modelcontextprotocol/clientCapabilities": {},
+                }
+            },
+        },
+    )
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert "2026-07-28" in result["supportedVersions"]
+    assert "tools" in result["capabilities"]
+    assert "resources" not in result["capabilities"]
+    assert "prompts" not in result["capabilities"]

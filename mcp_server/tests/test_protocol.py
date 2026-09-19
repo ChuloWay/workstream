@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import typing
 from typing import Any
 
 import pytest
 from conftest import mcp_call
 from starlette.testclient import TestClient
+
+from workstream_mcp.config import Settings
+from workstream_mcp.server import create_app
 
 
 @pytest.mark.parametrize(
@@ -90,17 +96,13 @@ def test_every_response_is_no_store_and_profile_is_not_cross_caller_cached(
 async def test_cancellation_reaches_running_tool_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import asyncio
-    import json
 
-    from workstream_mcp.config import Settings
     from workstream_mcp.http_gateway import GatewayResult
-    from workstream_mcp.server import create_app
 
     tool_call_started = asyncio.Event()
     tool_call_cancelled = asyncio.Event()
 
-    async def hanging_profile_get(*args, **kwargs) -> GatewayResult:
+    async def hanging_profile_get(*args: typing.Any, **kwargs: typing.Any) -> GatewayResult:
         tool_call_started.set()
         try:
             await asyncio.sleep(10)
@@ -142,7 +144,7 @@ async def test_cancellation_reaches_running_tool_call(
     async def receive() -> dict[str, Any]:
         return await receive_queue.get()
 
-    async def send(message: dict[str, Any]) -> None:
+    async def send(message: typing.MutableMapping[str, typing.Any]) -> None:
         pass
 
     async with app.router.lifespan_context(app):
@@ -164,3 +166,50 @@ async def test_cancellation_reaches_running_tool_call(
             await app_task
         except asyncio.CancelledError:
             pass
+
+
+
+
+@pytest.mark.asyncio
+async def test_asgi_ingress_limits() -> None:
+    settings = Settings(
+        api_url="http://127.0.0.1:8000",
+        max_request_frames=2,
+        max_request_bytes=1024,
+        ingress_timeout_seconds=0.1,
+    )
+    app = create_app(settings)
+    scope = {"type": "http", "method": "POST", "path": "/mcp", "headers": [(b"host", b"127.0.0.1")]}
+    
+    # 1. Test Frame Limit
+    from collections.abc import MutableMapping
+    receive_queue: asyncio.Queue[MutableMapping[str, Any]] = asyncio.Queue()
+    for _ in range(5):
+        receive_queue.put_nowait({"type": "http.request", "body": b" ", "more_body": True})
+    receive_queue.put_nowait({"type": "http.request", "body": b"{}", "more_body": False})
+    
+    send_queue: asyncio.Queue[MutableMapping[str, Any]] = asyncio.Queue()
+    await app(scope, receive_queue.get, send_queue.put)
+    resp = await send_queue.get()
+    assert resp["status"] == 400
+    body = await send_queue.get()
+    assert isinstance(body["body"], bytes)
+    assert json.loads(body["body"])["error"] == "request_ingress_limit"
+    
+    # 2. Test Timeout
+    async def slow_receive() -> MutableMapping[str, Any]:
+        await asyncio.sleep(0.2)
+        return {"type": "http.request", "body": b"{}", "more_body": False}
+        
+    send_queue = asyncio.Queue()
+    await app(scope, slow_receive, send_queue.put)
+    resp = await send_queue.get()
+    assert resp["status"] == 408
+    
+    # 3. Test Payload Size Limit
+    receive_queue = asyncio.Queue()
+    receive_queue.put_nowait({"type": "http.request", "body": b" " * 1025, "more_body": False})
+    send_queue = asyncio.Queue()
+    await app(scope, receive_queue.get, send_queue.put)
+    resp = await send_queue.get()
+    assert resp["status"] == 413

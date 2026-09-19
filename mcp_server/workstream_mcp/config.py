@@ -109,13 +109,19 @@ class Settings:
         if not self.allowed_hosts or any(not item.strip() for item in self.allowed_hosts):
             raise ConfigurationError("at least one non-empty allowed host is required")
         for allowed_host in self.allowed_hosts:
-            host, separator, port = allowed_host.rpartition(":")
-            if not separator or not host or port != "*" and not port.isdigit():
-                raise ConfigurationError("allowed hosts must include a port or :*")
+            if ":" in allowed_host:
+                host, _, port = allowed_host.rpartition(":")
+                if not host or (port != "*" and not port.isdigit()):
+                    raise ConfigurationError(
+                        "allowed hosts with colon must include a valid port or :*"
+                    )
+                if port.isdigit() and not 1 <= int(port) <= 65_535:
+                    raise ConfigurationError("allowed host port is invalid")
+            else:
+                host = allowed_host
+
             if "*" in host or host.startswith(".") or host.endswith("."):
                 raise ConfigurationError("wildcard hostnames are not allowed")
-            if port.isdigit() and not 1 <= int(port) <= 65_535:
-                raise ConfigurationError("allowed host port is invalid")
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -124,9 +130,9 @@ class Settings:
             raise ConfigurationError("WORKSTREAM_API_URL is required")
         allowed_hosts = tuple(
             item.strip()
-            for item in os.getenv(
-                "WORKSTREAM_MCP_ALLOWED_HOSTS", "127.0.0.1:*,localhost:*"
-            ).split(",")
+            for item in os.getenv("WORKSTREAM_MCP_ALLOWED_HOSTS", "127.0.0.1:*,localhost:*").split(
+                ","
+            )
         )
         return cls(
             api_url=api_url,
@@ -145,9 +151,7 @@ class Settings:
             max_request_frames=_integer(
                 "WORKSTREAM_MCP_MAX_REQUEST_FRAMES", 128, minimum=1, maximum=4_096
             ),
-            max_in_flight=_integer(
-                "WORKSTREAM_MCP_MAX_IN_FLIGHT", 8, minimum=1, maximum=256
-            ),
+            max_in_flight=_integer("WORKSTREAM_MCP_MAX_IN_FLIGHT", 8, minimum=1, maximum=256),
             ingress_timeout_seconds=_seconds(
                 "WORKSTREAM_MCP_INGRESS_TIMEOUT_SECONDS", 15, minimum=0.1, maximum=180
             ),

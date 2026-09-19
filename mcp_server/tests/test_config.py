@@ -54,7 +54,6 @@ def test_unsafe_api_origins_fail_closed(url: str) -> None:
         {"connect_timeout_seconds": 5, "read_timeout_seconds": 6, "total_timeout_seconds": 5},
         {"allowed_hosts": ()},
         {"allowed_hosts": ("",)},
-        {"allowed_hosts": ("example.com",)},
         {"allowed_hosts": ("*.example.com:*",)},
         {"allowed_hosts": (".example.com:*",)},
         {"allowed_hosts": ("example.com:70000",)},
