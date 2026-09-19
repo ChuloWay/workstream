@@ -84,3 +84,83 @@ def test_every_response_is_no_store_and_profile_is_not_cross_caller_cached(
         "Bearer alice",
         "Bearer bob",
     ]
+
+
+@pytest.mark.asyncio
+async def test_cancellation_reaches_running_tool_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+    import json
+
+    from workstream_mcp.config import Settings
+    from workstream_mcp.http_gateway import GatewayResult
+    from workstream_mcp.server import create_app
+
+    tool_call_started = asyncio.Event()
+    tool_call_cancelled = asyncio.Event()
+
+    async def hanging_profile_get(*args, **kwargs) -> GatewayResult:
+        tool_call_started.set()
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            tool_call_cancelled.set()
+            raise
+        return GatewayResult(data={"actor_profile_id": "profile-1"})
+
+    monkeypatch.setattr(
+        "workstream_mcp.http_gateway.WorkstreamGateway.profile_get", hanging_profile_get
+    )
+    settings = Settings(api_url="http://127.0.0.1:8000")
+    app = create_app(settings)
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/mcp",
+        "headers": [
+            (b"host", b"127.0.0.1:8080"),
+            (b"accept", b"application/json, text/event-stream"),
+            (b"authorization", b"Bearer token"),
+            (b"content-type", b"application/json"),
+        ],
+    }
+
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "workstream_profile_get", "arguments": {}},
+        }
+    ).encode("utf-8")
+
+    receive_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+    await receive_queue.put({"type": "http.request", "body": body, "more_body": False})
+
+    async def receive() -> dict[str, Any]:
+        return await receive_queue.get()
+
+    async def send(message: dict[str, Any]) -> None:
+        pass
+
+    async with app.router.lifespan_context(app):
+        # Start the ASGI app in the background
+        app_task = asyncio.create_task(app(scope, receive, send))
+
+        # Wait for profile_get to start
+        await asyncio.wait_for(tool_call_started.wait(), timeout=1.0)
+
+        # Simulate client disconnect (this is how stateless mode cancels)
+        await receive_queue.put({"type": "http.disconnect"})
+
+        # Verify the cancellation reaches the running tool call
+        await asyncio.wait_for(tool_call_cancelled.wait(), timeout=1.0)
+
+        # Cleanup
+        app_task.cancel()
+        try:
+            await app_task
+        except asyncio.CancelledError:
+            pass

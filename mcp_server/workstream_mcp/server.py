@@ -151,13 +151,27 @@ def create_app(settings: Settings) -> Starlette:
             request_frames = 0
             response_started = False
 
+            receive_queue: asyncio.Queue[Message] = asyncio.Queue()
+
+            async def pump_receive() -> None:
+                while True:
+                    try:
+                        msg = await receive()
+                    except BaseException:
+                        break
+                    await receive_queue.put(msg)
+                    if msg.get("type") == "http.disconnect":
+                        break
+
+            pump_task = asyncio.create_task(pump_receive())
+
             async def bounded_receive() -> Message:
                 nonlocal request_frames
                 remaining = deadline - loop.time()
                 if remaining <= 0:
                     raise IngressLimitError
                 try:
-                    message = await asyncio.wait_for(receive(), timeout=remaining)
+                    message = await asyncio.wait_for(receive_queue.get(), timeout=remaining)
                 except TimeoutError as exc:
                     raise IngressLimitError from exc
                 if message.get("type") == "http.request":
@@ -176,7 +190,45 @@ def create_app(settings: Settings) -> Starlette:
                 await send(message)
 
             try:
-                await manager.handle_request(scope, bounded_receive, no_store_send)
+                # Workaround for MCP SDK v1.29.0: StreamableHTTPServerTransport does not
+                # use try...finally, so transport termination is skipped on disconnect.
+                from mcp.server.streamable_http import StreamableHTTPServerTransport
+
+                if not getattr(StreamableHTTPServerTransport, "_workstream_patched", False):
+                    original_handle = StreamableHTTPServerTransport.handle_request
+
+                    async def patched_handle(self_obj: Any, *args: Any, **kwargs: Any) -> None:
+                        try:
+                            await original_handle(self_obj, *args, **kwargs)
+                        except asyncio.CancelledError:
+                            await self_obj.terminate()
+                            raise
+
+                    StreamableHTTPServerTransport.handle_request = patched_handle  # type: ignore
+                    StreamableHTTPServerTransport._workstream_patched = True  # type: ignore[attr-defined]
+
+                manager_task = asyncio.create_task(
+                    manager.handle_request(scope, bounded_receive, no_store_send)
+                )
+
+                async def watch_disconnect() -> None:
+                    while True:
+                        msg_task = asyncio.create_task(receive_queue.get())
+                        done, pending = await asyncio.wait(
+                            [manager_task, msg_task], return_when=asyncio.FIRST_COMPLETED
+                        )
+                        if manager_task in done:
+                            msg_task.cancel()
+                            break
+                        msg = msg_task.result()
+                        if msg.get("type") == "http.disconnect":
+                            manager_task.cancel()
+                            break
+
+                await watch_disconnect()
+                await manager_task
+            except asyncio.CancelledError:
+                pass
             except IngressLimitError:
                 if not response_started:
                     await JSONResponse(
@@ -184,6 +236,8 @@ def create_app(settings: Settings) -> Starlette:
                         status_code=408,
                         headers={"Cache-Control": "no-store"},
                     )(scope, receive, send)
+            finally:
+                pump_task.cancel()
 
     return Starlette(
         routes=[Route("/mcp", Endpoint(), methods=["POST", "GET", "DELETE"])],
