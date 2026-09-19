@@ -149,9 +149,12 @@ def create_app(settings: Settings) -> Starlette:
             loop = asyncio.get_running_loop()
             deadline = loop.time() + settings.ingress_timeout_seconds
             request_frames = 0
+            request_bytes = 0
             response_started = False
 
-            receive_queue: asyncio.Queue[Message] = asyncio.Queue()
+            # Bounded queue prevents uncontrolled memory consumption during streaming
+            receive_queue: asyncio.Queue[Message] = asyncio.Queue(maxsize=2)
+            disconnect_event = asyncio.Event()
 
             async def pump_receive() -> None:
                 while True:
@@ -161,12 +164,13 @@ def create_app(settings: Settings) -> Starlette:
                         break
                     await receive_queue.put(msg)
                     if msg.get("type") == "http.disconnect":
+                        disconnect_event.set()
                         break
 
             pump_task = asyncio.create_task(pump_receive())
 
             async def bounded_receive() -> Message:
-                nonlocal request_frames
+                nonlocal request_frames, request_bytes
                 remaining = deadline - loop.time()
                 if remaining <= 0:
                     raise IngressLimitError
@@ -176,7 +180,11 @@ def create_app(settings: Settings) -> Starlette:
                     raise IngressLimitError from exc
                 if message.get("type") == "http.request":
                     request_frames += 1
-                    if request_frames > settings.max_request_frames:
+                    request_bytes += len(message.get("body", b""))
+                    if (
+                        request_frames > settings.max_request_frames
+                        or request_bytes > settings.max_request_bytes
+                    ):
                         raise IngressLimitError
                 return message
 
@@ -212,18 +220,14 @@ def create_app(settings: Settings) -> Starlette:
                 )
 
                 async def watch_disconnect() -> None:
-                    while True:
-                        msg_task = asyncio.create_task(receive_queue.get())
-                        done, pending = await asyncio.wait(
-                            [manager_task, msg_task], return_when=asyncio.FIRST_COMPLETED
-                        )
-                        if manager_task in done:
-                            msg_task.cancel()
-                            break
-                        msg = msg_task.result()
-                        if msg.get("type") == "http.disconnect":
-                            manager_task.cancel()
-                            break
+                    disconnect_task = asyncio.create_task(disconnect_event.wait())
+                    done, pending = await asyncio.wait(
+                        [manager_task, disconnect_task], return_when=asyncio.FIRST_COMPLETED
+                    )
+                    if disconnect_task in done:
+                        manager_task.cancel()
+                    else:
+                        disconnect_task.cancel()
 
                 await watch_disconnect()
                 await manager_task
