@@ -44,7 +44,8 @@ the hidden policy behavior.
    frozen work; CP07 supplies hidden PROJECTS
    activation/binding, and AUTH-12H supplies its live manager authority. ARCH-03A completes the internal context port;
    CP08 delivers lineage fields and existing Task/Assignment/Submission writers together.
-   ARCH-03B retains queues, invalidation and broader projections. CP09 removes the replaced legacy
+   ARCH-03B retains detail/locked-context and audit projections and invalidation.
+   CP09 removes the replaced legacy
    economic path only after all consumers are replaced, including CHECKERS and
    public Submission cutover; it does not block canonical `allow_review`.
 2. Add CON-03C ContributionRecord/CompensationAward persistence after the
