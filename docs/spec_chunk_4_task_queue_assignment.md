@@ -84,8 +84,8 @@ parallel commands from the same actor. Referential integrity remains enforced.
 
 ## Claim and start retries
 
-`POST /tasks/{task_id}/claim`, `POST /tasks/{task_id}/start`, and
-`POST /operations/tasks/{task_id}/start` require one UUID `Idempotency-Key`
+`POST /api/v1/tasks/{task_id}/claim`, `POST /api/v1/tasks/{task_id}/start`, and
+`POST /api/v1/operations/tasks/{task_id}/start` require one UUID `Idempotency-Key`
 header. Retrying the same actor/action/key and semantic request returns the
 original typed success response only after fresh current authorization and
 exact task, active assignment and locked-context checks. Claim replay requires

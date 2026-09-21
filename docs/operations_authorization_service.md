@@ -764,8 +764,8 @@ and commits bounded read-decision evidence. `PATCH /api/v1/actors/me` declares
 kernel never commits or rolls back.
 
 Self routes return explicit 403 errors because the caller owns the target:
-`identity_link_revoked`, then `actor_deactivated`, then `actor_suspended` for an
-update. A correction to lifecycle state takes effect on the next request; no
+`identity_link_revoked`, then `actor_deactivated`, then `actor_suspended` for both
+self-read and self-update. A correction to lifecycle state takes effect on the next request; no
 decision cache survives a request. Token role changes do not affect either
 self action. Unknown and planned actions appear publicly only as
 `permission_not_granted`.

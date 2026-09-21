@@ -14,7 +14,8 @@ from app.modules.authorization.runtime import AuthorizationEvidenceUnavailable
 from app.modules.authorization.task_authorization import PreparedTaskAuthorization
 from app.modules.tasks.api import TaskAuthorityDenied
 from app.modules.audit.service import AuditService, LifecycleAuditParticipant
-from app.modules.tasks.models import AuditEvent, TaskAssignment, WorkstreamTask
+from app.modules.tasks.models import AuditEvent, TaskAssignment, TaskCommandReceipt, WorkstreamTask
+from app.modules.tasks.command_replay import TaskCommandReplay
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.service import TaskServiceError
 from tests.test_tasks import (
@@ -432,6 +433,9 @@ async def test_manager_context_and_system_operator_override_are_distinct(task_cl
         assert no_reason.status_code == 422, no_reason.text
     reason = "Operator verified assigned contributor started work"
     start_headers = auth_headers()
+    await _assert_operator_failure_rollback(
+        task_client, monkeypatch, task_id, owner, claimed, start_headers, reason,
+    )
     started = await task_client.post(
         f"/api/v1/operations/tasks/{task_id}/start",
         headers=start_headers,
@@ -465,6 +469,67 @@ async def test_manager_context_and_system_operator_override_are_distinct(task_cl
         )
         assert decision.action_id == "operations.task.start_override"
         assert decision.matched_grant_id == issued.json()["resource_id"]
+        assert await session.scalar(select(func.count()).select_from(AuditEvent).where(
+            AuditEvent.entity_id == task_id, AuditEvent.event_type == "TaskStartOverridden",
+        )) == 1
+    await _assert_operator_revocation_denies_replay(
+        task_client, monkeypatch, task_id, owner, issued, start_headers, reason,
+        bootstrap_subject, bootstrap_issuer,
+    )
+
+
+async def _assert_operator_failure_rollback(
+    task_client, monkeypatch, task_id, owner, claimed, start_headers, reason,
+):
+    original_complete = TaskCommandReplay.complete
+    def fail_after_operator_staging(*args):
+        original_complete(*args)
+        raise OperationalError("operator receipt failure", None, RuntimeError("injected"))
+    with monkeypatch.context() as patch:
+        patch.setattr(TaskCommandReplay, "complete", staticmethod(fail_after_operator_staging))
+        failed = await task_client.post(
+            f"/api/v1/operations/tasks/{task_id}/start", headers=start_headers, json={"reason": reason},
+        )
+    assert failed.status_code == 503, failed.text
+    async with db_session.get_session_factory()() as session:
+        unchanged = await session.get(WorkstreamTask, task_id)
+        assert unchanged.status == "claimed" and unchanged.assigned_to == owner["actor_profile_id"]
+        assignment = await session.get(TaskAssignment, claimed.json()["assignment"]["id"])
+        assert assignment.status == "active" and assignment.contributor_id == owner["actor_profile_id"]
+        assert await session.scalar(select(func.count()).select_from(TaskCommandReceipt).where(
+            TaskCommandReceipt.task_id == task_id,
+            TaskCommandReceipt.action_id == "operations.task.start_override",
+        )) == 0
+        assert await session.scalar(select(func.count()).select_from(AuditEvent).where(
+            AuditEvent.entity_id == task_id, AuditEvent.event_type == "TaskStartOverridden",
+        )) == 0
+        decisions = list(await session.scalars(select(AuditEvent).where(
+            AuditEvent.action_id == "operations.task.start_override",
+        )))
+        assert all(not event.after_facts["allowed"] for event in decisions)
+
+
+async def _assert_operator_revocation_denies_replay(
+    task_client, monkeypatch, task_id, owner, issued, start_headers, reason, bootstrap_subject, bootstrap_issuer,
+):
+    set_dev_actor(monkeypatch, roles="viewer", subject=bootstrap_subject, issuer=bootstrap_issuer)
+    revoked = await task_client.post(
+        f"/api/v1/admin-role-grants/{issued.json()['resource_id']}/revoke",
+        headers=auth_headers(), json={"reason": "Remove operator authority before retry"},
+    )
+    assert revoked.status_code == 200, revoked.text
+    set_dev_actor(monkeypatch, roles="viewer", subject="explicit-operator")
+    denied_replay = await task_client.post(
+        f"/api/v1/operations/tasks/{task_id}/start", headers=start_headers, json={"reason": reason},
+    )
+    assert denied_replay.status_code == 403, denied_replay.text
+    async with db_session.get_session_factory()() as session:
+        unchanged = await session.get(WorkstreamTask, task_id)
+        assert unchanged.status == "in_progress" and unchanged.assigned_to == owner["actor_profile_id"]
+        assert await session.scalar(select(func.count()).select_from(TaskCommandReceipt).where(
+            TaskCommandReceipt.task_id == task_id,
+            TaskCommandReceipt.action_id == "operations.task.start_override",
+        )) == 1
         assert await session.scalar(select(func.count()).select_from(AuditEvent).where(
             AuditEvent.entity_id == task_id, AuditEvent.event_type == "TaskStartOverridden",
         )) == 1

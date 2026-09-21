@@ -1,15 +1,15 @@
 # Deny suspended self access and recover committed task commands
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: suspension denies self-read and self-update; existing
   task claim/start commands support authorized durable idempotent replay.
 
 ## Intent and current behavior
 
-The human confirmed that suspension blocks even self-read. Currently AUTH's
-self evaluator and actor response allow suspended reads. Claim/start currently
-prevent duplicate assignments but cannot recover their success after a lost
+The human confirmed that suspension blocks even self-read. Before this change,
+AUTH's self evaluator and actor response allowed suspended reads. Claim/start
+prevented duplicate assignments but could not recover their success after a lost
 response. ARCH-03C already requires replay; fulfill that bounded requirement
 here rather than build a competing claim operation. Merged ARCH-03B2 owns the
 hidden ready queue and remains unchanged.
@@ -22,6 +22,7 @@ receipt migration and migration admission, affected caller tests/drills, schema
 fingerprint/reset inventory, focused test-lane registration if needed, canonical
 AUTH/TASK specifications, roadmap and ARCH-03C remaining-scope reconciliation.
 Refresh exact structural-debt inventory for the shrinking touched AUTH owners;
+refresh current assertion-map targets while retaining historical provenance;
 do not raise limits, add debt or grant exceptions.
 No multiple issuers, queue activation, new permissions, new claim operation,
 assignment invalidation, submission/review lifecycle changes, retained-data
@@ -89,7 +90,8 @@ Commands: focused `pytest --no-cov` actor self, task authority/PREP and new
 `tests/tasks/test_command_replay.py` tests; real PostgreSQL through
 `scripts/run_isolated_tests.py`; Ruff; module/AUTH boundaries; migration/schema
 fingerprint proof; links/stale scans; full hosted Backend and MCP checks.
-New test paths are implementation targets, not claims of executed evidence.
+Named tests define required verification; current execution and review results
+belong in the PR, not this durable intended-outcome record.
 
 Named proofs in `test_command_replay.py`: `test_committed_task_response_replays_once`,
 `test_task_key_mismatch_rejects_reason_and_target`, `test_task_key_namespace_is_per_operation`,
@@ -113,3 +115,14 @@ Base includes merged #419. Existing claim/lineage writers and hidden queue are
 reused. ARCH-03C keeps its remaining activation/projection/invalidation work;
 this change removes only its unimplemented claim/start replay requirement.
 No additional human decision is needed within the confirmed scope.
+
+## Review-driven corrections
+
+- Preserve old assertion IDs, spans and source hashes in the AUTH split map,
+  while explicitly superseding the old suspended-read allowance with the
+  human-confirmed denial contract. This is a policy correction, not a claim
+  that the old `200` assertion is preserved.
+- Update the migration-chain proof and all current self-access/drill wording.
+- Prove failure rollback and same-key recovery separately for claim, start and
+  operator start. Exercise revoked system-Operator authority and each exact
+  non-self post-state guard, rather than infer them from submitter replay.

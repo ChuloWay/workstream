@@ -285,9 +285,10 @@ These cases do not certify the remaining endpoint contracts automatically.
 Actor administration additionally checks complete human profile identity and
 lifecycle output fields, exact mutation receipts, same-key replay, and unchanged
 target readbacks after invalid reasons. Lifecycle reasons use a 500-byte UTF-8
-positive boundary and reject 502-byte and NUL inputs. Suspended actors may read
-their own profile, including their suspended status, but may not update it;
-that allowed read advances admission timestamps. Deactivated actors may do neither.
+positive boundary and reject 502-byte and NUL inputs. Suspended actors may neither
+read nor update their own profile. Denied self-reads do not advance admission
+timestamps; an authorized administrator can inspect the suspended profile.
+Deactivated actors may likewise do neither.
 Embedded-NUL self-profile cases preserve
 [API-DRILL-007](external-api-drill-findings.md#api-drill-007-embedded-nul-in-canonical-profile-fields-becomes-503)
 as a permanent 422 regression expectation after the request-validator repair;

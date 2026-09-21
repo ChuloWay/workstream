@@ -10,7 +10,7 @@ from app.modules.authorization.catalogue import ActionId
 from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.task_authorization import PreparedTaskAuthorization
 from app.modules.tasks.api import TaskAuthorityDenied, TaskAuthorityFacts, TaskAuthorityOperation
-from app.modules.authorization.domain.task_authority import TaskAuthorityResourceContext
+from app.modules.authorization.domain.task_authority import TaskAuthorityResourceContext, task_resource_guard
 from app.modules.authorization.kernel import AuthorizationService
 from app.modules.authorization.prepared import PreparedAuthorizationService
 from app.modules.authorization.repository import AdminAuthorizationRepository
@@ -337,6 +337,30 @@ async def test_task_key_cannot_differ_from_prepared_key():
             ))
     finally:
         prepared.close()
+
+
+@pytest.mark.parametrize("case", [
+    "valid", "wrong_assignment", "missing_key", "self_owner", "inconsistent_owner", "wrong_state", "missing_reason",
+])
+def test_operator_replay_requires_exact_nonself_post_state(case):
+    _, _, _, resource, _ = setup()
+    assignment_id, contributor_id = uuid4(), uuid4()
+    values = dict(task_status="in_progress", assigned_to=contributor_id,
+                  assignment_contributor_id=contributor_id, assignment_id=assignment_id,
+                  replay_assignment_id=assignment_id, idempotency_key=uuid4(), reason="Operator verified work")
+    if case == "wrong_assignment":
+        values["replay_assignment_id"] = uuid4()
+    elif case == "missing_key":
+        values["idempotency_key"] = None
+    elif case == "self_owner":
+        values["assigned_to"] = values["assignment_contributor_id"] = resource.actor_profile_id
+    elif case == "inconsistent_owner":
+        values["assigned_to"] = uuid4()
+    elif case == "wrong_state":
+        values["task_status"] = "claimed"
+    elif case == "missing_reason":
+        values["reason"] = " "
+    assert task_resource_guard(ActionId.OPERATIONS_TASK_START_OVERRIDE, resource.model_copy(update=values)) is (case == "valid")
 
 
 @pytest.mark.parametrize("identity", list(ServiceIdentity))
