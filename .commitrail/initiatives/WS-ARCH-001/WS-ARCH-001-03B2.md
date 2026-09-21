@@ -27,8 +27,8 @@ cutover work; this queue must not call those helpers or create another role path
 
 ### Allowed
 
-- `backend/app/modules/tasks/api/ready_queue.py`, its API exports, and a focused
-  TASK-owned repository implementation for the new read port.
+- `backend/app/modules/tasks/api/ready_queue.py`, its API exports, and
+  `backend/app/modules/tasks/repository.py` extending the existing owner.
 - `backend/tests/tasks/test_ready_queue.py`; exact TASK test-lane registration
   and its equality assertion.
 - This record, ARCH parent/overview/map, affected current navigation and
@@ -73,7 +73,11 @@ use the unique task ID tie-breaker. No query selects a current guide or CON poli
 
 - [ ] Invalid input fails before database access; wrong-project cursor rejects.
 - [ ] Project/state/assignment eligibility filters precede limit and next cursor;
-      foreign/draft/claimed tasks cannot affect a page or indicate another page.
+      foreign/draft/assigned tasks cannot affect a page or indicate another page.
+      Isolate each predicate: local READY/non-null assigned_to/no active assignment
+      and local READY/null assigned_to/exact-stamp active assignment are separate
+      committed decoys with their pre-query state asserted. Interleave all decoys
+      with eligible controls and verify exact items/cursors through exhaustion.
 - [ ] Equal timestamps page deterministically without duplicates; removed or
       claimed anchors still permit continuation; exhausted and empty pages end.
 - [ ] Active assignment inconsistency is excluded; inactive history is allowed.
@@ -102,7 +106,7 @@ Do not fabricate non-draft stamps or disable guards in normal arrangements.
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
 | Input boundary | `test_ready_queue_request_validation` | Planned | Pure controls including bool limit and naive dates |
-| Scoped pagination | `test_ready_queue_filters_before_pagination` | Planned | Real ready tasks in two projects plus draft/claimed decoys; same timestamps and limit-one continuation |
+| Scoped pagination | `test_ready_queue_filters_before_pagination` | Planned | Two projects plus independently excluded local draft, assigned_to-only and active-assignment-only decoys; assert stored states, deterministic timestamps/UUID order and exact limit-one traversal to exhaustion |
 | Assignment visibility | `test_ready_queue_assignment_visibility` | Planned | Valid exact-stamp active assignment on ready task versus closed history; preserve all DB constraints |
 | Detached facts | `test_ready_queue_detached_projection` | Planned | Full field equality, mutable source-tag mutation and frozen result rejection |
 | Caller transaction | `test_ready_queue_preserves_transaction` | Planned | Pending invalid row no autoflush; separately flushed marker read/rollback and independent observer |
@@ -113,7 +117,12 @@ Do not fabricate non-draft stamps or disable guards in normal arrangements.
 
 ## Review findings
 
-Pending focused plan review before product implementation.
+Security/architecture/reuse review accepts the hidden data-owner boundary;
+existing per-task authority cannot authorize a collection without prior discovery.
+QA-03B2-PLAN-01 repaired the predicate matrix: a claimed decoy is insufficient
+for assigned_to because state/active-assignment guards also exclude it. Prove
+each eligibility predicate independently using reachable exact-stamp database
+states, without disabling constraints. Named tests remain future evidence.
 
 ## Reconciliation
 
