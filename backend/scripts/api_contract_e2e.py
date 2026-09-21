@@ -1970,6 +1970,7 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
         await request_json(
             client, "POST", f"/api/v1/tasks/{task['id']}/claim", worker_token,
             {"reason": "Revoked authority must not permit task work"}, 403,
+            idempotency_key=str(uuid4()),
         )
         renewed_submitter = await client.post(
             f"/api/v1/projects/{project['id']}/role-grants",
@@ -2095,6 +2096,7 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             f"/api/v1/tasks/{task['id']}/claim",
             worker_token,
             {"reason": "real worker claim"},
+            idempotency_key=str(uuid4()),
         )
         assert claim["task"]["locked_contribution_policy_version_id"] == active["contribution_policy_version_id"]
         assert claim["assignment"]["submitter_contribution_policy_version_id"] == screened[
@@ -2117,6 +2119,7 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             f"/api/v1/tasks/{task['id']}/start",
             worker_token,
             {"reason": "real worker start"},
+            idempotency_key=str(uuid4()),
         )
         active_work_context = await request_json(
             client,
