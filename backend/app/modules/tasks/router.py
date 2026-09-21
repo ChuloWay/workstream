@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_registered_actor
-from app.core.api_controls import StructuredHTTPException, error_response
+from app.core.api_controls import StructuredHTTPException, error_response, parse_idempotency_key
 from app.core.permissions import PermissionDenied
 from app.db.session import get_db_session
 from app.modules.tasks.schemas import (
@@ -31,6 +31,17 @@ from app.adapters.tasks import task_service
 from app.schemas.auth import ActorContext
 
 router = APIRouter(tags=["tasks"])
+
+TASK_IDEMPOTENCY_PARAMETER = {
+    "name": "Idempotency-Key", "in": "header", "required": True,
+    "schema": {"type": "string", "format": "uuid"},
+}
+
+
+def require_task_command_key(request: Request) -> UUID:
+    """Validate a single retry key before mutating actor resolution."""
+    values = request.headers.getlist("Idempotency-Key")
+    return parse_idempotency_key(values[0] if len(values) == 1 else "")
 
 
 CANONICAL_ERROR_OBJECT_SCHEMA = {"$ref": "#/components/schemas/ApiError"}
@@ -330,45 +341,51 @@ async def list_task_audit_events(
 
 @router.post(
     "/tasks/{task_id}/claim", response_model=TaskWithAssignmentResponse, response_model_exclude_none=True,
-    openapi_extra={"x-workstream-action-id": TaskAuthorityOperation.CLAIM.value},
+    openapi_extra={"x-workstream-action-id": TaskAuthorityOperation.CLAIM.value,
+                   "parameters": [TASK_IDEMPOTENCY_PARAMETER]},
 )
 async def claim_task(
     task_id: UUID,
+    idempotency_key: Annotated[UUID, Depends(require_task_command_key)],
     commands: Annotated[AuthorizedTaskCommands, Depends(get_task_commands)],
     payload: TaskTransitionRequest | None = None,
 ) -> TaskWithAssignmentResponse:
     try:
-        return await commands.claim(task_id, payload.reason if payload else None)
+        return await commands.claim(task_id, payload.reason if payload else None, idempotency_key=idempotency_key)
     except TaskServiceError as exc:
         raise task_http_error(exc) from exc
 
 
 @router.post(
     "/tasks/{task_id}/start", response_model=TaskResponse, response_model_exclude_none=True,
-    openapi_extra={"x-workstream-action-id": TaskAuthorityOperation.START.value},
+    openapi_extra={"x-workstream-action-id": TaskAuthorityOperation.START.value,
+                   "parameters": [TASK_IDEMPOTENCY_PARAMETER]},
 )
 async def start_task(
     task_id: UUID,
+    idempotency_key: Annotated[UUID, Depends(require_task_command_key)],
     commands: Annotated[AuthorizedTaskCommands, Depends(get_task_commands)],
     payload: TaskTransitionRequest | None = None,
 ) -> TaskResponse:
     try:
-        return await commands.start(task_id, payload.reason if payload else None)
+        return await commands.start(task_id, payload.reason if payload else None, idempotency_key=idempotency_key)
     except TaskServiceError as exc:
         raise task_http_error(exc) from exc
 
 
 @router.post(
     "/operations/tasks/{task_id}/start", response_model=TaskResponse, response_model_exclude_none=True,
-    openapi_extra={"x-workstream-action-id": TaskAuthorityOperation.START_OVERRIDE.value},
+    openapi_extra={"x-workstream-action-id": TaskAuthorityOperation.START_OVERRIDE.value,
+                   "parameters": [TASK_IDEMPOTENCY_PARAMETER]},
 )
 async def override_task_start(
     task_id: UUID,
+    idempotency_key: Annotated[UUID, Depends(require_task_command_key)],
     commands: Annotated[AuthorizedTaskCommands, Depends(get_task_commands)],
     payload: TaskTransitionRequest,
 ) -> TaskResponse:
     try:
-        return await commands.start(task_id, payload.reason, operator_override=True)
+        return await commands.start(task_id, payload.reason, idempotency_key=idempotency_key, operator_override=True)
     except TaskServiceError as exc:
         raise task_http_error(exc) from exc
 

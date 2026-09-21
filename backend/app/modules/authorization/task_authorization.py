@@ -46,6 +46,8 @@ class PreparedTaskAuthorization:
             assignment_contributor_id=facts.assignment_contributor_id,
             locked_context_hash=facts.locked_context_hash,
             reason=facts.reason,
+            idempotency_key=facts.idempotency_key,
+            replay_assignment_id=facts.replay_assignment_id,
         )
 
     async def prepare(self, facts: TaskAuthorityFacts) -> object:
@@ -57,7 +59,7 @@ class PreparedTaskAuthorization:
             self._repository,
         )
         caller_input = PreparedAuthorizationInput(
-            idempotency_key=self._context.request_id,
+            idempotency_key=facts.idempotency_key or self._context.request_id,
             request_value=resource.model_dump(mode="json"),
         )
         try:

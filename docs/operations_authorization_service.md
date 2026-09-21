@@ -180,8 +180,9 @@ profile plus sorted active administrative role names as a non-authoritative
 self projection; project grants remain empty until AUTH-10. `PATCH /api/v1/actors/me` accepts
 only `display_name` and `contact_email`; token roles, issuer metadata, actor
 kind, status, grants, and lifecycle fields are not writable there. Suspended
-profiles remain readable for support, but suspended or deactivated profiles
-cannot be mutated or use legacy product routes.
+and deactivated profiles cannot read or update their self profile or perform
+protected product operations. An authorized administrator may still inspect
+their status through the separate administrative API.
 
 Unknown services require later manual provisioning and are denied without a
 write. Agent and Space subjects are denied without a write. Operators must not
@@ -753,7 +754,8 @@ human grants.
 ## Actor Self Decision Operations
 
 `GET /api/v1/actors/me` declares `actor.profile.read_self`; it permits an
-active identity link with an active or suspended human actor. Both self routes
+active identity link with an active human actor. Suspended actors are denied
+on both self routes. Both self routes
 lock the exact actor profile first and its exact identity link second and
 recheck current state before deciding. GET then advances verification timestamps
 and commits bounded read-decision evidence. `PATCH /api/v1/actors/me` declares

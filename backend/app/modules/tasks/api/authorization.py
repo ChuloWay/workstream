@@ -26,6 +26,8 @@ class TaskAuthorityFacts:
     assignment_contributor_id: UUID | None
     locked_context_hash: str
     reason: str | None = None
+    idempotency_key: UUID | None = None
+    replay_assignment_id: UUID | None = None
 
 
 class TaskAuthorityDenied(RuntimeError):

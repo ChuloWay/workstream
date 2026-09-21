@@ -108,7 +108,7 @@ def setup(*, granted=True, status="active", link_status="active"):
 
 async def prepare(prepared, resource, action=ActionId.TASK_CLAIM):
     value = PreparedAuthorizationInput(
-        idempotency_key=uuid4(), request_value=resource.model_dump(mode="json")
+        idempotency_key=resource.idempotency_key or uuid4(), request_value=resource.model_dump(mode="json")
     )
     handle = await prepared.prepare(
         action,
@@ -225,6 +225,8 @@ async def test_foreign_project_grant_does_not_prepare():
         ("identity_link_id", uuid4()),
         ("locked_context_hash", "sha256:" + "b" * 64),
         ("task_status", "claimed"),
+        ("idempotency_key", uuid4()),
+        ("replay_assignment_id", uuid4()),
     ],
 )
 async def test_substituted_final_facts_cannot_consume(field, value):
@@ -288,6 +290,51 @@ async def test_commit_invalidates_prepared_task_authority():
         with pytest.raises(PreparedAuthorizationHandleInvalid):
             await prepared.consume(handle, ActionId.TASK_CLAIM, request, resource)
         assert evidence.events == []
+    finally:
+        prepared.close()
+
+
+@pytest.mark.parametrize("action,state", [(ActionId.TASK_CLAIM, "claimed"), (ActionId.TASK_START, "in_progress")])
+@pytest.mark.parametrize("case", ["valid", "wrong_assignment", "foreign_owner", "wrong_state", "missing_key"])
+async def test_replay_authority_requires_exact_current_post_state(action, state, case):
+    _, _, prepared, resource, evidence = setup()
+    assignment_id = uuid4()
+    values = {
+        "task_status": state, "assigned_to": resource.actor_profile_id,
+        "assignment_contributor_id": resource.actor_profile_id,
+        "assignment_id": assignment_id, "replay_assignment_id": assignment_id,
+        "idempotency_key": uuid4(),
+    }
+    if case == "wrong_assignment":
+        values["replay_assignment_id"] = uuid4()
+    elif case == "foreign_owner":
+        values["assigned_to"] = values["assignment_contributor_id"] = uuid4()
+    elif case == "wrong_state":
+        values["task_status"] = "ready"
+    elif case == "missing_key":
+        values["idempotency_key"] = None
+    resource = resource.model_copy(update=values)
+    try:
+        handle, request = await prepare(prepared, resource, action)
+        if case == "valid":
+            assert (await prepared.consume(handle, action, request, resource)).allowed
+        else:
+            with pytest.raises(AuthorizationDenied):
+                await prepared.consume(handle, action, request, resource)
+        assert evidence.events[-1].after_facts["allowed"] is (case == "valid")
+    finally:
+        prepared.close()
+
+
+async def test_task_key_cannot_differ_from_prepared_key():
+    _, _, prepared, resource, _ = setup()
+    resource = resource.model_copy(update={"idempotency_key": uuid4()})
+    request = PreparedAuthorizationInput(idempotency_key=uuid4(), request_value=resource.model_dump(mode="json"))
+    try:
+        with pytest.raises(PreparedAuthorizationHandleInvalid):
+            await prepared.prepare(ActionId.TASK_CLAIM, request, PreparedAuthorityScope(
+                kind=PreparedAuthorityScopeKind.PROJECT, project_id=resource.scope_project_id,
+            ))
     finally:
         prepared.close()
 

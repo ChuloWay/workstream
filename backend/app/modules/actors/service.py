@@ -359,10 +359,7 @@ class ActorService:
         admin_roles: tuple[str, ...] = (),
     ) -> ActorProfileSelfResponse:
         """Build the Contributor-domain response with informational active role names."""
-        if profile.actor_kind != "human":
-            raise UnsupportedSubjectKind("Unsupported subject kind")
-        if profile.status == "deactivated":
-            raise ActorDeactivated("Actor is deactivated")
+        ActorService._require_active_human(profile)
         return ActorProfileSelfResponse(
             actor_profile_id=profile.id,
             actor_kind="human",

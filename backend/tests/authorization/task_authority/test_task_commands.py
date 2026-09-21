@@ -431,12 +431,22 @@ async def test_manager_context_and_system_operator_override_are_distinct(task_cl
         )
         assert no_reason.status_code == 422, no_reason.text
     reason = "Operator verified assigned contributor started work"
+    start_headers = auth_headers()
     started = await task_client.post(
         f"/api/v1/operations/tasks/{task_id}/start",
-        headers=auth_headers(),
+        headers=start_headers,
         json={"reason": reason},
     )
     assert started.status_code == 200, started.text
+    replayed = await task_client.post(
+        f"/api/v1/operations/tasks/{task_id}/start", headers=start_headers, json={"reason": reason},
+    )
+    assert replayed.status_code == 200, replayed.text
+    assert replayed.json() == started.json()
+    mismatch = await task_client.post(
+        f"/api/v1/operations/tasks/{task_id}/start", headers=start_headers, json={"reason": "Changed reason"},
+    )
+    assert mismatch.status_code == 409 and mismatch.json()["error"]["code"] == "idempotency_mismatch"
     async with db_session.get_session_factory()() as session:
         row = await session.get(WorkstreamTask, task_id)
         assert row.status == "in_progress" and row.assigned_to == owner["actor_profile_id"]
@@ -455,3 +465,6 @@ async def test_manager_context_and_system_operator_override_are_distinct(task_cl
         )
         assert decision.action_id == "operations.task.start_override"
         assert decision.matched_grant_id == issued.json()["resource_id"]
+        assert await session.scalar(select(func.count()).select_from(AuditEvent).where(
+            AuditEvent.entity_id == task_id, AuditEvent.event_type == "TaskStartOverridden",
+        )) == 1

@@ -14,7 +14,8 @@ from app.modules.tasks.api.authorization import (
     TaskAuthorizationPort,
 )
 from app.modules.tasks.api.transition_audit import TaskTransitionAuditPort, TaskTransitionFacts
-from app.modules.tasks.models import TaskAssignment, WorkstreamTask
+from app.modules.tasks.models import TaskAssignment, TaskCommandReceipt, WorkstreamTask
+from app.modules.tasks.command_replay import TaskCommandReplay
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.schemas import (
     AssignmentResponse,
@@ -51,6 +52,7 @@ class AuthorizedTaskCommands:
         self._actor_id = actor_profile_id
         self._repo = TaskRepository(session)
         self._contexts = contexts
+        self._replay = TaskCommandReplay(session)
 
     def _facts(
         self,
@@ -58,6 +60,8 @@ class AuthorizedTaskCommands:
         assignment: TaskAssignment | None,
         operation: TaskAuthorityOperation,
         reason: str | None,
+        idempotency_key: UUID | None = None,
+        replay_assignment_id: UUID | None = None,
     ) -> TaskAuthorityFacts:
         return TaskAuthorityFacts(
             operation=operation,
@@ -73,6 +77,8 @@ class AuthorizedTaskCommands:
                          else getattr(task, field)) for field in LOCKED_CONTEXT_REQUIRED_FIELDS}
             ),
             reason=reason,
+            idempotency_key=idempotency_key,
+            replay_assignment_id=replay_assignment_id,
         )
 
     async def _locked_task(
@@ -81,13 +87,18 @@ class AuthorizedTaskCommands:
         operation: TaskAuthorityOperation,
         reason: str | None = None,
         project_id: UUID | None = None,
+        idempotency_key: UUID | None = None,
+        receipt: TaskCommandReceipt | None = None,
     ) -> tuple[WorkstreamTask, TaskAssignment | None, UUID]:
         # Match submission creation: TASK/assignment locks precede AUTH locks.
         task = await self._repo.get_task(str(task_id), for_update=True)
         if task is None or (project_id is not None and task.project_id != str(project_id)):
             raise TaskNotFound("task not found")
         assignment = await self._repo.get_active_assignment(task.id, for_update=True)
-        facts = self._facts(task, assignment, operation, reason)
+        facts = self._facts(
+            task, assignment, operation, reason, idempotency_key,
+            self._replay.replay_assignment(receipt, task_id) if receipt else None,
+        )
         handle = await self._authorization.prepare(facts)
         try:
             decision_id = await self._authorization.consume(handle, facts)
@@ -95,14 +106,26 @@ class AuthorizedTaskCommands:
         finally:
             self._authorization.close(handle)
 
-    async def claim(self, task_id: UUID, reason: str | None = None) -> TaskWithAssignmentResponse:
+    async def claim(
+        self, task_id: UUID, reason: str | None = None, *, idempotency_key: UUID,
+    ) -> TaskWithAssignmentResponse:
         try:
             async with self._session.begin():
+                receipt, digest, reserved = await self._replay.reserve(
+                    self._actor_id, TaskAuthorityOperation.CLAIM, idempotency_key, task_id, reason,
+                )
                 task, assignment, decision_id = await self._locked_task(
                     task_id,
                     TaskAuthorityOperation.CLAIM,
                     reason,
+                    idempotency_key=idempotency_key, receipt=receipt,
                 )
+                facts = self._facts(task, assignment, TaskAuthorityOperation.CLAIM, reason, idempotency_key)
+                replayed = self._replay.recover(receipt, digest, facts, task, assignment, reserved=reserved)
+                if replayed is not None:
+                    if not isinstance(replayed, TaskWithAssignmentResponse):
+                        raise RuntimeError("invalid claim response")
+                    return replayed
                 self._contexts._ensure_transition_allowed(task.status, "claimed")
                 if assignment is not None or task.assigned_to is not None:
                     raise TaskAssignmentConflict("task already has an active assignment")
@@ -127,6 +150,8 @@ class AuthorizedTaskCommands:
                     task=self._contexts.task_response_for_authority(task, can_manage=False),
                     assignment=AssignmentResponse.model_validate(assignment),
                 )
+                self._replay.complete(receipt, assignment, facts, response)
+                await self._session.flush()
             return response
         except IntegrityError as exc:
             if integrity_constraint_name(exc) == "uq_task_assignments_one_active_per_task":
@@ -138,6 +163,7 @@ class AuthorizedTaskCommands:
         task_id: UUID,
         reason: str | None = None,
         *,
+        idempotency_key: UUID,
         operator_override: bool = False,
     ) -> TaskResponse:
         if operator_override and not (reason and reason.strip()):
@@ -148,7 +174,18 @@ class AuthorizedTaskCommands:
             else TaskAuthorityOperation.START
         )
         async with self._session.begin():
-            task, assignment, decision_id = await self._locked_task(task_id, operation, reason)
+            receipt, digest, reserved = await self._replay.reserve(
+                self._actor_id, operation, idempotency_key, task_id, reason,
+            )
+            task, assignment, decision_id = await self._locked_task(
+                task_id, operation, reason, idempotency_key=idempotency_key, receipt=receipt,
+            )
+            facts = self._facts(task, assignment, operation, reason, idempotency_key)
+            replayed = self._replay.recover(receipt, digest, facts, task, assignment, reserved=reserved)
+            if replayed is not None:
+                if not isinstance(replayed, TaskResponse):
+                    raise RuntimeError("invalid start response")
+                return replayed
             self._contexts._ensure_transition_allowed(task.status, "in_progress")
             if assignment is None or assignment.contributor_id != task.assigned_to:
                 raise TaskTransitionBlocked("task has no consistent active assignment")
@@ -164,6 +201,8 @@ class AuthorizedTaskCommands:
             await self._session.flush()
             await self._session.refresh(task)
             response = self._contexts.task_response_for_authority(task, can_manage=False)
+            self._replay.complete(receipt, assignment, facts, response)
+            await self._session.flush()
         return response
 
     async def work_context(

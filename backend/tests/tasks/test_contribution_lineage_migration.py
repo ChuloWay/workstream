@@ -243,6 +243,8 @@ async def test_0024_downgrade_refuses_reachable_retained_custody_without_mutatio
     # Later valid states imply earlier custody: do not break FKs to isolate
     # redundant defensive SQL clauses. Each reachable retained class is real.
     factory = await _retained_attempt_for_downgrade(task_client, monkeypatch, kind)
+    async with factory() as session:
+        before_revision = await session.scalar(text("SELECT version_num FROM alembic_version"))
     before_rows = await _rows(factory, normalize_task=False)
     before_schema = await build_manifest(clean_postgres_database)
     with pytest.raises(RuntimeError, match="CP08 contribution or payment evidence prevents downgrade"):
@@ -250,4 +252,4 @@ async def test_0024_downgrade_refuses_reachable_retained_custody_without_mutatio
     assert await build_manifest(clean_postgres_database) == before_schema
     assert await _rows(factory, normalize_task=False) == before_rows
     async with factory() as session:
-        assert await session.scalar(text("SELECT version_num FROM alembic_version")) == OWN
+        assert await session.scalar(text("SELECT version_num FROM alembic_version")) == before_revision
