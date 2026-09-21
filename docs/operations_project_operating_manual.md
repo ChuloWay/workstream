@@ -195,8 +195,9 @@ the assignment. Screening and release check that the installed pre/post policies
 are supported; historical reads do not rerun availability. No superseded economic configuration is
 required. Task display now comes from detached values supplied by PROJECTS,
 including the exact historical guide after a successor activates. Draft task
-creation still works before guide configuration. Remaining queues and actor-specific
-projections belong to ARCH-03B; assignment invalidation also needs shared delivery
+creation still works before guide configuration. A hidden project-scoped ready queue read now returns bounded contributor
+summaries; it grants no authority and is not a public queue. Management/operations/
+audit queues and actor-specific projections belong to ARCH-03B; assignment invalidation also needs shared delivery
 claims, and authorization/public cutover remains ARCH-03C.
 
 The intended unified flow uses one compilation result for sufficiency and

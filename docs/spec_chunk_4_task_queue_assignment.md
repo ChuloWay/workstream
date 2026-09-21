@@ -5,7 +5,8 @@
 Workstream is developing its first, unreleased v0.1. This specification covers
 the existing task-record and assignment foundation, including the bounded
 [project-grant authorization replacement](../.commitrail/changes/task-project-grant-authorization.md).
-It does not claim the complete task queue, contribution-policy lineage,
+CP08 delivers exact contribution-policy lineage through task, assignment and
+hidden Submission creation. It does not claim the complete public task queue,
 submission public cutover, or authority-invalidation worker is delivered.
 The [capability ledger](roadmap_status.md) distinguishes those remaining owners.
 
@@ -66,9 +67,9 @@ draft -> screening -> ready -> claimed -> in_progress
 - Operator start does not reassign ownership or create a contributor grant.
 - Existing locked context remains tied to the attempt. A later guide or
   policy publication alone is not permission to rewrite that context.
-- The remaining readiness work must bind the guide's ContributionPolicyVersion
-  before work becomes claimable and copy it through assignment and Submission.
-  It must not add a fresh CON lookup during claim.
+- The guide's ContributionPolicyVersion is locked before work becomes claimable
+  and copied through assignment and hidden Submission creation by CP08.
+  Claim does not perform a fresh CON lookup.
 
 Task and assignment are locked first, followed by canonical actor, identity
 link and applicable grant revalidation and locking. This matches hidden
@@ -112,3 +113,22 @@ policy-governed routing; it does not own final acceptance.
   fixture migration; no helper fabricates public submission success.
 - Boundary checks, applicable tests, hosted coverage and focused reviews pass
   before the implementation is declared ready.
+
+## Hidden ready queue facts
+
+ARCH-03B2 provides `ReadyTaskQueuePort` through `TaskRepository`: an internal
+data-owner read, not an HTTP route or authorization decision. It returns only
+ready tasks in one exact project with no assigned contributor and no active
+assignment. These predicates apply before `(created_at, id)` pagination and the
+bounded `limit+1` query. Released assignment history does not hide eligible work.
+
+The detached summary includes IDs, title, task type, difficulty, immutable skill
+tags, estimated minutes and creation time. It excludes source metadata, actor
+identity, policy bodies/hashes and artifact references. The project-bound cursor
+is a position, not a permission token. The read performs no flush, commit or row
+lock. Pages are live views, not reservations; claim rechecks authority and state.
+
+ARCH-03C must authorize the exact project collection before calling this port
+or using a client cursor, with current-grant/revocation and concealment proof.
+No per-task AUTH handle or token role can substitute for that collection gate.
+Manager/operations/audit projections and authority invalidation remain separate.

@@ -14,11 +14,12 @@ AUTH-13/14 cutovers are not additional implementation work.
   phase composition are delivered.
 - [AUTH-12H](../WS-AUTH-001-12H.md) delivers exact-project manager authority after
   completed POL-07B phase composition, CP06 validation and CP07 guide binding.
-  ARCH-03A complete internal guide context is delivered; CP08 lineage and its
-  minimal existing writers are next;
-  HTTP activation exposure remains pending.
+  ARCH-03A internal guide context, CP08 lineage/minimal writers, ARCH-03B1
+  historical reads and ARCH-03B2 hidden ready-queue facts are delivered.
+  Remaining ARCH-03B projections/invalidation and ARCH-03C exact authority
+  and HTTP exposure remain pending.
 - CP05 owns exact ContributionPolicy-action activation after merged CP04B.
-- CP08 owns the minimal lineage writers; ARCH-03B owns remaining queues,
+- CP08 delivered the minimal lineage writers; ARCH-03B owns remaining queues,
   invalidation and projections, and ARCH-03C owns their exact activation.
   [AUTH-13 is superseded](chunks/WS-AUTH-001-13-task-assignment-cutover.md).
 - ARCH-04D alone activates post-submit materialization/output and CHECKERS
@@ -40,8 +41,9 @@ replaces contributor claim/start/work-context authority, adds separate managemen
 context and reasoned system-Operator start, and removes self-activated eligibility
 and public JSON-packet Submission creation. Admission-backed creation stays hidden.
 ARCH-03B/03C must reuse these exact actions and command owners while completing
-ContributionPolicyVersion lineage, ready queues, remaining projections and durable
-invalidation. Do not restore eligibility or register replacement aliases.
+public ready-queue access, remaining projections and durable invalidation; CP08
+already delivered ContributionPolicyVersion lineage. Do not restore eligibility
+or register replacement aliases.
 
 ## WS-AUTH-001-OUTBOX-01 — unavailable dispatcher contract
 

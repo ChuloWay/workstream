@@ -8,7 +8,9 @@ The bounded [project-grant repair](../../../../changes/task-project-grant-author
 already owns canonical contributor claim/start/work-context, separate management
 work-context and system-Operator start authority. Reuse its command/port and
 assignment transaction, not a second claim implementation. CP08 completes the contribution-policy attempt locks and minimal writers.
-This parent retains queues, broader projections and invalidation behavior below.
+The [03B2 child](../../WS-ARCH-001-03B2.md) supplies hidden contributor-ready
+queue facts and pagination, without live AUTH or HTTP exposure. This parent
+retains management/operations/audit queues, broader projections and invalidation.
 
 The reconciled CP08 chunk owns contribution-policy fields and the minimal
 existing screening/claim/Submission copy paths together after ARCH-03A. This

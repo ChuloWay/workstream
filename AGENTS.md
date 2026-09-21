@@ -51,6 +51,13 @@ definition or ownership boundary of Workstream.
   share one operation and transaction, with explicit trigger provenance.
   Add an abstraction, policy, state or workflow only for a concrete requirement
   the existing design cannot safely meet; explain that gap in the change record.
+  Keep control flow and dependencies explicit. Prefer small, cohesive functions
+  and the fewest concepts needed for current behavior; do not add frameworks,
+  generic helpers, configuration knobs or indirection for hypothetical future use.
+  Make required behavior testable through stable owner interfaces and focused
+  fixtures. Tests should protect outcomes and failure boundaries rather than
+  mirror implementation details. Use broad fixtures or mock graphs only when
+  the integration risk requires them.
   Simplicity must preserve authorization, locked lineage and atomicity.
 - Keep the engineering loop separate from the Workstream product lifecycle. Workstream product review decisions remain `accept`, `needs_revision`, and `reject`; internal engineering reviewer findings are process evidence, not product decisions.
 - Codex-discoverable repository skills live under `.agents/skills/`.

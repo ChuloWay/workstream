@@ -1928,3 +1928,15 @@ def test_arch03a_partition_transition_accepts_only_exact_policy_lineage_relocati
     ):
         with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
             ownership._validate_additive_partition_transition(_partition(after), _partition(before))
+
+
+def test_ready_queue_partition_addition_does_not_authorize_neighbors() -> None:
+    """Only the new ready queue API may extend the trusted target set."""
+    retained = "backend/app/core/config.py"
+    target = "backend/app/modules/tasks/api/ready_queue.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(_partition(sorted([retained, target])), trusted)
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted([retained, target, "backend/app/modules/tasks/api/unreviewed.py"])), trusted,
+        )
