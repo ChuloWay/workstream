@@ -4,7 +4,7 @@
 - Durable disposition: `Planned`
 - Intended merge outcome: TASK supplies fixed contributor and management task detail through its existing repository; exact public authority and route replacement remain ARCH-03C.
 
-## Intent and current source
+## Intent
 
 Main `77c8fc23` includes all three hidden queues, task command replay and actor
 suspension denial. Migration head is `0025_task_command_replay`. The remaining
@@ -22,7 +22,7 @@ aliases for these new owner facts. Locked-context/work-context, requirements,
 operational and audit projections remain the next 03B boundary. Assignment
 invalidation still requires the shared committed-claim contract.
 
-## Scope and design
+## Bounded change
 
 Risk: `L1` (tenant isolation and contributor visibility).
 
@@ -52,7 +52,9 @@ Both detail contracts contain task_id, project_id, title, description, task_type
 difficulty, skill_tags (tuple), estimated_time_minutes, status,
 acceptance_criteria, rejection_criteria, deadline_at, created_at and updated_at.
 Management additionally contains source_type, source_ref, source_payload_hash,
-import_batch_id, external_task_id, created_by and assigned_to. No economic fields,
+import_batch_id, external_task_id, created_by and assigned_to. The last two
+retain scalar-string storage identity (created_by required, assigned_to optional);
+request project/task/contributor identifiers are UUIDs. No economic fields,
 policy bodies, locked-context hashes, assignment payload, credentials or artifact
 references enter either detail. These belong to other governed surfaces.
 
@@ -75,7 +77,7 @@ Apply project, task and visibility predicates in the executed query. Use
 no_autoflush, no commit/rollback/locks, and detached tuple/scalar results. Existing
 queue behavior and command receipts remain unchanged.
 
-## Acceptance and proof
+## Acceptance criteria
 
 All test names below are planned, not executed evidence.
 
@@ -86,39 +88,55 @@ All test names below are planned, not executed evidence.
   canonical helpers; both methods conceal an exact task requested under another
   project and missing task. Contributor sees local unassigned ready; manager
   sees local draft. Removing only project scope must fail the foreign case.
-- `test_task_detail_visibility`: canonical real-AUTH claim with a real actor,
-  then another actor and released/history fixtures; prove ready/own active
-  visibility, other contributor denial, assigned_to alone denial, active
-  assignment alone denial, and released history cannot confer ownership or hide
-  unassigned ready. Store/precondition each fact before querying; no disabled
-  database guard. Mutation removing the contributor ownership predicate must
-  fail with a persisted foreign contributor/assignment.
+- `test_task_detail_visibility`: canonical real-AUTH claim with real actors A/B,
+  then stored valid controls and independent mismatches. Requested A + task
+  assignee A + active assignment B must deny (remove only assignment contributor
+  equality to prove failure). Requested A + active assignment A + task assignee
+  NULL/B must deny (remove only task assignee equality). A target with assignee A
+  and no active assignment must deny even when A owns another task's active
+  assignment (remove only assignment task correlation to prove failure). Persist
+  exact preconditions before every read; database guards stay enabled. Non-READY
+  task with released assignment history cannot confer access; separately, READY
+  with NULL assignee and no active assignment stays visible despite released
+  history. Assignment-only and assignee-only partial states each deny.
 - `test_task_detail_management_states`: all nine stored states, using canonical
   draft/ready/claimed plus fully locked later-state fixtures as in 03B3. Exact
-  state preconditions and returned IDs; no claim these fixtures execute the
-  later lifecycle operations. Contributor own-assignment state handling is
-  checked against the current work-context visibility rule, without inventing
-  a new lifecycle allowlist.
+  state preconditions and returned IDs; no claim these fixtures execute later
+  lifecycle operations. `test_task_detail_owned_states` covers exact own-active
+  visibility in screening, ready, claimed, in_progress, submitted,
+  evaluation_pending, review_pending and needs_revision through fully locked
+  fixtures. Each must return detail; injecting a claimed/in_progress-only
+  allowlist must fail. Ordinary draft without assignment denies; unassigned READY
+  is a separate positive control. No new lifecycle allowlist is introduced.
 - `test_task_detail_projection`: exact DTO fields, source/actor sentinels in
-  manager detail only, real executed contributor SELECT column set, non-null
-  persisted deadline, detached tags and immutable result. Add only source_ref
-  to actual SELECT and prove the exact column assertion fails.
+  manager detail only, exact real executed SELECT columns for BOTH projections,
+  non-null persisted deadline, detached tags and immutable result. Add only
+  source_ref to contributor SELECT and only base_amount to management SELECT in
+  separate probes; each must fail its exact column assertion.
+- `test_task_detail_scope` and `test_task_detail_visibility` capture real execute
+  calls and assert exactly one scoped SELECT for missing, wrong-project and
+  invisible cases. Inject a preliminary existence SELECT and prove the one-query
+  assertion fails, independently from returned None.
 - `test_task_detail_transaction` and `test_task_detail_nonlocking`: both methods;
-  pending invalid row never flushed, flushed marker rolls back and another
-  session observes original value, transaction stays open; independent session
+  pending invalid row never flushed (separate test step from commit proof).
+  Flush a non-visibility-changing title marker, assert the detail actually returns
+  that marker and the transaction remains open, rollback, then an independent
+  session observes the original title; independent session
   holds task FOR UPDATE and read completes within bounded timeout.
 - No public route/action added; ready queue tests and replay tests remain in
   full hosted selection. Existing old detail/command response consumers remain
   explicit 03C dependencies; no alias or second public endpoint is introduced.
 
+## Evidence
+
 Fixtures reuse `tests.test_tasks` and existing ready/management queue tests with
 real PostgreSQL and current migration0025. Trace valid actor/task/assignment
 lineage under existing FKs before constructing negative cases. Run focused
-isolated PostgreSQL tests, the three discriminating query mutations, exact
+isolated PostgreSQL tests, the independently discriminating query mutations, exact
 lane/ownership regressions, Ruff, module/AUTH/test-structure boundaries,
 Markdown links, stale wording, Commitrail and full unchanged hosted CI.
 
-## Review and human focus
+## Risk and review routing
 
 Plan review before implementation: security/architecture/reuse and
 QA/test-delta/product-operations; independently inspect fixture feasibility.
@@ -135,3 +153,10 @@ and command responses still have live callers. Do not rename them as cleanup.
 After this child, remaining detail-adjacent locked-context/requirements and audit
 contracts precede 03C authority/cutover. Roadmap and current navigation must
 reflect this child’s intended merged outcome in the same PR.
+
+Plan review repairs: PLAN-03B4-01 / QA-03B4-PLAN-02 add manager SQL overfetch
+proof; QA-03B4-PLAN-01 separates ownership legs and unrelated-task correlation;
+QA-03B4-PLAN-03 binds concealment to one executed query; QA-03B4-PLAN-04
+enumerates own-assignment states; QA-03B4-PLAN-05 requires observing the flushed
+marker before independent rollback verification. These are planned obligations,
+not claims that implementation tests already ran.
