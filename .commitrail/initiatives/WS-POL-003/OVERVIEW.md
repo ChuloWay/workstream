@@ -27,8 +27,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   Production post-submit phase execution remains unavailable.
 - Intent: compile one locked guide and its policies into authoritative,
   versioned project behavior without circular subsystem authority.
-- Next usable boundary: remaining ARCH-03B management/operations/audit queues and projections
-  after completed ARCH-03B2 hidden contributor-ready queue facts, ARCH-03B1 detached metadata and CP08 lineage
+- Next usable boundary: remaining ARCH-03B detail/locked-context and audit projections
+  after completed ARCH-03B3 hidden management/operational queues and ARCH-03B2 contributor-ready queue facts, ARCH-03B1 detached metadata and CP08 lineage
   and minimal writers and ARCH-03A internal guide context, following completed CP07 activation/binding and
   [AUTH-12H live authority](../WS-AUTH-001/WS-AUTH-001-12H.md). POL-07B consumes the completed POL-07A
   ART attempt prerequisite and ARCH-04A value contracts. POL-06B public

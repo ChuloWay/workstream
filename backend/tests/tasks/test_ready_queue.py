@@ -11,7 +11,7 @@ from sqlalchemy import delete, select
 
 from app.db import session as db_session
 from app.modules.tasks.api import (
-    ReadyTaskCursor, ReadyTaskPage, ReadyTaskQueueRequest, ReadyTaskSummary,
+    TaskQueueCursor, ReadyTaskPage, TaskQueueRequest, ReadyTaskSummary,
 )
 from app.modules.tasks.models import TaskAssignment, WorkstreamTask
 from app.modules.tasks.repository import TaskRepository
@@ -26,22 +26,22 @@ from tests.test_tasks import (
 @pytest.mark.parametrize("value", [0, 101, True, False, 1.5, "5", None])
 def test_ready_queue_request_validation(value):
     with pytest.raises(ValueError, match="request is invalid"):
-        ReadyTaskQueueRequest(uuid4(), limit=value)
+        TaskQueueRequest(uuid4(), limit=value)
 
 
 def test_ready_queue_cursor_validation():
     project = uuid4()
     instant = datetime.now(UTC)
-    valid = ReadyTaskCursor(project, instant, uuid4())
-    assert ReadyTaskQueueRequest(project, after=valid).after == valid
+    valid = TaskQueueCursor(project, instant, uuid4())
+    assert TaskQueueRequest(project, after=valid).after == valid
     for change in ({"project_id": "bad"}, {"task_id": "bad"}, {"created_at": instant.replace(tzinfo=None)}):
         with pytest.raises(ValueError, match="cursor is invalid"):
             replace(valid, **change)
     for cursor in (replace(valid, project_id=uuid4()), {}, "cursor"):
         with pytest.raises(ValueError, match="cursor differs"):
-            ReadyTaskQueueRequest(project, after=cursor)
+            TaskQueueRequest(project, after=cursor)
     with pytest.raises(ValueError, match="request is invalid"):
-        ReadyTaskQueueRequest(str(project))
+        TaskQueueRequest(str(project))
 
 
 async def test_ready_queue_rejects_non_request_before_database():
@@ -89,20 +89,20 @@ async def test_ready_queue_filters_before_pagination(task_client):
         foreign_row = await session.get(WorkstreamTask, foreign_task["id"])
         assert foreign_row.project_id == foreign["id"] and foreign_row.status == "ready"
         assert foreign_row.assigned_to is None
-        request = ReadyTaskQueueRequest(UUID(project["id"]), limit=1)
+        request = TaskQueueRequest(UUID(project["id"]), limit=1)
         expected = sorted((UUID(first["id"]), UUID(second["id"])))
         owner = TaskRepository(session)
         page = await owner.read_ready_tasks(request)
         assert [item.task_id for item in page.items] == expected[:1]
-        assert page.next_cursor == ReadyTaskCursor(request.project_id, instant + timedelta(seconds=3), expected[0])
+        assert page.next_cursor == TaskQueueCursor(request.project_id, instant + timedelta(seconds=3), expected[0])
         next_page = await owner.read_ready_tasks(replace(request, after=page.next_cursor))
         assert [item.task_id for item in next_page.items] == expected[1:]
         assert next_page.next_cursor is None
         empty = await owner.read_ready_tasks(replace(
-            request, after=ReadyTaskCursor(request.project_id, instant + timedelta(seconds=3), expected[1]),
+            request, after=TaskQueueCursor(request.project_id, instant + timedelta(seconds=3), expected[1]),
         ))
         assert empty == ReadyTaskPage(request.project_id, (), None)
-        missing = await owner.read_ready_tasks(ReadyTaskQueueRequest(uuid4()))
+        missing = await owner.read_ready_tasks(TaskQueueRequest(uuid4()))
         assert missing.items == () and missing.next_cursor is None
     # A cursor is a position; deleting its fixture anchor cannot restart pagination.
     async with factory() as session, session.begin():
@@ -118,7 +118,7 @@ async def test_ready_queue_continues_after_claim(task_client, monkeypatch):
     first = await create_ready_task(task_client, project["id"])
     second = await create_ready_task(task_client, project["id"])
     factory = db_session.get_session_factory()
-    request = ReadyTaskQueueRequest(UUID(project["id"]), limit=1)
+    request = TaskQueueRequest(UUID(project["id"]), limit=1)
     async with factory() as session:
         page = await TaskRepository(session).read_ready_tasks(request)
         assert [item.task_id for item in page.items] == [UUID(first["id"])]
@@ -146,7 +146,7 @@ async def test_ready_queue_assignment_visibility(task_client):
         assignment = _assignment(row, status="released")
         session.add(assignment)
     async with factory() as session:
-        page = await TaskRepository(session).read_ready_tasks(ReadyTaskQueueRequest(UUID(project["id"])))
+        page = await TaskRepository(session).read_ready_tasks(TaskQueueRequest(UUID(project["id"])))
         assert [item.task_id for item in page.items] == [UUID(task["id"])]
         assert page.next_cursor is None
 
@@ -156,7 +156,7 @@ async def test_ready_queue_detached_projection(task_client):
     task = await create_ready_task(task_client, project["id"])
     async with db_session.get_session_factory()() as session:
         row = await session.get(WorkstreamTask, task["id"])
-        page = await TaskRepository(session).read_ready_tasks(ReadyTaskQueueRequest(UUID(project["id"])))
+        page = await TaskRepository(session).read_ready_tasks(TaskQueueRequest(UUID(project["id"])))
         expected = ReadyTaskSummary(
             UUID(row.id), UUID(row.project_id), row.title, row.task_type, row.difficulty,
             tuple(row.skill_tags), row.estimated_time_minutes, row.created_at,
@@ -179,14 +179,14 @@ async def test_ready_queue_detached_projection(task_client):
         with pytest.raises(ValueError, match="page is invalid"):
             replace(page, project_id=uuid4())
         with pytest.raises(ValueError, match="continuation differs"):
-            replace(page, next_cursor=ReadyTaskCursor(page.project_id, expected.created_at, uuid4()))
+            replace(page, next_cursor=TaskQueueCursor(page.project_id, expected.created_at, uuid4()))
 
 
 async def test_ready_queue_preserves_transaction(task_client):
     project = await create_active_project(task_client)
     task = await create_ready_task(task_client, project["id"])
     factory = db_session.get_session_factory()
-    request = ReadyTaskQueueRequest(UUID(project["id"]))
+    request = TaskQueueRequest(UUID(project["id"]))
     async with factory() as session:
         assert not session.in_transaction()
         assert len((await TaskRepository(session).read_ready_tasks(request)).items) == 1
@@ -216,7 +216,7 @@ async def test_ready_queue_does_not_wait_for_task_lock(task_client):
         await writer.scalar(select(WorkstreamTask).where(WorkstreamTask.id == task["id"]).with_for_update())
         async with factory() as reader:
             page = await asyncio.wait_for(
-                TaskRepository(reader).read_ready_tasks(ReadyTaskQueueRequest(UUID(project["id"]))),
+                TaskRepository(reader).read_ready_tasks(TaskQueueRequest(UUID(project["id"]))),
                 timeout=5,
             )
             assert [item.task_id for item in page.items] == [UUID(task["id"])]

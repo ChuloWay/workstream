@@ -156,4 +156,28 @@ lock. Pages are live views, not reservations; claim rechecks authority and state
 ARCH-03C must authorize the exact project collection before calling this port
 or using a client cursor, with current-grant/revocation and concealment proof.
 No per-task AUTH handle or token role can substitute for that collection gate.
-Manager/operations/audit projections and authority invalidation remain separate.
+Actor-specific detail/locked-context and audit projections and authority
+invalidation remain separate.
+
+
+## Hidden management and operational queues
+
+ARCH-03B3 extends the existing TaskRepository with `ManagementTaskQueuePort`
+and `OperationalTaskQueuePort`. Each reads all task states within one exact
+project, including draft, active work and post-submit states. These are internal
+owner facts; ARCH-03C still owns separate manager/operator permissions and routes.
+
+Management summaries contain task/project IDs, title, task type, difficulty,
+immutable skill tags, estimated minutes, status, deadline and creation/update
+timestamps. Operational summaries contain only task/project IDs, status and
+creation/update timestamps. Neither includes descriptions, acceptance/rejection
+text, source/import metadata, contributor identity, policy or artifact content.
+There is no token-role switch or caller-selected projection.
+
+All three queues use the single `TaskQueueRequest` and `TaskQueueCursor`
+contract. Project/cursor filtering precedes bounded pagination; an extra row
+alone supplies continuation. The ready queue retains its independent eligibility
+filters. Cursors identify a live position, not authority, audience or membership.
+No queue flushes, commits, rolls back or takes a row lock. No counts, reservation
+or snapshot guarantee is supplied. Later authorized composition must validate
+exact project authority before using an untrusted cursor.

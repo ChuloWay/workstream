@@ -1943,10 +1943,13 @@ def test_command_replay_partition_addition_does_not_authorize_neighbors() -> Non
         )
 
 
-def test_ready_queue_partition_addition_does_not_authorize_neighbors() -> None:
-    """Only the new ready queue API may extend the trusted target set."""
+@pytest.mark.parametrize("target", [
+    "backend/app/modules/tasks/api/ready_queue.py",
+    "backend/app/modules/tasks/api/management_queue.py",
+])
+def test_task_queue_partition_additions_do_not_authorize_neighbors(target: str) -> None:
+    """Only the explicit queue APIs may extend the trusted target set."""
     retained = "backend/app/core/config.py"
-    target = "backend/app/modules/tasks/api/ready_queue.py"
     trusted = _partition([retained])
     ownership._validate_additive_partition_transition(_partition(sorted([retained, target])), trusted)
     with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
