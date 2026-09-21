@@ -303,8 +303,6 @@ async def test_installed_mcp_preserves_profile_and_lifecycle_parity() -> None:
                     token=admin_token,
                     path=f"/api/v1/actors/{first['mcp-suspended']['actor_profile_id']}/suspend",
                 )
-                suspended, failed = await _call(mcp_url, tokens["mcp-suspended"])
-                assert not failed and suspended["status"] == "suspended"
 
                 revoked_link = await direct.get(
                     f"/api/v1/actors/{first['mcp-revoked']['actor_profile_id']}/identity-links",
@@ -326,6 +324,7 @@ async def test_installed_mcp_preserves_profile_and_lifecycle_parity() -> None:
                 )
 
                 for name, code in (
+                    ("mcp-suspended", "actor_suspended"),
                     ("mcp-revoked", "identity_link_revoked"),
                     ("mcp-deactivated", "actor_deactivated"),
                 ):

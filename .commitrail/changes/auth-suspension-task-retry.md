@@ -5,7 +5,7 @@
 - Intended merge outcome: suspension denies self-read and self-update; existing
   task claim/start commands support authorized durable idempotent replay.
 
-## Intent and current behavior
+## Intent
 
 The human confirmed that suspension blocks even self-read. Before this change,
 AUTH's self evaluator and actor response allowed suspended reads. Claim/start
@@ -19,8 +19,9 @@ hidden ready queue and remains unchanged.
 Allowed: AUTH self lifecycle evaluator, `actors/service.py` self response, TASK command/router/model/repository and
 typed authority facts, exact AUTH task resource/PREP adapter, an additive task
 receipt migration and migration admission, affected caller tests/drills, schema
-fingerprint/reset inventory, focused test-lane registration if needed, canonical
+fingerprint/reset inventory, behavior-owner inventory, focused test-lane registration if needed, canonical
 AUTH/TASK specifications, roadmap and ARCH-03C remaining-scope reconciliation.
+The MCP lifecycle parity test must assert the same suspended-access denial as REST.
 Refresh exact structural-debt inventory for the shrinking touched AUTH owners;
 refresh current assertion-map targets while retaining historical provenance;
 do not raise limits, add debt or grant exceptions.
@@ -67,7 +68,7 @@ deletion, compatibility fallbacks or weakened CI/coverage.
   token-based replay authority and assignment-only duplicate detection cannot
   safely meet the lost-response requirement and are not introduced.
 
-## Acceptance and proof
+## Acceptance criteria
 
 - Suspended self GET/PATCH deny without writes; active control succeeds; revoked
   and deactivated cases retain their denials.
@@ -86,6 +87,8 @@ deletion, compatibility fallbacks or weakened CI/coverage.
   Direct SQL must also reject committed identity/digest/response rewrites,
   deletion and truncation while allowing the exact no-op used for locking.
 
+## Evidence
+
 Commands: focused `pytest --no-cov` actor self, task authority/PREP and new
 `tests/tasks/test_command_replay.py` tests; real PostgreSQL through
 `scripts/run_isolated_tests.py`; Ruff; module/AUTH boundaries; migration/schema
@@ -100,7 +103,7 @@ Named proofs in `test_command_replay.py`: `test_committed_task_response_replays_
 and `test_committed_receipt_is_immutable_through_sql`. The actor lifecycle suite's
 `test_suspended_profile_is_not_readable` protects the removed exception.
 
-## Risk and review
+## Risk and review routing
 
 - Risk class: L1 (authorization, idempotency, transaction and schema).
 - Required reviewers: security; architecture/reuse; QA/test-delta;
