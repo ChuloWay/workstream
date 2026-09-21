@@ -103,10 +103,12 @@ All test names below are planned, not executed evidence.
   draft/ready/claimed plus fully locked later-state fixtures as in 03B3. Exact
   state preconditions and returned IDs; no claim these fixtures execute later
   lifecycle operations. `test_task_detail_owned_states` covers exact own-active
-  visibility in screening, ready, claimed, in_progress, submitted,
+  visibility in draft, screening, ready, claimed, in_progress, submitted,
   evaluation_pending, review_pending and needs_revision through fully locked
-  fixtures. Each must return detail; injecting a claimed/in_progress-only
-  allowlist must fail. Ordinary draft without assignment denies; unassigned READY
+  fixtures (all nine states, including a status-only return to draft while
+  retaining the full lock and own active assignment). Each must return detail;
+  injecting a draft-excluding filter must fail. Ordinary initial draft without
+  assignment denies; unassigned READY
   is a separate positive control. No new lifecycle allowlist is introduced.
 - `test_task_detail_projection`: exact DTO fields, source/actor sentinels in
   manager detail only, exact real executed SELECT columns for BOTH projections,
@@ -160,3 +162,7 @@ QA-03B4-PLAN-03 binds concealment to one executed query; QA-03B4-PLAN-04
 enumerates own-assignment states; QA-03B4-PLAN-05 requires observing the flushed
 marker before independent rollback verification. These are planned obligations,
 not claims that implementation tests already ran.
+
+PLAN-03B4-02: the own-active rule is status-independent. Its matrix includes
+a fully locked draft with retained assignment as well as the separate ordinary
+unassigned draft denial; the status-only fixture is allowed by existing guards.
