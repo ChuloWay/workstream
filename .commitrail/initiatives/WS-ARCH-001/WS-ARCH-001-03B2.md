@@ -7,6 +7,9 @@
 
 ## Intent
 
+The user also requires maintainability and testability to be explicit in the
+existing repository simplicity rule, without a duplicate rule or extra process.
+
 Provide the missing contributor-ready queue data boundary without rebuilding
 CP08 lineage writers, duplicating claim, or exposing an unauthorised route.
 This is the next bounded child after delivered 03B1. Manager/operations/audit
@@ -26,6 +29,9 @@ cutover work; this queue must not call those helpers or create another role path
 ## Bounded change
 
 ### Allowed
+
+- `AGENTS.md`: user-requested clarification of the existing simplicity rule;
+  keep code easy to understand, maintain and test without weakening safeguards.
 
 - `backend/app/modules/tasks/api/ready_queue.py`, its API exports, and
   `backend/app/modules/tasks/repository.py` extending the existing owner.
