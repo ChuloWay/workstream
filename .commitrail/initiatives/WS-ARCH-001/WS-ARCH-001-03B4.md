@@ -1,7 +1,7 @@
 # ARCH-03B4 — Hidden contributor and management task detail
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: TASK supplies fixed contributor and management task detail through its existing repository; exact public authority and route replacement remain ARCH-03C.
 
 ## Intent
@@ -79,7 +79,8 @@ queue behavior and command receipts remain unchanged.
 
 ## Acceptance criteria
 
-All test names below are planned, not executed evidence.
+The following tests implement the required proof boundaries. Exact execution
+and review evidence belongs in the PR; no local result is inferred from names.
 
 - `test_task_detail_contracts`: immutable exact field contracts, invalid UUIDs,
   scalar/tuple/time shapes, no mutable nested values; malformed requests fail
@@ -160,8 +161,8 @@ Plan review repairs: PLAN-03B4-01 / QA-03B4-PLAN-02 add manager SQL overfetch
 proof; QA-03B4-PLAN-01 separates ownership legs and unrelated-task correlation;
 QA-03B4-PLAN-03 binds concealment to one executed query; QA-03B4-PLAN-04
 enumerates own-assignment states; QA-03B4-PLAN-05 requires observing the flushed
-marker before independent rollback verification. These are planned obligations,
-not claims that implementation tests already ran.
+marker before independent rollback verification. These obligations are implemented; execution results are recorded separately
+with their actual target and custody.
 
 PLAN-03B4-02: the own-active rule is status-independent. Its matrix includes
 a fully locked draft with retained assignment as well as the separate ordinary

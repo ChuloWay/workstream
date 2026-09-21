@@ -46,7 +46,19 @@ from app.modules.tasks.api.management_queue import (
     OperationalTaskSummary,
 )
 
+from app.modules.tasks.api.task_detail import (
+    ContributorTaskDetail, ContributorTaskDetailRequest, ContributorTaskDetailPort,
+    ManagementTaskDetail, ManagementTaskDetailRequest, ManagementTaskDetailPort,
+)
+
 __all__ = (
+    "ContributorTaskDetail",
+    "ContributorTaskDetailRequest",
+    "ContributorTaskDetailPort",
+    "ManagementTaskDetail",
+    "ManagementTaskDetailRequest",
+    "ManagementTaskDetailPort",
+
     "ManagementTaskPage",
     "ManagementTaskQueuePort",
     "ManagementTaskSummary",

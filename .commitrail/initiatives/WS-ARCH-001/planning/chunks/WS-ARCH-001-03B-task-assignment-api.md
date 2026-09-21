@@ -10,9 +10,11 @@ work-context and system-Operator start authority. Reuse its command/port and
 assignment transaction, not a second claim implementation. CP08 completes the contribution-policy attempt locks and minimal writers.
 The [03B2 child](../../WS-ARCH-001-03B2.md) supplies hidden contributor-ready
 queue facts and pagination, without live AUTH or HTTP exposure. This parent
-retains detail/locked-context and audit projections and invalidation. The
+retains work-context, locked-context, requirements and audit projections and invalidation. The
 [03B3 child](../../WS-ARCH-001-03B3.md) delivers hidden all-state management
 and status-only operational queue facts.
+The [03B4 child](../../WS-ARCH-001-03B4.md) delivers hidden contributor and
+management task detail; reuse its fixed projections and visibility facts.
 
 The reconciled CP08 chunk owns contribution-policy fields and the minimal
 existing screening/claim/Submission copy paths together after ARCH-03A. This
@@ -26,12 +28,12 @@ declarations, boundary ledgers and current documentation. Not allowed: duplicate
 lineage writers, project-policy evaluation, checker planning, ART custody, AUTH
 decisions, compatibility paths, public cutover or human revision semantics.
 
-Reuse delivered ready, management and operational queue facts; declare remaining
+Reuse delivered ready, management and operational queue facts and 03B4 detail; declare remaining
 replacement task surfaces against hidden owner commands; ARCH-03C owns their exact activation and live route switch.
 Do not leave an unowned route step between public ports and user-visible
 behavior. The queue must filter project/visibility before counts and cursors.
 Own the distinct management, operational and audit locked-context projections
-and their field contracts, plus management task detail/work-context/submission
+and their field contracts, plus management work-context/submission
 requirements reads. 03C supplies their separate action/permission declarations;
 03B3 supplies the management/operational queue facts; covered Audit
 task-evidence projections enumerated there remain. Scope filtering precedes counts, cursors and
@@ -80,8 +82,8 @@ test-delta impact.
    draft/display reads using the existing port and immutable exact-guide facts.
    Its public response shapes and authorization remain unchanged. The separate
    pre-submit context consumer is explicitly outside this metadata cutover.
-2. After delivered 03B2/03B3 hidden queues, remaining actor-specific task
-   detail/locked-context and audit projections, with exact field,
+2. After delivered 03B2/03B3 hidden queues and 03B4 detail, remaining actor-specific task
+   work-context, locked-context, requirements and audit projections, with exact field,
    visibility/count/cursor and hidden command contracts before implementation.
 3. Assignment invalidation after the shared claim contract exists, followed by
    ARCH-03C producer wiring, exact AUTH and public activation. No parallel worker

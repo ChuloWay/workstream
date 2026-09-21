@@ -6,12 +6,14 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Row, Select, select, tuple_, update
+from sqlalchemy import Row, Select, and_, or_, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.modules.audit.repository import AuditRepository
 from app.modules.tasks.api import (
+    ContributorTaskDetail, ContributorTaskDetailRequest,
+    ManagementTaskDetail, ManagementTaskDetailRequest,
     ManagementTaskPage,
     ManagementTaskSummary,
     OperationalTaskPage,
@@ -35,6 +37,26 @@ from app.modules.tasks.models import (
 )
 
 
+def _unassigned_ready_task():
+    """Shared ready visibility for queue discovery and contributor detail."""
+    task = WorkstreamTask
+    active_assignment = select(TaskAssignment.id).where(
+        TaskAssignment.task_id == task.id, TaskAssignment.status == "active",
+    ).exists()
+    return and_(task.status == "ready", task.assigned_to.is_(None), ~active_assignment)
+
+
+def _task_detail_columns():
+    """Fixed common detail projection; never select a task ORM entity."""
+    task = WorkstreamTask
+    return (
+        task.id.label("task_id"), task.project_id, task.title, task.description,
+        task.task_type, task.difficulty, task.skill_tags, task.estimated_time_minutes,
+        task.status, task.acceptance_criteria, task.rejection_criteria,
+        task.deadline_at, task.created_at, task.updated_at,
+    )
+
+
 class TaskRepository:
     """Wraps SQLAlchemy persistence for task queue operations."""
 
@@ -54,17 +76,10 @@ class TaskRepository:
         neither flushes pending writes nor commits/locks the caller's session.
         """
         task = WorkstreamTask
-        active_assignment = select(TaskAssignment.id).where(
-            TaskAssignment.task_id == task.id, TaskAssignment.status == "active",
-        ).exists()
         statement = select(
             task.id, task.project_id, task.title, task.task_type, task.difficulty,
             task.skill_tags, task.estimated_time_minutes, task.created_at,
-        ).where(
-            task.status == "ready",
-            task.assigned_to.is_(None),
-            ~active_assignment,
-        )
+        ).where(_unassigned_ready_task())
         rows, continuation = await self._read_task_queue_rows(request, statement)
         items = tuple(
             ReadyTaskSummary(
@@ -131,6 +146,53 @@ class TaskRepository:
             if len(rows) > request.limit else None
         )
         return rows[:request.limit], continuation
+
+    async def read_contributor_task_detail(self, request: ContributorTaskDetailRequest) -> ContributorTaskDetail | None:
+        """Read visible work facts in one scoped query; caller supplies authority."""
+        if type(request) is not ContributorTaskDetailRequest:
+            raise ValueError("task detail request is invalid")
+        task, assignment = WorkstreamTask, TaskAssignment
+        own_assignment = select(assignment.id).where(
+            assignment.task_id == task.id,
+            assignment.project_id == task.project_id,
+            assignment.status == "active",
+            assignment.contributor_id == str(request.contributor_id),
+        ).exists()
+        statement = select(*_task_detail_columns()).where(or_(
+            _unassigned_ready_task(),
+            and_(task.assigned_to == str(request.contributor_id), own_assignment),
+        ))
+        values = await self._read_task_detail_values(request, statement)
+        return ContributorTaskDetail(**values) if values is not None else None
+
+    async def read_management_task_detail(self, request: ManagementTaskDetailRequest) -> ManagementTaskDetail | None:
+        """Read exact-project management facts without broad ORM loading."""
+        if type(request) is not ManagementTaskDetailRequest:
+            raise ValueError("task detail request is invalid")
+        task = WorkstreamTask
+        statement = select(
+            *_task_detail_columns(), task.source_type, task.source_ref, task.source_payload_hash,
+            task.import_batch_id, task.external_task_id, task.created_by, task.assigned_to,
+        )
+        values = await self._read_task_detail_values(request, statement)
+        return ManagementTaskDetail(**values) if values is not None else None
+
+    async def _read_task_detail_values(
+        self, request: ContributorTaskDetailRequest | ManagementTaskDetailRequest, statement: Select,
+    ) -> dict | None:
+        """Keep exact scope, one query and transaction behavior common to both reads."""
+        statement = statement.where(
+            WorkstreamTask.project_id == str(request.project_id),
+            WorkstreamTask.id == str(request.task_id),
+        )
+        with self._session.no_autoflush:
+            row = (await self._session.execute(statement)).mappings().one_or_none()
+        if row is None:
+            return None
+        return dict(row) | {
+            "task_id": UUID(row["task_id"]), "project_id": UUID(row["project_id"]),
+            "skill_tags": tuple(row["skill_tags"]),
+        }
 
     async def add_task(self, task: WorkstreamTask) -> WorkstreamTask:
         """Persist a new task and refresh generated database fields.

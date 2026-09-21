@@ -198,8 +198,10 @@ including the exact historical guide after a successor activates. Draft task
 creation still works before guide configuration. A hidden project-scoped ready queue read now returns bounded contributor
 summaries. Hidden management and operational reads also cover all project task
 states: managers receive planning fields; operators receive only IDs, status
-and timestamps. None grants authority or exposes a public queue. Remaining
-actor-specific detail/locked-context and audit projections belong to ARCH-03B;
+and timestamps. None grants authority or exposes a public queue.
+ARCH-03B4 also supplies hidden contributor and manager detail facts; these are
+not new public endpoints. Remaining work-context, locked-context, requirements
+and audit projections belong to ARCH-03B;
 assignment invalidation also needs shared delivery
 claims, and authorization/public cutover remains ARCH-03C.
 

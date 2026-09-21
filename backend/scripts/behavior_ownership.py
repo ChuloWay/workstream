@@ -89,6 +89,7 @@ MODULE_PUBLIC_API_FOUNDATION_TARGETS = frozenset(
         "backend/app/modules/tasks/api/submission_context.py",
         "backend/app/modules/tasks/api/ready_queue.py",
         "backend/app/modules/tasks/api/management_queue.py",
+        "backend/app/modules/tasks/api/task_detail.py",
     }
 )
 ARCH_04A_POST_SUBMIT_TARGETS = frozenset(
