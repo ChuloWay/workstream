@@ -35,6 +35,9 @@ cutover work; this queue must not call those helpers or create another role path
 
 - `backend/app/modules/tasks/api/ready_queue.py`, its API exports, and
   `backend/app/modules/tasks/repository.py` extending the existing owner.
+- `.ci/behavior-ownership/partition.v1.json`, `backend/scripts/behavior_ownership.py`
+  and its focused tests: exact additive registration of the new public API file;
+  retain the protected base, existing targets and rejection of undeclared neighbors.
 - `backend/tests/tasks/test_ready_queue.py`; exact TASK test-lane registration
   and its equality assertion.
 - This record, ARCH parent/overview/map, affected current navigation and
