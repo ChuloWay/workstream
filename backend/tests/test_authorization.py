@@ -6,6 +6,7 @@ from app.modules.authorization.domain.post_policy import post_policy_resource
 from tests.authorization.post_policy.support import post_facts
 
 from tests.authorization.catalogue_fixtures import ART_CUSTODY_EXPECTATIONS, REV_CUSTODY_EXPECTATIONS
+from tests.authorization.postgresql_support import restore_actor_lifecycle_triggers
 
 from tests.authorization.runtime_support import (
     _runtime_context,
@@ -6216,8 +6217,7 @@ async def test_prepared_postgresql_failure_and_cancellation_are_atomic(
         await session.execute(
             text("delete from actor_profiles where id=:id"), {"id": str(profile_id)}
         )
-        await session.execute(text("alter table actor_identity_links enable trigger user"))
-        await session.execute(text("alter table actor_profiles enable trigger user"))
+        await restore_actor_lifecycle_triggers(session)
         await session.commit()
 
 
@@ -6385,8 +6385,7 @@ async def test_prepared_actor_authority_crossed_mutations_complete_in_both_order
         await cleanup.execute(text("alter table actor_profiles disable trigger user"))
         await cleanup.execute(text("delete from actor_identity_links where id=:link"), values)
         await cleanup.execute(text("delete from actor_profiles where id=:actor"), values)
-        await cleanup.execute(text("alter table actor_identity_links enable trigger user"))
-        await cleanup.execute(text("alter table actor_profiles enable trigger user"))
+        await restore_actor_lifecycle_triggers(cleanup)
         await cleanup.commit()
 
 
@@ -6726,8 +6725,7 @@ async def test_prepared_crosses_real_lifecycle_service_transactions(
             text("delete from actor_profiles where id in (:target, :mutator)"),
             {"target": actor_ids[0], "mutator": actor_ids[1]},
         )
-        await cleanup.execute(text("alter table actor_identity_links enable trigger user"))
-        await cleanup.execute(text("alter table actor_profiles enable trigger user"))
+        await restore_actor_lifecycle_triggers(cleanup)
         await cleanup.commit()
 
 
@@ -6842,8 +6840,7 @@ async def test_prepared_postgresql_rejects_duplicate_supported_grant_and_reuses_
         await cleanup.execute(
             text("delete from actor_profiles where id=:id"), {"id": str(profile_id)}
         )
-        await cleanup.execute(text("alter table actor_identity_links enable trigger user"))
-        await cleanup.execute(text("alter table actor_profiles enable trigger user"))
+        await restore_actor_lifecycle_triggers(cleanup)
         await cleanup.commit()
 
 
@@ -9988,8 +9985,7 @@ async def test_authorization_locks_refresh_cached_actor_lifecycle_state(
             ),
             {"link": str(link_id)},
         )
-        await cleanup.execute(text("alter table actor_identity_links enable trigger user"))
-        await cleanup.execute(text("alter table actor_profiles enable trigger user"))
+        await restore_actor_lifecycle_triggers(cleanup)
         await cleanup.commit()
 
 
