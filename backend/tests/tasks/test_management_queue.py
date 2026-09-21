@@ -152,13 +152,16 @@ async def test_management_queue_all_states(task_client, monkeypatch, method):
 async def test_management_queue_projection(task_client):
     project = await create_active_project(task_client)
     task = await create_draft_task(task_client, project["id"])
+    deadline = datetime(2030, 5, 6, 7, 8, tzinfo=UTC)
     factory = db_session.get_session_factory()
     async with factory() as session, session.begin():
         row = await session.get(WorkstreamTask, task["id"])
         row.title = row.description = row.source_ref = row.acceptance_criteria = "PRIVATE-CONTENT"
         row.skill_tags = ["PRIVATE-TAG"]
+        row.deadline_at = deadline
     async with factory() as session:
         row = await session.get(WorkstreamTask, task["id"])
+        assert row.deadline_at == deadline
         owner, request = TaskRepository(session), TaskQueueRequest(UUID(project["id"]))
         management = (await owner.read_management_tasks(request)).items[0]
         operational = (await owner.read_operational_tasks(request)).items[0]

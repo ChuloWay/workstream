@@ -37,7 +37,8 @@ route or authorization is replaced or activated here. Migration head is
 - Existing behavior-ownership partition, approved API targets and focused
   transition test: one exact new file, no neighboring target allowance.
 - This record, current ARCH parent/overview/plan/map, affected initiative
-  navigation, README, task specification, operating manual and roadmap.
+  navigation, README, task specification, operating manual,
+  `docs/operations_operator_workflow.md` availability note and roadmap.
 
 ### Not allowed
 
@@ -149,6 +150,11 @@ independent session. Parameterize each read proof over both queue methods.
 only with draft/ready/claimed. The contract now requires all nine persisted
 states and a three-state-filter mutation probe, with fixture-only later state
 setup distinguished from lifecycle-operation evidence.
+
+`QA-03B3-IMPL-01`: the management projection now uses a persisted non-null
+aware deadline and exact stored precondition, so a dropped deadline cannot pass
+the field proof. `DOC-03B3-01`: the operator workflow now explicitly labels
+queue reads hidden and public access pending ARCH-03C.
 
 ## Reconciliation
 

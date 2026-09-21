@@ -7,6 +7,11 @@ Review, revision, FinalAcceptance, and review-sourced contribution behavior
 below is planned and unavailable until its owning REV/CON chunks, exact AUTH
 activation, and REV-13 joint release complete.
 
+Contributor, management and operational task queues currently have hidden owner
+reads only. Exact queue authorization and public routes remain ARCH-03C work;
+queue steps below describe the intended workflow. See the
+[capability ledger](roadmap_status.md) for current availability.
+
 ## Roles
 
 ### Project Manager
