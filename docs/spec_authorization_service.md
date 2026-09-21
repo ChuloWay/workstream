@@ -904,7 +904,8 @@ deactivation, exact grant revocation, and final-admin mutation.
 
 For the two active self actions, the default human authority source is
 `actor_self`; token roles and client-supplied permissions never enter the
-context. Self-read requires an active link and an active or suspended actor.
+context. Self-read requires an active link and an active actor; suspension
+denies self-read as well as self-update.
 Self-update through ordinary request authorization retains its existing
 revalidation behavior; prepared self-update locks the exact profile followed by
 its exact link,

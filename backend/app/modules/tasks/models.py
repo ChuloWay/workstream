@@ -23,9 +23,61 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 
 from app.db.base import Base
+
+
+class TaskCommandReceipt(Base):
+    """TASK-owned immutable success and actor/action-scoped retry reservation."""
+
+    __tablename__ = "task_command_receipts"
+    __table_args__ = (
+        UniqueConstraint("actor_profile_id", "action_id", "idempotency_key", name="uq_task_command_namespace"),
+        ForeignKeyConstraint(
+            ["assignment_id", "task_id", "contributor_id"],
+            ["task_assignments.id", "task_assignments.task_id", "task_assignments.contributor_id"],
+            name="fk_task_command_assignment",
+        ),
+        CheckConstraint(
+            "action_id in ('task.claim','task.start','operations.task.start_override')",
+            name="task_command_action",
+        ),
+        CheckConstraint("request_digest ~ '^sha256:[0-9a-f]{64}$'", name="task_command_request_digest"),
+        CheckConstraint(
+            "(status='pending' and assignment_id is null and contributor_id is null "
+            "and locked_context_hash is null and response is null and committed_at is null) or "
+            "(status='committed' and assignment_id is not null and contributor_id is not null "
+            "and locked_context_hash is not null and locked_context_hash ~ '^sha256:[0-9a-f]{64}$' "
+            "and response is not null and jsonb_typeof(response)='object' and committed_at is not null)",
+            name="task_command_state_shape",
+        ),
+        CheckConstraint(
+            "status='pending' or (action_id='operations.task.start_override' and actor_profile_id<>contributor_id) "
+            "or (action_id in ('task.claim','task.start') and actor_profile_id=contributor_id)",
+            name="task_command_contributor",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    # Reservation precedes AUTH: defer the FK's implicit actor KEY SHARE lock
+    # until after AUTH has acquired its canonical actor lock.
+    actor_profile_id: Mapped[str] = mapped_column(ForeignKey(
+        "actor_profiles.id", deferrable=True, initially="DEFERRED",
+    ))
+    action_id: Mapped[str] = mapped_column(String(160))
+    idempotency_key: Mapped[UUID] = mapped_column(Uuid())
+    request_digest: Mapped[str] = mapped_column(String(71))
+    # Pending selectors are untrusted; the completed assignment FK proves custody.
+    task_id: Mapped[str] = mapped_column(String(36))
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    assignment_id: Mapped[str | None] = mapped_column(String(36))
+    contributor_id: Mapped[str | None] = mapped_column(String(36))
+    locked_context_hash: Mapped[str | None] = mapped_column(String(71))
+    response: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class WorkstreamTask(Base):

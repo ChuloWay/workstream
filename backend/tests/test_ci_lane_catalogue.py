@@ -171,6 +171,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/tasks/test_contribution_lineage.py",
             "tests/tasks/test_project_display.py",
             "tests/tasks/test_ready_queue.py",
+            "tests/tasks/test_command_replay.py",
             "tests/tasks/test_contribution_lineage_migration.py",
             "tests/tasks/test_contribution_claim_races.py",
             "tests/tasks/test_submission_lineage.py",

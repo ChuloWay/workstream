@@ -22,6 +22,11 @@ def test_task_public_surface_has_no_self_activation_or_packet_creation():
         assert operation["x-workstream-action-id"] == action
         assert all(parameter["schema"]["format"] == "uuid"
                    for parameter in operation["parameters"] if parameter["in"] == "path")
+        if method == "post":
+            keys = [parameter for parameter in operation["parameters"]
+                    if parameter["in"] == "header" and parameter["name"] == "Idempotency-Key"]
+            assert len(keys) == 1 and keys[0]["required"] is True
+            assert keys[0]["schema"] == {"type": "string", "format": "uuid"}
     assert "LegacyWorkflowEligibilityActivationRequest" not in schema["components"]["schemas"]
     transition = schema["components"]["schemas"]["TaskTransitionRequest"]
     assert transition["additionalProperties"] is False

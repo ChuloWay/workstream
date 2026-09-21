@@ -102,7 +102,7 @@ async def test_role_issuance_and_claim_linearize_at_real_authority(
                 audit=task_transition_audit(session),
                 actor_profile_id=context.actor_profile_id,
                 contexts=task_service(session, settings=get_settings()),
-            ).claim(UUID(ready["id"]), "Concurrent initial claim")
+            ).claim(UUID(ready["id"]), "Concurrent initial claim", idempotency_key=uuid4())
 
     pending = []
     try:
@@ -216,7 +216,7 @@ async def test_claim_keeps_frozen_policy_while_successor_activation_waits(
                 audit=task_transition_audit(session),
                 actor_profile_id=context.actor_profile_id,
                 contexts=task_service(session, settings=get_settings()),
-            ).claim(UUID(ready["id"]), "Claim exact prior guide during successor activation")
+            ).claim(UUID(ready["id"]), "Claim exact prior guide during successor activation", idempotency_key=uuid4())
 
     pending = []
     try:

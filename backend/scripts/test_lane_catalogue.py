@@ -333,6 +333,7 @@ PROJECT_MODULES = (
 )
 
 TASK_MODULES = (
+    "tests/tasks/test_command_replay.py",
     "tests/tasks/test_contribution_lineage.py",
     "tests/tasks/test_project_display.py",
     "tests/tasks/test_ready_queue.py",

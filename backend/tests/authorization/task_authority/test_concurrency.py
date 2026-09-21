@@ -75,7 +75,7 @@ async def test_two_granted_claimants_have_one_atomic_winner(task_client, monkeyp
                 audit=task_transition_audit(session),
                 actor_profile_id=context.actor_profile_id,
                 contexts=task_service(session, settings=get_settings()),
-            ).claim(UUID(task["id"]), "Competing claim")
+            ).claim(UUID(task["id"]), "Competing claim", idempotency_key=uuid4())
 
     results = await asyncio.wait_for(
         asyncio.gather(*(claim(actor) for actor in actors), return_exceptions=True), timeout=30,
@@ -161,7 +161,7 @@ async def test_project_grant_revocation_serializes_with_claim(
                 audit=task_transition_audit(session),
                 actor_profile_id=context.actor_profile_id,
                 contexts=task_service(session, settings=get_settings()),
-            ).claim(UUID(task["id"]), "Claim racing with authority revocation")
+            ).claim(UUID(task["id"]), "Claim racing with authority revocation", idempotency_key=uuid4())
 
     async def revoke():
         return await task_client.post(

@@ -709,13 +709,11 @@ class PreparedAuthorizationService:
         scope: PreparedAuthorityScope,
     ) -> _PreparedAuthorizationBinding:
         operation_id = project_id = operation_generation = None
-        guide_bindings = parse_prepared_guide_mutation(action_id, caller_input.request_value)
         policy_mutation_project_id = policy_mutation_guide_id = policy_mutation_policy_id = policy_mutation_operation_id = None
         policy_mutation_request_digest = policy_mutation_policy_digest = policy_mutation_predecessor_digest = None
         policy_mutation_generation = policy_mutation_predecessor_generation = policy_mutation_predecessor_id = policy_mutation_guide_status = None
         sufficiency: dict[str, object] = {}
         setup_bindings = parse_setup_bindings(action_id, caller_input, scope, self._context)
-        review_bindings = parse_review_bindings(action_id, caller_input, scope, self._context)
         if action_id is ActionId.PROJECT_CREATE:
             operation_id, project_id, operation_generation = parse_project_create_binding(
                 dict(caller_input.request_value), PreparedAuthorizationHandleInvalid
@@ -830,7 +828,7 @@ class PreparedAuthorizationService:
             project_create_operation_id=operation_id,
             project_create_project_id=project_id,
             project_create_generation=operation_generation,
-            **guide_bindings,
+            **parse_prepared_guide_mutation(action_id, caller_input.request_value),
             policy_mutation_project_id=policy_mutation_project_id,
             policy_mutation_guide_id=policy_mutation_guide_id,
             policy_mutation_policy_id=policy_mutation_policy_id,
@@ -864,13 +862,14 @@ class PreparedAuthorizationService:
             submission_policy_resource_digest=submission_policy_resource_digest,
             task_authority_context=parse_task_authority_binding(
                 action_id, caller_input.request_value, PreparedAuthorizationHandleInvalid,
+                caller_input.idempotency_key,
             ),
             **parse_prepared_artifact_bindings(
                 action_id, dict(caller_input.request_value), PreparedAuthorizationHandleInvalid,
             ),
             **parse_prepared_adapter_binding(action_id, caller_input.request_value),
             **parse_prepared_contribution_policy(action_id, caller_input.request_value),
-            **review_bindings,
+            **parse_review_bindings(action_id, caller_input, scope, self._context),
             **setup_bindings,
         )
 

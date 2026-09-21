@@ -43,11 +43,29 @@ async def suspended_actor(actor_client):
     return actor_profile_id
 
 
-async def test_suspended_profile_is_readable(actor_client, suspended_actor):
+async def test_suspended_profile_is_not_readable(actor_client, suspended_actor):
+    async with db_session.get_session_factory()() as session:
+        profile = await session.get(ActorProfile, suspended_actor)
+        link = await session.scalar(select(ActorIdentityLink).where(
+            ActorIdentityLink.actor_profile_id == suspended_actor,
+        ))
+        before = (profile.last_seen_at, link.last_verified_at)
     read = await actor_client.get("/api/v1/actors/me", headers=auth_headers())
-    assert read.status_code == 200
-    assert read.json()["status"] == "suspended"
-    assert read.json()["actor_profile_id"] == suspended_actor
+    assert read.status_code == 403
+    assert read.json()["error"]["code"] == "actor_suspended"
+    assert "actor_profile_id" not in read.json()
+    async with db_session.get_session_factory()() as session:
+        profile = await session.get(ActorProfile, suspended_actor)
+        link = await session.scalar(select(ActorIdentityLink).where(
+            ActorIdentityLink.actor_profile_id == suspended_actor,
+        ))
+        assert (profile.last_seen_at, link.last_verified_at) == before
+        assert profile.status == "suspended"
+        denial = await session.scalar(select(AuditEvent).where(
+            AuditEvent.action_id == ActionId.ACTOR_PROFILE_READ_SELF.value,
+            AuditEvent.denial_code == "actor_suspended",
+        ))
+        assert denial is not None and denial.resource_id == suspended_actor
 
 
 async def test_suspended_profile_is_not_mutable(actor_client, suspended_actor):
