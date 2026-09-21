@@ -167,3 +167,8 @@ with their actual target and custody.
 PLAN-03B4-02: the own-active rule is status-independent. Its matrix includes
 a fully locked draft with retained assignment as well as the separate ordinary
 unassigned draft denial; the status-only fixture is allowed by existing guards.
+
+Implementation proof repair QA-03B4-IMPL-01 / IMPL-03B4-01: lifecycle constants
+store transition pairs. State fixtures flatten their endpoints into the exact
+nine string tokens before assigning persisted status. Both positive state
+matrices and the draft-exclusion probe must execute beyond fixture setup.

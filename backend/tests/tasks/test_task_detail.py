@@ -24,6 +24,7 @@ from tests.test_tasks import (
 )
 
 READS = ("read_contributor_task_detail", "read_management_task_detail")
+STATES = {state for transition in ALLOWED_TASK_TRANSITIONS for state in transition}
 COMMON = {
     "task_id", "project_id", "title", "description", "task_type", "difficulty", "skill_tags",
     "estimated_time_minutes", "status", "acceptance_criteria", "rejection_criteria",
@@ -46,6 +47,8 @@ async def read_once(session, method, request):
 
 
 def test_task_detail_contracts():
+    assert STATES == {"draft", "screening", "ready", "claimed", "in_progress", "submitted",
+                      "evaluation_pending", "review_pending", "needs_revision"}
     now, project, task, contributor = datetime.now(UTC), uuid4(), uuid4(), uuid4()
     for request in (ManagementTaskDetailRequest(project, task), ContributorTaskDetailRequest(project, task, contributor)):
         for field in asdict(request):
@@ -158,7 +161,7 @@ async def test_task_detail_visibility(task_client, monkeypatch):
 
 async def test_task_detail_management_states(task_client):
     project = await create_active_project(task_client)
-    states = set(ALLOWED_TASK_TRANSITIONS)
+    states = STATES
     rows = {state: await create_ready_task(task_client, project["id"]) for state in states - {"draft"}}
     rows["draft"] = await create_draft_task(task_client, project["id"])
     factory = db_session.get_session_factory()
@@ -183,7 +186,7 @@ async def test_task_detail_owned_states(task_client, monkeypatch):
     claimed = await task_client.post(f"/api/v1/tasks/{task['id']}/claim", headers=auth_headers())
     assert claimed.status_code == 200, claimed.text
     factory, seen = db_session.get_session_factory(), set()
-    for state in ALLOWED_TASK_TRANSITIONS:
+    for state in STATES:
         async with factory() as session, session.begin():
             row = await session.get(WorkstreamTask, task["id"])
             assert row.locked_contribution_policy_version_id is not None
@@ -196,7 +199,7 @@ async def test_task_detail_owned_states(task_client, monkeypatch):
             result = await read_once(session, READS[0], request_for(READS[0], project["id"], row.id, UUID(row.assigned_to)))
             assert result is not None and (result.task_id, result.status) == (UUID(row.id), state)
             seen.add(result.status)
-    assert seen == set(ALLOWED_TASK_TRANSITIONS) and len(seen) == 9
+    assert seen == STATES and len(seen) == 9
 
 
 @pytest.mark.parametrize("method", READS)

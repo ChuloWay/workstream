@@ -63,7 +63,8 @@ ARCH-04A catalogue/schema before producing approval-eligible generations. Owners
 work concurrently if allowed paths do not overlap; shared catalogue/schema
 changes must be serialized or rebased, not implemented twice. ARCH-03A completes the existing internal guide-context port after AUTH-12H.
 CP08 completes its schema and minimal existing writers together; ARCH-03B retains
-invalidation and remaining projections after completed 03B1 metadata and 03B2/03B3 hidden queue facts.
+invalidation and remaining projections after completed 03B1 metadata, 03B2/03B3 hidden queue facts and 03B4 hidden
+contributor/management task detail.
 The invalidation handler additionally requires CON-02B committed claims; actor-wide
 changes need explicit per-project TASK events, not arbitrary outbox scope. Subsequent
 PR-sized contracts name exact files, public types, current migration head and
