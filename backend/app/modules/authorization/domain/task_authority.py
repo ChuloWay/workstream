@@ -39,16 +39,22 @@ class TaskAuthorityResourceContext(BaseModel):
     assignment_contributor_id: UUID | None
     locked_context_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     reason: str | None
+    idempotency_key: UUID | None = None
+    replay_assignment_id: UUID | None = None
 
 
 def parse_task_authority_binding(
     action: ActionId, request: Mapping[str, object], invalid_error: type[Exception],
+    idempotency_key: UUID,
 ) -> TaskAuthorityResourceContext | None:
     """Keep the complete task commitment typed and immutable through consumption."""
     if action not in TASK_ACTIONS:
         return None
     try:
-        return TaskAuthorityResourceContext.model_validate_json(json.dumps(dict(request)))
+        resource = TaskAuthorityResourceContext.model_validate_json(json.dumps(dict(request)))
+        if resource.idempotency_key is not None and resource.idempotency_key != idempotency_key:
+            raise ValueError("task key differs from prepared binding")
+        return resource
     except (TypeError, ValueError) as exc:
         raise invalid_error("invalid prepared authorization handle") from exc
 
@@ -66,6 +72,25 @@ def task_resource_guard(action: ActionId, resource: TaskAuthorityResourceContext
         and resource.assignment_id is None
         and resource.assignment_contributor_id is None
     )
+    if resource.replay_assignment_id is not None:
+        if (
+            resource.idempotency_key is None
+            or resource.replay_assignment_id != resource.assignment_id
+        ):
+            return False
+        if action is ActionId.TASK_CLAIM:
+            return resource.task_status == "claimed" and own_assignment
+        if action is ActionId.TASK_START:
+            return resource.task_status == "in_progress" and own_assignment
+        if action is ActionId.OPERATIONS_TASK_START_OVERRIDE:
+            return (
+                resource.task_status == "in_progress"
+                and resource.assignment_contributor_id is not None
+                and resource.assignment_contributor_id == resource.assigned_to
+                and resource.assigned_to != resource.actor_profile_id
+                and bool(resource.reason and resource.reason.strip())
+            )
+        return False
     if action is ActionId.TASK_CLAIM:
         return unassigned_ready
     if action is ActionId.TASK_START:

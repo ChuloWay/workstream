@@ -418,6 +418,9 @@ TASK_PROJECT_AUTHORITY_TARGETS = frozenset(
         "backend/app/modules/tasks/authorized_commands.py",
     }
 )
+TASK_COMMAND_REPLAY_TARGETS = frozenset({
+    "backend/app/modules/tasks/command_replay.py",
+})
 
 
 class BehaviorOwnershipError(RuntimeError):
@@ -623,6 +626,7 @@ def _validate_additive_partition_transition(
         | ARCH_03A_GUIDE_CONTEXT_TARGETS
         | V01_BASELINE_ADDED_TARGETS
         | TASK_PROJECT_AUTHORITY_TARGETS
+        | TASK_COMMAND_REPLAY_TARGETS
     )
     expected_additions = (approved_additions & additions) - set(trusted_targets)
     if POL_03A_DECLARATIVE_MODEL_TARGET in additions:

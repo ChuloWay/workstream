@@ -1174,6 +1174,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/command_replay.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/lifecycle.py"
     },
     {
@@ -1329,7 +1333,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "01e0f1e6643273b2b916bf0a3247da8d7e3b564c4a53f6b70a36e5a4a258ea62",
+  "authority_digest": "dea33dae6ff35bc5517b72824e657a694b12970bcc5277d9245a97b1be5a14e7",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

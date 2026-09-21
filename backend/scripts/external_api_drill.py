@@ -1179,16 +1179,11 @@ async def authority_cases(drill, admin, manager, outsider, manager_id, project):
                 exact_fields=current.keys())
         else:
             if action == "suspend":
-                self_read = await profile_readback(drill, outsider, "suspended_self_read_allowed",
-                    {"actor_profile_id": scoped_id, "status": "suspended", "display_name": None,
-                            "contact_email": None, "actor_kind": "human", "domains": ["contributor"],
-                            "admin_roles": ["project_manager"], "project_role_grants": [],
-                            "created_at": outsider_body["created_at"]}, current)
-                # A legitimate self read touches admission timestamps, unlike
-                # an administrator reading a different target.
+                await drill.call("suspended_self_read_denied", "GET", "/api/v1/actors/me",
+                    token=outsider, expected=403, values={"error.code": "actor_suspended"})
                 current = await drill.call("suspended_self_read_admin_baseline", "GET", actor_route,
                     path=actor_path, token=admin,
-                    values=current | {key: self_read[key] for key in ("updated_at", "last_seen_at")},
+                    values=current,
                     exact_fields=current.keys())
             else:
                 await drill.call("deactivated_self_read_denied", "GET", "/api/v1/actors/me", token=outsider,

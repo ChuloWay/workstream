@@ -66,6 +66,12 @@ stage their invalidation event atomically, while every foreground claim/start/
 submission still revalidates current authority and never waits for that worker
 to deny a revoked actor. Prove crash/redelivery and wrong-role preservation.
 
+The [suspension and task-retry repair](../../../../changes/auth-suspension-task-retry.md)
+owns durable claim/start/Operator-start replay on the existing command path.
+Reuse that receipt, current-authority recheck and atomic transaction; do not
+create a second retry implementation during activation. Other proposed actions
+still require their own exact operation proofs when implemented.
+
 Acceptance: actor, identity link, project grant, task, assignment, contributor,
 locked generation, transaction and idempotency are exact. Mismatched replay,
 revocation and internally stale context deny with atomic evidence; exact valid

@@ -1930,6 +1930,19 @@ def test_arch03a_partition_transition_accepts_only_exact_policy_lineage_relocati
             ownership._validate_additive_partition_transition(_partition(after), _partition(before))
 
 
+def test_command_replay_partition_addition_does_not_authorize_neighbors() -> None:
+    """Admit the exact replay owner without opening adjacent unreviewed paths."""
+    retained = "backend/app/core/config.py"
+    target = "backend/app/modules/tasks/command_replay.py"
+    trusted = _partition([retained])
+    assert ownership.TASK_COMMAND_REPLAY_TARGETS == {target}
+    ownership._validate_additive_partition_transition(_partition(sorted([retained, target])), trusted)
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted([retained, target, "backend/app/modules/tasks/unreviewed.py"])), trusted,
+        )
+
+
 @pytest.mark.parametrize("target", [
     "backend/app/modules/tasks/api/ready_queue.py",
     "backend/app/modules/tasks/api/management_queue.py",

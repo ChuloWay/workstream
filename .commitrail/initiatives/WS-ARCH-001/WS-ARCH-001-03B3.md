@@ -158,6 +158,13 @@ queue reads hidden and public access pending ARCH-03C.
 
 ## Reconciliation
 
+- Main integration: preserve merged retry/suspension behavior, both exact owner
+  registrations and their regression tests, both TASK lane modules, and both
+  roadmap outcomes. Recompute the combined ownership digest. Operational
+  projection proof also inspects the actual executed SELECT columns, so loading
+  private content cannot pass merely because serialization omits it. Keep the
+  small shared datetime validator beside the existing queue input contracts;
+  extracting another utility module is not needed for this reconciliation.
 - Current-source reconciliation: extends merged 03B2; CP08 writers and public
   claims remain authoritative and untouched. No pre-release compatibility path.
 - Next usable boundary: remaining actor-specific detail/locked-context/audit

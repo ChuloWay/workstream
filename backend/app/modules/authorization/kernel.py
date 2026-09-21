@@ -1360,10 +1360,7 @@ class AuthorizationService:
             return AuthorizationDenialCode.IDENTITY_LINK_REVOKED
         if context.actor_status is ActorStatus.DEACTIVATED:
             return AuthorizationDenialCode.ACTOR_DEACTIVATED
-        if (
-            requested_action is ActionId.ACTOR_PROFILE_UPDATE_SELF
-            and context.actor_status is ActorStatus.SUSPENDED
-        ):
+        if context.actor_status is ActorStatus.SUSPENDED:
             return AuthorizationDenialCode.ACTOR_SUSPENDED
         if action is None:
             return AuthorizationDenialCode.UNKNOWN_ACTION

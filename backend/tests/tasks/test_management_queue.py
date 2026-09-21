@@ -3,7 +3,7 @@
 import asyncio
 from dataclasses import FrozenInstanceError, asdict, replace
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -164,7 +164,11 @@ async def test_management_queue_projection(task_client):
         assert row.deadline_at == deadline
         owner, request = TaskRepository(session), TaskQueueRequest(UUID(project["id"]))
         management = (await owner.read_management_tasks(request)).items[0]
-        operational = (await owner.read_operational_tasks(request)).items[0]
+        with patch.object(session, "execute", wraps=session.execute) as execute:
+            operational = (await owner.read_operational_tasks(request)).items[0]
+        execute.assert_awaited_once()
+        statement = execute.call_args.args[0]
+        assert set(statement.selected_columns.keys()) == {"id", "project_id", "status", "created_at", "updated_at"}
         assert management == ManagementTaskSummary(
             UUID(row.id), UUID(row.project_id), row.title, row.task_type, row.difficulty, tuple(row.skill_tags),
             row.estimated_time_minutes, row.status, row.deadline_at, row.created_at, row.updated_at,

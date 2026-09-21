@@ -71,11 +71,36 @@ draft -> screening -> ready -> claimed -> in_progress
   and copied through assignment and hidden Submission creation by CP08.
   Claim does not perform a fresh CON lookup.
 
-Task and assignment are locked first, followed by canonical actor, identity
+For claim/start, the actor/action/idempotency-key receipt is reserved first;
+task and assignment are then locked, followed by canonical actor, identity
 link and applicable grant revalidation and locking. This matches hidden
 Submission creation's lock order. Authorization consumes the exact locked
 facts before writes. Product writes and their audit evidence commit or roll
 back together.
+
+The receipt actor foreign key is checked at commit, after AUTH's actor lock;
+reservation must not take an earlier implicit actor lock that can deadlock
+parallel commands from the same actor. Referential integrity remains enforced.
+
+## Claim and start retries
+
+`POST /api/v1/tasks/{task_id}/claim`, `POST /api/v1/tasks/{task_id}/start`, and
+`POST /api/v1/operations/tasks/{task_id}/start` require one UUID `Idempotency-Key`
+header. Retrying the same actor/action/key and semantic request returns the
+original typed success response only after fresh current authorization and
+exact task, active assignment and locked-context checks. Claim replay requires
+the task still be claimed; start replay requires it still be in progress.
+No duplicate assignment or lifecycle success event is created. A fresh AUTH
+decision records the replay's current authority check.
+
+The key is not a permission. Revocation, suspension, a different assignment or
+an incompatible current task state yields the normal concealed denial. Only
+after authority succeeds may the caller receive `409 idempotency_mismatch`
+for changed input or `409 task_replay_state_changed` for inconsistent stored
+result/context. Keys are scoped by actor and operation, not by task: reusing a
+claim key for another task is a mismatch, not a second claim. The receipt and
+all business/audit writes commit or roll back together. Committed receipts
+cannot be modified, deleted or truncated through ordinary SQL.
 
 Revocation immediately prevents subsequent contributor commands. Closing an
 existing assignment and returning a task to the ready queue through durable
