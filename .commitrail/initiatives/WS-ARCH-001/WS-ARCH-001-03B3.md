@@ -80,8 +80,9 @@ membership. Future wire tokens/authority are ARCH-03C responsibilities.
 
 ## Acceptance criteria
 
-- Both new queues return exactly the selected project's draft, ready and
-  actively claimed tasks. Foreign rows interleaved before and between local
+- Both new queues return exactly the selected project's tasks in all nine
+  current lifecycle states: draft, screening, ready, claimed, in_progress,
+  submitted, evaluation_pending, review_pending and needs_revision. Foreign rows interleaved before and between local
   rows cannot consume page slots, alter continuation or escape serialization.
 - Limit-one traversal covers equal timestamps, exact UUID tie ordering,
   exhaustion, empty/missing project and a deleted cursor anchor.
@@ -92,12 +93,15 @@ membership. Future wire tokens/authority are ARCH-03C responsibilities.
   not appear in operator serialized facts.
 - Invalid request/cross-project cursor fails before SQL. Reads neither flush
   pending invalid rows nor commit/rollback caller changes; an independent
-  session observes rollback. Reads complete while another session holds a
+  session observes rollback; `session.in_transaction()` remains true after the
+  read. Reads complete while another session holds a
   task row lock.
 - API exports contain the canonical request/cursor only; no former name alias
   remains. No new public route or AUTH action appears.
 - Focused real PostgreSQL tests and unchanged full hosted gates pass. Removing
-  the exact project predicate must fail the named pagination regression.
+  the exact project predicate must fail `test_management_queue_pagination` for
+  both methods. Injecting `status IN ('draft', 'ready', 'claimed')` must fail
+  `test_management_queue_all_states` for both methods.
 
 ## Risk and review routing
 
@@ -116,6 +120,19 @@ runtime claims. Fixtures use existing task_client/create_active_project and
 real constrained Task/Assignment rows, with stored precondition assertions.
 Draft is valid without policy locks; ready and claimed fixtures use the existing
 screen/release/real claim helpers, retaining CP08 lineage and real actor FKs.
+`test_management_queue_all_states` persists all nine states and asserts their
+exact stored set before reading either queue. Draft, ready and claimed use the
+canonical helpers; later-state fixtures may update fully locked ready rows
+with all database guards enabled. This arranges read fixtures only, and does
+not claim the later lifecycle operations ran. The existing 0024 trigger guards
+initial insertion/stamp mutation, and the fully locked rows satisfy non-draft
+constraints without disabling a trigger.
+
+Additional tests: `test_management_queue_projection` checks exact manager and
+operator fields and private sentinels; `test_management_queue_transaction`
+checks no-autoflush separately from flushed-marker rollback and the still-open
+transaction; `test_management_queue_nonlocking` holds a real row lock in an
+independent session. Parameterize each read proof over both queue methods.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
@@ -124,6 +141,13 @@ screen/release/real claim helpers, retaining CP08 lineage and real actor FKs.
 | Transaction/nonlocking | Real independent-session no-autoflush/rollback/row-lock tests for both new reads | Planned | No mocked SQL proof |
 | Wrong-reason resistance | Remove only project predicate in actual owner query, rerun exact pagination test | Planned | Test must fail for the injected defect |
 | Architecture/docs/CI | Ruff, module/AUTH/test boundaries, ownership validator, links, stale scan, Commitrail, hosted seven lanes | Planned | Final exact head evidence in PR |
+
+## Review findings
+
+`PLAN-03B3-01` / `QA-03B3-PLAN-01`: an all-states promise was initially tested
+only with draft/ready/claimed. The contract now requires all nine persisted
+states and a three-state-filter mutation probe, with fixture-only later state
+setup distinguished from lifecycle-operation evidence.
 
 ## Reconciliation
 
