@@ -6,12 +6,16 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.modules.audit.repository import AuditRepository
 from app.modules.tasks.api import (
+    ReadyTaskCursor,
+    ReadyTaskPage,
+    ReadyTaskQueueRequest,
+    ReadyTaskSummary,
     SubmissionPredecessorFacts,
     TaskLockedProjectContextReferences,
     TaskSubmissionContextFacts,
@@ -38,6 +42,51 @@ class TaskRepository:
         """
         self._session = session
         self._audit_repository = AuditRepository(session)
+
+    async def read_ready_tasks(self, request: ReadyTaskQueueRequest) -> ReadyTaskPage:
+        """Read only eligible project rows before keyset pagination.
+
+        This hidden owner read performs no authorization or reservation. It
+        neither flushes pending writes nor commits/locks the caller's session.
+        """
+        if not isinstance(request, ReadyTaskQueueRequest):
+            raise ValueError("ready task queue request is invalid")
+        task = WorkstreamTask
+        active_assignment = select(TaskAssignment.id).where(
+            TaskAssignment.task_id == task.id, TaskAssignment.status == "active",
+        ).exists()
+        statement = select(
+            task.id, task.project_id, task.title, task.task_type, task.difficulty,
+            task.skill_tags, task.estimated_time_minutes, task.created_at,
+        ).where(
+            task.project_id == str(request.project_id),
+            task.status == "ready",
+            task.assigned_to.is_(None),
+            ~active_assignment,
+        )
+        if request.after is not None:
+            statement = statement.where(
+                tuple_(task.created_at, task.id) > tuple_(
+                    request.after.created_at, str(request.after.task_id),
+                ),
+            )
+        statement = statement.order_by(task.created_at, task.id).limit(request.limit + 1)
+        with self._session.no_autoflush:
+            rows = (await self._session.execute(statement)).all()
+        items = tuple(
+            ReadyTaskSummary(
+                task_id=UUID(row.id), project_id=UUID(row.project_id), title=row.title,
+                task_type=row.task_type, difficulty=row.difficulty,
+                skill_tags=tuple(row.skill_tags), estimated_time_minutes=row.estimated_time_minutes,
+                created_at=row.created_at,
+            )
+            for row in rows[:request.limit]
+        )
+        continuation = (
+            ReadyTaskCursor(request.project_id, items[-1].created_at, items[-1].task_id)
+            if len(rows) > request.limit else None
+        )
+        return ReadyTaskPage(request.project_id, items, continuation)
 
     async def add_task(self, task: WorkstreamTask) -> WorkstreamTask:
         """Persist a new task and refresh generated database fields.

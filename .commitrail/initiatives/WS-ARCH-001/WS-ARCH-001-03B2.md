@@ -1,7 +1,7 @@
 # WS-ARCH-001-03B2 — Project-scoped ready task queue facts
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: TASK exposes one hidden owner port for bounded,
   detached ready-task queue pages; live AUTH/HTTP composition stays in ARCH-03C.
 
@@ -98,22 +98,24 @@ use the unique task ID tie-breaker. No query selects a current guide or CON poli
 
 ## Evidence
 
-Planned test names below are future implementation tests, not executed evidence.
+The named tests below implement the proof boundaries; exact execution and
+review evidence belongs to the PR.
 Use actual PostgreSQL with existing `task_client`/`create_active_project` and
 `create_ready_task` fixtures, which screen/release through existing CP08 writers.
 Do not fabricate non-draft stamps or disable guards in normal arrangements.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Input boundary | `test_ready_queue_request_validation` | Planned | Pure controls including bool limit and naive dates |
-| Scoped pagination | `test_ready_queue_filters_before_pagination` | Planned | Two projects plus independently excluded local draft, assigned_to-only and active-assignment-only decoys; assert stored states, deterministic timestamps/UUID order and exact limit-one traversal to exhaustion |
-| Assignment visibility | `test_ready_queue_assignment_visibility` | Planned | Valid exact-stamp active assignment on ready task versus closed history; preserve all DB constraints |
-| Detached facts | `test_ready_queue_detached_projection` | Planned | Full field equality, mutable source-tag mutation and frozen result rejection |
-| Caller transaction | `test_ready_queue_preserves_transaction` | Planned | Pending invalid row no autoflush; separately flushed marker read/rollback and independent observer |
-| Nonlocking read | `test_ready_queue_does_not_wait_for_task_lock` | Planned | Two sessions, held FOR UPDATE and bounded independent read |
-| Proof rejects defect | Scoped predicate-omission probe | Planned | Remove project predicate only in isolated test copy; positive control passes, exact pagination test fails |
-| Exposure/selection | Existing OpenAPI route inventory, exact TASK catalogue assertion | Planned | No HTTP queue claimed |
-| Shared checks | Ruff, boundaries, Commitrail, links, stale scans, hosted full Backend/MCP CI | Planned | Migrations remain 0024; full suite stays hosted |
+| Input boundary | `test_ready_queue_request_validation` | Implemented; execution in PR | Pure controls including bool limit and naive dates |
+| Scoped pagination | `test_ready_queue_filters_before_pagination` | Implemented; execution in PR | Two projects plus independently excluded local draft, assigned_to-only and active-assignment-only decoys; assert stored states, deterministic timestamps/UUID order and exact limit-one traversal to exhaustion |
+| Claimed anchor | `test_ready_queue_continues_after_claim`: real exact-project grant and canonical claim; old cursor and fresh read exclude claimed task | Implemented; execution in PR | No claim or AUTH substitute |
+| Assignment visibility | `test_ready_queue_assignment_visibility` | Implemented; execution in PR | Valid exact-stamp active assignment on ready task versus closed history; preserve all DB constraints |
+| Detached facts | `test_ready_queue_detached_projection` | Implemented; execution in PR | Full field equality, mutable source-tag mutation and frozen result rejection |
+| Caller transaction | `test_ready_queue_preserves_transaction` | Implemented; execution in PR | Pending invalid row no autoflush; separately flushed marker read/rollback and independent observer |
+| Nonlocking read | `test_ready_queue_does_not_wait_for_task_lock` | Implemented; execution in PR | Two sessions, held FOR UPDATE and bounded independent read |
+| Proof rejects defect | Scoped predicate-omission probe | Implemented; execution in PR | Remove project predicate only in isolated test copy; positive control passes, exact pagination test fails |
+| Exposure/selection | Existing OpenAPI route inventory, exact TASK catalogue assertion | Implemented; execution in PR | No HTTP queue claimed |
+| Shared checks | Ruff, boundaries, Commitrail, links, stale scans, hosted full Backend/MCP CI | Implemented; execution in PR | Migrations remain 0024; full suite stays hosted |
 
 ## Review findings
 

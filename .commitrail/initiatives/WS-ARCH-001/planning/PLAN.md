@@ -30,7 +30,8 @@ checker-remediation boundary before public Submission cutover.
 | [ARCH-03A](../WS-ARCH-001-03A.md) | AUTH-12H, CP07 | Complete active and exact frozen PROJECTS guide facts before CP08 |
 | [CP08](../WS-ARCH-001-CP08.md) | ARCH-03A | Complete: TASK initial-attempt lineage schema, public facts and minimal existing writers together |
 | [ARCH-03B1](../WS-ARCH-001-03B1.md) | ARCH-03A, CP08 | Complete: TaskService detached PROJECTS display and draft lookup |
-| ARCH-03B remaining | ARCH-03B1; AUTH-OUTBOX-01 and CON-02B for invalidation | Queues and actor-specific projections; hidden assignment invalidation only after shared committed claims |
+| [ARCH-03B2](../WS-ARCH-001-03B2.md) | ARCH-03B1 | Complete: hidden project-scoped contributor ready queue facts; no live queue authority/HTTP |
+| ARCH-03B remaining | ARCH-03B2; AUTH-OUTBOX-01 and CON-02B for invalidation | Management/operations/audit queues and projections; hidden assignment invalidation only after shared committed claims |
 | ARCH-03C | ARCH-03B, AUTH-OUTBOX-02 | AUTH exact task/assignment activation and integrated readiness proof |
 | CP09 (later cleanup coordination) | All legacy consumers replaced, including CHECKER and public 02I path | Physical economic deletion; not on the allow_review critical path |
 | ARCH-04B | ARCH-04A, POL-07, ARCH-03C, merged ARCH-02H | ART exact stored Submission materialization |
@@ -60,7 +61,7 @@ ARCH-04A catalogue/schema before producing approval-eligible generations. Owners
 work concurrently if allowed paths do not overlap; shared catalogue/schema
 changes must be serialized or rebased, not implemented twice. ARCH-03A completes the existing internal guide-context port after AUTH-12H.
 CP08 completes its schema and minimal existing writers together; ARCH-03B retains
-queues/invalidation and broader projections after completed 03B1 metadata cutover.
+queues/invalidation and broader projections after completed 03B1 metadata and 03B2 hidden ready queue facts.
 The invalidation handler additionally requires CON-02B committed claims; actor-wide
 changes need explicit per-project TASK events, not arbitrary outbox scope. Subsequent
 PR-sized contracts name exact files, public types, current migration head and

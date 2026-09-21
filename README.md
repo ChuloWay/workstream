@@ -568,8 +568,10 @@ the assignment's exact stamp. PostgreSQL rejects mismatched or replaced stamps.
 New work requires no superseded economic configuration. ARCH-03B1 removes
 TaskService's private PROJECTS reads: the existing port now returns detached
 project descriptions and exact historical guide display facts. Draft task creation
-requires project existence, not an activated guide. Remaining queues and
-actor-specific projections stay in ARCH-03B; invalidation requires shared delivery
+requires project existence, not an activated guide. ARCH-03B2 adds hidden,
+project-scoped ready queue facts with bounded live pagination; it exposes no
+queue endpoint or authority. Management/operations/audit queues and projections
+stay in ARCH-03B; invalidation requires shared delivery
 claims, and public authority cutover remains ARCH-03C. Canonical checker materialization follows in
 ARCH-04B/04C.
 
