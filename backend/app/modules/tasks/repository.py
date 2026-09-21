@@ -6,15 +6,19 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select, tuple_, update
+from sqlalchemy import Row, Select, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.modules.audit.repository import AuditRepository
 from app.modules.tasks.api import (
-    ReadyTaskCursor,
+    ManagementTaskPage,
+    ManagementTaskSummary,
+    OperationalTaskPage,
+    OperationalTaskSummary,
+    TaskQueueCursor,
     ReadyTaskPage,
-    ReadyTaskQueueRequest,
+    TaskQueueRequest,
     ReadyTaskSummary,
     SubmissionPredecessorFacts,
     TaskLockedProjectContextReferences,
@@ -43,14 +47,12 @@ class TaskRepository:
         self._session = session
         self._audit_repository = AuditRepository(session)
 
-    async def read_ready_tasks(self, request: ReadyTaskQueueRequest) -> ReadyTaskPage:
+    async def read_ready_tasks(self, request: TaskQueueRequest) -> ReadyTaskPage:
         """Read only eligible project rows before keyset pagination.
 
         This hidden owner read performs no authorization or reservation. It
         neither flushes pending writes nor commits/locks the caller's session.
         """
-        if not isinstance(request, ReadyTaskQueueRequest):
-            raise ValueError("ready task queue request is invalid")
         task = WorkstreamTask
         active_assignment = select(TaskAssignment.id).where(
             TaskAssignment.task_id == task.id, TaskAssignment.status == "active",
@@ -59,11 +61,62 @@ class TaskRepository:
             task.id, task.project_id, task.title, task.task_type, task.difficulty,
             task.skill_tags, task.estimated_time_minutes, task.created_at,
         ).where(
-            task.project_id == str(request.project_id),
             task.status == "ready",
             task.assigned_to.is_(None),
             ~active_assignment,
         )
+        rows, continuation = await self._read_task_queue_rows(request, statement)
+        items = tuple(
+            ReadyTaskSummary(
+                task_id=UUID(row.id), project_id=UUID(row.project_id), title=row.title,
+                task_type=row.task_type, difficulty=row.difficulty,
+                skill_tags=tuple(row.skill_tags), estimated_time_minutes=row.estimated_time_minutes,
+                created_at=row.created_at,
+            )
+            for row in rows
+        )
+        return ReadyTaskPage(request.project_id, items, continuation)
+
+    async def read_management_tasks(self, request: TaskQueueRequest) -> ManagementTaskPage:
+        """Return all project tasks with fixed planning fields and no work content."""
+        task = WorkstreamTask
+        rows, cursor = await self._read_task_queue_rows(request, select(
+            task.id, task.project_id, task.title, task.task_type, task.difficulty,
+            task.skill_tags, task.estimated_time_minutes, task.status, task.deadline_at,
+            task.created_at, task.updated_at,
+        ))
+        items = tuple(ManagementTaskSummary(
+            task_id=UUID(row.id), project_id=UUID(row.project_id), title=row.title,
+            task_type=row.task_type, difficulty=row.difficulty, skill_tags=tuple(row.skill_tags),
+            estimated_time_minutes=row.estimated_time_minutes, status=row.status,
+            deadline_at=row.deadline_at, created_at=row.created_at, updated_at=row.updated_at,
+        ) for row in rows)
+        return ManagementTaskPage(request.project_id, items, cursor)
+
+    async def read_operational_tasks(self, request: TaskQueueRequest) -> OperationalTaskPage:
+        """Select status-only columns, without loading private task content."""
+        task = WorkstreamTask
+        rows, cursor = await self._read_task_queue_rows(request, select(
+            task.id, task.project_id, task.status, task.created_at, task.updated_at,
+        ))
+        items = tuple(OperationalTaskSummary(
+            task_id=UUID(row.id), project_id=UUID(row.project_id), status=row.status,
+            created_at=row.created_at, updated_at=row.updated_at,
+        ) for row in rows)
+        return OperationalTaskPage(request.project_id, items, cursor)
+
+    async def _read_task_queue_rows(
+        self, request: TaskQueueRequest, statement: Select,
+    ) -> tuple[Sequence[Row], TaskQueueCursor | None]:
+        """Apply one exact project and live position before the bounded query.
+
+        Only TASK's fixed projection methods supply statements. This helper
+        never authorizes, flushes, commits, rolls back or acquires row locks.
+        """
+        if not isinstance(request, TaskQueueRequest):
+            raise ValueError("task queue request is invalid")
+        task = WorkstreamTask
+        statement = statement.where(task.project_id == str(request.project_id))
         if request.after is not None:
             statement = statement.where(
                 tuple_(task.created_at, task.id) > tuple_(
@@ -73,20 +126,11 @@ class TaskRepository:
         statement = statement.order_by(task.created_at, task.id).limit(request.limit + 1)
         with self._session.no_autoflush:
             rows = (await self._session.execute(statement)).all()
-        items = tuple(
-            ReadyTaskSummary(
-                task_id=UUID(row.id), project_id=UUID(row.project_id), title=row.title,
-                task_type=row.task_type, difficulty=row.difficulty,
-                skill_tags=tuple(row.skill_tags), estimated_time_minutes=row.estimated_time_minutes,
-                created_at=row.created_at,
-            )
-            for row in rows[:request.limit]
-        )
         continuation = (
-            ReadyTaskCursor(request.project_id, items[-1].created_at, items[-1].task_id)
+            TaskQueueCursor(request.project_id, rows[request.limit - 1].created_at, UUID(rows[request.limit - 1].id))
             if len(rows) > request.limit else None
         )
-        return ReadyTaskPage(request.project_id, items, continuation)
+        return rows[:request.limit], continuation
 
     async def add_task(self, task: WorkstreamTask) -> WorkstreamTask:
         """Persist a new task and refresh generated database fields.

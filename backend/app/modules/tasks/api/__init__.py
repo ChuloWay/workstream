@@ -34,11 +34,26 @@ from app.modules.tasks.api.submission_command import (
 )
 
 from app.modules.tasks.api.ready_queue import (
-    ReadyTaskCursor, ReadyTaskPage, ReadyTaskQueuePort, ReadyTaskQueueRequest, ReadyTaskSummary,
+    TaskQueueCursor, ReadyTaskPage, ReadyTaskQueuePort, TaskQueueRequest, ReadyTaskSummary,
+)
+
+from app.modules.tasks.api.management_queue import (
+    ManagementTaskPage,
+    ManagementTaskQueuePort,
+    ManagementTaskSummary,
+    OperationalTaskPage,
+    OperationalTaskQueuePort,
+    OperationalTaskSummary,
 )
 
 __all__ = (
-    "ReadyTaskCursor", "ReadyTaskPage", "ReadyTaskQueuePort", "ReadyTaskQueueRequest", "ReadyTaskSummary",
+    "ManagementTaskPage",
+    "ManagementTaskQueuePort",
+    "ManagementTaskSummary",
+    "OperationalTaskPage",
+    "OperationalTaskQueuePort",
+    "OperationalTaskSummary",
+    "TaskQueueCursor", "ReadyTaskPage", "ReadyTaskQueuePort", "TaskQueueRequest", "ReadyTaskSummary",
     "TaskTransitionAuditPort",
     "TaskTransitionFacts",
     "TaskAuthorizationPort",

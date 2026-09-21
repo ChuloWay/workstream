@@ -21,8 +21,8 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Public post-policy composition: POL-06B delivered using existing AUTH-12G.
 - Completed activation boundary: AUTH-12H exact-project manager authority for
   CP07 complete-guide activation/binding, with live-authority replay.
-- Next usable boundary: remaining ARCH-03B management/operations/audit queues and projections
-  after completed ARCH-03B2 hidden contributor-ready queue facts, ARCH-03B1 detached metadata and CP08 lineage
+- Next usable boundary: remaining ARCH-03B detail/locked-context and audit projections
+  after completed ARCH-03B3 hidden management/operational queues and ARCH-03B2 contributor-ready queue facts, ARCH-03B1 detached metadata and CP08 lineage
   and minimal writers and ARCH-03A internal guide context. POL-07B internal phase composition is delivered.
   Unavailable dispatcher contracts remain a separate contribution boundary.
 - Governing source: `docs/spec_authorization_service.md`, authorization code,

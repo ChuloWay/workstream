@@ -10,7 +10,9 @@ work-context and system-Operator start authority. Reuse its command/port and
 assignment transaction, not a second claim implementation. CP08 completes the contribution-policy attempt locks and minimal writers.
 The [03B2 child](../../WS-ARCH-001-03B2.md) supplies hidden contributor-ready
 queue facts and pagination, without live AUTH or HTTP exposure. This parent
-retains management/operations/audit queues, broader projections and invalidation.
+retains detail/locked-context and audit projections and invalidation. The
+[03B3 child](../../WS-ARCH-001-03B3.md) delivers hidden all-state management
+and status-only operational queue facts.
 
 The reconciled CP08 chunk owns contribution-policy fields and the minimal
 existing screening/claim/Submission copy paths together after ARCH-03A. This
@@ -31,8 +33,8 @@ behavior. The queue must filter project/visibility before counts and cursors.
 Own the distinct management, operational and audit locked-context projections
 and their field contracts, plus management task detail/work-context/submission
 requirements reads. 03C supplies their separate action/permission declarations;
-also own the management/operational queue and covered Audit task-evidence
-projections enumerated there. Scope filtering precedes counts, cursors and
+03B3 supplies the management/operational queue facts; covered Audit
+task-evidence projections enumerated there remain. Scope filtering precedes counts, cursors and
 serialization; operational status never includes contributor-private detail.
 For every one of these surfaces,
 no projection selects a permission using a token role or leaks another
@@ -78,7 +80,8 @@ test-delta impact.
    draft/display reads using the existing port and immutable exact-guide facts.
    Its public response shapes and authorization remain unchanged. The separate
    pre-submit context consumer is explicitly outside this metadata cutover.
-2. Remaining 03B queues and actor-specific task projections, with exact field,
+2. After delivered 03B2/03B3 hidden queues, remaining actor-specific task
+   detail/locked-context and audit projections, with exact field,
    visibility/count/cursor and hidden command contracts before implementation.
 3. Assignment invalidation after the shared claim contract exists, followed by
    ARCH-03C producer wiring, exact AUTH and public activation. No parallel worker

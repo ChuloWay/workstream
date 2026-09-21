@@ -336,6 +336,7 @@ TASK_MODULES = (
     "tests/tasks/test_contribution_lineage.py",
     "tests/tasks/test_project_display.py",
     "tests/tasks/test_ready_queue.py",
+    "tests/tasks/test_management_queue.py",
     "tests/tasks/test_contribution_lineage_migration.py",
     "tests/tasks/test_contribution_claim_races.py",
     "tests/tasks/test_submission_lineage.py",

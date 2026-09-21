@@ -196,8 +196,11 @@ are supported; historical reads do not rerun availability. No superseded economi
 required. Task display now comes from detached values supplied by PROJECTS,
 including the exact historical guide after a successor activates. Draft task
 creation still works before guide configuration. A hidden project-scoped ready queue read now returns bounded contributor
-summaries; it grants no authority and is not a public queue. Management/operations/
-audit queues and actor-specific projections belong to ARCH-03B; assignment invalidation also needs shared delivery
+summaries. Hidden management and operational reads also cover all project task
+states: managers receive planning fields; operators receive only IDs, status
+and timestamps. None grants authority or exposes a public queue. Remaining
+actor-specific detail/locked-context and audit projections belong to ARCH-03B;
+assignment invalidation also needs shared delivery
 claims, and authorization/public cutover remains ARCH-03C.
 
 The intended unified flow uses one compilation result for sufficiency and

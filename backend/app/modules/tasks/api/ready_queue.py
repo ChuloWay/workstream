@@ -12,7 +12,7 @@ def _aware(value: datetime) -> bool:
 
 
 @dataclass(frozen=True, slots=True)
-class ReadyTaskCursor:
+class TaskQueueCursor:
     """Project-bound live position, not an authority token or reservation."""
 
     project_id: UUID
@@ -22,25 +22,25 @@ class ReadyTaskCursor:
     def __post_init__(self) -> None:
         """Reject malformed positions before a repository can query."""
         if not all(isinstance(value, UUID) for value in (self.project_id, self.task_id)) or not _aware(self.created_at):
-            raise ValueError("ready task cursor is invalid")
+            raise ValueError("task queue cursor is invalid")
 
 
 @dataclass(frozen=True, slots=True)
-class ReadyTaskQueueRequest:
+class TaskQueueRequest:
     """Bound one project and page; future callers must authorize scope first."""
 
     project_id: UUID
     limit: int = 50
-    after: ReadyTaskCursor | None = None
+    after: TaskQueueCursor | None = None
 
     def __post_init__(self) -> None:
         """Reject unbounded limits and cross-project cursor substitution."""
         if not isinstance(self.project_id, UUID) or type(self.limit) is not int or not 1 <= self.limit <= 100:
-            raise ValueError("ready task queue request is invalid")
+            raise ValueError("task queue request is invalid")
         if self.after is not None and (
-            not isinstance(self.after, ReadyTaskCursor) or self.after.project_id != self.project_id
+            not isinstance(self.after, TaskQueueCursor) or self.after.project_id != self.project_id
         ):
-            raise ValueError("ready task cursor differs from project")
+            raise ValueError("task queue cursor differs from project")
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,7 +76,7 @@ class ReadyTaskPage:
 
     project_id: UUID
     items: tuple[ReadyTaskSummary, ...]
-    next_cursor: ReadyTaskCursor | None
+    next_cursor: TaskQueueCursor | None
 
     def __post_init__(self) -> None:
         """Prevent a projection or continuation from crossing project scope."""
@@ -87,8 +87,8 @@ class ReadyTaskPage:
         ):
             raise ValueError("ready task page is invalid")
         if self.next_cursor is not None and (
-            not self.items or not isinstance(self.next_cursor, ReadyTaskCursor)
-            or self.next_cursor != ReadyTaskCursor(
+            not self.items or not isinstance(self.next_cursor, TaskQueueCursor)
+            or self.next_cursor != TaskQueueCursor(
                 self.project_id, self.items[-1].created_at, self.items[-1].task_id,
             )
         ):
@@ -98,6 +98,6 @@ class ReadyTaskPage:
 class ReadyTaskQueuePort(Protocol):
     """Internal data-owner read; ARCH-03C supplies AUTH and public composition."""
 
-    async def read_ready_tasks(self, request: ReadyTaskQueueRequest) -> ReadyTaskPage:
+    async def read_ready_tasks(self, request: TaskQueueRequest) -> ReadyTaskPage:
         """Read a scoped live page without claiming work or owning a transaction."""
         ...

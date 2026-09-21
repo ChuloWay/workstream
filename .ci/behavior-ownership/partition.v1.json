@@ -1146,6 +1146,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/management_queue.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/ready_queue.py"
     },
     {
@@ -1325,7 +1329,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "36b48e2a1962546f09c8a0d944fb2424a40fc3a1eed9af42590e2141e9bace75",
+  "authority_digest": "01e0f1e6643273b2b916bf0a3247da8d7e3b564c4a53f6b70a36e5a4a258ea62",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

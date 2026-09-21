@@ -1,7 +1,7 @@
 # ARCH-03B3 — Hidden management and operational task queues
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: TASK supplies separate bounded project management and operational queue facts through its existing repository; public access remains ARCH-03C.
 
 ## Intent
@@ -115,8 +115,9 @@ membership. Future wire tokens/authority are ARCH-03C responsibilities.
 
 ## Evidence
 
-Plan review precedes implementation. Proof names below are proposed tests, not
-runtime claims. Fixtures use existing task_client/create_active_project and
+Plan review preceded implementation and repaired the state-coverage gap below.
+The named tests now implement these proof obligations; exact execution and review
+provenance belong in the PR. Fixtures use existing task_client/create_active_project and
 real constrained Task/Assignment rows, with stored precondition assertions.
 Draft is valid without policy locks; ready and claimed fixtures use the existing
 screen/release/real claim helpers, retaining CP08 lineage and real actor FKs.
@@ -136,11 +137,11 @@ independent session. Parameterize each read proof over both queue methods.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Project/pagination/privacy | `tests/tasks/test_management_queue.py` on isolated PostgreSQL via `scripts/run_isolated_tests.py` | Planned | Must prove stored interleaved foreign rows and exact field sets |
-| Ready behavior retained | Existing `tests/tasks/test_ready_queue.py` unchanged assertions with canonical renamed inputs | Planned | Independent exclusion decoys must still execute |
-| Transaction/nonlocking | Real independent-session no-autoflush/rollback/row-lock tests for both new reads | Planned | No mocked SQL proof |
-| Wrong-reason resistance | Remove only project predicate in actual owner query, rerun exact pagination test | Planned | Test must fail for the injected defect |
-| Architecture/docs/CI | Ruff, module/AUTH/test boundaries, ownership validator, links, stale scan, Commitrail, hosted seven lanes | Planned | Final exact head evidence in PR |
+| Project/pagination/privacy | `tests/tasks/test_management_queue.py` on isolated PostgreSQL via `scripts/run_isolated_tests.py` | Implemented | Exact head execution required before readiness |
+| Ready behavior retained | Existing `tests/tasks/test_ready_queue.py` unchanged assertions with canonical renamed inputs | Preserved | Exact head execution required before readiness |
+| Transaction/nonlocking | Real independent-session no-autoflush/rollback/row-lock tests for both new reads | Implemented with real sessions | Exact head execution required before readiness |
+| Wrong-reason resistance | Remove only project predicate in actual owner query, rerun exact pagination test | Required probes | Project removal and three-state filter must fail |
+| Architecture/docs/CI | Ruff, module/AUTH/test boundaries, ownership validator, links, stale scan, Commitrail, hosted seven lanes | Required | Final exact head evidence in PR |
 
 ## Review findings
 
