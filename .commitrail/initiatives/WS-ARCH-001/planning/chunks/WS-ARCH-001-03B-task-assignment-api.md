@@ -20,14 +20,14 @@ chunk consumes those complete frozen attempt facts; it must not reimplement the
 writers or select current CON policy during ordinary claim. Preserve the
 screening-time lock and existing authority/transaction ownership.
 
-Allowed: the smallest remaining TASK queue, assignment invalidation and public
-facts/projection changes, focused tests, composition adapters, deny-only route
+Allowed: remaining actor-specific task projections, assignment invalidation and
+public facts, focused tests, composition adapters, deny-only route
 declarations, boundary ledgers and current documentation. Not allowed: duplicate
 lineage writers, project-policy evaluation, checker planning, ART custody, AUTH
 decisions, compatibility paths, public cutover or human revision semantics.
 
-Declare the missing ready queue and replacement task surfaces against hidden
-owner commands; ARCH-03C owns their exact activation and live route switch.
+Reuse delivered ready, management and operational queue facts; declare remaining
+replacement task surfaces against hidden owner commands; ARCH-03C owns their exact activation and live route switch.
 Do not leave an unowned route step between public ports and user-visible
 behavior. The queue must filter project/visibility before counts and cursors.
 Own the distinct management, operational and audit locked-context projections
