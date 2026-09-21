@@ -88,9 +88,10 @@ contributor artifact path can prepare verified bytes, publish a ready
 admission, create the immutable Submission, and bind it atomically, but its
 public legacy cutover is intentionally deferred.
 
-The current critical path is to finish one complete governed Project Guide
-generation, lock its ContributionPolicyVersion into claimable work, and carry
-one admitted Submission through a durable current post-submit checker result
+CP08 already locks the guide's ContributionPolicyVersion into claimable work
+and carries it through Assignment and hidden Submission creation. The current
+critical path is to complete public guide activation and intake integration,
+then carry one admitted Submission through a durable current post-submit checker result
 with `routing_recommendation = allow_review`. That fact unlocks the live
 review/revision path. Review decisions must then create contribution and
 conditional compensation facts atomically before v0.1 can be released.
@@ -440,15 +441,15 @@ Setup receipts remain immutable. The next guide boundary is:
    The hidden operation replaces superseded economic readiness. Retained economic
    data and downstream TASK consumers remain until their scoped cutover;
    deleting retained data is not authorized by code cleanup.
-2. **Make tasks claimable from that generation.** TASK locks the complete guide
-   and policy context before `READY`. Claim copies it to TaskAssignment; it
-   performs no ContributionPolicy selection. Submission later copies the
-   assignment's attempt version.
-   **Complete pre-submission intake integration before creating the Submission:**
-   continuous artifact preparation executes the locked intake plan, returns
-   correction feedback on blocking failures, and publishes ready admission only
-   after the required preparation/custody checks. TASK then consumes that
-   admission to create the immutable Submission with the same assignment lineage.
+2. **Complete public intake and admission integration for claimable work.**
+   CP08 already locks the complete guide and policy context before `READY`.
+   Claim copies it to TaskAssignment without selecting another ContributionPolicy;
+   hidden admission-backed Submission creation already copies that exact lineage.
+   Remaining work connects continuous preparation to the approved unified-guide
+   intake plan and completes the canonical public cutover. Preparation returns
+   correction feedback for blocking intake failures and publishes ready admission
+   only after the required preparation/custody checks; the existing TASK creation
+   operation consumes that admission with the assignment's locked lineage.
 3. **Produce current post-submit evidence and policy-governed routing.** Materialize the exact immutable
    Submission, execute the locked post-submit plan, persist one current result,
    activate only its fixed services, and automatically publish an exact
