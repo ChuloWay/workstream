@@ -18,7 +18,7 @@ from app.db.session import get_db_session
 from app.modules.tasks.schemas import (
     ContributorTaskWorkContext, ManagementTaskWorkContext,
     AuditEventResponse,
-    SubmissionRequirementsResponse,
+    ContributorTaskSubmissionRequirements,
     SubmissionResponse,
     TaskCreate,
     ManagementTaskLockedContext,
@@ -169,7 +169,7 @@ async def get_task(
 
 @router.get(
     "/tasks/{task_id}/submission-requirements",
-    response_model=SubmissionRequirementsResponse,
+    response_model=ContributorTaskSubmissionRequirements,
     response_model_exclude_none=True,
     responses=TASK_LOCKED_CONTEXT_RESPONSES,
 )
@@ -178,7 +178,7 @@ async def get_task_submission_requirements(
     task_id: str,
     actor: Annotated[ActorContext, Depends(get_registered_actor)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
-) -> SubmissionRequirementsResponse | JSONResponse:
+) -> ContributorTaskSubmissionRequirements | JSONResponse:
     """Return exact contributor submission requirements from locked policy context."""
     try:
         return await task_service(session, settings=request.app.state.settings).get_task_submission_requirements(actor, task_id)

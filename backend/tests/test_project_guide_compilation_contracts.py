@@ -131,9 +131,9 @@ def test_task_requirements_response_carries_valid_locked_archive_limit(limit, fi
     task = SimpleNamespace(id=str(uuid4()), project_id=str(uuid4()), locked_guide_version="v0.1")
     if limit is not None and (type(limit) is not int or limit <= 0):
         with pytest.raises(TaskLockedContextInvalid):
-            task_service(None, settings=get_settings())._submission_requirements_response(task, context)
+            task_service(None, settings=get_settings())._contributor_submission_requirements_response(task, context)
     else:
-        response = task_service(None, settings=get_settings())._submission_requirements_response(task, context)
+        response = task_service(None, settings=get_settings())._contributor_submission_requirements_response(task, context)
         assert response.model_dump(mode="json")[field] == limit
 SOURCE_ITEM_ID = UUID("11111111-1111-1111-1111-111111111111")
 DOCUMENT_VERSION_ID = UUID("22222222-2222-2222-2222-222222222222")

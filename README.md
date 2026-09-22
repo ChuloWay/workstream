@@ -580,7 +580,10 @@ without obsolete payment fields or submission flags. ARCH-03B6 supplies distinct
 locked-context projections through the same historical resolver: management
 includes the bounded checker summary; operational and audit reads expose only
 exact policy references and remain internal. The retained management route's
-authority cutover remains ARCH-03C. Requirements and task audit-evidence projections remain in ARCH-03B;
+authority cutover remains ARCH-03C. ARCH-03B7 supplies immutable contributor and
+management requirements through one historical translator. Its hidden contributor
+read reuses exact assignment visibility after locking TASK; the retained requirements
+route keeps its current authority wrapper. Task audit-evidence projections remain in ARCH-03B;
 invalidation requires shared delivery
 claims, and public authority cutover remains ARCH-03C. Canonical checker materialization follows in
 ARCH-04B/04C.

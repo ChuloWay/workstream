@@ -13,7 +13,7 @@ from app.adapters.tasks import task_service
 from app.core.config import get_settings
 from app.modules.projects.api import ProjectDisplayFacts, GuideDisplayFacts
 from app.modules.projects.locked_policy_repository import ProjectLockedPolicyRepository
-from app.modules.projects.models import Project, ProjectGuide, PostSubmitCheckerPolicy
+from app.modules.projects.models import Project, ProjectGuide, PostSubmitCheckerPolicy, EffectiveProjectSubmissionArtifactPolicy
 from app.modules.tasks.models import AuditEvent, WorkstreamTask
 from tests.projects.locked_policy_fixtures import activated_context, frozen_request
 from tests.test_tasks import (
@@ -206,6 +206,14 @@ async def test_task_display_survives_guide_successor_for_contributor_and_manager
     requirements_url = f"/api/v1/tasks/{task['id']}/submission-requirements"
     first_requirements = await task_client.get(requirements_url, headers=auth_headers())
     assert first_requirements.status_code == 200, first_requirements.text
+    requirement_reads = ("read_contributor_task_submission_requirements", "read_management_task_submission_requirements")
+    async with db_session.get_session_factory()() as session:
+        owner = UUID((await session.get(WorkstreamTask, task["id"])).assigned_to)
+        service = task_service(session, settings=get_settings())
+        for method in requirement_reads:
+            args = (UUID(project["id"]), UUID(task["id"])) + ((owner,) if method == requirement_reads[0] else ())
+            result = await getattr(service, method)(*args)
+            assert result.model_dump(mode="json", exclude_none=True) == first_requirements.json()
     set_dev_actor(monkeypatch, roles="project_manager", subject="project-manager-subject")
     successor = await task_client.post(
         f"/api/v1/projects/{project['id']}/guides", headers=auth_headers(),
@@ -235,7 +243,16 @@ async def test_task_display_survives_guide_successor_for_contributor_and_manager
                     if entry["classification"] == "project_required"]
         assert required == ["check_acceptance_criteria_present"]
         assert required != original_summary["required_checkers"]
+        effective = await session.scalar(select(EffectiveProjectSubmissionArtifactPolicy).where(
+            EffectiveProjectSubmissionArtifactPolicy.guide_id == active.id,
+        ))
+        assert effective.effective_policy["required_artifacts"][0]["path"] == "v2-answer.md"
+        assert effective.effective_policy["required_artifacts"][0]["path"] != first_requirements.json()["required_artifacts"][0]["path"]
         service = task_service(session, settings=get_settings())
+        for method in requirement_reads:
+            args = (UUID(project["id"]), UUID(task["id"])) + ((owner,) if method == requirement_reads[0] else ())
+            result = await getattr(service, method)(*args)
+            assert result.model_dump(mode="json", exclude_none=True) == first_requirements.json()
         for method in locked_reads:
             locked = (await getattr(service, method)(UUID(project["id"]), UUID(task["id"]))).model_dump(mode="json")
             assert locked == original_locked[method]
@@ -266,6 +283,6 @@ async def test_task_display_survives_guide_successor_for_contributor_and_manager
             assert response[name] == expected, name
     requirements = await task_client.get(requirements_url, headers=auth_headers())
     assert requirements.status_code == 200, requirements.text
+    assert requirements.json() == first_requirements.json()
     assert requirements.json()["guide_version"] == "v1"
-    assert requirements.json()["required_artifacts"] == first_requirements.json()["required_artifacts"]
     assert requirements.json()["required_artifacts"][0]["path"] == "answer.md"

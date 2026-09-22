@@ -11,6 +11,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import ValidationError
 
 from app.core.permissions import PermissionDenied, require_any_role
 from app.modules.checkers.api.pre_submit import (
@@ -45,6 +46,7 @@ from app.modules.tasks.models import (
     Submission,
     WorkstreamTask,
 )
+from app.modules.tasks.api.task_detail import ContributorTaskDetailRequest
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.schemas import (
     AuditEventResponse,
@@ -53,7 +55,9 @@ from app.modules.tasks.schemas import (
     RequiredArtifactRequirement,
     RequiredEvidenceRequirement,
     StorageReferenceRules,
-    SubmissionRequirementsResponse,
+    ContributorTaskSubmissionRequirements,
+    ManagementTaskSubmissionRequirements,
+    SubmissionPackagingRequirements,
     SubmissionResponse,
     TaskCreate,
     ManagementTaskLockedContext,
@@ -313,7 +317,7 @@ class TaskService:
         self,
         actor: ActorContext,
         task_id: str,
-    ) -> SubmissionRequirementsResponse:
+    ) -> ContributorTaskSubmissionRequirements:
         """Return exact Contributor submission requirements for a locked task.
 
         Args:
@@ -329,10 +333,31 @@ class TaskService:
             TaskLockedContextInvalid: If locked context is incomplete or stale.
         """
         require_any_role(actor, TASK_VIEW_ROLES)
-        task = await self._get_task(task_id)
-        await self._ensure_task_visible(actor, task)
-        context = await self._load_locked_task_context(task)
-        return self._submission_requirements_response(task, context)
+        with self._session.no_autoflush:
+            task = await self._get_task(task_id, for_update=True)
+            await self._ensure_task_visible(actor, task)
+            context = await self._load_locked_task_context(task)
+            return self._contributor_submission_requirements_response(task, context)
+
+    async def read_management_task_submission_requirements(
+        self, project_id: UUID, task_id: UUID,
+    ) -> ManagementTaskSubmissionRequirements:
+        """Read hidden management requirements in the caller's authorized transaction."""
+        task, context = await self._read_locked_context(project_id, task_id)
+        return ManagementTaskSubmissionRequirements(**self._submission_requirement_values(task, context))
+
+    async def read_contributor_task_submission_requirements(
+        self, project_id: UUID, task_id: UUID, contributor_id: UUID,
+    ) -> ContributorTaskSubmissionRequirements:
+        """Lock TASK, conceal invisible work, then validate historical policy custody."""
+        request = ContributorTaskDetailRequest(project_id, task_id, contributor_id)
+        with self._session.no_autoflush:
+            task = await self._lock_scoped_task(project_id, task_id)
+            detail = await self._repo.read_contributor_task_detail(request)
+            if detail is None:
+                raise TaskNotFound("task not found")
+            context = await self._load_locked_task_context(task)
+            return self._contributor_submission_requirements_response(task, context)
 
     async def get_task_locked_context(
         self,
@@ -361,16 +386,22 @@ class TaskService:
             context = await self._load_locked_task_context(task)
             return self._management_locked_context_response(task, context)
 
-    async def _read_locked_context(
-        self, project_id: UUID, task_id: UUID,
-    ) -> tuple[WorkstreamTask, LockedTaskContext]:
-        """Scope and lock TASK before resolving PROJECTS in the caller's transaction."""
+    async def _lock_scoped_task(self, project_id: UUID, task_id: UUID) -> WorkstreamTask:
+        """Validate exact selectors and refresh a scoped TASK under the caller's lock."""
         if not isinstance(project_id, UUID) or not isinstance(task_id, UUID):
             raise ValueError("task locked context selectors are invalid")
         with self._session.no_autoflush:
             task = await self._repo.lock_project_task(project_id, task_id)
             if task is None:
                 raise TaskNotFound("task not found")
+            return task
+
+    async def _read_locked_context(
+        self, project_id: UUID, task_id: UUID,
+    ) -> tuple[WorkstreamTask, LockedTaskContext]:
+        """Resolve historical PROJECTS custody only after the shared TASK lock."""
+        with self._session.no_autoflush:
+            task = await self._lock_scoped_task(project_id, task_id)
             return task, await self._load_locked_task_context(task)
 
     async def read_management_task_locked_context(
@@ -947,36 +978,39 @@ class TaskService:
         """Return missing locked-context fields for a task."""
         return [field for field in LOCKED_CONTEXT_REQUIRED_FIELDS if not getattr(task, field)]
 
-    def _submission_requirements_response(
+    def _contributor_submission_requirements_response(
+        self, task: WorkstreamTask, context: LockedTaskContext,
+    ) -> ContributorTaskSubmissionRequirements:
+        """Compose the contributor projection shared by hidden and retained reads."""
+        return ContributorTaskSubmissionRequirements(**self._submission_requirement_values(task, context))
+
+    def _submission_requirement_values(
         self,
         task: WorkstreamTask,
         context: LockedTaskContext,
-    ) -> SubmissionRequirementsResponse:
-        """Build Contributor-facing requirements from the locked effective policy."""
+    ) -> dict[str, object]:
+        """Translate the historical effective policy once into fixed safe values."""
         policy = json.loads(context.facts.effective_policy.value)
         if not isinstance(policy, dict):
             raise TaskLockedContextInvalid(
                 "task locked effective project submission artifact policy is invalid",
                 {"field": "effective_policy"},
             )
-        allowed_storage_schemes = self._policy_string_list(
-            policy,
-            "allowed_storage_schemes",
-        )
+        allowed_storage_schemes = tuple(self._policy_string_list(policy, "allowed_storage_schemes"))
         required_artifacts = self._policy_list(policy, "required_artifacts")
         required_evidence = self._policy_list(policy, "required_evidence")
         forbidden_artifacts = self._policy_list(policy, "forbidden_artifacts")
-        return SubmissionRequirementsResponse(
-            task_id=task.id,
-            project_id=task.project_id,
-            guide_version=task.locked_guide_version or "",
+        return dict(
+            task_id=UUID(task.id),
+            project_id=UUID(task.project_id),
+            guide_version=task.locked_guide_version,
             policy_schema_version=self._optional_policy_text(policy, "schema_version"),
             merge_algorithm_version=self._optional_policy_text(
                 policy,
                 "merge_algorithm_version",
             ),
-            required_packet_fields=self._required_packet_fields(policy),
-            required_artifacts=[
+            required_packet_fields=tuple(self._required_packet_fields(policy)),
+            required_artifacts=tuple(
                 RequiredArtifactRequirement(
                     key=self._policy_rule_text(rule, "key", "required_artifacts"),
                     path=self._policy_rule_text(rule, "path", "required_artifacts"),
@@ -997,8 +1031,8 @@ class TaskService:
                     ),
                 )
                 for rule in required_artifacts
-            ],
-            required_evidence=[
+            ),
+            required_evidence=tuple(
                 RequiredEvidenceRequirement(
                     key=self._policy_rule_text(rule, "key", "required_evidence"),
                     label=self._policy_rule_text(rule, "label", "required_evidence"),
@@ -1019,8 +1053,8 @@ class TaskService:
                     ),
                 )
                 for rule in required_evidence
-            ],
-            forbidden_artifacts=[
+            ),
+            forbidden_artifacts=tuple(
                 ForbiddenArtifactRequirement(
                     pattern=self._policy_rule_text(rule, "pattern", "forbidden_artifacts"),
                     reason=self._optional_policy_rule_text(
@@ -1040,15 +1074,15 @@ class TaskService:
                     ),
                 )
                 for rule in forbidden_artifacts
-            ],
-            attestation_terms=self._policy_string_list(policy, "attestation_terms"),
+            ),
+            attestation_terms=tuple(self._policy_string_list(policy, "attestation_terms")),
             manifest_required=self._policy_bool(policy, "manifest_required"),
             artifact_hash_required=self._policy_bool(policy, "artifact_hash_required"),
             artifact_hash_algorithm="sha256",
             allowed_storage_schemes=allowed_storage_schemes,
             storage_reference_rules=StorageReferenceRules(
                 allowed_storage_schemes=allowed_storage_schemes,
-                allowed_uri_prefixes=[f"{scheme}://" for scheme in allowed_storage_schemes],
+                allowed_uri_prefixes=tuple(f"{scheme}://" for scheme in allowed_storage_schemes),
                 credentials_allowed=False,
                 query_strings_allowed=False,
                 fragments_allowed=False,
@@ -1062,7 +1096,7 @@ class TaskService:
                 policy,
                 "maximum_package_size_bytes",
             ),
-            packaging=self._policy_object(policy, "packaging"),
+            packaging=self._packaging_requirements(policy),
             maximum_archive_entries=self._optional_policy_non_negative_int(
                 policy, "maximum_archive_entries", minimum=1,
             ),
@@ -1070,6 +1104,18 @@ class TaskService:
                 policy, "maximum_archive_size_bytes", minimum=1,
             ),
         )
+
+    def _packaging_requirements(self, policy: dict[str, Any]) -> SubmissionPackagingRequirements:
+        """Validate the bounded packaging value without exposing arbitrary policy keys."""
+        try:
+            return SubmissionPackagingRequirements.model_validate_json(
+                json.dumps(self._policy_object(policy, "packaging")),
+            )
+        except ValidationError as exc:
+            raise TaskLockedContextInvalid(
+                "task locked effective project submission artifact policy is invalid",
+                {"field": "effective_policy.packaging"},
+            ) from exc
 
     def _policy_list(self, policy: dict[str, Any], field: str) -> list[Any]:
         """Return a list field from the locked policy or fail closed."""

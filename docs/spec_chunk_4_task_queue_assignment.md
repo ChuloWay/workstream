@@ -156,7 +156,7 @@ lock. Pages are live views, not reservations; claim rechecks authority and state
 ARCH-03C must authorize the exact project collection before calling this port
 or using a client cursor, with current-grant/revocation and concealment proof.
 No per-task AUTH handle or token role can substitute for that collection gate.
-Actor-specific requirements and task audit-evidence projections and authority
+Task audit-evidence projections and authority
 invalidation remain separate.
 
 
@@ -207,7 +207,7 @@ These detail ports remain internal as standalone reads. ARCH-03B5 reuses them
 in existing authorized work-context responses below. The existing standalone
 detail endpoint and command response consumers still require their exact ARCH-03C
 authority/cutover; no parallel public route or compatibility alias is added.
-Requirements and task audit-evidence projections remain separate ARCH-03B work.
+Task audit-evidence projections remain separate ARCH-03B work.
 
 
 ## Current contributor and manager work context
@@ -242,7 +242,7 @@ missing or invalid locked custody returns the existing 422
 `task_locked_context_invalid`. Ordinary unassigned draft is not contributor work;
 a fully locked own-active draft remains visible under the existing authority rule.
 
-Standalone detail endpoints, other requirements/audit projection
+Standalone detail endpoints, audit projection
 replacements, and assignment invalidation retain their separately scoped work.
 
 ## Task locked-context projections
@@ -269,5 +269,35 @@ The retained `/tasks/{task_id}/locked-context` route returns the same management
 projection under its existing role/creator wrapper and loads the task once.
 ARCH-03C still owns replacement of that authority and public operational/audit
 activation. There is no audience-switching endpoint, fallback schema or new
-TASK public API dependency. Submission requirements and audit-event evidence
-remain separate projection work.
+TASK public API dependency. Audit-event evidence remains separate projection work.
+
+
+## Task submission requirements projections
+
+ARCH-03B7 replaces the shared mutable response with strict frozen
+`ContributorTaskSubmissionRequirements` and `ManagementTaskSubmissionRequirements`
+in TASK schemas. Both contain the same safe task/project IDs, guide version,
+policy schema/merge identifiers, required packet/artifact/evidence fields,
+forbidden artifact rules, attestations, hashing/storage rules, size limits and
+packaging. Nested models are frozen and collections are tuples; JSON arrays
+remain arrays. Packaging exposes only `package_required` and optional
+`allowed_package_formats`, matching the effective-policy merge contract.
+No source metadata, actors, economics, storage object locations or complete
+policy bodies are exposed. A described format is not a claim of runtime support.
+
+The management read reuses the existing historical context resolver. Contributor
+requirements first acquire the same exact project/task row lock, then reuse the
+existing detail visibility query, then resolve PROJECTS custody. A ready unassigned
+task with no active assignment is visible, including released assignment history;
+otherwise the task assignee and active assignment contributor must both match.
+Missing, foreign and invisible tasks conceal identically before policy reads.
+Invalid selectors reject before SQL. Both methods preserve caller transactions
+without implicit flush, commit, rollback or nested transaction, and keep original
+requirements after a successor guide activates. They grant no authority.
+
+The existing `/tasks/{task_id}/submission-requirements` route uses the same
+contributor-safe constructor for its current callers, including managers. Its
+existing role/creator visibility wrapper remains an explicit ARCH-03C dependency;
+it loads and locks TASK once before visibility and historical policy resolution.
+The distinct manager model/read is internal and absent from OpenAPI. There is no
+new public route, generic audience selector, compatibility alias or new compiler.
