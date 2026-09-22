@@ -32,6 +32,8 @@ It is not the proposed `audit.task.evidence.read` authority surface.
   through the existing shared audit repository.
 - `backend/app/modules/audit/repository.py`: bounded fixed-column lifecycle
   evidence query, preserving existing writers and required full-row readers.
+  Add WorkstreamTask to its existing tasks.models import solely for atomic
+  project membership in this query; the recorded private-edge path is unchanged.
 - `backend/tests/tasks/test_audit_evidence.py`, relevant existing audit/delegation
   tests and the TASK lane catalogue/exact-set registration.
 - Current ARCH overview/plan/chunk map/03B/03C contracts, related AUTH/CON/POL
@@ -42,7 +44,7 @@ It is not the proposed `audit.task.evidence.read` authority surface.
 
 No route, permission, AUTH decision, token-role switch, writer, migration,
 retained-data deletion, compatibility alias, fallback, generic pagination
-framework, dependency-guard weakening or new private import. No PROJECTS lookup,
+framework, dependency-guard weakening or new private import path. No PROJECTS lookup,
 policy evaluation, assignment invalidation or current-guide selection.
 
 ## Design and decisions
@@ -53,18 +55,34 @@ and optional `TaskEvidenceCursor` containing the same project/task plus aware
 created_at and UUID event_id. Validate before SQL; cursor is a position, never
 proof of authority or event existence.
 
-`read_audit_task_evidence` first verifies the exact project/task using a scalar
-TASK query. Missing and foreign tasks return None without loading any audit
-rows. All task states are eligible. The shared audit owner selects only fixed
-lifecycle columns for entity_type task and the exact task ID, excluding authority
-records. Scope and cursor predicates precede limit+1. Ordering is ascending
+`read_audit_task_evidence` delegates one scoped query to the existing shared
+audit repository. Select a non-null task marker and fixed audit columns from
+WorkstreamTask LEFT OUTER JOIN AuditEvent. The WHERE clause selects exact
+project/task; the ON clause selects the existing exact `legacy_lifecycle` persisted domain, task entity and matching
+task ID, plus the event cursor. No task yields no rows (None); an existing task
+with no matching events yields one null-event marker (empty page). All task
+states are eligible. Scope/event/cursor predicates precede limit+1. There is no
+separate existence query, lateral subquery or generic query framework. This
+atomic statement prevents a concurrent draft project move from invalidating a
+prior scope check. The existing AUDIT-to-TASK model debt path remains recorded;
+no new edge or public API exception is introduced. Ordering is ascending
 (created_at, id); continuation exists only when another matching event exists.
 Existing unbounded reads cannot safely implement this bounded SQL contract, but
 remain required by the named live consumers above; do not add a fallback to them.
 
-The immutable item contains event_id, event_type, from_status, to_status,
-actor_id (stored attribution, not current identity/authority), created_at,
-event_version and occurred_at. It excludes external subject/issuer, actor roles,
+The immutable item contains UUID event_id; str event_type and actor_id (stored
+attribution, not current identity/authority); str|None from_status and to_status;
+aware datetime created_at; and UUID|None assignment_id and
+authorization_decision_id. Null statuses and untyped-event references are valid;
+other malformed types reject. Each page uses an immutable tuple of these items.
+SQL selects exactly the task marker, six base event fields and four JSON scalar
+references; never the raw payload column or a complete ORM row. For canonical
+TaskClaimed, TaskStarted and TaskStartOverridden events, select only scalar
+references.project_id/task_id/assignment_id/authorization_decision_id from the stored payload;
+require exact request project/task and both valid required UUID references. Reject
+missing, malformed or crossed references with sanitized TaskEvidenceInvalid.
+Other event types do not gain inferred references. Omit unused nullable
+event_version/occurred_at fields. It excludes external subject/issuer, actor roles,
 claim_snapshot, reason, arbitrary event_payload/before_facts/after_facts, source
 or artifact references, and policy bodies. Project/task identity is on the page
 and cursor. Existing audit locked-context facts remain the separate provenance
@@ -86,7 +104,9 @@ this change does not rewrite its retained records or shared writers.
 ## Acceptance criteria
 
 - Valid own-project/task reads include persisted task lifecycle events in all
-  task states; missing/foreign tasks conceal before AUDIT is called.
+  nine current task states; missing/foreign tasks return None without projecting evidence.
+  A committed concurrent draft project move cannot expose evidence in the old
+  project; task scoping and evidence selection use the same statement snapshot.
 - Interleaved other-task, other-project and other-entity events cannot fill a
   page or alter continuation. Equal timestamps use exact UUID tie ordering.
 - Limit-one traversal, exhaustion, empty history and a non-existent cursor anchor
@@ -111,18 +131,37 @@ this change does not rewrite its retained records or shared writers.
 
 ## Evidence
 
-Planned tests in `tests/tasks/test_audit_evidence.py`: contracts/invalid inputs,
-real PostgreSQL scope and pagination, fixed SQL fields/privacy, transaction and
-nonlocking behavior, and hidden API exposure. Concrete controls must first prove
+Planned nodes in `tests/tasks/test_audit_evidence.py`:
+`test_task_evidence_contracts`, `test_task_evidence_rejects_before_sql`,
+`test_task_evidence_project_scope`, `test_task_evidence_project_move`, `test_task_evidence_pagination`,
+`test_task_evidence_transition_references`, `test_task_evidence_sql_privacy`,
+`test_task_evidence_caller_transaction`, `test_task_evidence_does_not_lock`,
+and `test_task_evidence_hidden_surface`. Concrete controls must first prove
 that fixture events are persisted under the existing append-only audit guards.
 No tests disable data protections merely to reach an assertion.
 
 Discriminating probes must drop exact project scoping, drop task event filtering,
-and substitute full-row selection, each causing its intended test to fail.
-Run existing audit visibility/recovery and architecture tests, lane exact-set
+substitute full-row selection, bypass typed-reference checks, permit a split scope precheck plus event query, and permit crossed
+cursor project/task identity, each causing its intended test to fail.
+Retained consumer nodes are
+`tests/test_tasks.py::test_task_repository_delegates_audit_persistence`,
+`::test_task_service_finalization_provenance_fails_closed_without_lock_audit`,
+`::test_full_task_claim_start_flow_writes_audit_events`,
+`::test_retained_packet_reads_preserve_locked_lineage_and_redact_audit`, and
+`::test_cross_worker_cannot_list_submissions_or_audit_after_submit`.
+Run those existing audit visibility/recovery and architecture tests, lane exact-set
 checks, Ruff, stale wording, Markdown links and Commitrail validation. Full hosted
 PostgreSQL/MinIO lanes and coverage govern final evidence. Migration head remains
 0025. Runtime execution and plan feasibility are reported separately in the PR.
+
+## Plan review corrections
+
+- PLAN-03B8-01: retain fixed assignment and authorization-decision references
+  required by the canonical TASK transition evidence contract; exclude raw JSON.
+- PLAN-03B8-03: eliminate the two-query project-scope race with one scoped
+  outer join; preserve missing-versus-empty without new locks or abstractions.
+- PLAN-03B8-02: name concrete future tests and discriminating mutations before
+  implementation; runtime proof remains outstanding until those tests execute.
 
 ## Reconciliation
 
