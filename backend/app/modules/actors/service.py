@@ -20,7 +20,7 @@ from app.modules.actors.schemas import (
     ActorProfileSelfResponse,
     ActorProfileUpdateRequest,
 )
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.audit.schemas import (
     ActorReferenceKind,
     AuthorityAuditEventInput,

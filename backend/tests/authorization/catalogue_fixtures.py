@@ -1,5 +1,43 @@
 """Explicit catalogue expectations, independent of production definitions."""
 
+from app.modules.actors.api import ServiceIdentity
+
+FIXED_SERVICE_ACTION_EXPECTATIONS = {
+    ServiceIdentity.OUTBOX_DISPATCHER: {"outbox.dispatch"},
+    ServiceIdentity.ARTIFACT_VERIFIER: {"artifact.verification.execute"},
+    ServiceIdentity.ARTIFACT_PUT_RESOLVER: {"artifact.put_attempt.resolve"},
+    ServiceIdentity.ARTIFACT_SCHEDULER: {"artifact.pending_work.scan"},
+    ServiceIdentity.ARTIFACT_BINDING: {
+        "artifact.submission.binding.create",
+        "artifact.checker_output.binding.create",
+        "artifact.review_evidence.binding.create",
+    },
+    ServiceIdentity.ARTIFACT_GUIDE_READER: {"artifact.guide_source.read"},
+    ServiceIdentity.ARTIFACT_MATERIALIZER: {
+        "artifact.pre_submit.checker_input.materialize",
+        "artifact.post_submit.checker_input.materialize",
+        "artifact.review_packet.materialize",
+    },
+    ServiceIdentity.ARTIFACT_CHECKER_OUTPUT: {"artifact.checker_output.write"},
+    ServiceIdentity.PROJECT_SETUP: {
+        "project.guide_compilation.request_automatic",
+        "project.guide_compilation.execute",
+        "project.guide_sufficiency.run",
+        "project.submission_artifact_policy.derive",
+        "project.post_submit_checker_policy.derive",
+        "project.setup_run.update",
+    },
+    ServiceIdentity.REVIEW_PREFERENCE_EXPIRY: {"review.preference_expiry.run"},
+    ServiceIdentity.REVIEW_LEASE_EXPIRY: {"review.lease_expiry.run"},
+    ServiceIdentity.REVIEW_AUTHORITY_INVALIDATION_RECONCILIATION: {"review.reconcile.run"},
+    ServiceIdentity.REVIEW_RECONCILIATION: {"review.reconcile.run"},
+    ServiceIdentity.REVIEW_ARTIFACT_REFERENCE_RECONCILIATION: {
+        "review.artifact_reference.reconcile"
+    },
+    ServiceIdentity.REVIEW_PROJECTION: {"review.projection.rebuild"},
+}
+
+
 ART_CUSTODY_EXPECTATIONS = {
     "artifact.binding.read": (
         "artifact.binding.read",
@@ -211,7 +249,7 @@ historical_permissions = frozenset("""actor.profile.read_self actor.profile.upda
     audit.read audit.export""".split())
 
 new_permissions = frozenset(
-    """project.setup_diagnostic.read project.effective_policy.read
+    """outbox.dispatch project.setup_diagnostic.read project.effective_policy.read
     operations.task.start_override operations.submission_gate.repair
     operations.checker.retry artifact.binding.read artifact.replica.read
     artifact.receipt.read artifact.verification_job.read
@@ -224,6 +262,7 @@ new_permissions = frozenset(
 )
 
 expected = {
+    "outbox.dispatch": ("outbox.dispatch", "WS-AUTH-001-OUTBOX-01"),
     "actor.profile.read_self": ("actor.profile.read_self", "WS-AUTH-001-07B"),
     "actor.profile.update_self": ("actor.profile.update_self", "WS-AUTH-001-07B"),
     "operations.task.start_override": ("operations.task.start_override", "task-project-grant-authorization"),

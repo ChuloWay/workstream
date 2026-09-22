@@ -225,7 +225,7 @@ async def test_all_documents_stored_dispatches_once_through_minio(
     project_client, monkeypatch, recover_callback
 ):
     from app.core.config import get_settings
-    from app.modules.actors.service_identities import ServiceIdentity
+    from app.modules.actors.api import ServiceIdentity
     from app.modules.artifacts.models import ArtifactReplica, ArtifactPutAttempt
     from app.workers.project_setup import run_project_guide_compilation
     from app.adapters.artifacts import internal_workers
@@ -631,7 +631,7 @@ async def test_concurrent_last_documents_dispatch_one_setup(project_client, monk
     import asyncio
     from sqlalchemy import func
     from app.core.config import get_settings
-    from app.modules.actors.service_identities import ServiceIdentity
+    from app.modules.actors.api import ServiceIdentity
     from app.modules.artifacts.models import ArtifactPutAttempt, ArtifactReplica
     from app.workers.project_setup import run_project_guide_compilation
     deliveries = []

@@ -308,6 +308,11 @@ the repository is changed; it does not define runtime task or review records.
 Independent initiatives and branches may proceed concurrently. Start with
 [CONTRIBUTING.md](CONTRIBUTING.md) before proposing repository work.
 
+The shared outbox dispatcher has a registered but unavailable fixed identity and
+phase-bound authorization contract (AUTH-OUTBOX-01). Reliable delivery mechanics
+and live activation remain CON-02B and AUTH-OUTBOX-02; registration does not enable
+background task or checker effects.
+
 ## Developer Quickstart
 
 The supported backend setup uses CPython 3.11 or 3.12. The pinned Docker image

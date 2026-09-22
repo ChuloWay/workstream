@@ -11,7 +11,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.authorization import PreparedPreSubmitMaterializationAuthorization
 from app.modules.artifacts.schemas import ArtifactAuthorityDeniedError
 from app.modules.artifacts.submission_materialization import PreSubmitMaterializationAuthorityFacts

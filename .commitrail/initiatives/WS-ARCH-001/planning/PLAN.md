@@ -44,7 +44,7 @@ checker-remediation boundary before public Submission cutover.
 | ARCH-04B2 | ARCH-04A and merged ART admission/verification/binding foundations | ART bounded checker output/log ingestion and verified binding, no routing |
 | ARCH-04C | ARCH-04A, ARCH-04B, ARCH-04B2, POL-07 | CHECKERS durable execution/result/currentness and worker recovery |
 | ARCH-04D | ARCH-04B, ARCH-04C | AUTH post-submit materialization/result activation |
-| AUTH-OUTBOX-01 | Merged shared outbox persistence and AUTH service/PREP foundations | Planned dispatcher identity/action/matrix and unavailable typed authority contract |
+| AUTH-OUTBOX-01 | Merged shared outbox persistence and AUTH service/PREP foundations | Complete: planned dispatcher identity/action/matrix and unavailable typed authority contract |
 | CON-02B | AUTH-OUTBOX-01 | Shared hidden dispatcher/claim fencing, typed handlers and recovery |
 | AUTH-OUTBOX-02 | CON-02B exact hidden manifest | Exact dispatcher mechanics only; no feature authority |
 | ARCH-04E1A | ARCH-04C | TASK routing-manifest schema/public facts and accepted-effects port, no handlers or REV dependency |
@@ -87,7 +87,7 @@ record on implementation; the parent is not a multi-owner implementation PR.
 
 An outbox row is not a running dispatcher. The existing shared module supplies
 append/flush and idempotency, but delivery is still CON-02B work. Reuse that
-existing boundary: AUTH first supplies planned dispatcher metadata and typed
+existing boundary: AUTH-OUTBOX-01 has supplied planned dispatcher metadata and typed
 authority; CON-02B builds hidden claim/invoke/finalize mechanics; AUTH then
 activates that exact manifest. None depends on ContributionRecord, fulfillment
 or REV implementation. TASK must not implement an alternative outbox worker.

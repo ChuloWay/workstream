@@ -1266,3 +1266,12 @@ it returns the original receipt without a second allow or activation. Supersessi
 or later ContributionPolicy retirement does not rewrite that evidence. Revoked
 actor/link/grant authority denies replay. Composition without the explicit adapter
 continues to deny; public activation and downstream task lineage remain pending.
+
+## Planned outbox dispatcher identity
+
+The closed identity catalogue admits `workstream.outbox.dispatcher`, and the
+protected permission catalogue lists `outbox.dispatch`. This registration does
+not enable the dispatcher: the action remains planned and no human role receives it.
+Provisioning through the existing administrative operation cannot bypass that
+availability gate. Shared delivery and its live authority await CON-02B and
+AUTH-OUTBOX-02; no TASK, checker, artifact or compensation permission is inherited.

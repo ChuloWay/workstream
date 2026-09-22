@@ -18,7 +18,7 @@ from app.db import session as db_session
 from app.db.base import Base
 from app.main import create_app
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.contributions.models import (
     ContributionPolicy,
     ContributionPolicyVersion,

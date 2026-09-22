@@ -20,7 +20,7 @@ from app.adapters.projects import project_contribution_policy_eligibility_port
 from app.db import session as db_session
 from app.db.base import Base
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.compensation.models import ProjectCompensationAdapterBinding
 from app.modules.contributions.models import (
     ContributionAwardDefinition,

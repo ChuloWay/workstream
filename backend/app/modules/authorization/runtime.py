@@ -28,9 +28,10 @@ from app.modules.authorization.domain.guide_mutations import (
     ProjectGuideMutationResourceContext, ProjectGuideMutationPrepareDenialResourceContext,
     ProjectGuideSourceSnapshotMutationResourceContext,
 )
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
 from app.modules.authorization.domain.guide_activation import ProjectGuideActivationResourceContext
+from app.modules.authorization.service_actor_schemas import ServiceActorProvisionResourceContext
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.schemas import AdminRole, AdminScope, ProjectRole
 from app.modules.authorization.submission_preparation import SubmissionBundlePreparationPreflightResourceContext, SubmissionBundlePreparationResourceContext
@@ -999,14 +1000,6 @@ class AdminRoleGrantResourceContext(BaseModel):
     resource_type: Literal["admin_role_grant"]
     resource_id: UUID
     existing_idempotency_record: bool = False
-
-
-class ServiceActorProvisionResourceContext(BaseModel):
-    """Fixed local identity targeted by controlled service provisioning."""
-
-    model_config = _STRICT_FROZEN
-    resource_type: Literal["service_actor_provisioning"]
-    resource_id: ServiceIdentity
 
 
 class ProjectContributorCandidateCollectionResourceContext(BaseModel):

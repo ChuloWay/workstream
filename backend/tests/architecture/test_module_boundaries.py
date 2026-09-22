@@ -437,7 +437,7 @@ def test_general_ledger_allows_non_auth_security_triage_owner(tmp_path: Path) ->
         "edges": [{
             "source_file": "backend/app/modules/tasks/service.py",
             "target_module": "actors",
-            "imported_private_path": "app.modules.actors.service_identities",
+            "imported_private_path": "app.modules.actors.models",
             "repair_owner": "security-triage-required",
         }],
     }
@@ -447,7 +447,7 @@ def test_general_ledger_allows_non_auth_security_triage_owner(tmp_path: Path) ->
         boundary.PrivateEdge(
             "backend/app/modules/tasks/service.py",
             "actors",
-            "app.modules.actors.service_identities",
+            "app.modules.actors.models",
             "security-triage-required",
         )
     }
@@ -475,8 +475,8 @@ def test_initial_ledgers_capture_high_risk_application_edges() -> None:
     )
     assert (
         "backend/app/adapters/artifacts/__init__.py",
-        "app.modules.actors.service_identities",
-    ) in actual
+        "app.modules.actors.models",
+    ) not in actual
     assert not any(
         source == "backend/app/workers/project_setup.py"
         and target.startswith("app.modules.projects.")

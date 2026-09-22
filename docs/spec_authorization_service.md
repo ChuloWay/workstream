@@ -674,7 +674,7 @@ planning document does not grant a service permission.
 
 | Proposed ActionId / PermissionId | Sole fixed identity | Exact target and guards | Current activation custodian |
 |---|---|---|---|
-| `outbox.dispatch` | `workstream.outbox.dispatcher` | Event/claim generation/lease and exact phase; fresh authority for claim, invoke and finalize; no feature authority | AUTH-OUTBOX-01 registration, CON-02B hidden mechanics, AUTH-OUTBOX-02 activation |
+| `outbox.dispatch` | `workstream.outbox.dispatcher` | Event/claim generation/lease and exact phase; fresh authority for claim, invoke and finalize; no feature authority | AUTH-OUTBOX-01 registration complete (planned/unavailable); CON-02B hidden mechanics and AUTH-OUTBOX-02 activation remain |
 | `task.assignment.authority_reconcile` | `workstream.task.assignment_reconciler` | Committed exact AUTH invalidation event, project/actor/grant-or-link, active pre-submit assignment; no wrong-role or submitted-history mutation | ARCH-03B hidden handler, ARCH-03C activation |
 | `checker.post_submit.execute` | `workstream.checker.post_submit` | Immutable Submission/request/generation, locked compiled policy, attempt and admitted service; exact pre-I/O authority | ARCH-04C hidden behavior, ARCH-04D activation |
 | `checker.post_submit.finalize` | `workstream.checker.post_submit` | Exact execution request/fence, accepted result digest and required verified output bindings; fresh post-I/O authority and atomic evidence | ARCH-04C hidden behavior, ARCH-04D activation |
@@ -1516,3 +1516,16 @@ Replay validates the original event under fresh live authority and returns the
 original receipt without another activation or decision. Readiness and policy
 selection remain CP07 responsibilities; unavailable automated acceptance still
 blocks `human_review_required=false`. Public activation wiring remains pending.
+
+### Registered outbox dispatcher contract
+
+`outbox.dispatch` is registered but planned, with sole fixed identity
+`workstream.outbox.dispatcher`. No human role receives it. The existing protected
+permission catalogue lists the metadata; provisioning the identity does not
+enable execution. Claim/invoke/finalize facts bind `outbox_event`, exact event
+and project, payload digest, generation, claim owner and UTC lease. Finalize
+also requires the exact OUTBOX-owned outcome digest. These facts and decisions
+are not portable authority. The abstract preparation port has no live adapter;
+CON-02B owns committed claim/lease validation and outcome hashing, and
+AUTH-OUTBOX-02 owns fresh transaction-bound authority and exact recomposed-fact
+consumption. A pre-invocation decision cannot authorize post-I/O finalization.

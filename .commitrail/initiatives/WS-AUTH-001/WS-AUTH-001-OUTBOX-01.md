@@ -1,7 +1,7 @@
 # AUTH-OUTBOX-01 — Restricted dispatcher authorization contract
 
 - Initiative: WS-AUTH-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: register one unavailable dispatcher action and fixed
   identity with closed phase-bound facts and a typed preparation port; leave
   delivery and live authorization to CON-02B and AUTH-OUTBOX-02.
@@ -36,6 +36,16 @@ Allowed:
   exact production/test import consumers to `actors.api`. Update only matching
   AUTH/private-edge debt entries and ownership partition/closed-transition tests.
   This mechanical consumer repair preserves all existing service identities.
+  Remove the two unused migration helpers from affected artifact admission tests;
+  canonical migrated fixtures already own their setup. Retain all test assertions.
+  To satisfy the unchanged structural-debt guard, place the exact service actor
+  provisioning context in existing `authorization/service_actor_schemas.py`,
+  update direct service/test consumers, and retain its strict frozen config.
+  Runtime continues importing it for its resource union; kernel/router continue
+  consuming that aggregate. There is one implementation and no compatibility shim.
+  Move only the expected fixed-service matrix literal to existing catalogue test
+  fixtures; preserve its test node and every assertion. Regenerate the debt
+  inventory only after these real reductions; no gate exemption or new owner.
 - Focused `backend/tests/authorization/test_outbox_dispatch_contract.py` and
   `backend/tests/migrations/test_outbox_dispatch_identity.py`, existing catalogue,
   boundary, identity and ownership expectations; exact lane registrations.
@@ -160,12 +170,13 @@ reviewers own scoped falsification rather than repeating the full suite.
 
 ### Named proof inventory
 
-Future nodes in `tests/authorization/test_outbox_dispatch_contract.py`:
+Named nodes in `tests/authorization/test_outbox_dispatch_contract.py`:
 
 - `test_dispatch_registration_is_exact_and_unavailable`: exact catalogue,
   fixed-service pair, human exclusion and closed metadata corruption controls.
 - `test_dispatch_facts_validate_all_phases`: valid controls and each malformed
   field independently, including phase-specific outcome requirements.
+- `test_dispatch_digest_matches_canonical_envelope`: fixed canonical envelope vector.
 - `test_dispatch_digest_binds_every_fact`: independent substitutions of each
   field, fixed canonical bytes, same-instant UTC normalization, forged typed
   input rejection and action/permission/service/resource envelope assertions.
@@ -176,7 +187,7 @@ Future nodes in `tests/authorization/test_outbox_dispatch_contract.py`:
 - `test_service_identity_alias_is_removed`: whole live Python consumer scan,
   absent old file, current ledgers clean; historical records are not rewritten.
 
-Future nodes in `tests/migrations/test_outbox_dispatch_identity.py`:
+Named nodes in `tests/migrations/test_outbox_dispatch_identity.py`:
 
 - `test_dispatch_identity_upgrade_preserves_records_and_exact_schema`: install
   0025, commit actor/link controls, reject dispatcher before upgrade, apply0026,
@@ -205,3 +216,20 @@ Plan review added repeated-migration admission, exact schema fingerprint custody
 explicit method signatures and serialization restrictions, fixed-envelope hashing,
 finalize outcome binding, named wrong-reason-resistant controls, and the distinction
 between current registration proof and future live dispatcher proof.
+
+## Implementation reconciliation
+
+The public API uses one facts type, phase enum, digest function, abstract prepared
+handle and preparation protocol. The catalogue adds one planned action and no
+active action. Migration 0026 changes only the identity CHECK. All 26 consumers
+of the old service-identity re-export now use the canonical ACTORS API; the alias
+is deleted and its five non-AUTH private edges plus four AUTH debts are retired.
+Existing workflow metadata and retained actor/history tables are untouched; this
+is vocabulary ownership cleanup, not permission to delete retained data.
+
+The exact PostgreSQL schema snapshot changes only
+`actor_profiles.ck_actor_profiles_kind_service_identity`; its new fingerprint is
+`df7cbc0da3f84782be0b007da561164b6735bf53b5bc307fc656e0698de96fa1`.
+The 0001 baseline manifest is unchanged. Runtime delivery/claim correctness and
+live prepared consumption remain the explicit next contracts, not inferred from
+these registration and immutable-value tests.

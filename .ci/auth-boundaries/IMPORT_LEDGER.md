@@ -132,7 +132,6 @@ backend/app/modules/authorization/lifecycle_service.py
   app.modules.audit.service
 backend/app/modules/authorization/prepared.py
   app.modules.actors.repository
-  app.modules.actors.service_identities
   app.modules.audit.schemas
 backend/app/modules/authorization/project_role_service.py
   app.modules.audit.schemas
@@ -147,16 +146,13 @@ backend/app/modules/authorization/repository.py
   app.modules.audit.schemas
   app.modules.projects.repository
 backend/app/modules/authorization/review_contracts.py
-  app.modules.actors.service_identities
 backend/app/modules/authorization/router.py
   app.modules.actors.repository
   app.modules.actors.schemas
   app.modules.actors.service
   app.modules.projects.repository
 backend/app/modules/authorization/runtime.py
-  app.modules.actors.service_identities
 backend/app/modules/authorization/schemas.py
-  app.modules.actors.service_identities
   app.modules.audit.schemas
 backend/app/modules/authorization/service.py
   app.modules.audit.schemas

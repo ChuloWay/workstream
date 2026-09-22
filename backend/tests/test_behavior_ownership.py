@@ -1958,3 +1958,15 @@ def test_task_read_partition_additions_do_not_authorize_neighbors(target: str) -
         ownership._validate_additive_partition_transition(
             _partition(sorted([retained, target, "backend/app/modules/tasks/api/unreviewed.py"])), trusted,
         )
+
+
+def test_outbox_contract_partition_transition_is_exact():
+    """Only the public contract addition and obsolete alias removal are admitted."""
+    retained = "backend/app/core/config.py"
+    removed = "backend/app/modules/actors/service_identities.py"
+    added = "backend/app/modules/authorization/api/outbox_dispatch.py"
+    trusted = _partition(sorted([retained, removed]))
+    ownership._validate_additive_partition_transition(_partition(sorted([retained, added])), trusted)
+    for targets in ([added], [retained, added, "backend/app/modules/authorization/api/unreviewed.py"]):
+        with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+            ownership._validate_additive_partition_transition(_partition(sorted(targets)), trusted)

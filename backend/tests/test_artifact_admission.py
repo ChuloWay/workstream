@@ -17,7 +17,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
-from alembic.config import Config
 import pytest
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -31,7 +30,7 @@ from app.core.config import Settings
 from app.core.hashing import canonical_json_hash
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.actors.service import ActorService
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.checkers.models import CheckerRun
 from app.modules.artifacts.models import (
     ArtifactAdmissionCharge,
@@ -153,28 +152,10 @@ class _RevokeTerminalArtifactAuthority(_AllowArtifactAuthority):
             raise ArtifactAuthorityDeniedError(self.reason)
 
 
-def _alembic_config() -> Config:
-    root = Path(__file__).resolve().parents[1]
-    config = Config(str(root / "alembic.ini"))
-    config.set_main_option("script_location", str(root / "alembic"))
-    return config
-
-
 @pytest.fixture
 def admission_database_env(isolated_database_env: str) -> Iterator[str]:
     """Provide the clean migrated database for artifact admission tests."""
     yield isolated_database_env
-
-
-async def _reset_admission_test_schema(database_url: str) -> None:
-    """Reset the schema only for tests that explicitly exercise migrations."""
-    engine = create_async_engine(database_url)
-    try:
-        async with engine.begin() as conn:
-            await conn.execute(text("drop schema if exists public cascade"), {})
-            await conn.execute(text("create schema public"), {})
-    finally:
-        await engine.dispose()
 
 
 def _settings(tmp_path: Path, *, maximum_bytes: int = 1024) -> Settings:

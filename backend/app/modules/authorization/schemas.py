@@ -22,7 +22,7 @@ from pydantic import (
 
 from app.core.hashing import canonical_json_hash
 from app.modules.audit.schemas import ActorReferenceKind
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _MODEL_CONFIG = ConfigDict(extra="forbid", frozen=True, strict=True, hide_input_in_errors=True)

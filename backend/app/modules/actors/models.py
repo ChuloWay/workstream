@@ -18,7 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.db.base import Base
-from app.modules.actors.service_identities import SERVICE_IDENTITY_VALUES
+from app.modules.actors.api import SERVICE_IDENTITY_VALUES
 
 ACTOR_KINDS = ("human", "service")
 ACTOR_PROFILE_STATUSES = ("active", "suspended", "deactivated")

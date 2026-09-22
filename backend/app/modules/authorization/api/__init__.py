@@ -147,3 +147,15 @@ __all__ = (
     "contribution_policy_resource_digest",
     "permission_id",
 )
+
+from .outbox_dispatch import (
+    OUTBOX_DISPATCH_ACTION, OUTBOX_DISPATCH_PERMISSION, OUTBOX_DISPATCH_RESOURCE,
+    OUTBOX_DISPATCH_SERVICE, OutboxDispatchPhase, OutboxDispatchFacts,
+    OutboxDispatchAuthorizationPort, PreparedOutboxDispatch, outbox_dispatch_resource_digest,
+)
+
+__all__ += (
+    "OUTBOX_DISPATCH_ACTION", "OUTBOX_DISPATCH_PERMISSION", "OUTBOX_DISPATCH_RESOURCE",
+    "OUTBOX_DISPATCH_SERVICE", "OutboxDispatchPhase", "OutboxDispatchFacts",
+    "OutboxDispatchAuthorizationPort", "PreparedOutboxDispatch", "outbox_dispatch_resource_digest",
+)

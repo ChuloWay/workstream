@@ -2,18 +2,6 @@
   "schema_version": 1,
   "edges": [
     {
-      "source_file": "backend/app/adapters/artifacts/__init__.py",
-      "target_module": "actors",
-      "imported_private_path": "app.modules.actors.service_identities",
-      "repair_owner": "WS-ARCH-001-03"
-    },
-    {
-      "source_file": "backend/app/adapters/artifacts/internal_workers.py",
-      "target_module": "actors",
-      "imported_private_path": "app.modules.actors.service_identities",
-      "repair_owner": "WS-ARCH-001-03"
-    },
-    {
       "source_file": "backend/app/adapters/artifacts/internal_workers.py",
       "target_module": "artifacts",
       "imported_private_path": "app.modules.artifacts.authorization",
@@ -200,12 +188,6 @@
       "repair_owner": "WS-ARCH-001-03"
     },
     {
-      "source_file": "backend/app/modules/artifacts/authorization.py",
-      "target_module": "actors",
-      "imported_private_path": "app.modules.actors.service_identities",
-      "repair_owner": "WS-ARCH-001-03"
-    },
-    {
       "source_file": "backend/app/modules/artifacts/operator.py",
       "target_module": "checkers",
       "imported_private_path": "app.modules.checkers.models",
@@ -239,24 +221,12 @@
       "source_file": "backend/app/modules/artifacts/repository.py",
       "target_module": "tasks",
       "imported_private_path": "app.modules.tasks.models",
-      "repair_owner": "WS-ARCH-001-03"
-    },
-    {
-      "source_file": "backend/app/modules/artifacts/schemas.py",
-      "target_module": "actors",
-      "imported_private_path": "app.modules.actors.service_identities",
       "repair_owner": "WS-ARCH-001-03"
     },
     {
       "source_file": "backend/app/modules/artifacts/service.py",
       "target_module": "actors",
       "imported_private_path": "app.modules.actors.service",
-      "repair_owner": "WS-ARCH-001-03"
-    },
-    {
-      "source_file": "backend/app/modules/artifacts/service.py",
-      "target_module": "actors",
-      "imported_private_path": "app.modules.actors.service_identities",
       "repair_owner": "WS-ARCH-001-03"
     },
     {

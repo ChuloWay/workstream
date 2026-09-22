@@ -17,7 +17,7 @@ from app.core.api_controls import request_ids
 from app.core.hashing import canonical_json_hash
 from app.db.session import get_db_session
 from app.modules.actors.service import ResolvedActor
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.schemas import (
     ArtifactAuthorityDeniedError,
     GuideArtifactIngestAuthorityFacts,

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import app.modules.artifacts.authorization as artifact_authorization
 import app.modules.authorization.prepared as prepared_authorization
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.artifacts.authorization import PreparedArtifactInternalAuthority
 from app.modules.artifacts.schemas import (

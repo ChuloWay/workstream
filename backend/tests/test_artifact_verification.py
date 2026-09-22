@@ -18,7 +18,7 @@ import app.adapters.artifacts.internal_workers as internal_worker_adapter
 from app.adapters.artifacts.local import LocalStorageAdapter, LocalStorageBootstrap
 from app.core.config import Settings, get_settings
 from app.interfaces.artifacts import ArtifactStoreNamespaceClaim
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.authorization import PreparedArtifactInternalAuthority
 from app.modules.artifacts.schemas import (
     ArtifactAuthorityDeniedError,
