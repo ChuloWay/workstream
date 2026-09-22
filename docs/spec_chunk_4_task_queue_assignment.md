@@ -156,7 +156,7 @@ lock. Pages are live views, not reservations; claim rechecks authority and state
 ARCH-03C must authorize the exact project collection before calling this port
 or using a client cursor, with current-grant/revocation and concealment proof.
 No per-task AUTH handle or token role can substitute for that collection gate.
-Actor-specific detail/locked-context and audit projections and authority
+Actor-specific work-context, locked-context, requirements and audit projections and authority
 invalidation remain separate.
 
 
@@ -181,3 +181,29 @@ filters. Cursors identify a live position, not authority, audience or membership
 No queue flushes, commits, rolls back or takes a row lock. No counts, reservation
 or snapshot guarantee is supplied. Later authorized composition must validate
 exact project authority before using an untrusted cursor.
+
+## Hidden contributor and management task detail
+
+ARCH-03B4 adds separate `ContributorTaskDetailPort` and
+`ManagementTaskDetailPort` reads to TaskRepository. Each requires exact project
+and task UUIDs. Contributor detail additionally requires a caller-bound
+contributor UUID and returns unassigned READY work or exact own-active-assignment
+work. Both task assignee and assignment contributor must match, with exact
+assignment task/project membership. Released history cannot confer access; it
+does not hide otherwise unassigned READY work. This is object visibility, not
+a permission decision; future public callers must establish current exact
+authority and must not trust a caller-supplied contributor identity.
+
+Both immutable detail values contain title, description, type, difficulty, tags,
+estimate, status, acceptance/rejection criteria, deadline and timestamps, with
+task/project identity. Manager detail additionally contains source type/ref/hash,
+import/external IDs and creator/assignee display facts. Contributor SELECTs never
+load those private columns. Neither projection loads policy bodies, locked
+hashes, artifacts or retired payment fields. SQL filters project/task/visibility
+before returning a result; missing and invisible tasks both yield no result in
+one query. Reads do not flush, commit, roll back or lock the caller's work.
+
+These ports remain hidden. The existing detail endpoint and command response
+consumers still require their exact ARCH-03C authority/cutover; this child adds
+no parallel public route or compatibility alias. Work-context, locked-context,
+requirements and audit projections remain separate ARCH-03B work.

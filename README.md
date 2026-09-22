@@ -572,7 +572,9 @@ requires project existence, not an activated guide. ARCH-03B2 adds hidden,
 project-scoped ready queue facts with bounded live pagination; it exposes no
 queue endpoint or authority. ARCH-03B3 adds hidden all-state management queues
 with planning fields and operational queues with IDs/status/timestamps only.
-Actor-specific detail/locked-context and audit projections stay in ARCH-03B;
+ARCH-03B4 adds hidden contributor and management task detail with fixed
+fields and project/assignment visibility. Existing public detail remains pending
+the exact AUTH cutover. Work-context, locked-context, requirements and audit projections stay in ARCH-03B;
 invalidation requires shared delivery
 claims, and public authority cutover remains ARCH-03C. Canonical checker materialization follows in
 ARCH-04B/04C.
