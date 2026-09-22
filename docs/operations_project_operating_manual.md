@@ -200,7 +200,7 @@ summaries. Hidden management and operational reads also cover all project task
 states: managers receive planning fields; operators receive only IDs, status
 and timestamps. None grants authority or exposes a public queue.
 ARCH-03B4 also supplies hidden contributor and manager detail facts; these are
-not new public endpoints. Remaining work-context, locked-context, requirements
+not new public endpoints. Remaining locked-context, requirements
 and audit projections belong to ARCH-03B;
 assignment invalidation also needs shared delivery
 claims, and authorization/public cutover remains ARCH-03C.
@@ -295,7 +295,13 @@ context and `GET /api/v1/tasks/{task_id}/submission-requirements` for the exact
 artifact, evidence, storage, packaging, hash, and attestation requirements.
 Covered Project Managers use
 `GET /api/v1/projects/{project_id}/tasks/{task_id}/work-context` for their
-canonical exact-project projection. The retained
+canonical exact-project projection. Work context now returns separate contributor
+and manager task facts, the exact historical guide, review/revision references
+(`policy_id`, `generation`, `policy_hash`), and the locked
+`contribution_policy_version_id`. It omits obsolete payment amounts and
+submission/precheck flags. Contributor `lifecycle.next_actions` contains only
+currently applicable claim/start hints; management has no contributor lifecycle.
+Executing a hint always rechecks authority. The retained
 `GET /api/v1/tasks/{task_id}/locked-context` route still uses token-role
 checks for either the `admin` token role or the `project_manager` token role;
 it is not a canonical Operator/Audit projection.

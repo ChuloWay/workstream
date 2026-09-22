@@ -1,7 +1,7 @@
 # ARCH-03B5 — Replace contributor and manager work-context projections
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: Existing authorized work-context routes use separate current contributor and manager contracts, with obsolete economic fields and submission capability removed.
 
 ## Intent
@@ -141,8 +141,9 @@ actor fields, immutable historical custody and complete removal of old shapes.
 
 ## Evidence
 
-The following tests are future implementation obligations, not executed proof.
-New tests live in `backend/tests/tasks/test_work_context.py` unless qualified.
+The following tests implement the proof obligations; exact execution results
+and review freshness belong in the PR.
+Tests live in `backend/tests/tasks/test_work_context.py` unless qualified.
 
 | Behavior atom | Named proof and independently observable assertion |
 |---|---|
@@ -191,8 +192,7 @@ PLAN-03B5-04 removes duplicate status; PLAN-03B5-05 explicitly protects successf
 AUTH evidence; PLAN-03B5-06 / QA-03B5-PLAN-02 cover all nine owned states.
 QA-03B5-PLAN-01 supplies named atomic proofs; QA-03B5-PLAN-03 fixes the exact
 post-AUTH failure/rollback contract; QA-03B5-PLAN-04 names retained economic
-consumers and scopes the obsolete-symbol removal proof. No product code is
-implemented by these plan corrections.
+consumers and scopes the obsolete-symbol removal proof. These plan corrections preceded product implementation.
 
 ## Reconciliation
 
