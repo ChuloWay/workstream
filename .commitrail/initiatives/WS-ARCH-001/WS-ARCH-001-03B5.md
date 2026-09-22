@@ -38,6 +38,7 @@ field list or another authorization evaluator.
   builders/schemas; reuse existing detail repository reads and locked resolver.
 - `backend/tests/tasks/test_work_context.py`; affected work-context assertions
   in `tests/test_tasks.py`, `tests/tasks/test_project_display.py`,
+  `tests/tasks/test_task_detail.py`,
   `tests/authorization/task_authority/{test_task_commands,test_public_surface}.py`,
   `tests/test_pre_submit_related_lock_order.py`, and `scripts/api_contract_e2e.py`.
 - Register the new test module in the existing lane catalogue and equality test.
@@ -213,6 +214,9 @@ status assertion to `task.status`; QA-03B5-IMPL-02 proves the original detail re
 succeeds before injecting its missing-result failure; QA-03B5-IMPL-03 asserts
 false ownership for unassigned READY and true ownership after claim/start.
 DOC-03B5-01 keeps this child in the parent's completed predecessor sequence.
+The prior detail OpenAPI proof now distinguishes nested reuse in work-context
+responses from standalone exposure: both canonical detail components are reused,
+neither is a direct route response, and existing detail route exposure is unchanged.
 
 ## Reconciliation
 

@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import select
 
 from app.db import session as db_session
+from app.main import create_app
 from app.modules.tasks.api import (
     ContributorTaskDetail, ContributorTaskDetailRequest,
     ManagementTaskDetail, ManagementTaskDetailRequest,
@@ -273,10 +274,16 @@ async def test_task_detail_nonlocking(task_client, method):
             assert detail.task_id == UUID(task["id"])
 
 
-async def test_task_detail_ports_remain_hidden(task_client):
-    response = await task_client.get("/openapi.json")
-    assert response.status_code == 200
-    schema = response.json()
+def test_task_detail_ports_remain_hidden():
+    schema = create_app().openapi()
     assert "/api/v1/projects/{project_id}/tasks/{task_id}" not in schema["paths"]
-    assert not {"ContributorTaskDetail", "ManagementTaskDetail"} & schema["components"]["schemas"].keys()
+    for audience in ("Contributor", "Management"):
+        detail_ref = {"$ref": f"#/components/schemas/{audience}TaskDetail"}
+        assert schema["components"]["schemas"][f"{audience}TaskWorkContext"]["properties"]["task"] == detail_ref
+        for path in schema["paths"].values():
+            for operation in path.values():
+                if isinstance(operation, dict):
+                    for response in operation.get("responses", {}).values():
+                        for content in response.get("content", {}).values():
+                            assert content.get("schema") != detail_ref
     assert schema["paths"]["/api/v1/tasks/{task_id}"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith("/TaskResponse")
