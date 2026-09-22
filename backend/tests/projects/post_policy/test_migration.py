@@ -2,23 +2,21 @@
 
 import pytest
 
-from tests.migration_fixtures import current_schema_revision
+from tests.migration_fixtures import current_schema_revision, run_guarded_revision_downgrade
 from sqlalchemy import inspect, text
 
-from migration_fixtures import run_alembic_revision
 from app.modules.projects.post_policy.models import PostPolicyOperation
 from tests.projects.guide_compilation.helpers import service_actor
 from tests.projects.guide_compilation.proposals.pg_support import proposal_case
 from .pg_support import prepare_post_policy, operate
 
 
-async def test_downgrade_preserves_retained_post_policy_evidence(clean_postgres_database, capfd):
+async def test_downgrade_preserves_retained_post_policy_evidence(clean_postgres_database):
     async with proposal_case(clean_postgres_database) as (values, factory, command, actor, grant):
         setup = service_actor(values)
         payload, receipt = await prepare_post_policy(factory, command, actor, grant, setup)
-        with pytest.raises(RuntimeError, match='isolated migration subprocess failed'):
-            await run_alembic_revision('downgrade', '0019_guide_proposal_review')
-        assert 'retained post-policy evidence prevents downgrade' in capfd.readouterr().err
+        with pytest.raises(RuntimeError, match='retained post-policy evidence prevents downgrade'):
+            await run_guarded_revision_downgrade(clean_postgres_database, '0020_post_submit_policy_custody')
         async with factory() as session:
             assert await session.scalar(text('SELECT version_num FROM alembic_version')) == current_schema_revision()
         assert await operate(factory, setup, command.project_id, None, 'derive', payload) == receipt

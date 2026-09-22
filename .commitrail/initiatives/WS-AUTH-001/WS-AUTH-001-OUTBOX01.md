@@ -51,6 +51,13 @@ Allowed:
   boundary, identity and ownership expectations; exact lane registrations.
   Update `backend/tests/test_alembic.py` exact graph and downgrade expectations
   for 0026, preserving the 0025 guard case.
+  Reconcile the existing permission response schema, two administrative read test
+  modules and independent external API drill oracle with the 74-entry catalogue.
+  In affected proposal/post-policy/automatic-request/activation/task-lineage
+  migration tests, use the existing scoped guard helper for retained-data probes
+  and `migration_schema_at` for real owned-revision round trips. Preserve all
+  named tests, exact error checks, schema comparisons and retained-row assertions;
+  do not relax 0026 or add a migration bypass helper.
   Update the explicit action inventory 116 -> 117, permission inventory 73 -> 74
   (new permissions 24 -> 25), and service memberships 23 -> 24 without loosening
   exact-set assertions.

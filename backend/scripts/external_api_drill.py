@@ -101,6 +101,7 @@ review.queue.read review.queue.inspect review.claim review.release review.declin
 review.decision review.lease.force_release review.chain.read review.queue.override
 contribution.read_self contribution.read_project compensation.policy.manage
 compensation.adapter_binding.manage compensation.award.read compensation.delivery.reconcile
+outbox.dispatch
 operations.status.read operations.timer.run operations.reconcile.run operations.outbox.retry
 operations.projection.rebuild operations.task.start_override operations.submission_gate.repair
 operations.checker.retry artifact.binding.read artifact.replica.read artifact.receipt.read
@@ -135,7 +136,7 @@ contribution.read_project compensation.award.read audit.read audit.export"""),
 def catalogue_expectations():
     """Fresh expected JSON objects; callers cannot mutate the frozen oracle."""
     return {
-        "permissions": {"items": [{"permission_id": value} for value in EXPECTED_PERMISSIONS], "total": 73},
+        "permissions": {"items": [{"permission_id": value} for value in EXPECTED_PERMISSIONS], "total": 74},
         "admin-role-definitions": {"items": [
             {"role": role, "allowed_scopes": list(scopes), "permission_ids": permissions.split()}
             for role, scopes, permissions in EXPECTED_ROLE_CONTRACT], "total": 5},

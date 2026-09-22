@@ -1,8 +1,10 @@
 """Forward/reverse schema proof with retained-evidence protection."""
 
+import asyncio
+
 import pytest
 
-from tests.migration_fixtures import current_schema_revision
+from tests.migration_fixtures import current_schema_revision, run_guarded_revision_downgrade
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -10,7 +12,11 @@ from migration_fixtures import run_alembic_revision
 
 
 @pytest.mark.postgres_schema_contract
-async def test_empty_proposal_migration_round_trip(clean_postgres_database):
+async def test_empty_proposal_migration_round_trip(
+    clean_postgres_database, migration_schema_at, migration_lock,
+):
+    with migration_lock():
+        await asyncio.to_thread(migration_schema_at, "0019_guide_proposal_review")
     engine = create_async_engine(clean_postgres_database)
 
     async def definitions():
@@ -55,13 +61,13 @@ async def test_empty_proposal_migration_round_trip(clean_postgres_database):
                 )
                 is None
             )
-        await run_alembic_revision("upgrade", "head")
+        await run_alembic_revision("upgrade", "0019_guide_proposal_review")
         assert await definitions() == before
     finally:
         await engine.dispose()
 
 
-async def test_downgrade_refuses_retained_approval_without_mutation(clean_postgres_database, capfd):
+async def test_downgrade_refuses_retained_approval_without_mutation(clean_postgres_database):
     import pytest
     from uuid import uuid4
     from app.modules.projects.api.guide_proposals import GuideProposalApproval
@@ -72,9 +78,8 @@ async def test_downgrade_refuses_retained_approval_without_mutation(clean_postgr
         package = await read_package(factory, command, actor, grant)
         payload = GuideProposalApproval(target=package.target, idempotency_key=uuid4())
         receipt = await approve(factory, command, actor, grant, payload)
-        with pytest.raises(RuntimeError, match="isolated migration subprocess failed"):
-            await run_alembic_revision("downgrade", "0018_guide_document_creation")
-        assert "retained guide proposal evidence prevents downgrade" in capfd.readouterr().err
+        with pytest.raises(RuntimeError, match="retained guide proposal evidence prevents downgrade"):
+            await run_guarded_revision_downgrade(clean_postgres_database, "0019_guide_proposal_review")
         async with factory() as session:
             assert await session.scalar(text("SELECT version_num FROM alembic_version")) == current_schema_revision()
         assert await approve(factory, command, actor, grant, payload) == receipt
