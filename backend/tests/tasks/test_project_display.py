@@ -208,8 +208,8 @@ async def test_task_display_survives_guide_successor_for_contributor_and_manager
         assert active.status == "active" and active.activation_operation_id is not None
         for kind in ("review", "revision"):
             assert getattr(active, f"selected_{kind}_policy_id") != expected_policies[f"{kind}_policy"]["policy_id"]
-        # A successor may legitimately reuse the same published ContributionPolicy.
         assert active.contribution_policy_version_id is not None
+        assert str(active.contribution_policy_version_id) != expected_policies["contribution_policy_version_id"]
     manager = await task_client.get(
         f"/api/v1/projects/{project['id']}/tasks/{task['id']}/work-context", headers=auth_headers(),
     )

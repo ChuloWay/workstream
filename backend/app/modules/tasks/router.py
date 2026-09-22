@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from uuid import UUID
 from app.api.deps.authorization import get_task_commands
-from app.modules.tasks.api.work_context import ContributorTaskWorkContext, ManagementTaskWorkContext
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.api import TaskAuthorityOperation
 from typing import Annotated
@@ -17,6 +16,7 @@ from app.core.api_controls import StructuredHTTPException, error_response, parse
 from app.core.permissions import PermissionDenied
 from app.db.session import get_db_session
 from app.modules.tasks.schemas import (
+    ContributorTaskWorkContext, ManagementTaskWorkContext,
     AuditEventResponse,
     SubmissionRequirementsResponse,
     SubmissionResponse,

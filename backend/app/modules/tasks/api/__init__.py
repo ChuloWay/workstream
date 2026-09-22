@@ -51,12 +51,7 @@ from app.modules.tasks.api.task_detail import (
     ManagementTaskDetail, ManagementTaskDetailRequest, ManagementTaskDetailPort,
 )
 
-from app.modules.tasks.api.work_context import (
-    ContributorTaskLifecycle, ContributorTaskWorkContext, ManagementTaskWorkContext,
-)
-
 __all__ = (
-    "ContributorTaskLifecycle", "ContributorTaskWorkContext", "ManagementTaskWorkContext",
     "ContributorTaskDetail",
     "ContributorTaskDetailRequest",
     "ContributorTaskDetailPort",

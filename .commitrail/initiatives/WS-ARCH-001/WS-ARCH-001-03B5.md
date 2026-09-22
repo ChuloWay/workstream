@@ -31,19 +31,18 @@ field list or another authorization evaluator.
 
 ### Allowed
 
-- `backend/app/modules/tasks/api/work_context.py` and `api/__init__.py`:
-  current owner response contracts, exported for existing composition. No unused Protocol interfaces.
-- `tasks/authorized_commands.py`, `tasks/router.py`, `tasks/schemas.py`,
+- `backend/app/modules/tasks/schemas.py`: distinct composite response models reuse
+  canonical TASK and PROJECTS facts without changing TASK's public API dependencies.
+- `tasks/authorized_commands.py`, `tasks/router.py`,
   `tasks/service.py`: replace only work-context entrypoints and exclusive
   builders/schemas; reuse existing detail repository reads and locked resolver.
 - `backend/tests/tasks/test_work_context.py`; affected work-context assertions
   in `tests/test_tasks.py`, `tests/tasks/test_project_display.py`,
   `tests/authorization/task_authority/{test_task_commands,test_public_surface}.py`,
   `tests/test_pre_submit_related_lock_order.py`, and `scripts/api_contract_e2e.py`.
-- Exact new-module registration in existing lane catalogue/ownership partition,
-  digest/allowlist and their equality/neighbor tests. Preserve all earlier targets.
-  `tests/architecture/test_module_boundaries.py`: exact per-file public-contract
-  dependency proof, retaining canonical private/cycle guards and negative probes.
+- Register the new test module in the existing lane catalogue and equality test.
+  No new public API module or ownership target; restore the unchanged public API
+  dependency guard and remove the superseded import exception/registration.
 - This record, ARCH parent/overview/plan/chunk map, current AUTH/CON/POL navigation,
   index, README, task specification, operating manual and roadmap reconciliation.
 
@@ -62,8 +61,9 @@ this work-context replacement; they are not justification for keeping its old fi
 
 ## Design and decisions
 
-Use one new owner API module with frozen Pydantic result contracts directly
-consumed by FastAPI, rather than duplicate transport and owner field lists.
+Use frozen composite Pydantic response models in the existing `tasks/schemas.py`,
+directly consumed by FastAPI. TASK's public API retains its existing dependency
+guard. Reuse immutable owner facts without duplicating them or adding interfaces.
 Separate `ContributorTaskWorkContext` and `ManagementTaskWorkContext` nest the
 existing `ContributorTaskDetail`/`ManagementTaskDetail`, PROJECTS
 `ProjectDisplayFacts`/`GuideDisplayFacts`, and the existing immutable
@@ -159,7 +159,7 @@ Tests live in `backend/tests/tasks/test_work_context.py` unless qualified.
 | Current authority and concealment | retained grant/revocation/suspension tests plus `test_work_context_project_scope`: stored foreign task, valid same-project manager control, wrong route project returns 404; valid locked task without required grant denies, with no assignment/task changes |
 | Successful audit custody | `test_work_context_public_projections`: before/after task/assignment/receipt/transition state stable and exactly one AUTH allow per read with correct action, project selector and actor, plus canonical resource digest; existing AUTH-owner proofs cover exact task-context digest binding |
 | Post-AUTH projection failure rollback | `test_work_context_projection_failure_rolls_back` for both methods/routes: wrapped real detail read verifies staged exact allow in its transaction, then returns None; HTTP 404/resource_not_found/nonretryable; independent observer finds no committed new allow, task/assignment/receipt/transition unchanged |
-| Exact historical guide and complete policy references | extend `tests/tasks/test_project_display.py::test_task_display_survives_guide_successor_for_contributor_and_manager`: assert stored original task stamps and valid successor; both read results retain exact guide identity, both policy IDs/generations/hashes and ContributionPolicy UUID, using separate audience field sets |
+| Exact historical guide and complete policy references | extend `tests/tasks/test_project_display.py::test_task_display_survives_guide_successor_for_contributor_and_manager`: assert stored original task stamps and a valid successor with a distinct ContributionPolicy version; both read results retain exact guide identity, both policy IDs/generations/hashes and ContributionPolicy UUID, using separate audience field sets |
 | Invalid custody | retained `test_task_context_apis_fail_closed_when_locked_context_is_missing` and `test_task_context_apis_fail_closed_on_stale_locked_context_rows`, plus `test_work_context_missing_locked_context`: ordinary manager draft has actual authority before 422/task_locked_context_invalid; no successful allow commits |
 | Both route error contracts | update `test_task_command_routes_preserve_structured_errors` owner method names only; preserve each public status/code/retry/request-ID assertion |
 | Unchanged real lock interleaving | `tests/test_pre_submit_related_lock_order.py::test_work_context_task_lock_precedes_art_actor_lock`: replace only removed method call, retain real AUTH/ART sessions, order and completion assertions |
@@ -197,12 +197,14 @@ QA-03B5-PLAN-01 supplies named atomic proofs; QA-03B5-PLAN-03 fixes the exact
 post-AUTH failure/rollback contract; QA-03B5-PLAN-04 names retained economic
 consumers and scopes the obsolete-symbol removal proof. These plan corrections preceded product implementation.
 
-Implementation proof repairs: the canonical module validator permits public-to-public
-contracts, so TASK's test now allows only the two required PROJECTS API modules
-in `work_context.py`, with negative probes for extra imports and other files.
-The prior audit test incorrectly queried a raw task resource. Existing AUTH
-intentionally records a project selector and a resource digest binding TASK facts;
-proof now uses that privacy-safe selector. No production AUTH behavior changed.
+External review corrected the response-model boundary: composite transport models
+belong in existing TASK schemas, so the public API dependency guard remains
+unchanged; the attempted import exception and new API module are removed. The
+successor history proof must establish a different ContributionPolicy version
+before asserting both audiences retain the original locked UUID. The prior audit
+test incorrectly queried a raw task resource. Existing AUTH intentionally records
+a project selector and a resource digest binding TASK facts; proof uses that
+privacy-safe selector. No production AUTH behavior changed.
 
 ## Reconciliation
 

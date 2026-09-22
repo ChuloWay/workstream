@@ -13,15 +13,13 @@ from app.modules.tasks.api.authorization import (
     TaskAuthorityOperation,
     TaskAuthorizationPort,
 )
-from app.modules.tasks.api.work_context import (
-    ContributorTaskLifecycle, ContributorTaskWorkContext, ManagementTaskWorkContext,
-)
 from app.modules.tasks.api.task_detail import ContributorTaskDetailRequest, ManagementTaskDetailRequest
 from app.modules.tasks.api.transition_audit import TaskTransitionAuditPort, TaskTransitionFacts
 from app.modules.tasks.models import TaskAssignment, TaskCommandReceipt, WorkstreamTask
 from app.modules.tasks.command_replay import TaskCommandReplay
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.schemas import (
+    ContributorTaskLifecycle, ContributorTaskWorkContext, ManagementTaskWorkContext,
     AssignmentResponse,
     TaskResponse,
     TaskWithAssignmentResponse,

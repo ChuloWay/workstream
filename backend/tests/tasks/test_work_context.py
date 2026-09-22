@@ -15,9 +15,9 @@ from app.db import session as db_session
 from app.main import create_app
 from app.modules.projects.api.guide_activation import GuidePolicySelection
 from app.modules.projects.api.locked_policy import GuideDisplayFacts, ProjectDisplayFacts
-from app.modules.tasks.api import (
-    ContributorTaskDetail, ContributorTaskLifecycle, ContributorTaskWorkContext,
-    ManagementTaskDetail, ManagementTaskWorkContext,
+from app.modules.tasks.api import ContributorTaskDetail, ManagementTaskDetail
+from app.modules.tasks.schemas import (
+    ContributorTaskLifecycle, ContributorTaskWorkContext, ManagementTaskWorkContext,
 )
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.lifecycle import ALLOWED_TASK_TRANSITIONS
