@@ -16,6 +16,7 @@ from app.core.api_controls import StructuredHTTPException, error_response, parse
 from app.core.permissions import PermissionDenied
 from app.db.session import get_db_session
 from app.modules.tasks.schemas import (
+    ContributorTaskWorkContext, ManagementTaskWorkContext,
     AuditEventResponse,
     SubmissionRequirementsResponse,
     SubmissionResponse,
@@ -23,7 +24,6 @@ from app.modules.tasks.schemas import (
     TaskLockedContextResponse,
     TaskResponse,
     TaskTransitionRequest,
-    TaskWorkContextResponse,
     TaskWithAssignmentResponse,
 )
 from app.modules.tasks.service import TaskServiceError
@@ -391,7 +391,7 @@ async def override_task_start(
 
 
 @router.get(
-    "/tasks/{task_id}/work-context", response_model=TaskWorkContextResponse, response_model_exclude_none=True,
+    "/tasks/{task_id}/work-context", response_model=ContributorTaskWorkContext, response_model_exclude_none=True,
     openapi_extra={"x-workstream-action-id": TaskAuthorityOperation.WORK_CONTEXT.value},
     responses=TASK_LOCKED_CONTEXT_RESPONSES,
 )
@@ -399,9 +399,9 @@ async def get_task_work_context(
     request: Request,
     task_id: UUID,
     commands: Annotated[AuthorizedTaskCommands, Depends(get_task_commands)],
-) -> TaskWorkContextResponse | JSONResponse:
+) -> ContributorTaskWorkContext | JSONResponse:
     try:
-        return await commands.work_context(task_id)
+        return await commands.contributor_work_context(task_id)
     except TaskServiceError as exc:
         if getattr(exc, "code", None) is not None:
             return task_domain_error_response(request, exc)
@@ -409,7 +409,7 @@ async def get_task_work_context(
 
 
 @router.get(
-    "/projects/{project_id}/tasks/{task_id}/work-context", response_model=TaskWorkContextResponse, response_model_exclude_none=True,
+    "/projects/{project_id}/tasks/{task_id}/work-context", response_model=ManagementTaskWorkContext, response_model_exclude_none=True,
     openapi_extra={"x-workstream-action-id": TaskAuthorityOperation.MANAGEMENT_WORK_CONTEXT.value},
     responses=TASK_LOCKED_CONTEXT_RESPONSES,
 )
@@ -418,9 +418,9 @@ async def get_management_task_work_context(
     project_id: UUID,
     task_id: UUID,
     commands: Annotated[AuthorizedTaskCommands, Depends(get_task_commands)],
-) -> TaskWorkContextResponse | JSONResponse:
+) -> ManagementTaskWorkContext | JSONResponse:
     try:
-        return await commands.work_context(task_id, project_id=project_id)
+        return await commands.management_work_context(project_id, task_id)
     except TaskServiceError as exc:
         if getattr(exc, "code", None) is not None:
             return task_domain_error_response(request, exc)

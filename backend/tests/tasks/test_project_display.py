@@ -171,6 +171,22 @@ async def test_task_display_survives_guide_successor_for_contributor_and_manager
     original = await task_client.get(url, headers=auth_headers())
     assert original.status_code == 200, original.text
     original = original.json()
+    async with db_session.get_session_factory()() as session:
+        stored = await session.get(WorkstreamTask, task["id"])
+        expected_policies = {
+            f"{kind}_policy": {
+                "policy_id": getattr(stored, f"locked_{kind}_policy_id"),
+                "generation": getattr(stored, f"locked_{kind}_policy_generation"),
+                "policy_hash": getattr(stored, f"locked_{kind}_policy_hash"),
+            } for kind in ("review", "revision")
+        }
+        expected_policies["contribution_policy_version_id"] = str(stored.locked_contribution_policy_version_id)
+        manager_facts = {name: getattr(stored, name) for name in (
+            "source_type", "source_ref", "source_payload_hash", "import_batch_id", "external_task_id",
+            "created_by", "assigned_to",
+        ) if getattr(stored, name) is not None}
+    for name, expected in expected_policies.items():
+        assert original[name] == expected
     requirements_url = f"/api/v1/tasks/{task['id']}/submission-requirements"
     first_requirements = await task_client.get(requirements_url, headers=auth_headers())
     assert first_requirements.status_code == 200, first_requirements.text
@@ -187,6 +203,13 @@ async def test_task_display_survives_guide_successor_for_contributor_and_manager
     await seed_active_guide_for_downstream_test(
         db_session.get_session_factory(), project_id=project["id"], guide_id=successor.json()["id"],
     )
+    async with db_session.get_session_factory()() as session:
+        active = await session.get(ProjectGuide, successor.json()["id"])
+        assert active.status == "active" and active.activation_operation_id is not None
+        for kind in ("review", "revision"):
+            assert getattr(active, f"selected_{kind}_policy_id") != expected_policies[f"{kind}_policy"]["policy_id"]
+        assert active.contribution_policy_version_id is not None
+        assert str(active.contribution_policy_version_id) != expected_policies["contribution_policy_version_id"]
     manager = await task_client.get(
         f"/api/v1/projects/{project['id']}/tasks/{task['id']}/work-context", headers=auth_headers(),
     )
@@ -198,13 +221,19 @@ async def test_task_display_survives_guide_successor_for_contributor_and_manager
     set_dev_actor(monkeypatch, roles="worker", subject="worker-one")
     contributor = await task_client.get(url, headers=auth_headers())
     assert contributor.status_code == 200, contributor.text
-    for response in (manager.json(), contributor.json()):
-        assert set(response) == set(original)
+    contributor_body, manager_body = contributor.json(), manager.json()
+    assert set(contributor_body) == set(original)
+    assert set(manager_body) == set(original) - {"lifecycle"}
+    assert set(contributor_body["task"]) == set(original["task"])
+    assert set(manager_body["task"]) == set(original["task"]) | set(manager_facts)
+    assert {key: manager_body["task"][key] for key in manager_facts} == manager_facts
+    for response in (manager_body, contributor_body):
         assert response["guide"] == original["guide"]
-        assert set(response["guide"]) == {"id", "version", "change_summary", "effective_at"}
+        assert set(response["guide"]) == {"id", "project_id", "version", "change_summary", "effective_at"}
         assert response["project"] == original["project"]
-        assert set(response["task"]) == set(original["task"])
         assert response["guide"]["id"] != successor.json()["id"]
+        for name, expected in expected_policies.items():
+            assert response[name] == expected, name
     requirements = await task_client.get(requirements_url, headers=auth_headers())
     assert requirements.status_code == 200, requirements.text
     assert requirements.json()["guide_version"] == "v1"

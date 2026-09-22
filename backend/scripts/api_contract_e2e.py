@@ -2128,12 +2128,8 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             worker_token,
         )
         ensure(
-            active_work_context["lifecycle"]["can_submit"] is False,
-            "hidden submission creation must not be advertised as a public action",
-        )
-        ensure(
-            "can_run_pre_submit_check" not in active_work_context["lifecycle"],
-            "work context must omit the removed JSON-precheck capability",
+            set(active_work_context["lifecycle"]) == {"assigned_to_current_actor", "next_actions"},
+            "work context must expose only the current bounded lifecycle facts",
         )
         ensure(
             active_work_context["lifecycle"]["next_actions"] == [],

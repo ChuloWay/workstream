@@ -8,7 +8,67 @@ from typing import Any, Literal
 from uuid import UUID
 from urllib.parse import unquote, urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.modules.projects.api.guide_activation import GuidePolicySelection
+from app.modules.projects.api.locked_policy import GuideDisplayFacts, ProjectDisplayFacts
+from app.modules.tasks.api.task_detail import ContributorTaskDetail, ManagementTaskDetail
+
+
+class ContributorTaskLifecycle(BaseModel):
+    """Current assignment and bounded action hints; executing actions reauthorizes."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    assigned_to_current_actor: bool
+    next_actions: tuple[Literal["claim", "start"], ...] = Field(max_length=1)
+
+
+class _TaskWorkContext(BaseModel):
+    """Detached display and exact receipt-selected governing policy identities."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    project: ProjectDisplayFacts
+    guide: GuideDisplayFacts
+    review_policy: GuidePolicySelection
+    revision_policy: GuidePolicySelection
+    contribution_policy_version_id: UUID
+
+    @model_validator(mode="after")
+    def exact_project(self):
+        """Reject display facts belonging to different projects."""
+        if self.project.id != self.guide.project_id:
+            raise ValueError("work context project differs from guide")
+        return self
+
+
+class ContributorTaskWorkContext(_TaskWorkContext):
+    """Contributor work instructions without management data or obsolete economics."""
+
+    task: ContributorTaskDetail
+    lifecycle: ContributorTaskLifecycle
+
+    @model_validator(mode="after")
+    def exact_task(self):
+        """Keep the task audience and project exact without response redaction."""
+        if type(self.task) is not ContributorTaskDetail or self.task.project_id != self.project.id:
+            raise ValueError("contributor work context task is invalid")
+        return self
+
+
+class ManagementTaskWorkContext(_TaskWorkContext):
+    """Manager work instructions and provenance without contributor action hints."""
+
+    task: ManagementTaskDetail
+
+    @model_validator(mode="after")
+    def exact_task(self):
+        """Keep management facts scoped to the context project."""
+        if type(self.task) is not ManagementTaskDetail or self.task.project_id != self.project.id:
+            raise ValueError("management work context task is invalid")
+        return self
+
 
 ALLOWED_STORAGE_URI_PREFIXES = ("local://", "s3://", "r2://")
 FORBIDDEN_URI_FRAGMENTS = (
@@ -190,83 +250,6 @@ class TaskResponse(BaseModel):
     assigned_to: str | None
     created_at: datetime
     updated_at: datetime
-
-
-class TaskProjectContext(BaseModel):
-    """Contributor-safe project summary for a task context response."""
-
-    id: str
-    name: str
-    slug: str
-    description: str | None
-
-
-class TaskWorkerTaskContext(BaseModel):
-    """Contributor-safe task summary for work-context responses."""
-
-    id: str
-    project_id: str
-    locked_guide_version: str
-    title: str
-    description: str
-    task_type: str | None
-    difficulty: str | None
-    skill_tags: list[str]
-    estimated_time_minutes: int | None
-    base_amount: Decimal | None
-    currency: str | None
-    payout_type: str | None
-    status: str
-    acceptance_criteria: str | None
-    rejection_criteria: str | None
-    deadline_at: datetime | None
-    created_at: datetime
-    updated_at: datetime
-
-
-class TaskGuideContext(BaseModel):
-    """Contributor-safe guide material locked to a task."""
-
-    id: str
-    version: str
-    change_summary: str | None
-    effective_at: datetime | None
-
-
-class TaskReviewPolicyContext(BaseModel):
-    """Contributor-safe review policy summary for the locked guide version."""
-
-    policy_id: str
-    policy_generation: int
-    policy_hash: str
-
-
-class TaskRevisionPolicyContext(BaseModel):
-    """Contributor-safe revision policy summary for the locked guide version."""
-
-    policy_id: str
-    policy_generation: int
-    policy_hash: str
-
-
-class TaskWorkerLifecycleContext(BaseModel):
-    """Contributor-facing lifecycle state for a task."""
-
-    status: str
-    assigned_to_current_actor: bool
-    can_submit: bool
-    next_actions: list[str]
-
-
-class TaskWorkContextResponse(BaseModel):
-    """Contributor-safe context needed before doing task work."""
-
-    task: TaskWorkerTaskContext
-    project: TaskProjectContext
-    guide: TaskGuideContext
-    review_policy: TaskReviewPolicyContext
-    revision_policy: TaskRevisionPolicyContext
-    lifecycle: TaskWorkerLifecycleContext
 
 
 class RequiredArtifactRequirement(BaseModel):

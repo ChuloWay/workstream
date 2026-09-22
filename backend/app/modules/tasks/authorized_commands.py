@@ -13,16 +13,16 @@ from app.modules.tasks.api.authorization import (
     TaskAuthorityOperation,
     TaskAuthorizationPort,
 )
+from app.modules.tasks.api.task_detail import ContributorTaskDetailRequest, ManagementTaskDetailRequest
 from app.modules.tasks.api.transition_audit import TaskTransitionAuditPort, TaskTransitionFacts
 from app.modules.tasks.models import TaskAssignment, TaskCommandReceipt, WorkstreamTask
 from app.modules.tasks.command_replay import TaskCommandReplay
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.schemas import (
+    ContributorTaskLifecycle, ContributorTaskWorkContext, ManagementTaskWorkContext,
     AssignmentResponse,
     TaskResponse,
     TaskWithAssignmentResponse,
-    TaskWorkContextResponse,
-    TaskWorkerLifecycleContext,
 )
 from app.modules.tasks.service import (
     LOCKED_CONTEXT_REQUIRED_FIELDS,
@@ -205,40 +205,58 @@ class AuthorizedTaskCommands:
             await self._session.flush()
         return response
 
-    async def work_context(
-        self,
-        task_id: UUID,
-        *,
-        project_id: UUID | None = None,
-    ) -> TaskWorkContextResponse:
-        operation = (
-            TaskAuthorityOperation.MANAGEMENT_WORK_CONTEXT
-            if project_id is not None
-            else TaskAuthorityOperation.WORK_CONTEXT
-        )
+    async def contributor_work_context(self, task_id: UUID) -> ContributorTaskWorkContext:
+        """Project current contributor instructions under the existing exact authority."""
+        if not isinstance(task_id, UUID):
+            raise TaskValidationError("work context task ID is invalid")
         async with self._session.begin():
-            task, assignment, _ = await self._locked_task(task_id, operation, project_id=project_id)
+            task, assignment, _ = await self._locked_task(task_id, TaskAuthorityOperation.WORK_CONTEXT)
             context = await self._contexts._load_locked_task_context(task)
+            detail = await self._repo.read_contributor_task_detail(
+                ContributorTaskDetailRequest(UUID(task.project_id), task_id, self._actor_id),
+            )
+            if detail is None:
+                raise TaskNotFound("task not found")
             own_assignment = bool(
                 assignment is not None
                 and assignment.contributor_id == str(self._actor_id)
                 and task.assigned_to == str(self._actor_id)
             )
-            actions = []
-            if project_id is None:
-                if task.status == "ready" and assignment is None and task.assigned_to is None:
-                    actions = ["claim"]
-                elif task.status == "claimed" and own_assignment:
-                    actions = ["start"]
-            response = self._contexts._work_context_response(
-                task,
-                context,
-                lifecycle=TaskWorkerLifecycleContext(
-                    status=task.status,
-                    assigned_to_current_actor=own_assignment,
-                    can_submit=False,
-                    next_actions=actions,
+            actions = ()
+            if task.status == "ready" and assignment is None and task.assigned_to is None:
+                actions = ("claim",)
+            elif task.status == "claimed" and own_assignment:
+                actions = ("start",)
+            selection = context.facts.activation_receipt.command
+            response = ContributorTaskWorkContext(
+                task=detail, project=context.facts.project, guide=context.facts.guide,
+                review_policy=selection.review, revision_policy=selection.revision,
+                contribution_policy_version_id=selection.contribution_policy_version_id,
+                lifecycle=ContributorTaskLifecycle(
+                    assigned_to_current_actor=own_assignment, next_actions=actions,
                 ),
+            )
+        return response
+
+    async def management_work_context(
+        self, project_id: UUID, task_id: UUID,
+    ) -> ManagementTaskWorkContext:
+        """Project manager instructions through the existing exact project authority."""
+        if not isinstance(project_id, UUID) or not isinstance(task_id, UUID):
+            raise TaskValidationError("work context project or task ID is invalid")
+        async with self._session.begin():
+            task, _, _ = await self._locked_task(
+                task_id, TaskAuthorityOperation.MANAGEMENT_WORK_CONTEXT, project_id=project_id,
+            )
+            context = await self._contexts._load_locked_task_context(task)
+            detail = await self._repo.read_management_task_detail(ManagementTaskDetailRequest(project_id, task_id))
+            if detail is None:
+                raise TaskNotFound("task not found")
+            selection = context.facts.activation_receipt.command
+            response = ManagementTaskWorkContext(
+                task=detail, project=context.facts.project, guide=context.facts.guide,
+                review_policy=selection.review, revision_policy=selection.revision,
+                contribution_policy_version_id=selection.contribution_policy_version_id,
             )
         return response
 

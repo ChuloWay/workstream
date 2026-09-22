@@ -325,7 +325,7 @@ async def test_work_context_task_lock_precedes_art_actor_lock(
                 contexts=task_service(task_session, settings=get_settings()),
             )
             try:
-                task_command = asyncio.create_task(commands.work_context(harness.request.task_id))
+                task_command = asyncio.create_task(commands.contributor_work_context(harness.request.task_id))
                 await asyncio.wait_for(task_locked.wait(), timeout=30)
                 assert task_pid is not None
                 art_task = asyncio.create_task(workflow.execute_reserved(
@@ -341,7 +341,7 @@ async def test_work_context_task_lock_precedes_art_actor_lock(
                     timeout=30,
                 )
                 assert not isinstance(task_result, BaseException), task_result
-                assert task_result.lifecycle.status == "in_progress"
+                assert task_result.task.status == "in_progress"
                 assert task_result.lifecycle.assigned_to_current_actor is True
                 assert not isinstance(art_result, BaseException), art_result
                 assert art_result.pass_capability is not None

@@ -200,7 +200,7 @@ summaries. Hidden management and operational reads also cover all project task
 states: managers receive planning fields; operators receive only IDs, status
 and timestamps. None grants authority or exposes a public queue.
 ARCH-03B4 also supplies hidden contributor and manager detail facts; these are
-not new public endpoints. Remaining work-context, locked-context, requirements
+not new public endpoints. Remaining locked-context, requirements
 and audit projections belong to ARCH-03B;
 assignment invalidation also needs shared delivery
 claims, and authorization/public cutover remains ARCH-03C.
@@ -275,10 +275,9 @@ post-submit checker policy reference.
 
 ### Task Screening Gate
 
-The following is the target v0.1 gate. Complete ContributionPolicyVersion
-propagation into Task, TaskAssignment, Submission and ReviewLease is still
-planned; do not treat this checklist as proof that the current release operation
-enforces that lock. See [the capability ledger](roadmap_status.md) for delivered
+CP08 enforces the guide-bound ContributionPolicyVersion lock before `READY`
+and carries it through TaskAssignment and Submission. ReviewLease propagation
+remains planned. See [the capability ledger](roadmap_status.md) for delivered
 boundaries and remaining work.
 
 A task cannot move to `READY` until the task contract is complete, the guide
@@ -286,8 +285,9 @@ version is locked, submission artifact requirements are clear,
 checker/review/revision policy versions and the guide-bound
 ContributionPolicyVersion are locked, and a release decision is recorded. A
 task cannot become `READY` without that policy lock. TaskAssignment and
-Submission later carry it for the exact attempt; ReviewLease copies the
-immutable Submission stamp without current-policy lookup.
+Submission later carry it for the exact attempt. When canonical review admission
+is delivered, ReviewLease must copy the immutable Submission stamp without
+current-policy lookup.
 
 After screening and release, contributors use
 `GET /api/v1/tasks/{task_id}/work-context` for the locked guide and lifecycle
@@ -295,7 +295,13 @@ context and `GET /api/v1/tasks/{task_id}/submission-requirements` for the exact
 artifact, evidence, storage, packaging, hash, and attestation requirements.
 Covered Project Managers use
 `GET /api/v1/projects/{project_id}/tasks/{task_id}/work-context` for their
-canonical exact-project projection. The retained
+canonical exact-project projection. Work context now returns separate contributor
+and manager task facts, the exact historical guide, review/revision references
+(`policy_id`, `generation`, `policy_hash`), and the locked
+`contribution_policy_version_id`. It omits obsolete payment amounts and
+submission/precheck flags. Contributor `lifecycle.next_actions` contains only
+currently applicable claim/start hints; management has no contributor lifecycle.
+Executing a hint always rechecks authority. The retained
 `GET /api/v1/tasks/{task_id}/locked-context` route still uses token-role
 checks for either the `admin` token role or the `project_manager` token role;
 it is not a canonical Operator/Audit projection.
@@ -314,8 +320,8 @@ External origin qualification and webhook drop notifications are future adapter 
 
 ## Task Release Checklist
 
-This is the target release checklist, including the pending contribution-policy
-lock described above; it is not an inventory of current runtime guards.
+This is the target release checklist, not an inventory of current runtime guards.
+The contribution-policy lock described above is already enforced.
 
 Before moving a task to `READY`:
 
@@ -335,7 +341,7 @@ Before moving a task to `READY`:
 ## Ready Gate
 
 The complete gate below is the target v0.1 contract. Its contribution-policy
-lock remains pending, as noted in Task Screening Gate.
+lock is already enforced, as noted in Task Screening Gate.
 
 A task cannot move to `READY` just because it has text.
 

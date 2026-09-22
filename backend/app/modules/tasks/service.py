@@ -56,15 +56,8 @@ from app.modules.tasks.schemas import (
     SubmissionRequirementsResponse,
     SubmissionResponse,
     TaskCreate,
-    TaskGuideContext,
     TaskLockedContextResponse,
-    TaskProjectContext,
     TaskResponse,
-    TaskReviewPolicyContext,
-    TaskRevisionPolicyContext,
-    TaskWorkerLifecycleContext,
-    TaskWorkerTaskContext,
-    TaskWorkContextResponse,
 )
 from app.schemas.auth import ActorContext
 
@@ -918,41 +911,6 @@ class TaskService:
         """Return missing locked-context fields for a task."""
         return [field for field in LOCKED_CONTEXT_REQUIRED_FIELDS if not getattr(task, field)]
 
-    def _work_context_response(
-        self,
-        task: WorkstreamTask,
-        context: LockedTaskContext,
-        *,
-        lifecycle: TaskWorkerLifecycleContext,
-    ) -> TaskWorkContextResponse:
-        """Build the Contributor-safe work-context response."""
-        return TaskWorkContextResponse(
-            task=self._worker_safe_task_response(task),
-            project=TaskProjectContext(
-                id=str(context.facts.project.id),
-                name=context.facts.project.name,
-                slug=context.facts.project.slug,
-                description=context.facts.project.description,
-            ),
-            guide=TaskGuideContext(
-                id=str(context.facts.guide.id),
-                version=context.facts.guide.version,
-                change_summary=context.facts.guide.change_summary,
-                effective_at=context.facts.guide.effective_at,
-            ),
-            review_policy=TaskReviewPolicyContext(
-                policy_id=task.locked_review_policy_id or "",
-                policy_generation=task.locked_review_policy_generation or 0,
-                policy_hash=task.locked_review_policy_hash or "",
-            ),
-            revision_policy=TaskRevisionPolicyContext(
-                policy_id=task.locked_revision_policy_id or "",
-                policy_generation=task.locked_revision_policy_generation or 0,
-                policy_hash=task.locked_revision_policy_hash or "",
-            ),
-            lifecycle=lifecycle,
-        )
-
     def _submission_requirements_response(
         self,
         task: WorkstreamTask,
@@ -1263,29 +1221,6 @@ class TaskService:
             locked_revision_policy_generation=task.locked_revision_policy_generation or 0,
             locked_revision_policy_hash=task.locked_revision_policy_hash or "",
             locked_contribution_policy_version_id=task.locked_contribution_policy_version_id,
-        )
-
-    def _worker_safe_task_response(self, task: WorkstreamTask) -> TaskWorkerTaskContext:
-        """Build a task summary without private source/import provenance."""
-        return TaskWorkerTaskContext(
-            id=task.id,
-            project_id=task.project_id,
-            locked_guide_version=task.locked_guide_version or "",
-            title=task.title,
-            description=task.description,
-            task_type=task.task_type,
-            difficulty=task.difficulty,
-            skill_tags=list(task.skill_tags),
-            estimated_time_minutes=task.estimated_time_minutes,
-            base_amount=task.base_amount,
-            currency=task.currency,
-            payout_type=task.payout_type,
-            status=task.status,
-            acceptance_criteria=task.acceptance_criteria,
-            rejection_criteria=task.rejection_criteria,
-            deadline_at=task.deadline_at,
-            created_at=task.created_at,
-            updated_at=task.updated_at,
         )
 
     def _validate_task_contract_fields(self, task: WorkstreamTask) -> None:

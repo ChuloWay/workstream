@@ -156,7 +156,7 @@ lock. Pages are live views, not reservations; claim rechecks authority and state
 ARCH-03C must authorize the exact project collection before calling this port
 or using a client cursor, with current-grant/revocation and concealment proof.
 No per-task AUTH handle or token role can substitute for that collection gate.
-Actor-specific work-context, locked-context, requirements and audit projections and authority
+Actor-specific locked-context, requirements and audit projections and authority
 invalidation remain separate.
 
 
@@ -203,7 +203,44 @@ hashes, artifacts or retired payment fields. SQL filters project/task/visibility
 before returning a result; missing and invisible tasks both yield no result in
 one query. Reads do not flush, commit, roll back or lock the caller's work.
 
-These ports remain hidden. The existing detail endpoint and command response
-consumers still require their exact ARCH-03C authority/cutover; this child adds
-no parallel public route or compatibility alias. Work-context, locked-context,
-requirements and audit projections remain separate ARCH-03B work.
+These detail ports remain internal as standalone reads. ARCH-03B5 reuses them
+in existing authorized work-context responses below. The existing standalone
+detail endpoint and command response consumers still require their exact ARCH-03C
+authority/cutover; no parallel public route or compatibility alias is added.
+Locked-context, requirements and audit projections remain separate ARCH-03B work.
+
+
+## Current contributor and manager work context
+
+ARCH-03B5 replaces the response contracts of the existing authorized work-context
+routes. Their actions, actor binding, project authority and task/assignment/AUTH
+lock order stay the same. It does not activate other proposed ARCH-03C surfaces.
+
+Both return `task`, `project`, `guide`, `review_policy`, `revision_policy`, and
+`contribution_policy_version_id`. Task uses the fixed 03B4 audience-specific
+facts (`task_id`, with no economic fields); guide owns `version`. The policy
+references reuse PROJECTS `GuidePolicySelection`: `policy_id`, `generation`,
+and `policy_hash`, taken from the validated historical activation receipt. The
+ContributionPolicy version is that same receipt's exact UUID, already checked
+against the task stamp. New guide activation does not replace an existing
+attempt's policy references. No CON lookup or economic rules are exposed.
+
+Only contributor context has `lifecycle`, with `assigned_to_current_actor` and
+`next_actions`. Unassigned READY advertises `claim`; own CLAIMED advertises
+`start`; other own-active states have no action hint. Task status appears only in
+`task.status`. Hints never authorize execution. There is no `can_submit` flag or
+precheck capability; hidden submission creation is not advertised as usable.
+Manager task facts include source/creator/assignee display fields, without
+contributor lifecycle or hints. The old shared work-context schemas and builders
+are removed, not aliased.
+
+The read reuses complete frozen-policy validation and the existing AUTH decision
+inside its owner transaction. Successful reads persist their exact AUTH allow
+record, without changing TASK lifecycle/assignment/receipt state. Missing detail
+after authorization returns 404 `resource_not_found` and rolls that decision back;
+missing or invalid locked custody returns the existing 422
+`task_locked_context_invalid`. Ordinary unassigned draft is not contributor work;
+a fully locked own-active draft remains visible under the existing authority rule.
+
+Standalone detail endpoints, other locked-context/requirements/audit projection
+replacements, and assignment invalidation retain their separately scoped work.

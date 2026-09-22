@@ -1919,13 +1919,12 @@ async def test_task_context_apis_return_worker_requirements_and_operator_provena
     )
     assert work_context.status_code == 200, work_context.text
     work_body = work_context.json()
-    assert work_body["task"]["locked_guide_version"] == "v1"
+    assert work_body["task"]["task_id"] == started_task["id"]
     assert work_body["guide"]["version"] == "v1"
     assert work_body["guide"]["change_summary"] == "Initial v1"
     assert "content_markdown" not in work_body["guide"]
     assert "payment_policy" not in work_body
-    assert work_body["lifecycle"]["can_submit"] is False
-    assert "can_run_pre_submit_check" not in work_body["lifecycle"]
+    assert set(work_body["lifecycle"]) == {"assigned_to_current_actor", "next_actions"}
     assert work_body["lifecycle"]["next_actions"] == []
     worker_context_json = json.dumps(work_body, sort_keys=True)
     for internal_field in (
