@@ -5,7 +5,7 @@
 - Intended merge outcome: one historical context resolver supplies explicit
   management, operational and audit projections, with no parallel old response.
 
-## Intent and current behavior
+## Intent
 
 After 03B5, complete policy locks and historical validation already exist.
 `TaskService._load_locked_task_context` validates every TASK stamp against the
@@ -79,35 +79,48 @@ lookup before historical resolution; missing and foreign tasks both raise existi
 Use the caller's transaction; never flush, commit, rollback or create a nested
 transaction. A caller's pending writes are not implicitly flushed.
 
-The existing route still checks its current role and creator scope before using
-the canonical management projection. This explicitly retained authority wrapper
+The existing route checks its current role, loads/locks the TASK once, and checks
+creator scope before passing that same row through `_load_locked_task_context`
+and the management constructor. It must not call the hidden exact-project read
+and repeat the TASK query. This explicitly retained authority wrapper
 is a dependency for 03C, not a new compatibility route or a claim that canonical
 manager/Operator/Audit authority is complete. Preserve current manager access and
 denials. Remove the superseded response class and builder and update their tests.
 The new operational/audit methods are internal only, with no OpenAPI activation.
 
-## Acceptance and proof
+## Acceptance criteria
 
 1. Exact frozen field contracts: valid constructors succeed; malformed UUID/hash,
    empty version, nonpositive generation, extra private field and mutable nested
    collections fail. Operational/audit models reject management summary input.
+   For each hidden method, independently pass None, text, integers and booleans
+   as project/task selectors; repository and resolver spies must remain untouched.
 2. Real PostgreSQL project/task scope: valid fully activated/screened task is a
    successful control for all three methods; stored foreign task and missing task
    conceal identically. Resolver is not called for either missing/foreign case.
 3. Historical identity: activate a valid successor with a distinct ContributionPolicy
-   version using the existing test fixture. All three reads retain the original
+   version and a different post-submit summary using the existing test fixture
+   (`post_submit_required_checkers=["check_acceptance_criteria_present"]`). Assert
+   both differences after valid activation. All three reads retain the original
    exact task stamps; management summary remains that original compiled policy.
 4. Invalid custody: valid control first, then permitted TASK post-policy-body
    mismatch causes the existing coded failure for every read. Draft missing locks
    also fail. Immutable PROJECTS data is not altered to evade its database guards.
-5. Transaction/locks: caller owns rollback, unflushed sentinels remain pending,
-   flushed caller edits remain uncommitted; TASK acquisition precedes PROJECTS.
-   A real two-session TASK-lock test verifies the read waits and resolves the
-   committed task context after the lock is released.
+5. Transaction/locks: an invalid pending sentinel stays in `session.new`, a flushed
+   non-projected marker stays uncommitted, and the caller transaction remains active
+   after each read. Roll back, then use an independent observer to prove neither
+   change persisted. For a real two-session TASK-lock test, preload the reader's
+   identity map; the writer holds TASK and changes only its stored post-policy JSON
+   body. Observe the reader blocked on that exact writer and assert the wrapped
+   real PROJECTS resolver has not been entered. After writer commit, the reader
+   refreshes the row and rejects the mismatch. This distinguishes absent TASK
+   locks, stale identity-map reads and reversed resolver ordering.
 6. Retained HTTP boundary: existing manager success, worker denial, foreign creator
    concealment and structured domain errors remain; only the management schema is
    reachable. Operational/audit references appear nowhere in OpenAPI. Old exclusive
    response/builder symbols are absent, while required behavioral tests remain.
+
+## Evidence
 
 Future tests live in `tests/tasks/test_locked_context.py`. Use existing real
 `tests.test_tasks` setup, canonical guide activation and ready-task helpers.
@@ -115,7 +128,21 @@ Do not use a fake policy resolver for the successful PostgreSQL controls.
 Discriminating probes: remove project filtering and prove foreign-task rejection
 fails; inject management summary into an operational response and prove exact
 fields fail; substitute successor policy identity and prove the history assertion
-fails after a distinct valid successor is established.
+fails after a distinct valid successor is established. Separately substitute the
+successor management summary and prove its original-summary assertion fails.
+
+Named future proofs: `test_locked_context_contracts`,
+`test_locked_context_invalid_selectors_before_sql`,
+`test_locked_context_exact_scope_and_fields`,
+`test_locked_context_invalid_custody`,
+`test_locked_context_preserves_caller_transaction`,
+`test_locked_context_waits_for_task_before_projects`, and
+`test_locked_context_public_surface_and_removed_symbols`.
+Extend the real `tests/tasks/test_project_display.py::test_task_display_survives_guide_successor_for_contributor_and_manager`
+to cover all three new reads after its distinct-successor controls.
+Run these nodes plus affected `tests/test_tasks.py` HTTP/visibility cases and
+`tests/architecture/test_module_boundaries.py` through the backend pytest runner;
+add the new module to the existing task lifecycle lane without changing selection.
 
 Shared checks include Ruff, the original TASK/PROJECTS public dependency guards,
 module boundaries, lane catalogue parity, affected HTTP contracts, links, stale
