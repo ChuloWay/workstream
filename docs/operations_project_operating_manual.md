@@ -275,10 +275,9 @@ post-submit checker policy reference.
 
 ### Task Screening Gate
 
-The following is the target v0.1 gate. Complete ContributionPolicyVersion
-propagation into Task, TaskAssignment, Submission and ReviewLease is still
-planned; do not treat this checklist as proof that the current release operation
-enforces that lock. See [the capability ledger](roadmap_status.md) for delivered
+CP08 enforces the guide-bound ContributionPolicyVersion lock before `READY`
+and carries it through TaskAssignment and Submission. ReviewLease propagation
+remains planned. See [the capability ledger](roadmap_status.md) for delivered
 boundaries and remaining work.
 
 A task cannot move to `READY` until the task contract is complete, the guide
