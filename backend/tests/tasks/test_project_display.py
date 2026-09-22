@@ -9,9 +9,11 @@ import pytest
 from sqlalchemy import func, select
 
 from app.db import session as db_session
+from app.adapters.tasks import task_service
+from app.core.config import get_settings
 from app.modules.projects.api import ProjectDisplayFacts, GuideDisplayFacts
 from app.modules.projects.locked_policy_repository import ProjectLockedPolicyRepository
-from app.modules.projects.models import Project, ProjectGuide
+from app.modules.projects.models import Project, ProjectGuide, PostSubmitCheckerPolicy
 from app.modules.tasks.models import AuditEvent, WorkstreamTask
 from tests.projects.locked_policy_fixtures import activated_context, frozen_request
 from tests.test_tasks import (
@@ -187,6 +189,20 @@ async def test_task_display_survives_guide_successor_for_contributor_and_manager
         ) if getattr(stored, name) is not None}
     for name, expected in expected_policies.items():
         assert original[name] == expected
+    locked_reads = (
+        "read_management_task_locked_context", "read_operational_task_locked_context",
+        "read_audit_task_locked_context",
+    )
+    original_locked = {}
+    async with db_session.get_session_factory()() as session:
+        service = task_service(session, settings=get_settings())
+        for method in locked_reads:
+            original_locked[method] = (await getattr(service, method)(
+                UUID(project["id"]), UUID(task["id"]),
+            )).model_dump(mode="json")
+    summary_key = "locked_post_submit_checker_policy_body_summary"
+    original_summary = original_locked[locked_reads[0]][summary_key]
+    assert original_summary["required_checkers"] == []
     requirements_url = f"/api/v1/tasks/{task['id']}/submission-requirements"
     first_requirements = await task_client.get(requirements_url, headers=auth_headers())
     assert first_requirements.status_code == 200, first_requirements.text
@@ -199,6 +215,7 @@ async def test_task_display_survives_guide_successor_for_contributor_and_manager
     await create_policy_bundle_for_guide(
         task_client, project["id"], successor.json()["id"],
         task_artifact_proposal().model_copy(update={"required_artifacts": ("v2-answer.md",)}),
+        post_submit_required_checkers=["check_acceptance_criteria_present"],
     )
     await seed_active_guide_for_downstream_test(
         db_session.get_session_factory(), project_id=project["id"], guide_id=successor.json()["id"],
@@ -210,6 +227,19 @@ async def test_task_display_survives_guide_successor_for_contributor_and_manager
             assert getattr(active, f"selected_{kind}_policy_id") != expected_policies[f"{kind}_policy"]["policy_id"]
         assert active.contribution_policy_version_id is not None
         assert str(active.contribution_policy_version_id) != expected_policies["contribution_policy_version_id"]
+        successor_policy = await session.scalar(select(PostSubmitCheckerPolicy).where(
+            PostSubmitCheckerPolicy.project_id == project["id"],
+            PostSubmitCheckerPolicy.guide_id == active.id,
+        ))
+        required = [entry["checker_id"] for entry in successor_policy.policy_body["entries"]
+                    if entry["classification"] == "project_required"]
+        assert required == ["check_acceptance_criteria_present"]
+        assert required != original_summary["required_checkers"]
+        service = task_service(session, settings=get_settings())
+        for method in locked_reads:
+            locked = (await getattr(service, method)(UUID(project["id"]), UUID(task["id"]))).model_dump(mode="json")
+            assert locked == original_locked[method]
+            assert locked["locked_contribution_policy_version_id"] == expected_policies["contribution_policy_version_id"]
     manager = await task_client.get(
         f"/api/v1/projects/{project['id']}/tasks/{task['id']}/work-context", headers=auth_headers(),
     )

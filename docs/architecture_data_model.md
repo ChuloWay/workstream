@@ -858,15 +858,16 @@ policy or newly compiled checker.
 
 Task context APIs read this already-stamped context. `work-context` and
 `submission-requirements` return task-visible contributor-safe guide and requirement
-projections from the locked rows. `locked-context` requires the registered
-covered Project Manager permission or an explicitly authorized Operator/Audit
-projection and exposes the full
-locked source snapshot, effective policy, pre-submit checker, post-submit
-checker, review, and revision provenance. Contribution-policy provenance comes
-from the guide-bound task lock copied to `TaskAssignment`, stamped on each
-immutable Submission, and copied from that Submission to `ReviewLease`.
-None of these reads
-recompute from the current active guide.
+projections from the locked rows. ARCH-03B6 provides explicit management,
+operational and audit locked-context projections containing exact source,
+effective/pre/post-submit policy, review, revision and ContributionPolicy references.
+Only management includes the bounded post-submit checker summary. The existing
+`locked-context` route retains its token-role/creator management wrapper;
+operational and audit methods remain internal. ARCH-03C owns canonical authority
+and public activation. Contribution-policy provenance comes from the guide-bound
+task lock copied to `TaskAssignment` and stamped on each immutable Submission;
+future ReviewLease propagation must copy that Submission stamp.
+None of these reads recomputes from the current active guide.
 
 Approval creates a project-scoped `PreSubmitCheckerPolicy` row with lifecycle
 status `compiled`. The trusted compiler writes the immutable `compiled_bundle`

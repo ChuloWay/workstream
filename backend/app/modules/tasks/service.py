@@ -56,7 +56,9 @@ from app.modules.tasks.schemas import (
     SubmissionRequirementsResponse,
     SubmissionResponse,
     TaskCreate,
-    TaskLockedContextResponse,
+    ManagementTaskLockedContext,
+    OperationalTaskLockedContext,
+    AuditTaskLockedContext,
     TaskResponse,
 )
 from app.schemas.auth import ActorContext
@@ -336,27 +338,61 @@ class TaskService:
         self,
         actor: ActorContext,
         task_id: str,
-    ) -> TaskLockedContextResponse:
-        """Return operator-only locked provenance for a task.
+    ) -> ManagementTaskLockedContext:
+        """Return management provenance under the retained role/creator authority.
 
         Args:
             actor: Verified Flow actor context for the current request.
             task_id: Task whose locked provenance should be returned.
 
         Returns:
-            Full locked guide and policy provenance for support/debugging.
+            Exact locked policy references and the management checker summary.
 
         Raises:
-            PermissionDenied: If the actor is not an operator.
+            PermissionDenied: If the actor lacks a retained management role.
             TaskNotFound: If the task is unknown.
             TaskLockedContextInvalid: If locked context is incomplete or stale.
         """
         require_any_role(actor, PROJECT_OPERATOR_ROLES)
-        task = await self._get_task(task_id)
-        if not can_admin_or_task_creator_manage(actor, task):
-            raise TaskNotFound("task not found")
-        context = await self._load_locked_task_context(task)
-        return self._locked_context_response(task, context)
+        with self._session.no_autoflush:
+            task = await self._get_task(task_id, for_update=True)
+            if not can_admin_or_task_creator_manage(actor, task):
+                raise TaskNotFound("task not found")
+            context = await self._load_locked_task_context(task)
+            return self._management_locked_context_response(task, context)
+
+    async def _read_locked_context(
+        self, project_id: UUID, task_id: UUID,
+    ) -> tuple[WorkstreamTask, LockedTaskContext]:
+        """Scope and lock TASK before resolving PROJECTS in the caller's transaction."""
+        if not isinstance(project_id, UUID) or not isinstance(task_id, UUID):
+            raise ValueError("task locked context selectors are invalid")
+        with self._session.no_autoflush:
+            task = await self._repo.lock_project_task(project_id, task_id)
+            if task is None:
+                raise TaskNotFound("task not found")
+            return task, await self._load_locked_task_context(task)
+
+    async def read_management_task_locked_context(
+        self, project_id: UUID, task_id: UUID,
+    ) -> ManagementTaskLockedContext:
+        """Read exact management facts; the caller supplies authority and transaction."""
+        task, context = await self._read_locked_context(project_id, task_id)
+        return self._management_locked_context_response(task, context)
+
+    async def read_operational_task_locked_context(
+        self, project_id: UUID, task_id: UUID,
+    ) -> OperationalTaskLockedContext:
+        """Read hidden operational references without granting Operator access."""
+        task, _context = await self._read_locked_context(project_id, task_id)
+        return OperationalTaskLockedContext(**self._locked_context_reference_values(task))
+
+    async def read_audit_task_locked_context(
+        self, project_id: UUID, task_id: UUID,
+    ) -> AuditTaskLockedContext:
+        """Read hidden audit references without evidence or policy bodies."""
+        task, _context = await self._read_locked_context(project_id, task_id)
+        return AuditTaskLockedContext(**self._locked_context_reference_values(task))
 
     async def move_to_screening(
         self,
@@ -900,10 +936,10 @@ class TaskService:
         return LockedTaskContext(
             facts=facts,
             locked_post_submit_policy_body=PostSubmitPolicyBodySummary(
-                schema_version=parsed.schema_version, default_checkers=parsed.default_checkers,
-                required_checkers=parsed.required_checkers, warning_checkers=parsed.warning_checkers,
-                execution_checkers=parsed.execution_checkers,
-                blocking_severities=list(parsed.blocking_severities),
+                schema_version=parsed.schema_version, default_checkers=tuple(parsed.default_checkers),
+                required_checkers=tuple(parsed.required_checkers), warning_checkers=tuple(parsed.warning_checkers),
+                execution_checkers=tuple(parsed.execution_checkers),
+                blocking_severities=tuple(parsed.blocking_severities),
             ),
         )
 
@@ -1184,43 +1220,38 @@ class TaskService:
             )
         return value
 
-    def _locked_context_response(
-        self,
-        task: WorkstreamTask,
-        context: LockedTaskContext,
-    ) -> TaskLockedContextResponse:
-        """Build the operator-only locked-context response."""
-        return TaskLockedContextResponse(
-            task_id=task.id,
-            project_id=task.project_id,
-            locked_guide_version=task.locked_guide_version or "",
-            locked_guide_source_snapshot_id=task.locked_guide_source_snapshot_id or "",
-            locked_guide_source_snapshot_hash=task.locked_guide_source_snapshot_hash or "",
-            locked_effective_project_submission_artifact_policy_id=(
-                task.locked_effective_project_submission_artifact_policy_id or ""
-            ),
-            locked_effective_project_submission_artifact_policy_hash=(
-                task.locked_effective_project_submission_artifact_policy_hash or ""
-            ),
-            locked_pre_submit_checker_policy_id=task.locked_pre_submit_checker_policy_id or "",
-            locked_pre_submit_checker_bundle_hash=(
-                task.locked_pre_submit_checker_bundle_hash or ""
-            ),
-            locked_post_submit_checker_policy_id=(task.locked_post_submit_checker_policy_id or ""),
-            locked_post_submit_checker_policy_version=(
-                task.locked_post_submit_checker_policy_version or ""
-            ),
-            locked_post_submit_checker_policy_hash=(
-                task.locked_post_submit_checker_policy_hash or ""
-            ),
-            locked_post_submit_checker_policy_body_summary=(context.locked_post_submit_policy_body),
-            locked_review_policy_id=task.locked_review_policy_id or "",
-            locked_review_policy_generation=task.locked_review_policy_generation or 0,
-            locked_review_policy_hash=task.locked_review_policy_hash or "",
-            locked_revision_policy_id=task.locked_revision_policy_id or "",
-            locked_revision_policy_generation=task.locked_revision_policy_generation or 0,
-            locked_revision_policy_hash=task.locked_revision_policy_hash or "",
-            locked_contribution_policy_version_id=task.locked_contribution_policy_version_id,
+    @staticmethod
+    def _locked_context_reference_values(task: WorkstreamTask) -> dict[str, object]:
+        """Copy only the fixed scalar projection after historical custody validation."""
+        return {
+            "task_id": UUID(task.id),
+            "project_id": UUID(task.project_id),
+            "locked_guide_version": task.locked_guide_version,
+            "locked_guide_source_snapshot_id": UUID(task.locked_guide_source_snapshot_id),
+            "locked_guide_source_snapshot_hash": task.locked_guide_source_snapshot_hash,
+            "locked_effective_project_submission_artifact_policy_id": UUID(task.locked_effective_project_submission_artifact_policy_id),
+            "locked_effective_project_submission_artifact_policy_hash": task.locked_effective_project_submission_artifact_policy_hash,
+            "locked_pre_submit_checker_policy_id": UUID(task.locked_pre_submit_checker_policy_id),
+            "locked_pre_submit_checker_bundle_hash": task.locked_pre_submit_checker_bundle_hash,
+            "locked_post_submit_checker_policy_id": UUID(task.locked_post_submit_checker_policy_id),
+            "locked_post_submit_checker_policy_version": task.locked_post_submit_checker_policy_version,
+            "locked_post_submit_checker_policy_hash": task.locked_post_submit_checker_policy_hash,
+            "locked_review_policy_id": UUID(task.locked_review_policy_id),
+            "locked_review_policy_generation": task.locked_review_policy_generation,
+            "locked_review_policy_hash": task.locked_review_policy_hash,
+            "locked_revision_policy_id": UUID(task.locked_revision_policy_id),
+            "locked_revision_policy_generation": task.locked_revision_policy_generation,
+            "locked_revision_policy_hash": task.locked_revision_policy_hash,
+            "locked_contribution_policy_version_id": task.locked_contribution_policy_version_id,
+        }
+
+    def _management_locked_context_response(
+        self, task: WorkstreamTask, context: LockedTaskContext,
+    ) -> ManagementTaskLockedContext:
+        """Compose the sole management projection, shared by hidden and retained reads."""
+        return ManagementTaskLockedContext(
+            **self._locked_context_reference_values(task),
+            locked_post_submit_checker_policy_body_summary=context.locked_post_submit_policy_body,
         )
 
     def _validate_task_contract_fields(self, task: WorkstreamTask) -> None:

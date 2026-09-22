@@ -21,7 +21,7 @@ from app.modules.tasks.schemas import (
     SubmissionRequirementsResponse,
     SubmissionResponse,
     TaskCreate,
-    TaskLockedContextResponse,
+    ManagementTaskLockedContext,
     TaskResponse,
     TaskTransitionRequest,
     TaskWithAssignmentResponse,
@@ -192,7 +192,7 @@ async def get_task_submission_requirements(
 
 @router.get(
     "/tasks/{task_id}/locked-context",
-    response_model=TaskLockedContextResponse,
+    response_model=ManagementTaskLockedContext,
     response_model_exclude_none=True,
     responses=TASK_LOCKED_CONTEXT_RESPONSES,
 )
@@ -201,8 +201,8 @@ async def get_task_locked_context(
     task_id: str,
     actor: Annotated[ActorContext, Depends(get_registered_actor)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
-) -> TaskLockedContextResponse | JSONResponse:
-    """Return operator-only locked task provenance."""
+) -> ManagementTaskLockedContext | JSONResponse:
+    """Return management locked provenance through the retained authority wrapper."""
     try:
         return await task_service(session, settings=request.app.state.settings).get_task_locked_context(actor, task_id)
     except PermissionDenied as exc:
