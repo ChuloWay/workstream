@@ -156,8 +156,8 @@ lock. Pages are live views, not reservations; claim rechecks authority and state
 ARCH-03C must authorize the exact project collection before calling this port
 or using a client cursor, with current-grant/revocation and concealment proof.
 No per-task AUTH handle or token role can substitute for that collection gate.
-Task audit-evidence projections and authority
-invalidation remain separate.
+ARCH-03B8 supplies hidden task audit evidence. Authority invalidation and
+public evidence access remain separate.
 
 
 ## Hidden management and operational queues
@@ -207,7 +207,7 @@ These detail ports remain internal as standalone reads. ARCH-03B5 reuses them
 in existing authorized work-context responses below. The existing standalone
 detail endpoint and command response consumers still require their exact ARCH-03C
 authority/cutover; no parallel public route or compatibility alias is added.
-Task audit-evidence projections remain separate ARCH-03B work.
+ARCH-03B8 supplies the bounded internal audit evidence read described below.
 
 
 ## Current contributor and manager work context
@@ -242,8 +242,8 @@ missing or invalid locked custody returns the existing 422
 `task_locked_context_invalid`. Ordinary unassigned draft is not contributor work;
 a fully locked own-active draft remains visible under the existing authority rule.
 
-Standalone detail endpoints, audit projection
-replacements, and assignment invalidation retain their separately scoped work.
+Standalone detail endpoints, retained audit-route authority replacement, and
+assignment invalidation retain their separately scoped work.
 
 ## Task locked-context projections
 
@@ -269,7 +269,8 @@ The retained `/tasks/{task_id}/locked-context` route returns the same management
 projection under its existing role/creator wrapper and loads the task once.
 ARCH-03C still owns replacement of that authority and public operational/audit
 activation. There is no audience-switching endpoint, fallback schema or new
-TASK public API dependency. Audit-event evidence remains separate projection work.
+TASK public API dependency. Retained audit-route authority replacement remains
+separate ARCH-03C work.
 
 
 ## Task submission requirements projections
@@ -301,3 +302,31 @@ existing role/creator visibility wrapper remains an explicit ARCH-03C dependency
 it loads and locks TASK once before visibility and historical policy resolution.
 The distinct manager model/read is internal and absent from OpenAPI. There is no
 new public route, generic audience selector, compatibility alias or new compiler.
+
+## Hidden task audit evidence
+
+ARCH-03B8 supplies `AuditTaskEvidencePort` through `TaskRepository`, delegating
+one fixed-column query to the shared audit owner. This is internal lifecycle
+evidence for future covered Audit Authority access; ARCH-03C owns exact live
+authority and routing. Existing contributor/manager audit reads and submission
+recovery remain separate current consumers until their authority cutover.
+
+The request binds exact project/task UUIDs and a 1..100 limit. Its cursor binds
+that same scope and `(created_at, event_id)`. One TASK-left-join-AUDIT statement
+filters canonical project membership, lifecycle domain, task identity and cursor
+before limit+1. A missing or foreign task yields None; existing empty/exhausted
+history yields an empty page. Equal timestamps use event UUID ordering. This is
+one statement snapshot, not a durable export or current-at-return guarantee.
+
+Items contain event ID/type, optional from/to status, stored actor attribution,
+creation time, and optional assignment/authorization-decision IDs. Canonical
+claim/start events require both references and exact nested project/task IDs;
+malformed evidence fails with a sanitized error. SQL selects reference scalars
+only for the typed audit writer and canonical claim/start event types; generic
+rows cannot acquire canonical provenance by copying their tokens. Other events
+gain no inferred references. SQL extracts only four named JSON scalar references and never loads
+raw claims, roles, external identity, reasons, arbitrary payloads or policy bodies.
+It does not export authority-decision history or claim forensic completeness.
+
+Reads are nonlocking and do not flush, commit or roll back. The caller retains
+its transaction; later claim/command authorization never relies on these facts.

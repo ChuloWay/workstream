@@ -12,6 +12,8 @@ from sqlalchemy.orm import selectinload
 
 from app.modules.audit.repository import AuditRepository
 from app.modules.tasks.api import (
+    AuditTaskEvidence, AuditTaskEvidencePage, AuditTaskEvidenceRequest,
+    TaskEvidenceCursor, TaskEvidenceInvalid,
     ContributorTaskDetail, ContributorTaskDetailRequest,
     ManagementTaskDetail, ManagementTaskDetailRequest,
     ManagementTaskPage,
@@ -193,6 +195,45 @@ class TaskRepository:
             "task_id": UUID(row["task_id"]), "project_id": UUID(row["project_id"]),
             "skill_tags": tuple(row["skill_tags"]),
         }
+
+    async def read_audit_task_evidence(self, request: AuditTaskEvidenceRequest) -> AuditTaskEvidencePage | None:
+        """Map one AUDIT-owned scoped statement into immutable TASK evidence."""
+        if type(request) is not AuditTaskEvidenceRequest:
+            raise ValueError("task evidence request is invalid")
+        rows = await self._audit_repository.read_task_evidence_rows(
+            request.project_id, request.task_id, request.limit,
+            request.after.created_at if request.after else None,
+            request.after.event_id if request.after else None,
+        )
+        if not rows:
+            return None
+        if rows[0].event_id is None:
+            return AuditTaskEvidencePage(request.project_id, request.task_id, (), None)
+        items = tuple(self._task_evidence_item(row, request) for row in rows[:request.limit])
+        cursor = TaskEvidenceCursor(
+            request.project_id, request.task_id, items[-1].created_at, items[-1].event_id,
+        ) if len(rows) > request.limit else None
+        return AuditTaskEvidencePage(request.project_id, request.task_id, items, cursor)
+
+    @staticmethod
+    def _task_evidence_item(row: Row, request: AuditTaskEvidenceRequest) -> AuditTaskEvidence:
+        """Require exact transition references without exposing stored diagnostics."""
+        assignment_id = decision_id = None
+        try:
+            if row.event_type in {"TaskClaimed", "TaskStarted", "TaskStartOverridden"}:
+                if (
+                    UUID(row.reference_project_id) != request.project_id
+                    or UUID(row.reference_task_id) != request.task_id
+                ):
+                    raise ValueError("scope")
+                assignment_id = UUID(row.assignment_id)
+                decision_id = UUID(row.authorization_decision_id)
+            return AuditTaskEvidence(
+                UUID(row.event_id), row.event_type, row.from_status, row.to_status,
+                row.actor_id, row.created_at, assignment_id, decision_id,
+            )
+        except (TypeError, ValueError, AttributeError):
+            raise TaskEvidenceInvalid("task audit evidence is invalid") from None
 
     async def add_task(self, task: WorkstreamTask) -> WorkstreamTask:
         """Persist a new task and refresh generated database fields.

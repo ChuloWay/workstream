@@ -9,8 +9,9 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   immutable ContributionRecords and optional
   project-policy-driven compensation awards without coupling lifecycle truth to
   an economic provider.
-- Next usable boundary: remaining ARCH-03B task audit-evidence projections
-  after completed ARCH-03B7 requirements projections and ARCH-03B6 locked-context projections and ARCH-03B5 current work context and ARCH-03B4 hidden contributor/management task detail, ARCH-03B3 hidden management/operational queues and ARCH-03B2 contributor-ready queue facts, ARCH-03B1 detached metadata and CP08 lineage
+- Next usable boundary: shared committed-claim prerequisites, then ARCH-03B
+  assignment invalidation and ARCH-03C authority/public activation, after
+  completed ARCH-03B8 hidden task audit evidence and ARCH-03B7 requirements projections and ARCH-03B6 locked-context projections and ARCH-03B5 current work context and ARCH-03B4 hidden contributor/management task detail, ARCH-03B3 hidden management/operational queues and ARCH-03B2 contributor-ready queue facts, ARCH-03B1 detached metadata and CP08 lineage
   and minimal writers, ARCH-03A internal guide context,
   [CP07 activation/binding](../WS-ARCH-001/WS-ARCH-001-CP07.md) and
   [AUTH-12H live authority](../WS-AUTH-001/WS-AUTH-001-12H.md), before task readiness.
@@ -44,7 +45,8 @@ the hidden policy behavior.
    frozen work; CP07 supplies hidden PROJECTS
    activation/binding, and AUTH-12H supplies its live manager authority. ARCH-03A completes the internal context port;
    CP08 delivers lineage fields and existing Task/Assignment/Submission writers together.
-   ARCH-03B retains task audit-evidence projections and invalidation.
+   ARCH-03B8 hidden task audit evidence is complete; ARCH-03B retains
+   dependency-gated assignment invalidation.
    CP09 removes the replaced legacy
    economic path only after all consumers are replaced, including CHECKERS and
    public Submission cutover; it does not block canonical `allow_review`.

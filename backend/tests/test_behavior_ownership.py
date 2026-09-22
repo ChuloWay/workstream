@@ -1947,6 +1947,7 @@ def test_command_replay_partition_addition_does_not_authorize_neighbors() -> Non
     "backend/app/modules/tasks/api/ready_queue.py",
     "backend/app/modules/tasks/api/management_queue.py",
     "backend/app/modules/tasks/api/task_detail.py",
+    "backend/app/modules/tasks/api/audit_evidence.py",
 ])
 def test_task_read_partition_additions_do_not_authorize_neighbors(target: str) -> None:
     """Only the explicit task read APIs may extend the trusted target set."""

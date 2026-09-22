@@ -342,6 +342,7 @@ TASK_MODULES = (
     "tests/tasks/test_work_context.py",
     "tests/tasks/test_locked_context.py",
     "tests/tasks/test_submission_requirements.py",
+    "tests/tasks/test_audit_evidence.py",
     "tests/tasks/test_contribution_lineage_migration.py",
     "tests/tasks/test_contribution_claim_races.py",
     "tests/tasks/test_submission_lineage.py",

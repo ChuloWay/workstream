@@ -51,7 +51,14 @@ from app.modules.tasks.api.task_detail import (
     ManagementTaskDetail, ManagementTaskDetailRequest, ManagementTaskDetailPort,
 )
 
+from app.modules.tasks.api.audit_evidence import (
+    AuditTaskEvidence, AuditTaskEvidencePage, AuditTaskEvidencePort,
+    AuditTaskEvidenceRequest, TaskEvidenceCursor, TaskEvidenceInvalid,
+)
+
 __all__ = (
+    "AuditTaskEvidence", "AuditTaskEvidencePage", "AuditTaskEvidencePort",
+    "AuditTaskEvidenceRequest", "TaskEvidenceCursor", "TaskEvidenceInvalid",
     "ContributorTaskDetail",
     "ContributorTaskDetailRequest",
     "ContributorTaskDetailPort",

@@ -9,8 +9,8 @@ already owns canonical contributor claim/start/work-context, separate management
 work-context and system-Operator start authority. Reuse its command/port and
 assignment transaction, not a second claim implementation. CP08 completes the contribution-policy attempt locks and minimal writers.
 The [03B2 child](../../WS-ARCH-001-03B2.md) supplies hidden contributor-ready
-queue facts and pagination, without live AUTH or HTTP exposure. This parent
-retains task audit-evidence projections and invalidation. The
+queue facts and pagination, without live AUTH or HTTP exposure. The [03B8 child](../../WS-ARCH-001-03B8.md) completes hidden task audit evidence.
+This parent retains dependency-gated assignment invalidation. The
 [03B3 child](../../WS-ARCH-001-03B3.md) delivers hidden all-state management
 and status-only operational queue facts.
 The [03B4 child](../../WS-ARCH-001-03B4.md) delivers hidden contributor and
@@ -31,7 +31,7 @@ chunk consumes those complete frozen attempt facts; it must not reimplement the
 writers or select current CON policy during ordinary claim. Preserve the
 screening-time lock and existing authority/transaction ownership.
 
-Allowed: remaining actor-specific task projections, assignment invalidation and
+Allowed: dependency-gated assignment invalidation and
 public facts, focused tests, composition adapters, deny-only route
 declarations, boundary ledgers and current documentation. Not allowed: duplicate
 lineage writers, project-policy evaluation, checker planning, ART custody, AUTH
@@ -42,10 +42,10 @@ Reuse delivered ready, management and operational queue facts, 03B4 detail and
 replacement task surfaces against hidden owner commands; ARCH-03C owns their exact activation and live route switch.
 Do not leave an unowned route step between public ports and user-visible
 behavior. The queue must filter project/visibility before counts and cursors.
-Reuse the completed 03B6 locked-context field contracts; remaining work includes
-task audit-evidence reads. The [03B7 child](../../WS-ARCH-001-03B7.md) supplies immutable contributor and management submission requirements using one historical translator; contributor visibility follows the shared TASK lock. The retained requirements route keeps its current authority wrapper. 03C supplies separate action/permission declarations;
-03B3 supplies the management/operational queue facts; covered Audit
-task-evidence projections enumerated there remain. Scope filtering precedes counts, cursors and
+Reuse the completed 03B6 locked-context field contracts and 03B8 bounded audit
+evidence contract. The [03B7 child](../../WS-ARCH-001-03B7.md) supplies immutable contributor and management submission requirements using one historical translator; contributor visibility follows the shared TASK lock. The retained requirements route keeps its current authority wrapper. 03C supplies separate action/permission declarations;
+03B3 supplies the management/operational queue facts; 03B8 supplies the covered Audit
+task-evidence facts; their live authority remains 03C. Scope filtering precedes counts, cursors and
 serialization; operational status never includes contributor-private detail.
 For every one of these surfaces,
 no projection selects a permission using a token role or leaks another
@@ -91,9 +91,10 @@ test-delta impact.
    draft/display reads using the existing port and immutable exact-guide facts.
    Its public response shapes and authorization remain unchanged. The separate
    pre-submit context consumer is explicitly outside this metadata cutover.
-2. After delivered 03B2/03B3 hidden queues, 03B4 detail, 03B5 work context and 03B6 locked-context and 03B7 requirements projections, remaining
-   task audit-evidence projections, with exact field,
-   visibility/count/cursor and hidden command contracts before implementation.
+2. 03B2/03B3 hidden queues, 03B4 detail, 03B5 work context, 03B6 locked context,
+   03B7 requirements and [03B8 bounded audit evidence](../../WS-ARCH-001-03B8.md)
+   are complete. Existing public audit/recovery readers remain required until
+   their explicit 03C authority replacement.
 3. Assignment invalidation after the shared claim contract exists, followed by
    ARCH-03C producer wiring, exact AUTH and public activation. No parallel worker
    or fabricated claim value substitutes for those dependencies.

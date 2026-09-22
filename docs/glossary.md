@@ -471,3 +471,10 @@ raw checker success is not authority.
 ## Human Owner
 
 The person accountable for a submitted packet, even when agents or external tools helped produce the work.
+
+## Task Audit Evidence Page
+
+An internal bounded lifecycle projection for one exact project/task. It contains
+fixed event facts and validated claim/start assignment and authorization-decision
+references. ARCH-03B8 supplies its immutable contract; live Audit Authority access
+remains ARCH-03C. It is not a forensic payload export or an authorization token.
