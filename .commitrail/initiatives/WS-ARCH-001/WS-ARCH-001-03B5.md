@@ -53,8 +53,8 @@ execution, other locked-context/requirements/audit cutovers, migrations, retaine
 data deletion, compatibility aliases or alternate constructors. No dependency,
 workflow, gate, coverage-floor or test-selection weakening. No physical economic
 column removal: `TaskResponse` still serves task CRUD/detail and authorized
-claim/start responses; `TaskCommandReplay.result` and `.complete` preserve their
-immutable response payloads. `WorkstreamTask` economic columns and affected
+claim/start responses; `TaskCommandReplay.recover` and `.complete` preserve immutable
+response payloads stored on `TaskCommandReceipt.response`. `WorkstreamTask` economic columns and affected
 PROJECTS economic persistence remain retained. These shared consumers are outside
 this work-context replacement; they are not justification for keeping its old fields.
 
