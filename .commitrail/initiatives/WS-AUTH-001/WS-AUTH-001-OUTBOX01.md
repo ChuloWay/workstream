@@ -49,6 +49,8 @@ Allowed:
 - Focused `backend/tests/authorization/test_outbox_dispatch_contract.py` and
   `backend/tests/migrations/test_outbox_dispatch_identity.py`, existing catalogue,
   boundary, identity and ownership expectations; exact lane registrations.
+  Update `backend/tests/test_alembic.py` exact graph and downgrade expectations
+  for 0026, preserving the 0025 guard case.
   Update the explicit action inventory 116 -> 117, permission inventory 73 -> 74
   (new permissions 24 -> 25), and service memberships 23 -> 24 without loosening
   exact-set assertions.
@@ -216,6 +218,12 @@ Plan review added repeated-migration admission, exact schema fingerprint custody
 explicit method signatures and serialization restrictions, fixed-envelope hashing,
 finalize outcome binding, named wrong-reason-resistant controls, and the distinction
 between current registration proof and future live dispatcher proof.
+
+Implementation review additionally required sanitizing hostile timezone offsets
+for both lease timestamps, preserving the 0025 migration guard proof while
+adding 0026 expectations, and reconciling registered-versus-proposed authority
+wording and the complete CON-02B -> AUTH-OUTBOX-02 sequence. The record uses the
+existing single-suffix filename convention; no validator was relaxed.
 
 ## Implementation reconciliation
 

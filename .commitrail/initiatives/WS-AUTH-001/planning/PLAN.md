@@ -19,8 +19,8 @@ AUTH-13/14 cutovers are not additional implementation work.
   contributor/management detail are delivered. ARCH-03B5 replaces the existing
   authorized work-context responses with distinct current task facts and exact
   locked policy references.
-  Remaining ARCH-03B projections/invalidation and ARCH-03C exact authority
-  and HTTP exposure remain pending.
+  ARCH-03B projections through 03B8 are complete. Dependency-gated assignment
+  invalidation and ARCH-03C exact authority and HTTP exposure remain pending.
 - CP05 owns exact ContributionPolicy-action activation after merged CP04B.
 - CP08 delivered the minimal lineage writers. ARCH-03B8 hidden task audit
   evidence is complete; dependency-gated assignment invalidation remains in
@@ -51,7 +51,7 @@ or register replacement aliases.
 
 ## WS-AUTH-001-OUTBOX-01 — unavailable dispatcher contract
 
-Disposition: Complete. [Contract and proof](../WS-AUTH-001-OUTBOX-01.md).
+Disposition: Complete. [Contract and proof](../WS-AUTH-001-OUTBOX01.md).
 The closed catalogue registers planned `outbox.dispatch` solely for fixed
 `workstream.outbox.dispatcher`. Migration 0026 admits this identity without
 provisioning it or enabling execution. The canonical ACTORS public vocabulary

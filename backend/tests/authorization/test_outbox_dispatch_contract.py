@@ -2,7 +2,7 @@
 
 from copy import copy, deepcopy
 from dataclasses import FrozenInstanceError, replace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 import inspect
 from pathlib import Path
 import pickle
@@ -83,6 +83,24 @@ def test_dispatch_facts_validate_all_phases():
                 assert 'private' not in str(error.value) and error.value.__cause__ is None
     with pytest.raises(ValueError, match='lease is invalid'):
         replace(facts(), claimed_at=datetime.min.replace(tzinfo=timezone(timedelta(hours=1))))
+
+
+@pytest.mark.parametrize("field", ["claimed_at", "claim_expires_at"])
+@pytest.mark.parametrize("failure", ["raises", "invalid_offset"])
+def test_dispatch_lease_sanitizes_timezone_failures(field, failure):
+    """One hostile timestamp cannot expose arbitrary timezone exception content."""
+    class InvalidTimezone(tzinfo):
+        def utcoffset(self, _value):
+            if failure == "raises":
+                raise RuntimeError("private-tz-secret")
+            return "private-tz-secret"
+
+    timestamp = datetime(2026, 1, 1, 0, 1, tzinfo=InvalidTimezone())
+    with pytest.raises(ValueError) as error:
+        replace(facts(), **{field: timestamp})
+    assert str(error.value) == "outbox dispatch lease is invalid"
+    assert error.value.__cause__ is None
+    assert error.value.__suppress_context__ is True
 
 
 def test_dispatch_digest_matches_canonical_envelope():

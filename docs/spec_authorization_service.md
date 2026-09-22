@@ -664,15 +664,16 @@ inherits a human grant or role.
 Adding a permission requires a specification/ADR update and human approval.
 Routers cannot invent identifiers or evaluate grant unions.
 
-### Proposed Pre-Review Service Authority
+### Pre-Review Service Authority
 
-The following is a proposed specification amendment for human design review,
-not registered or active authority. Current catalogue counts above exclude
-these additions. The named implementation boundaries must register typed
-parity, prove hidden behavior and activate only their exact manifests; a
-planning document does not grant a service permission.
+`outbox.dispatch` is registered and included in the current catalogue counts,
+but remains planned and unavailable. The other rows are proposed specification
+amendments for human design review: they are not registered or active and are
+excluded from those counts. The named implementation boundaries must register
+typed parity, prove hidden behavior and activate only their exact manifests;
+a planning document does not grant a service permission.
 
-| Proposed ActionId / PermissionId | Sole fixed identity | Exact target and guards | Current activation custodian |
+| ActionId / PermissionId | Sole fixed identity | Exact target and guards | Current activation custodian |
 |---|---|---|---|
 | `outbox.dispatch` | `workstream.outbox.dispatcher` | Event/claim generation/lease and exact phase; fresh authority for claim, invoke and finalize; no feature authority | AUTH-OUTBOX-01 registration complete (planned/unavailable); CON-02B hidden mechanics and AUTH-OUTBOX-02 activation remain |
 | `task.assignment.authority_reconcile` | `workstream.task.assignment_reconciler` | Committed exact AUTH invalidation event, project/actor/grant-or-link, active pre-submit assignment; no wrong-role or submitted-history mutation | ARCH-03B hidden handler, ARCH-03C activation |

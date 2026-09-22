@@ -64,9 +64,7 @@ class OutboxDispatchFacts:
             and type(self.claim_owner) is str
             and _OWNER.fullmatch(self.claim_owner) is not None
             and type(self.claimed_at) is datetime
-            and self.claimed_at.utcoffset() is not None
             and type(self.claim_expires_at) is datetime
-            and self.claim_expires_at.utcoffset() is not None
         )
         if not valid:
             raise ValueError("outbox dispatch facts are invalid")
@@ -76,12 +74,14 @@ class OutboxDispatchFacts:
         elif self.outcome_digest is not None:
             raise ValueError("outbox dispatch outcome is invalid")
         try:
+            if self.claimed_at.utcoffset() is None or self.claim_expires_at.utcoffset() is None:
+                raise ValueError("naive lease timestamp")
             claimed = self.claimed_at.astimezone(timezone.utc)
             expires = self.claim_expires_at.astimezone(timezone.utc)
-        except (OverflowError, ValueError):
+            if expires <= claimed:
+                raise ValueError("non-positive lease interval")
+        except Exception:
             raise ValueError("outbox dispatch lease is invalid") from None
-        if expires <= claimed:
-            raise ValueError("outbox dispatch lease is invalid")
         object.__setattr__(self, "claimed_at", claimed)
         object.__setattr__(self, "claim_expires_at", expires)
 
