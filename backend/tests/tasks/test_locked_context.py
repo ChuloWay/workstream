@@ -1,6 +1,7 @@
 """Exact hidden provenance projections and retained management HTTP behavior."""
 
 import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
@@ -104,7 +105,7 @@ async def test_locked_context_exact_scope_and_fields(task_client):
         stored = await session.get(WorkstreamTask, task["id"])
         expected = {field: str(getattr(stored, "id" if field == "task_id" else field))
                     if field.endswith("_id") else getattr(stored, field) for field in REFERENCE_FIELDS}
-        compiled = CompiledPostSubmitPolicy.model_validate(stored.locked_post_submit_checker_policy_body)
+        compiled = CompiledPostSubmitPolicy.model_validate_json(json.dumps(stored.locked_post_submit_checker_policy_body))
         expected_summary = {field: getattr(compiled, field) for field in SUMMARY_FIELDS}
         expected_summary["blocking_severities"] = list(compiled.blocking_severities)
     for method, cls in READS:
