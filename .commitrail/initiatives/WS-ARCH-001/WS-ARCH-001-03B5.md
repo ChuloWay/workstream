@@ -32,7 +32,7 @@ field list or another authorization evaluator.
 ### Allowed
 
 - `backend/app/modules/tasks/api/work_context.py` and `api/__init__.py`:
-  current owner contracts and narrow ports, exported for existing composition.
+  current owner response contracts, exported for existing composition. No unused Protocol interfaces.
 - `tasks/authorized_commands.py`, `tasks/router.py`, `tasks/schemas.py`,
   `tasks/service.py`: replace only work-context entrypoints and exclusive
   builders/schemas; reuse existing detail repository reads and locked resolver.
@@ -52,8 +52,11 @@ selection or resolver, command/replay mutation, submission activation, checker
 execution, other locked-context/requirements/audit cutovers, migrations, retained
 data deletion, compatibility aliases or alternate constructors. No dependency,
 workflow, gate, coverage-floor or test-selection weakening. No physical economic
-column removal: unaffected command receipts and other surfaces still consume
-those columns and remain explicitly outside this replacement.
+column removal: `TaskResponse` still serves task CRUD/detail and authorized
+claim/start responses; `TaskCommandReplay.result` and `.complete` preserve their
+immutable response payloads. `WorkstreamTask` economic columns and affected
+PROJECTS economic persistence remain retained. These shared consumers are outside
+this work-context replacement; they are not justification for keeping its old fields.
 
 ## Design and decisions
 
@@ -61,26 +64,37 @@ Use one new owner API module with frozen Pydantic result contracts directly
 consumed by FastAPI, rather than duplicate transport and owner field lists.
 Separate `ContributorTaskWorkContext` and `ManagementTaskWorkContext` nest the
 existing `ContributorTaskDetail`/`ManagementTaskDetail`, PROJECTS
-`ProjectDisplayFacts`/`GuideDisplayFacts`, and immutable review/revision policy
-references (`policy_id`, positive `policy_generation`, canonical `policy_hash`).
-Validate common project identity across task/project/guide facts. No raw policy
-bodies, artifact references, source documents or credentials enter these results.
+`ProjectDisplayFacts`/`GuideDisplayFacts`, and the existing immutable
+`GuidePolicySelection` values from `context.facts.activation_receipt.command.review`
+and `.revision` (`policy_id`, positive `generation`, canonical `policy_hash`).
+Also expose exact UUID `contribution_policy_version_id` from that validated
+receipt command. The existing resolver already proves equality with the task
+stamp. Do not read CON or expose economic rules. No new policy-reference class
+or conversion to the superseded `policy_generation` field is needed.
+Validate common project identity across task/project/guide facts. Add no raw
+policy-body, artifact-custody, source-document-content or credential fields.
 
-Contributor-only lifecycle facts retain status, current-actor assignment and
+Contributor-only lifecycle facts contain current-actor assignment and
 immutable `next_actions`: claim for unassigned READY, start for own CLAIMED,
-otherwise empty. Remove `can_submit`; do not advertise hidden Submission creation
+otherwise empty, including own READY and later own-active states. Task status
+lives only in `task.status`; do not duplicate it in lifecycle. Remove `can_submit`; do not advertise hidden Submission creation
 or intake as an executable task command. Management receives its fixed management
 task facts and the same locked guide/policy references, with no contributor
 lifecycle or contributor action hints.
 
 Replace the optional-project audience switch with explicit contributor and
-management work-context methods on the same `AuthorizedTaskCommands` object,
-implementing the two narrow public ports. Bind actor only from the existing
-constructor; management requires project and task UUIDs. Reject malformed
-internal selectors before SQL. Keep the existing transaction, `_locked_task`
+management work-context methods (`contributor_work_context(task_id)` and
+`management_work_context(project_id, task_id)`) on the same
+`AuthorizedTaskCommands` object. Existing composition already consumes this
+concrete owner; do not add unused Protocols or a new adapter. Bind actor only from the existing
+constructor; management requires project and task UUIDs. Malformed internal
+selectors raise existing `TaskValidationError` before SQL. Keep the existing transaction, `_locked_task`
 AUTH path and `_load_locked_task_context` validation. Read 03B4 detail only after
 current authority and complete historical custody pass, while existing locks
-remain held. Missing projected facts fail closed and roll back staged evidence.
+remain held. Missing projected facts raise existing `TaskNotFound("task not found")`
+and roll back staged evidence: HTTP 404, `error.code=resource_not_found`,
+`error.retryable=false`, through the existing handler. Do not mask it as a generic
+500 or return partial context.
 No new service/factory or independent permission check is needed.
 
 Existing routes use these separate contracts/methods with unchanged action IDs,
@@ -100,15 +114,19 @@ not a duplicate task field. No aliases preserve the superseded shape.
 3. Existing exact-project Submitter/Project Manager authority, visibility,
    foreign-project concealment, revocation/suspension and structured errors stay
    enforced. A manager is not made a contributor; token roles are not authority.
-4. Historical guide and review/revision references remain exact after successor
+4. Historical guide, review/revision references and ContributionPolicy version
+   remain exact after successor
    activation. Incomplete or substituted custody fails without result or committed
    allow evidence; no current-policy lookup or empty fallback references.
 5. Results are detached/immutable, with exact project coherence and valid policy
    reference types; malformed selectors cause no SQL. Public serialization and
    OpenAPI agree with actual returned fields.
 6. Existing task/assignment/AUTH/PROJECT locks and transaction order are retained;
-   no task, assignment, receipt, policy or lifecycle evidence is written by a read.
-   The existing real AUTH/ART work-context interleaving regression still passes.
+   no task, assignment, command receipt, policy or TASK transition evidence is
+   written by a read. The canonical AUTH allow decision is the sole expected
+   write within the owner transaction, bound to the exact action/project/task/actor.
+   Request identity/rate-control processing remains outside this claim. The existing real
+   AUTH/ART work-context interleaving regression still passes.
 7. Old exclusive work-context schemas/builders/callers are absent. Required
    historical-context/privacy/authorization tests remain, updated for the new
    contract rather than deleted. Remaining shared economic consumers are named.
@@ -123,26 +141,42 @@ actor fields, immutable historical custody and complete removal of old shapes.
 
 ## Evidence
 
-Future `tests/tasks/test_work_context.py` must cover exact immutable contracts,
-malformed-selector no-SQL behavior, distinct OpenAPI contracts, and real public
-contributor/manager results with persisted private/economic sentinel values.
-Use real grant-backed READY -> CLAIMED -> in-progress operations; keep ordinary
-unassigned draft denial distinct from any valid owned-state fixture. Verify
-stored task/assignment preconditions before result assertions.
+The following tests are future implementation obligations, not executed proof.
+New tests live in `backend/tests/tasks/test_work_context.py` unless qualified.
 
-Retain and update existing real authority denial/error tests, historical successor
-read tests and `test_pre_submit_related_lock_order` work-context race. Add a
-failure after authorization (e.g. unavailable detail) and independently inspect
-that staged allow evidence rolled back with no lifecycle/assignment changes.
-A stored foreign task and valid same-project control must exercise manager scope;
-missing/revoked-grant cases must use otherwise valid locked tasks, so policy
-failure cannot mask missing authority.
+| Behavior atom | Named proof and independently observable assertion |
+|---|---|
+| Immutable exact contracts and project coherence | `test_work_context_contracts`: reject mutable/invalid nested fields, foreign task/project/guide IDs and malformed policy references; frozen mutation rejects; accepted values remain detached; contributor accepts exactly ContributorTaskDetail and manager exactly ManagementTaskDetail, rejecting audience substitution |
+| Distinct public field sets | `test_work_context_openapi`: exact contributor/manager schemas, canonical task ID and guide/version placement; manager has no lifecycle; no obsolete work-context schema or economic/submission capability fields |
+| Malformed selectors before SQL | `test_work_context_invalid_selectors`: both concrete methods reject each invalid UUID before transaction/execute/authority access |
+| Actual actor-specific JSON and privacy | `test_work_context_public_projections`: valid granted actor/manager requests, stored non-null economic and private source sentinels, exact allowed returned keys/values; economics absent for both, management-only facts absent for contributor |
+| Contributor executable hints | retained `test_project_grant_drives_claim_start_and_current_action_hints`: real READY -> claim -> start; claim/start/empty hints and absence of submit/precheck flags |
+| All own-active states and ordinary draft denial | `test_work_context_owned_state_matrix`: real canonical claim plus fully locked status-only fixture for all nine string states, including owned draft/READY; persisted assignment/assignee/context preconditions asserted; only own CLAIMED advertises start. Ordinary unassigned draft separately returns existing 403 guard denial |
+| Current authority and concealment | retained grant/revocation/suspension tests plus `test_work_context_project_scope`: stored foreign task, valid same-project manager control, wrong route project returns 404; valid locked task without required grant denies, with no assignment/task changes |
+| Successful audit custody | `test_work_context_public_projections`: before/after task/assignment/receipt/transition state stable and exactly one AUTH allow per read with correct action, project, resource and actor |
+| Post-AUTH projection failure rollback | `test_work_context_projection_failure_rolls_back` for both methods/routes: wrapped real detail read verifies staged exact allow in its transaction, then returns None; HTTP 404/resource_not_found/nonretryable; independent observer finds no committed new allow, task/assignment/receipt/transition unchanged |
+| Exact historical guide and complete policy references | extend `tests/tasks/test_project_display.py::test_task_display_survives_guide_successor_for_contributor_and_manager`: assert stored original task stamps and valid successor; both read results retain exact guide identity, both policy IDs/generations/hashes and ContributionPolicy UUID, using separate audience field sets |
+| Invalid custody | retained `test_task_context_apis_fail_closed_when_locked_context_is_missing` and `test_task_context_apis_fail_closed_on_stale_locked_context_rows`, plus `test_work_context_missing_locked_context`: ordinary manager draft has actual authority before 422/task_locked_context_invalid; no successful allow commits |
+| Both route error contracts | update `test_task_command_routes_preserve_structured_errors` owner method names only; preserve each public status/code/retry/request-ID assertion |
+| Unchanged real lock interleaving | `tests/test_pre_submit_related_lock_order.py::test_work_context_task_lock_precedes_art_actor_lock`: replace only removed method call, retain real AUTH/ART sessions, order and completion assertions |
+| Old path removal | `test_work_context_obsolete_symbols_absent`: deleted exclusive schemas, service builders and old optional-project method absent; current routes bind the separate owner methods; required old proof is updated, not removed |
 
-Discriminating probes: reintroduce an economic response field and require the
-exact shape proof to fail; add a contributor action hint to the manager response
-and require rejection; bypass locked-context validation with a substituted policy
-reference and require the historical-reference proof to fail. Preserve each
-probe's actual execution target and intended assertion, not a fixture/setup error.
+Reuse real PostgreSQL fixtures in `tests.test_tasks`; persist economic sentinels
+only after valid guide activation/screening so no invalid fixture masks a leak.
+The nine-state fixture reuses the proven 03B4 fully locked task and active assignment
+with status-only changes. Ordinary unassigned draft denial is distinct from a
+fully locked owned draft and from manager draft's missing-policy failure.
+
+Discriminating probes must fail at the intended assertion, not fixture setup:
+add an economic field to the actual returned HTTP task projection and require
+`test_work_context_public_projections` exact keys to fail; add contributor hints
+to manager output and require the same audience assertion to fail; substitute
+one valid-but-wrong historical review/revision reference or ContributionPolicy
+UUID in the returned projection and require the persisted-reference comparison
+to fail. These output substitutions test projection proof, not a claim to bypass
+unchanged PROJECTS database guards. Exclude owned draft in the command and add a
+claim hint for own READY in separate probes; the nine-state test must catch both.
+Retain actual execution targets and cleanup evidence for every credited probe.
 
 Run focused isolated PostgreSQL/API tests plus required real lock regression,
 Ruff, module/AUTH/test-structure boundaries, exact lane/ownership tests, Commitrail,
@@ -151,7 +185,14 @@ on final head, with no skipped/deselected tests and changed modules >=90%.
 
 ## Review findings
 
-Plan review pending. No product implementation has begun.
+Plan repairs: PLAN-03B5-01 binds the required ContributionPolicy UUID;
+PLAN-03B5-02 reuses `GuidePolicySelection`; PLAN-03B5-03 removes unused interfaces;
+PLAN-03B5-04 removes duplicate status; PLAN-03B5-05 explicitly protects successful
+AUTH evidence; PLAN-03B5-06 / QA-03B5-PLAN-02 cover all nine owned states.
+QA-03B5-PLAN-01 supplies named atomic proofs; QA-03B5-PLAN-03 fixes the exact
+post-AUTH failure/rollback contract; QA-03B5-PLAN-04 names retained economic
+consumers and scopes the obsolete-symbol removal proof. No product code is
+implemented by these plan corrections.
 
 ## Reconciliation
 
