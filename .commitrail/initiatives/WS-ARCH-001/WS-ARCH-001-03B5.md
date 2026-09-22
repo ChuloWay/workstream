@@ -215,8 +215,9 @@ succeeds before injecting its missing-result failure; QA-03B5-IMPL-03 asserts
 false ownership for unassigned READY and true ownership after claim/start.
 DOC-03B5-01 keeps this child in the parent's completed predecessor sequence.
 The prior detail OpenAPI proof now distinguishes nested reuse in work-context
-responses from standalone exposure: both canonical detail components are reused,
-neither is a direct route response, and existing detail route exposure is unchanged.
+responses from standalone exposure: an exhaustive reference inventory permits
+each canonical detail only at its audience's work-context task field, including
+checks inside arrays and composed schemas; existing detail route exposure is unchanged.
 
 ## Reconciliation
 

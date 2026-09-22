@@ -277,13 +277,20 @@ async def test_task_detail_nonlocking(task_client, method):
 def test_task_detail_ports_remain_hidden():
     schema = create_app().openapi()
     assert "/api/v1/projects/{project_id}/tasks/{task_id}" not in schema["paths"]
+
+    def reference_paths(value, reference, path=()):
+        if isinstance(value, dict):
+            if value.get("$ref") == reference:
+                yield path
+            for key, child in value.items():
+                yield from reference_paths(child, reference, (*path, key))
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                yield from reference_paths(child, reference, (*path, index))
+
     for audience in ("Contributor", "Management"):
-        detail_ref = {"$ref": f"#/components/schemas/{audience}TaskDetail"}
-        assert schema["components"]["schemas"][f"{audience}TaskWorkContext"]["properties"]["task"] == detail_ref
-        for path in schema["paths"].values():
-            for operation in path.values():
-                if isinstance(operation, dict):
-                    for response in operation.get("responses", {}).values():
-                        for content in response.get("content", {}).values():
-                            assert content.get("schema") != detail_ref
+        reference = f"#/components/schemas/{audience}TaskDetail"
+        assert list(reference_paths(schema, reference)) == [
+            ("components", "schemas", f"{audience}TaskWorkContext", "properties", "task"),
+        ]
     assert schema["paths"]["/api/v1/tasks/{task_id}"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith("/TaskResponse")
