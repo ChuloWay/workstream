@@ -105,8 +105,10 @@ this change does not rewrite its retained records or shared writers.
 
 - Valid own-project/task reads include persisted task lifecycle events in all
   nine current task states; missing/foreign tasks return None without projecting evidence.
-  A committed concurrent draft project move cannot expose evidence in the old
-  project; task scoping and evidence selection use the same statement snapshot.
+  Task scoping and evidence selection cannot combine different statement
+  snapshots. A move committed before the SELECT starts hides the old-project
+  task and exposes it under its new project. A commit after the statement snapshot
+  does not retroactively alter that live read; no current-at-return claim is made.
 - Interleaved other-task, other-project and other-entity events cannot fill a
   page or alter continuation. Equal timestamps use exact UUID tie ordering.
 - Limit-one traversal, exhaustion, empty history and a non-existent cursor anchor
@@ -156,6 +158,9 @@ PostgreSQL/MinIO lanes and coverage govern final evidence. Migration head remain
 
 ## Plan review corrections
 
+- QA-03B8-PLAN-01: specify PostgreSQL statement-snapshot semantics. The move
+  test commits the writer before starting the read; exact-one-execute proof and
+  a split-query mutant detect the former mixed-snapshot design.
 - PLAN-03B8-01: retain fixed assignment and authorization-decision references
   required by the canonical TASK transition evidence contract; exclude raw JSON.
 - PLAN-03B8-03: eliminate the two-query project-scope race with one scoped
