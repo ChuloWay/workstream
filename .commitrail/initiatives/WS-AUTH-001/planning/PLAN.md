@@ -45,7 +45,7 @@ replaces contributor claim/start/work-context authority, adds separate managemen
 context and reasoned system-Operator start, and removes self-activated eligibility
 and public JSON-packet Submission creation. Admission-backed creation stays hidden.
 ARCH-03B/03C must reuse these exact actions and command owners while completing
-public queue access, remaining projections and durable invalidation; CP08
+public access/authority cutover and durable invalidation; CP08
 already delivered ContributionPolicyVersion lineage. Do not restore eligibility
 or register replacement aliases.
 

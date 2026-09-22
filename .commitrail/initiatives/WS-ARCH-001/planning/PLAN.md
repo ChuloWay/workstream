@@ -37,7 +37,7 @@ checker-remediation boundary before public Submission cutover.
 | [ARCH-03B6](../WS-ARCH-001-03B6.md) | ARCH-03B5 | Complete: shared historical validation and distinct management/operational/audit locked-context projections; retained management HTTP authority unchanged |
 | [ARCH-03B7](../WS-ARCH-001-03B7.md) | ARCH-03B6 | Complete: immutable contributor/management requirements through one historical translator and TASK-before-visibility locking; retained HTTP authority unchanged |
 | [ARCH-03B8](../WS-ARCH-001-03B8.md) | ARCH-03B7 | Complete: bounded hidden task audit evidence with atomic scope and exact transition references |
-| ARCH-03B remaining | ARCH-03B8; AUTH-OUTBOX-01 and CON-02B for invalidation | ARCH-03B8 evidence complete; hidden assignment invalidation only after shared committed claims |
+| ARCH-03B remaining | ARCH-03B8; AUTH-OUTBOX-01 and CON-02B for invalidation | Hidden assignment invalidation only after shared committed claims |
 | ARCH-03C | ARCH-03B, AUTH-OUTBOX-02 | AUTH exact task/assignment activation and integrated readiness proof |
 | CP09 (later cleanup coordination) | All legacy consumers replaced, including CHECKER and public 02I path | Physical economic deletion; not on the allow_review critical path |
 | ARCH-04B | ARCH-04A, POL-07, ARCH-03C, merged ARCH-02H | ART exact stored Submission materialization |
@@ -66,10 +66,10 @@ CP05 and ARCH-04A have independent prerequisites. POL-04B consumes the corrected
 ARCH-04A catalogue/schema before producing approval-eligible generations. Owners may
 work concurrently if allowed paths do not overlap; shared catalogue/schema
 changes must be serialized or rebased, not implemented twice. ARCH-03A completes the existing internal guide-context port after AUTH-12H.
-CP08 completes its schema and minimal existing writers together; ARCH-03B retains
-invalidation and remaining projections after completed 03B1 metadata, 03B2/03B3 hidden queue facts and 03B4 hidden
-contributor/management task detail, 03B5 replacement of existing authorized
-work context, 03B6 locked-context projections and 03B7 requirements projections.
+CP08 completes its schema and minimal existing writers together. Projections
+through 03B8 are complete: detached metadata, queues, detail, work context,
+locked context, requirements and bounded audit evidence. ARCH-03B retains
+dependency-gated assignment invalidation.
 The invalidation handler additionally requires CON-02B committed claims; actor-wide
 changes need explicit per-project TASK events, not arbitrary outbox scope. Subsequent
 PR-sized contracts name exact files, public types, current migration head and

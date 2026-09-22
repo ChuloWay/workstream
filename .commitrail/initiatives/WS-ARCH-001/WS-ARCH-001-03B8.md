@@ -82,6 +82,9 @@ TaskClaimed, TaskStarted and TaskStartOverridden events, select only scalar
 references.project_id/task_id/assignment_id/authorization_decision_id from the stored payload;
 require exact request project/task and both valid required UUID references. Reject
 missing, malformed or crossed references with sanitized TaskEvidenceInvalid.
+The shared audit writer provenance marker and one of the three canonical
+event types gate each JSON scalar with SQL CASE; other rows do not load those
+values. A generic row copying a canonical token and valid references rejects.
 Other event types do not gain inferred references. Omit unused nullable
 event_version/occurred_at fields. It excludes external subject/issuer, actor roles,
 claim_snapshot, reason, arbitrary event_payload/before_facts/after_facts, source
@@ -137,7 +140,7 @@ this change does not rewrite its retained records or shared writers.
 Planned nodes in `tests/tasks/test_audit_evidence.py`:
 `test_task_evidence_contracts`, `test_task_evidence_rejects_before_sql`,
 `test_task_evidence_project_scope`, `test_task_evidence_project_move`, `test_task_evidence_pagination`,
-`test_task_evidence_transition_references`, `test_task_evidence_sql_privacy`,
+`test_task_evidence_transition_references`, `test_task_evidence_source_provenance`, `test_task_evidence_sql_privacy`,
 `test_task_evidence_caller_transaction`, `test_task_evidence_does_not_lock`,
 and `test_task_evidence_hidden_surface`. Concrete controls must first prove
 that fixture events are persisted under the existing append-only audit guards.
@@ -145,7 +148,9 @@ No tests disable data protections merely to reach an assertion.
 
 Discriminating probes must drop exact project scoping, drop task event filtering,
 substitute full-row selection, bypass typed-reference checks, permit a split scope precheck plus event query, and permit crossed
-cursor project/task identity, each causing its intended test to fail.
+cursor project/task identity, each causing its intended test to fail. Separate source-marker and event-type
+CASE-gate mutations prove rejection of a fully valid generic spoof and SQL-level
+omission of references from a noncanonical typed-source row.
 Retained consumer nodes are
 `tests/test_tasks.py::test_task_repository_delegates_audit_persistence`,
 `::test_task_service_finalization_provenance_fails_closed_without_lock_audit`,
@@ -168,6 +173,15 @@ PostgreSQL/MinIO lanes and coverage govern final evidence. Migration head remain
   outer join; preserve missing-versus-empty without new locks or abstractions.
 - PLAN-03B8-02: name concrete future tests and discriminating mutations before
   implementation; runtime proof remains outstanding until those tests execute.
+
+## Implementation review corrections
+
+- QA/SEC-03B8-IMPL-01: require typed-writer provenance before selecting canonical
+  reference scalars. Test real typed positives, valid generic spoof rejection,
+  and direct-ORM malformed typed-source rows under unchanged database guards.
+  The latter isolates reference validation from the new provenance guard.
+- DOC-03B8-01..03: reconcile all remaining-projection assignments, name the
+  retained route-authority dependency, and keep the glossary term at peer level.
 
 ## Reconciliation
 

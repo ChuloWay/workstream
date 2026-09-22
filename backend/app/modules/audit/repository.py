@@ -6,9 +6,10 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Row, and_, select, text, tuple_
+from sqlalchemy import Row, and_, case, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.audit.schemas import LifecycleAuditEventType
 from app.modules.tasks.models import AuditEvent, WorkstreamTask
 
 
@@ -129,13 +130,21 @@ class AuditRepository:
         if after_created_at is not None:
             conditions.append(tuple_(event.created_at, event.id) > tuple_(after_created_at, str(after_event_id)))
         refs = event.event_payload["references"]
+        typed_transition = and_(
+            event.auth_source == LIFECYCLE_AUTH_SOURCE,
+            event.event_type.in_((
+                LifecycleAuditEventType.TASK_CLAIMED.value,
+                LifecycleAuditEventType.TASK_STARTED.value,
+                LifecycleAuditEventType.TASK_START_OVERRIDDEN.value,
+            )),
+        )
         statement = select(
             task.id.label("scoped_task_id"), event.id.label("event_id"), event.event_type,
             event.from_status, event.to_status, event.actor_id, event.created_at,
-            refs["project_id"].as_string().label("reference_project_id"),
-            refs["task_id"].as_string().label("reference_task_id"),
-            refs["assignment_id"].as_string().label("assignment_id"),
-            refs["authorization_decision_id"].as_string().label("authorization_decision_id"),
+            case((typed_transition, refs["project_id"].as_string())).label("reference_project_id"),
+            case((typed_transition, refs["task_id"].as_string())).label("reference_task_id"),
+            case((typed_transition, refs["assignment_id"].as_string())).label("assignment_id"),
+            case((typed_transition, refs["authorization_decision_id"].as_string())).label("authorization_decision_id"),
         ).select_from(task).outerjoin(event, and_(*conditions)).where(
             task.project_id == str(project_id), task.id == str(task_id),
         ).order_by(event.created_at, event.id).limit(limit + 1)

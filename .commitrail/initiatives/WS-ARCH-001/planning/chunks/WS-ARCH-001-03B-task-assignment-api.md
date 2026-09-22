@@ -31,7 +31,7 @@ chunk consumes those complete frozen attempt facts; it must not reimplement the
 writers or select current CON policy during ordinary claim. Preserve the
 screening-time lock and existing authority/transaction ownership.
 
-Allowed: remaining actor-specific task projections, assignment invalidation and
+Allowed: dependency-gated assignment invalidation and
 public facts, focused tests, composition adapters, deny-only route
 declarations, boundary ledgers and current documentation. Not allowed: duplicate
 lineage writers, project-policy evaluation, checker planning, ART custody, AUTH

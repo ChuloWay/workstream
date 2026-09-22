@@ -6,7 +6,7 @@ work accounting. Foundations through 02H and CP04B are complete; none restart.
 
 | Boundary | Owner outcome | Risk | Current dependency |
 |---|---|---|---|
-| [WS-ARCH-001-03B1](../WS-ARCH-001-03B1.md) | Detached TaskService project/guide display through the existing PROJECTS port | L1 | Complete; 03B2 ready queue facts delivered; remaining 03B projections next, invalidation waits for shared claims |
+| [WS-ARCH-001-03B1](../WS-ARCH-001-03B1.md) | Detached TaskService project/guide display through the existing PROJECTS port | L1 | Complete; 03B2 ready queue facts delivered; projections through 03B8 complete; invalidation waits for shared claims |
 | [WS-ARCH-001-03B2](../WS-ARCH-001-03B2.md) | Hidden project-scoped contributor ready queue facts with bounded live pagination | L1 | Complete; exact AUTH and public exposure remain 03C |
 | [WS-ARCH-001-03B3](../WS-ARCH-001-03B3.md) | Hidden all-state management and status-only operational task queues | L1 | Complete; task audit evidence delivered by 03B8; exact AUTH/public access remain 03C |
 | [WS-ARCH-001-03B4](../WS-ARCH-001-03B4.md) | Hidden contributor and management task detail with fixed fields and exact project/assignment visibility | L1 | Complete; task audit evidence delivered by 03B8; public access remains 03C |

@@ -472,7 +472,7 @@ raw checker success is not authority.
 
 The person accountable for a submitted packet, even when agents or external tools helped produce the work.
 
-### Task audit evidence page
+## Task Audit Evidence Page
 
 An internal bounded lifecycle projection for one exact project/task. It contains
 fixed event facts and validated claim/start assignment and authorization-decision

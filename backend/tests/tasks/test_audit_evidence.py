@@ -11,7 +11,7 @@ from sqlalchemy import event as sql_events, select
 
 from app.db import session as db_session
 from app.main import create_app
-from app.modules.audit.repository import AuditRepository
+from app.modules.audit.repository import AuditRepository, LIFECYCLE_AUTH_SOURCE
 from app.modules.audit.schemas import (
     LifecycleAuditEntityType, LifecycleAuditEventInput, LifecycleAuditEventType,
     LifecycleAuditReason, LifecycleAuditReferenceKind,
@@ -37,14 +37,19 @@ def request(project, task, **kwargs):
     return AuditTaskEvidenceRequest(UUID(project["id"]), UUID(task["id"]), **kwargs)
 
 
-async def store_event(session, task_id, *, when=NOW, event_type="fixture_event", entity_type="task", payload=None):
+async def store_event(session, task_id, *, when=NOW, event_type="fixture_event", entity_type="task", payload=None, typed_source=False):
     value = AuditEvent(
         id=str(uuid4()), entity_type=entity_type, entity_id=task_id, event_type=event_type,
         actor_id="recorded-actor", external_subject="private-subject", external_issuer="private-issuer",
         actor_roles=["private-role"], claim_snapshot={"secret": "private-claim"},
-        auth_source="flow_jwt", reason="private-reason", event_payload=payload or {"private": "private-payload"},
+        auth_source=LIFECYCLE_AUTH_SOURCE if typed_source else "flow_jwt", reason="private-reason", event_payload=payload or {"private": "private-payload"},
         created_at=when,
     )
+    if typed_source:
+        # Faulty-writer counterexample: bypass Python validation, keep every DB guard.
+        session.add(value)
+        await session.flush()
+        return value
     return await AuditRepository(session).add_audit_event(value)
 
 
@@ -199,11 +204,36 @@ async def test_task_evidence_transition_references(task_client):
                 else:
                     broken[field] = bad
                 async with factory() as session:
-                    stored = await store_event(session, task["id"], event_type=event_type, payload={"references": broken})
+                    stored = await store_event(session, task["id"], event_type=event_type, payload={"references": broken}, typed_source=True)
                     assert await session.scalar(select(AuditEvent.id).where(AuditEvent.id == stored.id)) == stored.id
                     with pytest.raises(TaskEvidenceInvalid, match="^task audit evidence is invalid$"):
                         await read_once(session, value)
                     await session.rollback()
+
+
+async def test_task_evidence_source_provenance(task_client):
+    project = await create_active_project(task_client)
+    task = await create_draft_task(task_client, project["id"])
+    value = request(project, task)
+    refs = {"project_id": project["id"], "task_id": task["id"],
+            "assignment_id": str(uuid4()), "authorization_decision_id": str(uuid4())}
+    factory = db_session.get_session_factory()
+    for event_type in ("TaskClaimed", "TaskStarted", "TaskStartOverridden"):
+        async with factory() as session:
+            stored = await store_event(session, task["id"], event_type=event_type, payload={"references": refs})
+            assert await session.scalar(select(AuditEvent.auth_source).where(AuditEvent.id == stored.id)) == "flow_jwt"
+            with pytest.raises(TaskEvidenceInvalid, match="^task audit evidence is invalid$"):
+                await read_once(session, value)
+            await session.rollback()
+    for typed_source in (False, True):
+        async with factory() as session:
+            stored = await store_event(session, task["id"], payload={"references": refs}, typed_source=typed_source)
+            rows = await AuditRepository(session).read_task_evidence_rows(value.project_id, value.task_id, 50, None, None)
+            row = next(row for row in rows if row.event_id == stored.id)
+            assert (row.reference_project_id, row.reference_task_id, row.assignment_id, row.authorization_decision_id) == (None,) * 4
+            item = next(item for item in (await read_once(session, value)).items if item.event_id == UUID(stored.id))
+            assert item.assignment_id is None and item.authorization_decision_id is None
+            await session.rollback()
 
 
 async def test_task_evidence_sql_privacy(task_client):

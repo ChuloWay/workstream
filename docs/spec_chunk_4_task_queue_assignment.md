@@ -320,8 +320,10 @@ one statement snapshot, not a durable export or current-at-return guarantee.
 Items contain event ID/type, optional from/to status, stored actor attribution,
 creation time, and optional assignment/authorization-decision IDs. Canonical
 claim/start events require both references and exact nested project/task IDs;
-malformed evidence fails with a sanitized error. Other events gain no inferred
-references. SQL extracts only four named JSON scalar references and never loads
+malformed evidence fails with a sanitized error. SQL selects reference scalars
+only for the typed audit writer and canonical claim/start event types; generic
+rows cannot acquire canonical provenance by copying their tokens. Other events
+gain no inferred references. SQL extracts only four named JSON scalar references and never loads
 raw claims, roles, external identity, reasons, arbitrary payloads or policy bodies.
 It does not export authority-decision history or claim forensic completeness.
 
