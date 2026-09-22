@@ -3,6 +3,7 @@
 from dataclasses import FrozenInstanceError, asdict, replace
 from datetime import UTC, datetime
 from decimal import Decimal
+import re
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
@@ -133,8 +134,10 @@ async def test_work_context_invalid_selectors():
 
 
 async def decisions(session, task_id):
+    project_id = await session.scalar(select(WorkstreamTask.project_id).where(WorkstreamTask.id == task_id))
     return list(await session.scalars(select(AuditEvent).where(
-        AuditEvent.resource_id == task_id, AuditEvent.action_id.in_(ACTIONS),
+        AuditEvent.project_id == project_id, AuditEvent.resource_type == "project",
+        AuditEvent.resource_id == project_id, AuditEvent.action_id.in_(ACTIONS),
     )))
 
 
@@ -199,9 +202,12 @@ async def test_work_context_public_projections(task_client, monkeypatch):
         async with factory() as session:
             event = await session.get(AuditEvent, next(iter(current - previous)))
             assert (event.action_id, event.project_id, event.resource_id, event.actor_id) == (
-                ACTIONS[int(management)], project["id"], task["id"], actor.json()["actor_profile_id"],
+                ACTIONS[int(management)], project["id"], project["id"], actor.json()["actor_profile_id"],
             )
+            assert event.resource_type == "project"
+            assert set(event.after_facts) == {"allowed", "resource_context_digest"}
             assert event.after_facts["allowed"] is True
+            assert re.fullmatch(r"sha256:[0-9a-f]{64}", event.after_facts["resource_context_digest"])
 
 
 async def test_work_context_owned_state_matrix(task_client, monkeypatch):

@@ -42,6 +42,8 @@ field list or another authorization evaluator.
   `tests/test_pre_submit_related_lock_order.py`, and `scripts/api_contract_e2e.py`.
 - Exact new-module registration in existing lane catalogue/ownership partition,
   digest/allowlist and their equality/neighbor tests. Preserve all earlier targets.
+  `tests/architecture/test_module_boundaries.py`: exact per-file public-contract
+  dependency proof, retaining canonical private/cycle guards and negative probes.
 - This record, ARCH parent/overview/plan/chunk map, current AUTH/CON/POL navigation,
   index, README, task specification, operating manual and roadmap reconciliation.
 
@@ -124,7 +126,8 @@ not a duplicate task field. No aliases preserve the superseded shape.
 6. Existing task/assignment/AUTH/PROJECT locks and transaction order are retained;
    no task, assignment, command receipt, policy or TASK transition evidence is
    written by a read. The canonical AUTH allow decision is the sole expected
-   write within the owner transaction, bound to the exact action/project/task/actor.
+   write within the owner transaction, bound to the exact action/project/actor, with a project-scoped audit selector
+   and exact TASK context bound by the authorization resource digest.
    Request identity/rate-control processing remains outside this claim. The existing real
    AUTH/ART work-context interleaving regression still passes.
 7. Old exclusive work-context schemas/builders/callers are absent. Required
@@ -154,7 +157,7 @@ Tests live in `backend/tests/tasks/test_work_context.py` unless qualified.
 | Contributor executable hints | retained `test_project_grant_drives_claim_start_and_current_action_hints`: real READY -> claim -> start; claim/start/empty hints and absence of submit/precheck flags |
 | All own-active states and ordinary draft denial | `test_work_context_owned_state_matrix`: real canonical claim plus fully locked status-only fixture for all nine string states, including owned draft/READY; persisted assignment/assignee/context preconditions asserted; only own CLAIMED advertises start. Ordinary unassigned draft separately returns existing 403 guard denial |
 | Current authority and concealment | retained grant/revocation/suspension tests plus `test_work_context_project_scope`: stored foreign task, valid same-project manager control, wrong route project returns 404; valid locked task without required grant denies, with no assignment/task changes |
-| Successful audit custody | `test_work_context_public_projections`: before/after task/assignment/receipt/transition state stable and exactly one AUTH allow per read with correct action, project, resource and actor |
+| Successful audit custody | `test_work_context_public_projections`: before/after task/assignment/receipt/transition state stable and exactly one AUTH allow per read with correct action, project selector and actor, plus canonical resource digest; existing AUTH-owner proofs cover exact task-context digest binding |
 | Post-AUTH projection failure rollback | `test_work_context_projection_failure_rolls_back` for both methods/routes: wrapped real detail read verifies staged exact allow in its transaction, then returns None; HTTP 404/resource_not_found/nonretryable; independent observer finds no committed new allow, task/assignment/receipt/transition unchanged |
 | Exact historical guide and complete policy references | extend `tests/tasks/test_project_display.py::test_task_display_survives_guide_successor_for_contributor_and_manager`: assert stored original task stamps and valid successor; both read results retain exact guide identity, both policy IDs/generations/hashes and ContributionPolicy UUID, using separate audience field sets |
 | Invalid custody | retained `test_task_context_apis_fail_closed_when_locked_context_is_missing` and `test_task_context_apis_fail_closed_on_stale_locked_context_rows`, plus `test_work_context_missing_locked_context`: ordinary manager draft has actual authority before 422/task_locked_context_invalid; no successful allow commits |
@@ -193,6 +196,13 @@ AUTH evidence; PLAN-03B5-06 / QA-03B5-PLAN-02 cover all nine owned states.
 QA-03B5-PLAN-01 supplies named atomic proofs; QA-03B5-PLAN-03 fixes the exact
 post-AUTH failure/rollback contract; QA-03B5-PLAN-04 names retained economic
 consumers and scopes the obsolete-symbol removal proof. These plan corrections preceded product implementation.
+
+Implementation proof repairs: the canonical module validator permits public-to-public
+contracts, so TASK's test now allows only the two required PROJECTS API modules
+in `work_context.py`, with negative probes for extra imports and other files.
+The prior audit test incorrectly queried a raw task resource. Existing AUTH
+intentionally records a project selector and a resource digest binding TASK facts;
+proof now uses that privacy-safe selector. No production AUTH behavior changed.
 
 ## Reconciliation
 

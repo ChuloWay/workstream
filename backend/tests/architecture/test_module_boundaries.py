@@ -255,22 +255,50 @@ def test_public_api_private_reexport_fails_closed(tmp_path: Path) -> None:
         )
 
 
-def test_tasks_public_api_has_no_private_or_mutable_dependency() -> None:
-    """TASK facts remain dependency-safe immutable public contracts."""
+def _assert_task_public_dependencies(root: Path) -> None:
+    """Admit only the exact immutable PROJECTS contracts used by work context."""
+    api_root = root / "backend/app/modules/tasks/api"
+    files = list(api_root.rglob("*.py"))
+    assert files
+    for path in files:
+        foreign = {
+            target for target in boundary.exact_source_imports(path, root)
+            if target.startswith("app.modules.")
+            and not (target == "app.modules.tasks.api" or target.startswith("app.modules.tasks.api."))
+        }
+        expected = {
+            "app.modules.projects.api.guide_activation",
+            "app.modules.projects.api.locked_policy",
+        } if path == api_root / "work_context.py" else set()
+        assert foreign == expected, (path, foreign)
+
+
+def test_tasks_public_api_uses_only_declared_immutable_dependencies() -> None:
+    """TASK API reuse stays exact; canonical private/cycle guards still apply."""
     boundary._validate_public_apis(  # noqa: SLF001 - architecture proof
         ROOT, boundary.load_registry(REGISTRY)
     )
-    api_files = list((ROOT / "backend/app/modules/tasks/api").rglob("*.py"))
-    assert api_files
-    imports: set[str] = set()
-    for path in api_files:
-        imports.update(boundary.exact_source_imports(path, ROOT))
-    assert imports
-    assert all(
-        not target.startswith("app.modules.")
-        or target.startswith("app.modules.tasks.api")
-        for target in imports
+    _assert_task_public_dependencies(ROOT)
+
+
+@pytest.mark.parametrize("filename, extra", [
+    ("work_context.py", "app.modules.projects.api.guide_creation"),
+    ("work_context.py", "app.modules.projects.repository"),
+    ("task_detail.py", "app.modules.projects.api.locked_policy"),
+])
+def test_task_public_dependency_exception_is_exact(tmp_path: Path, filename: str, extra: str) -> None:
+    """An extra foreign public/private import or another file cannot use the exception."""
+    target = tmp_path / "backend/app/modules/tasks/api"
+    original = (
+        "from app.modules.projects.api.guide_activation import GuidePolicySelection\n"
+        "from app.modules.projects.api.locked_policy import GuideDisplayFacts\n"
     )
+    _write(target / "work_context.py", original)
+    _assert_task_public_dependencies(tmp_path)
+    path = target / filename
+    _write(path, (original if filename == "work_context.py" else "") + f"import {extra}\n")
+    with pytest.raises(AssertionError):
+        _assert_task_public_dependencies(tmp_path)
 
 
 def test_projects_public_api_has_no_private_or_mutable_dependency() -> None:
