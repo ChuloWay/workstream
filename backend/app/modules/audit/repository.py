@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
+from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import Row, and_, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.tasks.models import AuditEvent
+from app.modules.tasks.models import AuditEvent, WorkstreamTask
 
 
 LIFECYCLE_AUTH_SOURCE = "local_lifecycle"
@@ -109,3 +111,33 @@ class AuditRepository:
             .order_by(AuditEvent.created_at.asc(), AuditEvent.id.asc())
         )
         return result.scalars().all()
+
+    async def read_task_evidence_rows(
+        self, project_id: UUID, task_id: UUID, limit: int,
+        after_created_at: datetime | None, after_event_id: UUID | None,
+    ) -> Sequence[Row]:
+        """Select one scoped statement snapshot without private payload loading.
+
+        A task marker distinguishes missing scope from empty/exhausted history.
+        TASK supplies validated selectors and translates the fixed scalar rows.
+        """
+        task, event = WorkstreamTask, AuditEvent
+        conditions = [
+            event.entity_type == "task", event.entity_id == task.id,
+            event.event_domain == "legacy_lifecycle",
+        ]
+        if after_created_at is not None:
+            conditions.append(tuple_(event.created_at, event.id) > tuple_(after_created_at, str(after_event_id)))
+        refs = event.event_payload["references"]
+        statement = select(
+            task.id.label("scoped_task_id"), event.id.label("event_id"), event.event_type,
+            event.from_status, event.to_status, event.actor_id, event.created_at,
+            refs["project_id"].as_string().label("reference_project_id"),
+            refs["task_id"].as_string().label("reference_task_id"),
+            refs["assignment_id"].as_string().label("assignment_id"),
+            refs["authorization_decision_id"].as_string().label("authorization_decision_id"),
+        ).select_from(task).outerjoin(event, and_(*conditions)).where(
+            task.project_id == str(project_id), task.id == str(task_id),
+        ).order_by(event.created_at, event.id).limit(limit + 1)
+        with self._session.no_autoflush:
+            return (await self._session.execute(statement)).all()

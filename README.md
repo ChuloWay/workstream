@@ -583,7 +583,7 @@ exact policy references and remain internal. The retained management route's
 authority cutover remains ARCH-03C. ARCH-03B7 supplies immutable contributor and
 management requirements through one historical translator. Its hidden contributor
 read reuses exact assignment visibility after locking TASK; the retained requirements
-route keeps its current authority wrapper. Task audit-evidence projections remain in ARCH-03B;
+route keeps its current authority wrapper. ARCH-03B8 supplies bounded internal Audit Authority task evidence;
 invalidation requires shared delivery
 claims, and public authority cutover remains ARCH-03C. Canonical checker materialization follows in
 ARCH-04B/04C.

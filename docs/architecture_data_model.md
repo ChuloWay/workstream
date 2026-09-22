@@ -856,6 +856,12 @@ the work is split into another project/guide. The task stores
 `PreSubmitCheckerPolicy.compiled_bundle_hash`; it does not own a newly derived
 policy or newly compiled checker.
 
+
+ARCH-03B8 adds no storage: its internal task audit evidence page projects fixed
+shared audit fields with exact project/task scope in one SQL statement. Typed
+claim/start references bind assignment and authorization decision without raw
+payload exposure. The shared persisted audit namespace and records are unchanged.
+
 Task context APIs read this already-stamped context. `work-context` and
 `submission-requirements` return task-visible contributor-safe guide and requirement
 projections from the locked rows. ARCH-03B7 makes requirements immutable with

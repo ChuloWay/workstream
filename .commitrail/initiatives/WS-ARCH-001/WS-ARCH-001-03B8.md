@@ -1,7 +1,7 @@
 # ARCH-03B8 — Bounded task audit evidence
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: immutable, bounded task lifecycle evidence for the
   planned Audit Authority read, with exact project/task scoping and no public
   activation.
@@ -18,7 +18,8 @@ another audit store, writer, authority decision or history reconstruction.
 Main includes 03B7 at `ab4a4256`. TASK already supplies the other actor-specific
 projections. `TaskRepository.list_audit_events` delegates to the shared
 `AuditRepository`; it loads whole rows without pagination. Its live consumers
-include `TaskService.list_task_audit_events` and submission finalization recovery.
+include `TaskService.list_task_audit_events`, submission finalization recovery
+and `CheckerService` recovery provenance.
 The retained HTTP route uses contributor/manager visibility and payload redaction.
 It is not the proposed `audit.task.evidence.read` authority surface.
 

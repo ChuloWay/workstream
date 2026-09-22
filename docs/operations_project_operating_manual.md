@@ -205,7 +205,7 @@ audit locked-context projections through one historical resolver. Operational an
 audit methods remain internal. ARCH-03B7 supplies immutable contributor and manager
 requirements from the original locked effective policy. Its separate manager read
 is internal; the existing submission-requirements route retains its role/creator
-visibility wrapper pending ARCH-03C. Task audit-evidence projections remain in ARCH-03B;
+visibility wrapper pending ARCH-03C. ARCH-03B8 supplies bounded internal Audit Authority task evidence;
 assignment invalidation also needs shared delivery
 claims, and authorization/public cutover remains ARCH-03C.
 
