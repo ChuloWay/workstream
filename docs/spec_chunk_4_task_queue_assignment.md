@@ -156,7 +156,7 @@ lock. Pages are live views, not reservations; claim rechecks authority and state
 ARCH-03C must authorize the exact project collection before calling this port
 or using a client cursor, with current-grant/revocation and concealment proof.
 No per-task AUTH handle or token role can substitute for that collection gate.
-Actor-specific locked-context, requirements and audit projections and authority
+Actor-specific requirements and task audit-evidence projections and authority
 invalidation remain separate.
 
 
@@ -207,7 +207,7 @@ These detail ports remain internal as standalone reads. ARCH-03B5 reuses them
 in existing authorized work-context responses below. The existing standalone
 detail endpoint and command response consumers still require their exact ARCH-03C
 authority/cutover; no parallel public route or compatibility alias is added.
-Locked-context, requirements and audit projections remain separate ARCH-03B work.
+Requirements and task audit-evidence projections remain separate ARCH-03B work.
 
 
 ## Current contributor and manager work context
@@ -242,5 +242,32 @@ missing or invalid locked custody returns the existing 422
 `task_locked_context_invalid`. Ordinary unassigned draft is not contributor work;
 a fully locked own-active draft remains visible under the existing authority rule.
 
-Standalone detail endpoints, other locked-context/requirements/audit projection
+Standalone detail endpoints, other requirements/audit projection
 replacements, and assignment invalidation retain their separately scoped work.
+
+## Task locked-context projections
+
+ARCH-03B6 replaces the shared operator-labelled response with strict immutable
+`ManagementTaskLockedContext`, `OperationalTaskLockedContext` and
+`AuditTaskLockedContext` composites in TASK schemas. All contain task/project
+UUIDs and the exact historical guide version, source snapshot ID/hash, effective
+submission-policy ID/hash, pre-submit policy ID/bundle hash, post-submit policy
+ID/version/hash, review and revision ID/generation/hash and ContributionPolicy
+version UUID. Management alone adds the bounded post-submit summary (schema
+version, checker ID groups and blocking severities); its collections are immutable.
+Operational/audit results exclude bodies, work/source content, actor identities,
+artifacts, storage locations and economics.
+
+The three hidden owner reads require exact project/task UUIDs, filter both before
+resolving policy custody and lock TASK before PROJECTS. They use the existing
+historical validator, including exact activation-receipt and stored-body checks;
+a newer active guide does not change the result. They neither flush nor commit
+caller-owned work and do not grant authority. Missing and foreign tasks conceal
+identically; incomplete or inconsistent locks fail with `task_locked_context_invalid`.
+
+The retained `/tasks/{task_id}/locked-context` route returns the same management
+projection under its existing role/creator wrapper and loads the task once.
+ARCH-03C still owns replacement of that authority and public operational/audit
+activation. There is no audience-switching endpoint, fallback schema or new
+TASK public API dependency. Submission requirements and audit-event evidence
+remain separate projection work.

@@ -271,11 +271,13 @@ rules, hash algorithm, size limits, and attestation terms before submission.
 
 ## Task Locked Context
 
-The permission-scoped Project Manager, Operator, or Audit projection of a task's
-locked guide and policy provenance, including guide source snapshot id/hash,
-effective policy id/hash, pre-submit checker policy id/hash, post-submit checker
-policy id/hash/body summary, and exact review and revision policy
-id/generation/hash identities.
+An actor-specific projection of a task's exact historical guide and policy
+provenance: source snapshot id/hash, effective policy id/hash, pre-submit policy
+id/bundle hash, post-submit policy id/version/hash, review and revision policy
+id/generation/hash, and ContributionPolicy version UUID. Management additionally
+receives a bounded post-submit checker summary; operational and audit projections
+contain references only. ARCH-03B6 implements the projections; the operational
+and audit methods remain internal and ARCH-03C owns canonical authority/public access.
 
 ## Task Contract
 

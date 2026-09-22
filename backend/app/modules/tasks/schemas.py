@@ -318,39 +318,56 @@ class SubmissionRequirementsResponse(BaseModel):
 
 
 class PostSubmitPolicyBodySummary(BaseModel):
-    """Operator-facing summary of the locked post-submit checker policy body."""
+    """Detached immutable summary of the exact locked post-submit policy."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     schema_version: str | None
-    default_checkers: list[str]
-    required_checkers: list[str]
-    warning_checkers: list[str]
-    execution_checkers: list[str]
-    blocking_severities: list[str]
+    default_checkers: tuple[str, ...]
+    required_checkers: tuple[str, ...]
+    warning_checkers: tuple[str, ...]
+    execution_checkers: tuple[str, ...]
+    blocking_severities: tuple[str, ...]
 
 
-class TaskLockedContextResponse(BaseModel):
-    """Operator-only locked provenance for a task."""
+class _TaskLockedContextReferences(BaseModel):
+    """Exact immutable policy identities, without policy bodies or work content."""
 
-    task_id: str
-    project_id: str
-    locked_guide_version: str
-    locked_guide_source_snapshot_id: str
-    locked_guide_source_snapshot_hash: str
-    locked_effective_project_submission_artifact_policy_id: str
-    locked_effective_project_submission_artifact_policy_hash: str
-    locked_pre_submit_checker_policy_id: str
-    locked_pre_submit_checker_bundle_hash: str
-    locked_post_submit_checker_policy_id: str
-    locked_post_submit_checker_policy_version: str
-    locked_post_submit_checker_policy_hash: str
-    locked_post_submit_checker_policy_body_summary: PostSubmitPolicyBodySummary
-    locked_review_policy_id: str
-    locked_review_policy_generation: int
-    locked_review_policy_hash: str
-    locked_revision_policy_id: str
-    locked_revision_policy_generation: int
-    locked_revision_policy_hash: str
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    task_id: UUID
+    project_id: UUID
+    locked_guide_version: str = Field(pattern=r"\S")
+    locked_guide_source_snapshot_id: UUID
+    locked_guide_source_snapshot_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    locked_effective_project_submission_artifact_policy_id: UUID
+    locked_effective_project_submission_artifact_policy_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    locked_pre_submit_checker_policy_id: UUID
+    locked_pre_submit_checker_bundle_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    locked_post_submit_checker_policy_id: UUID
+    locked_post_submit_checker_policy_version: str = Field(pattern=r"\S")
+    locked_post_submit_checker_policy_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    locked_review_policy_id: UUID
+    locked_review_policy_generation: int = Field(gt=0)
+    locked_review_policy_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    locked_revision_policy_id: UUID
+    locked_revision_policy_generation: int = Field(gt=0)
+    locked_revision_policy_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     locked_contribution_policy_version_id: UUID
+
+
+class ManagementTaskLockedContext(_TaskLockedContextReferences):
+    """Management provenance plus the bounded historical checker summary."""
+
+    locked_post_submit_checker_policy_body_summary: PostSubmitPolicyBodySummary
+
+
+class OperationalTaskLockedContext(_TaskLockedContextReferences):
+    """Operational provenance references; no policy body or private task details."""
+
+
+class AuditTaskLockedContext(_TaskLockedContextReferences):
+    """Audit provenance references; evidence and policy-body reads are separate."""
 
 
 class AssignmentResponse(BaseModel):

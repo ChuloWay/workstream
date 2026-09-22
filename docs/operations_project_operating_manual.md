@@ -200,8 +200,9 @@ summaries. Hidden management and operational reads also cover all project task
 states: managers receive planning fields; operators receive only IDs, status
 and timestamps. None grants authority or exposes a public queue.
 ARCH-03B4 also supplies hidden contributor and manager detail facts; these are
-not new public endpoints. Remaining locked-context, requirements
-and audit projections belong to ARCH-03B;
+not new public endpoints. ARCH-03B6 supplies distinct management, operational and
+audit locked-context projections through one historical resolver. Operational and
+audit methods remain internal. Requirements and task audit-evidence projections belong to ARCH-03B;
 assignment invalidation also needs shared delivery
 claims, and authorization/public cutover remains ARCH-03C.
 
@@ -305,7 +306,12 @@ Executing a hint always rechecks authority. The retained
 `GET /api/v1/tasks/{task_id}/locked-context` route still uses token-role
 checks for either the `admin` token role or the `project_manager` token role;
 it is not a canonical Operator/Audit projection.
-Its authorization cutover remains planned.
+It returns the canonical management projection: exact guide/policy references
+and an immutable bounded post-submit checker summary. Hidden operational and
+audit projections return references only, without policy bodies or task content.
+All three validate the task's historical activation custody, even after another
+guide becomes active. They do not select current policy. Its authorization
+cutover and operational/audit public access remain planned in ARCH-03C.
 
 ### Submission Quality Gate
 

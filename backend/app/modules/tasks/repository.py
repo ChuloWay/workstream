@@ -230,6 +230,16 @@ class TaskRepository:
             statement.execution_options(populate_existing=True)
         )
 
+    async def lock_project_task(self, project_id: UUID, task_id: UUID) -> WorkstreamTask | None:
+        """Conceal foreign tasks before taking their lock or resolving policy custody."""
+        with self._session.no_autoflush:
+            return await self._session.scalar(
+                select(WorkstreamTask).where(
+                    WorkstreamTask.project_id == str(project_id),
+                    WorkstreamTask.id == str(task_id),
+                ).with_for_update().execution_options(populate_existing=True)
+            )
+
     async def add_assignment(self, assignment: TaskAssignment) -> TaskAssignment:
         """Persist an assignment and refresh generated database fields.
 

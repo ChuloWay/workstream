@@ -1,7 +1,7 @@
 # ARCH-03B6 — Explicit task locked-context projections
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: one historical context resolver supplies explicit
   management, operational and audit projections, with no parallel old response.
 
@@ -122,7 +122,7 @@ The new operational/audit methods are internal only, with no OpenAPI activation.
 
 ## Evidence
 
-Future tests live in `tests/tasks/test_locked_context.py`. Use existing real
+Tests live in `tests/tasks/test_locked_context.py`. They use existing real
 `tests.test_tasks` setup, canonical guide activation and ready-task helpers.
 Do not use a fake policy resolver for the successful PostgreSQL controls.
 Discriminating probes: remove project filtering and prove foreign-task rejection
@@ -131,7 +131,7 @@ fields fail; substitute successor policy identity and prove the history assertio
 fails after a distinct valid successor is established. Separately substitute the
 successor management summary and prove its original-summary assertion fails.
 
-Named future proofs: `test_locked_context_contracts`,
+Named proofs: `test_locked_context_contracts`,
 `test_locked_context_invalid_selectors_before_sql`,
 `test_locked_context_exact_scope_and_fields`,
 `test_locked_context_invalid_custody`,
@@ -162,6 +162,13 @@ modules remain above 90%. Exact commands/results belong in PR evidence.
   retained authority dependency and absence of premature Operator/Audit access.
 
 ## Reconciliation
+
+Plan review required a single TASK lookup for the retained route, exact test
+names, malformed-selector no-SQL controls, a distinct valid successor checker
+summary, and a lock probe proving PROJECTS has not been entered while TASK is
+blocked. The implementation and proofs follow those corrections. The stored
+TASK post-policy JSON mismatch is reachable without modifying immutable PROJECTS
+data; no broader policy-tuple corruption fixture or second resolver is needed.
 
 Base: merged #423 at `40d15d3d`. Only open #410 is CI impact reporting; this child
 does not modify CI workflows or impact selection. No spreadsheet exports found
