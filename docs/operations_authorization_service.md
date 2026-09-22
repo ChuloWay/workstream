@@ -684,19 +684,19 @@ actor, project, role, and cause event before a consumer changes product state.
 Revoking one role must leave the other project roles and all AdminRoleGrants
 unchanged.
 
-The closed registry now has fifteen fixed-service identities: fourteen
-action-bearing identities with twenty-three matrix memberships, plus the
+The closed registry now has sixteen fixed-service identities: fifteen
+action-bearing identities with twenty-four matrix memberships, plus the
 target-only `workstream.compensation.adapter` identity. The action-bearing
-set comprises seven ART identities, project setup, and six exact REV
-identities. Missing provisioned rows deny without stopping the application.
-The target-only identity has no matrix membership, and the REV actions remain
+set comprises seven ART identities, project setup, six exact REV identities,
+and the planned/unavailable outbox dispatcher. Missing provisioned rows deny without stopping the application.
+The target-only identity has no matrix membership, and the REV and outbox dispatcher actions remain
 unavailable, so registry membership alone grants no authority. Do not create a
 shared review service or a database service-grant table.
 
 Historically, AUTH-12B extended the registry to an eighth identity,
 `workstream.project.setup`, now with exactly six static memberships:
 `project.guide_sufficiency.run`,
-`project.guide_compilation.request.automatic`,
+`project.guide_compilation.request_automatic`,
 `project.guide_compilation.execute`,
 `project.submission_artifact_policy.derive`,
 `project.post_submit_checker_policy.derive`, and `project.setup_run.update`.

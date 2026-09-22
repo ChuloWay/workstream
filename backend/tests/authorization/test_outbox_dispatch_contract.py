@@ -63,7 +63,7 @@ def test_dispatch_facts_validate_all_phases():
     for phase in OutboxDispatchPhase:
         value = facts(phase)
         assert value.phase is phase
-        with pytest.raises(FrozenInstanceError):
+        with pytest.raises(FrozenInstanceError, match="cannot assign to field 'claim_generation'"):
             value.claim_generation = 2
         assert replace(value, claim_generation=2147483647, claim_owner='a' * 120)
         invalid = {

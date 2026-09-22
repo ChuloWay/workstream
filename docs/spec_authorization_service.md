@@ -200,6 +200,7 @@ operations.status.read
 operations.timer.run
 operations.reconcile.run
 operations.outbox.retry
+outbox.dispatch
 operations.projection.rebuild
 operations.task.start_override
 operations.submission_gate.repair
@@ -610,6 +611,8 @@ closed:
 | `workstream.review.reconciliation` | `review.reconcile.run` |
 | `workstream.review.artifact_reference_reconciliation` | `review.artifact_reference.reconcile` |
 | `workstream.review.projection` | `review.projection.rebuild` |
+| `workstream.outbox.dispatcher` | planned/unavailable: `outbox.dispatch` |
+| `workstream.compensation.adapter` | target-only; no action membership |
 
 The hidden 04B2 prepared resource first locks fixed-service authority using
 task, assignment, project, effective
@@ -625,7 +628,9 @@ facts because `TaskAssignment` uses a new immutable ID for replacement rather
 than a separate generation counter.
 
 `workstream.project.setup` was the eighth fixed identity when AUTH-12B merged;
-02C expands the current registry to fourteen identities. AUTH-12E activates
+02C expanded that registry to fourteen identities. The current registry has
+sixteen identities after the target-only compensation adapter and planned outbox
+dispatcher registrations. AUTH-12E activates
 `project.guide_sufficiency.run`, AUTH-12F3 activates policy derivation, and
 AUTH-12I activates exact unified compilation execution. AUTH-12B2 activates
 exact setup finalization; AUTH-12G activates

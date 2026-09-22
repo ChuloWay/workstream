@@ -231,6 +231,11 @@ for both lease timestamps, preserving the 0025 migration guard proof while
 adding 0026 expectations, and reconciling registered-versus-proposed authority
 wording and the complete CON-02B -> AUTH-OUTBOX-02 sequence. The record uses the
 existing single-suffix filename convention; no validator was relaxed.
+The public permission-response schema and independent API drill share the exact
+74-entry catalogue. Older migration tests arrange their owned historical schema
+for genuine round trips or invoke their own retained-data guard, so the new
+forward-only migration cannot mask their safety assertions. The fixed-service
+inventory records 16 identities, 15 action-bearing identities and 24 memberships.
 
 ## Implementation reconciliation
 
