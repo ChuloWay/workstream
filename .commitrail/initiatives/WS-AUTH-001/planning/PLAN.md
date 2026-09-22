@@ -23,7 +23,7 @@ AUTH-13/14 cutovers are not additional implementation work.
   and HTTP exposure remain pending.
 - CP05 owns exact ContributionPolicy-action activation after merged CP04B.
 - CP08 delivered the minimal lineage writers; ARCH-03B owns remaining
-  requirements and task audit-evidence projections and invalidation; ARCH-03C owns
+  task audit-evidence projections and invalidation; ARCH-03C owns
   their exact activation.
   [AUTH-13 is superseded](chunks/WS-AUTH-001-13-task-assignment-cutover.md).
 - ARCH-04D alone activates post-submit materialization/output and CHECKERS

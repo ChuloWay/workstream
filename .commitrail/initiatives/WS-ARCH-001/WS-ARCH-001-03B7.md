@@ -1,7 +1,7 @@
 # ARCH-03B7 — Explicit task submission requirements
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: distinct immutable contributor and management
   requirements projections reuse the task's historical policy resolver.
 

@@ -255,6 +255,8 @@ class TaskResponse(BaseModel):
 class RequiredArtifactRequirement(BaseModel):
     """Contributor-facing required artifact rule from the locked effective policy."""
 
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
     key: str
     path: str
     hash_required: bool
@@ -264,6 +266,8 @@ class RequiredArtifactRequirement(BaseModel):
 
 class RequiredEvidenceRequirement(BaseModel):
     """Contributor-facing required evidence rule from the locked effective policy."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     key: str
     label: str
@@ -275,6 +279,8 @@ class RequiredEvidenceRequirement(BaseModel):
 class ForbiddenArtifactRequirement(BaseModel):
     """Contributor-facing forbidden artifact rule from the locked effective policy."""
 
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
     pattern: str
     reason: str | None = None
     worker_facing_fix: str | None = None
@@ -284,37 +290,58 @@ class ForbiddenArtifactRequirement(BaseModel):
 class StorageReferenceRules(BaseModel):
     """Contributor-facing storage-reference constraints for staged artifacts."""
 
-    allowed_storage_schemes: list[str]
-    allowed_uri_prefixes: list[str]
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    allowed_storage_schemes: tuple[str, ...]
+    allowed_uri_prefixes: tuple[str, ...]
     credentials_allowed: bool
     query_strings_allowed: bool
     fragments_allowed: bool
     path_traversal_allowed: bool
 
 
-class SubmissionRequirementsResponse(BaseModel):
+class SubmissionPackagingRequirements(BaseModel):
+    """Fixed packaging requirements from the historical effective policy."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    package_required: bool
+    allowed_package_formats: tuple[Literal["zip", "tar", "tar.gz", "tar.zst"], ...] | None = None
+
+
+class _TaskSubmissionRequirements(BaseModel):
     """Contributor-safe exact submission requirements for a locked task."""
 
-    task_id: str
-    project_id: str
-    guide_version: str
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    task_id: UUID
+    project_id: UUID
+    guide_version: str = Field(pattern=r"\S")
     policy_schema_version: str | None
     merge_algorithm_version: str | None
-    required_packet_fields: list[str]
-    required_artifacts: list[RequiredArtifactRequirement]
-    required_evidence: list[RequiredEvidenceRequirement]
-    forbidden_artifacts: list[ForbiddenArtifactRequirement]
-    attestation_terms: list[str]
+    required_packet_fields: tuple[str, ...]
+    required_artifacts: tuple[RequiredArtifactRequirement, ...]
+    required_evidence: tuple[RequiredEvidenceRequirement, ...]
+    forbidden_artifacts: tuple[ForbiddenArtifactRequirement, ...]
+    attestation_terms: tuple[str, ...]
     manifest_required: bool
     artifact_hash_required: bool
     artifact_hash_algorithm: Literal["sha256"]
-    allowed_storage_schemes: list[str]
+    allowed_storage_schemes: tuple[str, ...]
     storage_reference_rules: StorageReferenceRules
     maximum_file_size_bytes: int | None
     maximum_package_size_bytes: int | None
     maximum_archive_entries: int | None
     maximum_archive_size_bytes: int | None
-    packaging: dict[str, Any]
+    packaging: SubmissionPackagingRequirements
+
+
+class ContributorTaskSubmissionRequirements(_TaskSubmissionRequirements):
+    """Contributor-safe intake requirements without policy internals or actors."""
+
+
+class ManagementTaskSubmissionRequirements(_TaskSubmissionRequirements):
+    """Separate management requirements; no additional private fields are needed."""
 
 
 class PostSubmitPolicyBodySummary(BaseModel):

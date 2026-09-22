@@ -411,7 +411,7 @@ async def test_task_service_read_contexts_preserve_visibility_and_operator_scope
     service._ensure_task_visible = AsyncMock()
     service._load_locked_task_context = AsyncMock(return_value=context)
     service._task_response = MagicMock(return_value=task_response)
-    service._submission_requirements_response = MagicMock(return_value=requirements_response)
+    service._contributor_submission_requirements_response = MagicMock(return_value=requirements_response)
     service._management_locked_context_response = MagicMock(return_value=locked_response)
 
     assert await service.get_task(actor, task.id) is task_response
@@ -419,11 +419,11 @@ async def test_task_service_read_contexts_preserve_visibility_and_operator_scope
     assert await service.get_task_locked_context(actor, task.id) is locked_response
 
     assert service._get_task.await_args_list == [
-        call(task.id), call(task.id), call(task.id, for_update=True),
+        call(task.id), call(task.id, for_update=True), call(task.id, for_update=True),
     ]
     assert service._ensure_task_visible.await_count == 2
     assert service._load_locked_task_context.await_count == 2
-    service._submission_requirements_response.assert_called_once_with(task, context)
+    service._contributor_submission_requirements_response.assert_called_once_with(task, context)
     service._management_locked_context_response.assert_called_once_with(task, context)
 
 

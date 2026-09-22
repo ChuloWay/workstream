@@ -268,6 +268,11 @@ The contributor-safe API projection of the task's locked effective project
 submission artifact policy. It tells the contributor the exact required artifacts,
 evidence keys, forbidden artifact rules, storage reference rules, packaging
 rules, hash algorithm, size limits, and attestation terms before submission.
+ARCH-03B7 supplies separate immutable contributor and management result types
+with the same safe fields. Both use the original locked policy, never the current
+guide. The hidden contributor read applies existing assignment visibility after
+TASK locking; the management read stays internal and the retained public route
+keeps its existing authority wrapper until ARCH-03C.
 
 ## Task Locked Context
 

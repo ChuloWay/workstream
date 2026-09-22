@@ -202,7 +202,10 @@ and timestamps. None grants authority or exposes a public queue.
 ARCH-03B4 also supplies hidden contributor and manager detail facts; these are
 not new public endpoints. ARCH-03B6 supplies distinct management, operational and
 audit locked-context projections through one historical resolver. Operational and
-audit methods remain internal. Requirements and task audit-evidence projections belong to ARCH-03B;
+audit methods remain internal. ARCH-03B7 supplies immutable contributor and manager
+requirements from the original locked effective policy. Its separate manager read
+is internal; the existing submission-requirements route retains its role/creator
+visibility wrapper pending ARCH-03C. Task audit-evidence projections remain in ARCH-03B;
 assignment invalidation also needs shared delivery
 claims, and authorization/public cutover remains ARCH-03C.
 

@@ -35,7 +35,7 @@ checker-remediation boundary before public Submission cutover.
 | [ARCH-03B4](../WS-ARCH-001-03B4.md) | ARCH-03B3 | Complete: hidden exact-project contributor and management task detail with assignment visibility |
 | [ARCH-03B5](../WS-ARCH-001-03B5.md) | ARCH-03B4 | Complete: replace existing authorized contributor/manager work context with current task facts and exact locked policy references |
 | [ARCH-03B6](../WS-ARCH-001-03B6.md) | ARCH-03B5 | Complete: shared historical validation and distinct management/operational/audit locked-context projections; retained management HTTP authority unchanged |
-| ARCH-03B remaining | ARCH-03B6; AUTH-OUTBOX-01 and CON-02B for invalidation | Requirements and task audit-evidence projections; hidden assignment invalidation only after shared committed claims |
+| ARCH-03B remaining | ARCH-03B7; AUTH-OUTBOX-01 and CON-02B for invalidation | Requirements and task audit-evidence projections; hidden assignment invalidation only after shared committed claims |
 | ARCH-03C | ARCH-03B, AUTH-OUTBOX-02 | AUTH exact task/assignment activation and integrated readiness proof |
 | CP09 (later cleanup coordination) | All legacy consumers replaced, including CHECKER and public 02I path | Physical economic deletion; not on the allow_review critical path |
 | ARCH-04B | ARCH-04A, POL-07, ARCH-03C, merged ARCH-02H | ART exact stored Submission materialization |
