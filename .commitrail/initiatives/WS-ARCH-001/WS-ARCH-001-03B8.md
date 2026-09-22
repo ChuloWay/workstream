@@ -37,6 +37,9 @@ It is not the proposed `audit.task.evidence.read` authority surface.
   project membership in this query; the recorded private-edge path is unchanged.
 - `backend/tests/tasks/test_audit_evidence.py`, relevant existing audit/delegation
   tests and the TASK lane catalogue/exact-set registration.
+- Ownership partition, existing explicit public-API registration and its neighbor-
+  rejection test: register only the new audit-evidence module and recompute the
+  partition digest while preserving its protected base and all existing owners.
 - Current ARCH overview/plan/chunk map/03B/03C contracts, related AUTH/CON/POL
   navigation, INDEX, README, roadmap, task specification, data model, glossary
   and operating manual. Local roadmap exports only if present.
@@ -191,3 +194,11 @@ PostgreSQL/MinIO lanes and coverage govern final evidence. Migration head remain
   shared committed claims, then ARCH-03C exact authority/public activation.
 - Remaining risks: the retained public audit wrapper remains until its explicit
   authority replacement; live pagination is not a snapshot export.
+
+### Ownership inventory repair
+
+The new module must appear in the existing exact behavior-ownership inventory.
+Register its single path, retain every existing assignment and the protected base,
+and extend the existing read-module neighbor-rejection test. Verify the complete
+preflight, including ownership validation; architecture tests alone do not prove
+inventory completeness. This does not weaken a guard or introduce an exemption.
