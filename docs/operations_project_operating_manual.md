@@ -285,8 +285,9 @@ version is locked, submission artifact requirements are clear,
 checker/review/revision policy versions and the guide-bound
 ContributionPolicyVersion are locked, and a release decision is recorded. A
 task cannot become `READY` without that policy lock. TaskAssignment and
-Submission later carry it for the exact attempt; ReviewLease copies the
-immutable Submission stamp without current-policy lookup.
+Submission later carry it for the exact attempt. When canonical review admission
+is delivered, ReviewLease must copy the immutable Submission stamp without
+current-policy lookup.
 
 After screening and release, contributors use
 `GET /api/v1/tasks/{task_id}/work-context` for the locked guide and lifecycle
@@ -319,8 +320,8 @@ External origin qualification and webhook drop notifications are future adapter 
 
 ## Task Release Checklist
 
-This is the target release checklist, including the pending contribution-policy
-lock described above; it is not an inventory of current runtime guards.
+This is the target release checklist, not an inventory of current runtime guards.
+The contribution-policy lock described above is already enforced.
 
 Before moving a task to `READY`:
 
@@ -340,7 +341,7 @@ Before moving a task to `READY`:
 ## Ready Gate
 
 The complete gate below is the target v0.1 contract. Its contribution-policy
-lock remains pending, as noted in Task Screening Gate.
+lock is already enforced, as noted in Task Screening Gate.
 
 A task cannot move to `READY` just because it has text.
 
