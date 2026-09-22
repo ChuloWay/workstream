@@ -6,7 +6,7 @@
   identity with closed phase-bound facts and a typed preparation port; leave
   delivery and live authorization to CON-02B and AUTH-OUTBOX-02.
 
-## Intent and current behavior
+## Intent
 
 Reliable follow-up must survive a worker crash without giving the delivery
 worker TASK, checker, artifact or compensation authority. Shared OUTBOX already
@@ -27,6 +27,11 @@ Allowed:
   `backend/alembic/versions/0026_outbox_dispatch_identity.py`: add only
   `workstream.outbox.dispatcher` to the existing closed identity vocabulary and
   database check after 0025. Do not provision an actor or rewrite retained data.
+- `backend/alembic/env.py`: retain 0025 as an admitted predecessor and register
+  0026 as the current head; repeated `upgrade head` must remain valid.
+- `backend/tests/conftest.py`: refresh only the exact public-schema digest after
+  PostgreSQL catalogue comparison proves the identity CHECK is the sole delta.
+  Preserve the immutable 0001 baseline manifest.
 - Remove the superseded `actors/service_identities.py` re-export; update its
   exact production/test import consumers to `actors.api`. Update only matching
   AUTH/private-edge debt entries and ownership partition/closed-transition tests.
@@ -34,6 +39,9 @@ Allowed:
 - Focused `backend/tests/authorization/test_outbox_dispatch_contract.py` and
   `backend/tests/migrations/test_outbox_dispatch_identity.py`, existing catalogue,
   boundary, identity and ownership expectations; exact lane registrations.
+  Update the explicit action inventory 116 -> 117, permission inventory 73 -> 74
+  (new permissions 24 -> 25), and service memberships 23 -> 24 without loosening
+  exact-set assertions.
 - AUTH/CON/ARCH current overview/plan/map, INDEX, README, roadmap, authorization
   and contribution specifications and operations docs where current boundary
   wording changes. No local spreadsheet exports exist.
@@ -52,20 +60,32 @@ not make its action executable.
 
 Expose a closed `claim`, `invoke`, `finalize` phase enum and immutable
 `OutboxDispatchFacts`. Bind exact event UUID, project UUID, immutable payload
-digest, positive claim generation, bounded worker owner token, aware claimed-at
-and later lease expiry. For claim these describe the proposed next reservation;
+digest (`sha256:[0-9a-f]{64}`), strict integer claim generation 1..2147483647,
+worker owner matching `[A-Za-z0-9._:-]{1,120}`, aware claimed-at and strictly
+later lease expiry. FINALIZE additionally requires a canonical `outcome_digest`;
+CLAIM/INVOKE forbid it. CON-02B owns the typed outcome and hashes every result,
+retry and dead-letter field to be written; AUTH does not interpret that schema. For claim these describe the proposed next reservation;
 for invoke/finalize they describe the already-committed reservation. CON-02B
 must compare claim generation against locked persisted state and validate
 committed ownership; callers cannot assert commit by supplying a boolean.
-Phase is included in the action-domain-separated resource digest so neither a
+The canonical resource digest uses the single domain
+`workstream.authorization.outbox_dispatch` and binds every normalized fact plus
+fixed action, permission, service identity, resource type/id and project scope.
+There is no compatibility domain. Phase and outcome are included so neither a
 copied claim nor pre-invocation facts identify a later-phase operation. Same
 instant timestamp offsets canonicalize to UTC.
 
 Expose a nominal abstract `PreparedOutboxDispatch` and typed context-manager
-port for one exact phase. Preparation resolves the fixed identity internally;
+port for one exact phase:
+`PreparedOutboxDispatch.consume(facts: OutboxDispatchFacts) -> AuthorizationDecision`
+and `prepare_outbox_dispatch(facts, request_id, correlation_id) ->
+AbstractAsyncContextManager[PreparedOutboxDispatch]`. Reuse the existing public
+decision type; add no receipt class. Request/correlation identifiers are invocation
+context, excluded from resource facts/digest. Preparation resolves the fixed identity internally;
 there is no caller-selected service or feature action. A handle must remain
-process-local and is not serializable. Concrete session/root-transaction binding,
-single consumption, live authority and committed-generation revalidation belong
+process-local and rejects pickle, shallow copy and deep copy. Concrete session/root-transaction binding,
+single consumption, equality of recomposed phase/facts/outcome, live authority
+and committed-generation revalidation belong
 to AUTH-OUTBOX-02 consuming CON-02B's public claim port. No live implementation,
 factory, permissive default or fabricated allow receipt is added here. Each
 phase requires a new preparation; no handle crosses commit, lease wait or I/O.
@@ -76,7 +96,7 @@ and retire only its exact debt/inventory references. Preserve synthetic tests
 which still protect required private-boundary behavior using a real retained
 private owner where appropriate. Do not duplicate the identity enum.
 
-## Acceptance and proof
+## Acceptance criteria
 
 1. Catalogue/matrix admit exactly the new pair as planned, preserve all existing
    pairs, and reject extra feature membership. Existing fixed-service admission
@@ -91,12 +111,16 @@ private owner where appropriate. Do not duplicate the identity enum.
 4. Real PostgreSQL upgrade 0025 -> 0026 preserves existing actor/link rows and
    constraints, allows exact dispatcher provisioning, rejects unknown identities
    and duplicate singleton provisioning. The downgrade guard preserves data.
-5. Real PostgreSQL fixed-service admission proves missing identity denies,
-   provisioned dispatcher remains unavailable, and dispatcher cannot invoke any
-   active foreign service action. Positive control uses an existing provisioned
+5. Real PostgreSQL fixed-service admission proves missing identity raises
+   `ACTOR_NOT_FOUND`; a provisioned active dispatcher/link with its exact planned
+   action raises `PERMISSION_NOT_GRANTED`; an active foreign service action
+   raises `PERMISSION_NOT_GRANTED`. Assert persisted actor/link status, exact
+   matrix membership and availability before testing the denial. Positive control uses an existing provisioned
    active service action so a universally failing fixture cannot pass.
 6. No live imports use the deleted alias; boundary/ownership/lane validation and
    all retained identity/authorization tests pass without relaxed gates.
+
+## Evidence
 
 These are contract/registration proofs, not runtime lease/replay/crash proofs.
 CON-02B must prove persisted claim fencing and recovery; AUTH-OUTBOX-02 must prove
@@ -105,7 +129,7 @@ Mutation probes must remove the planned gate or exact matrix membership check,
 change digest generation/phase binding, and widen the identity DB constraint;
 corresponding tests must fail at their intended assertion with valid controls.
 
-## Risk and review
+## Risk and review routing
 
 L1: bounded authorization, identity schema and public contract. Required tracks:
 security, architecture/reuse, QA/test delta, CI integrity and docs. Human focus:
@@ -123,3 +147,51 @@ reviewers own scoped falsification rather than repeating the full suite.
 - No overlapping open product PR; #410 concerns advisory CI reporting.
 - Next usable boundary: CON-02B hidden shared dispatcher, followed by
   AUTH-OUTBOX-02 activation; TASK invalidation and ARCH-03C remain separate.
+
+### Named proof inventory
+
+Future nodes in `tests/authorization/test_outbox_dispatch_contract.py`:
+
+- `test_dispatch_registration_is_exact_and_unavailable`: exact catalogue,
+  fixed-service pair, human exclusion and closed metadata corruption controls.
+- `test_dispatch_facts_validate_all_phases`: valid controls and each malformed
+  field independently, including phase-specific outcome requirements.
+- `test_dispatch_digest_binds_every_fact`: independent substitutions of each
+  field, fixed canonical bytes, same-instant UTC normalization, forged typed
+  input rejection and action/permission/service/resource envelope assertions.
+- `test_dispatch_prepared_contract_is_nominal_and_process_local`: abstract
+  handle plus pickle/copy/deepcopy rejection; no runtime authority claim.
+- `test_dispatch_service_admission`: real persisted missing, active planned,
+  foreign-action denials and existing active-service success in distinct steps.
+- `test_service_identity_alias_is_removed`: whole live Python consumer scan,
+  absent old file, current ledgers clean; historical records are not rewritten.
+
+Future nodes in `tests/migrations/test_outbox_dispatch_identity.py`:
+
+- `test_dispatch_identity_upgrade_preserves_records_and_exact_schema`: install
+  0025, commit actor/link controls, reject dispatcher before upgrade, apply0026,
+  reconnect to verify persistence and unchanged records; compare exact constraint
+  vocabulary with ACTORS model and assert only the identity CHECK changes.
+- `test_dispatch_identity_head_upgrade_is_repeatable`: repeated head migration
+  succeeds and leaves schema/records unchanged after0026 is already committed.
+- `test_dispatch_identity_rejects_unknown_and_duplicate`: actual raw-DB exact
+  identity acceptance, unknown CHECK rejection and duplicate UNIQUE rejection,
+  each with valid surrounding fields and its exact expected constraint.
+- `test_dispatch_identity_downgrade_preserves_records`: unchanged revision,
+  constraint and actor/link snapshots after the existing no-downgrade guard.
+
+The current tests do not prove live committed-claim equality, lease validity,
+session/transaction lifetime or delivery recovery. Those remain CON-02B and
+AUTH-OUTBOX-02 implementation proofs. Admission tests use existing denial codes.
+The planned-gate mutation changes only action availability in fixed-service
+admission; the matrix mutation changes only exact membership. Digest mutations
+omit generation/phase/outcome independently. The DB mutation widens only the
+identity CHECK so the unknown-identity test must stop raising. These probes must
+reach the named semantic assertion; setup failures do not count as detection.
+
+## Review findings
+
+Plan review added repeated-migration admission, exact schema fingerprint custody,
+explicit method signatures and serialization restrictions, fixed-envelope hashing,
+finalize outcome binding, named wrong-reason-resistant controls, and the distinction
+between current registration proof and future live dispatcher proof.
