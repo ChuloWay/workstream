@@ -61,10 +61,7 @@ No source metadata, actor identity, payment, full policy body or storage object
 reference is projected. Existing whitelist translation and validation helpers
 remain when used; remove only superseded response/builders and unused helpers.
 
-Hidden management read takes exact UUID project/task selectors and reuses
-03B6 `_read_locked_context`: exact project/task TASK lock, refreshed row, then
-existing historical PROJECTS validation. Hidden contributor read additionally
-takes an exact UUID contributor selector. It first locks the exact project/task,
+Extract one private `_lock_scoped_task` helper from 03B6 `_read_locked_context`: UUID project/task validation, exact `lock_project_task` lookup under no_autoflush, refreshed TASK lock and TaskNotFound. `_read_locked_context` calls this helper and then the unchanged historical PROJECTS resolver. Hidden management requirements reuse that operation. Hidden contributor requirements validate all three UUID selectors through the existing `ContributorTaskDetailRequest` before SQL and call the same TASK-only helper,
 then reuses `read_contributor_task_detail(ContributorTaskDetailRequest(...))`
 for current visibility before entering PROJECTS. Its extra bounded detail query
 is intentional: it reuses the existing ready/unassigned-or-own-active-assignment
@@ -92,7 +89,12 @@ the same translator; no current guide/policy lookup.
    calls. Real ready task succeeds for both hidden reads; stored wrong-project,
    missing, draft/unassigned and another contributor's assigned task conceal
    appropriately before PROJECTS. Management of a locked non-ready task works.
-   Own active assignment succeeds; inconsistent or closed assignment fails.
+   Assert the stored status/assignee and assignment contributor/status for each
+   case before reading: wrong assignment contributor, wrong task assignee, active
+   assignment alone on unassigned READY, assignee without assignment, claimed
+   without assignment and released claimed assignment all conceal. Own active
+   assignment succeeds; READY with released history remains visible. Reuse the
+   proven fixture pattern in `test_task_detail_visibility`.
 3. Every requirement equals the original effective policy projection. Reuse the
    existing successor integration test: original `answer.md`, activated successor
    `v2-answer.md`; prove the successor differs, then both hidden reads and public
@@ -103,8 +105,10 @@ the same translator; no current guide/policy lookup.
 5. Both reads leave invalid pending sentinel unflushed and a flushed marker
    uncommitted; independent observer after caller rollback sees neither. Reuse
    03B6's exact-PID two-session TASK-lock pattern for contributor read: preload
-   reader row, observe exact writer blocker, PROJECTS resolver not entered until
-   release, then refresh/reject changed body. No fake successful policy resolver.
+   reader row and observe exact writer blocker. Wrap both real detail visibility
+   and real PROJECTS reads; neither is entered before TASK release. After release,
+   detail runs exactly once before PROJECTS, which rejects the refreshed changed
+   body. No fake successful policy resolver.
 6. Retained service test asserts exactly one TASK load with `for_update=True`
    before visibility/resolution; existing HTTP manager/worker/foreign/error tests
    remain. OpenAPI exposes only contributor-safe schema. Old response/builder
@@ -118,13 +122,22 @@ New named tests: `test_requirement_contracts`,
 `test_requirement_custody_and_caller_transaction`,
 `test_requirement_waits_for_task_before_projects`,
 `test_requirement_public_surface_and_removed_symbols`.
-Extend the existing successor test and retained-service test. A focused pure
-translation test proves typed packaging rejects unexpected fields and malformed
-values with sanitized `TaskLockedContextInvalid`, using otherwise valid policy
-facts rather than bypassing the real custody proof.
+Extend `test_task_display_survives_guide_successor_for_contributor_and_manager`
+in `tests/tasks/test_project_display.py` and
+`test_task_service_read_contexts_preserve_visibility_and_operator_scope` in
+`tests/test_tasks.py`; update its exact await list so both requirements and
+locked-context reads request `for_update=True`, with one TASK load each. A focused pure
+translation test `test_requirement_packaging_projection` independently proves
+canonical package_required-only policy with absent formats, valid format-to-tuple
+conversion and JSON arrays, unexpected keys, and malformed package_required or
+formats rejected with sanitized `TaskLockedContextInvalid`. It uses otherwise
+valid policy facts and does not claim to prove persisted custody.
 
 Discriminating runtime probes: omit contributor visibility and require foreign
-assignment rejection to fail; substitute the genuinely different successor
+assignment rejection to fail; drop task-assignee equality from the existing
+visibility predicate and require the wrong-assignee case to fail; move the real
+detail read before TASK locking and require its non-entry assertion to fail;
+substitute the genuinely different successor
 requirements and require full historical equality to fail; remove retained-route
 TASK lock and require the exact await assertion to fail. Contract tests reject
 mutable nested collections and private packaging keys independently.
@@ -146,6 +159,11 @@ complete historical requirements, exact contributor visibility, immutable safe
 payload and explicit deferred authority boundary.
 
 ## Reconciliation
+
+Plan review tightened the complete assignment matrix, required detail-before-
+PROJECTS and TASK-before-detail concurrency proof, extracted the shared TASK-only
+lock helper, and named packaging projection proofs. These are adopted before
+implementation; no future runtime proof is claimed by plan review.
 
 Base is merged #424, `b5e52529`. Only open #410 concerns CI impact reporting;
 this change does not touch workflows or impact selection. No local spreadsheet
