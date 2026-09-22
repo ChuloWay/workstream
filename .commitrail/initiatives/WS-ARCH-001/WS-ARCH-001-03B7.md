@@ -24,7 +24,8 @@ reads; live exact AUTH and separate public activation remain 03C.
   translation; retained route replacement. Existing repository/detail facts may
   be consumed without changing their public contracts.
 - `backend/tests/tasks/test_submission_requirements.py`, affected
-  `tests/test_tasks.py` and `tests/tasks/test_project_display.py`; new module
+  `tests/test_tasks.py`, `tests/tasks/test_project_display.py` and the archive-limit
+  projection cases in `tests/test_project_guide_compilation_contracts.py`; new module
   registration in existing lane catalogue and its exact-set test.
 - Current ARCH parent, overview, plan/chunk map, AUTH/CON/POL navigation, INDEX,
   README, roadmap, task specification, glossary/data model and operating manual.
