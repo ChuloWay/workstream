@@ -91,7 +91,7 @@ test-delta impact.
    draft/display reads using the existing port and immutable exact-guide facts.
    Its public response shapes and authorization remain unchanged. The separate
    pre-submit context consumer is explicitly outside this metadata cutover.
-2. After delivered 03B2/03B3 hidden queues, 03B4 detail, 03B5 work context and 03B6 locked-context and 03B7 requirements projections, remaining task
+2. After delivered 03B2/03B3 hidden queues, 03B4 detail, 03B5 work context and 03B6 locked-context and 03B7 requirements projections, remaining
    task audit-evidence projections, with exact field,
    visibility/count/cursor and hidden command contracts before implementation.
 3. Assignment invalidation after the shared claim contract exists, followed by

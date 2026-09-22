@@ -599,7 +599,7 @@ remaining trace sequence is:
   and minimal Task/Assignment/Submission writers together without superseded economic
   readiness. Remaining work includes
   task audit-evidence projections in `ARCH-03B`, following delivered
-  `ARCH-03B1` metadata and ARCH-03B2/03B3 hidden queues and ARCH-03B4 hidden detail and ARCH-03B5 current work context, and authorization/public cutover in `ARCH-03C`. `CP09` physical cleanup waits for all remaining
+  `ARCH-03B1` metadata and ARCH-03B2/03B3 hidden queues and ARCH-03B4 hidden detail and ARCH-03B5 current work context, ARCH-03B6 locked-context and ARCH-03B7 requirements projections, and authorization/public cutover in `ARCH-03C`. `CP09` physical cleanup waits for all remaining
   legacy consumers to be replaced; it is outside the `allow_review` critical path.
   Live assignment invalidation also requires shared dispatch and its exact
   service authority; current authority is still checked on every request.
