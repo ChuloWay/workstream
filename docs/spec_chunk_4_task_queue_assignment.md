@@ -242,8 +242,8 @@ missing or invalid locked custody returns the existing 422
 `task_locked_context_invalid`. Ordinary unassigned draft is not contributor work;
 a fully locked own-active draft remains visible under the existing authority rule.
 
-Standalone detail endpoints, audit projection
-replacements, and assignment invalidation retain their separately scoped work.
+Standalone detail endpoints, retained audit-route authority replacement, and
+assignment invalidation retain their separately scoped work.
 
 ## Task locked-context projections
 
@@ -269,7 +269,8 @@ The retained `/tasks/{task_id}/locked-context` route returns the same management
 projection under its existing role/creator wrapper and loads the task once.
 ARCH-03C still owns replacement of that authority and public operational/audit
 activation. There is no audience-switching endpoint, fallback schema or new
-TASK public API dependency. Audit-event evidence remains separate projection work.
+TASK public API dependency. Retained audit-route authority replacement remains
+separate ARCH-03C work.
 
 
 ## Task submission requirements projections
