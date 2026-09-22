@@ -56,7 +56,10 @@ new private imports, gate weakening or unrelated cleanup.
 The dispatcher has exactly `outbox.dispatch`; no human role receives it and no
 other service receives it. Availability stays `planned` in both the ordinary
 catalogue and service-matrix metadata. Registering/provisioning an identity must
-not make its action executable.
+not make its action executable. The service index must require exact permission
+`OUTBOX_DISPATCH`, owner `AUTH_OUTBOX_01` and availability PLANNED. Keep the
+action out of `_ACTIVE_SERVICE_ACTIONS` and `FUTURE_INTENT_REQUIRED_ACTIONS`: it
+is a planned fixed-service action, not a caller-declared future-intent action.
 
 Expose a closed `claim`, `invoke`, `finalize` phase enum and immutable
 `OutboxDispatchFacts`. Bind exact event UUID, project UUID, immutable payload
