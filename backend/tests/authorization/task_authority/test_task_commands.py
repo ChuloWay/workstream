@@ -111,14 +111,14 @@ async def test_project_grant_drives_claim_start_and_current_action_hints(task_cl
     assert authority["actor_profile_id"] == actor_id
     context = await task_client.get(f"/api/v1/tasks/{task_id}/work-context", headers=auth_headers())
     assert context.status_code == 200, context.text
-    assert context.json()["lifecycle"]["next_actions"] == ["claim"]
+    assert context.json()["lifecycle"] == {"assigned_to_current_actor": False, "next_actions": ["claim"]}
     claimed = await task_client.post(f"/api/v1/tasks/{task_id}/claim", headers=auth_headers())
     assert claimed.status_code == 200, claimed.text
     assert claimed.json()["assignment"]["contributor_id"] == actor_id
     assert claimed.json()["task"]["status"] == "claimed"
     context = await task_client.get(f"/api/v1/tasks/{task_id}/work-context", headers=auth_headers())
     assert context.status_code == 200, context.text
-    assert context.json()["lifecycle"]["next_actions"] == ["start"]
+    assert context.json()["lifecycle"] == {"assigned_to_current_actor": True, "next_actions": ["start"]}
     set_dev_actor(monkeypatch, roles="project_manager", subject="project-manager-subject")
     revoked = await task_client.post(
         f"/api/v1/projects/{project['id']}/role-grants/{authority['grant_id']}/revoke",
@@ -142,9 +142,7 @@ async def test_project_grant_drives_claim_start_and_current_action_hints(task_cl
     assert started.json()["status"] == "in_progress"
     context = await task_client.get(f"/api/v1/tasks/{task_id}/work-context", headers=auth_headers())
     assert context.status_code == 200, context.text
-    assert context.json()["lifecycle"]["next_actions"] == []
-    assert set(context.json()["lifecycle"]) == {"assigned_to_current_actor", "next_actions"}
-    assert "can_run_pre_submit_check" not in context.json()["lifecycle"]
+    assert context.json()["lifecycle"] == {"assigned_to_current_actor": True, "next_actions": []}
 
     async with db_session.get_session_factory()() as session:
         assert (

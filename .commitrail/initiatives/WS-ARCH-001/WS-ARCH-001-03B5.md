@@ -154,15 +154,15 @@ Tests live in `backend/tests/tasks/test_work_context.py` unless qualified.
 | Distinct public field sets | `test_work_context_openapi`: exact contributor/manager schemas, canonical task ID and guide/version placement; manager has no lifecycle; no obsolete work-context schema or economic/submission capability fields |
 | Malformed selectors before SQL | `test_work_context_invalid_selectors`: both concrete methods reject each invalid UUID before transaction/execute/authority access |
 | Actual actor-specific JSON and privacy | `test_work_context_public_projections`: valid granted actor/manager requests, stored non-null economic and private source sentinels, exact allowed returned keys/values; economics absent for both, management-only facts absent for contributor |
-| Contributor executable hints | retained `test_project_grant_drives_claim_start_and_current_action_hints`: real READY -> claim -> start; claim/start/empty hints and absence of submit/precheck flags |
+| Contributor executable hints | retained `test_project_grant_drives_claim_start_and_current_action_hints`: real READY -> claim -> start; false/true assignment ownership and claim/start/empty hints and absence of submit/precheck flags |
 | All own-active states and ordinary draft denial | `test_work_context_owned_state_matrix`: real canonical claim plus fully locked status-only fixture for all nine string states, including owned draft/READY; persisted assignment/assignee/context preconditions asserted; only own CLAIMED advertises start. Ordinary unassigned draft separately returns existing 403 guard denial |
 | Current authority and concealment | retained grant/revocation/suspension tests plus `test_work_context_project_scope`: stored foreign task, valid same-project manager control, wrong route project returns 404; valid locked task without required grant denies, with no assignment/task changes |
 | Successful audit custody | `test_work_context_public_projections`: before/after task/assignment/receipt/transition state stable and exactly one AUTH allow per read with correct action, project selector and actor, plus canonical resource digest; existing AUTH-owner proofs cover exact task-context digest binding |
-| Post-AUTH projection failure rollback | `test_work_context_projection_failure_rolls_back` for both methods/routes: wrapped real detail read verifies staged exact allow in its transaction, then returns None; HTTP 404/resource_not_found/nonretryable; independent observer finds no committed new allow, task/assignment/receipt/transition unchanged |
+| Post-AUTH projection failure rollback | `test_work_context_projection_failure_rolls_back` for both methods/routes: wrapped real detail read proves exact nonmissing audience/task/project and staged allow in its transaction, then returns None; HTTP 404/resource_not_found/nonretryable; independent observer finds no committed new allow, task/assignment/receipt/transition unchanged |
 | Exact historical guide and complete policy references | extend `tests/tasks/test_project_display.py::test_task_display_survives_guide_successor_for_contributor_and_manager`: assert stored original task stamps and a valid successor with a distinct ContributionPolicy version; both read results retain exact guide identity, both policy IDs/generations/hashes and ContributionPolicy UUID, using separate audience field sets |
 | Invalid custody | retained `test_task_context_apis_fail_closed_when_locked_context_is_missing` and `test_task_context_apis_fail_closed_on_stale_locked_context_rows`, plus `test_work_context_missing_locked_context`: ordinary manager draft has actual authority before 422/task_locked_context_invalid; no successful allow commits |
 | Both route error contracts | update `test_task_command_routes_preserve_structured_errors` owner method names only; preserve each public status/code/retry/request-ID assertion |
-| Unchanged real lock interleaving | `tests/test_pre_submit_related_lock_order.py::test_work_context_task_lock_precedes_art_actor_lock`: replace only removed method call, retain real AUTH/ART sessions, order and completion assertions |
+| Unchanged real lock interleaving | `tests/test_pre_submit_related_lock_order.py::test_work_context_task_lock_precedes_art_actor_lock`: update removed method call and canonical task.status assertion, retain real AUTH/ART sessions, order and completion assertions |
 | Old path removal | `test_work_context_obsolete_symbols_absent`: deleted exclusive schemas, service builders and old optional-project method absent; current routes bind the separate owner methods; required old proof is updated, not removed |
 
 Reuse real PostgreSQL fixtures in `tests.test_tasks`; persist economic sentinels
@@ -180,7 +180,9 @@ UUID in the returned projection and require the persisted-reference comparison
 to fail. These output substitutions test projection proof, not a claim to bypass
 unchanged PROJECTS database guards. Exclude owned draft in the command and add a
 claim hint for own READY in separate probes; the nine-state test must catch both.
-Retain actual execution targets and cleanup evidence for every credited probe.
+Force assigned_to_current_actor true for unassigned READY and require the retained
+grant test to reject the false ownership fact. Retain actual execution targets
+and cleanup evidence for every credited probe.
 
 Run focused isolated PostgreSQL/API tests plus required real lock regression,
 Ruff, module/AUTH/test-structure boundaries, exact lane/ownership tests, Commitrail,
@@ -205,6 +207,12 @@ before asserting both audiences retain the original locked UUID. The prior audit
 test incorrectly queried a raw task resource. Existing AUTH intentionally records
 a project selector and a resource digest binding TASK facts; proof uses that
 privacy-safe selector. No production AUTH behavior changed.
+
+Internal review repairs: QA-03B5-IMPL-01 updates the retained real AUTH/ART race's
+status assertion to `task.status`; QA-03B5-IMPL-02 proves the original detail read
+succeeds before injecting its missing-result failure; QA-03B5-IMPL-03 asserts
+false ownership for unassigned READY and true ownership after claim/start.
+DOC-03B5-01 keeps this child in the parent's completed predecessor sequence.
 
 ## Reconciliation
 

@@ -253,6 +253,9 @@ async def test_work_context_projection_failure_rolls_back(task_client, monkeypat
 
     async def unavailable(owner, request):
         assert request.task_id == UUID(task["id"]) and request.project_id == UUID(project["id"])
+        detail = await original(owner, request)
+        assert type(detail) is (ManagementTaskDetail if management else ContributorTaskDetail)
+        assert detail.task_id == UUID(task["id"]) and detail.project_id == UUID(project["id"])
         staged = [event for event in await decisions(owner._session, task["id"]) if event.id not in previous]
         assert len(staged) == 1 and staged[0].after_facts["allowed"] is True
         assert staged[0].action_id == ACTIONS[int(management)] and staged[0].project_id == project["id"]
@@ -261,6 +264,7 @@ async def test_work_context_projection_failure_rolls_back(task_client, monkeypat
         return None
 
     method = "read_management_task_detail" if management else "read_contributor_task_detail"
+    original = getattr(TaskRepository, method)
     monkeypatch.setattr(TaskRepository, method, unavailable)
     path = f"/api/v1/projects/{project['id']}" if management else "/api/v1"
     response = await task_client.get(f"{path}/tasks/{task['id']}/work-context", headers=auth_headers())

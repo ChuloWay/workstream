@@ -31,7 +31,8 @@ declarations, boundary ledgers and current documentation. Not allowed: duplicate
 lineage writers, project-policy evaluation, checker planning, ART custody, AUTH
 decisions, compatibility paths, public cutover or human revision semantics.
 
-Reuse delivered ready, management and operational queue facts and 03B4 detail; declare remaining
+Reuse delivered ready, management and operational queue facts, 03B4 detail and
+03B5 work context; declare remaining
 replacement task surfaces against hidden owner commands; ARCH-03C owns their exact activation and live route switch.
 Do not leave an unowned route step between public ports and user-visible
 behavior. The queue must filter project/visibility before counts and cursors.
@@ -85,7 +86,7 @@ test-delta impact.
    draft/display reads using the existing port and immutable exact-guide facts.
    Its public response shapes and authorization remain unchanged. The separate
    pre-submit context consumer is explicitly outside this metadata cutover.
-2. After delivered 03B2/03B3 hidden queues and 03B4 detail, remaining actor-specific task
+2. After delivered 03B2/03B3 hidden queues, 03B4 detail and 03B5 work context, remaining actor-specific task
    locked-context, requirements and audit projections, with exact field,
    visibility/count/cursor and hidden command contracts before implementation.
 3. Assignment invalidation after the shared claim contract exists, followed by
