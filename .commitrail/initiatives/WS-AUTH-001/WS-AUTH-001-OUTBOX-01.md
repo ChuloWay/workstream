@@ -66,22 +66,26 @@ Expose a closed `claim`, `invoke`, `finalize` phase enum and immutable
 digest (`sha256:[0-9a-f]{64}`), strict integer claim generation 1..2147483647,
 worker owner matching `[A-Za-z0-9._:-]{1,120}`, aware claimed-at and strictly
 later lease expiry. FINALIZE additionally requires a canonical `outcome_digest`;
-CLAIM/INVOKE forbid it. CON-02B owns the typed outcome and hashes every result,
+CLAIM/INVOKE forbid it; the outcome digest uses the same exact
+`sha256:[0-9a-f]{64}` shape. CON-02B owns the typed outcome and hashes every result,
 retry and dead-letter field to be written; AUTH does not interpret that schema. For claim these describe the proposed next reservation;
 for invoke/finalize they describe the already-committed reservation. CON-02B
 must compare claim generation against locked persisted state and validate
 committed ownership; callers cannot assert commit by supplying a boolean.
 The canonical resource digest uses the single domain
 `workstream.authorization.outbox_dispatch` and binds every normalized fact plus
-fixed action, permission, service identity, resource type/id and project scope.
+fixed action `outbox.dispatch`, permission `outbox.dispatch`, service identity
+`workstream.outbox.dispatcher`, `resource_type="outbox_event"`,
+`resource_id=event_id` and `scope_project_id=project_id`. The fixed-vector test
+asserts those exact values.
 There is no compatibility domain. Phase and outcome are included so neither a
 copied claim nor pre-invocation facts identify a later-phase operation. Same
 instant timestamp offsets canonicalize to UTC.
 
 Expose a nominal abstract `PreparedOutboxDispatch` and typed context-manager
 port for one exact phase:
-`PreparedOutboxDispatch.consume(facts: OutboxDispatchFacts) -> AuthorizationDecision`
-and `prepare_outbox_dispatch(facts, request_id, correlation_id) ->
+`async def PreparedOutboxDispatch.consume(facts: OutboxDispatchFacts) -> AuthorizationDecision`
+and `def prepare_outbox_dispatch(facts: OutboxDispatchFacts, request_id: UUID, correlation_id: UUID) ->
 AbstractAsyncContextManager[PreparedOutboxDispatch]`. Reuse the existing public
 decision type; add no receipt class. Request/correlation identifiers are invocation
 context, excluded from resource facts/digest. Preparation resolves the fixed identity internally;
@@ -109,7 +113,10 @@ private owner where appropriate. Do not duplicate the identity enum.
    Independently changing event/project/generation/owner/lease/payload/phase changes
    the digest. Valid same-instant timestamps are stable. Invalid output is sanitized.
 3. The abstract handle cannot be instantiated as authority and cannot be pickled;
-   no public HTTP surface or runtime evaluator appears. Protocol documentation
+   no new dispatcher route or executable surface or runtime evaluator appears.
+   The existing protected `GET /authorization/permissions` catalogue exposes the
+   planned permission as metadata (existing response-count test 73 -> 74); every
+   admin-role definition excludes it and no effective-action projection gains it. Protocol documentation
    explicitly binds future preparation/consumption to one session/root transaction.
 4. Real PostgreSQL upgrade 0025 -> 0026 preserves existing actor/link rows and
    constraints, allows exact dispatcher provisioning, rejects unknown identities
@@ -137,7 +144,7 @@ corresponding tests must fail at their intended assertion with valid controls.
 L1: bounded authorization, identity schema and public contract. Required tracks:
 security, architecture/reuse, QA/test delta, CI integrity and docs. Human focus:
 planned never means enabled; exact dispatcher permission gives no feature
-permission; facts/receipts are not transferable authority; retained data survives.
+permission; facts/decisions are not transferable authority; retained data survives.
 
 Lead runs focused pure and isolated PostgreSQL proof, full boundary/ownership
 preflight, Ruff, stale-wording/Markdown/Commitrail checks, then exact-head hosted
