@@ -178,7 +178,6 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/tasks/test_submission_requirements.py",
             "tests/tasks/test_audit_evidence.py",
             "tests/tasks/test_command_replay.py",
-            "tests/tasks/test_contribution_lineage_migration.py",
             "tests/tasks/test_contribution_claim_races.py",
             "tests/tasks/test_submission_lineage.py",
             "tests/checkers/post_submit/test_catalogue.py",
@@ -230,6 +229,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     assert {
         "tests/test_alembic.py",
         "tests/test_database_reset.py",
+        "tests/tasks/test_contribution_lineage_migration.py",
         runner.ADMIN_RUNNER_MODULE,
     } == modules_by_lane["schema_contracts"]
     assert {

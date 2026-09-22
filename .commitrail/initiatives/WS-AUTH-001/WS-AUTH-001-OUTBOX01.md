@@ -61,6 +61,13 @@ Allowed:
   Update the explicit action inventory 116 -> 117, permission inventory 73 -> 74
   (new permissions 24 -> 25), and service memberships 23 -> 24 without loosening
   exact-set assertions.
+  Move the eight schema-marked contribution-lineage migration cases from the
+  overloaded task lane to the existing schema-contract lane. Update both exact
+  lane-set expectations; retain every node, seven lanes, canonical collection,
+  coverage aggregation, database cleanup and the 1,200-second execution limit.
+  Main's measured task lane used 1,191 seconds before the added schema revision;
+  this relocation gives the affected real-migration proofs appropriate capacity
+  without changing their fixtures, guards or assertions.
 - AUTH/CON/ARCH current overview/plan/map, INDEX, README, roadmap, authorization
   and contribution specifications, `docs/engineering/external-api-drill.md`,
   `docs/engineering/authorization_activation_custody.md`, and operations docs where current boundary
