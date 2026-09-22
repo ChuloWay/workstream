@@ -418,7 +418,9 @@ async def test_task_service_read_contexts_preserve_visibility_and_operator_scope
     assert await service.get_task_submission_requirements(actor, task.id) is requirements_response
     assert await service.get_task_locked_context(actor, task.id) is locked_response
 
-    assert service._get_task.await_count == 3
+    assert service._get_task.await_args_list == [
+        call(task.id), call(task.id), call(task.id, for_update=True),
+    ]
     assert service._ensure_task_visible.await_count == 2
     assert service._load_locked_task_context.await_count == 2
     service._submission_requirements_response.assert_called_once_with(task, context)
