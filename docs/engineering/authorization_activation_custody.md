@@ -79,9 +79,12 @@ remains planned and
 cannot be activated by read/status proof. The historical transfer added no
 migration because owner and availability are typed metadata. WS-XINT-002-01
 historically reconciled PostgreSQL parity through migration `0036`, now folded
-into the v0.1 baseline. Its closed registry contains fifteen service identities:
-fourteen action-bearing identities with twenty-three matrix memberships plus
-the target-only `workstream.compensation.adapter` identity.
+into the v0.1 baseline. At that historical boundary, the closed registry contained
+fifteen service identities: fourteen action-bearing identities with twenty-three
+matrix memberships plus the target-only `workstream.compensation.adapter`.
+AUTH-OUTBOX-01 adds the planned/unavailable dispatcher. The current registry has
+sixteen identities, fifteen action-bearing identities and twenty-four memberships;
+registration does not activate `outbox.dispatch`.
 CP01A registered four initially unavailable adapter-binding actions and CP01B
 registered five initially unavailable ContributionPolicy actions; neither
 changes fixed-service identity or matrix membership. CP01C corrects only the

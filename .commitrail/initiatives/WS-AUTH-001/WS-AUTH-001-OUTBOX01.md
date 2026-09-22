@@ -62,7 +62,8 @@ Allowed:
   (new permissions 24 -> 25), and service memberships 23 -> 24 without loosening
   exact-set assertions.
 - AUTH/CON/ARCH current overview/plan/map, INDEX, README, roadmap, authorization
-  and contribution specifications and operations docs where current boundary
+  and contribution specifications, `docs/engineering/external-api-drill.md`,
+  `docs/engineering/authorization_activation_custody.md`, and operations docs where current boundary
   wording changes. No local spreadsheet exports exist.
 
 Prohibited: dispatcher/handler implementation, worker registration, runtime
