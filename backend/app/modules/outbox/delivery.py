@@ -280,11 +280,13 @@ class OutboxDelivery:
         cause = FinalizationCause.UNKNOWN
         task = None
         try:
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + self._options.handler_timeout_seconds
             task = asyncio.create_task(handler(envelope))
             self._running_handlers.add(task)
             task.add_done_callback(self._handler_done)
             done, _ = await asyncio.wait((task,), timeout=self._options.handler_timeout_seconds)
-            if done and not task.cancelled():
+            if done and loop.time() < deadline and not task.cancelled():
                 result = task.result()
                 if type(result) is HandlerOutcome:
                     cause = FinalizationCause(result.value)

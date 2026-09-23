@@ -311,3 +311,21 @@ async def test_handler_suppressing_cancellation_cannot_ack_after_deadline(delive
         release.set()
         await asyncio.gather(invocation, return_exceptions=True)
         await asyncio.gather(*tuple(h.delivery._running_handlers), return_exceptions=True)
+
+
+async def test_completed_handler_after_deadline_is_unknown(delivery_harness):
+    """A completed task must not turn event-loop delay into a timely success."""
+    import time
+
+    h = delivery_harness
+    h.options = h.options.model_copy(update={"lease_seconds": 30, "handler_timeout_seconds": 1})
+    h.delivery = h.build()
+
+    async def blocking_handler(envelope):
+        time.sleep(1.1)
+
+    h.handler_hook = blocking_handler
+    receipt = await h.delivery.invoke(await h.claim())
+    assert json.loads(receipt.outcome_json)["error_code"] == "INVOKE_OUTCOME_UNKNOWN"
+    assert len(h.handled) == 1
+    assert (await h.delivery.drain(h.project)).unresolved == 1

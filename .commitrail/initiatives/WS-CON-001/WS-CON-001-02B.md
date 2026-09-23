@@ -180,7 +180,8 @@ Bounded options belong to one strict delivery-options value supplied by
 composition, not a new environment or configuration framework. Handler failures
 and timeouts become closed sanitized outcome codes, never raw exceptions,
 provider responses, payloads or credentials. A deadline is enforced independently
-of cooperative handler cancellation. Timed-out calls may still run physically;
+of cooperative handler cancellation. A result observed after the elapsed deadline
+is unknown even when the handler blocked the event loop. Timed-out calls may still run physically;
 retain their task until it ends and consume its exception, but never accept a late
 result or retry unknown effects. Cancellation/crash leaves durable
 recoverable custody rather than claiming successful handler completion.
@@ -312,6 +313,9 @@ Current command results and review freshness belong in the PR, not this record.
   Removing the outcome-expiry guard must fail these negatives.
 - `test_sql_completion_time_and_retry_bounds` and `test_sql_claim_lease_is_bounded`:
   paired writes isolate future completion, retry delay and lease limits.
+- `test_completed_handler_after_deadline_is_unknown`: a handler that blocks the
+  event loop cannot acknowledge after its deadline; removing the elapsed-time
+  guard makes this real PostgreSQL regression fail.
 - `test_attempted_cancellation_rejects_without_changing_custody`: claimed and
   invoked events reject cancellation at the event-shape check, preserve custody,
   and can still finalize normally. Pending cancellation remains valid.
