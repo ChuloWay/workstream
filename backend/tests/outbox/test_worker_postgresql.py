@@ -298,3 +298,5 @@ def test_delivery_task_has_independent_hard_limit(worker):
     assert task.time_limit == 300
     assert task.time_limit > DeliveryOptions().handler_timeout_seconds
     assert task.acks_late and task.acks_on_failure_or_timeout
+    assert task.reject_on_worker_lost is True
+    assert task.soft_time_limit is None
