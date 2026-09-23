@@ -82,10 +82,19 @@ def test_duplicate_authorization_does_not_dispatch(
     [
         (PROFILE_UPDATE_TOOL_NAME, {}),
         (PROFILE_UPDATE_TOOL_NAME, {"display_name": "   "}),
+        (PROFILE_UPDATE_TOOL_NAME, {"display_name": 7}),
+        (PROFILE_UPDATE_TOOL_NAME, {"display_name": "d" * 201}),
+        (PROFILE_UPDATE_TOOL_NAME, {"contact_email": "e" * 321}),
+        (
+            PROFILE_UPDATE_TOOL_NAME,
+            {"display_name": "valid", "contact_email": "   "},
+        ),
         (PROFILE_UPDATE_TOOL_NAME, {"display_name": "valid", "extra": "denied"}),
         (PROFILE_UPDATE_TOOL_NAME, {"display_name": "bad\x00value"}),
         (CONTEXT_TOOL_NAME, {}),
         (CONTEXT_TOOL_NAME, {"project_id": ""}),
+        (CONTEXT_TOOL_NAME, {"project_id": None}),
+        (CONTEXT_TOOL_NAME, {"project_id": 7}),
         (CONTEXT_TOOL_NAME, {"project_id": "bad\x00project"}),
         (CONTEXT_TOOL_NAME, {"project_id": "p" * 101}),
         (CONTEXT_TOOL_NAME, {"project_id": "project", "url": "https://invalid.example"}),
@@ -145,6 +154,35 @@ def test_authorization_context_forwards_caller_and_exact_project(
     assert len(received) == 1
     assert received[0].headers["authorization"] == "Bearer context-caller"
     assert received[0].url.params["project_id"] == "project/one"
+
+
+def test_authorization_context_concealment_returns_no_stale_authority(
+    adapter: tuple[TestClient, list[Any], dict[str, Any]],
+) -> None:
+    client, received, upstream = adapter
+    upstream["status"] = 404
+    upstream["json"] = {
+        "error": {
+            "code": "project_authorization_resource_not_found",
+            "message": "private project detail",
+            "details": {"project_roles": ["submitter"], "effective_action_ids": ["task.claim"]},
+        }
+    }
+    response = mcp_call(
+        client,
+        name=CONTEXT_TOOL_NAME,
+        arguments={"project_id": "project/one"},
+    )
+
+    result = response.json()["result"]
+    assert result["isError"] is True
+    assert result["structuredContent"]["status"] == 404
+    assert result["structuredContent"]["code"] == "project_authorization_resource_not_found"
+    serialized = json.dumps(result)
+    assert "private project detail" not in serialized
+    assert "project_roles" not in serialized
+    assert "effective_action_ids" not in serialized
+    assert len(received) == 1
 
 
 def test_every_response_is_no_store_and_profile_is_not_cross_caller_cached(

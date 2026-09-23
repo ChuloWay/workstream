@@ -370,6 +370,41 @@ async def test_installed_mcp_preserves_profile_and_lifecycle_parity() -> None:
                 assert concealed["status"] == 404
                 assert concealed["code"] == "project_authorization_resource_not_found"
 
+                revoked_manager = await direct.post(
+                    "/api/v1/admin-role-grants/"
+                    f"{manager_grant.json()['resource_id']}/revoke",
+                    headers={
+                        "Authorization": f"Bearer {admin_token}",
+                        "Idempotency-Key": str(uuid4()),
+                    },
+                    json={"reason": "MCP context revocation proof complete"},
+                )
+                assert revoked_manager.status_code == 200, revoked_manager.text
+                direct_revoked_context = await direct.get(
+                    "/api/v1/actors/me/authorization-context",
+                    headers={"Authorization": f"Bearer {tokens['mcp-first-a']}"},
+                    params={"project_id": project.json()["id"]},
+                )
+                assert direct_revoked_context.status_code == 404
+                assert (
+                    direct_revoked_context.json()["error"]["code"]
+                    == "project_authorization_resource_not_found"
+                )
+                revoked_context, failed = await _call(
+                    mcp_url,
+                    tokens["mcp-first-a"],
+                    name="workstream_authorization_context_get",
+                    arguments={"project_id": project.json()["id"]},
+                )
+                assert failed
+                assert revoked_context["status"] == 404
+                assert (
+                    revoked_context["code"]
+                    == direct_revoked_context.json()["error"]["code"]
+                )
+                assert "project_roles" not in revoked_context
+                assert "effective_action_ids" not in revoked_context
+
                 await _admin_transition(
                     direct,
                     token=admin_token,

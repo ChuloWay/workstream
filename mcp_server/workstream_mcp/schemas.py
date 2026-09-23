@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from functools import lru_cache
 from importlib.resources import files
 from pathlib import Path
 from typing import Any, cast
 
-from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
+from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
 
 EMPTY_INPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -39,6 +40,17 @@ AUTHORIZATION_CONTEXT_INPUT_SCHEMA: dict[str, Any] = {
 
 class ContractError(RuntimeError):
     """The reviewed packaged contract is absent or invalid."""
+
+
+_OUTPUT_FORMAT_CHECKER = FormatChecker()
+
+
+@_OUTPUT_FORMAT_CHECKER.checks("date-time", raises=(TypeError, ValueError))
+def _is_aware_iso_datetime(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return parsed.tzinfo is not None
 
 
 def _resolve_schema_refs(value: Any, schemas: dict[str, Any]) -> Any:
@@ -120,7 +132,10 @@ def authorization_context_output_schema() -> dict[str, Any]:
 
 @lru_cache(maxsize=3)
 def _contract_output_validator(name: str) -> Draft202012Validator:
-    return Draft202012Validator(_contract_output_schema(name))
+    return Draft202012Validator(
+        _contract_output_schema(name),
+        format_checker=_OUTPUT_FORMAT_CHECKER,
+    )
 
 
 def profile_output_validator() -> Draft202012Validator:

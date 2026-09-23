@@ -202,6 +202,47 @@ async def test_profile_update_transport_failure_is_uncertain_and_not_retried() -
     assert result.failure is not None
     assert result.failure.error == "workstream_execution_uncertain"
     assert result.failure.retryable is False
+    assert result.failure.correlation_id is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response",
+    [
+        lambda: httpx.Response(
+            200, content=b"not-json", headers={"content-type": "application/json"}
+        ),
+        lambda: httpx.Response(
+            200, json=profile_fixture(), headers={"content-type": "text/plain"}
+        ),
+        lambda: httpx.Response(
+            200,
+            json=profile_fixture(updated_at="not-a-date"),
+            headers={"content-type": "application/json"},
+        ),
+    ],
+)
+async def test_profile_update_invalid_success_is_uncertain(response: typing.Any) -> None:
+    calls = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return response()
+
+    client = httpx.AsyncClient(base_url="http://api.test", transport=httpx.MockTransport(handler))
+    try:
+        result = await WorkstreamGateway(settings(), client).profile_update(
+            "Bearer opaque", {"display_name": "Victor"}
+        )
+    finally:
+        await client.aclose()
+
+    assert calls == 1
+    assert result.failure is not None
+    assert result.failure.error == "workstream_execution_uncertain"
+    assert result.failure.retryable is False
+    assert result.failure.correlation_id is not None
 
 
 @pytest.mark.asyncio
@@ -229,3 +270,26 @@ async def test_authorization_context_uses_fixed_path_and_encoded_project_query()
     assert seen[0].method == "GET"
     assert seen[0].url.path == "/api/v1/actors/me/authorization-context"
     assert seen[0].url.params["project_id"] == "project/with ? reserved"
+
+
+@pytest.mark.asyncio
+async def test_authorization_context_rejects_malformed_uuid_output() -> None:
+    client = httpx.AsyncClient(
+        base_url="http://api.test",
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                200,
+                json=authorization_context_fixture(project_id="not-a-uuid"),
+                headers={"content-type": "application/json"},
+            )
+        ),
+    )
+    try:
+        result = await WorkstreamGateway(settings(), client).authorization_context_get(
+            "Bearer opaque", "project"
+        )
+    finally:
+        await client.aclose()
+
+    assert result.failure is not None
+    assert result.failure.error == "invalid_api_response"

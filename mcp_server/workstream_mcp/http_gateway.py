@@ -144,7 +144,11 @@ class WorkstreamGateway:
                         if media_type != "application/json":
                             return GatewayResult(
                                 failure=SafeFailure(
-                                    "invalid_api_response",
+                                    (
+                                        "workstream_execution_uncertain"
+                                        if mutation
+                                        else "invalid_api_response"
+                                    ),
                                     status=502,
                                     correlation_id=correlation_id,
                                 )
@@ -157,7 +161,11 @@ class WorkstreamGateway:
                         except (json.JSONDecodeError, ValueError, ValidationError):
                             return GatewayResult(
                                 failure=SafeFailure(
-                                    "invalid_api_response",
+                                    (
+                                        "workstream_execution_uncertain"
+                                        if mutation
+                                        else "invalid_api_response"
+                                    ),
                                     status=502,
                                     correlation_id=correlation_id,
                                 )
@@ -168,7 +176,11 @@ class WorkstreamGateway:
         except TimeoutError:
             if mutation:
                 return GatewayResult(
-                    failure=SafeFailure("workstream_execution_uncertain", status=504)
+                    failure=SafeFailure(
+                        "workstream_execution_uncertain",
+                        status=504,
+                        correlation_id=request_id,
+                    )
                 )
             return GatewayResult(
                 failure=SafeFailure("workstream_timeout", status=504, retryable=True)
@@ -176,7 +188,11 @@ class WorkstreamGateway:
         except httpx.TimeoutException:
             if mutation:
                 return GatewayResult(
-                    failure=SafeFailure("workstream_execution_uncertain", status=504)
+                    failure=SafeFailure(
+                        "workstream_execution_uncertain",
+                        status=504,
+                        correlation_id=request_id,
+                    )
                 )
             return GatewayResult(
                 failure=SafeFailure("workstream_timeout", status=504, retryable=True)
@@ -184,13 +200,21 @@ class WorkstreamGateway:
         except ResponseTooLarge:
             if mutation:
                 return GatewayResult(
-                    failure=SafeFailure("workstream_execution_uncertain", status=502)
+                    failure=SafeFailure(
+                        "workstream_execution_uncertain",
+                        status=502,
+                        correlation_id=request_id,
+                    )
                 )
             return GatewayResult(failure=SafeFailure("workstream_response_too_large", status=502))
         except httpx.HTTPError:
             if mutation:
                 return GatewayResult(
-                    failure=SafeFailure("workstream_execution_uncertain", status=502)
+                    failure=SafeFailure(
+                        "workstream_execution_uncertain",
+                        status=502,
+                        correlation_id=request_id,
+                    )
                 )
             return GatewayResult(
                 failure=SafeFailure("workstream_unavailable", status=502, retryable=True)
