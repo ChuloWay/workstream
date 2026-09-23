@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import AwareDatetime, ValidationError
 
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.catalogue import ACTION_BY_ID, ActionAvailability, ActionId
 from app.modules.authorization.prepared import PreparedAuthorizationHandle
 from app.modules.authorization.runtime import PROJECT_MUTATION_RESOURCE_BY_ACTION

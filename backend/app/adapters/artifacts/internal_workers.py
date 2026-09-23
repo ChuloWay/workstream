@@ -17,7 +17,7 @@ from app.adapters.artifacts import (
 from app.core.config import get_settings
 from app.db.session import get_session_factory
 from app.interfaces.artifacts import ArtifactStore, ArtifactStoreBootstrap
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.authorization import PreparedArtifactInternalAuthority
 from app.modules.artifacts.service import (
     ArtifactPendingWorkScanner,

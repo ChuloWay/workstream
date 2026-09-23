@@ -91,6 +91,7 @@ MODULE_PUBLIC_API_FOUNDATION_TARGETS = frozenset(
         "backend/app/modules/tasks/api/management_queue.py",
         "backend/app/modules/tasks/api/task_detail.py",
         "backend/app/modules/tasks/api/audit_evidence.py",
+        "backend/app/modules/authorization/api/outbox_dispatch.py",
     }
 )
 ARCH_04A_POST_SUBMIT_TARGETS = frozenset(
@@ -399,6 +400,9 @@ AUTH_12B2_TARGETS = frozenset(
         "backend/app/modules/authorization/project_setup_finalization.py",
     }
 )
+OUTBOX_IDENTITY_REMOVED_TARGETS = frozenset({
+    "backend/app/modules/actors/service_identities.py",
+})
 V01_BASELINE_REMOVED_TARGETS = frozenset(
     {
         "backend/app/modules/actors/service_identity_migration.py",
@@ -582,7 +586,7 @@ def _validate_additive_partition_transition(
     ]
     if (
         trusted_targets != sorted(trusted_targets)
-        or removed - (V01_BASELINE_REMOVED_TARGETS | POL_03B_REMOVED_TARGETS | POL_04B_REMOVED_TARGETS | POL_05A_REMOVED_TARGETS | ARCH_03A_GUIDE_CONTEXT_REMOVED_TARGETS)
+        or removed - (OUTBOX_IDENTITY_REMOVED_TARGETS | V01_BASELINE_REMOVED_TARGETS | POL_03B_REMOVED_TARGETS | POL_04B_REMOVED_TARGETS | POL_05A_REMOVED_TARGETS | ARCH_03A_GUIDE_CONTEXT_REMOVED_TARGETS)
         or [current_by_target[item["target"]] for item in retained_trusted]
         != retained_trusted
     ):

@@ -14,7 +14,7 @@ work and historical proposals.
 | CP05 | AUTH exact five policy actions after merged CP04A/CP04B |
 | ARCH-03C | AUTH task/assignment activation after ARCH-03B and AUTH-OUTBOX-02 (active CON-02B dispatcher mechanics); replaces broad AUTH-13 |
 | ARCH-04D | AUTH materialization/output plus CHECKERS execute/finalize activation after ARCH-04B/04B2/04C; replaces AUTH-14/XINT-06B |
-| [AUTH-OUTBOX-01](PLAN.md#ws-auth-001-outbox-01--unavailable-dispatcher-contract) | Unavailable exact dispatcher registration/contract before CON-02B |
+| [AUTH-OUTBOX-01](PLAN.md#ws-auth-001-outbox-01--unavailable-dispatcher-contract) | Complete: unavailable exact dispatcher identity/action/phase contract; CON-02B hidden mechanics next |
 | [AUTH-OUTBOX-02](PLAN.md#ws-auth-001-outbox-02--exact-dispatcher-activation) | Exact mechanics activation after hidden CON-02B |
 | [ARCH-04E2](../../WS-ARCH-001/planning/chunks/WS-ARCH-001-04E-canonical-allow-review.md#current-bounded-sequence) | Exact TASK routing handler authority after hidden 04E1, before live 04E3 |
 

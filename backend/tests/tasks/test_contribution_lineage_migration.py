@@ -2,6 +2,7 @@
 
 from app.core.config import get_settings
 
+import asyncio
 import json
 from uuid import uuid4
 
@@ -136,8 +137,10 @@ async def _prior_task(factory, receipt, actor, kind):
 
 
 async def test_0024_preserves_draft_tasks_and_activation_evidence(
-    clean_postgres_database, migration_lock
+    clean_postgres_database, migration_lock, migration_schema_at,
 ):
+    with migration_lock():
+        await asyncio.to_thread(migration_schema_at, OWN)
     async with activated_context(clean_postgres_database) as (factory, receipt, actor, *_):
         with migration_lock():
             await run_alembic_revision("downgrade", PRIOR)
@@ -163,8 +166,11 @@ async def test_0024_preserves_draft_tasks_and_activation_evidence(
 async def test_0024_refuses_retained_attempt_without_schema_or_row_mutation(
     clean_postgres_database,
     migration_lock,
+    migration_schema_at,
     kind,
 ):
+    with migration_lock():
+        await asyncio.to_thread(migration_schema_at, OWN)
     async with activated_context(clean_postgres_database) as (factory, receipt, actor, *_):
         with migration_lock():
             await run_alembic_revision("downgrade", PRIOR)

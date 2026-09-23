@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.catalogue import ActionId
 
 

@@ -1,5 +1,6 @@
 """Activation migration preserves prior rows and refuses loss of immutable evidence."""
 
+import asyncio
 from uuid import uuid4
 
 import pytest
@@ -20,9 +21,13 @@ OWN = "0023_guide_activation_custody"
 
 
 @pytest.mark.postgres_schema_contract
-async def test_empty_migration_roundtrip_restores_prior_schema(clean_postgres_database):
+async def test_empty_migration_roundtrip_restores_prior_schema(
+    clean_postgres_database, migration_schema_at, migration_lock,
+):
     from scripts.schema_baseline_manifest import build_manifest
 
+    with migration_lock():
+        await asyncio.to_thread(migration_schema_at, OWN)
     # Exact prior owner schema, not just a successful Alembic exit.
     engine = create_async_engine(clean_postgres_database)
     try:
@@ -37,7 +42,11 @@ async def test_empty_migration_roundtrip_restores_prior_schema(clean_postgres_da
 
 
 @pytest.mark.postgres_schema_contract
-async def test_retained_active_guide_upgrades_without_invented_binding(clean_postgres_database):
+async def test_retained_active_guide_upgrades_without_invented_binding(
+    clean_postgres_database, migration_schema_at, migration_lock,
+):
+    with migration_lock():
+        await asyncio.to_thread(migration_schema_at, OWN)
     async with activation_case(clean_postgres_database) as (
         factory,
         command,

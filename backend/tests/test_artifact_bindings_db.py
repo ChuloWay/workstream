@@ -40,7 +40,7 @@ from app.modules.authorization.runtime import (
     ServiceAuthorizationContext,
     PreparedAuthorizationUnsupported,
 )
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from test_artifact_bindings import _Allow, _lineage, _request
 
 

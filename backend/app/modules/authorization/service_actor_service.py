@@ -20,7 +20,6 @@ from app.modules.authorization.catalogue import ActionId, PermissionId
 from app.modules.authorization.runtime import (
     AuthorizationDecision,
     MatchedAuthorityKind,
-    ServiceActorProvisionResourceContext,
     authorization_resource_digest,
 )
 from app.modules.authorization.schemas import (
@@ -35,7 +34,10 @@ from app.modules.authorization.schemas import (
     derive_service_identity_digest,
 )
 from app.modules.authorization.service import AuthorityMutationService
-from app.modules.authorization.service_actor_schemas import ServiceActorProvisionResponse
+from app.modules.authorization.service_actor_schemas import (
+    ServiceActorProvisionResourceContext,
+    ServiceActorProvisionResponse,
+)
 
 
 class ServiceActorConflict(StrEnum):

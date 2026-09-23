@@ -86,6 +86,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0025_task_command_replay",
         "0024_task_policy_lineage",
         "0023_guide_activation_custody",
         "0022_adapter_binding_audit_resource",
@@ -569,7 +570,8 @@ def test_root_upgrade_refuses_nonempty_unstamped_schema_before_product_ddl(
 
 @pytest.mark.parametrize("revision,message", [
     (BASELINE_REVISION, "0001_v01_baseline cannot be downgraded; recreate the database"),
-    (HEAD_REVISION, "guide document creation custody cannot be downgraded"),
+    ("0025_task_command_replay", "guide document creation custody cannot be downgraded"),
+    (HEAD_REVISION, "Workstream v0.1 migrations cannot be downgraded; recreate the database"),
 ])
 def test_downgrade_refuses_without_mutation(
     isolated_database_env: str,

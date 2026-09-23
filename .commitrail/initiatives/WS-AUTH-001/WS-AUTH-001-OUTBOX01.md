@@ -1,0 +1,263 @@
+# AUTH-OUTBOX-01 — Restricted dispatcher authorization contract
+
+- Initiative: WS-AUTH-001
+- Durable disposition: Complete
+- Intended merge outcome: register one unavailable dispatcher action and fixed
+  identity with closed phase-bound facts and a typed preparation port; leave
+  delivery and live authorization to CON-02B and AUTH-OUTBOX-02.
+
+## Intent
+
+Reliable follow-up must survive a worker crash without giving the delivery
+worker TASK, checker, artifact or compensation authority. Shared OUTBOX already
+persists immutable events and delivery metadata; it has no dispatcher. AUTH
+already owns the closed service matrix, planned-action gate and transaction-local
+prepared-authority conventions. Extend these owners, not a second worker or
+permission system. Current main includes ARCH-03B8 internal audit evidence.
+
+## Bounded change
+
+Allowed:
+
+- `backend/app/modules/authorization/catalogue.py`: one planned action/permission
+  `outbox.dispatch`, AUTH-OUTBOX-01 owner and exact singleton service matrix row.
+- `backend/app/modules/authorization/api/outbox_dispatch.py` and `api/__init__.py`:
+  immutable dispatcher facts, phase, digest and abstract prepared port only.
+- `backend/app/modules/actors/api/service_identities.py` and
+  `backend/alembic/versions/0026_outbox_dispatch_identity.py`: add only
+  `workstream.outbox.dispatcher` to the existing closed identity vocabulary and
+  database check after 0025. Do not provision an actor or rewrite retained data.
+- `backend/alembic/env.py`: retain 0025 as an admitted predecessor and register
+  0026 as the current head; repeated `upgrade head` must remain valid.
+- `backend/tests/conftest.py`: refresh only the exact public-schema digest after
+  PostgreSQL catalogue comparison proves the identity CHECK is the sole delta.
+  Preserve the immutable 0001 baseline manifest.
+- Remove the superseded `actors/service_identities.py` re-export; update its
+  exact production/test import consumers to `actors.api`. Update only matching
+  AUTH/private-edge debt entries and ownership partition/closed-transition tests.
+  This mechanical consumer repair preserves all existing service identities.
+  Remove the two unused migration helpers from affected artifact admission tests;
+  canonical migrated fixtures already own their setup. Retain all test assertions.
+  To satisfy the unchanged structural-debt guard, place the exact service actor
+  provisioning context in existing `authorization/service_actor_schemas.py`,
+  update direct service/test consumers, and retain its strict frozen config.
+  Runtime continues importing it for its resource union; kernel/router continue
+  consuming that aggregate. There is one implementation and no compatibility shim.
+  Move only the expected fixed-service matrix literal to existing catalogue test
+  fixtures; preserve its test node and every assertion. Regenerate the debt
+  inventory only after these real reductions; no gate exemption or new owner.
+- Focused `backend/tests/authorization/test_outbox_dispatch_contract.py` and
+  `backend/tests/migrations/test_outbox_dispatch_identity.py`, existing catalogue,
+  boundary, identity and ownership expectations; exact lane registrations.
+  Update `backend/tests/test_alembic.py` exact graph and downgrade expectations
+  for 0026, preserving the 0025 guard case.
+  Reconcile the existing permission response schema, two administrative read test
+  modules and independent external API drill oracle with the 74-entry catalogue.
+  In affected proposal/post-policy/automatic-request/activation/task-lineage
+  migration tests, use the existing scoped guard helper for retained-data probes
+  and `migration_schema_at` for real owned-revision round trips. Preserve all
+  named tests, exact error checks, schema comparisons and retained-row assertions;
+  do not relax 0026 or add a migration bypass helper.
+  Update the explicit action inventory 116 -> 117, permission inventory 73 -> 74
+  (new permissions 24 -> 25), and service memberships 23 -> 24 without loosening
+  exact-set assertions.
+  Move the eight schema-marked contribution-lineage migration cases from the
+  overloaded task lane to the existing schema-contract lane. Update both exact
+  lane-set expectations; retain every node, seven lanes, canonical collection,
+  coverage aggregation, database cleanup and the 1,200-second execution limit.
+  Main's measured task lane used 1,191 seconds before the added schema revision;
+  this relocation gives the affected real-migration proofs appropriate capacity
+  without changing their fixtures, guards or assertions.
+- AUTH/CON/ARCH current overview/plan/map, INDEX, README, roadmap, authorization
+  and contribution specifications, `docs/engineering/external-api-drill.md`,
+  `docs/engineering/authorization_activation_custody.md`, and operations docs where current boundary
+  wording changes. No local spreadsheet exports exist.
+
+Prohibited: dispatcher/handler implementation, worker registration, runtime
+activation, generic service permissions, feature authority, grant changes,
+public routes, outbox state/schema changes, data deletion, compatibility aliases,
+new private imports, gate weakening or unrelated cleanup.
+
+## Design
+
+The dispatcher has exactly `outbox.dispatch`; no human role receives it and no
+other service receives it. Availability stays `planned` in both the ordinary
+catalogue and service-matrix metadata. Registering/provisioning an identity must
+not make its action executable. The service index must require exact permission
+`OUTBOX_DISPATCH`, owner `AUTH_OUTBOX_01` and availability PLANNED. Keep the
+action out of `_ACTIVE_SERVICE_ACTIONS` and `FUTURE_INTENT_REQUIRED_ACTIONS`: it
+is a planned fixed-service action, not a caller-declared future-intent action.
+
+Expose a closed `claim`, `invoke`, `finalize` phase enum and immutable
+`OutboxDispatchFacts`. Bind exact event UUID, project UUID, immutable payload
+digest (`sha256:[0-9a-f]{64}`), strict integer claim generation 1..2147483647,
+worker owner matching `[A-Za-z0-9._:-]{1,120}`, aware claimed-at and strictly
+later lease expiry. FINALIZE additionally requires a canonical `outcome_digest`;
+CLAIM/INVOKE forbid it; the outcome digest uses the same exact
+`sha256:[0-9a-f]{64}` shape. CON-02B owns the typed outcome and hashes every result,
+retry and dead-letter field to be written; AUTH does not interpret that schema. For claim these describe the proposed next reservation;
+for invoke/finalize they describe the already-committed reservation. CON-02B
+must compare claim generation against locked persisted state and validate
+committed ownership; callers cannot assert commit by supplying a boolean.
+The canonical resource digest uses the single domain
+`workstream.authorization.outbox_dispatch` and binds every normalized fact plus
+fixed action `outbox.dispatch`, permission `outbox.dispatch`, service identity
+`workstream.outbox.dispatcher`, `resource_type="outbox_event"`,
+`resource_id=event_id` and `scope_project_id=project_id`. The fixed-vector test
+asserts those exact values.
+There is no compatibility domain. Phase and outcome are included so neither a
+copied claim nor pre-invocation facts identify a later-phase operation. Same
+instant timestamp offsets canonicalize to UTC.
+
+Expose a nominal abstract `PreparedOutboxDispatch` and typed context-manager
+port for one exact phase:
+`async def PreparedOutboxDispatch.consume(facts: OutboxDispatchFacts) -> AuthorizationDecision`
+and `def prepare_outbox_dispatch(facts: OutboxDispatchFacts, request_id: UUID, correlation_id: UUID) ->
+AbstractAsyncContextManager[PreparedOutboxDispatch]`. Reuse the existing public
+decision type; add no receipt class. Request/correlation identifiers are invocation
+context, excluded from resource facts/digest. Preparation resolves the fixed identity internally;
+there is no caller-selected service or feature action. A handle must remain
+process-local and rejects pickle, shallow copy and deep copy. Concrete session/root-transaction binding,
+single consumption, equality of recomposed phase/facts/outcome, live authority
+and committed-generation revalidation belong
+to AUTH-OUTBOX-02 consuming CON-02B's public claim port. No live implementation,
+factory, permissive default or fabricated allow receipt is added here. Each
+phase requires a new preparation; no handle crosses commit, lease wait or I/O.
+
+The ACTORS transitional import file has no implementation. Trace all consumers,
+replace their imports with the existing canonical public API, remove the alias
+and retire only its exact debt/inventory references. Preserve synthetic tests
+which still protect required private-boundary behavior using a real retained
+private owner where appropriate. Do not duplicate the identity enum.
+
+## Acceptance criteria
+
+1. Catalogue/matrix admit exactly the new pair as planned, preserve all existing
+   pairs, and reject extra feature membership. Existing fixed-service admission
+   rejects dispatcher execution even when the actor/link are correctly provisioned.
+2. Pure contract tests accept valid facts for all three phases, reject malformed
+   UUID/digest/owner/counter/timestamp/phase values and mutable or substitute facts.
+   Independently changing event/project/generation/owner/lease/payload/phase changes
+   the digest. Valid same-instant timestamps are stable. Invalid output is sanitized.
+3. The abstract handle cannot be instantiated as authority and cannot be pickled;
+   no new dispatcher route or executable surface or runtime evaluator appears.
+   The existing protected `GET /authorization/permissions` catalogue exposes the
+   planned permission as metadata (existing response-count test 73 -> 74); every
+   admin-role definition excludes it and no effective-action projection gains it. Protocol documentation
+   explicitly binds future preparation/consumption to one session/root transaction.
+4. Real PostgreSQL upgrade 0025 -> 0026 preserves existing actor/link rows and
+   constraints, allows exact dispatcher provisioning, rejects unknown identities
+   and duplicate singleton provisioning. The downgrade guard preserves data.
+5. Real PostgreSQL fixed-service admission proves missing identity raises
+   `ACTOR_NOT_FOUND`; a provisioned active dispatcher/link with its exact planned
+   action raises `PERMISSION_NOT_GRANTED`; an active foreign service action
+   raises `PERMISSION_NOT_GRANTED`. Assert persisted actor/link status, exact
+   matrix membership and availability before testing the denial. Positive control uses an existing provisioned
+   active service action so a universally failing fixture cannot pass.
+6. No live imports use the deleted alias; boundary/ownership/lane validation and
+   all retained identity/authorization tests pass without relaxed gates.
+
+## Evidence
+
+These are contract/registration proofs, not runtime lease/replay/crash proofs.
+CON-02B must prove persisted claim fencing and recovery; AUTH-OUTBOX-02 must prove
+live generation matching and fresh authority/session/transaction consumption.
+Mutation probes must remove the planned gate or exact matrix membership check,
+change digest generation/phase binding, and widen the identity DB constraint;
+corresponding tests must fail at their intended assertion with valid controls.
+
+## Risk and review routing
+
+L1: bounded authorization, identity schema and public contract. Required tracks:
+security, architecture/reuse, QA/test delta, CI integrity and docs. Human focus:
+planned never means enabled; exact dispatcher permission gives no feature
+permission; facts/decisions are not transferable authority; retained data survives.
+
+Lead runs focused pure and isolated PostgreSQL proof, full boundary/ownership
+preflight, Ruff, stale-wording/Markdown/Commitrail checks, then exact-head hosted
+lanes and coverage. Freeze clean candidates for plan and implementation review;
+reviewers own scoped falsification rather than repeating the full suite.
+
+## Reconciliation
+
+- Base: main 0c701e03 (merged PR #426); current migration head 0025.
+- No overlapping open product PR; #410 concerns advisory CI reporting.
+- Next usable boundary: CON-02B hidden shared dispatcher, followed by
+  AUTH-OUTBOX-02 activation; TASK invalidation and ARCH-03C remain separate.
+
+### Named proof inventory
+
+Named nodes in `tests/authorization/test_outbox_dispatch_contract.py`:
+
+- `test_dispatch_registration_is_exact_and_unavailable`: exact catalogue,
+  fixed-service pair, human exclusion and closed metadata corruption controls.
+- `test_dispatch_facts_validate_all_phases`: valid controls and each malformed
+  field independently, including phase-specific outcome requirements.
+- `test_dispatch_digest_matches_canonical_envelope`: fixed canonical envelope vector.
+- `test_dispatch_digest_binds_every_fact`: independent substitutions of each
+  field, fixed canonical bytes, same-instant UTC normalization, forged typed
+  input rejection and action/permission/service/resource envelope assertions.
+- `test_dispatch_prepared_contract_is_nominal_and_process_local`: abstract
+  handle plus pickle/copy/deepcopy rejection; no runtime authority claim.
+- `test_dispatch_service_admission`: real persisted missing, active planned,
+  foreign-action denials and existing active-service success in distinct steps.
+- `test_service_identity_alias_is_removed`: whole live Python consumer scan,
+  absent old file, current ledgers clean; historical records are not rewritten.
+
+Named nodes in `tests/migrations/test_outbox_dispatch_identity.py`:
+
+- `test_dispatch_identity_upgrade_preserves_records_and_exact_schema`: install
+  0025, commit actor/link controls, reject dispatcher before upgrade, apply0026,
+  reconnect to verify persistence and unchanged records; compare exact constraint
+  vocabulary with ACTORS model and assert only the identity CHECK changes.
+- `test_dispatch_identity_head_upgrade_is_repeatable`: repeated head migration
+  succeeds and leaves schema/records unchanged after0026 is already committed.
+- `test_dispatch_identity_rejects_unknown_and_duplicate`: actual raw-DB exact
+  identity acceptance, unknown CHECK rejection and duplicate UNIQUE rejection,
+  each with valid surrounding fields and its exact expected constraint.
+- `test_dispatch_identity_downgrade_preserves_records`: unchanged revision,
+  constraint and actor/link snapshots after the existing no-downgrade guard.
+
+The current tests do not prove live committed-claim equality, lease validity,
+session/transaction lifetime or delivery recovery. Those remain CON-02B and
+AUTH-OUTBOX-02 implementation proofs. Admission tests use existing denial codes.
+The planned-gate mutation changes only action availability in fixed-service
+admission; the matrix mutation changes only exact membership. Digest mutations
+omit generation/phase/outcome independently. The DB mutation widens only the
+identity CHECK so the unknown-identity test must stop raising. These probes must
+reach the named semantic assertion; setup failures do not count as detection.
+
+## Review findings
+
+Plan review added repeated-migration admission, exact schema fingerprint custody,
+explicit method signatures and serialization restrictions, fixed-envelope hashing,
+finalize outcome binding, named wrong-reason-resistant controls, and the distinction
+between current registration proof and future live dispatcher proof.
+
+Implementation review additionally required sanitizing hostile timezone offsets
+for both lease timestamps, preserving the 0025 migration guard proof while
+adding 0026 expectations, and reconciling registered-versus-proposed authority
+wording and the complete CON-02B -> AUTH-OUTBOX-02 sequence. The record uses the
+existing single-suffix filename convention; no validator was relaxed.
+The public permission-response schema and independent API drill share the exact
+74-entry catalogue. Older migration tests arrange their owned historical schema
+for genuine round trips or invoke their own retained-data guard, so the new
+forward-only migration cannot mask their safety assertions. The fixed-service
+inventory records 16 identities, 15 action-bearing identities and 24 memberships.
+
+## Implementation reconciliation
+
+The public API uses one facts type, phase enum, digest function, abstract prepared
+handle and preparation protocol. The catalogue adds one planned action and no
+active action. Migration 0026 changes only the identity CHECK. All 26 consumers
+of the old service-identity re-export now use the canonical ACTORS API; the alias
+is deleted and its five non-AUTH private edges plus four AUTH debts are retired.
+Existing workflow metadata and retained actor/history tables are untouched; this
+is vocabulary ownership cleanup, not permission to delete retained data.
+
+The exact PostgreSQL schema snapshot changes only
+`actor_profiles.ck_actor_profiles_kind_service_identity`; its new fingerprint is
+`df7cbc0da3f84782be0b007da561164b6735bf53b5bc307fc656e0698de96fa1`.
+The 0001 baseline manifest is unchanged. Runtime delivery/claim correctness and
+live prepared consumption remain the explicit next contracts, not inferred from
+these registration and immutable-value tests.

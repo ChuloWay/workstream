@@ -113,6 +113,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_local_artifact_store.py",
     "tests/test_merge_test_lane_evidence.py",
     "tests/migrations/test_compensation_adapter_identity.py",
+    "tests/migrations/test_outbox_dispatch_identity.py",
     "tests/migrations/test_project_role_scope.py",
     "tests/test_mutation_policy.py",
     "tests/test_s3_artifact_store.py",
@@ -166,6 +167,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_auth_concurrency_observer.py",
     "tests/test_authorization.py",
     "tests/authorization/test_catalogue.py",
+    "tests/authorization/test_outbox_dispatch_contract.py",
     "tests/authorization/guide_compilation/test_adapter_contract.py",
     "tests/authorization/guide_compilation/test_domain_contract.py",
     "tests/authorization/guide_compilation/test_migration_contract.py",
@@ -343,7 +345,6 @@ TASK_MODULES = (
     "tests/tasks/test_locked_context.py",
     "tests/tasks/test_submission_requirements.py",
     "tests/tasks/test_audit_evidence.py",
-    "tests/tasks/test_contribution_lineage_migration.py",
     "tests/tasks/test_contribution_claim_races.py",
     "tests/tasks/test_submission_lineage.py",
     "tests/checkers/post_submit/test_catalogue.py",
@@ -385,7 +386,13 @@ PARTITION_LANES_BY_MODULE = {
 LANES = (
     *(TestLane(name, SHARED_FOUNDATION_MODULES) for name in PARTITIONED_SHARED_LANES),
     TestLane(
-        "schema_contracts", (SCHEMA_MODULE, "tests/test_database_reset.py", ADMIN_RUNNER_MODULE)
+        "schema_contracts",
+        (
+            SCHEMA_MODULE,
+            "tests/test_database_reset.py",
+            "tests/tasks/test_contribution_lineage_migration.py",
+            ADMIN_RUNNER_MODULE,
+        ),
     ),
     *(TestLane(name, PROJECT_MODULES) for name in PARTITIONED_PROJECT_LANES),
     TestLane(TASK_LANE, TASK_MODULES),

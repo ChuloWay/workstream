@@ -19,8 +19,8 @@ AUTH-13/14 cutovers are not additional implementation work.
   contributor/management detail are delivered. ARCH-03B5 replaces the existing
   authorized work-context responses with distinct current task facts and exact
   locked policy references.
-  Remaining ARCH-03B projections/invalidation and ARCH-03C exact authority
-  and HTTP exposure remain pending.
+  ARCH-03B projections through 03B8 are complete. Dependency-gated assignment
+  invalidation and ARCH-03C exact authority and HTTP exposure remain pending.
 - CP05 owns exact ContributionPolicy-action activation after merged CP04B.
 - CP08 delivered the minimal lineage writers. ARCH-03B8 hidden task audit
   evidence is complete; dependency-gated assignment invalidation remains in
@@ -51,21 +51,21 @@ or register replacement aliases.
 
 ## WS-AUTH-001-OUTBOX-01 — unavailable dispatcher contract
 
-Disposition: Planned. L1. Depends on merged shared outbox persistence and
-AUTH's fixed-service/admission/PREP foundations. This is one AUTH-owned change:
-register proposed action/permission `outbox.dispatch`, fixed identity
-`workstream.outbox.dispatcher`, its singleton matrix row and closed
-claim/invoke/finalize resource/PREP contracts while keeping availability
-planned. Allow AUTH catalogue/contracts/parity and focused tests only; no
-dispatcher or feature behavior. Inputs include event identity, claim generation,
-lease, action/resource digest, session and transaction. Prove absent/foreign
-identity, copied claim, wrong generation and every unrelated feature action
-deny. CON-02B consumes this unavailable contract to build hidden mechanics.
-Claim, invocation and finalization each obtain fresh transaction-bound
-authority. No PREP handle or authority-bearing object survives a commit,
-lease wait, handler/provider I/O or serialization. After invocation, finalize
-revalidates the committed claim generation and current dispatcher authority;
-an old pre-invocation allow cannot authorize that later write.
+Disposition: Complete. [Contract and proof](../WS-AUTH-001-OUTBOX01.md).
+The closed catalogue registers planned `outbox.dispatch` solely for fixed
+`workstream.outbox.dispatcher`. Migration 0026 admits this identity without
+provisioning it or enabling execution. The canonical ACTORS public vocabulary
+replaces the removed transitional import module in all affected callers.
+
+Pure facts bind the exact event/project, payload digest, generation, worker owner,
+UTC lease and claim/invoke/finalize phase. Finalize additionally binds the exact
+OUTBOX-owned outcome digest. The nominal preparation/consume interface uses the
+existing public decision type and rejects handle copying/serialization. It has
+no live implementation. CON-02B supplies persisted claim/lease/recovery mechanics;
+OUTBOX-02 supplies fresh authority and exact facts/session/root-transaction checks
+for each phase. No handle survives commit, lease wait or handler/provider I/O.
+The existing protected permission catalogue exposes metadata only; no human role
+or effective action gains dispatcher authority.
 
 ## WS-AUTH-001-OUTBOX-02 — exact dispatcher activation
 

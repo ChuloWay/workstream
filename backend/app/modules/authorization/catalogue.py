@@ -22,6 +22,7 @@ class PermissionId(StrEnum):
     ACTOR_IDENTITY_LINK_READ = "actor.identity_link.read"
     ACTOR_IDENTITY_LINK_REVOKE = "actor.identity_link.revoke"
     ACTOR_IDENTITY_LINK_REACTIVATE = "actor.identity_link.reactivate"
+    OUTBOX_DISPATCH = "outbox.dispatch"
     ACTOR_SERVICE_PROVISION = "actor.service.provision"
     ADMIN_ROLE_READ = "admin_role.read"
     ADMIN_ROLE_GRANT = "admin_role.grant"
@@ -113,6 +114,7 @@ class ActionId(StrEnum):
     ACTOR_IDENTITY_LINK_READ = "actor.identity_link.read"
     ACTOR_IDENTITY_LINK_REVOKE = "actor.identity_link.revoke"
     ACTOR_IDENTITY_LINK_REACTIVATE = "actor.identity_link.reactivate"
+    OUTBOX_DISPATCH = "outbox.dispatch"
     ACTOR_SERVICE_PROVISION = "actor.service.provision"
     PROJECT_CONTRIBUTOR_CANDIDATE_LIST = "project.contributor_candidate.list"
     PROJECT_ROLE_GRANT_LIST = "project_role_grant.list"
@@ -248,6 +250,7 @@ class ActionOwner(StrEnum):
     XINT_002_06A = "WS-XINT-002-06A"
     AUTH_12G = "WS-AUTH-001-12G"
     AUTH_12H = "WS-AUTH-001-12H"
+    AUTH_OUTBOX_01 = "WS-AUTH-001-OUTBOX-01"
     AUTH_14 = "WS-AUTH-001-14"
     AUTH_REV_05 = "WS-AUTH-001-REV-05"
     AUTH_REV_06 = "WS-AUTH-001-REV-06"
@@ -315,6 +318,7 @@ _CONTRIBUTION_POLICY_ACTION_IDS = (
 
 
 ACTION_DEFINITIONS = (
+    _planned(ActionId.OUTBOX_DISPATCH, PermissionId.OUTBOX_DISPATCH, ActionOwner.AUTH_OUTBOX_01),
     _active(
         ActionId.ACTOR_PROFILE_READ_SELF, PermissionId.ACTOR_PROFILE_READ_SELF, ActionOwner.AUTH_07B
     ),
@@ -836,6 +840,7 @@ FUTURE_INTENT_REQUIRED_ACTIONS = frozenset(
 )
 NEW_PERMISSION_IDS = frozenset(
     {
+        PermissionId.OUTBOX_DISPATCH,
         PermissionId.PROJECT_SETUP_DIAGNOSTIC_READ,
         PermissionId.PROJECT_EFFECTIVE_POLICY_READ,
         PermissionId.PROJECT_GUIDE_COMPILATION_REQUEST,
@@ -867,9 +872,9 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 73 or len(ACTION_IDS) != 116:
+    if len(PERMISSION_IDS) != 74 or len(ACTION_IDS) != 117:
         raise RuntimeError("authorization catalogue count mismatch")
-    if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 24:
+    if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 25:
         raise RuntimeError("authorization permission boundary mismatch")
 
 
@@ -1002,6 +1007,7 @@ ACTION_BY_ID = _index_actions(ACTION_DEFINITIONS)
 
 
 _SERVICE_ACTIONS = {
+    ServiceIdentity.OUTBOX_DISPATCHER: frozenset({ActionId.OUTBOX_DISPATCH}),
     ServiceIdentity.ARTIFACT_VERIFIER: frozenset({ActionId.ARTIFACT_VERIFICATION_EXECUTE}),
     ServiceIdentity.ARTIFACT_PUT_RESOLVER: frozenset({ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE}),
     ServiceIdentity.ARTIFACT_SCHEDULER: frozenset({ActionId.ARTIFACT_PENDING_WORK_SCAN}),
@@ -1050,6 +1056,7 @@ ACTION_BEARING_SERVICE_IDENTITIES = SERVICE_IDENTITIES - {
 _EXPECTED_SERVICE_ACTION_MEMBERSHIPS = frozenset(
     (identity, action)
     for identity, action in (
+        (ServiceIdentity.OUTBOX_DISPATCHER, ActionId.OUTBOX_DISPATCH),
         (ServiceIdentity.ARTIFACT_VERIFIER, ActionId.ARTIFACT_VERIFICATION_EXECUTE),
         (ServiceIdentity.ARTIFACT_PUT_RESOLVER, ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE),
         (ServiceIdentity.ARTIFACT_SCHEDULER, ActionId.ARTIFACT_PENDING_WORK_SCAN),
@@ -1109,6 +1116,7 @@ def _index_service_actions(
     rows: dict[ServiceIdentity, frozenset[ActionId]],
 ) -> MappingProxyType[ServiceIdentity, frozenset[ActionId]]:
     expected_metadata = {
+        ActionId.OUTBOX_DISPATCH: (PermissionId.OUTBOX_DISPATCH, ActionOwner.AUTH_OUTBOX_01),
         ActionId.ARTIFACT_VERIFICATION_EXECUTE: (PermissionId.ARTIFACT_VERIFICATION_EXECUTE, ActionOwner.AUTH_ART_02D_INTERNAL),
         ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE: (PermissionId.ARTIFACT_PUT_ATTEMPT_RESOLVE, ActionOwner.AUTH_ART_02D_INTERNAL),
         ActionId.ARTIFACT_PENDING_WORK_SCAN: (PermissionId.ARTIFACT_PENDING_WORK_SCAN, ActionOwner.AUTH_ART_02D_INTERNAL),

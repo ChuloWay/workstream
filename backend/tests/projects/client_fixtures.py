@@ -11,7 +11,7 @@ from app.core.config import get_settings
 from app.db import session as db_session
 from app.main import create_app
 from app.modules.actors.models import ActorIdentityLink
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.models import AdminRoleGrant, AuthorityControl
 
 

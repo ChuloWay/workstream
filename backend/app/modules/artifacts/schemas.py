@@ -10,7 +10,7 @@ from uuid import UUID
 from app.modules.artifacts.sources import CommittedArtifactSource
 from app.modules.authorization.runtime import AuthorizationContext
 from app.modules.authorization.catalogue import ActionId
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 
 
 @final

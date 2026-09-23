@@ -34,7 +34,7 @@ from app.modules.authorization.runtime import (
     IdentityLinkStatus,
     ServiceAuthorizationContext,
 )
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.audit.schemas import AuthorityAuditEventInput
 
 

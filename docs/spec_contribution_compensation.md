@@ -847,7 +847,7 @@ remain unchanged, and downgrade refuses retained binding audit evidence.
 
 | ActionId | PermissionId | Principal / target | Protocol | Feature owner |
 |---|---|---|---:|---|
-| `outbox.dispatch` | proposed `outbox.dispatch` | fixed dispatcher / claimed event | T | CON-02B |
+| `outbox.dispatch` | registered planned `outbox.dispatch` | fixed dispatcher / exact event and phase | T | AUTH-OUTBOX-01 complete; CON-02B mechanics and AUTH-OUTBOX-02 activation remain |
 | `compensation.adapter_binding.read` | `compensation.adapter_binding.manage` | covered human Finance Authority / binding | Q | WS-ARCH-001-CP03B (active; CP01A registration custody) |
 | `compensation.adapter_binding.create` | `compensation.adapter_binding.manage` | covered human Finance Authority / binding collection | T | WS-ARCH-001-CP03B (active; CP01A registration custody) |
 | `compensation.adapter_binding.suspend` | `compensation.adapter_binding.manage` | covered human Finance Authority / active binding | T | WS-ARCH-001-CP03B (active; CP01A registration custody) |

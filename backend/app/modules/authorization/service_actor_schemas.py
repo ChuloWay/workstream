@@ -49,3 +49,11 @@ class ServiceActorProvisionResponse(BaseModel):
     provisioning_method: Literal["manual_service_provisioning"]
     created_at: datetime
     linked_at: datetime
+
+
+class ServiceActorProvisionResourceContext(BaseModel):
+    """Fixed local identity targeted by controlled service provisioning."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    resource_type: Literal["service_actor_provisioning"]
+    resource_id: ServiceIdentity

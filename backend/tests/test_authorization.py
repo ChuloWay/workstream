@@ -188,6 +188,8 @@ from app.modules.authorization.admin_service import (
     LastAccessAdministratorConflict,
 )
 from app.modules.authorization.policy import ADMIN_ROLE_PERMISSIONS, ADMIN_ROLE_SCOPES
+from app.modules.authorization.service_actor_schemas import ServiceActorProvisionResourceContext
+from tests.authorization.catalogue_fixtures import FIXED_SERVICE_ACTION_EXPECTATIONS
 from app.modules.authorization.runtime import (
     ActorAdminRoleGrantHistoryResourceContext,
     ActorAuthorizationContextResourceContext,
@@ -239,7 +241,6 @@ from app.modules.authorization.runtime import (
     ProjectRoleGrantIssueResourceContext,
     ProjectRoleGrantReadResourceContext,
     ProjectRoleGrantRevokeResourceContext,
-    ServiceActorProvisionResourceContext,
     ServiceAuthorizationContext,
     SystemResourceContext,
     authorization_resource_digest,
@@ -1986,45 +1987,13 @@ def test_obsolete_artifact_upload_authority_is_historical_only() -> None:
 
 
 def test_fixed_service_action_matrix_and_activation_are_exact_and_immutable() -> None:
-    expected = {
-        ServiceIdentity.ARTIFACT_VERIFIER: {"artifact.verification.execute"},
-        ServiceIdentity.ARTIFACT_PUT_RESOLVER: {"artifact.put_attempt.resolve"},
-        ServiceIdentity.ARTIFACT_SCHEDULER: {"artifact.pending_work.scan"},
-        ServiceIdentity.ARTIFACT_BINDING: {
-            "artifact.submission.binding.create",
-            "artifact.checker_output.binding.create",
-            "artifact.review_evidence.binding.create",
-        },
-        ServiceIdentity.ARTIFACT_GUIDE_READER: {"artifact.guide_source.read"},
-        ServiceIdentity.ARTIFACT_MATERIALIZER: {
-            "artifact.pre_submit.checker_input.materialize",
-            "artifact.post_submit.checker_input.materialize",
-            "artifact.review_packet.materialize",
-        },
-        ServiceIdentity.ARTIFACT_CHECKER_OUTPUT: {"artifact.checker_output.write"},
-        ServiceIdentity.PROJECT_SETUP: {
-            "project.guide_compilation.request_automatic",
-            "project.guide_compilation.execute",
-            "project.guide_sufficiency.run",
-            "project.submission_artifact_policy.derive",
-            "project.post_submit_checker_policy.derive",
-            "project.setup_run.update",
-        },
-        ServiceIdentity.REVIEW_PREFERENCE_EXPIRY: {"review.preference_expiry.run"},
-        ServiceIdentity.REVIEW_LEASE_EXPIRY: {"review.lease_expiry.run"},
-        ServiceIdentity.REVIEW_AUTHORITY_INVALIDATION_RECONCILIATION: {"review.reconcile.run"},
-        ServiceIdentity.REVIEW_RECONCILIATION: {"review.reconcile.run"},
-        ServiceIdentity.REVIEW_ARTIFACT_REFERENCE_RECONCILIATION: {
-            "review.artifact_reference.reconcile"
-        },
-        ServiceIdentity.REVIEW_PROJECTION: {"review.projection.rebuild"},
-    }
+    expected = FIXED_SERVICE_ACTION_EXPECTATIONS
     assert set(SERVICE_ACTIONS_BY_IDENTITY) == SERVICE_IDENTITIES - {ServiceIdentity.COMPENSATION_ADAPTER}
     assert {
         identity: {action.value for action in actions}
         for identity, actions in SERVICE_ACTIONS_BY_IDENTITY.items()
     } == expected
-    assert sum(map(len, SERVICE_ACTIONS_BY_IDENTITY.values())) == 23
+    assert sum(map(len, SERVICE_ACTIONS_BY_IDENTITY.values())) == 24
     assert FUTURE_INTENT_REQUIRED_ACTIONS == {
         ActionId.REVIEW_FINDING_EVIDENCE_INGEST,
         ActionId.REVIEW_FINDING_RESPONSE_EVIDENCE_INGEST,
@@ -2350,7 +2319,7 @@ def test_administrative_role_policy_and_definition_responses_are_exact() -> None
     )
 
     permission_response, role_response = AdminRoleGrantService.permission_definitions(), AdminRoleGrantService.role_definitions()
-    assert permission_response.total == 73
+    assert permission_response.total == 74
     assert [item.permission_id.value for item in permission_response.items] == sorted(
         permission.value for permission in PermissionId
     )

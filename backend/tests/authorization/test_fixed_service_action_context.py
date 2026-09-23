@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.api import SubmissionAdmissionConsumptionError
 from app.modules.artifacts.authorization import PreparedSubmissionBindingAuthorization
 from app.modules.artifacts.submission_bindings import SubmissionBindingAuthorityFacts

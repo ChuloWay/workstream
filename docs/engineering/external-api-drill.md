@@ -47,7 +47,7 @@ are outside this matrix.
 | 9 | `POST /actors/{actor_profile_id}/deactivate` | Same boundary matrix, terminal status and subsequent self-access denial: E `actor_deactivate_*`, `deactivate_self_write_denied`. |
 | 10 | `POST /actor-identity-links/{identity_link_id}/revoke` | Reason/key/authority/target boundaries, exact receipt, replay/mismatch/conflict, denied admission and unchanged current link: E `link_revoke_*`, `service_link_revoke_*`; A self guard. |
 | 11 | `POST /actor-identity-links/{identity_link_id}/reactivate` | Same boundary matrix and restored identity admission without creating authority: E `link_reactivate_*`, `service_link_reactivate_*`. |
-| 12 | `GET /authorization/permissions` | Exact frozen 73-permission catalogue, not runtime-derived expectations; authority and lifecycle rejection: E `catalogue_*`; A `inactive_catalogue_*`. Catalogue presence does not activate an action. |
+| 12 | `GET /authorization/permissions` | Exact frozen 74-permission catalogue, not runtime-derived expectations; authority and lifecycle rejection: E `catalogue_*`; A `inactive_catalogue_*`. Catalogue presence does not activate an action. |
 | 13 | `GET /authorization/admin-role-definitions` | Exact five roles, allowed scopes and permission matrix; twenty-human allow/deny matrix: E `catalogue_*`; A `role_definitions_*`. |
 | 14 | `POST /admin-role-grants` | Required/optional scope inputs, role/reason/key boundaries, self-grant prohibition, target eligibility, exact receipt/history and replay: A `grant_*`, `self_grant_*`, `system_only_*`, `inactive_grant_target_*`, `closing_service_grant_denied`, `closing_revoked_link_grant_denied`, `closing_restored_target_grant`. |
 | 15 | `GET /admin-role-grants` | All 16 public history fields against independent stored custody, populated scope/status pagination, cursor/query limits and audit/ordinary/no-auth boundaries: A `admin_pages_*`, `admin_query_collection_*`, `admin_auditor_collection_*`. |
@@ -298,7 +298,7 @@ The context selector similarly preserves
 [API-DRILL-008](external-api-drill-findings.md#api-drill-008-nul-project-selector-becomes-503)
 with a valid-selector and unchanged-project control before continuing. The
 query now rejects NUL before lookup; neither fix changes authorization or storage.
-Catalogue probes compare all 73 permission identifiers and every field of the
+Catalogue probes compare all 74 permission identifiers and every field of the
 five administrative role definitions against frozen client expectations. Both
 catalogues reject unauthenticated and ungranted callers. The twenty-actor role
 matrix reuses the same complete role definition oracle. A catalogue entry is

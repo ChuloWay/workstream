@@ -14,8 +14,9 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Current boundary: one CHECKERS catalogue, compiler/parser and implementation
   per checker ID serve active policy consumers; production post-submit phase
   execution remains unavailable.
-- Next usable boundary: shared committed-claim prerequisites, then ARCH-03B
-  assignment invalidation and ARCH-03C authority/public activation, after
+- Next usable boundary: CON-02B shared committed claims after delivered
+  AUTH-OUTBOX-01 unavailable dispatcher contract, then AUTH-OUTBOX-02 activation.
+  Downstream work remains ARCH-03B assignment invalidation and ARCH-03C authority/public activation, after
   completed [ARCH-03B8](WS-ARCH-001-03B8.md) hidden task audit evidence and [ARCH-03B7](WS-ARCH-001-03B7.md) requirements projections and [ARCH-03B6](WS-ARCH-001-03B6.md) locked-context projections and [ARCH-03B5](WS-ARCH-001-03B5.md) current contributor/manager work context and ARCH-03B4 hidden contributor/management task detail, ARCH-03B3 hidden management/operational queues and ARCH-03B2 contributor-ready queue facts, ARCH-03B1 detached metadata and CP08 lineage
   and minimal writers and ARCH-03A internal guide context, following delivered CP07 activation and AUTH-12H live manager authority. POL-04B unified setup, POL-05/06
   manager operations and POL-07B internal phase composition are delivered.

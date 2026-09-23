@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.hashing import canonical_json_hash
 from app.modules.actors.repository import ActorRepository
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.audit.schemas import ActorReferenceKind
 from app.modules.authorization.catalogue import (
     ACTION_BY_ID,

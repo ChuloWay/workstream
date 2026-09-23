@@ -9,8 +9,9 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   immutable ContributionRecords and optional
   project-policy-driven compensation awards without coupling lifecycle truth to
   an economic provider.
-- Next usable boundary: shared committed-claim prerequisites, then ARCH-03B
-  assignment invalidation and ARCH-03C authority/public activation, after
+- Next usable boundary: CON-02B shared committed claims after delivered
+  AUTH-OUTBOX-01 unavailable dispatcher contract, then AUTH-OUTBOX-02 activation.
+  Downstream work remains ARCH-03B assignment invalidation and ARCH-03C authority/public activation, after
   completed ARCH-03B8 hidden task audit evidence and ARCH-03B7 requirements projections and ARCH-03B6 locked-context projections and ARCH-03B5 current work context and ARCH-03B4 hidden contributor/management task detail, ARCH-03B3 hidden management/operational queues and ARCH-03B2 contributor-ready queue facts, ARCH-03B1 detached metadata and CP08 lineage
   and minimal writers, ARCH-03A internal guide context,
   [CP07 activation/binding](../WS-ARCH-001/WS-ARCH-001-CP07.md) and
@@ -63,7 +64,7 @@ the hidden policy behavior.
    see the [canonical source, authority and transaction contract](../../../docs/spec_review_lifecycle.md#finalacceptance).
 3. Shared dispatcher CON-02B is pulled forward before canonical task authority
    invalidation and post-submit routing, independently of ContributionRecord/
-   award persistence. AUTH-OUTBOX-01 supplies its unavailable contract and
+   award persistence. AUTH-OUTBOX-01 has delivered its unavailable contract and
    AUTH-OUTBOX-02 activates its proven mechanics. Add fulfillment,
    reconciliation and product reads only after
    their exact AUTH service identities and actions exist.

@@ -200,6 +200,7 @@ operations.status.read
 operations.timer.run
 operations.reconcile.run
 operations.outbox.retry
+outbox.dispatch
 operations.projection.rebuild
 operations.task.start_override
 operations.submission_gate.repair
@@ -239,12 +240,13 @@ registration, hidden ART behavior/resource composition, then dedicated AUTH
 evaluator integration and activation. ART never writes availability. AUTH-12,
 AUTH-14, and AUTH-15 are not alternate artifact activation paths.
 
-These are 73 approved `PermissionId` values. `ActionId` values are a separate
+These are 74 approved `PermissionId` values. `ActionId` values are a separate
 closed registry layer and are not included in that permission count. AUTH-05A's
 typed and PostgreSQL audit registry accepts the exact historical 49. The three
 approved Operator recovery identifiers, 16 artifact identifiers,
 `review.queue.override`, and the two AUTH-11A read-only project inspection
-permissions plus the two compilation permissions are the exact 24 post-`0020`
+permissions plus the two compilation permissions and the unavailable
+`outbox.dispatch` permission are the exact 25 post-`0020`
 permissions. AUTH-07A, AUTH-11A, and
 WS-XINT-002-01 add
 their matching typed/SQL audit parity without making them executable.
@@ -609,6 +611,8 @@ closed:
 | `workstream.review.reconciliation` | `review.reconcile.run` |
 | `workstream.review.artifact_reference_reconciliation` | `review.artifact_reference.reconcile` |
 | `workstream.review.projection` | `review.projection.rebuild` |
+| `workstream.outbox.dispatcher` | planned/unavailable: `outbox.dispatch` |
+| `workstream.compensation.adapter` | target-only; no action membership |
 
 The hidden 04B2 prepared resource first locks fixed-service authority using
 task, assignment, project, effective
@@ -624,7 +628,9 @@ facts because `TaskAssignment` uses a new immutable ID for replacement rather
 than a separate generation counter.
 
 `workstream.project.setup` was the eighth fixed identity when AUTH-12B merged;
-02C expands the current registry to fourteen identities. AUTH-12E activates
+02C expanded that registry to fourteen identities. The current registry has
+sixteen identities after the target-only compensation adapter and planned outbox
+dispatcher registrations. AUTH-12E activates
 `project.guide_sufficiency.run`, AUTH-12F3 activates policy derivation, and
 AUTH-12I activates exact unified compilation execution. AUTH-12B2 activates
 exact setup finalization; AUTH-12G activates
@@ -664,17 +670,18 @@ inherits a human grant or role.
 Adding a permission requires a specification/ADR update and human approval.
 Routers cannot invent identifiers or evaluate grant unions.
 
-### Proposed Pre-Review Service Authority
+### Pre-Review Service Authority
 
-The following is a proposed specification amendment for human design review,
-not registered or active authority. Current catalogue counts above exclude
-these additions. The named implementation boundaries must register typed
-parity, prove hidden behavior and activate only their exact manifests; a
-planning document does not grant a service permission.
+`outbox.dispatch` is registered and included in the current catalogue counts,
+but remains planned and unavailable. The other rows are proposed specification
+amendments for human design review: they are not registered or active and are
+excluded from those counts. The named implementation boundaries must register
+typed parity, prove hidden behavior and activate only their exact manifests;
+a planning document does not grant a service permission.
 
-| Proposed ActionId / PermissionId | Sole fixed identity | Exact target and guards | Current activation custodian |
+| ActionId / PermissionId | Sole fixed identity | Exact target and guards | Current activation custodian |
 |---|---|---|---|
-| `outbox.dispatch` | `workstream.outbox.dispatcher` | Event/claim generation/lease and exact phase; fresh authority for claim, invoke and finalize; no feature authority | AUTH-OUTBOX-01 registration, CON-02B hidden mechanics, AUTH-OUTBOX-02 activation |
+| `outbox.dispatch` | `workstream.outbox.dispatcher` | Event/claim generation/lease and exact phase; fresh authority for claim, invoke and finalize; no feature authority | AUTH-OUTBOX-01 registration complete (planned/unavailable); CON-02B hidden mechanics and AUTH-OUTBOX-02 activation remain |
 | `task.assignment.authority_reconcile` | `workstream.task.assignment_reconciler` | Committed exact AUTH invalidation event, project/actor/grant-or-link, active pre-submit assignment; no wrong-role or submitted-history mutation | ARCH-03B hidden handler, ARCH-03C activation |
 | `checker.post_submit.execute` | `workstream.checker.post_submit` | Immutable Submission/request/generation, locked compiled policy, attempt and admitted service; exact pre-I/O authority | ARCH-04C hidden behavior, ARCH-04D activation |
 | `checker.post_submit.finalize` | `workstream.checker.post_submit` | Exact execution request/fence, accepted result digest and required verified output bindings; fresh post-I/O authority and atomic evidence | ARCH-04C hidden behavior, ARCH-04D activation |
@@ -1516,3 +1523,16 @@ Replay validates the original event under fresh live authority and returns the
 original receipt without another activation or decision. Readiness and policy
 selection remain CP07 responsibilities; unavailable automated acceptance still
 blocks `human_review_required=false`. Public activation wiring remains pending.
+
+### Registered outbox dispatcher contract
+
+`outbox.dispatch` is registered but planned, with sole fixed identity
+`workstream.outbox.dispatcher`. No human role receives it. The existing protected
+permission catalogue lists the metadata; provisioning the identity does not
+enable execution. Claim/invoke/finalize facts bind `outbox_event`, exact event
+and project, payload digest, generation, claim owner and UTC lease. Finalize
+also requires the exact OUTBOX-owned outcome digest. These facts and decisions
+are not portable authority. The abstract preparation port has no live adapter;
+CON-02B owns committed claim/lease validation and outcome hashing, and
+AUTH-OUTBOX-02 owns fresh transaction-bound authority and exact recomposed-fact
+consumption. A pre-invocation decision cannot authorize post-I/O finalization.

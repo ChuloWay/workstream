@@ -41,7 +41,7 @@ from app.interfaces.artifact_operations import (
     GuideArtifactIngestResult,
 )
 from app.modules.actors.service import ActorService
-from app.modules.actors.service_identities import ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.models import (
     ArtifactAdmissionCharge,
     ArtifactAdmissionScope,
