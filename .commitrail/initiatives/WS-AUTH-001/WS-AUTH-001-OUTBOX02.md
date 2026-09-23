@@ -272,3 +272,34 @@ The migration concurrency regression pauses actual Alembic execution after its
 initial locks, observes a concurrent relabel waiting on the actor table, then
 proves the committed guard rejects it and preserves identity and empty custody.
 Removing only the migration actor lock must defeat the blocking assertion.
+
+### Synchronous worker termination boundary
+
+External review reproduced a cancellation-resistant handler: invocation can
+record UNKNOWN, but `asyncio.run()` then waits indefinitely for that handler
+while shutting down. The handler timeout is not a process-execution bound.
+The affected repair belongs to this same dispatcher chunk: configure a Celery
+hard execution limit on `deliver_event`, require its supported prefork execution
+mode in its operating contract, and retain the existing UNKNOWN/recovery fencing. Do not add a second async
+runner or turn uncertain effects into an automatic safe retry.
+
+Allowed repair files are `app/workers/outbox.py`, affected worker/composition tests
+and their existing lane/ownership registration, and current dispatcher operating
+instructions. The shared async runner and other feature-worker semantics remain
+outside this repair. Acceptance requires an actual synchronous delivery-task
+boundary with a repeatedly cancellation-resistant handler, independent process
+termination, and UNKNOWN preserved without another handler invocation. A
+remove-only-limit mutation must reproduce the hang within a bounded test
+watchdog. Existing real-PostgreSQL recovery/replay proofs must continue to pass.
+Security/architecture, QA/test-delta and CI-integrity reviewers check termination,
+acknowledgment/redelivery, custody, and proof discrimination before readiness.
+
+Use the existing Celery prefork process deadline (`time_limit=300`) with explicit
+`acks_on_failure_or_timeout=True`, preserving late acknowledgment and ordinary
+worker-loss redelivery. No soft limit is needed. The proof uses the real Celery
+Request and prefork TaskPool, synchronous task and async runner, real PostgreSQL
+custody, and a deliberately cancellation-resistant registered test handler.
+No global pool guard is added: shared guide-only drill workers use solo, and
+changing their runtime is outside this repair. The first production feature
+handler must enforce prefork routing/execution; unsupported pools and eager
+execution do not satisfy the containment contract.

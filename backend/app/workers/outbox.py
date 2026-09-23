@@ -24,10 +24,11 @@ def _uuid(value):
 
 
 @celery_app.task(
-    name="workstream.outbox.deliver_event", bind=True, acks_late=True, reject_on_worker_lost=True
+    name="workstream.outbox.deliver_event", bind=True, acks_late=True,
+    reject_on_worker_lost=True, acks_on_failure_or_timeout=True, time_limit=300,
 )
 def deliver_event(self, event_id, project_id):
-    """Real task identity names the worker; broker input never supplies a claim."""
+    """Run under prefork: its hard limit also bounds async shutdown after UNKNOWN."""
     try:
         event, project, task = _uuid(event_id), _uuid(project_id), _uuid(self.request.id)
     except (TypeError, ValueError):

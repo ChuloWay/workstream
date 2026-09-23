@@ -1284,3 +1284,17 @@ Unknown invoked effects remain terminal for reconciliation. The production
 handler registry is empty until feature-specific authority and handlers land.
 Celery worker retries cover infrastructure failure with at most three retries and a
 30-second exponential delay; they never authorize repeating an invocation.
+
+Delivery requires Celery's prefork process pool. `deliver_event` has a 300-second
+hard execution limit, independent of its 240-second handler timeout and covering
+async shutdown as well. The prefork parent acknowledges a hard timeout instead
+of requeuing that timed-out invocation. A committed UNKNOWN remains terminal;
+if termination interrupts finalization, the existing expired-invocation recovery
+records UNKNOWN without calling the handler again. Ordinary Celery worker-loss
+redelivery remains fenced by the same durable invocation custody.
+
+Eager execution and solo/thread/greenlet pools do not provide this process
+containment. Before registering the first production feature handler, its Celery worker
+and routing composition must enforce prefork execution. The shared app's other
+jobs and guide-only solo drill do not establish delivery containment. The
+production OUTBOX handler registry remains empty.

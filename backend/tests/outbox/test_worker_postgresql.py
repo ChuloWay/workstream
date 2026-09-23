@@ -195,3 +195,106 @@ async def test_empty_production_registry_does_not_claim_feature_work(delivery_ha
     async with h.factory() as session:
         assert (await session.scalars(select(OutboxDeliveryAttempt))).all() == []
         assert (await session.get(OutboxEvent, event.event_id)).delivery_state == "pending"
+
+
+async def test_prefork_bounds_cancellation_resistant_worker(
+    delivery_harness, worker, monkeypatch, tmp_path
+):
+    """Actual sync task shutdown is bounded after real invocation records UNKNOWN."""
+    import ast
+    import asyncio
+    from threading import Event
+
+    from billiard.einfo import ExceptionWithTraceback
+    from celery.concurrency.prefork import TaskPool
+    from celery.exceptions import TimeLimitExceeded
+    from celery.worker.request import Request
+    from kombu.message import Message
+
+    from app.modules.outbox.api import DeliveryOptions
+
+    h = delivery_harness
+    marker = tmp_path / "handler-calls.txt"
+
+    async def stubborn(envelope):
+        with marker.open("a") as stream:
+            stream.write("invoked\n")
+        while True:
+            try:
+                await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                with marker.open("a") as stream:
+                    stream.write("cancelled\n")
+
+    h.handler_hook = stubborn
+    h.options = DeliveryOptions(lease_seconds=30, handler_timeout_seconds=1)
+    event = await h.append()
+    task = worker.deliver_event
+    # Scale an installed process deadline only. Removing it leaves the real
+    # prefork task hanging until the independent test watchdog detects it.
+    if task.time_limit is not None:
+        monkeypatch.setattr(task, "time_limit", 5)
+    monkeypatch.setenv("WORKSTREAM_ARTIFACT_STORE_BACKEND", "disabled")
+    get_settings.cache_clear()
+    acked = Event()
+    rejected = []
+    pool = TaskPool(1, app=worker.celery_app, initargs=(worker.celery_app, "outbox-proof"))
+    pool.start()
+    child = pool._pool._pool[0]
+    try:
+        task_id = str(uuid4())
+        message = Message(
+            headers={"id": task_id, "task": task.name},
+            properties={"correlation_id": task_id},
+            body=((str(event.event_id), str(h.project)), {}, {}),
+        )
+        request = Request(message, app=worker.celery_app, task=task, decoded=True,
+                          on_ack=lambda *args: acked.set(),
+                          on_reject=lambda *args: rejected.append(args))
+        result = request.execute_using_pool(pool)
+        with pytest.raises(ExceptionWithTraceback) as timed_out:
+            result.get(timeout=15)
+        assert isinstance(timed_out.value.exc, TimeLimitExceeded)
+        assert acked.wait(3), "hard timeout must acknowledge without retrying the handler"
+        assert rejected == []
+        child.join(timeout=5)
+        assert not child.is_alive(), "hard timeout must terminate the stuck worker process"
+        duplicate_id = str(uuid4())
+        duplicate = Request(Message(
+            headers={"id": duplicate_id, "task": task.name},
+            properties={"correlation_id": duplicate_id}, body=message.body,
+        ), app=worker.celery_app, task=task, decoded=True,
+            on_reject=lambda *args: rejected.append(args))
+        failed, body, _ = duplicate.execute_using_pool(pool).get(timeout=15)
+        assert not failed and ast.literal_eval(body) == {"status": "delivery_unavailable"}
+        assert duplicate.worker_pid != child.pid
+        assert rejected == []
+    finally:
+        processes = pool._pool
+        pool.terminate()
+        processes.join()
+        get_settings.cache_clear()
+
+    lines = marker.read_text().splitlines()
+    assert lines.count("invoked") == 1
+    assert lines.count("cancelled") >= 2  # invocation timeout and asyncio.run shutdown
+    async with h.factory() as session:
+        attempt = (await session.scalars(select(OutboxDeliveryAttempt))).one()
+        assert attempt.stage == "completed"
+        assert json.loads(attempt.outcome_json)["error_code"] == "INVOKE_OUTCOME_UNKNOWN"
+        assert attempt.finalize_decision_event_id
+        original = attempt.outcome_json
+    assert deliver(worker, event.event_id, h.project) == {"status": "delivery_unavailable"}
+    assert marker.read_text().splitlines().count("invoked") == 1
+    async with h.factory() as session:
+        attempts = (await session.scalars(select(OutboxDeliveryAttempt))).all()
+        assert len(attempts) == 1 and attempts[0].outcome_json == original
+
+
+def test_delivery_task_has_independent_hard_limit(worker):
+    from app.modules.outbox.api import DeliveryOptions
+
+    task = worker.deliver_event
+    assert task.time_limit == 300
+    assert task.time_limit > DeliveryOptions().handler_timeout_seconds
+    assert task.acks_late and task.acks_on_failure_or_timeout

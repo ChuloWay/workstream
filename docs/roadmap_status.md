@@ -608,7 +608,11 @@ remaining trace sequence is:
   04D -> 04E` supplies materialization, durable results, authority and routing.
   An ART-owned output/log custody child precedes `04C` final completion.
   AUTH-OUTBOX-02 delivers shared live authority, phase audit custody and Celery
-  delivery/recovery scans over CON-02B. Automatic `04E` delivery still needs its
+  delivery/recovery scans over CON-02B. Delivery termination is bounded by a
+  300-second hard limit under prefork.
+  Feature-handler activation must enforce that Celery worker/routing topology; eager
+  and non-prefork execution are not delivery-containment proof.
+  Automatic `04E` delivery still needs its
   separately authorized feature handler; no production handler is installed yet. These foundations do not require REV or fulfillment.
   `04E` is hidden TASK handler `04E1`, exact AUTH activation `04E2`, then live
   integration `04E3`; a dispatcher cannot authorize TASK or CHECKERS mutations.
