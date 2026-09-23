@@ -41,7 +41,8 @@ Allowed files:
   migration graph, exact schema/reset inventory, lane/ownership registrations
   and their exact tests where the new files/table require them.
 - `docs/spec_shared_outbox.md`, affected current capability/navigation and
-  architecture/specification documents, and this record.
+  architecture/specification documents, this record, and the AUTH-OUTBOX-02
+  activation contract in `WS-AUTH-001/planning/PLAN.md`.
 
 Prohibited: active AUTH evaluator/catalogue changes; human/operator authority;
 feature handlers or provider calls; public routes; production Celery/beat
@@ -76,8 +77,16 @@ missing authority adapter.
 4. A handler receives immutable envelope/payload and claim facts, never ORM rows,
    a dispatcher authority handle or its session. Its own feature composition
    must obtain feature authority and validate the committed claim through the
-   public port. The port reads an independent transaction, so an uncommitted
-   claim cannot validate. Safe explicit retries can invoke multiple generations;
+   public port. The port reads an independent transaction and requires committed
+   invocation custody matching the current live claim. This is a point-in-time
+   observation, not a lease extension or authority for feature writes. Feature
+   integration must provide its own transaction fence, current AUTH and effect
+   idempotency; an uncommitted claim cannot validate. One nonlocking SQL statement
+   joins current event and incomplete invoked custody, checks all exact facts and
+   `claim_expires_at > clock_timestamp()`, and returns immutable facts with DB
+   `observed_at`. A fresh owner-controlled session closes before return. All
+   mismatched/uncommitted/expired/completed cases share an unavailable result;
+   the port never accepts the dispatcher writer session. Safe explicit retries can invoke multiple generations;
    feature effects must deduplicate by immutable event identity, not generation.
    There is no unconditional at-least-once guarantee: a crash after invocation
    custody commits but before handler entry is conservatively unknown, even when
@@ -104,13 +113,19 @@ JSON payload text. Recompute its digest before delivery; do not place a mutable
 dictionary or ORM instance inside a nominally frozen envelope.
 
 One custody row per `(event_id, claim_generation)` stores those exact claim
-facts and CLAIM decision UUID, then optional INVOKE decision UUID/`invoked_at`,
-then FINALIZE decision UUID and the complete canonical outcome. Decision IDs
-link to consumed AUTH decisions; they are not independent authority. Before
-each mutation, require a returned `AuthorizationDecision` with exact
-ALLOW/action/permission, following locked fact comparison and fresh DB-time
-checks. Production AUTH decision/audit integration remains OUTBOX-02; test
-authority is explicit and must not be presented as live AUTH evidence.
+facts, optional `invoked_at`, then the complete canonical outcome. It stores no
+AUTH decision UUIDs: the action is planned and cannot produce valid allowed audit
+evidence. Before each mutation, require a returned `AuthorizationDecision` with
+exact ALLOW/action/permission, following locked fact comparison and fresh DB-time
+checks. Injected test ports prove only this synthetic service contract; retain
+real AUTH planned-action denial tests. No fake allowed audit rows or permissive
+production adapter may stand in for activation.
+
+AUTH-OUTBOX-02 atomically adds the live evaluator, audit resource/action vocabulary,
+exact audit matching guards, receipt decision foreign keys and production
+composition. It must refuse preexisting attempts without provable authority,
+not backfill evidence or delete retained data. This chunk's receipts establish
+delivery facts only; they do not claim authorization evidence.
 
 Closed handler results are acknowledge, safe retry, or nonretryable failure.
 They carry no arbitrary result text or provider payload. Canonical finalization
@@ -128,11 +143,10 @@ fields including nulls; AUTH's resource facts separately bind the complete claim
 | Never-invoked expiry, budget exhausted | dead_letter | ATTEMPTS_EXHAUSTED, retry null, finalized DB time | false |
 | Invoked exception/timeout/interruption/expiry | dead_letter | INVOKE_OUTCOME_UNKNOWN, retry null, finalized DB time | true |
 
-`invoked_at`/INVOKE decision are both null only for never-invoked custody.
-CLAIM decision is always present; FINALIZE decision/outcome/digest/receipt time
-are present only when completed. Receipt completion time is DB-owned even when
+`invoked_at` is null only for never-invoked custody.
+Outcome/digest/receipt time are present only when completed. Receipt completion time is DB-owned even when
 the current event's `finalized_at` is null for retryable. Replays return the
-original decision IDs, times, digest and disposition, with no extra receipt.
+original delivery identities, times, digest and disposition, with no extra receipt.
 Cancellation/crash before finalization may leave invoked custody for later
 expiry recovery; it must never manufacture a successful outcome.
 
@@ -255,7 +269,7 @@ These are planned nodes, not executed evidence:
   absent; expiry preserves unknown evidence and cannot re-invoke automatically.
 - `test_finalize_commit_and_exact_replay`: before-commit fault rolls back both
   writes; after-commit response loss replays the original receipt; substituted
-  outcome/claim facts reject. Assert all original decision IDs, timestamps and
+  outcome/claim facts reject. Assert all original delivery identities, timestamps and
   digests and unchanged row count; mutate each digest-bound field independently.
   Removing outcome comparison must fail the test.
 - `test_retry_backoff_and_exhaustion`: explicit retry plus a valid successful

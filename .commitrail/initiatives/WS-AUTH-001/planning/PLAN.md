@@ -70,7 +70,13 @@ or effective action gains dispatcher authority.
 ## WS-AUTH-001-OUTBOX-02 — exact dispatcher activation
 
 Disposition: Planned. L1. Depends on OUTBOX-01 and the exact hidden CON-02B
-manifest. Allow AUTH evaluator/composition/parity and integration proof;
+mechanics. Allow AUTH evaluator/composition/parity and integration proof,
+plus the atomic authorization binding of delivery custody: audit resource/action
+vocabulary, exact phase/resource/actor/project matching guards and decision
+foreign keys. CON-02B retains delivery facts only while dispatch is unavailable.
+Refuse preexisting attempts without provable authority; never backfill fictional
+audit evidence or delete retained data. Activate these bindings together with
+the live evaluator and production composition;
 prohibit outbox behavior rewrites or feature-handler authority. Activate only
 dispatcher mechanics after claim/lease/recovery proof. Prove provisioned and
 missing-identity cases, expiry/revocation, wrong event/generation, rollback,
