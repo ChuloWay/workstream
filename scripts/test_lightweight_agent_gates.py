@@ -133,7 +133,8 @@ class LightweightAgentGateTests(unittest.TestCase):
             "          - project_lifecycle_a\n"
             "          - project_lifecycle_b\n"
             "          - project_lifecycle_c\n"
-            "          - task_lifecycle",
+            "          - task_lifecycle_a\n"
+            "          - task_lifecycle_b",
         )
         self.assertIn(
             "  test:\n    if: ${{ always() }}\n"

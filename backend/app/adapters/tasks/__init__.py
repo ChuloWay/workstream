@@ -24,8 +24,51 @@ from app.modules.tasks.service import TaskService
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.api import TaskAuthorizationPort, TaskTransitionAuditPort
 from app.modules.tasks.submission_composition import TaskSubmissionCreationService
+from app.modules.tasks.assignment_invalidation import AssignmentInvalidationOperation
+from app.modules.tasks.api.assignment_invalidation import AssignmentInvalidationUnavailable
+from app.modules.outbox.api import HandlerOutcome
+
+
+class DenyAssignmentInvalidationAuthorization:
+    """Explicit unavailable feature authority until its exact ARCH-03C activation."""
+
+    async def prepare(self, facts):
+        raise AssignmentInvalidationUnavailable("assignment reconciliation unavailable")
+
+    async def consume(self, handle, facts):
+        raise AssignmentInvalidationUnavailable("assignment reconciliation unavailable")
+
+    def close(self, handle):
+        pass
+
+
+class TransactionalAssignmentInvalidationHandler:
+    """Hidden typed handler; no production registry entry or implicit authority."""
+
+    def __init__(self, session_factory, *, observer, authorization_factory):
+        self._sessions = session_factory
+        self._observer, self._authorization = observer, authorization_factory
+
+    async def __call__(self, envelope):
+        from app.adapters.audit import assignment_invalidation_audit, committed_authority_invalidation
+        from app.adapters.outbox import outbox_invocation_fence
+
+        try:
+            async with self._sessions() as session, session.begin():
+                outcome = await AssignmentInvalidationOperation(
+                    session, observer=self._observer, fence=outbox_invocation_fence(session),
+                    causes=committed_authority_invalidation(self._sessions),
+                    authorization=self._authorization(session),
+                    audit=assignment_invalidation_audit(session),
+                ).reconcile(envelope)
+            return outcome
+        except AssignmentInvalidationUnavailable:
+            # The context has rolled back every staged TASK/AUTH/audit change.
+            return HandlerOutcome.REJECT
 
 __all__ = (
+    "DenyAssignmentInvalidationAuthorization",
+    "TransactionalAssignmentInvalidationHandler",
     "task_commands",
     "task_service",
     "DenySubmissionCreationAuthorization",

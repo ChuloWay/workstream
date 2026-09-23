@@ -135,9 +135,9 @@ cannot be reused as post-submission review-gate evidence. See the
 | Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls; canonical `/actors/me` self-read with duplicate `/auth/me` removed; suspension denies both self-read and self-update | Final end-to-end operational and conformance proof |
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
 | Project Guide source custody | **Live foundation** | Guide creation declares documents and task examples; public document upload; immutable internal metadata snapshots; exact run-scoped reads; S3-backed originals and isolated agent document inspection; exact document generation through separate manager approvals and internally authorized CP07 activation | Public activation wiring; prove each enabled document reader |
-| Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; automatic deterministic post-policy derivation, public complete policy read, separate approval and shared correction custody | Public activation wiring and public TASK queue access, assignment invalidation and its shared committed-claim prerequisites |
-| Contribution policy administration | **Hidden and proven** | Finance Authority adapter-binding lifecycle; ContributionPolicy read/create/update/publish/retire with exact Finance Authority; immutable operation and event history; internal exact selected-version validation; CP07 binding with live exact-project manager authority of the selected published version to the active guide generation | Public activation wiring; public TASK queue access, assignment invalidation and its shared committed-claim prerequisites |
-| Task readiness and claim | **Foundation with grant-backed contributor commands** | Task records, assignments and locked work context; guide-bound ContributionPolicyVersion locked before `READY` and copied to TaskAssignment; detached project/guide display; hidden project-scoped ready, management and operational queue facts with bounded live pagination; hidden contributor/management detail with exact project and assignment visibility; separate current live work-context projections with exact receipt-selected review/revision/ContributionPolicy identities and no obsolete economic fields; explicit management/operational/audit locked-context projections using one historical resolver, with operational/audit reads internal; immutable contributor/management requirements using one historical translator, with hidden exact contributor visibility and management read; bounded internal Audit Authority lifecycle evidence with atomic project/task scoping and exact transition references; claim/start/contributor context use exact-project Submitter grants; separate manager context and system-Operator start; durable claim/start retry receipts with fresh authority and exact assignment checks | Public queue authority/exposure, Audit Authority public evidence access and durable assignment invalidation |
+| Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; automatic deterministic post-policy derivation, public complete policy read, separate approval and shared correction custody | Public activation wiring and public TASK queue access, live assignment-invalidation authority and atomic producer wiring |
+| Contribution policy administration | **Hidden and proven** | Finance Authority adapter-binding lifecycle; ContributionPolicy read/create/update/publish/retire with exact Finance Authority; immutable operation and event history; internal exact selected-version validation; CP07 binding with live exact-project manager authority of the selected published version to the active guide generation | Public activation wiring; public TASK queue access, live assignment-invalidation authority and atomic producer wiring |
+| Task readiness and claim | **Foundation with grant-backed contributor commands** | Task records, assignments and locked work context; guide-bound ContributionPolicyVersion locked before `READY` and copied to TaskAssignment; detached project/guide display; hidden project-scoped ready, management and operational queue facts with bounded live pagination; hidden contributor/management detail with exact project and assignment visibility; separate current live work-context projections with exact receipt-selected review/revision/ContributionPolicy identities and no obsolete economic fields; explicit management/operational/audit locked-context projections using one historical resolver, with operational/audit reads internal; immutable contributor/management requirements using one historical translator, with hidden exact contributor visibility and management read; bounded internal Audit Authority lifecycle evidence with atomic project/task scoping and exact transition references; claim/start/contributor context use exact-project Submitter grants; separate manager context and system-Operator start; durable claim/start retry receipts with fresh authority and exact assignment checks; hidden exact-assignment invalidation with committed cause verification, delivery fencing and immutable release evidence | Public queue authority/exposure, Audit Authority public evidence access and live assignment-invalidation authority/producer wiring |
 | Contributor artifact preparation | **Hidden and proven** | One outer ZIP; bounded scratch inspection; canonical manifest; platform and project prechecks; unchanged-work rejection; durable put intent; verification; capacity-charged ready admission | Connect only the active unified guide/checker lineage and complete the later public admission-only cutover |
 | Pre-submission intake checking | **Hidden and proven; unified-guide integration remains** | Separate versioned pre-submission catalogue, locked effective-plan compilation, platform/project checks during continuous preparation, blocking feedback before Submission creation, and one internal phase command covering execution/replay with the JSON precheck removed | Connect approved unified-guide pre-submit policy lineage through task/assignment preparation and complete the canonical public cutover; passing intake must never substitute for post-submit evaluation |
 | Immutable Submission creation | **Hidden foundation; public packet creation retired** | Contributor preparation authority; durable pre-submit reservation and exact completed-evidence recovery without rerunning checks; atomic admission consumption; TASK-owned admission-backed creation with exact assignment ContributionPolicyVersion and locked policy lineage; fixed-service artifact binding; replay/concurrency/rollback proof | Finish downstream evaluation and the canonical public integration. The retained submission-list GET is not a usable creation POST |
@@ -166,7 +166,7 @@ cannot be reused as post-submission review-gate evidence. See the
 - GitHub CI distributes the backend suite across semantic lanes, rejects
   skipped/deselected tests, preserves global coverage, and requires at least
   90 percent coverage for new or materially changed backend subsystems.
-  Its seven-lane allocation uses three project lanes, one task lane, two
+  Its eight-lane allocation uses three project lanes, two task lanes, two
   shared-foundation lanes and one schema lane. Database resets batch trigger
   commands within the existing transaction while retaining full schema checks;
   authorization preflight runs alongside lanes and remains mandatory at fan-in.
@@ -360,7 +360,7 @@ cannot be reused as post-submission review-gate evidence. See the
   prior guide and promotes a draft Project atomically. Active-guide reads require
   the committed binding. AUTH-12H supplies live exact-project manager authority;
   CP08 locks and carries exact policy lineage through Task, TaskAssignment and
-  Submission. Public activation wiring and public TASK queue access, assignment invalidation and its shared committed-claim prerequisites remain pending.
+  Submission. Public activation wiring and public TASK queue access, live assignment-invalidation authority and atomic producer wiring remain pending.
 - Contributor ZIP preparation uses one verified byte lineage from scratch
   inspection through durable admission and eventual Submission binding.
 
@@ -433,9 +433,10 @@ Setup receipts remain immutable. The next guide boundary is:
    complete, as are ARCH-03B4 hidden contributor/management detail and ARCH-03B5
    replacement of the existing live work-context projections. ARCH-03B6 locked-context projections
    are complete, with operational/audit reads still internal. ARCH-03B7 requirements projections are complete; the retained requirements route keeps its existing authority wrapper. ARCH-03B8 bounded task audit evidence is complete and internal;
-   public queue authority stays in ARCH-03C. Invalidation follows delivery of
-   the shared committed-claim contract, before the ARCH-03C authorization/public
-   cutover. HTTP activation exposure remains
+   ARCH-03B9 hidden exact-assignment invalidation is complete, using the shared
+   committed invocation and same-transaction fence. ARCH-03C next supplies its
+   real feature authority and atomic producer wiring, plus public task authority
+   and exposure. HTTP activation exposure remains
    pending and is not implied by an internal public port. The operation requires exact
    current compilation, sufficiency, separate pre/post approvals, review/revision
    inputs and an explicitly selected published ContributionPolicyVersion.
@@ -492,7 +493,7 @@ Setup receipts remain immutable. The next guide boundary is:
 The [behavior-first audit](../.commitrail/initiatives/WS-QUAL-003/OVERVIEW.md)
 has delivered focused PROJECT proof repairs, fixture separation, real
 rollback checks, a shared AUTH concurrency-observer repair, and a rebalance of
-the seven hosted CI lanes. The audit also corrected concrete sufficiency and
+the hosted CI lanes. The audit also corrected concrete sufficiency and
 submission-policy validation defects. These are delivered bounded repairs,
 not a claim that every test or subsystem is fully audited.
 
@@ -590,20 +591,21 @@ remaining trace sequence is:
   POL-06A/AUTH-12G/POL-06B, POL-07A/07B, AUTH-12H and ARCH-03A are delivered.
   The complete internal guide context and `CP08` exact task/assignment/Submission
   contribution-policy stamps and ARCH-03B1 detached display are available; ARCH-03B2 ready and ARCH-03B3 management/operational queue facts and ARCH-03B4 hidden task detail and ARCH-03B5 current live work context and ARCH-03B6 locked-context and ARCH-03B7 requirements projections are delivered.
-  ARCH-03B8 hidden task audit evidence is complete. Assignment invalidation and
-  its shared claim prerequisites remain before ARCH-03C. ARCH-04A supplies registered-capability
+  ARCH-03B8 hidden task audit evidence and ARCH-03B9 hidden assignment invalidation
+  are complete. ARCH-03C retains real feature authority and atomic producer wiring. ARCH-04A supplies registered-capability
   contracts; activation does not require a Task, Submission or completed run.
 - Contribution lineage: CP05 authorization, CP06 validation and hidden `CP07` activation
   and `AUTH-12H` live manager authority are complete. `ARCH-03A` has completed
   the existing internal guide-context port. `CP08` delivers lineage fields
   and minimal Task/Assignment/Submission writers together without superseded economic
   readiness. Remaining work includes
-  assignment invalidation after shared committed claims in `ARCH-03B`, following delivered
-  `ARCH-03B1` metadata and ARCH-03B2/03B3 hidden queues and ARCH-03B4 hidden detail and ARCH-03B5 current work context, ARCH-03B6 locked-context and ARCH-03B7 requirements and ARCH-03B8 hidden audit evidence, and authorization/public cutover in `ARCH-03C`. `CP09` physical cleanup waits for all remaining
+  real assignment-invalidation authority and atomic producer wiring in `ARCH-03C`, following delivered
+  `ARCH-03B1` metadata and ARCH-03B2/03B3 hidden queues and ARCH-03B4 hidden detail and ARCH-03B5 current work context, ARCH-03B6 locked-context and ARCH-03B7 requirements and ARCH-03B8 hidden audit evidence and ARCH-03B9 hidden assignment invalidation, and authorization/public cutover in `ARCH-03C`. `CP09` physical cleanup waits for all remaining
   legacy consumers to be replaced; it is outside the `allow_review` critical path.
   Shared dispatch authority is delivered by AUTH-OUTBOX-02. Live assignment
-  invalidation still needs its exact feature authority and handler; current
-  authority is checked on every request.
+  invalidation still needs exact feature authority, producer fan-out and handler
+  registration; its hidden operation is delivered. Current authority is checked
+  on every request.
 - Post-submit admission: after delivered `POL-07B` and remaining `ARCH-03C`, `ARCH-04B -> 04C ->
   04D -> 04E` supplies materialization, durable results, authority and routing.
   An ART-owned output/log custody child precedes `04C` final completion.

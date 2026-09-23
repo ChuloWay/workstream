@@ -10,7 +10,8 @@ work-context and system-Operator start authority. Reuse its command/port and
 assignment transaction, not a second claim implementation. CP08 completes the contribution-policy attempt locks and minimal writers.
 The [03B2 child](../../WS-ARCH-001-03B2.md) supplies hidden contributor-ready
 queue facts and pagination, without live AUTH or HTTP exposure. The [03B8 child](../../WS-ARCH-001-03B8.md) completes hidden task audit evidence.
-This parent retains dependency-gated assignment invalidation. The
+[03B9](../../WS-ARCH-001-03B9.md) completes hidden exact-assignment invalidation;
+03C retains its real feature authority, producer wiring and registration. The
 [03B3 child](../../WS-ARCH-001-03B3.md) delivers hidden all-state management
 and status-only operational queue facts.
 The [03B4 child](../../WS-ARCH-001-03B4.md) delivers hidden contributor and
@@ -61,12 +62,14 @@ already-submitted/evaluation/review history cannot be rewritten. Downstream
 needs-revision obligations and manager reassignment remain REV-owned work;
 there is no new direct manager assignment feature here.
 
-Build this only after AUTH-OUTBOX-01 and CON-02B deliver the shared committed
-claim and typed-handler contracts. Current OUTBOX provides append-only persistence, and AUTH
-invalidation audit rows are not dispatched events. Actor-wide invalidation needs
-explicit per-project TASK fan-out; TASK and REV effects cannot share an implicit
-acknowledgement. The hidden TASK-owned event handler receives exact fixed-service
-authority supplied by 03C, using the shared outbox's committed claim contract.
+AUTH-OUTBOX-01, CON-02B and AUTH-OUTBOX-02 supply shared committed delivery
+and dispatcher authority. 03B9 consumes the complete committed envelope and
+holds the OUTBOX event/attempt fence through the hidden TASK effect transaction.
+AUTH invalidation audit rows still are not dispatched events. Actor-wide
+invalidation needs bounded per-project/per-assignment TASK fan-out; TASK and
+REV effects cannot share an implicit acknowledgement. The hidden handler
+requires its own feature authority port; real fixed-service authority and
+production registration remain 03C.
 03C must wire AUTH invalidation events durably in their originating transaction;
 a response hint such as `auth13_assignment` is not a delivered reconciliation.
 
@@ -95,9 +98,9 @@ test-delta impact.
    03B7 requirements and [03B8 bounded audit evidence](../../WS-ARCH-001-03B8.md)
    are complete. Existing public audit/recovery readers remain required until
    their explicit 03C authority replacement.
-3. Assignment invalidation after the shared claim contract exists, followed by
-   ARCH-03C producer wiring, exact AUTH and public activation. No parallel worker
-   or fabricated claim value substitutes for those dependencies.
+3. [03B9](../../WS-ARCH-001-03B9.md) hidden assignment invalidation is complete.
+   Next is ARCH-03C producer wiring, exact feature AUTH and public activation.
+   No parallel worker or fabricated claim value substitutes for those dependencies.
 
 ## Merge state
 

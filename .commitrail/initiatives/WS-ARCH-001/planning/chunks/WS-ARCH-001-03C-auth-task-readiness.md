@@ -17,8 +17,8 @@ role-only fallback or public Submission cutover.
 The bounded [project-grant repair](../../../../changes/task-project-grant-authorization.md)
 owns the active `task.claim`, `task.start`, `task.work_context.read`,
 `project.task.work_context.read` and `operations.task.start_override` actions.
-Reuse those registrations and extend their exact locked-context proof when
-03B delivers contribution-policy attempt lineage. The other rows below remain
+Reuse those registrations and extend their exact locked-context proof with the
+CP08-delivered contribution-policy attempt lineage. The other rows below remain
 proposed registrations, not claims of usable actions. This repair does not
 activate the queue, remaining projections or invalidation handler.
 
@@ -60,11 +60,19 @@ The pre-submit invalidation handler proposes fixed identity
 `workstream.task.assignment_reconciler` and sole action/permission
 `task.assignment.authority_reconcile`. It consumes only an exact committed
 AUTH invalidation event and the TASK-owned 03B handler manifest; no human,
-dispatcher or unrelated service receives it. Live reconciliation depends on
-CON-02B dispatch plus its exact AUTH activation. Originating authority changes
-stage their invalidation event atomically, while every foreground claim/start/
-submission still revalidates current authority and never waits for that worker
-to deny a revoked actor. Prove crash/redelivery and wrong-role preservation.
+dispatcher or unrelated service receives it. The [03B9 hidden operation](../../WS-ARCH-001-03B9.md) supplies exact cause
+validation, assignment release, replay and a same-transaction OUTBOX fence.
+Shared dispatch authority is delivered by AUTH-OUTBOX-02. Live reconciliation
+still requires this exact feature AUTH activation and producer wiring. Originating authority changes
+stage exact per-assignment events atomically through bounded actor/project
+fan-out. Publish only from the originating mutation transaction; never backfill
+or dispatch retained invalidation rows. Pre-repair transaction-start timestamps
+cannot establish assignment/cause chronology. Capture original assignment IDs through a nonlocking TASK owner
+projection while AUTH locks serialize claim; never acquire TASK locks after
+AUTH locks. Enforce prefork worker/routing topology before the first production
+handler registration. Every foreground claim/start/
+submission still revalidates current authority; no worker wait grants access.
+Prove crash/redelivery and wrong-role preservation.
 
 The [suspension and task-retry repair](../../../../changes/auth-suspension-task-retry.md)
 owns durable claim/start/Operator-start replay on the existing command path.

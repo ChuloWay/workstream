@@ -590,8 +590,10 @@ authority cutover remains ARCH-03C. ARCH-03B7 supplies immutable contributor and
 management requirements through one historical translator. Its hidden contributor
 read reuses exact assignment visibility after locking TASK; the retained requirements
 route keeps its current authority wrapper. ARCH-03B8 supplies bounded internal Audit Authority task evidence;
-invalidation requires shared delivery
-claims, and public authority cutover remains ARCH-03C. Canonical checker materialization follows in
+ARCH-03B9 supplies hidden exact-assignment invalidation with committed cause
+verification and a same-transaction delivery fence. Its production handler is
+unregistered; feature authority, atomic AUTH event wiring and public task
+cutover remain ARCH-03C. Canonical checker materialization follows in
 ARCH-04B/04C.
 
 ## v0.1 Success Standard

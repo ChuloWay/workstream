@@ -37,7 +37,7 @@ checker-remediation boundary before public Submission cutover.
 | [ARCH-03B6](../WS-ARCH-001-03B6.md) | ARCH-03B5 | Complete: shared historical validation and distinct management/operational/audit locked-context projections; retained management HTTP authority unchanged |
 | [ARCH-03B7](../WS-ARCH-001-03B7.md) | ARCH-03B6 | Complete: immutable contributor/management requirements through one historical translator and TASK-before-visibility locking; retained HTTP authority unchanged |
 | [ARCH-03B8](../WS-ARCH-001-03B8.md) | ARCH-03B7 | Complete: bounded hidden task audit evidence with atomic scope and exact transition references |
-| ARCH-03B remaining | ARCH-03B8; AUTH-OUTBOX-01 and CON-02B for invalidation | Hidden assignment invalidation only after shared committed claims |
+| [ARCH-03B9](../WS-ARCH-001-03B9.md) | ARCH-03B8, CON-02B and AUTH-OUTBOX-02 | Complete: hidden exact-assignment invalidation with committed cause and delivery custody |
 | ARCH-03C | ARCH-03B, AUTH-OUTBOX-02 | AUTH exact task/assignment activation and integrated readiness proof |
 | CP09 (later cleanup coordination) | All legacy consumers replaced, including CHECKER and public 02I path | Physical economic deletion; not on the allow_review critical path |
 | ARCH-04B | ARCH-04A, POL-07, ARCH-03C, merged ARCH-02H | ART exact stored Submission materialization |
@@ -68,10 +68,11 @@ work concurrently if allowed paths do not overlap; shared catalogue/schema
 changes must be serialized or rebased, not implemented twice. ARCH-03A completes the existing internal guide-context port after AUTH-12H.
 CP08 completes its schema and minimal existing writers together. Projections
 through 03B8 are complete: detached metadata, queues, detail, work context,
-locked context, requirements and bounded audit evidence. ARCH-03B retains
-dependency-gated assignment invalidation.
-The invalidation handler additionally requires CON-02B committed claims; actor-wide
-changes need explicit per-project TASK events, not arbitrary outbox scope. Subsequent
+locked context, requirements and bounded audit evidence. ARCH-03B9 completes
+hidden exact-assignment invalidation on the delivered shared dispatcher.
+ARCH-03C still owns real feature authority and originating-transaction-only
+per-assignment producer events, registration and public exposure; it must never
+backfill or dispatch retained invalidation rows. Subsequent
 PR-sized contracts name exact files, public types, current migration head and
 runnable proof before implementation; they refine this design, not create a
 new permission requirement.
@@ -87,8 +88,9 @@ record on implementation; the parent is not a multi-owner implementation PR.
 
 The shared module supplies append/flush and idempotency, and CON-02B supplies
 hidden claim/invoke/finalize, custody and recovery. AUTH-OUTBOX-01 has supplied
-planned dispatcher metadata and typed authority; AUTH-OUTBOX-02 must activate
-that exact manifest and bind real audit evidence before production integration. None depends on ContributionRecord, fulfillment
+dispatcher metadata and typed authority; AUTH-OUTBOX-02 has activated
+that exact manifest with real phase audit custody and bounded prefork workers.
+The production registry remains empty; each feature requires its own authority. None depends on ContributionRecord, fulfillment
 or REV implementation. TASK must not implement an alternative outbox worker.
 Registration and activation are distinct product-authority changes, not
 extra planning/administrator approval ceremonies.

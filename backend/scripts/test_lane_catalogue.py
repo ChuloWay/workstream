@@ -10,7 +10,7 @@ PARTITIONED_PROJECT_LANES = (
     "project_lifecycle_b",
     "project_lifecycle_c",
 )
-TASK_LANE = "task_lifecycle"
+PARTITIONED_TASK_LANES = ("task_lifecycle_a", "task_lifecycle_b")
 
 
 @dataclass(frozen=True)
@@ -354,6 +354,9 @@ TASK_MODULES = (
     "tests/tasks/test_locked_context.py",
     "tests/tasks/test_submission_requirements.py",
     "tests/tasks/test_audit_evidence.py",
+    "tests/tasks/test_assignment_invalidation.py",
+    "tests/tasks/test_assignment_invalidation_causes.py",
+    "tests/tasks/test_assignment_invalidation_races.py",
     "tests/tasks/test_contribution_claim_races.py",
     "tests/tasks/test_submission_lineage.py",
     "tests/checkers/post_submit/test_catalogue.py",
@@ -387,6 +390,7 @@ TASK_MODULES = (
 PARTITION_GROUPS = (
     (PARTITIONED_SHARED_LANES, SHARED_FOUNDATION_MODULES),
     (PARTITIONED_PROJECT_LANES, PROJECT_MODULES),
+    (PARTITIONED_TASK_LANES, TASK_MODULES),
 )
 PARTITION_LANES_BY_MODULE = {
     module: names for names, modules in PARTITION_GROUPS for module in modules
@@ -406,5 +410,5 @@ LANES = (
         ),
     ),
     *(TestLane(name, PROJECT_MODULES) for name in PARTITIONED_PROJECT_LANES),
-    TestLane(TASK_LANE, TASK_MODULES),
+    *(TestLane(name, TASK_MODULES) for name in PARTITIONED_TASK_LANES),
 )

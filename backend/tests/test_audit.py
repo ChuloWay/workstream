@@ -1206,6 +1206,7 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
             LifecycleAuditEventType.TASK_CLAIMED,
             LifecycleAuditEventType.TASK_STARTED,
             LifecycleAuditEventType.TASK_START_OVERRIDDEN,
+            LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED,
         },
         LifecycleAuditEntityType.REVIEW_QUEUE_ENTRY: {
             LifecycleAuditEventType.REVIEW_QUEUE_ENTRY_CREATED,
@@ -1306,6 +1307,9 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
                     "to_status": "claimed" if event_type is LifecycleAuditEventType.TASK_CLAIMED else "in_progress",
                     "task_reason": "Explicit task operation",
                 }
+            if event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED:
+                references[LifecycleAuditReferenceKind.AUTHORITY_INVALIDATION] = uuid4()
+                transition["to_status"] = "ready"
             value = _lifecycle_input(
                 entity_type=entity_type,
                 entity_id=entity_id,

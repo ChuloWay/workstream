@@ -33,10 +33,11 @@ async def test_crash_before_invoke_recovers(delivery_harness):
 async def test_crash_after_invoke_commit_before_handler_entry_is_unknown(delivery_harness):
     h = delivery_harness
     claim = await h.claim()
-    assert await h.delivery._begin_invocation(claim)
+    envelope = await h.delivery._begin_invocation(claim)
+    assert envelope is not None
     assert h.handled == []
     await expire(h)
-    assert await h.delivery.observe_invocation(claim) is None
+    assert await h.delivery.observe_invocation(envelope) is None
     receipt = await h.delivery.recover(claim.event_id, h.project)
     body = json.loads(receipt.outcome_json)
     assert (body["delivery_state"], body["error_code"], body["invocation_unknown"]) == (

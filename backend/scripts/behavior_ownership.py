@@ -76,6 +76,12 @@ AUTH_BOUNDARY_FOUNDATION_TARGETS = frozenset(
 MODULE_BOUNDARY_FOUNDATION_TARGETS = frozenset(
     {"backend/scripts/module_boundaries.py"}
 )
+ARCH_03B9_TARGETS = frozenset({
+    "backend/app/modules/audit/api.py",
+    "backend/app/modules/audit/invalidation.py",
+    "backend/app/modules/tasks/api/assignment_invalidation.py",
+    "backend/app/modules/tasks/assignment_invalidation.py",
+})
 AUTH_OUTBOX_02_TARGETS = frozenset({
     "backend/app/modules/authorization/domain/outbox_dispatch.py",
     "backend/app/modules/authorization/outbox_dispatch_authorization.py",
@@ -602,6 +608,7 @@ def _validate_additive_partition_transition(
         AUTH_BOUNDARY_FOUNDATION_TARGETS
         | CON_02B_DELIVERY_TARGETS
         | AUTH_OUTBOX_02_TARGETS
+        | ARCH_03B9_TARGETS
         | CI_LANE_CATALOGUE_TARGETS
         | MODULE_BOUNDARY_FOUNDATION_TARGETS
         | MODULE_PUBLIC_API_FOUNDATION_TARGETS

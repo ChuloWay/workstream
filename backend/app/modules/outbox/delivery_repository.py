@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from uuid import UUID
 
 from sqlalchemy import and_, cast, func, literal, or_, select, tuple_
@@ -14,7 +15,10 @@ from app.modules.outbox.api import (
     DeliveryCandidate, DeliveryCandidatePage,
     DrainObservation,
     OutboxClaim,
+    OutboxEventEnvelope,
+    DeliveryUnavailable,
 )
+from app.core.hashing import canonical_json_hash
 from app.modules.outbox.models import OutboxDeliveryAttempt, OutboxEvent
 
 
@@ -103,8 +107,21 @@ class DeliveryRepository:
             query = query.with_for_update()
         return (await self.session.execute(query)).scalar_one_or_none()
 
-    async def observe(self, claim: OutboxClaim) -> CommittedInvocationObservation | None:
-        """One nonlocking snapshot of exact committed invocation and live lease."""
+    async def observe(self, envelope: OutboxEventEnvelope) -> CommittedInvocationObservation | None:
+        """Compare the entire immutable envelope in one nonlocking SQL snapshot."""
+        try:
+            envelope = OutboxEventEnvelope.model_validate(envelope.model_dump())
+            payload = json.loads(envelope.payload_json)
+            if (
+                type(payload) is not dict
+                or json.dumps(payload, sort_keys=True, separators=(",", ":"),
+                              ensure_ascii=False, allow_nan=False) != envelope.payload_json
+                or canonical_json_hash(payload) != envelope.claim.payload_digest
+            ):
+                return None
+        except (AttributeError, TypeError, ValueError):
+            return None
+        claim = envelope.claim
         e, a = OutboxEvent, OutboxDeliveryAttempt
         query = (
             select(func.statement_timestamp())
@@ -117,6 +134,15 @@ class DeliveryRepository:
                 e.event_id == claim.event_id,
                 e.project_id == str(claim.project_id),
                 e.payload_digest == claim.payload_digest,
+                e.event_type == envelope.event_type,
+                e.event_version == envelope.event_version,
+                e.aggregate_type == envelope.aggregate_type,
+                e.aggregate_id == envelope.aggregate_id,
+                e.correlation_id == envelope.correlation_id,
+                e.causation_event_id.is_not_distinct_from(envelope.causation_event_id),
+                e.idempotency_key == envelope.idempotency_key,
+                e.occurred_at == envelope.occurred_at,
+                e.payload == payload,
                 e.delivery_state == "claimed",
                 a.stage == "invoked",
                 a.outcome_json.is_(None),
@@ -138,6 +164,27 @@ class DeliveryRepository:
             if observed is None
             else CommittedInvocationObservation(claim=claim, observed_at=observed)
         )
+
+    async def fence_invocation(self, envelope: OutboxEventEnvelope) -> CommittedInvocationObservation | None:
+        """Freeze current custody in the effect transaction, after feature AUTH locks.
+
+        This does not prove a claim was committed: the caller must first use the
+        independent observer. The lease must be live after all lock waits; row
+        locks freeze generation/state through commit, not the passage of time.
+        """
+        if not self.session.in_transaction() or self.session.in_nested_transaction():
+            raise DeliveryUnavailable("outbox fence requires a root transaction")
+        try:
+            envelope = OutboxEventEnvelope.model_validate(envelope.model_dump())
+        except (AttributeError, TypeError, ValueError):
+            return None
+        claim = envelope.claim
+        with self.session.no_autoflush:
+            if await self.event(claim.event_id, claim.project_id, lock=True) is None:
+                return None
+            if await self.attempt(claim, lock=True) is None:
+                return None
+            return await self.observe(envelope)
 
     async def drain(self, project_id: UUID, keys: tuple[tuple[str, int], ...]) -> DrainObservation:
         """One statement, disjoint state counts and explicitly overlapping facts."""

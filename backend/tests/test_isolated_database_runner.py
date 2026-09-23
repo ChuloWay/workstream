@@ -68,10 +68,10 @@ def test_lane_namespaces_bind_real_s3_traffic_and_separate_other_lanes() -> None
     shared_a = runner._minio_namespace("shared_foundations_a", "012345abcdef")
     shared_b = runner._minio_namespace("shared_foundations_b", "012345abcdef")
     control_bucket, control_prefix = runner._minio_namespace(
-        "project_lifecycle", "012345abcdef"
+        "project_lifecycle_a", "012345abcdef"
     )
     execution_bucket, execution_prefix = runner._minio_namespace(
-        "task_lifecycle", "fedcba543210"
+        "task_lifecycle_a", "fedcba543210"
     )
     assert shared_a == (
         "workstream-artifacts",
@@ -187,8 +187,11 @@ def test_minio_probe_cleans_up_and_preserves_async_cancellation(
         ("shared_foundations_a", "workstream-artifacts"),
         ("shared_foundations_b", "workstream-artifacts"),
         ("schema_contracts", "workstream-ci-schema-contracts-012345abcdef"),
-        ("project_lifecycle", "workstream-ci-project-lifecycle-012345abcdef"),
-        ("task_lifecycle", "workstream-ci-task-lifecycle-012345abcdef"),
+        ("project_lifecycle_a", "workstream-ci-project-lifecycle-a-012345abcdef"),
+        ("project_lifecycle_b", "workstream-ci-project-lifecycle-b-012345abcdef"),
+        ("project_lifecycle_c", "workstream-ci-project-lifecycle-c-012345abcdef"),
+        ("task_lifecycle_a", "workstream-ci-task-lifecycle-a-012345abcdef"),
+        ("task_lifecycle_b", "workstream-ci-task-lifecycle-b-012345abcdef"),
     ],
 )
 def test_committed_lane_buckets_use_validator_compatible_s3_grammar(
@@ -211,12 +214,15 @@ def test_lane_namespaces_do_not_collide_across_lanes_or_runner_suffixes() -> Non
             "shared_foundations_a",
             "shared_foundations_b",
             "schema_contracts",
-            "project_lifecycle",
-            "task_lifecycle",
+            "project_lifecycle_a",
+            "project_lifecycle_b",
+            "project_lifecycle_c",
+            "task_lifecycle_a",
+            "task_lifecycle_b",
         )
         for suffix in ("012345abcdef", "fedcba543210")
     }
-    assert len(namespaces) == 10
+    assert len(namespaces) == 16
     with pytest.raises(runner.RunnerError, match="invalid_lane"):
         runner._minio_namespace("project_lifecycle", "not-hex")
     with pytest.raises(runner.RunnerError, match="invalid_minio_namespace"):

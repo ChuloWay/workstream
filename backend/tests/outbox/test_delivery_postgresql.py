@@ -64,7 +64,8 @@ async def test_claim_lease_expiring_behind_lock_consumes_no_authority(delivery_h
 async def test_claim_validator_requires_committed_invocation(delivery_harness):
     h = delivery_harness
     claim = await h.claim()
-    assert await h.delivery.observe_invocation(claim) is None
+    envelope = await h.envelope(claim)
+    assert await h.delivery.observe_invocation(envelope) is None
     async with h.factory() as writer, writer.begin():
         facts = OutboxDispatchFacts(**claim.model_dump(), phase=OutboxDispatchPhase.INVOKE)
         async with outbox_dispatch_authorization(writer).prepare_outbox_dispatch(
@@ -75,8 +76,8 @@ async def test_claim_validator_requires_committed_invocation(delivery_harness):
             attempt.invoke_decision_event_id = str(decision.decision_id)
             attempt.stage, attempt.invoked_at = "invoked", await database_time(writer)
             await writer.flush()
-            assert await h.delivery.observe_invocation(claim) is None
-    observed = await h.delivery.observe_invocation(claim)
+            assert await h.delivery.observe_invocation(envelope) is None
+    observed = await h.delivery.observe_invocation(envelope)
     assert (
         observed.claim == claim
         and claim.claimed_at <= observed.observed_at < claim.claim_expires_at
@@ -90,9 +91,21 @@ async def test_claim_validator_requires_committed_invocation(delivery_harness):
         {"claimed_at": claim.claimed_at + timedelta(microseconds=1)},
         {"claim_expires_at": claim.claim_expires_at + timedelta(seconds=1)},
     ):
-        assert await h.delivery.observe_invocation(claim.model_copy(update=changes)) is None
+        assert await h.delivery.observe_invocation(envelope.model_copy(update={"claim": claim.model_copy(update=changes)})) is None
+    for changes in (
+        {"event_type": "DifferentEvent"}, {"event_version": 2},
+        {"aggregate_type": "other"}, {"aggregate_id": uuid4()},
+        {"correlation_id": "different"}, {"causation_event_id": uuid4()},
+        {"idempotency_key": "different"},
+        {"occurred_at": envelope.occurred_at + timedelta(microseconds=1)},
+        {"payload_json": "{}"}, {"payload_json": "invalid"},
+        {"payload_json": "[1]"}, {"payload_json": " " + envelope.payload_json},
+    ):
+        assert await h.delivery.observe_invocation(envelope.model_copy(update=changes)) is None
+    assert await h.delivery.observe_invocation(object()) is None
+    assert await h.delivery.observe_invocation(envelope) is not None
     await h.delivery.finalize(claim, FinalizationCause.ACKNOWLEDGE)
-    assert await h.delivery.observe_invocation(claim) is None
+    assert await h.delivery.observe_invocation(envelope) is None
 
 
 @pytest.mark.parametrize("phase", list(OutboxDispatchPhase))
@@ -236,7 +249,7 @@ async def test_stale_eligible_generation_rejects_before_consumption(delivery_har
 async def test_invocation_observation_uses_one_stable_database_instant(delivery_harness):
     h = delivery_harness
     claim = await h.claim()
-    await h.delivery._begin_invocation(claim)
+    envelope = await h.delivery._begin_invocation(claim)
     statements = []
     bind = h.factory.kw["bind"].sync_engine
 
@@ -245,7 +258,7 @@ async def test_invocation_observation_uses_one_stable_database_instant(delivery_
 
     sqlalchemy_event.listen(bind, "before_cursor_execute", capture)
     try:
-        observed = await h.delivery.observe_invocation(claim)
+        observed = await h.delivery.observe_invocation(envelope)
     finally:
         sqlalchemy_event.remove(bind, "before_cursor_execute", capture)
     assert claim.claimed_at <= observed.observed_at < claim.claim_expires_at
@@ -253,3 +266,50 @@ async def test_invocation_observation_uses_one_stable_database_instant(delivery_
     assert statements[0].count("statement_timestamp()") == 2
     assert "clock_timestamp()" not in statements[0]
     assert "FOR UPDATE" not in statements[0].upper()
+
+
+async def test_effect_fence_holds_custody_until_caller_transaction_ends(delivery_harness, monkeypatch):
+    h = delivery_harness
+    h.options = h.options.model_copy(update={"lease_seconds": 30, "handler_timeout_seconds": 20})
+    h.delivery = h.build()
+    claim = await h.claim()
+    envelope = await h.delivery._begin_invocation(claim)
+    entered = asyncio.Event()
+    waiter_name = "fence-finalizer-" + uuid4().hex
+    original_event = DeliveryRepository.event
+
+    async def named_event(owner, *args, **kwargs):
+        if asyncio.current_task().get_name() == waiter_name:
+            await owner.session.execute(text("select set_config('application_name', :name, true)"), {"name": waiter_name})
+        return await original_event(owner, *args, **kwargs)
+
+    monkeypatch.setattr(DeliveryRepository, "event", named_event)
+
+    async def finalize():
+        entered.set()
+        return await h.delivery.finalize(claim, FinalizationCause.ACKNOWLEDGE)
+
+    pending = None
+    try:
+        async with h.factory() as effect, effect.begin():
+            fenced = await DeliveryRepository(effect).fence_invocation(envelope)
+            assert fenced is not None and fenced.claim == claim
+            pending = asyncio.create_task(finalize(), name=waiter_name)
+            await entered.wait()
+            # Independently observe PostgreSQL waiting, not merely an unfinished coroutine.
+            from auth_concurrency_support import wait_for_named_database_lock
+            await asyncio.wait_for(wait_for_named_database_lock(
+                h.factory.kw["bind"].url.render_as_string(hide_password=False), waiter_name,
+            ), 5)
+            assert not pending.done()
+        receipt = await asyncio.wait_for(pending, 5)
+        assert receipt.claim == claim
+    finally:
+        if pending is not None:
+            await asyncio.gather(pending, return_exceptions=True)
+    async with h.factory() as session:
+        with pytest.raises(DeliveryUnavailable, match="root transaction"):
+            await DeliveryRepository(session).fence_invocation(envelope)
+        async with session.begin():
+            assert await DeliveryRepository(session).fence_invocation(envelope) is None
+            assert await DeliveryRepository(session).fence_invocation(object()) is None

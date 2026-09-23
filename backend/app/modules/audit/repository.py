@@ -6,10 +6,11 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Row, and_, case, select, text, tuple_
+from sqlalchemy import Row, and_, case, func, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
-from app.modules.audit.schemas import LifecycleAuditEventType
+from app.modules.audit.schemas import AuthorityEventType, LifecycleAuditEventType
 from app.modules.tasks.models import AuditEvent, WorkstreamTask
 
 
@@ -87,6 +88,9 @@ class AuditRepository:
         """Persist an authority event already validated by AuditService."""
         if event.event_domain != "authority":
             raise ValueError("expected authority audit event")
+        if event.event_type == AuthorityEventType.AUTHORITY_INVALIDATION_REQUESTED.value:
+            # Record mutation time after AUTH locks, not the transaction's start.
+            event.created_at = func.clock_timestamp()
         return await self._persist(event)
 
     async def get_authority_event(self, event_id: str) -> AuditEvent | None:
@@ -96,6 +100,19 @@ class AuditRepository:
                 AuditEvent.id == event_id, AuditEvent.event_domain == "authority"
             )
         )
+
+    async def invalidation_chain(self, event_id: UUID):
+        """Read immutable invalidation and cause together without authority locks."""
+        cause = aliased(AuditEvent)
+        return (await self._session.execute(
+            select(AuditEvent, cause).join(cause, cause.id == AuditEvent.invalidation_cause_event_id)
+            .where(AuditEvent.id == str(event_id), AuditEvent.event_domain == "authority",
+                   cause.event_domain == "authority")
+        )).one_or_none()
+
+    async def lifecycle_event(self, event_id: UUID):
+        """Read one exact immutable receipt, never a latest/current substitution."""
+        return await self._session.get(AuditEvent, str(event_id), populate_existing=True)
 
     async def _persist(self, event: AuditEvent) -> AuditEvent:
         """Flush one event without taking transaction ownership."""
@@ -136,6 +153,7 @@ class AuditRepository:
                 LifecycleAuditEventType.TASK_CLAIMED.value,
                 LifecycleAuditEventType.TASK_STARTED.value,
                 LifecycleAuditEventType.TASK_START_OVERRIDDEN.value,
+                LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED.value,
             )),
         )
         statement = select(
