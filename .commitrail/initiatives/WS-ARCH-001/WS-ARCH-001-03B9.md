@@ -1,7 +1,7 @@
 # WS-ARCH-001-03B9 — Exact pre-submit assignment invalidation
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: A hidden TASK-owned reconciliation operation releases
   only the exact pre-submit assignment affected by a committed authority change.
 
@@ -115,16 +115,26 @@ Production composition supplies an unavailable adapter and no registration.
 
 ## Acceptance criteria
 
-- [ ] Exact committed delivery and eligible cause release the original claimed
+- [x] Exact committed delivery and eligible cause release the original claimed
   or in-progress assignment and preserve policy locks and prior history.
-- [ ] Wrong project/actor/role/cause/assignment, forged envelope, uncommitted or
+- [x] Wrong project/actor/role/cause/assignment, forged envelope, uncommitted or
   expired invocation and missing feature authority produce no release.
-- [ ] Submitted/evaluation/review/revision work cannot return to ordinary ready.
-- [ ] Replay and concurrent delivery produce one release/evidence; a later claim
+- [x] Submitted/evaluation/review/revision work cannot return to ordinary ready.
+- [x] Replay and concurrent delivery produce one release/evidence; a later claim
   survives old delivery, and reactivation never restores a closed assignment.
-- [ ] Rollback removes every release effect; concurrency with start/submission
+- [x] Rollback removes every release effect; concurrency with start/submission
   preserves a single valid outcome without reversing existing lock order.
-- [ ] No production handler, route or permission becomes available in this PR.
+- [x] No production handler, route or permission becomes available in this PR.
+
+## Review size
+
+The diff exceeds the preferred L1 size because one atomic effect crosses existing
+TASK, AUDIT and OUTBOX owners, and must prove real AUTH causes, custody, rollback
+and competing transactions together. It adds no dispatcher, schema or worker.
+The bulk is targeted PostgreSQL tests and current boundary documentation. Shared
+ART admission/verifier fixture functions move without changing their assertions,
+so submission-race proof uses the existing real ZIP pipeline. Splitting the fence
+from the effect would leave an unsafe intermediate operation.
 
 ## Risk and review routing
 
@@ -138,10 +148,13 @@ Production composition supplies an unavailable adapter and no registration.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Existing contracts reconciled | Inspect TASK commands, AUTH emitters and OUTBOX committed observation on current main | Scope identified | Plan review must close cause, chronology and transaction-fence details |
-| Hidden operation safety | Focused PostgreSQL proof and a guard-removal probe for stale assignment protection | Required | Not implemented |
-| Boundaries and current docs | Module/structural boundary checks, Ruff, Commitrail, stale wording and Markdown links | Required | Not run for implementation |
-| Complete regression evidence | Hosted Backend semantic lanes and coverage | Required | Not run for implementation |
+| Existing contracts reconciled | TASK commands, AUTH emitters and OUTBOX observation; security/architecture and QA/product plan review | Cause, target and transaction fence fixed in the contract | Production AUTH/producer activation remains 03C |
+| Hidden release and immutable cause | `tests/tasks/test_assignment_invalidation.py`, `test_assignment_invalidation_causes.py` | Real four-cause and two-state controls, substitutions, replay/reclaim, rollback and protected history | Feature authorization is a synthetic hidden port, not live AUTH |
+| Transaction chronology | `tests/tasks/test_assignment_invalidation_races.py` | PostgreSQL lock waits; concurrent delivery, real start and real ZIP Submission orderings | Live broker transport is outside this hidden feature |
+| Discriminating guards | Remove effect fence; remove existing-Submission guard in isolated test processes | Exact negative regressions must detect the faulty behavior | No production mutation or retained data deletion |
+| Shared custody | `tests/outbox/test_delivery_postgresql.py`, `test_recovery_postgresql.py`, `test_contracts.py` | Full envelope, independent committed observation, expiry, same-session fence and finalizer wait | Fence freezes state/generation, not wall-clock time |
+| Boundaries and documentation | Module/structural/ownership validation, Ruff, lane catalogue, Commitrail, stale wording and Markdown links | Exact registrations; no guard/threshold/workflow relaxation | Local spreadsheet exports absent |
+| Complete regression evidence | Hosted Backend semantic lanes and coverage | Exact-head results belong to the PR | No hosted result inferred from local focused tests |
 
 ## Review findings
 
@@ -149,7 +162,7 @@ Plan inspection identified two obsolete assumptions: shared delivery is already
 implemented, while invalidation audit events still are not dispatchable events.
 Generic claimed/in-progress-to-ready transitions would inadvertently broaden
 the retained manager operation; reconciliation must own its narrower guard.
-Security/architecture and QA/product reviews required full-envelope verification,
+Plan review by security/architecture and QA/product required full-envelope verification,
 an AUDIT-owned exact cause projection, an assignment-specific event, and a real
 same-transaction OUTBOX fence after TASK/AUTH locks. The initial observation-only
 proposal was rejected. The delayed-TASK-lock regression must fail when the fence

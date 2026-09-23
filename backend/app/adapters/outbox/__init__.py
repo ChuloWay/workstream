@@ -4,9 +4,15 @@ from collections.abc import Callable
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.modules.authorization.api.outbox_dispatch import OutboxDispatchAuthorizationPort
-from app.modules.outbox.api import DeliveryOptions
+from app.modules.outbox.api import DeliveryOptions, InvocationFencePort
 from app.modules.outbox.delivery import OutboxDelivery
+from app.modules.outbox.delivery_repository import DeliveryRepository
 from app.modules.outbox.registry import HandlerRegistry
+
+
+def outbox_invocation_fence(session: AsyncSession) -> InvocationFencePort:
+    """Use the existing owner's locks in the caller's effect transaction."""
+    return DeliveryRepository(session)
 
 
 def outbox_delivery(

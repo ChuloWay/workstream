@@ -104,8 +104,9 @@ cannot be modified, deleted or truncated through ordinary SQL.
 
 Revocation immediately prevents subsequent contributor commands. Closing an
 existing assignment and returning a task to the ready queue through durable
-invalidation remains separately planned; a denied start is not proof that
-such an invalidation worker has run.
+invalidation has a hidden ARCH-03B9 operation. Its real service authority,
+producer wiring and registration remain ARCH-03C; a denied start is not proof
+that an invalidation worker has run.
 
 ## Work-context hints
 
@@ -156,8 +157,9 @@ lock. Pages are live views, not reservations; claim rechecks authority and state
 ARCH-03C must authorize the exact project collection before calling this port
 or using a client cursor, with current-grant/revocation and concealment proof.
 No per-task AUTH handle or token role can substitute for that collection gate.
-ARCH-03B8 supplies hidden task audit evidence. Authority invalidation and
-public evidence access remain separate.
+ARCH-03B8 supplies hidden task audit evidence. ARCH-03B9 supplies the hidden
+assignment-invalidation operation; its real authority/wiring and public evidence
+access remain separate.
 
 
 ## Hidden management and operational queues
@@ -330,3 +332,47 @@ It does not export authority-decision history or claim forensic completeness.
 
 Reads are nonlocking and do not flush, commit or roll back. The caller retains
 its transaction; later claim/command authorization never relies on these facts.
+
+
+## Hidden exact-assignment authority invalidation
+
+ARCH-03B9 supplies `AssignmentInvalidationOperation` and the transaction-owning
+`TransactionalAssignmentInvalidationHandler`. No production handler is
+registered, and the explicit unavailable authorization adapter cannot release
+work. The exact `task.assignment.authority_reconcile` fixed-service action and
+atomic AUTH producer wiring remain ARCH-03C.
+
+Each `TaskAssignmentAuthorityInvalidationRequested` event (protocol version 1)
+addresses one original project/task/assignment/contributor and one immutable AUTH
+invalidation event. AUDIT verifies the linked cause: Submitter grant revocation,
+profile suspension/deactivation or identity-link revocation. Reviewer/admin
+changes and reactivation are not assignment-release causes.
+
+OUTBOX first independently verifies the complete committed invocation envelope.
+The effect transaction locks TASK, its exact assignment, feature authority, then
+OUTBOX event and attempt. The final owner fence checks a live lease and exact
+invoked generation after lock waits, retaining custody locks through commit.
+Validity is checked at fence acquisition; this does not freeze wall-clock time.
+No external I/O occurs after the fence. The dispatcher releases its own locks
+before calling the handler and never acquires TASK locks.
+
+Only consistent active claimed/in-progress assignments without any Submission
+can become `authority_revoked`, with a release timestamp. TASK becomes `ready`
+and clears `assigned_to`; its policy locks and all prior work remain intact.
+Submitted/evaluation/review/revision work is unchanged. The existing manager
+release operation gains no additional transition or permission.
+
+One deterministic `TaskAssignmentAuthorityRevoked` lifecycle event identifies
+the invalidation and original assignment and binds its exact authorization
+reference. It commits with the effect and serves as the replay receipt. An old
+event cannot select a replacement assignment; restoration does not restore
+closed work. The handler acknowledges only after its transaction commits.
+Malformed targets/causes and denied authority reject; uncertain effects remain
+shared OUTBOX `UNKNOWN`, without automatic reinvocation.
+
+ARCH-03C must publish bounded actor-wide/project fan-out atomically with the AUTH
+mutation, capturing exact assignment IDs through a nonlocking TASK projection
+while authority locks serialize claim. Producers must not acquire TASK locks
+after AUTH locks. First production registration must also enforce the required
+prefork worker/routing topology. Hidden positive feature-authority tests use a
+controlled seam; they are not evidence of real fixed-service authorization.

@@ -220,7 +220,7 @@ class TaskRepository:
         """Require exact transition references without exposing stored diagnostics."""
         assignment_id = decision_id = None
         try:
-            if row.event_type in {"TaskClaimed", "TaskStarted", "TaskStartOverridden"}:
+            if row.event_type in {"TaskClaimed", "TaskStarted", "TaskStartOverridden", "TaskAssignmentAuthorityRevoked"}:
                 if (
                     UUID(row.reference_project_id) != request.project_id
                     or UUID(row.reference_task_id) != request.task_id
@@ -320,6 +320,23 @@ class TaskRepository:
             statement.execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
+
+    async def lock_invalidation_assignment(self, target) -> TaskAssignment | None:
+        """Lock the event's original assignment, never a replacement active claim."""
+        return await self._session.scalar(
+            select(TaskAssignment).where(
+                TaskAssignment.id == str(target.assignment_id),
+                TaskAssignment.task_id == str(target.task_id),
+                TaskAssignment.project_id == str(target.project_id),
+                TaskAssignment.contributor_id == str(target.contributor_id),
+            ).with_for_update().execution_options(populate_existing=True)
+        )
+
+    async def has_submission(self, task_id: UUID) -> bool:
+        """Any retained Submission excludes ordinary pre-submit release."""
+        return bool(await self._session.scalar(select(
+            select(Submission.id).where(Submission.task_id == str(task_id)).exists(),
+        )))
 
     async def lock_submission_context(
         self,

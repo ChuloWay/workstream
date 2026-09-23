@@ -447,12 +447,11 @@ class OutboxDelivery:
             )
         return await self.finalize(claim, FinalizationCause.EXPIRED)
 
-    async def observe_invocation(self, claim: OutboxClaim) -> CommittedInvocationObservation | None:
+    async def observe_invocation(self, envelope: OutboxEventEnvelope) -> CommittedInvocationObservation | None:
         """Independent committed snapshot, no feature authority or reservation."""
-        claim = _checked_claim(claim)
         try:
             async with self._sessions() as session:
-                return await DeliveryRepository(session).observe(claim)
+                return await DeliveryRepository(session).observe(envelope)
         except SQLAlchemyError:
             raise DeliveryPersistenceError("outbox_observation_failed") from None
 

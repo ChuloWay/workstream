@@ -2003,3 +2003,20 @@ def test_outbox_authority_partition_additions_are_exact():
         ownership._validate_additive_partition_transition(
             _partition(sorted([retained, *targets, "backend/app/workers/another_dispatcher.py"])), trusted,
         )
+
+
+def test_assignment_invalidation_partition_additions_are_exact():
+    retained = "backend/app/core/config.py"
+    targets = {
+        "backend/app/modules/audit/api.py", "backend/app/modules/audit/invalidation.py",
+        "backend/app/modules/tasks/api/assignment_invalidation.py",
+        "backend/app/modules/tasks/assignment_invalidation.py",
+    }
+    assert ownership.ARCH_03B9_TARGETS == targets
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(_partition(sorted([retained, *targets])), trusted)
+    for neighbor in ("backend/app/modules/tasks/another_reconciler.py", "backend/app/modules/audit/unreviewed.py"):
+        with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+            ownership._validate_additive_partition_transition(
+                _partition(sorted([retained, *targets, neighbor])), trusted,
+            )

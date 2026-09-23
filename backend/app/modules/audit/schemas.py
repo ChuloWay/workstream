@@ -97,6 +97,7 @@ class LifecycleAuditEventType(StrEnum):
     TASK_CLAIMED = "TaskClaimed"
     TASK_STARTED = "TaskStarted"
     TASK_START_OVERRIDDEN = "TaskStartOverridden"
+    TASK_ASSIGNMENT_AUTHORITY_REVOKED = "TaskAssignmentAuthorityRevoked"
     REVIEW_QUEUE_ENTRY_CREATED = "ReviewQueueEntryCreated"
     REVIEW_ROUTED_TO_PREFERRED_REVIEWER = "ReviewRoutedToPreferredReviewer"
     REVIEWER_PREFERENCE_EXPIRED = "ReviewerPreferenceExpired"
@@ -139,6 +140,7 @@ class LifecycleAuditReferenceKind(StrEnum):
     """Closed UUID reference keys allowed in lifecycle audit payloads."""
 
     AUTHORIZATION_DECISION = "authorization_decision_id"
+    AUTHORITY_INVALIDATION = "authority_invalidation_event_id"
     PROJECT = "project_id"
     TASK = "task_id"
     ASSIGNMENT = "assignment_id"
@@ -160,6 +162,7 @@ _LIFECYCLE_EVENT_ENTITY = {
             LifecycleAuditEventType.TASK_CLAIMED,
             LifecycleAuditEventType.TASK_STARTED,
             LifecycleAuditEventType.TASK_START_OVERRIDDEN,
+            LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED,
         ),
         LifecycleAuditEntityType.TASK,
     ),
@@ -210,6 +213,11 @@ _LIFECYCLE_EVENT_ENTITY = {
 }
 
 _LIFECYCLE_EVENT_REQUIRED_REFERENCES = {
+    LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED: frozenset({
+        LifecycleAuditReferenceKind.ASSIGNMENT,
+        LifecycleAuditReferenceKind.AUTHORIZATION_DECISION,
+        LifecycleAuditReferenceKind.AUTHORITY_INVALIDATION,
+    }),
     **dict.fromkeys(
         (
             LifecycleAuditEventType.TASK_CLAIMED,
@@ -288,6 +296,8 @@ class LifecycleAuditEventInput(BaseModel):
                 LifecycleAuditEventType.TASK_STARTED: ("claimed", "in_progress"),
                 LifecycleAuditEventType.TASK_START_OVERRIDDEN: ("claimed", "in_progress"),
             }.get(self.event_type)
+            if self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED:
+                expected = (self.from_status, "ready") if self.from_status in {"claimed", "in_progress"} else None
             if expected != (self.from_status, self.to_status):
                 raise ValueError("task event requires its exact transition")
             if self.task_reason is not None and not self.task_reason.strip():

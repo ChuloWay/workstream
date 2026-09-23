@@ -330,6 +330,14 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/modules/audit/api.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/audit/invalidation.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/modules/audit/repository.py"
     },
     {
@@ -1166,6 +1174,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/assignment_invalidation.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/audit_evidence.py"
     },
     {
@@ -1195,6 +1207,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/transition_audit.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/assignment_invalidation.py"
     },
     {
       "group": "lifecycle",
@@ -1369,7 +1385,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "cdcb3ea870fac4fc6e5c0b9db189e587d67e7a0bfc17a9e677edb491e7de9dc7",
+  "authority_digest": "d92a27ff4c3f522e5cf4393c262f8fe287cd147c0f5a7c9c5ee3433a250cb590",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

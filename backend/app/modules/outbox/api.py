@@ -116,9 +116,19 @@ class CommittedInvocationPort(Protocol):
 
     async def observe_invocation(
         self,
-        claim: OutboxClaim,
+        envelope: OutboxEventEnvelope,
     ) -> CommittedInvocationObservation | None:
         """Return one concealed unavailable result for all noncurrent invocations."""
+        ...
+
+
+class InvocationFencePort(Protocol):
+    """Caller-transaction custody lock; not feature authorization or a lease extension."""
+
+    async def fence_invocation(
+        self, envelope: OutboxEventEnvelope,
+    ) -> CommittedInvocationObservation | None:
+        """Lock event then attempt; hold exact current custody through caller commit."""
         ...
 
 

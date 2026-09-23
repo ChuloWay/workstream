@@ -60,11 +60,17 @@ The pre-submit invalidation handler proposes fixed identity
 `workstream.task.assignment_reconciler` and sole action/permission
 `task.assignment.authority_reconcile`. It consumes only an exact committed
 AUTH invalidation event and the TASK-owned 03B handler manifest; no human,
-dispatcher or unrelated service receives it. Live reconciliation depends on
-CON-02B dispatch plus its exact AUTH activation. Originating authority changes
-stage their invalidation event atomically, while every foreground claim/start/
-submission still revalidates current authority and never waits for that worker
-to deny a revoked actor. Prove crash/redelivery and wrong-role preservation.
+dispatcher or unrelated service receives it. The [03B9 hidden operation](../../WS-ARCH-001-03B9.md) supplies exact cause
+validation, assignment release, replay and a same-transaction OUTBOX fence.
+Shared dispatch authority is delivered by AUTH-OUTBOX-02. Live reconciliation
+still requires this exact feature AUTH activation and producer wiring. Originating authority changes
+stage exact per-assignment events atomically through bounded actor/project
+fan-out. Capture original assignment IDs through a nonlocking TASK owner
+projection while AUTH locks serialize claim; never acquire TASK locks after
+AUTH locks. Enforce prefork worker/routing topology before the first production
+handler registration. Every foreground claim/start/
+submission still revalidates current authority; no worker wait grants access.
+Prove crash/redelivery and wrong-role preservation.
 
 The [suspension and task-retry repair](../../../../changes/auth-suspension-task-retry.md)
 owns durable claim/start/Operator-start replay on the existing command path.

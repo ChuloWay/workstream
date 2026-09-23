@@ -1,6 +1,7 @@
 """Real provisioned dispatcher authority with bounded test observation hooks."""
 
 from contextlib import asynccontextmanager
+import json
 from uuid import uuid4
 
 import pytest
@@ -9,7 +10,8 @@ from app.adapters.auth import outbox_dispatch_authorization
 from app.modules.actors.models import ActorProfile, ActorIdentityLink
 from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.api.outbox_dispatch import PreparedOutboxDispatch
-from app.modules.outbox.api import DeliveryOptions, HandlerOutcome
+from app.modules.outbox.api import DeliveryOptions, HandlerOutcome, OutboxEventEnvelope
+from app.modules.outbox.models import OutboxEvent
 from app.adapters.outbox import outbox_delivery
 from app.modules.outbox.registry import HandlerRegistry
 from app.modules.outbox.service import OutboxService
@@ -89,6 +91,19 @@ class Harness:
         claim = await self.delivery.claim(event.event_id, self.project, "test-worker")
         assert claim is not None
         return claim
+
+    async def envelope(self, claim):
+        """Detach the stored event without committing invocation for negative proofs."""
+        async with self.factory() as session:
+            event = await session.get(OutboxEvent, claim.event_id)
+            return OutboxEventEnvelope(
+                claim=claim,
+                payload_json=json.dumps(event.payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False),
+                **{key: getattr(event, key) for key in (
+                    "event_type", "event_version", "aggregate_type", "aggregate_id",
+                    "correlation_id", "causation_event_id", "idempotency_key", "occurred_at",
+                )},
+            )
 
 
 @pytest.fixture
