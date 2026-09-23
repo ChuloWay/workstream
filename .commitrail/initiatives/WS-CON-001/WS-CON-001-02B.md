@@ -2,7 +2,7 @@
 
 - Initiative: WS-CON-001
 - Durable disposition: Planned
-- Intended outcome: one hidden, feature-neutral claim/invoke/finalize operation
+- Intended merge outcome: one hidden, feature-neutral claim/invoke/finalize operation
   with committed claim custody, bounded automatic recovery and truthful drain
   facts. Production dispatch remains unavailable until AUTH-OUTBOX-02.
 
@@ -115,7 +115,7 @@ authority is explicit and must not be presented as live AUTH evidence.
 Closed handler results are acknowledge, safe retry, or nonretryable failure.
 They carry no arbitrary result text or provider payload. Canonical finalization
 contains `delivery_state`, closed `error_code`, `next_attempt_at`, `finalized_at`,
-`invocation_unknown` and the preserved nullable `invoked_at`. Hash all those
+`receipt_completed_at`, `invocation_unknown` and the preserved nullable `invoked_at`. Hash all those
 fields including nulls; AUTH's resource facts separately bind the complete claim.
 
 | Source result | Event projection | Error and timestamps | Unknown |
@@ -227,10 +227,24 @@ These are planned nodes, not executed evidence:
 - `test_claim_lease_expiring_behind_lock_consumes_no_authority`: hold the event
   row in another transaction beyond the proposed lease, then release it. No
   consume/write occurs; removing locked clock revalidation must fail the proof.
-- `test_claim_validator_requires_committed_exact_facts`: an uncommitted insert
-  cannot validate; after commit it can, while independent project/event/payload/
-  owner/generation/lease substitutions fail. A validator reading its writer's
-  session instead of an independent transaction must fail the uncommitted case.
+- `test_claim_validator_requires_committed_invocation`: false before claim commit,
+  false after claim commit, false while invocation is uncommitted, true only
+  after exact INVOKE custody commits, then false after finalization. Independent
+  project/event/payload/owner/generation/lease substitutions fail. A validator
+  checking only claimed event state or reading its writer's transaction must
+  fail this test. Handler validation is not the broader internal state read
+  used to prepare dispatch phases.
+- `test_each_phase_denies_mismatch_and_reused_authority`: parameterize all three
+  phases with valid control, denial, wrong action/permission and phase/fact
+  mismatch. Require zero phase writes; mismatched facts consume no authority.
+  Reusing CLAIM preparation at INVOKE must fail the intended assertion.
+- `test_old_generation_cannot_invoke_or_finalize_successor`: expire gen1 before
+  invoke, finalize safe retry, commit gen2, then reject both gen1 operations
+  before consumption without changing gen2. Mutation removing generation
+  comparison must fail against these otherwise valid controls.
+- `test_unknown_registration_stays_unclaimed_and_counted`: exact pending row
+  remains unchanged with no authority, custody or handler calls. A default
+  handler or automatic terminal outcome mutation must fail this proof.
 - `test_invoke_releases_locks_and_runs_generation_once`: handler takes the event
   lock using another connection; concurrent duplicate invocation runs once.
 - `tests/outbox/test_recovery_postgresql.py::test_crash_before_invoke_recovers`:
@@ -241,7 +255,9 @@ These are planned nodes, not executed evidence:
   absent; expiry preserves unknown evidence and cannot re-invoke automatically.
 - `test_finalize_commit_and_exact_replay`: before-commit fault rolls back both
   writes; after-commit response loss replays the original receipt; substituted
-  outcome/claim facts reject. Removing outcome comparison must fail the test.
+  outcome/claim facts reject. Assert all original decision IDs, timestamps and
+  digests and unchanged row count; mutate each digest-bound field independently.
+  Removing outcome comparison must fail the test.
 - `test_retry_backoff_and_exhaustion`: explicit retry plus a valid successful
   control; verify database times, bounds and exhaustion without changing limits.
 - `tests/outbox/test_custody_postgresql.py::test_projection_and_receipt_commit_together`:
