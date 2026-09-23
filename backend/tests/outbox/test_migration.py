@@ -50,10 +50,10 @@ async def seed(url, state):
                 )
             if state not in ("pending", "claimed"):
                 await connection.execute(
-                    "update outbox_events set delivery_state=$2,claim_owner=null,claimed_at=null,claim_expires_at=null,"
-                    "next_attempt_at=case when $2='retryable' then statement_timestamp()+interval '1 second' else null end,"
+                    "update outbox_events set delivery_state=$2::text,claim_owner=null,claimed_at=null,claim_expires_at=null,"
+                    "next_attempt_at=case when $2::text='retryable' then statement_timestamp()+interval '1 second' else null end,"
                     "last_error_code='RETRY_REQUESTED',"
-                    "finalized_at=case when $2='retryable' then null else statement_timestamp() end where event_id=$1",
+                    "finalized_at=case when $2::text='retryable' then null else statement_timestamp() end where event_id=$1",
                     event.event_id,
                     state,
                 )

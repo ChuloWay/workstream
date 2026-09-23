@@ -90,7 +90,7 @@ class Harness:
         return self.result
 
     async def append(self, **changes):
-        event = _event(self.project, **changes)
+        event = _event(changes.pop("project_id", self.project), **changes)
         async with self.factory() as session, session.begin():
             await OutboxService(session).append(event)
         return event
