@@ -153,3 +153,81 @@ def test_dispatch_activation_refuses_unauthorized_attempts(
         ):
             command.upgrade(config(), REVISION)
         assert asyncio.run(snapshot(isolated_database_env)) == before
+
+
+def test_activation_blocks_service_relabel_until_new_guard_commits(
+    isolated_database_env, migration_lock, migration_schema_at
+):
+    """A concurrent writer cannot use the old guard during actual Alembic upgrade."""
+    from threading import Event
+    from uuid import uuid4
+
+    from sqlalchemy import event
+    from sqlalchemy.engine import Engine
+
+    entered, release = Event(), Event()
+
+    def pause_before_guard(connection, cursor, statement, parameters, context, many):
+        if statement.lstrip().upper().startswith("CREATE OR REPLACE FUNCTION PUBLIC.GUARD_ACTOR_PROFILE_HISTORY"):
+            entered.set()
+            assert release.wait(30), "migration barrier was not released"
+
+    async def exercise():
+        url = isolated_database_env.replace("+asyncpg", "")
+        writer = await asyncpg.connect(url)
+        observer = await asyncpg.connect(url)
+        actor_id = str(uuid4())
+        upgrade = mutation = None
+        try:
+            async with writer.transaction():
+                await writer.execute("""
+                    insert into actor_profiles(id,actor_kind,status,provisioning_method,service_identity,created_by)
+                    values($1,'service','active','manual_service_provisioning','workstream.project.setup',$1)
+                """, actor_id)
+                await writer.execute("""
+                    insert into actor_identity_links(id,actor_profile_id,issuer,subject,subject_kind,status,linked_by)
+                    values($1,$2,'configured-provider',$3,'service','active',$2)
+                """, str(uuid4()), actor_id, str(uuid4()))
+            upgrade = asyncio.create_task(asyncio.to_thread(command.upgrade, config(), REVISION))
+            assert await asyncio.to_thread(entered.wait, 30), "upgrade did not reach guard replacement"
+            pid = await writer.fetchval("select pg_backend_pid()")
+            mutation = asyncio.create_task(writer.execute(
+                "update actor_profiles set service_identity='workstream.outbox.dispatcher' where id=$1", actor_id
+            ))
+            blocked = False
+            for _ in range(100):
+                blocked = await observer.fetchval("""
+                    select exists(select 1 from pg_locks where relation='actor_profiles'::regclass
+                        and mode='AccessExclusiveLock' and granted
+                        and pid=any(pg_blocking_pids($1)))
+                """, pid)
+                if blocked or mutation.done():
+                    break
+                await asyncio.sleep(0.02)
+            assert blocked, "service relabel must wait behind migration's actor lock"
+            release.set()
+            await asyncio.wait_for(upgrade, 30)
+            with pytest.raises(asyncpg.ObjectNotInPrerequisiteStateError,
+                               match="actor profile identity is immutable"):
+                await asyncio.wait_for(mutation, 30)
+            assert await writer.fetchval(
+                "select service_identity from actor_profiles where id=$1", actor_id
+            ) == "workstream.project.setup"
+            assert await writer.fetchval("select count(*) from outbox_delivery_attempts") == 0
+            assert await writer.fetchval("select count(*) from audit_events") == 0
+        finally:
+            release.set()
+            pending = [task for task in (upgrade, mutation) if task is not None]
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            await writer.close()
+            await observer.close()
+
+    with migration_lock():
+        migration_schema_at(PREDECESSOR)
+        event.listen(Engine, "before_cursor_execute", pause_before_guard)
+        try:
+            asyncio.run(exercise())
+        finally:
+            release.set()
+            event.remove(Engine, "before_cursor_execute", pause_before_guard)

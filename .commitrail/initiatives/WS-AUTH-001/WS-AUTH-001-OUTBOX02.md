@@ -30,7 +30,9 @@ binding, single consumption and audit emission. Reuse those owners.
 - One forward migration after 0027: audit vocabulary and immutable exact
   phase decision matching/FKs, schema fingerprint and affected migration proof;
   include `service_identity` in the existing actor-profile immutable-history
-  comparison on which fixed-service admission depends.
+  comparison on which fixed-service admission depends. Acquire the actor-profile
+  table lock before OUTBOX locks so concurrent identity changes cannot cross
+  the migration boundary under the old guard.
 - `app/adapters/auth/`, `app/adapters/outbox/`, `app/workers/outbox.py` and existing
   Celery registration: explicit empty production handler registry until feature
   owners install separately authorized handlers; no runtime plugin discovery.
@@ -265,3 +267,8 @@ pairs it with a legitimately provisioned dispatcher. A mutation removes only the
 new comparison. Issuer/subject remain opaque credential bindings; they do not name
 the local fixed service. Handler-timeout proof uses an ample lease so it does not
 accidentally test the separately protected lease-expiry boundary.
+
+The migration concurrency regression pauses actual Alembic execution after its
+initial locks, observes a concurrent relabel waiting on the actor table, then
+proves the committed guard rejects it and preserves identity and empty custody.
+Removing only the migration actor lock must defeat the blocking assertion.

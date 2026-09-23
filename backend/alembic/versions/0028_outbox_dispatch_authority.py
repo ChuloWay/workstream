@@ -66,7 +66,7 @@ def _protect_service_identity():
 
 def upgrade():
     """Refuse unprovable attempts before changing schema or retained data."""
-    op.execute("lock table outbox_delivery_attempts, outbox_events in access exclusive mode")
+    op.execute("lock table actor_profiles, outbox_events, outbox_delivery_attempts in access exclusive mode")
     op.execute("""
         do $$ begin
           if exists(select 1 from outbox_delivery_attempts)
