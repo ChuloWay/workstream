@@ -681,7 +681,7 @@ a planning document does not grant a service permission.
 
 | ActionId / PermissionId | Sole fixed identity | Exact target and guards | Current activation custodian |
 |---|---|---|---|
-| `outbox.dispatch` | `workstream.outbox.dispatcher` | Event/claim generation/lease and exact phase; fresh authority for claim, invoke and finalize; no feature authority | AUTH-OUTBOX-01 registration complete (planned/unavailable); CON-02B hidden mechanics and AUTH-OUTBOX-02 activation remain |
+| `outbox.dispatch` | `workstream.outbox.dispatcher` | Event/claim generation/lease and exact phase; fresh authority for claim, invoke and finalize; no feature authority | AUTH-OUTBOX-01 registration complete (planned/unavailable); CON-02B hidden mechanics complete; AUTH-OUTBOX-02 activation remains |
 | `task.assignment.authority_reconcile` | `workstream.task.assignment_reconciler` | Committed exact AUTH invalidation event, project/actor/grant-or-link, active pre-submit assignment; no wrong-role or submitted-history mutation | ARCH-03B hidden handler, ARCH-03C activation |
 | `checker.post_submit.execute` | `workstream.checker.post_submit` | Immutable Submission/request/generation, locked compiled policy, attempt and admitted service; exact pre-I/O authority | ARCH-04C hidden behavior, ARCH-04D activation |
 | `checker.post_submit.finalize` | `workstream.checker.post_submit` | Exact execution request/fence, accepted result digest and required verified output bindings; fresh post-I/O authority and atomic evidence | ARCH-04C hidden behavior, ARCH-04D activation |

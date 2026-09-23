@@ -65,8 +65,7 @@ class OutboxEvent(Base):
             name="delivery_state",
         ),
         CheckConstraint(
-            "attempt_count >= 0 and claim_generation >= 0 "
-            "and attempt_count = claim_generation",
+            "attempt_count >= 0 and claim_generation >= 0 and attempt_count = claim_generation",
             name="delivery_counters",
         ),
         CheckConstraint(
@@ -198,7 +197,10 @@ class OutboxDeliveryAttempt(Base):
         CheckConstraint("claim_generation between 1 and 2147483647", name="generation"),
         CheckConstraint("claim_owner ~ '^[A-Za-z0-9._:-]{1,120}$'", name="owner"),
         CheckConstraint("payload_digest ~ '^sha256:[0-9a-f]{64}$'", name="payload_digest"),
-        CheckConstraint("claim_expires_at > claimed_at", name="lease"),
+        CheckConstraint(
+            "claim_expires_at > claimed_at and claim_expires_at <= claimed_at + interval '1 hour'",
+            name="lease",
+        ),
         CheckConstraint(
             "(stage = 'claimed' and invoked_at is null and outcome_json is null "
             "and outcome_digest is null) or "

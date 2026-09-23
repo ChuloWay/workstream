@@ -45,15 +45,21 @@ class OutboxClaim(DeliveryValue):
     @classmethod
     def aware_utc(cls, value: datetime) -> datetime:
         """Reject ambiguous leases and normalize exact timestamps."""
-        if value.utcoffset() is None:
-            raise ValueError("outbox timestamp requires timezone")
-        return value.astimezone(timezone.utc)
+        normalized = None
+        try:
+            if value.utcoffset() is not None:
+                normalized = value.astimezone(timezone.utc)
+        except Exception:
+            pass
+        if normalized is None:
+            raise ValueError("outbox timestamp requires a valid timezone")
+        return normalized
 
     @model_validator(mode="after")
     def ordered_lease(self) -> Self:
         """Require positive lease duration."""
-        if self.claim_expires_at <= self.claimed_at:
-            raise ValueError("outbox lease must be positive")
+        if not 0 < (self.claim_expires_at - self.claimed_at).total_seconds() <= 3600:
+            raise ValueError("outbox lease must be positive and at most one hour")
         return self
 
 

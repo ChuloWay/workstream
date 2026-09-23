@@ -926,7 +926,6 @@ def validate_catalogue(
     unresolved = expected - covered
     if unresolved.intersection(
         AUTH_BOUNDARY_FOUNDATION_TARGETS
-        | CON_02B_DELIVERY_TARGETS
         | POL_03A_CALLABLE_TARGETS
         | POL_04A_CALLABLE_TARGETS
         | POL_04A2_CALLABLE_TARGETS

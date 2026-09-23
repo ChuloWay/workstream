@@ -90,7 +90,7 @@ class DeliveryRepository:
         """One nonlocking snapshot of exact committed invocation and live lease."""
         e, a = OutboxEvent, OutboxDeliveryAttempt
         query = (
-            select(func.clock_timestamp())
+            select(func.statement_timestamp())
             .select_from(e)
             .join(
                 a,
@@ -112,7 +112,7 @@ class DeliveryRepository:
                 a.claim_owner == e.claim_owner,
                 a.claimed_at == e.claimed_at,
                 a.claim_expires_at == e.claim_expires_at,
-                e.claim_expires_at > func.clock_timestamp(),
+                e.claim_expires_at > func.statement_timestamp(),
             )
         )
         observed = (await self.session.execute(query)).scalar_one_or_none()

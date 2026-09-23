@@ -83,8 +83,8 @@ missing authority adapter.
    integration must provide its own transaction fence, current AUTH and effect
    idempotency; an uncommitted claim cannot validate. One nonlocking SQL statement
    joins current event and incomplete invoked custody, checks all exact facts and
-   `claim_expires_at > clock_timestamp()`, and returns immutable facts with DB
-   `observed_at`. A fresh owner-controlled session closes before return. All
+   `claim_expires_at > statement_timestamp()`, and returns immutable facts with DB
+   `observed_at` from that same statement-stable instant. A fresh owner-controlled session closes before return. All
    mismatched/uncommitted/expired/completed cases share an unavailable result;
    the port never accepts the dispatcher writer session. Safe explicit retries can invoke multiple generations;
    feature effects must deduplicate by immutable event identity, not generation.
@@ -103,6 +103,8 @@ Claimed-but-never-invoked expiry must not fabricate an invocation. Real SQL
 guards bind custody and the event's projection in the same transaction and deny
 deletion, rewriting and unsupported transitions. Retained attempts lacking
 provable custody stop migration; migration must not create fictional evidence.
+Database guards also reject invoked non-unknown outcomes completed after expiry,
+future completion times, leases longer than one hour and retry delays over one day.
 
 ### Closed facts and outcomes
 
@@ -167,13 +169,18 @@ typed retry outcome from the handler, or expiry before invocation, permits an
 automatic retry. Future authorized reconciliation owns unknown-effect recovery.
 Attempt exhaustion
 is bounded by the existing integer storage range and configured retry budget.
-Same-generation outcome replay compares the exact stored outcome and returns
-the original receipt; substituted facts/outcomes fail closed.
+Completed-attempt replay compares the exact stored outcome and returns the
+original receipt, even after a successor generation starts; it cannot mutate the
+successor. Concurrent finalizers may re-prepare once with the winner's stored
+digest under fresh authority. Substituted facts/outcomes fail closed.
 
 Bounded options belong to one strict delivery-options value supplied by
 composition, not a new environment or configuration framework. Handler failures
 and timeouts become closed sanitized outcome codes, never raw exceptions,
-provider responses, payloads or credentials. Cancellation/crash leaves durable
+provider responses, payloads or credentials. A deadline is enforced independently
+of cooperative handler cancellation. Timed-out calls may still run physically;
+retain their task until it ends and consume its exception, but never accept a late
+result or retry unknown effects. Cancellation/crash leaves durable
 recoverable custody rather than claiming successful handler completion.
 
 Registry entries use exact event type/version and a typed handler. No dynamic
@@ -238,8 +245,11 @@ recovery, and explicitly synthetic preparation ports for unavailable AUTH.
 Current command results and review freshness belong in the PR, not this record.
 
 - `tests/outbox/test_delivery_postgresql.py::test_claim_race_commits_one_generation`:
-  two independent sessions, one committed winner, loser consumes no authority;
-  remove the refreshed-generation comparison and require this test to fail.
+  two independent sessions, one committed winner, loser consumes no authority.
+- `test_stale_eligible_generation_rejects_before_consumption`: pause a proposal,
+  advance another claim through safe retry until eligible, then resume the stale
+  proposal. Removing only the refreshed-generation comparison must fail this
+  proof; the simpler simultaneous claim race does not isolate that guard.
 - `test_claim_lease_expiring_behind_lock_consumes_no_authority`: hold the event
   row in another transaction beyond the proposed lease, then release it. No
   consume/write occurs; removing locked clock revalidation must fail the proof.
@@ -254,10 +264,12 @@ Current command results and review freshness belong in the PR, not this record.
   phases with valid control, denial, wrong action/permission and phase/fact
   mismatch. Require zero phase writes; mismatched facts consume no authority.
   Reusing CLAIM preparation at INVOKE must fail the intended assertion.
-- `tests/outbox/test_recovery_postgresql.py::test_old_generation_cannot_invoke_or_finalize_successor`: expire gen1 before
-  invoke, finalize safe retry, commit gen2, then reject both gen1 operations
-  before consumption without changing gen2. Mutation removing generation
-  comparison must fail against these otherwise valid controls.
+- `tests/outbox/test_recovery_postgresql.py::test_completed_generation_replays_without_mutating_successor`:
+  finalize gen1, commit gen2, then replay the exact historical receipt under fresh
+  authority without changing gen2. Old invocation and substituted receipts reject.
+- `test_concurrent_same_outcome_finalizers_replay_winner`: independently prepared
+  outcomes race; the loser reauthorizes the stored digest once, preserving the
+  original receipt instead of writing a second outcome.
 - `test_unknown_registration_stays_unclaimed_and_counted`: exact pending row
   remains unchanged with no authority, custody or handler calls. A default
   handler or automatic terminal outcome mutation must fail this proof.
@@ -269,6 +281,16 @@ Current command results and review freshness belong in the PR, not this record.
   persisted, zero handler calls; expiry is unknown/dead-letter, not ack or retry.
 - `test_crash_after_handler_before_finalize_is_unknown`: handler ran, finalize
   absent; expiry preserves unknown evidence and cannot re-invoke automatically.
+- `test_running_handler_expiry_preserves_unknown_and_late_replay` and
+  `test_cancelled_invocation_leaves_custody_for_unknown_recovery`: real blocked
+  handler and cancellation interleavings preserve unknown custody, truthful drain
+  counts, one invocation and original receipt replay.
+- `test_handler_suppressing_cancellation_cannot_ack_after_deadline`: an
+  uncooperative call remains running when UNKNOWN commits; restoring the
+  cooperative-only timeout must fail the proof.
+- `test_invocation_observation_uses_one_stable_database_instant`: one nonlocking
+  statement binds both lease eligibility and returned time; splitting into
+  volatile clock reads fails the structural proof alongside real SQL bounds.
 - `test_finalize_commit_and_exact_replay`: before-commit fault rolls back both
   writes; after-commit response loss replays the original receipt; substituted
   outcome/claim facts reject. Assert all original delivery identities, timestamps and
@@ -280,6 +302,11 @@ Current command results and review freshness belong in the PR, not this record.
   direct SQL separately mutates each side with otherwise valid facts, requires
   rejection and rollback; paired valid write commits. Disable each deferred
   guard separately and require its corresponding negative to fail.
+- `test_expired_invoked_sql_outcome_rejected`: paired direct-SQL ACK, RETRY and
+  REJECT after expiry reject and roll back; UNKNOWN recovery remains valid.
+  Removing the outcome-expiry guard must fail these negatives.
+- `test_sql_completion_time_and_retry_bounds` and `test_sql_claim_lease_is_bounded`:
+  paired writes isolate future completion, retry delay and lease limits.
 - `test_completed_custody_is_immutable`: field substitutions, deletion and
   truncation each reject at their intended guard, with valid receipt controls.
 - `tests/outbox/test_migration.py::test_pending_events_preserved_without_fabricated_attempts`

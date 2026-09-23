@@ -50,6 +50,8 @@ def upgrade() -> None:
              or (value->>'invoked_at')::timestamptz is distinct from invoked then return false; end if;
           if invoked is null and (completed < expires or code not in
              ('LEASE_EXPIRED_BEFORE_INVOKE','ATTEMPTS_EXHAUSTED')) then return false; end if;
+          if invoked is not null and not unknown and completed >= expires then return false; end if;
+          if retry_time > completed + interval '1 day' then return false; end if;
           if unknown then
             return invoked is not null and outcome_state = 'dead_letter'
               and code = 'INVOKE_OUTCOME_UNKNOWN' and retry_time is null and final_time = completed;
@@ -84,7 +86,10 @@ def upgrade() -> None:
         sa.CheckConstraint("claim_generation between 1 and 2147483647", name="generation"),
         sa.CheckConstraint("claim_owner ~ '^[A-Za-z0-9._:-]{1,120}$'", name="owner"),
         sa.CheckConstraint("payload_digest ~ '^sha256:[0-9a-f]{64}$'", name="payload_digest"),
-        sa.CheckConstraint("claim_expires_at > claimed_at", name="lease"),
+        sa.CheckConstraint(
+            "claim_expires_at > claimed_at and claim_expires_at <= claimed_at + interval '1 hour'",
+            name="lease",
+        ),
         sa.CheckConstraint(
             "(stage = 'claimed' and invoked_at is null and outcome_json is null "
             "and outcome_digest is null) or "
@@ -127,6 +132,10 @@ def upgrade() -> None:
           if new.stage = 'invoked' and (new.invoked_at > clock_timestamp()
              or new.claim_expires_at <= clock_timestamp()) then
             raise exception 'outbox invocation lease is not current' using errcode='23514';
+          end if;
+          if new.stage = 'completed' and
+             (new.outcome_json::jsonb->>'receipt_completed_at')::timestamptz > clock_timestamp() then
+            raise exception 'outbox completion cannot be in the future' using errcode='23514';
           end if;
           return new;
         end $$;

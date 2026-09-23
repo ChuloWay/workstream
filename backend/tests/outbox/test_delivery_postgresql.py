@@ -6,11 +6,11 @@ from datetime import timedelta
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import event as sqlalchemy_event, select, text
 
 from app.modules.authorization.api.decisions import DecisionOutcome
 from app.modules.authorization.api.outbox_dispatch import OutboxDispatchPhase
-from app.modules.outbox.api import DeliveryUnavailable, FinalizationCause
+from app.modules.outbox.api import DeliveryUnavailable, FinalizationCause, HandlerOutcome
 from app.modules.outbox.delivery_repository import DeliveryRepository, database_time
 from app.modules.outbox.models import OutboxDeliveryAttempt, OutboxEvent
 from app.modules.outbox.registry import HandlerRegistry
@@ -71,7 +71,10 @@ async def test_claim_validator_requires_committed_invocation(delivery_harness):
         await writer.flush()
         assert await h.delivery.observe_invocation(claim) is None
     observed = await h.delivery.observe_invocation(claim)
-    assert observed.claim == claim and observed.observed_at >= claim.claimed_at
+    assert (
+        observed.claim == claim
+        and claim.claimed_at <= observed.observed_at < claim.claim_expires_at
+    )
     for changes in (
         {"project_id": uuid4()},
         {"event_id": uuid4()},
@@ -195,3 +198,58 @@ async def test_authority_wait_cannot_commit_an_expired_live_phase(delivery_harne
                 "claimed" if phase is OutboxDispatchPhase.INVOKE else "invoked"
             )
     assert h.handled == []
+
+
+async def test_stale_eligible_generation_rejects_before_consumption(delivery_harness):
+    """A safe retry makes the state eligible again but not the old generation."""
+    h = delivery_harness
+    h.options = h.options.model_copy(update={"lease_seconds": 30})
+    h.delivery = h.build()
+    event = await h.append()
+    prepared, release = asyncio.Event(), asyncio.Event()
+
+    async def pause_stale(facts):
+        if facts.claim_owner == "stale":
+            prepared.set()
+            await asyncio.wait_for(release.wait(), 10)
+
+    h.prepare_hook = pause_stale
+    stale = asyncio.create_task(h.delivery.claim(event.event_id, h.project, "stale"))
+    try:
+        await asyncio.wait_for(prepared.wait(), 5)
+        first = await h.delivery.claim(event.event_id, h.project, "first")
+        h.result = HandlerOutcome.RETRY
+        await h.delivery.invoke(first)
+        async with h.factory() as session:
+            await session.execute(text("select pg_sleep(1.05)"))
+        consumed = len(h.consumed)
+        release.set()
+        assert await asyncio.wait_for(stale, 5) is None
+        assert len(h.consumed) == consumed
+        second = await h.delivery.claim(event.event_id, h.project, "second")
+        assert second.claim_generation == 2
+    finally:
+        release.set()
+        await asyncio.gather(stale, return_exceptions=True)
+
+
+async def test_invocation_observation_uses_one_stable_database_instant(delivery_harness):
+    h = delivery_harness
+    claim = await h.claim()
+    await h.delivery._begin_invocation(claim)
+    statements = []
+    bind = h.factory.kw["bind"].sync_engine
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    sqlalchemy_event.listen(bind, "before_cursor_execute", capture)
+    try:
+        observed = await h.delivery.observe_invocation(claim)
+    finally:
+        sqlalchemy_event.remove(bind, "before_cursor_execute", capture)
+    assert claim.claimed_at <= observed.observed_at < claim.claim_expires_at
+    assert len(statements) == 1
+    assert statements[0].count("statement_timestamp()") == 2
+    assert "clock_timestamp()" not in statements[0]
+    assert "FOR UPDATE" not in statements[0].upper()

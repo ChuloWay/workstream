@@ -1,5 +1,6 @@
 """Crash boundaries, retry exhaustion and exact retained outcome replay."""
 
+import asyncio
 import json
 
 import pytest
@@ -144,20 +145,24 @@ async def test_retry_backoff_and_exhaustion(delivery_harness):
     )
 
 
-async def test_old_generation_cannot_invoke_or_finalize_successor(delivery_harness):
+async def test_completed_generation_replays_without_mutating_successor(delivery_harness):
     h = delivery_harness
     claim = await h.claim()
     await expire(h)
-    await h.delivery.recover(claim.event_id, h.project)
+    original = await h.delivery.recover(claim.event_id, h.project)
     async with h.factory() as session:
         await session.execute(text("select pg_sleep(1.05)"))
     second = await h.delivery.claim(claim.event_id, h.project, "second")
     assert second.claim_generation == 2
     consumed = len(h.consumed)
     assert await h.delivery.invoke(claim) is None
-    with pytest.raises(DeliveryUnavailable):
-        await h.delivery.finalize(claim, FinalizationCause.EXPIRED)
     assert len(h.consumed) == consumed
+    assert await h.delivery.finalize(claim, FinalizationCause.EXPIRED) == original
+    assert len(h.consumed) == consumed + 1
+    forged = original.model_copy(update={"outcome_digest": "sha256:" + "0" * 64})
+    with pytest.raises(DeliveryUnavailable):
+        await h.delivery._finalize(forged, FinalizationCause.EXPIRED)
+    assert len(h.consumed) == consumed + 1
     async with h.factory() as session:
         event = await session.get(OutboxEvent, claim.event_id)
         assert event.claim_generation == 2 and event.claim_owner == "second"
@@ -181,3 +186,128 @@ async def test_handler_failure_is_unknown_not_retryable(delivery_harness, fault)
     receipt = await h.delivery.invoke(await h.claim())
     assert "private" not in receipt.outcome_json
     assert json.loads(receipt.outcome_json)["error_code"] == "INVOKE_OUTCOME_UNKNOWN"
+
+
+async def test_concurrent_same_outcome_finalizers_replay_winner(delivery_harness):
+    from app.modules.authorization.api.outbox_dispatch import OutboxDispatchPhase
+
+    h = delivery_harness
+    h.options = h.options.model_copy(update={"lease_seconds": 30})
+    h.delivery = h.build()
+    claim = await h.claim()
+    await h.delivery._begin_invocation(claim)
+    entered, ready = 0, asyncio.Event()
+
+    async def barrier(facts):
+        nonlocal entered
+        if facts.phase is OutboxDispatchPhase.FINALIZE:
+            entered += 1
+            if entered == 2:
+                ready.set()
+            await asyncio.wait_for(ready.wait(), 5)
+
+    h.prepare_hook = barrier
+    first = asyncio.create_task(h.delivery.finalize(claim, FinalizationCause.ACKNOWLEDGE))
+    await asyncio.sleep(0.02)
+    receipts = await asyncio.gather(
+        first, h.delivery.finalize(claim, FinalizationCause.ACKNOWLEDGE)
+    )
+    assert receipts[0] == receipts[1]
+    finalized = [f for f in h.consumed if f.phase is OutboxDispatchPhase.FINALIZE]
+    assert len(finalized) == 2
+    assert {f.outcome_digest for f in finalized} == {receipts[0].outcome_digest}
+    assert entered == 3  # Losing proposal prepares once more for the stored digest.
+    async with h.factory() as session:
+        attempts = (await session.scalars(select(OutboxDeliveryAttempt))).all()
+        assert len(attempts) == 1 and attempts[0].outcome_json == receipts[0].outcome_json
+
+
+async def test_running_handler_expiry_preserves_unknown_and_late_replay(delivery_harness):
+    h = delivery_harness
+    h.options = h.options.model_copy(update={"lease_seconds": 5, "handler_timeout_seconds": 4})
+    h.delivery = h.build()
+    claim = await h.claim()
+    await asyncio.sleep(2)
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def blocked(envelope):
+        entered.set()
+        await release.wait()
+
+    h.handler_hook = blocked
+    invocation = asyncio.create_task(h.delivery.invoke(claim))
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        assert (await h.delivery.drain(h.project)).invoked == 1
+        await asyncio.sleep(3.05)
+        receipt = await h.delivery.recover(claim.event_id, h.project)
+        assert not invocation.done()
+        assert json.loads(receipt.outcome_json)["error_code"] == "INVOKE_OUTCOME_UNKNOWN"
+        observation = await h.delivery.drain(h.project)
+        assert observation.invoked == 0 and observation.unresolved == 1
+        assert await h.delivery.claim(claim.event_id, h.project, "retry") is None
+        release.set()
+        assert await asyncio.wait_for(invocation, 2) == receipt
+        assert len(h.handled) == 1
+        assert await h.delivery.invoke(claim) is None
+    finally:
+        release.set()
+        await asyncio.gather(invocation, return_exceptions=True)
+
+
+async def test_cancelled_invocation_leaves_custody_for_unknown_recovery(delivery_harness):
+    h = delivery_harness
+    claim = await h.claim()
+    entered = asyncio.Event()
+
+    async def blocked(envelope):
+        entered.set()
+        await asyncio.Event().wait()
+
+    h.handler_hook = blocked
+    invocation = asyncio.create_task(h.delivery.invoke(claim))
+    await asyncio.wait_for(entered.wait(), 2)
+    invocation.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await invocation
+    async with h.factory() as session:
+        assert (await DeliveryRepository(session).attempt(claim)).stage == "invoked"
+    await expire(h)
+    receipt = await h.delivery.recover(claim.event_id, h.project)
+    assert json.loads(receipt.outcome_json)["error_code"] == "INVOKE_OUTCOME_UNKNOWN"
+    observation = await h.delivery.drain(h.project)
+    assert observation.invoked == 0 and observation.unresolved == 1
+    assert await h.delivery.invoke(claim) is None and len(h.handled) == 1
+
+
+async def test_handler_suppressing_cancellation_cannot_ack_after_deadline(delivery_harness):
+    h = delivery_harness
+    h.options = h.options.model_copy(update={"lease_seconds": 30, "handler_timeout_seconds": 1})
+    h.delivery = h.build()
+    claim = await h.claim()
+    cancelled, release = asyncio.Event(), asyncio.Event()
+
+    async def suppress_cancellation(envelope):
+        try:
+            await release.wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            await release.wait()
+
+    h.handler_hook = suppress_cancellation
+    invocation = asyncio.create_task(h.delivery.invoke(claim))
+    try:
+        await asyncio.wait_for(cancelled.wait(), 3)
+        # The dispatcher returns while the uncooperative handler remains running.
+        receipt = await asyncio.wait_for(asyncio.shield(invocation), 2)
+        assert h.delivery._running_handlers
+        assert json.loads(receipt.outcome_json)["error_code"] == "INVOKE_OUTCOME_UNKNOWN"
+        assert (await h.delivery.drain(h.project)).unresolved == 1
+        release.set()
+        await asyncio.gather(*tuple(h.delivery._running_handlers))
+        assert await h.delivery.finalize(claim, FinalizationCause.UNKNOWN) == receipt
+        assert await h.delivery.invoke(claim) is None and len(h.handled) == 1
+    finally:
+        release.set()
+        await asyncio.gather(invocation, return_exceptions=True)
+        await asyncio.gather(*tuple(h.delivery._running_handlers), return_exceptions=True)

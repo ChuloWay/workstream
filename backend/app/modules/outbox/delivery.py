@@ -42,6 +42,14 @@ from app.modules.outbox.models import OutboxDeliveryAttempt
 from app.modules.outbox.registry import HandlerRegistry
 
 
+class _CompletedDuringFinalization(DeliveryUnavailable):
+    """A concurrent completion requires fresh preparation of its stored digest."""
+
+    def __init__(self, receipt: DeliveryReceipt) -> None:
+        """Carry only immutable delivery facts for one fresh authorization."""
+        self.receipt = receipt
+
+
 def _checked_claim(claim: OutboxClaim) -> OutboxClaim:
     """Revalidate even caller-constructed or copied value objects."""
     try:
@@ -144,6 +152,13 @@ class OutboxDelivery:
         self._authorization = authorization_factory
         self._registry = registry
         self._options = DeliveryOptions.model_validate(options.model_dump())
+        self._running_handlers: set[asyncio.Task] = set()
+
+    def _handler_done(self, task: asyncio.Task) -> None:
+        """Retain running calls and consume failures without keeping provider text."""
+        self._running_handlers.discard(task)
+        if not task.cancelled():
+            task.exception()
 
     async def claim(self, event_id: UUID, project_id: UUID, owner: str) -> OutboxClaim | None:
         """Commit one eligible exact registered claim, or leave unavailable work alone."""
@@ -263,15 +278,23 @@ class OutboxDelivery:
             return None
         handler = self._registry.get(envelope.event_type, envelope.event_version)
         cause = FinalizationCause.UNKNOWN
+        task = None
         try:
-            async with asyncio.timeout(self._options.handler_timeout_seconds):
-                result = await handler(envelope)
-            if type(result) is HandlerOutcome:
-                cause = FinalizationCause(result.value)
+            task = asyncio.create_task(handler(envelope))
+            self._running_handlers.add(task)
+            task.add_done_callback(self._handler_done)
+            done, _ = await asyncio.wait((task,), timeout=self._options.handler_timeout_seconds)
+            if done and not task.cancelled():
+                result = task.result()
+                if type(result) is HandlerOutcome:
+                    cause = FinalizationCause(result.value)
         except Exception:
             # Do not retain or log provider payloads. Cancellation deliberately leaves
             # committed invoked custody for expiration recovery.
             pass
+        finally:
+            if task is not None and not task.done():
+                task.cancel()
         return await self.finalize(claim, cause)
 
     async def finalize(self, claim: OutboxClaim, cause: FinalizationCause) -> DeliveryReceipt:
@@ -290,7 +313,22 @@ class OutboxDelivery:
             proposed = DeliveryReceipt(
                 claim=claim, outcome_json=_encode(value), outcome_digest=canonical_json_hash(value)
             )
-        return await self._finalize(proposed, cause)
+        try:
+            return await self._finalize(proposed, cause)
+        except _CompletedDuringFinalization as completed:
+            stored = json.loads(completed.receipt.outcome_json)
+            expected = _outcome(
+                claim,
+                attempt.invoked_at,
+                cause,
+                datetime.fromisoformat(stored["receipt_completed_at"]),
+                self._options,
+            )
+            if _encode(expected) != completed.receipt.outcome_json:
+                raise DeliveryUnavailable("outbox_delivery_unavailable") from None
+            # The prior transaction consumed no authority. Re-prepare once with
+            # the immutable winner's exact digest, never change the current event.
+            return await self._finalize(completed.receipt, cause)
 
     async def _finalize(
         self, receipt: DeliveryReceipt, cause: FinalizationCause
@@ -308,23 +346,20 @@ class OutboxDelivery:
                 event = await repo.event(claim.event_id, claim.project_id, lock=True)
                 attempt = await repo.attempt(claim, lock=True)
                 now = await database_time(session)
-                if (
-                    event is None
-                    or attempt is None
-                    or claim_from_attempt(attempt) != claim
-                    or event.claim_generation != claim.claim_generation
-                ):
+                if event is None or attempt is None or claim_from_attempt(attempt) != claim:
                     raise DeliveryUnavailable("outbox_delivery_unavailable")
                 if attempt.stage == "completed":
                     if _receipt(claim, attempt) != receipt:
-                        raise DeliveryUnavailable("outbox_delivery_unavailable")
+                        raise _CompletedDuringFinalization(_receipt(claim, attempt))
                     _allow(
                         await prepared.consume(
                             _facts(claim, OutboxDispatchPhase.FINALIZE, receipt.outcome_digest)
                         )
                     )
                     return _receipt(claim, attempt)
-                if not matches_event(event, claim):
+                if event.claim_generation != claim.claim_generation or not matches_event(
+                    event, claim
+                ):
                     raise DeliveryUnavailable("outbox_delivery_unavailable")
                 value = json.loads(receipt.outcome_json)
                 completed = datetime.fromisoformat(value["receipt_completed_at"])

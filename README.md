@@ -311,7 +311,7 @@ Independent initiatives and branches may proceed concurrently. Start with
 The shared outbox dispatcher has a registered but unavailable fixed identity and
 phase-bound authorization contract (AUTH-OUTBOX-01). CON-02B adds hidden delivery,
 crash recovery and immutable receipts. AUTH-OUTBOX-02 still owns live authorization,
-audit binding and worker integration; no background task or checker effect is
+audit binding and Celery worker integration; no background task or checker effect is
 activated by these hidden mechanics.
 
 ## Developer Quickstart

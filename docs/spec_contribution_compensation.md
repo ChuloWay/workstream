@@ -847,7 +847,7 @@ remain unchanged, and downgrade refuses retained binding audit evidence.
 
 | ActionId | PermissionId | Principal / target | Protocol | Feature owner |
 |---|---|---|---:|---|
-| `outbox.dispatch` | registered planned `outbox.dispatch` | fixed dispatcher / exact event and phase | T | AUTH-OUTBOX-01 complete; CON-02B mechanics and AUTH-OUTBOX-02 activation remain |
+| `outbox.dispatch` | registered planned `outbox.dispatch` | fixed dispatcher / exact event and phase | T | AUTH-OUTBOX-01 registration and CON-02B hidden mechanics complete; AUTH-OUTBOX-02 activation remains |
 | `compensation.adapter_binding.read` | `compensation.adapter_binding.manage` | covered human Finance Authority / binding | Q | WS-ARCH-001-CP03B (active; CP01A registration custody) |
 | `compensation.adapter_binding.create` | `compensation.adapter_binding.manage` | covered human Finance Authority / binding collection | T | WS-ARCH-001-CP03B (active; CP01A registration custody) |
 | `compensation.adapter_binding.suspend` | `compensation.adapter_binding.manage` | covered human Finance Authority / active binding | T | WS-ARCH-001-CP03B (active; CP01A registration custody) |
@@ -919,7 +919,8 @@ attempts without provable authority instead of inventing or deleting evidence.
 A handler receives immutable event facts and canonical JSON payload text. The
 committed-invocation observation joins event and incomplete invocation custody in
 one independent nonlocking SQL statement, matching project, event, digest,
-generation, owner and unexpired lease. It is only a point-in-time observation:
+generation, owner and unexpired lease using the same statement-stable database
+instant for the predicate and returned observation time. It is only a point-in-time observation:
 it reserves nothing and supplies no feature authority or commit-time guarantee.
 Feature effects deduplicate by immutable event identity across generations.
 
@@ -929,12 +930,18 @@ exponential backoff; an explicit safe handler retry can also create another atte
 An exception, timeout, cancellation or crash after the invocation marker commits
 has unknown effects and stops in dead-letter on finalization/recovery. This includes
 a crash before the handler actually starts. The dispatcher neither silently retries
-unknown effects nor promises unconditional at-least-once handler entry.
+unknown effects nor promises unconditional at-least-once handler entry. The deadline
+is independent of handler cancellation cooperation: a timed-out call may still run
+physically, but its later result cannot replace the recorded unknown outcome.
 
 The database requires the current event projection and delivery receipt to agree
 at transaction commit in both mutation directions. Completed receipts cannot be
 changed, removed or reopened. Finalization replay retains every original delivery
-identity, timestamp and digest. Migration preserves pending events and refuses
+identity, timestamp and digest even after a newer attempt starts. Concurrent
+finalizers may reauthorize the stored winner's digest once without another write.
+Database guards reject expired invoked non-unknown outcomes, future completion,
+leases beyond one hour and retry delays beyond one day.
+Migration preserves pending events and refuses
 attempted events without provable retained custody; it does not invent history.
 
 Drain is one project-scoped SQL snapshot. Pending, claimed and retryable counts are
@@ -942,7 +949,7 @@ disjoint; invoked overlaps claimed, unsupported overlaps nonterminal states, and
 unresolved unknown invocation remains visible after dead-letter. Counts must not
 be summed as readiness. Database failure is an error, never zero work. Lifecycle
 release still requires the consuming owner's fence and feature obligation evidence.
-No concrete handler, public route, worker or broker transport is installed here.
+No concrete handler, public route, Celery worker or broker transport is installed here.
 
 REV stages the audit and outbox rows for the Review decision after the reviewer
 operation and the applicable branch/submitter operation. Those rows share the
@@ -1092,10 +1099,11 @@ answers:
 2. The human must classify all pre-production legacy economic rows for
    deterministic rebuild or explicit migration before a replacement migration
    or CP09 cleanup changes those rows.
-3. The human and AUTH must approve exact fixed-service identity, action, static
-   row, context, and evaluator contracts for dispatcher mechanics, outbound
-   delivery, reconciliation, projection rebuild, and callback execution before
-   their owning chunks.
+3. AUTH-OUTBOX-01 has delivered the exact dispatcher identity, planned action,
+   static row and typed context; CON-02B has delivered hidden delivery mechanics.
+   AUTH-OUTBOX-02 still owns live evaluator, audit custody and composition.
+   Outbound delivery, reconciliation, projection rebuild and callback execution
+   require their own exact feature-authority contracts before activation.
 4. Optional contribution evidence remains deferred unless separately approved
    through fresh ART, AUTH, and CON contracts.
 

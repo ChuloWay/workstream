@@ -1,6 +1,7 @@
 """Closed values, explicit composition and preserved append/live boundaries."""
 
-from datetime import datetime, timedelta, timezone
+import ast
+from datetime import datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 from uuid import uuid4
 
@@ -10,9 +11,33 @@ from app.modules.outbox.api import DeliveryOptions, OutboxClaim
 from app.modules.outbox.registry import HandlerRegistry
 
 
-def test_append_transaction_and_hidden_delivery_boundaries():
-    import ast
+def _outbox_imports(source):
+    """Recognize both Python import forms, independent of local aliases."""
+    imports = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            imports.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imports.extend(f"{node.module}.{alias.name}" for alias in node.names)
+    return any("outbox" in name.split(".") for name in imports)
 
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import app.modules.outbox.delivery as delivery",
+        "from app.modules.outbox.delivery import OutboxDelivery as Owner",
+        "from app.modules import outbox",
+        "from app.adapters.outbox import outbox_delivery as factory",
+        "import app.adapters.outbox as adapter",
+    ],
+)
+def test_hidden_composition_guard_detects_import_forms(source):
+    assert _outbox_imports(source)
+    assert not _outbox_imports("from app.modules.tasks import service as outbox")
+
+
+def test_append_transaction_and_hidden_delivery_boundaries():
     root = Path(__file__).resolve().parents[2] / "app"
     for name in ("service.py", "repository.py"):
         tree = ast.parse((root / "modules/outbox" / name).read_text())
@@ -24,11 +49,7 @@ def test_append_transaction_and_hidden_delivery_boundaries():
         )
     for directory in (root / "workers", root / "api/routes"):
         for path in directory.rglob("*.py"):
-            tree = ast.parse(path.read_text())
-            assert not any(
-                isinstance(node, ast.ImportFrom) and node.module and "outbox" in node.module
-                for node in ast.walk(tree)
-            )
+            assert not _outbox_imports(path.read_text()), path
     tree = ast.parse((root / "modules/outbox/api.py").read_text())
     assert not any(
         isinstance(node, ast.ImportFrom)
@@ -100,3 +121,32 @@ def test_registry_rejects_duplicates_and_has_no_default():
     assert registry.get("event", 1) is handler
     assert registry.get("event", 2) is None
     assert HandlerRegistry([]).get("event", 1) is None
+
+
+@pytest.mark.parametrize("field", ["claimed_at", "claim_expires_at"])
+@pytest.mark.parametrize("fault", ["raises", "invalid"])
+def test_invalid_timezone_is_sanitized(field, fault):
+    class InvalidTimezone(tzinfo):
+        def utcoffset(self, dt):
+            if fault == "raises":
+                raise RuntimeError("private-timezone-marker")
+            return timedelta(days=2)
+
+    now = datetime.now(timezone.utc)
+    values = dict(
+        event_id=uuid4(),
+        project_id=uuid4(),
+        payload_digest="sha256:" + "a" * 64,
+        claim_generation=1,
+        claim_owner="test-worker",
+        claimed_at=now,
+        claim_expires_at=now + timedelta(seconds=5),
+    )
+    values[field] = now.replace(tzinfo=InvalidTimezone())
+    with pytest.raises(ValueError, match="outbox timestamp requires a valid timezone") as caught:
+        OutboxClaim(**values)
+    assert "private-timezone-marker" not in str(caught.value)
+    assert caught.value.__cause__ is caught.value.__context__ is None
+    for error in caught.value.errors(include_input=False):
+        original = error.get("ctx", {}).get("error")
+        assert original.__cause__ is original.__context__ is None
