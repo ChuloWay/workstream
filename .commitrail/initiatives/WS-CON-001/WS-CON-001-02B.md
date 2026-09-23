@@ -1,7 +1,7 @@
 # CON-02B — Hidden shared outbox delivery and recovery
 
 - Initiative: WS-CON-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: one hidden, feature-neutral claim/invoke/finalize operation
   with committed claim custody, bounded automatic recovery and truthful drain
   facts. Production dispatch remains unavailable until AUTH-OUTBOX-02.
@@ -233,7 +233,9 @@ lifecycle owner's fence and feature obligation evidence.
 
 ## Evidence
 
-These are planned nodes, not executed evidence:
+The implemented proof map uses real PostgreSQL for delivery, migration and
+recovery, and explicitly synthetic preparation ports for unavailable AUTH.
+Current command results and review freshness belong in the PR, not this record.
 
 - `tests/outbox/test_delivery_postgresql.py::test_claim_race_commits_one_generation`:
   two independent sessions, one committed winner, loser consumes no authority;
@@ -309,6 +311,10 @@ operation needs SQL guards, migration preservation, concurrency/crash proof and
 replacement of affected persistence-only tests together. Splitting the schema
 from its sole writer/proof would leave an unusable boundary. Public activation,
 feature handlers and broker wiring remain separate.
+SQL outcome validation reuses the existing pure
+`project_guide_projection_canonical_json(jsonb)` serializer. This is an explicit
+shared dependency: later PROJECTS cleanup must trace the OUTBOX consumer before
+renaming or removing it. No second serializer or compatibility wrapper is added.
 The custody record is justified by erased lease facts and missing exact outcomes;
 do not add additional frameworks or tables for hypothetical future integrations.
 
