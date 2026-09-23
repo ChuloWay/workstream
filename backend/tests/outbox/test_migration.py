@@ -114,7 +114,7 @@ def test_unattempted_events_preserved_without_fabricated_attempts(
         assert asyncio.run(count()) == 0
         command.upgrade(config(), "head")
         assert asyncio.run(snapshot(isolated_database_env)) == {
-            **after, "revision": "0028_outbox_dispatch_authority",
+            **after, "revision": "0029_assignment_authority",
         }
 
 

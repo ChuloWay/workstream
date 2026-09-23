@@ -1,16 +1,17 @@
-"""Hidden effect proof: real AUTH causes/OUTBOX custody; synthetic feature authority."""
+"""Hidden effect proof with real AUTH causes, feature authority and OUTBOX custody."""
 
+from contextlib import asynccontextmanager
 import pytest
 from uuid import UUID, uuid4
 from sqlalchemy import select
 
 from app.adapters.tasks import (
-    DenyAssignmentInvalidationAuthorization,
     TransactionalAssignmentInvalidationHandler,
 )
 from app.modules.outbox.api import HandlerOutcome
 from app.modules.tasks.api.assignment_invalidation import (
     AssignmentInvalidationAuthority,
+    PreparedAssignmentInvalidation,
     assignment_invalidation_evidence_id,
 )
 from app.modules.tasks.models import TaskAssignment, WorkstreamTask, Submission
@@ -24,7 +25,7 @@ from tests.test_tasks import (
 )
 from tests.test_tasks import task_client as task_client, task_database_env as task_database_env
 from tests.tasks.invalidation_support import (
-    SyntheticFeatureAuthority,
+    TracedFeatureAuthority,
     setup_assignment,
     revoke,
     invoked,
@@ -108,31 +109,30 @@ async def test_valid_delivery_cannot_substitute_target_or_cause(task_client, mon
     assert await s.handler(envelope) is HandlerOutcome.ACKNOWLEDGE
 
 
-async def test_hidden_authority_is_required_and_invalid_results_rollback(task_client, monkeypatch):
+async def test_invalid_authority_results_rollback(task_client, monkeypatch):
     s = await setup_assignment(task_client, monkeypatch)
     await revoke(s)
     _, envelope = await invoked(s)
     before = await snapshot(s)
-    denied = TransactionalAssignmentInvalidationHandler(
-        s.sessions,
-        observer=s.h.delivery,
-        authorization_factory=lambda session: DenyAssignmentInvalidationAuthorization(),
-    )
-    assert await denied(envelope) is HandlerOutcome.REJECT
     for result in (
         None,
-        AssignmentInvalidationAuthority("not-a-uuid", uuid4()),
-        AssignmentInvalidationAuthority(uuid4(), "not-a-uuid"),
+        AssignmentInvalidationAuthority("not-a-uuid", uuid4(), "sha256:" + "a" * 64),
+        AssignmentInvalidationAuthority(uuid4(), "not-a-uuid", "sha256:" + "a" * 64),
     ):
 
-        class InvalidAuthority(SyntheticFeatureAuthority):
-            async def consume(self, handle, facts):
+        class InvalidPrepared(PreparedAssignmentInvalidation):
+            async def consume(self, facts):
                 return result
+
+        class InvalidAuthority:
+            @asynccontextmanager
+            async def prepare_assignment_invalidation(self, facts):
+                yield InvalidPrepared()
 
         bad = TransactionalAssignmentInvalidationHandler(
             s.sessions,
             observer=s.h.delivery,
-            authorization_factory=lambda session: InvalidAuthority([]),
+            authorization_factory=lambda session: InvalidAuthority(),
         )
         assert await bad(envelope) is HandlerOutcome.REJECT
         assert await snapshot(s) == before
@@ -304,7 +304,7 @@ async def test_release_requires_root_transaction_and_exact_prior_receipt(task_cl
             observer=s.h.delivery,
             fence=outbox_invocation_fence(session),
             causes=committed_authority_invalidation(s.sessions),
-            authorization=SyntheticFeatureAuthority([]),
+            authorization=TracedFeatureAuthority(session, []),
             audit=assignment_invalidation_audit(session),
         )
         with pytest.raises(AssignmentInvalidationUnavailable, match="root transaction"):

@@ -592,8 +592,9 @@ read reuses exact assignment visibility after locking TASK; the retained require
 route keeps its current authority wrapper. ARCH-03B8 supplies bounded internal Audit Authority task evidence;
 ARCH-03B9 supplies hidden exact-assignment invalidation with committed cause
 verification and a same-transaction delivery fence. Its production handler is
-unregistered; feature authority, atomic AUTH event wiring and public task
-cutover remain ARCH-03C. Canonical checker materialization follows in
+unregistered. ARCH-03C1 supplies real fixed-service authority and exact decision
+receipts; atomic AUTH event wiring/registration remain ARCH-03C2, before public
+task cutover. Canonical checker materialization follows in
 ARCH-04B/04C.
 
 ## v0.1 Success Standard

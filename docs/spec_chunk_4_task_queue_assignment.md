@@ -104,8 +104,8 @@ cannot be modified, deleted or truncated through ordinary SQL.
 
 Revocation immediately prevents subsequent contributor commands. Closing an
 existing assignment and returning a task to the ready queue through durable
-invalidation has a hidden ARCH-03B9 operation. Its real service authority,
-producer wiring and registration remain ARCH-03C; a denied start is not proof
+invalidation has a hidden ARCH-03B9 operation. ARCH-03C1 supplies real service authority;
+producer wiring and registration remain ARCH-03C2; a denied start is not proof
 that an invalidation worker has run.
 
 ## Work-context hints
@@ -158,8 +158,8 @@ ARCH-03C must authorize the exact project collection before calling this port
 or using a client cursor, with current-grant/revocation and concealment proof.
 No per-task AUTH handle or token role can substitute for that collection gate.
 ARCH-03B8 supplies hidden task audit evidence. ARCH-03B9 supplies the hidden
-assignment-invalidation operation; its real authority/wiring and public evidence
-access remain separate.
+assignment-invalidation operation; ARCH-03C1 supplies its real authority.
+Producer wiring and public evidence access remain separate.
 
 
 ## Hidden management and operational queues
@@ -338,9 +338,10 @@ its transaction; later claim/command authorization never relies on these facts.
 
 ARCH-03B9 supplies `AssignmentInvalidationOperation` and the transaction-owning
 `TransactionalAssignmentInvalidationHandler`. No production handler is
-registered, and the explicit unavailable authorization adapter cannot release
-work. The exact `task.assignment.authority_reconcile` fixed-service action and
-atomic AUTH producer wiring remain ARCH-03C.
+registered. ARCH-03C1 replaces the unavailable authorization adapter with the
+canonical fixed-service AUTH/PREP implementation for the sole
+`task.assignment.authority_reconcile` action. Atomic AUTH producer wiring and
+first registration remain ARCH-03C2.
 
 Each `TaskAssignmentAuthorityInvalidationRequested` event (protocol version 1)
 addresses one original project/task/assignment/contributor and one immutable AUTH
@@ -368,16 +369,23 @@ release operation gains no additional transition or permission.
 
 One deterministic `TaskAssignmentAuthorityRevoked` lifecycle event identifies
 the invalidation and original assignment and binds its exact authorization
-reference. It commits with the effect and serves as the replay receipt. An old
+reference, bounded authority-facts snapshot and canonical resource digest.
+Both AUDIT and PostgreSQL recompute that digest and bind the exact assignment
+and invalidation references. AUDIT validates its immutable ALLOW
+decision, exact action/permission, actor, task/project and digest. The database
+additionally binds the immutable actor identity to the exact reconciler service.
+It commits with the effect and serves as the replay receipt. Historical replay
+does not recheck the service's current lifecycle status. An old
 event cannot select a replacement assignment; restoration does not restore
 closed work. The handler acknowledges only after its transaction commits.
 Malformed targets/causes and denied authority reject; uncertain effects remain
 shared OUTBOX `UNKNOWN`, without automatic reinvocation.
 
-ARCH-03C must publish bounded actor-wide/project fan-out atomically with the AUTH
+ARCH-03C2 must publish bounded actor-wide/project fan-out atomically with the AUTH
 mutation. It must not backfill or dispatch retained invalidation rows: their
 transaction-start timestamps do not establish mutation chronology. Capture exact assignment IDs through a nonlocking TASK projection
 while authority locks serialize claim. Producers must not acquire TASK locks
 after AUTH locks. First production registration must also enforce the required
-prefork worker/routing topology. Hidden positive feature-authority tests use a
-controlled seam; they are not evidence of real fixed-service authorization.
+prefork worker/routing topology. Hidden feature-authority tests now use real
+fixed-service PREP and PostgreSQL; they do not prove production event publication
+or live broker delivery.

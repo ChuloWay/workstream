@@ -434,9 +434,9 @@ Setup receipts remain immutable. The next guide boundary is:
    replacement of the existing live work-context projections. ARCH-03B6 locked-context projections
    are complete, with operational/audit reads still internal. ARCH-03B7 requirements projections are complete; the retained requirements route keeps its existing authority wrapper. ARCH-03B8 bounded task audit evidence is complete and internal;
    ARCH-03B9 hidden exact-assignment invalidation is complete, using the shared
-   committed invocation and same-transaction fence. ARCH-03C next supplies its
-   real feature authority and atomic producer wiring, plus public task authority
-   and exposure. HTTP activation exposure remains
+   committed invocation and same-transaction fence. ARCH-03C1 supplies real
+   feature authority and decision-bound receipts. ARCH-03C2 next supplies atomic
+   producer wiring and first registration, before public task authority/exposure. HTTP activation exposure remains
    pending and is not implied by an internal public port. The operation requires exact
    current compilation, sufficiency, separate pre/post approvals, review/revision
    inputs and an explicitly selected published ContributionPolicyVersion.
@@ -592,19 +592,20 @@ remaining trace sequence is:
   The complete internal guide context and `CP08` exact task/assignment/Submission
   contribution-policy stamps and ARCH-03B1 detached display are available; ARCH-03B2 ready and ARCH-03B3 management/operational queue facts and ARCH-03B4 hidden task detail and ARCH-03B5 current live work context and ARCH-03B6 locked-context and ARCH-03B7 requirements projections are delivered.
   ARCH-03B8 hidden task audit evidence and ARCH-03B9 hidden assignment invalidation
-  are complete. ARCH-03C retains real feature authority and atomic producer wiring. ARCH-04A supplies registered-capability
+  are complete. ARCH-03C1 real feature authority and exact decision receipts are
+  complete; ARCH-03C2 retains atomic producer wiring and registration. ARCH-04A supplies registered-capability
   contracts; activation does not require a Task, Submission or completed run.
 - Contribution lineage: CP05 authorization, CP06 validation and hidden `CP07` activation
   and `AUTH-12H` live manager authority are complete. `ARCH-03A` has completed
   the existing internal guide-context port. `CP08` delivers lineage fields
   and minimal Task/Assignment/Submission writers together without superseded economic
   readiness. Remaining work includes
-  real assignment-invalidation authority and atomic producer wiring in `ARCH-03C`, following delivered
+  atomic assignment-invalidation producer wiring/registration in `ARCH-03C2`,
+  following delivered real authority in `ARCH-03C1` and
   `ARCH-03B1` metadata and ARCH-03B2/03B3 hidden queues and ARCH-03B4 hidden detail and ARCH-03B5 current work context, ARCH-03B6 locked-context and ARCH-03B7 requirements and ARCH-03B8 hidden audit evidence and ARCH-03B9 hidden assignment invalidation, and authorization/public cutover in `ARCH-03C`. `CP09` physical cleanup waits for all remaining
   legacy consumers to be replaced; it is outside the `allow_review` critical path.
   Shared dispatch authority is delivered by AUTH-OUTBOX-02. Live assignment
-  invalidation still needs exact feature authority, producer fan-out and handler
-  registration; its hidden operation is delivered. Current authority is checked
+  invalidation still needs producer fan-out and handler registration in ARCH-03C2; its hidden operation is delivered. Current authority is checked
   on every request.
 - Post-submit admission: after delivered `POL-07B` and remaining `ARCH-03C`, `ARCH-04B -> 04C ->
   04D -> 04E` supplies materialization, durable results, authority and routing.

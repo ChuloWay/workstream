@@ -6,6 +6,7 @@ from uuid import UUID
 
 from app.core.hashing import canonical_json_hash
 from app.modules.authorization.catalogue import ActionId
+from app.modules.authorization.domain.assignment_invalidation import AssignmentInvalidationResourceContext
 from app.modules.authorization.domain.outbox_dispatch import OutboxDispatchResourceContext
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext, DERIVE
 from app.modules.authorization.domain.guide_compilation import (
@@ -99,7 +100,7 @@ def project_setup_resource_matches(
 
 def fixed_service_scope_project(action_id, scope, artifact_resource):
     """Admit exact setup, dispatcher or artifact scopes without conflating owners."""
-    outbox = (action_id is ActionId.OUTBOX_DISPATCH
+    outbox = (action_id in {ActionId.OUTBOX_DISPATCH, ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE}
               and scope.kind is PreparedAuthorityScopeKind.PROJECT and scope.project_id is not None)
     if is_project_setup_scope(action_id, scope) or outbox:
         return scope.project_id
@@ -112,6 +113,8 @@ def fixed_service_scope_project(action_id, scope, artifact_resource):
 
 def fixed_service_resource_matches(action_id, resource, project_id, artifact_type, artifact_id, expected):
     """Check the final resource against the exact prepared service scope."""
+    if action_id is ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE:
+        return type(resource) is AssignmentInvalidationResourceContext and resource.scope_project_id == project_id
     if action_id is ActionId.OUTBOX_DISPATCH:
         return type(resource) is OutboxDispatchResourceContext and resource.scope_project_id == project_id
     setup = project_setup_resource_matches(action_id, resource, project_id)

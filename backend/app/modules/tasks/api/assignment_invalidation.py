@@ -1,10 +1,14 @@
-"""Exact hidden assignment reconciliation contracts; no live service permission."""
+"""Exact hidden assignment reconciliation and scoped feature authority."""
 
+from abc import ABC, abstractmethod
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.core.hashing import canonical_json_hash
 
 ASSIGNMENT_INVALIDATION_EVENT = "TaskAssignmentAuthorityInvalidationRequested"
 
@@ -38,24 +42,40 @@ class AssignmentInvalidationAuthorityFacts(BaseModel):
     locked_context_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
 
+def assignment_invalidation_resource_digest(facts: AssignmentInvalidationAuthorityFacts) -> str:
+    """One canonical commitment shared by authorization and immutable receipts."""
+    facts = AssignmentInvalidationAuthorityFacts.model_validate(facts.model_dump())
+    return canonical_json_hash({"resource_context": {
+        "resource_type": "task_authority", "resource_id": str(facts.target.task_id),
+        "scope_project_id": str(facts.target.project_id), "facts": facts.model_dump(mode="json"),
+    }})
+
+
 @dataclass(frozen=True, slots=True)
 class AssignmentInvalidationAuthority:
-    """Future exact fixed-service decision; test substitutes are explicitly synthetic."""
+    """Exact canonical decision and its complete resource commitment."""
 
     actor_profile_id: UUID
     decision_id: UUID
+    resource_context_digest: str
+
+
+class PreparedAssignmentInvalidation(ABC):
+    """Single-use authority whose lifetime is owned by canonical AUTH/PREP."""
+
+    def __reduce_ex__(self, _protocol):
+        raise TypeError("prepared assignment authority is process-local")
+
+    @abstractmethod
+    async def consume(
+        self, facts: AssignmentInvalidationAuthorityFacts,
+    ) -> AssignmentInvalidationAuthority: ...
 
 
 class AssignmentInvalidationAuthorizationPort(Protocol):
-    async def prepare(self, facts: AssignmentInvalidationAuthorityFacts) -> object: ...
-
-    async def consume(
-        self,
-        handle: object,
-        facts: AssignmentInvalidationAuthorityFacts,
-    ) -> AssignmentInvalidationAuthority: ...
-
-    def close(self, handle: object) -> None: ...
+    def prepare_assignment_invalidation(
+        self, facts: AssignmentInvalidationAuthorityFacts,
+    ) -> AbstractAsyncContextManager[PreparedAssignmentInvalidation]: ...
 
 
 def assignment_invalidation_evidence_id(target: AssignmentInvalidationTarget) -> UUID:
@@ -68,9 +88,8 @@ def assignment_invalidation_evidence_id(target: AssignmentInvalidationTarget) ->
 
 @dataclass(frozen=True, slots=True)
 class AssignmentInvalidationEvidence:
-    target: AssignmentInvalidationTarget
+    facts: AssignmentInvalidationAuthorityFacts
     authority: AssignmentInvalidationAuthority
-    from_status: str
 
 
 class AssignmentInvalidationAuditPort(Protocol):

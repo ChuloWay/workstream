@@ -2318,7 +2318,7 @@ def test_administrative_role_policy_and_definition_responses_are_exact() -> None
     )
 
     permission_response, role_response = AdminRoleGrantService.permission_definitions(), AdminRoleGrantService.role_definitions()
-    assert permission_response.total == 74
+    assert permission_response.total == 75
     assert [item.permission_id.value for item in permission_response.items] == sorted(
         permission.value for permission in PermissionId
     )

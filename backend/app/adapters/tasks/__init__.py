@@ -29,19 +29,6 @@ from app.modules.tasks.api.assignment_invalidation import AssignmentInvalidation
 from app.modules.outbox.api import HandlerOutcome
 
 
-class DenyAssignmentInvalidationAuthorization:
-    """Explicit unavailable feature authority until its exact ARCH-03C activation."""
-
-    async def prepare(self, facts):
-        raise AssignmentInvalidationUnavailable("assignment reconciliation unavailable")
-
-    async def consume(self, handle, facts):
-        raise AssignmentInvalidationUnavailable("assignment reconciliation unavailable")
-
-    def close(self, handle):
-        pass
-
-
 class TransactionalAssignmentInvalidationHandler:
     """Hidden typed handler; no production registry entry or implicit authority."""
 
@@ -67,7 +54,6 @@ class TransactionalAssignmentInvalidationHandler:
             return HandlerOutcome.REJECT
 
 __all__ = (
-    "DenyAssignmentInvalidationAuthorization",
     "TransactionalAssignmentInvalidationHandler",
     "task_commands",
     "task_service",

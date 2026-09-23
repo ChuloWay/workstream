@@ -989,8 +989,13 @@ privacy-bounded denial event, and then translates the conflict.
 A replay reference is internal only. Active administrative routes load the
 canonical resource and evaluate current authority again before responding;
 later route owners must preserve the same rule. There is no production assignment-invalidation consumer registered. ARCH-03B9
-supplies the hidden exact-assignment handler; ARCH-03C must activate its fixed
-service and atomically publish assignment-specific events from AUTH mutations.
+supplies the hidden exact-assignment handler; ARCH-03C1 supplies its sole fixed
+service `workstream.task.assignment_reconciler` and permission
+`task.assignment.authority_reconcile`. No human or dispatcher inherits it.
+ARCH-03C2 must atomically publish assignment-specific events from AUTH mutations
+and register the handler with enforced prefork routing. Provisioning the service
+alone does not dispatch events. Release receipts retain the real decision and
+resource digest; later service revocation does not invalidate historical receipts.
 An audit invalidation row alone is not a dispatched reconciliation.
 
 ## Project Role Read Operations

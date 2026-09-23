@@ -195,3 +195,10 @@ def outbox_dispatch_authorization(session: AsyncSession) -> "OutboxDispatchAutho
     from app.modules.authorization.outbox_dispatch_authorization import OutboxDispatchAuthorizationAdapter
 
     return OutboxDispatchAuthorizationAdapter(session)
+
+
+def assignment_invalidation_authorization(session: AsyncSession):
+    """Compose the exact reconciler through canonical fixed-service PREP."""
+    from app.modules.authorization.assignment_invalidation_authorization import AssignmentInvalidationAuthorizationAdapter
+
+    return AssignmentInvalidationAuthorizationAdapter(session)

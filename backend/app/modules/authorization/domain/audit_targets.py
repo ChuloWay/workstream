@@ -1,6 +1,7 @@
 """Exact project resource audit selectors, without raw product facts."""
 
 from app.modules.authorization.catalogue import ActionId
+from app.modules.authorization.domain.assignment_invalidation import AssignmentInvalidationResourceContext
 from app.modules.authorization.domain.outbox_dispatch import OutboxDispatchResourceContext
 from app.modules.authorization.domain.guide_proposals import GuideProposalResourceContext
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
@@ -40,6 +41,9 @@ def project_authority_audit_target(
     if action_id is ActionId.PROJECT_GUIDE_ACTIVATE and isinstance(resource, ProjectGuideActivationResourceContext):
         project_id = str(resource.scope_project_id)
         return project_id, resource.resource_type, str(resource.resource_id), "project", project_id
+    if type(resource) is AssignmentInvalidationResourceContext:
+        project_id = str(resource.scope_project_id)
+        return project_id, "task", str(resource.resource_id), "project", project_id
     if isinstance(resource, TaskAuthorityResourceContext):
         project_id = str(resource.scope_project_id)
         return project_id, "project", project_id, "project", project_id
