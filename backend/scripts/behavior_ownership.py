@@ -76,6 +76,7 @@ AUTH_BOUNDARY_FOUNDATION_TARGETS = frozenset(
 MODULE_BOUNDARY_FOUNDATION_TARGETS = frozenset(
     {"backend/scripts/module_boundaries.py"}
 )
+CON_02B_DELIVERY_TARGETS = frozenset({'backend/app/modules/outbox/delivery_repository.py', 'backend/app/modules/outbox/api.py', 'backend/app/modules/outbox/delivery.py', 'backend/app/adapters/outbox/__init__.py', 'backend/app/modules/outbox/registry.py'})
 CI_LANE_CATALOGUE_TARGETS = frozenset({"backend/scripts/test_lane_catalogue.py"})
 MODULE_PUBLIC_API_FOUNDATION_TARGETS = frozenset(
     {
@@ -594,6 +595,7 @@ def _validate_additive_partition_transition(
     additions = set(current_by_target) - set(trusted_targets)
     approved_additions = (
         AUTH_BOUNDARY_FOUNDATION_TARGETS
+        | CON_02B_DELIVERY_TARGETS
         | CI_LANE_CATALOGUE_TARGETS
         | MODULE_BOUNDARY_FOUNDATION_TARGETS
         | MODULE_PUBLIC_API_FOUNDATION_TARGETS
@@ -924,6 +926,7 @@ def validate_catalogue(
     unresolved = expected - covered
     if unresolved.intersection(
         AUTH_BOUNDARY_FOUNDATION_TARGETS
+        | CON_02B_DELIVERY_TARGETS
         | POL_03A_CALLABLE_TARGETS
         | POL_04A_CALLABLE_TARGETS
         | POL_04A2_CALLABLE_TARGETS

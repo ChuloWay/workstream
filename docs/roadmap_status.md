@@ -145,7 +145,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Review queue and lease | **Hidden persistence foundation** | Queue/admission idempotency and ReviewLease/preference persistence; complete unavailable REV action/principal catalogue and typed AUTH contracts | Packet-membership contract and manifest; Review schema; canonical admission from `allow_review`; claim/lease/packet authority; lease copies the Submission-stamped policy version with no CON lookup |
 | Review decision and revision | **Planned** | Review/revision policy identities and mutation authority; approved same-task revision-rebase semantics | Immutable findings and decisions; `accept`, `needs_revision`, and `reject`; complete-context revision preparation; finding responses; replacement contributor rules; replay and recovery |
 | Contribution and compensation truth | **Schema foundations plus hidden policy behavior** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings; hidden policy administration | Persist ContributionRecord/CompensationAward and one shared FinalAcceptance/submitter operation for human accept or authorized false/pass routing. Only actual Reviews create reviewer records. Evaluate frozen actor rules into zero, one or two awards |
-| Fulfillment, reconciliation, and audit | **Planned** | Shared audit foundations, provider-neutral adapter convention and AUTH-OUTBOX-01 unavailable dispatcher identity/action/phase contract | CON-02B shared dispatcher and AUTH-OUTBOX-02 activation, conditional award fulfillment, callbacks, idempotent recovery, reconciliation, bounded operational reads, and release controls |
+| Fulfillment, reconciliation, and audit | **Planned** | Shared audit foundations, provider-neutral adapter convention, AUTH-OUTBOX-01 unavailable dispatcher contract and CON-02B hidden delivery/recovery custody | AUTH-OUTBOX-02 live authority/audit binding and worker integration, conditional award fulfillment, callbacks, idempotent recovery, reconciliation, bounded operational reads, and release controls |
 | Frontend and pilot | **Planned after stable backend contracts** | React + Vite + TypeScript stack decision | Implement only stable backed surfaces, run the real internal pilot, repair findings, and complete release drills |
 
 ## What Has Been Completed
@@ -606,9 +606,9 @@ remaining trace sequence is:
 - Post-submit admission: after delivered `POL-07B` and remaining `ARCH-03C`, `ARCH-04B -> 04C ->
   04D -> 04E` supplies materialization, durable results, authority and routing.
   An ART-owned output/log custody child precedes `04C` final completion.
-  Automatic `04E` delivery also needs the shared `CON-02B` dispatcher and its
-  AUTH-OUTBOX-02 activation after delivered AUTH-OUTBOX-01 registration; existing outbox persistence alone does
-  not deliver events. These foundations do not require REV or fulfillment.
+  Automatic `04E` delivery still needs AUTH-OUTBOX-02 live authority/audit binding
+  and worker integration after delivered AUTH-OUTBOX-01 registration and CON-02B
+  hidden delivery/recovery custody; no production handler is installed yet. These foundations do not require REV or fulfillment.
   `04E` is hidden TASK handler `04E1`, exact AUTH activation `04E2`, then live
   integration `04E3`; a dispatcher cannot authorize TASK or CHECKERS mutations.
   Later `04F` owns contributor-correctable remediation and admission-backed

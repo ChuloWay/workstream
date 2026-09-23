@@ -58,6 +58,9 @@ async def outbox_factory(
         yield factory, project_id
     finally:
         async with engine.begin() as connection:
+            await connection.execute(text("alter table outbox_delivery_attempts disable trigger user"))
+            await connection.execute(text("delete from outbox_delivery_attempts where project_id=:project_id"), {"project_id": str(project_id)})
+            await connection.execute(text("alter table outbox_delivery_attempts enable trigger user"))
             await connection.execute(text("alter table outbox_events disable trigger user"))
             await connection.execute(
                 text("delete from outbox_events where project_id=:project_id"),
@@ -758,48 +761,22 @@ async def test_outbox_changed_payload_race_conflicts_after_first_reserver_commit
 async def test_outbox_custody_allows_closed_sequence_and_denies_terminal_reopen(
     outbox_factory: tuple[async_sessionmaker[AsyncSession], UUID],
 ) -> None:
+    from tests.outbox.conftest import Harness
+    from app.modules.outbox.api import HandlerOutcome
+
     factory, project_id = outbox_factory
-    value = _event(project_id)
+    h = Harness(factory, project_id)
+    value = await h.append()
+    first = await h.delivery.claim(value.event_id, project_id, "worker:1")
+    h.result = HandlerOutcome.RETRY
+    await h.delivery.invoke(first)
     async with factory() as session:
-        async with session.begin():
-            await OutboxService(session).append(value)
-            await session.execute(
-                text(
-                    "update outbox_events set delivery_state='claimed', attempt_count=1, "
-                    "claim_generation=1, next_attempt_at=null, claim_owner='worker:1', "
-                    "claimed_at=statement_timestamp(), last_attempt_at=statement_timestamp(), "
-                    "claim_expires_at=statement_timestamp()+interval '30 seconds' "
-                    "where event_id=:id"
-                ),
-                {"id": value.event_id},
-            )
-            await session.execute(
-                text(
-                    "update outbox_events set delivery_state='retryable', "
-                    "next_attempt_at=clock_timestamp()+interval '1 second', "
-                    "claim_owner=null, claimed_at=null, claim_expires_at=null, "
-                    "last_error_code='PROVIDER_UNAVAILABLE' where event_id=:id"
-                ),
-                {"id": value.event_id},
-            )
-            await session.execute(
-                text(
-                    "update outbox_events set delivery_state='claimed', attempt_count=2, "
-                    "claim_generation=2, next_attempt_at=null, claim_owner='worker:2', "
-                    "claimed_at=statement_timestamp(), last_attempt_at=statement_timestamp(), "
-                    "claim_expires_at=statement_timestamp()+interval '30 seconds' "
-                    "where event_id=:id"
-                ),
-                {"id": value.event_id},
-            )
-            await session.execute(
-                text(
-                    "update outbox_events set delivery_state='acknowledged', "
-                    "claim_owner=null, claimed_at=null, claim_expires_at=null, "
-                    "finalized_at=clock_timestamp() where event_id=:id"
-                ),
-                {"id": value.event_id},
-            )
+        await session.execute(text("select pg_sleep(1.05)"))
+    second = await h.delivery.claim(value.event_id, project_id, "worker:2")
+    assert second.claim_generation == 2
+    h.result = HandlerOutcome.ACKNOWLEDGE
+    await h.delivery.invoke(second)
+    async with factory() as session:
         with pytest.raises(DBAPIError, match="illegal outbox delivery transition"):
             async with session.begin():
                 await session.execute(
@@ -862,7 +839,7 @@ async def test_outbox_immutable_columns_delete_and_truncate_are_guarded(
                 )
         with pytest.raises(DBAPIError, match="outbox events cannot be truncated"):
             async with session.begin():
-                await session.execute(text("truncate table outbox_events"))
+                await session.execute(text("truncate table outbox_events cascade"))
 
 
 @pytest.mark.asyncio
@@ -901,53 +878,41 @@ async def test_outbox_pending_cancellation_is_terminal_and_archivable(
 
 
 @pytest.mark.asyncio
-async def test_outbox_unarchived_dead_letter_can_requeue_with_identity_preserved(
+async def test_outbox_dead_letter_reopen_rejects_and_safe_retry_preserves_claim_guards(
     outbox_factory: tuple[async_sessionmaker[AsyncSession], UUID],
 ) -> None:
+    from tests.outbox.conftest import Harness
+    from app.modules.outbox.api import HandlerOutcome
+
     factory, project_id = outbox_factory
-    value = _event(project_id)
+    h = Harness(factory, project_id)
+    terminal = await h.claim()
+    h.result = HandlerOutcome.REJECT
+    receipt = await h.delivery.invoke(terminal)
     async with factory() as session:
-        async with session.begin():
-            await OutboxService(session).append(value)
-            await session.execute(
-                text(
-                    "update outbox_events set delivery_state='claimed', attempt_count=1, "
-                    "claim_generation=1, next_attempt_at=null, claim_owner='worker:1', "
-                    "claimed_at=statement_timestamp(), last_attempt_at=statement_timestamp(), "
-                    "claim_expires_at=statement_timestamp()+interval '30 seconds' "
-                    "where event_id=:id"
-                ),
-                {"id": value.event_id},
-            )
-            await session.execute(
-                text(
-                    "update outbox_events set delivery_state='dead_letter', claim_owner=null, "
-                    "claimed_at=null, claim_expires_at=null, last_error_code='ATTEMPTS_EXHAUSTED', "
-                    "finalized_at=clock_timestamp() where event_id=:id"
-                ),
-                {"id": value.event_id},
-            )
-            await session.execute(
-                text(
+        with pytest.raises(DBAPIError, match="outbox outcome custody mismatch"):
+            async with session.begin():
+                await session.execute(text(
                     "update outbox_events set delivery_state='retryable', "
                     "next_attempt_at=clock_timestamp(), finalized_at=null where event_id=:id"
-                ),
-                {"id": value.event_id},
-            )
-            row = (
-                await session.execute(
-                    text(
-                        "select event_id,idempotency_key,attempt_count,claim_generation,"
-                        "delivery_state,last_error_code from outbox_events where event_id=:id"
-                    ),
-                    {"id": value.event_id},
-                )
-            ).one()
-            assert row.event_id == value.event_id
-            assert row.idempotency_key == value.idempotency_key
-            assert row.attempt_count == row.claim_generation == 1
-            assert row.delivery_state == "retryable"
-            assert row.last_error_code == "ATTEMPTS_EXHAUSTED"
+                ), {"id": terminal.event_id})
+        row = (await session.execute(text(
+            "select delivery_state,claim_generation,last_error_code from outbox_events where event_id=:id"
+        ), {"id": terminal.event_id})).one()
+        assert tuple(row) == ("dead_letter", 1, "HANDLER_REJECTED")
+    from app.modules.outbox.api import FinalizationCause
+    assert await h.delivery.finalize(terminal, FinalizationCause.REJECT) == receipt
+    value = await h.append()
+    first = await h.delivery.claim(value.event_id, project_id, "worker:1")
+    h.result = HandlerOutcome.RETRY
+    await h.delivery.invoke(first)
+    async with factory() as session:
+        row = (await session.execute(text(
+            "select event_id,idempotency_key,attempt_count,claim_generation,delivery_state,last_error_code "
+            "from outbox_events where event_id=:id"
+        ), {"id": value.event_id})).one()
+        assert tuple(row) == (value.event_id, value.idempotency_key, 1, 1, "retryable", "RETRY_REQUESTED")
+        await session.rollback()
         with pytest.raises(DBAPIError, match="outbox claim generation must increment once"):
             async with session.begin():
                 await session.execute(
@@ -962,10 +927,11 @@ async def test_outbox_unarchived_dead_letter_can_requeue_with_identity_preserved
                 )
 
 
-def test_outbox_module_contains_no_dispatch_publish_or_commit_surface() -> None:
-    root = Path(__file__).resolve().parents[1] / "app/modules/outbox"
-    source = "\n".join(path.read_text(encoding="utf-8") for path in root.glob("*.py"))
-    assert "celery" not in source.lower()
-    assert "broker" not in source.lower()
+def test_outbox_append_remains_flush_only_without_delivery_composition() -> None:
+    root = Path(__file__).resolve().parents[1] / "app"
+    source = "\n".join((root / "modules/outbox" / name).read_text() for name in ("service.py", "repository.py"))
     assert ".commit(" not in source
+    assert ".begin(" not in source
     assert "def publish" not in source
+    for directory in (root / "workers", root / "api/routes"):
+        assert all("outbox_delivery(" not in path.read_text() for path in directory.rglob("*.py"))

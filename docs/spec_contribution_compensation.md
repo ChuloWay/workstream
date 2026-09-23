@@ -892,16 +892,57 @@ partial local transfer.
 The shared outbox is generic infrastructure:
 
 - CON-02A owns persistence and append/flush in the caller transaction.
-- CON-02B owns claim fencing, retry, dead-letter, replay, retention, stable
-  task identifiers, explicit handler registry, and typed handler outcomes.
+- CON-02B supplies hidden claim/invoke/finalize, retained per-generation delivery
+  receipts, bounded safe retry/dead-letter, exact replay, an explicit handler
+  registry and project-scoped drain observations. Production delivery is unavailable
+  until AUTH-OUTBOX-02 activates the exact dispatcher authority and audit bindings.
+  Manual requeue, cancellation and archival controls need separate authority.
 - CON-02C owns the shared lifecycle audit participant.
 
 The dispatcher may claim, invoke, and finalize under `outbox.dispatch` only.
 It MUST NOT inherit contribution, compensation, delivery, reconciliation,
 projection, callback, ART, or provider authority from an event type. Feature
-handlers validate an already-committed claim generation through a typed port,
+handlers observe an already-committed invocation through the typed port,
+obtain fresh feature authority and their own transaction fence/idempotency,
 stage feature-owned state, and return a typed outcome. They MUST NOT directly
 claim or mutate OutboxEvent rows.
+
+The hidden delivery owner commits a claim, then commits its invocation marker,
+then releases every database session before calling a handler. Finalization opens
+a fresh transaction. Each phase prepares and consumes exact phase-specific AUTH
+facts before mutation. CON-02B tests those mechanics with explicitly synthetic
+ports; it stores no fictional allowed audit evidence while the action is planned.
+AUTH-OUTBOX-02 adds the evaluator, audit vocabulary, decision foreign keys and exact
+matching database guards together with production composition. It refuses retained
+attempts without provable authority instead of inventing or deleting evidence.
+
+A handler receives immutable event facts and canonical JSON payload text. The
+committed-invocation observation joins event and incomplete invocation custody in
+one independent nonlocking SQL statement, matching project, event, digest,
+generation, owner and unexpired lease. It is only a point-in-time observation:
+it reserves nothing and supplies no feature authority or commit-time guarantee.
+Feature effects deduplicate by immutable event identity across generations.
+
+Unknown event type/version registrations remain pending and visible as unsupported.
+There is no default handler. Claim expiry before invocation can retry with bounded
+exponential backoff; an explicit safe handler retry can also create another attempt.
+An exception, timeout, cancellation or crash after the invocation marker commits
+has unknown effects and stops in dead-letter on finalization/recovery. This includes
+a crash before the handler actually starts. The dispatcher neither silently retries
+unknown effects nor promises unconditional at-least-once handler entry.
+
+The database requires the current event projection and delivery receipt to agree
+at transaction commit in both mutation directions. Completed receipts cannot be
+changed, removed or reopened. Finalization replay retains every original delivery
+identity, timestamp and digest. Migration preserves pending events and refuses
+attempted events without provable retained custody; it does not invent history.
+
+Drain is one project-scoped SQL snapshot. Pending, claimed and retryable counts are
+disjoint; invoked overlaps claimed, unsupported overlaps nonterminal states, and
+unresolved unknown invocation remains visible after dead-letter. Counts must not
+be summed as readiness. Database failure is an error, never zero work. Lifecycle
+release still requires the consuming owner's fence and feature obligation evidence.
+No concrete handler, public route, worker or broker transport is installed here.
 
 REV stages the audit and outbox rows for the Review decision after the reviewer
 operation and the applicable branch/submitter operation. Those rows share the

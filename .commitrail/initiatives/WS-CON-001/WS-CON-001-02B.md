@@ -33,14 +33,14 @@ Allowed files:
 - `backend/alembic/versions/0027_outbox_delivery_custody.py`, `alembic/env.py`,
   `app/db/models.py`: register and enforce the new custody records. Preserve the
   baseline and retained data; fail rather than invent unprovable claim history.
-- `backend/app/adapters/outbox.py`: explicit owner composition requiring the
+- `backend/app/adapters/outbox/__init__.py`: explicit owner composition requiring the
   AUTH preparation factory; no default, permissive adapter or runtime registry.
 - Focused `backend/tests/outbox/` contracts, PostgreSQL and recovery tests;
   `tests/test_outbox.py` affected raw-transition fixtures, obsolete persistence-only
   structure assertion and superseded dead-letter-reopening expectation;
   migration graph, exact schema/reset inventory, lane/ownership registrations
   and their exact tests where the new files/table require them.
-- `docs/spec_shared_outbox.md`, affected current capability/navigation and
+- `docs/spec_contribution_compensation.md`, affected current capability/navigation and
   architecture/specification documents, this record, and the AUTH-OUTBOX-02
   activation contract in `WS-AUTH-001/planning/PLAN.md`.
 
@@ -252,7 +252,7 @@ These are planned nodes, not executed evidence:
   phases with valid control, denial, wrong action/permission and phase/fact
   mismatch. Require zero phase writes; mismatched facts consume no authority.
   Reusing CLAIM preparation at INVOKE must fail the intended assertion.
-- `test_old_generation_cannot_invoke_or_finalize_successor`: expire gen1 before
+- `tests/outbox/test_recovery_postgresql.py::test_old_generation_cannot_invoke_or_finalize_successor`: expire gen1 before
   invoke, finalize safe retry, commit gen2, then reject both gen1 operations
   before consumption without changing gen2. Mutation removing generation
   comparison must fail against these otherwise valid controls.
@@ -304,6 +304,11 @@ L1: bounded shared delivery, concurrency, authorization consumption and retained
 database evidence. Required focused tracks: security/architecture/reuse, QA/test
 delta, CI integrity, documentation and operational recovery. Plan review precedes
 implementation; final review uses a clean frozen target and shared verification.
+This cohesive change exceeds the default 500-line L1 guideline because the one
+operation needs SQL guards, migration preservation, concurrency/crash proof and
+replacement of affected persistence-only tests together. Splitting the schema
+from its sole writer/proof would leave an unusable boundary. Public activation,
+feature handlers and broker wiring remain separate.
 The custody record is justified by erased lease facts and missing exact outcomes;
 do not add additional frameworks or tables for hypothetical future integrations.
 

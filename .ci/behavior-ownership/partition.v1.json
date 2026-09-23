@@ -33,6 +33,10 @@
       "target": "backend/app/adapters/auth/metrics.py"
     },
     {
+      "group": "shared",
+      "target": "backend/app/adapters/outbox/__init__.py"
+    },
+    {
       "group": "lifecycle",
       "target": "backend/app/adapters/project_agents/openai_agent_sdk.py"
     },
@@ -798,7 +802,23 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/modules/outbox/api.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/outbox/delivery.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/outbox/delivery_repository.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/modules/outbox/models.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/outbox/registry.py"
     },
     {
       "group": "shared",
@@ -1341,7 +1361,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "85e32ab897d7602bd501d1b29621a773db8bdc2407c51cdfceef85820b0404f1",
+  "authority_digest": "5a13ccc43af9eaa2743751c3dfe8294973c0bc5ea4896ce5e7cf00921892636c",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

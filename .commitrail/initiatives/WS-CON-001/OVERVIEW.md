@@ -9,8 +9,8 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   immutable ContributionRecords and optional
   project-policy-driven compensation awards without coupling lifecycle truth to
   an economic provider.
-- Next usable boundary: CON-02B shared committed claims after delivered
-  AUTH-OUTBOX-01 unavailable dispatcher contract, then AUTH-OUTBOX-02 activation.
+- Next usable boundary: AUTH-OUTBOX-02 live authority/audit binding and worker
+  integration after delivered AUTH-OUTBOX-01 contract and CON-02B hidden delivery.
   Downstream work remains ARCH-03B assignment invalidation and ARCH-03C authority/public activation, after
   completed ARCH-03B8 hidden task audit evidence and ARCH-03B7 requirements projections and ARCH-03B6 locked-context projections and ARCH-03B5 current work context and ARCH-03B4 hidden contributor/management task detail, ARCH-03B3 hidden management/operational queues and ARCH-03B2 contributor-ready queue facts, ARCH-03B1 detached metadata and CP08 lineage
   and minimal writers, ARCH-03A internal guide context,
@@ -71,7 +71,7 @@ the hidden policy behavior.
 
 ## CON-02B current dispatcher contract
 
-Disposition: Planned. Risk: L1. Consume
+Disposition: Complete. Risk: L1. Consume
 [AUTH OUTBOX-01/02](../WS-AUTH-001/planning/PLAN.md#ws-auth-001-outbox-01--unavailable-dispatcher-contract).
 The [current bounded record](WS-CON-001-02B.md) reconciles hidden claim/lease
 fencing, committed attempt/outcome custody, typed handler contracts,
@@ -80,7 +80,7 @@ the existing outbox rows and caller-session append service; do not implement
 contribution, compensation, checker, TASK or provider behavior here.
 Allowed files include the shared outbox module, its custody migration and explicit
 composition, bounded options and focused tests/docs. Each handler receives immutable
-event/claim facts, validates the committed claim through a public port and
+event/claim facts, observes committed invocation through a public port and
 returns a typed outcome without mutating outbox rows. Commit claim before
 handler invocation; hold no row lock across handler/provider I/O.
 
