@@ -65,7 +65,9 @@ validation, assignment release, replay and a same-transaction OUTBOX fence.
 Shared dispatch authority is delivered by AUTH-OUTBOX-02. Live reconciliation
 still requires this exact feature AUTH activation and producer wiring. Originating authority changes
 stage exact per-assignment events atomically through bounded actor/project
-fan-out. Capture original assignment IDs through a nonlocking TASK owner
+fan-out. Publish only from the originating mutation transaction; never backfill
+or dispatch retained invalidation rows. Pre-repair transaction-start timestamps
+cannot establish assignment/cause chronology. Capture original assignment IDs through a nonlocking TASK owner
 projection while AUTH locks serialize claim; never acquire TASK locks after
 AUTH locks. Enforce prefork worker/routing topology before the first production
 handler registration. Every foreground claim/start/

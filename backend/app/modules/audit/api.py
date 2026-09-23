@@ -4,7 +4,7 @@ from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict
 
 
 class AssignmentInvalidationCause(StrEnum):
@@ -20,6 +20,7 @@ class AuthorityInvalidationFacts(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
     invalidation_event_id: UUID
     cause_event_id: UUID
+    recorded_at: AwareDatetime
     contributor_id: UUID
     cause: AssignmentInvalidationCause
     target_id: UUID

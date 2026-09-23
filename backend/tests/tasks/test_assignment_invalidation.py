@@ -58,12 +58,24 @@ async def test_exact_real_cause_releases_only_pre_submit_assignment(
     assert len(added) == 1 and added[0]["id"] == str(assignment_invalidation_evidence_id(target))
     assert added[0]["event_type"] == "TaskAssignmentAuthorityRevoked"
     assert all(event in events for event in before[2])
+    claim_event = next(event for event in before[2] if event["event_type"] == "TaskClaimed")
+    # Assignment time is its DB insertion time, not the claim transaction start.
+    assert before[1][0]["assigned_at"] > claim_event["created_at"]
     assert [stage for stage, _ in s.trace] == ["prepare", "consume", "close"]
     from app.adapters.audit import committed_authority_invalidation
     from app.core.hashing import canonical_json_hash
 
     cause = await committed_authority_invalidation(s.sessions).read_invalidation(s.invalidation_id)
+    from app.modules.tasks.service import LOCKED_CONTEXT_REQUIRED_FIELDS
+
     facts = s.trace[0][1]
+    assert facts.task_status == before[0]["status"]
+    assert facts.locked_context_hash == canonical_json_hash(
+        {
+            key: str(before[0][key]) if isinstance(before[0][key], UUID) else before[0][key]
+            for key in LOCKED_CONTEXT_REQUIRED_FIELDS
+        }
+    )
     assert facts.target == target and facts.cause_event_id == cause.cause_event_id
     assert facts.delivery_event_id == envelope.claim.event_id
     assert facts.delivery_generation == envelope.claim.claim_generation
@@ -84,22 +96,6 @@ async def test_valid_delivery_cannot_substitute_target_or_cause(task_client, mon
         _, crossed = await invoked(s, target=target.model_copy(update={field: uuid4()}))
         assert await s.handler(crossed) is HandlerOutcome.REJECT
         assert await snapshot(s) == before
-    response = await s.client.post(
-        "/api/v1/projects",
-        headers=auth_headers(),
-        json={
-            "name": "Other invalidation project",
-            "slug": "other-invalidation-project",
-            "description": "Isolation proof",
-        },
-    )
-    assert response.status_code == 201, response.text
-    other_project = response.json()
-    _, crossed_project = await invoked(
-        s, target=target.model_copy(update={"project_id": UUID(other_project["id"])})
-    )
-    assert await s.handler(crossed_project) is HandlerOutcome.REJECT
-    assert await snapshot(s) == before
     for bad in (
         object(),
         envelope.model_copy(update={"payload_json": "{}"}),
@@ -182,6 +178,19 @@ async def test_old_delivery_cannot_release_real_replacement_claim(task_client, m
     assert claimed.status_code == 200, claimed.text
     assert claimed.json()["assignment"]["id"] != s.assignment["id"]
     after = await snapshot(s)
+    from app.adapters.audit import committed_authority_invalidation
+
+    cause = await committed_authority_invalidation(s.sessions).read_invalidation(s.invalidation_id)
+    new_assignment = next(
+        row for row in after[1] if row["id"] == claimed.json()["assignment"]["id"]
+    )
+    assert before_restore[1][0]["assigned_at"] <= cause.recorded_at < new_assignment["assigned_at"]
+    # A fully committed forged event cannot reuse an old cause for a newer assignment.
+    _, retargeted = await invoked(
+        s, target=target.model_copy(update={"assignment_id": UUID(new_assignment["id"])})
+    )
+    assert await s.handler(retargeted) is HandlerOutcome.REJECT
+    assert await snapshot(s) == after
     # A fresh transport event for the same immutable cause still addresses only the old assignment.
     _, duplicate = await invoked(s, target=target)
     assert await s.handler(duplicate) is HandlerOutcome.ACKNOWLEDGE

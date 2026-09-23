@@ -5,7 +5,15 @@ from uuid import UUID
 
 from app.modules.audit.api import AssignmentInvalidationCause, AuthorityInvalidationFacts
 from app.modules.audit.repository import AuditRepository
-from app.modules.audit.schemas import AuthorityAuditEventInput, AuthorityEventType
+from app.modules.audit.schemas import AuthorityAuditEventInput, AuthorityEventType, PermissionId
+
+
+_CAUSE_PERMISSIONS = {
+    AuthorityEventType.PROJECT_ROLE_GRANT_REVOKED: PermissionId.PROJECT_ROLE_GRANT_MANAGE,
+    AuthorityEventType.ACTOR_PROFILE_SUSPENDED: PermissionId.ACTOR_PROFILE_SUSPEND,
+    AuthorityEventType.ACTOR_PROFILE_DEACTIVATED: PermissionId.ACTOR_PROFILE_DEACTIVATE,
+    AuthorityEventType.ACTOR_IDENTITY_LINK_REVOKED: PermissionId.ACTOR_IDENTITY_LINK_REVOKE,
+}
 
 
 def _validated(row):
@@ -52,6 +60,9 @@ def _project(invalidation_row, cause_row):
         or cause.target_ref_id != cause.resource_id
         or cause.target_ref_kind != cause.resource_type
     ):
+        return None
+    expected_permission = _CAUSE_PERMISSIONS.get(cause.event_type)
+    if expected_permission is None or cause.permission_id is not expected_permission:
         return None
     actor_id = UUID(cause.target_actor_ref)
     project_id = None
@@ -113,6 +124,7 @@ def _project(invalidation_row, cause_row):
     return AuthorityInvalidationFacts(
         invalidation_event_id=invalidation.event_id,
         cause_event_id=cause.event_id,
+        recorded_at=invalidation_row.created_at,
         contributor_id=actor_id,
         cause=kind,
         target_id=UUID(cause.resource_id),

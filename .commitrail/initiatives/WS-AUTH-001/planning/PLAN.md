@@ -19,12 +19,13 @@ AUTH-13/14 cutovers are not additional implementation work.
   contributor/management detail are delivered. ARCH-03B5 replaces the existing
   authorized work-context responses with distinct current task facts and exact
   locked policy references.
-  ARCH-03B projections through 03B8 are complete. Dependency-gated assignment
-  invalidation and ARCH-03C exact authority and HTTP exposure remain pending.
+  ARCH-03B projections through 03B8 are complete. Hidden exact assignment
+  invalidation is delivered by 03B9; ARCH-03C exact feature authority, atomic
+  originating producer wiring, registration and HTTP exposure remain pending.
 - CP05 owns exact ContributionPolicy-action activation after merged CP04B.
 - CP08 delivered the minimal lineage writers. ARCH-03B8 hidden task audit
-  evidence is complete; dependency-gated assignment invalidation remains in
-  ARCH-03B. ARCH-03C owns exact authority and public activation.
+  evidence and 03B9 hidden assignment invalidation are complete. ARCH-03C owns
+  exact feature authority, originating-transaction event production and public activation.
   [AUTH-13 is superseded](chunks/WS-AUTH-001-13-task-assignment-cutover.md).
 - ARCH-04D alone activates post-submit materialization/output and CHECKERS
   execution/finalization after ARCH-04B/04B2/04C; historical AUTH-14 and XINT-06B
@@ -45,7 +46,7 @@ replaces contributor claim/start/work-context authority, adds separate managemen
 context and reasoned system-Operator start, and removes self-activated eligibility
 and public JSON-packet Submission creation. Admission-backed creation stays hidden.
 ARCH-03B/03C must reuse these exact actions and command owners while completing
-public access/authority cutover and durable invalidation; CP08
+public access/authority cutover and live wiring for delivered hidden invalidation; CP08
 already delivered ContributionPolicyVersion lineage. Do not restore eligibility
 or register replacement aliases.
 
@@ -61,28 +62,24 @@ Pure facts bind the exact event/project, payload digest, generation, worker owne
 UTC lease and claim/invoke/finalize phase. Finalize additionally binds the exact
 OUTBOX-owned outcome digest. The nominal preparation/consume interface uses the
 existing public decision type and rejects handle copying/serialization. It has
-no live implementation. CON-02B supplies persisted claim/lease/recovery mechanics;
-OUTBOX-02 supplies fresh authority and exact facts/session/root-transaction checks
+a live implementation delivered by OUTBOX-02. CON-02B supplies persisted
+claim/lease/recovery mechanics; OUTBOX-02 supplies fresh authority and exact facts/session/root-transaction checks
 for each phase. No handle survives commit, lease wait or handler/provider I/O.
 The existing protected permission catalogue exposes metadata only; no human role
 or effective action gains dispatcher authority.
 
 ## WS-AUTH-001-OUTBOX-02 — exact dispatcher activation
 
-Disposition: Planned. L1. Depends on OUTBOX-01 and the exact hidden CON-02B
-mechanics. Allow AUTH evaluator/composition/parity and integration proof,
-plus the atomic authorization binding of delivery custody: audit resource/action
-vocabulary, exact phase/resource/actor/project matching guards and decision
-foreign keys. CON-02B retains delivery facts only while dispatch is unavailable.
-Refuse preexisting attempts without provable authority; never backfill fictional
-audit evidence or delete retained data. Activate these bindings together with
-the live evaluator and production composition;
-prohibit outbox behavior rewrites or feature-handler authority. Activate only
-dispatcher mechanics after claim/lease/recovery proof. Prove provisioned and
-missing-identity cases, expiry/revocation, wrong event/generation, rollback,
-and denial of ART, CHECKERS and TASK actions. A registered handler separately
-obtains its own feature authority. Missing provisioning denies work, not app
-startup or the administrative provisioning route.
+Disposition: Complete. [Contract and proof](../WS-AUTH-001-OUTBOX02.md).
+The exact hidden CON-02B mechanics now use fixed-dispatcher authority,
+phase/resource/actor/project matching, immutable decision bindings and bounded
+prefork workers. Unprovable existing attempts are refused, with no fictional
+backfill or retained-data deletion. Production feature registration remains
+empty: each handler needs its own authorization. ARCH-03B9 supplies hidden
+assignment invalidation; ARCH-03C owns its real feature authority and atomic
+originating-transaction-only producer wiring. Never backfill or dispatch retained
+invalidation rows whose transaction-start timestamps do not prove mutation chronology.
+Missing dispatcher provisioning denies work, not startup or provisioning access.
 
 Both boundaries require focused architecture/security/QA review and affected
 CI/docs review. Human focus: a dispatcher can deliver a request but cannot

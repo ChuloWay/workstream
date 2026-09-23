@@ -84,6 +84,8 @@ class AssignmentInvalidationOperation:
         assignment = await self._repo.lock_invalidation_assignment(target)
         if assignment is None:
             return HandlerOutcome.REJECT
+        if assignment.assigned_at > cause.recorded_at:
+            return HandlerOutcome.REJECT
         prior = await self._audit.read_release(target)
         if prior is not None:
             if (

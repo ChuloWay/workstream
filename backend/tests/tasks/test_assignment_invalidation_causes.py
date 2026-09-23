@@ -81,6 +81,26 @@ async def test_reader_rejects_mixed_and_malformed_real_cause_chain(task_client, 
                 index,
                 tuple(changes),
             )
+    from app.modules.audit.schemas import PermissionId
+
+    wrong_permission = (
+        PermissionId.ACTOR_PROFILE_SUSPEND.value
+        if kind == "deactivate"
+        else PermissionId.ACTOR_PROFILE_DEACTIVATE.value
+    )
+    # Corrupt both rows so their equality cannot reject before exact event/permission binding.
+    altered = deepcopy(originals)
+    for row in altered:
+        row["permission_id"] = wrong_permission
+
+    async def wrong_permission_chain(owner, event_id):
+        return tuple(SimpleNamespace(**row) for row in altered)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(AuditRepository, "invalidation_chain", wrong_permission_chain)
+        assert await reader.read_invalidation(s.invalidation_id) is None
+    assert control.recorded_at == originals[0]["created_at"]
+    assert control.recorded_at.utcoffset() is not None
     assert await reader.read_invalidation(s.invalidation_id) == control
 
 
@@ -155,3 +175,62 @@ async def test_reactivation_event_is_not_a_release_cause(task_client, monkeypatc
     before = await snapshot(s)
     assert await s.handler(envelope) is HandlerOutcome.REJECT
     assert await snapshot(s) == before and s.trace == []
+
+
+@pytest.mark.parametrize("mismatch", ["project", "contributor"])
+async def test_committed_cause_cannot_target_another_valid_assignment(
+    task_client, monkeypatch, mismatch
+):
+    from app.modules.tasks.api.assignment_invalidation import AssignmentInvalidationTarget
+    from tests.test_tasks import (
+        create_active_project,
+        create_ready_task,
+        admit_and_grant_project_submitter,
+    )
+
+    s = await setup_assignment(task_client, monkeypatch)
+    set_dev_actor(monkeypatch, roles="project_manager", subject="project-manager-subject")
+    project = (
+        await create_active_project(s.client, slug="other-cause-project")
+        if mismatch == "project"
+        else s.project
+    )
+    task = await create_ready_task(s.client, project["id"])
+    grant = await admit_and_grant_project_submitter(
+        s.client,
+        monkeypatch,
+        project["id"],
+        "invalidation-submitter" if mismatch == "project" else "other-cause-contributor",
+    )
+    assert grant["grant_id"] != s.grant["grant_id"]
+    assert (grant["actor_profile_id"] == s.grant["actor_profile_id"]) is (mismatch == "project")
+    claimed = await s.client.post(f"/api/v1/tasks/{task['id']}/claim", headers=auth_headers())
+    assert claimed.status_code == 200, claimed.text
+    assignment = claimed.json()["assignment"]
+    # Both real assignments predate the cause, so chronology cannot mask correlation.
+    await revoke(s, "grant" if mismatch == "project" else "suspend")
+    target = AssignmentInvalidationTarget(
+        project_id=UUID(project["id"]),
+        task_id=UUID(task["id"]),
+        assignment_id=UUID(assignment["id"]),
+        contributor_id=UUID(grant["actor_profile_id"]),
+        authority_invalidation_event_id=s.invalidation_id,
+    )
+    _, envelope = await invoked(s, target=target)
+    foreign = SimpleNamespace(
+        **{**vars(s), "task": task, "assignment": assignment, "project": project}
+    )
+    before, original_before = await snapshot(foreign), await snapshot(s)
+    cause = await committed_authority_invalidation(s.sessions).read_invalidation(s.invalidation_id)
+    assert cause is not None and before[1][0]["assigned_at"] <= cause.recorded_at
+    assert (
+        before[0]["status"] == "claimed" and before[0]["assigned_to"] == grant["actor_profile_id"]
+    )
+    assert before[1][0]["status"] == "active" and before[1][0]["released_at"] is None
+    assert await s.h.delivery.observe_invocation(envelope) is not None
+    assert await s.handler(envelope) is HandlerOutcome.REJECT
+    assert await snapshot(foreign) == before and await snapshot(s) == original_before
+    assert s.trace == []
+    _, valid = await invoked(s)
+    assert await s.handler(valid) is HandlerOutcome.ACKNOWLEDGE
+    assert await snapshot(foreign) == before

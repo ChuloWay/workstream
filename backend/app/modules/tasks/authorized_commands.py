@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -138,6 +139,9 @@ class AuthorizedTaskCommands:
                         submitter_contribution_policy_version_id=task.locked_contribution_policy_version_id,
                         contributor_id=str(self._actor_id),
                         assigned_by=str(self._actor_id),
+                        # Claim insertion follows live AUTH consumption; transaction
+                        # start time cannot establish invalidation chronology.
+                        assigned_at=func.clock_timestamp(),
                         accepted_at=datetime.now(UTC),
                         status="active",
                     )

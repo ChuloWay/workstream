@@ -6,11 +6,11 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Row, and_, case, select, text, tuple_
+from sqlalchemy import Row, and_, case, func, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.modules.audit.schemas import LifecycleAuditEventType
+from app.modules.audit.schemas import AuthorityEventType, LifecycleAuditEventType
 from app.modules.tasks.models import AuditEvent, WorkstreamTask
 
 
@@ -88,6 +88,9 @@ class AuditRepository:
         """Persist an authority event already validated by AuditService."""
         if event.event_domain != "authority":
             raise ValueError("expected authority audit event")
+        if event.event_type == AuthorityEventType.AUTHORITY_INVALIDATION_REQUESTED.value:
+            # Record mutation time after AUTH locks, not the transaction's start.
+            event.created_at = func.clock_timestamp()
         return await self._persist(event)
 
     async def get_authority_event(self, event_id: str) -> AuditEvent | None:

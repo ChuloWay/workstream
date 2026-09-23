@@ -64,6 +64,13 @@ cause and complete invocation; they do not import other owners' public types.
 Keep production unavailable until the exact
 fixed-service implementation and originating event wiring land in 03C.
 
+New claim insertion and invalidation recording stamp the existing `assigned_at`
+and `created_at` fields from PostgreSQL `clock_timestamp()` after AUTH locks,
+not transaction-start `now()`. AUDIT exposes an aware immutable `recorded_at`;
+TASK requires the exact assignment to have existed by that instant. Existing
+retained timestamps are not rewritten. ARCH-03C publishes only originating
+mutations and must not backfill or dispatch retained invalidation rows.
+
 Serialize on TASK then its exact assignment. Only a consistent active assignment
 on a claimed/in-progress task with no Submission may become authority_revoked;
 clear assigned_to and return the task to ready without changing locked policy
@@ -91,7 +98,8 @@ after the fence. Shared dispatch releases its locks before handler execution
 and never acquires TASK locks; future AUTH producers must not acquire TASK locks.
 
 AUDIT projects the immutable invalidation and its exact cause together, validating
-domain/source/version, direction, actor, cause identity and role-specific scope.
+domain/source/version, direction, actor, cause identity, exact event permission
+and role-specific scope.
 No ORM object or private AUTH model crosses this boundary. Release evidence uses
 the closed `TaskAssignmentAuthorityRevoked` lifecycle event and exact project,
 task, assignment, authorization-decision and authority-invalidation references.
@@ -107,7 +115,8 @@ REJECT. RETRY is allowed only after a positively known rollback-safe failure;
 uncertain failures propagate to shared UNKNOWN handling.
 
 Exact implementation paths: TASK `api/assignment_invalidation.py`,
-`assignment_invalidation.py`, `repository.py`; AUDIT `api.py`,
+`assignment_invalidation.py`, `repository.py`, and the existing claim writer
+`authorized_commands.py` for its DB insertion timestamp; AUDIT `api.py`,
 `invalidation.py`, `repository.py`, `schemas.py`; OUTBOX `api.py`, `delivery.py`,
 `delivery_repository.py`; owner composition `adapters/tasks/__init__.py`,
 `adapters/audit/__init__.py`, `adapters/outbox/__init__.py`; tests under
@@ -181,3 +190,12 @@ PostgreSQL/AUTH cause and shared dispatcher evidence.
   must enforce the prefork worker/routing topology required by AUTH-OUTBOX-02.
 - Remaining risks: Real fixed-service feature authority and atomic producer
   fan-out are deferred to 03C; this hidden PR cannot claim their runtime proof.
+
+Implementation review closed two unsafe assumptions: an original cause cannot
+be reused for a later assignment merely because actor/project match, and equal
+permissions on two audit rows do not prove the permission is canonical for that
+cause. The repair binds DB mutation chronology and exact cause permissions.
+Correlation regressions use valid alternate assignments so unrelated lookup
+guards cannot mask the intended project/actor checks; authority facts assert
+stored status and the full locked-policy digest. Current adopted planning maps
+are reconciled with delivered dispatcher mechanics and hidden invalidation.

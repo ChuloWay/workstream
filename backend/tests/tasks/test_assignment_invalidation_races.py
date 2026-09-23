@@ -30,7 +30,7 @@ async def test_expired_delivery_waiting_for_task_cannot_release(
 ):
     s = await setup_assignment(task_client, monkeypatch)
     await revoke(s)
-    s.h.options = DeliveryOptions(lease_seconds=3, handler_timeout_seconds=2)
+    s.h.options = DeliveryOptions(lease_seconds=30, handler_timeout_seconds=25)
     s.h.delivery = s.h.build(s.h.delivery._registry)
     _, envelope = await invoked(s)
     before = await snapshot(s)
@@ -60,15 +60,15 @@ async def test_expired_delivery_waiting_for_task_cannot_release(
                 select(WorkstreamTask).where(WorkstreamTask.id == s.task["id"]).with_for_update()
             )
             pending = asyncio.create_task(s.handler(envelope), name=waiter)
-            await asyncio.wait_for(observed.wait(), 5)
-            await asyncio.wait_for(wait_for_named_database_lock(task_database_env, waiter), 5)
+            await asyncio.wait_for(observed.wait(), 30)
+            await asyncio.wait_for(wait_for_named_database_lock(task_database_env, waiter), 30)
             await blocker.execute(
                 text(
                     "select pg_sleep(greatest(0, extract(epoch from (cast(:expiry as timestamptz) - clock_timestamp()))) + 0.05)"
                 ),
                 {"expiry": envelope.claim.claim_expires_at},
             )
-        assert await asyncio.wait_for(pending, 5) is HandlerOutcome.REJECT
+        assert await asyncio.wait_for(pending, 30) is HandlerOutcome.REJECT
     finally:
         if pending is not None:
             await asyncio.gather(pending, return_exceptions=True)

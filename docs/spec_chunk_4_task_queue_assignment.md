@@ -346,7 +346,11 @@ Each `TaskAssignmentAuthorityInvalidationRequested` event (protocol version 1)
 addresses one original project/task/assignment/contributor and one immutable AUTH
 invalidation event. AUDIT verifies the linked cause: Submitter grant revocation,
 profile suspension/deactivation or identity-link revocation. Reviewer/admin
-changes and reactivation are not assignment-release causes.
+changes and reactivation are not assignment-release causes. Each cause must
+carry its canonical AUTH permission. The locked assignment must predate the
+invalidation's recorded mutation time. New claims and invalidations stamp their
+existing timestamps using PostgreSQL's clock after AUTH locks, so a transaction
+started earlier cannot make a replacement assignment appear eligible.
 
 OUTBOX first independently verifies the complete committed invocation envelope.
 The effect transaction locks TASK, its exact assignment, feature authority, then
@@ -371,7 +375,8 @@ Malformed targets/causes and denied authority reject; uncertain effects remain
 shared OUTBOX `UNKNOWN`, without automatic reinvocation.
 
 ARCH-03C must publish bounded actor-wide/project fan-out atomically with the AUTH
-mutation, capturing exact assignment IDs through a nonlocking TASK projection
+mutation. It must not backfill or dispatch retained invalidation rows: their
+transaction-start timestamps do not establish mutation chronology. Capture exact assignment IDs through a nonlocking TASK projection
 while authority locks serialize claim. Producers must not acquire TASK locks
 after AUTH locks. First production registration must also enforce the required
 prefork worker/routing topology. Hidden positive feature-authority tests use a

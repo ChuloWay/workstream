@@ -169,6 +169,9 @@ async def revoke(s, kind="grant"):
             }[kind]
         )
         assert invalidation.after_facts["effective"] is False
+        # The cause retains the transaction-start default; invalidation records
+        # actual DB mutation time after authority locks, strictly later.
+        assert invalidation.created_at > cause.created_at
         s.invalidation_id = UUID(invalidation.id)
     return s.invalidation_id
 
