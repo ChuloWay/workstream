@@ -19,6 +19,9 @@ It clears worker/lease facts on finalization and retains no outcome digest, so
 its current row alone cannot prove an exact finalization replay. Add the minimum
 per-event/generation custody record to preserve those facts. Current business
 policy and submission versions are unrelated to this storage change.
+Existing event projection and new custody must agree at transaction commit;
+deferred constraints protect both mutation directions, not only normal service
+writes. A completed custody outcome remains immutable.
 
 ## Scope and reconciliation
 
@@ -88,7 +91,13 @@ provable custody stop migration; migration must not create fictional evidence.
 
 Use database time for eligibility, leases and retry scheduling. The existing
 event trigger forbids `claimed -> claimed`; recovery finalizes an expired claim
-to retry/dead-letter and only then permits a new generation. Attempt exhaustion
+that was never invoked to retry/dead-letter and only then permits a new generation.
+An expired or interrupted invocation has unknown effects: record
+`INVOKE_OUTCOME_UNKNOWN`, dead-letter it and retain unresolved-invocation evidence.
+Do not automatically invoke it again or clear its uncertainty. Only an explicit
+typed retry outcome from the handler, or expiry before invocation, permits an
+automatic retry. Future authorized reconciliation owns unknown-effect recovery.
+Attempt exhaustion
 is bounded by the existing integer storage range and configured retry budget.
 Same-generation outcome replay compares the exact stored outcome and returns
 the original receipt; substituted facts/outcomes fail closed.
