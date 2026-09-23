@@ -83,7 +83,8 @@ existing UNKNOWN handling, without automatic uncertain-effect repetition.
   `backend/scripts/behavior_ownership.py` and its tests for exact new module
   registrations, `.ci/behavior-ownership/partition.v1.json` and digest; this record,
   adopted 03C contract, ARCH/AUTH/CON/POL overview navigation, `.commitrail/INDEX.md`,
-  current README, TASK/AUTH architecture/operating docs and `docs/roadmap_status.md`.
+  current README, TASK/AUTH architecture/operating docs,
+  `docs/engineering/authorization_activation_custody.md` and `docs/roadmap_status.md`.
 - Current ARCH `planning/PLAN.md`, `planning/CHUNK_MAP.md` and adopted 03B parent
   contract; AUTH `planning/PLAN.md`, POL `planning/CHUNK_MAP.md`, and
   `docs/operations_project_operating_manual.md` to reconcile completed authority
