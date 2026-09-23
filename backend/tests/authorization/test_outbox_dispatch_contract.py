@@ -1,4 +1,4 @@
-"""Proof of planned dispatcher registration, exact facts and restricted identity."""
+"""Proof of exact dispatcher registration, exact facts and restricted identity."""
 
 from copy import copy, deepcopy
 from dataclasses import FrozenInstanceError, replace
@@ -39,19 +39,18 @@ def facts(phase=OutboxDispatchPhase.CLAIM):
     )
 
 
-def test_dispatch_registration_is_exact_and_unavailable():
-    """Register only the planned pair, with no human or foreign feature rights."""
+def test_dispatch_registration_is_exact_and_active():
+    """Activate only the fixed pair, with no human or foreign feature rights."""
     definition = ACTION_BY_ID[ActionId.OUTBOX_DISPATCH]
     assert (definition.permission_id, definition.owner, definition.availability) == (
-        PermissionId.OUTBOX_DISPATCH, ActionOwner.AUTH_OUTBOX_01, ActionAvailability.PLANNED,
+        PermissionId.OUTBOX_DISPATCH, ActionOwner.AUTH_OUTBOX_01, ActionAvailability.ACTIVE,
     )
     assert SERVICE_ACTIONS_BY_IDENTITY[ServiceIdentity.OUTBOX_DISPATCHER] == {ActionId.OUTBOX_DISPATCH}
     assert ActionId.OUTBOX_DISPATCH not in FUTURE_INTENT_REQUIRED_ACTIONS
     assert all(PermissionId.OUTBOX_DISPATCH not in permissions for permissions in ADMIN_ROLE_PERMISSIONS.values())
     assert all(ActionId.OUTBOX_DISPATCH not in actions for identity, actions in SERVICE_ACTIONS_BY_IDENTITY.items()
                if identity is not ServiceIdentity.OUTBOX_DISPATCHER)
-    with pytest.raises(ValueError, match='not active'):
-        resolve_executable_action(ActionId.OUTBOX_DISPATCH)
+    assert resolve_executable_action(ActionId.OUTBOX_DISPATCH) is definition
     rows = dict(SERVICE_ACTIONS_BY_IDENTITY)
     rows[ServiceIdentity.OUTBOX_DISPATCHER] |= {ActionId.ARTIFACT_VERIFICATION_EXECUTE}
     with pytest.raises(RuntimeError, match='matrix row mismatch'):
@@ -154,7 +153,7 @@ def test_dispatch_prepared_contract_is_nominal_and_process_local():
 
 @pytest.mark.asyncio
 async def test_dispatch_service_admission(clean_postgres_database):
-    """Real persisted identities distinguish unavailable and foreign-action denial."""
+    """Real persisted identities distinguish missing provisioning and foreign-action denial."""
     engine = create_async_engine(clean_postgres_database)
     try:
         async with async_sessionmaker(engine, expire_on_commit=False)() as session:
@@ -183,12 +182,12 @@ async def test_dispatch_service_admission(clean_postgres_database):
             assert all(p.status == link.status == 'active' and p.actor_kind == link.subject_kind == 'service'
                        for p, link in rows)
             assert SERVICE_ACTIONS_BY_IDENTITY[ServiceIdentity.OUTBOX_DISPATCHER] == {ActionId.OUTBOX_DISPATCH}
-            assert ACTION_BY_ID[ActionId.OUTBOX_DISPATCH].availability is ActionAvailability.PLANNED
-            with pytest.raises(PreparedAuthorizationUnsupported) as planned:
-                await admit(ServiceIdentity.OUTBOX_DISPATCHER, ActionId.OUTBOX_DISPATCH)
-            assert planned.value.denial_code is AuthorizationDenialCode.PERMISSION_NOT_GRANTED
+            assert ACTION_BY_ID[ActionId.OUTBOX_DISPATCH].availability is ActionAvailability.ACTIVE
+            dispatcher = await admit(ServiceIdentity.OUTBOX_DISPATCHER, ActionId.OUTBOX_DISPATCH)
+            assert dispatcher.service_identity is ServiceIdentity.OUTBOX_DISPATCHER
             active_foreign = {action for actions in SERVICE_ACTIONS_BY_IDENTITY.values() for action in actions
-                              if ACTION_BY_ID[action].availability is ActionAvailability.ACTIVE}
+                              if ACTION_BY_ID[action].availability is ActionAvailability.ACTIVE
+                              and action is not ActionId.OUTBOX_DISPATCH}
             assert ActionId.ARTIFACT_VERIFICATION_EXECUTE in active_foreign
             for action in active_foreign:
                 assert action not in SERVICE_ACTIONS_BY_IDENTITY[ServiceIdentity.OUTBOX_DISPATCHER]
@@ -211,3 +210,23 @@ def test_service_identity_alias_is_removed():
             assert obsolete not in path.read_text(), path
     for path in (root/'.ci/auth-boundaries/IMPORT_LEDGER.md', root/'.ci/module-boundaries/private-edge-debt.v1.json'):
         assert obsolete not in path.read_text(), path
+
+
+@pytest.mark.parametrize("field", ["resource_type", "resource_id", "scope_project_id"])
+def test_outbox_resource_rejects_selector_substitution(field):
+    from app.modules.authorization.domain.outbox_dispatch import outbox_dispatch_resource
+    resource = outbox_dispatch_resource(facts())
+    data = {**resource.model_dump(), "facts": resource.facts}
+    assert type(resource).model_validate(data) == resource
+    data[field] = "project" if field == "resource_type" else uuid4()
+    with pytest.raises(ValueError):
+        type(resource).model_validate(data)
+
+
+@pytest.mark.parametrize("value", [{}, {"outbox_dispatch_digest": "bad"},
+    {"outbox_dispatch_digest": "sha256:" + "0"*64, "extra": True}])
+def test_prepared_dispatch_rejects_incomplete_or_extra_request_facts(value):
+    from app.modules.authorization.domain.outbox_dispatch import prepared_outbox_digest
+    assert prepared_outbox_digest(ActionId.ACTOR_PROFILE_READ_SELF, value, ValueError) is None
+    with pytest.raises(ValueError):
+        prepared_outbox_digest(ActionId.OUTBOX_DISPATCH, value, ValueError)

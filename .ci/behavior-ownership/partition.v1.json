@@ -462,6 +462,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/domain/outbox_dispatch.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/domain/post_policy.py"
     },
     {
@@ -535,6 +539,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/models.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/outbox_dispatch_authorization.py"
     },
     {
       "group": "auth",
@@ -1262,6 +1270,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/workers/outbox.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/workers/post_policy.py"
     },
     {
@@ -1357,7 +1369,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "75ca7560d1f9e191a23ec83e3ce3354a4ec936936b19db7843a959e127405321",
+  "authority_digest": "cdcb3ea870fac4fc6e5c0b9db189e587d67e7a0bfc17a9e677edb491e7de9dc7",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

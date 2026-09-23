@@ -7,6 +7,8 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 
 from app.core.hashing import canonical_json_hash
+from app.modules.authorization.api import OutboxDispatchFacts, OutboxDispatchPhase
+from tests.outbox.conftest import phase_decision
 from app.modules.outbox.api import FinalizationCause
 from app.modules.outbox.delivery import _encode, _outcome
 from app.modules.outbox.delivery_repository import DeliveryRepository, database_time
@@ -42,15 +44,19 @@ async def test_projection_and_receipt_commit_together(delivery_harness, side):
                         },
                     )
                 else:
+                    decision = await phase_decision(session, OutboxDispatchFacts(
+                        **claim.model_dump(), phase=OutboxDispatchPhase.FINALIZE,
+                        outcome_digest=canonical_json_hash(value),
+                    ))
                     await session.execute(
                         text(
                             "update outbox_delivery_attempts set stage='completed',outcome_json=:body,"
-                            "outcome_digest=:digest where event_id=:id"
+                            "outcome_digest=:digest,finalize_decision_event_id=:decision where event_id=:id"
                         ),
                         {
                             "id": claim.event_id,
                             "body": _encode(value),
-                            "digest": canonical_json_hash(value),
+                            "digest": canonical_json_hash(value), "decision": decision,
                         },
                     )
         attempt = await DeliveryRepository(session).attempt(claim)
@@ -128,26 +134,34 @@ async def test_invocation_requires_timestamp_not_sql_null(delivery_harness):
     async with h.factory() as session:
         with pytest.raises(DBAPIError, match="ck_outbox_delivery_attempts_stage_shape"):
             async with session.begin():
+                decision = await phase_decision(session, OutboxDispatchFacts(
+                    **claim.model_dump(), phase=OutboxDispatchPhase.INVOKE,
+                ))
                 await session.execute(
-                    text("update outbox_delivery_attempts set stage='invoked' where event_id=:id"),
-                    {"id": claim.event_id},
+                    text("update outbox_delivery_attempts set stage='invoked',invoke_decision_event_id=:decision where event_id=:id"),
+                    {"id": claim.event_id, "decision": decision},
                 )
         assert (await DeliveryRepository(session).attempt(claim)).stage == "claimed"
     assert await h.delivery._begin_invocation(claim)
 
 
-async def _write_paired_outcome(session, claim, value):
+async def _write_paired_outcome(session, claim, value, *, decision=None):
     """Write both valid projections so rejection must come from outcome custody."""
+    if decision is None:
+        decision = await phase_decision(session, OutboxDispatchFacts(
+            **claim.model_dump(), phase=OutboxDispatchPhase.FINALIZE,
+            outcome_digest=canonical_json_hash(value),
+        ))
     await session.execute(
         text(
             "update outbox_delivery_attempts set stage='completed',outcome_json=:body,"
-            "outcome_digest=:digest where event_id=:id and claim_generation=:generation"
+            "outcome_digest=:digest,finalize_decision_event_id=:decision where event_id=:id and claim_generation=:generation"
         ),
         {
             "id": claim.event_id,
             "generation": claim.claim_generation,
             "body": _encode(value),
-            "digest": canonical_json_hash(value),
+            "digest": canonical_json_hash(value), "decision": decision,
         },
     )
     await session.execute(
@@ -244,6 +258,11 @@ async def test_sql_claim_lease_is_bounded(delivery_harness):
         await session.rollback()
         with pytest.raises(DBAPIError, match="ck_outbox_delivery_attempts_lease"):
             async with session.begin():
+                decision = await phase_decision(session, OutboxDispatchFacts(
+                    phase=OutboxDispatchPhase.CLAIM, event_id=event.event_id, project_id=h.project,
+                    payload_digest=canonical_json_hash(event.payload), claim_generation=1,
+                    claim_owner="bounded", claimed_at=now, claim_expires_at=now+timedelta(seconds=3601),
+                ))
                 await session.execute(
                     text(
                         "update outbox_events set delivery_state='claimed',attempt_count=1,claim_generation=1,"
@@ -261,7 +280,7 @@ async def test_sql_claim_lease_is_bounded(delivery_harness):
                         claim_owner="bounded",
                         claimed_at=now,
                         claim_expires_at=now + timedelta(seconds=3601),
-                        stage="claimed",
+                        stage="claimed", claim_decision_event_id=decision,
                     )
                 )
                 await session.flush()
@@ -318,3 +337,94 @@ async def test_attempted_cancellation_rejects_without_changing_custody(delivery_
                 )
             )
         ).all() == []
+
+
+@pytest.mark.asyncio
+async def test_outbox_custody_allows_closed_sequence_and_denies_terminal_reopen(
+    delivery_harness,
+) -> None:
+    from app.modules.outbox.api import HandlerOutcome
+
+    h = delivery_harness
+    factory, project_id = h.factory, h.project
+    value = await h.append()
+    first = await h.delivery.claim(value.event_id, project_id, "worker:1")
+    h.result = HandlerOutcome.RETRY
+    await h.delivery.invoke(first)
+    async with factory() as session:
+        await session.execute(text("select pg_sleep(1.05)"))
+    second = await h.delivery.claim(value.event_id, project_id, "worker:2")
+    assert second.claim_generation == 2
+    h.result = HandlerOutcome.ACKNOWLEDGE
+    await h.delivery.invoke(second)
+    async with factory() as session:
+        with pytest.raises(DBAPIError, match="illegal outbox delivery transition"):
+            async with session.begin():
+                await session.execute(
+                    text(
+                        "update outbox_events set delivery_state='retryable', "
+                        "next_attempt_at=clock_timestamp(), finalized_at=null, "
+                        "last_error_code='RETRY_REQUESTED' where event_id=:id"
+                    ),
+                    {"id": value.event_id},
+                )
+        async with session.begin():
+            await session.execute(
+                text("update outbox_events set archived_at=clock_timestamp() where event_id=:id"),
+                {"id": value.event_id},
+            )
+        with pytest.raises(DBAPIError, match="archived outbox event is closed"):
+            async with session.begin():
+                await session.execute(
+                    text("update outbox_events set archived_at=null where event_id=:id"),
+                    {"id": value.event_id},
+                )
+
+
+@pytest.mark.asyncio
+async def test_outbox_dead_letter_reopen_rejects_and_safe_retry_preserves_claim_guards(
+    delivery_harness,
+) -> None:
+    from app.modules.outbox.api import HandlerOutcome
+
+    h = delivery_harness
+    factory, project_id = h.factory, h.project
+    terminal = await h.claim()
+    h.result = HandlerOutcome.REJECT
+    receipt = await h.delivery.invoke(terminal)
+    async with factory() as session:
+        with pytest.raises(DBAPIError, match="outbox outcome custody mismatch"):
+            async with session.begin():
+                await session.execute(text(
+                    "update outbox_events set delivery_state='retryable', "
+                    "next_attempt_at=clock_timestamp(), finalized_at=null where event_id=:id"
+                ), {"id": terminal.event_id})
+        row = (await session.execute(text(
+            "select delivery_state,claim_generation,last_error_code from outbox_events where event_id=:id"
+        ), {"id": terminal.event_id})).one()
+        assert tuple(row) == ("dead_letter", 1, "HANDLER_REJECTED")
+    from app.modules.outbox.api import FinalizationCause
+    assert await h.delivery.finalize(terminal, FinalizationCause.REJECT) == receipt
+    value = await h.append()
+    first = await h.delivery.claim(value.event_id, project_id, "worker:1")
+    h.result = HandlerOutcome.RETRY
+    await h.delivery.invoke(first)
+    async with factory() as session:
+        row = (await session.execute(text(
+            "select event_id,idempotency_key,attempt_count,claim_generation,delivery_state,last_error_code "
+            "from outbox_events where event_id=:id"
+        ), {"id": value.event_id})).one()
+        assert tuple(row) == (value.event_id, value.idempotency_key, 1, 1, "retryable", "RETRY_REQUESTED")
+        await session.rollback()
+        with pytest.raises(DBAPIError, match="outbox claim generation must increment once"):
+            async with session.begin():
+                await session.execute(
+                    text(
+                        "update outbox_events set delivery_state='claimed', attempt_count=2, "
+                        "claim_generation=2, next_attempt_at=null, claim_owner='worker:2', "
+                        "claimed_at=statement_timestamp(), last_attempt_at=statement_timestamp(), "
+                        "claim_expires_at=statement_timestamp()+interval '30 seconds', "
+                        "last_error_code='CHANGED_DURING_CLAIM' where event_id=:id"
+                    ),
+                    {"id": value.event_id},
+                )

@@ -1,49 +1,37 @@
-"""Explicit synthetic AUTH proof for hidden mechanics, never live authority."""
+"""Real provisioned dispatcher authority with bounded test observation hooks."""
 
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
 import pytest
 
-from app.modules.authorization.api.decisions import AuthorizationDecision, DecisionOutcome
+from app.adapters.auth import outbox_dispatch_authorization
+from app.modules.actors.models import ActorProfile, ActorIdentityLink
+from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.api.outbox_dispatch import PreparedOutboxDispatch
-from app.modules.outbox.api import DeliveryOptions, DeliveryUnavailable, HandlerOutcome
+from app.modules.outbox.api import DeliveryOptions, HandlerOutcome
 from app.adapters.outbox import outbox_delivery
 from app.modules.outbox.registry import HandlerRegistry
 from app.modules.outbox.service import OutboxService
 from tests.test_outbox import outbox_database_env, outbox_factory, _event  # noqa: F401
 
 
-class SyntheticPrepared(PreparedOutboxDispatch):
-    """Enforce exact facts and one consumption in the synthetic root transaction."""
+class TracedPrepared(PreparedOutboxDispatch):
+    """Observe actual PREP consumption; never manufacture a decision."""
 
-    def __init__(self, harness, session, facts):
-        self.harness, self.session, self.facts = harness, session, facts
-        self.transaction = session.get_transaction()
-        self.used = False
+    def __init__(self, harness, delegate):
+        self.harness, self.delegate = harness, delegate
 
     async def consume(self, facts):
-        if (
-            self.used
-            or facts != self.facts
-            or self.session.get_transaction() is not self.transaction
-        ):
-            raise DeliveryUnavailable("synthetic_authority_mismatch")
-        self.used = True
+        decision = await self.delegate.consume(facts)
         self.harness.consumed.append(facts)
         if self.harness.consume_hook:
             await self.harness.consume_hook(facts)
-        return AuthorizationDecision(
-            uuid4(),
-            self.harness.action,
-            self.harness.permission,
-            self.harness.outcome,
-            "denied" if self.harness.outcome is DecisionOutcome.DENY else None,
-        )
+        return decision
 
 
-class SyntheticPort:
-    """Labeled injected contract fixture; audit evidence is intentionally absent."""
+class TracedPort:
+    """Pre-PREP barriers keep real service locking feasible in race proofs."""
 
     def __init__(self, harness, session):
         self.harness, self.session = harness, session
@@ -54,7 +42,10 @@ class SyntheticPort:
         if self.harness.prepare_hook:
             await self.harness.prepare_hook(facts)
         checked = self.harness.substitute(facts) if self.harness.substitute else facts
-        yield SyntheticPrepared(self.harness, self.session, checked)
+        async with outbox_dispatch_authorization(self.session).prepare_outbox_dispatch(
+            facts=checked, request_id=request_id, correlation_id=correlation_id,
+        ) as prepared:
+            yield TracedPrepared(self.harness, prepared)
 
 
 class Harness:
@@ -64,8 +55,6 @@ class Harness:
         self.factory, self.project = factory, project
         self.prepared, self.consumed, self.handled = [], [], []
         self.prepare_hook = self.consume_hook = self.substitute = None
-        self.action = self.permission = "outbox.dispatch"
-        self.outcome = DecisionOutcome.ALLOW
         self.result = HandlerOutcome.ACKNOWLEDGE
         self.handler_hook = None
         self.options = DeliveryOptions(
@@ -76,7 +65,7 @@ class Harness:
     def build(self, registry=None):
         return outbox_delivery(
             self.factory,
-            authorization_factory=lambda session: SyntheticPort(self, session),
+            authorization_factory=lambda session: TracedPort(self, session),
             registry=registry
             if registry is not None
             else HandlerRegistry([("ContributionRecorded", 1, self.handle)]),
@@ -105,4 +94,26 @@ class Harness:
 @pytest.fixture
 async def delivery_harness(outbox_factory):  # noqa: F811 - pytest fixture injection
     factory, project = outbox_factory
-    return Harness(factory, project)
+    h = Harness(factory, project)
+    h.actor_id, h.link_id = uuid4(), uuid4()
+    async with factory() as session, session.begin():
+        session.add(ActorProfile(
+            id=str(h.actor_id), actor_kind="service", status="active",
+            provisioning_method="manual_service_provisioning",
+            service_identity=ServiceIdentity.OUTBOX_DISPATCHER.value, created_by=str(h.actor_id),
+        ))
+        await session.flush()
+        session.add(ActorIdentityLink(
+            id=str(h.link_id), actor_profile_id=str(h.actor_id), issuer="workstream.internal",
+            subject=ServiceIdentity.OUTBOX_DISPATCHER.value, subject_kind="service",
+            status="active", linked_by="workstream:system:bootstrap",
+        ))
+    return h
+
+
+async def phase_decision(session, facts):
+    """Real PREP evidence for direct-SQL tests of independent custody guards."""
+    async with outbox_dispatch_authorization(session).prepare_outbox_dispatch(
+        facts=facts, request_id=uuid4(), correlation_id=uuid4(),
+    ) as prepared:
+        return str((await prepared.consume(facts)).decision_id)

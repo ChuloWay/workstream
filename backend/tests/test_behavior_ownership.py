@@ -1987,3 +1987,19 @@ def test_outbox_delivery_partition_additions_are_exact():
         ownership._validate_additive_partition_transition(
             _partition(sorted([retained, *targets, "backend/app/modules/outbox/unreviewed.py"])), trusted,
         )
+
+
+def test_outbox_authority_partition_additions_are_exact():
+    retained = "backend/app/core/config.py"
+    targets = {
+        "backend/app/modules/authorization/domain/outbox_dispatch.py",
+        "backend/app/modules/authorization/outbox_dispatch_authorization.py",
+        "backend/app/workers/outbox.py",
+    }
+    assert ownership.AUTH_OUTBOX_02_TARGETS == targets
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(_partition(sorted([retained, *targets])), trusted)
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted([retained, *targets, "backend/app/workers/another_dispatcher.py"])), trusted,
+        )

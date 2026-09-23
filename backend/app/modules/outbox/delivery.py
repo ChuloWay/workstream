@@ -1,9 +1,10 @@
-"""Hidden claim/invoke/finalize owner with no live authority or worker wiring."""
+"""Canonical claim/invoke/finalize owner with exact phase authority custody."""
 
 from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 import json
 from uuid import UUID, uuid4
@@ -13,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.hashing import canonical_json_hash
 from app.modules.authorization.api.decisions import AuthorizationDecision, DecisionOutcome
+from app.modules.authorization.api.errors import AuthorizationBoundaryError
 from app.modules.authorization.api.outbox_dispatch import (
     OUTBOX_DISPATCH_ACTION,
     OUTBOX_DISPATCH_PERMISSION,
@@ -23,6 +25,7 @@ from app.modules.authorization.api.outbox_dispatch import (
 from app.modules.outbox.api import (
     CommittedInvocationObservation,
     DeliveryOptions,
+    DeliveryCandidatePage,
     DeliveryPersistenceError,
     DeliveryReceipt,
     DeliveryUnavailable,
@@ -65,15 +68,17 @@ def _facts(
     return OutboxDispatchFacts(**claim.model_dump(), phase=phase, outcome_digest=digest)
 
 
-def _allow(decision: AuthorizationDecision) -> None:
+def _allow(decision: AuthorizationDecision) -> str:
     """A mismatched action or denied decision cannot authorize any phase write."""
     if (
         type(decision) is not AuthorizationDecision
+        or type(decision.decision_id) is not UUID
         or decision.outcome is not DecisionOutcome.ALLOW
         or decision.action_id != OUTBOX_DISPATCH_ACTION
         or decision.permission_id != OUTBOX_DISPATCH_PERMISSION
     ):
         raise DeliveryUnavailable("outbox_delivery_unavailable")
+    return str(decision.decision_id)
 
 
 def _receipt(claim: OutboxClaim, attempt: OutboxDeliveryAttempt) -> DeliveryReceipt:
@@ -147,18 +152,42 @@ class OutboxDelivery:
         registry: HandlerRegistry,
         options: DeliveryOptions,
     ) -> None:
-        """Require explicit AUTH composition; no production adapter exists yet."""
+        """Require explicit AUTH composition and bounded handler registration."""
         self._sessions = session_factory
         self._authorization = authorization_factory
         self._registry = registry
         self._options = DeliveryOptions.model_validate(options.model_dump())
         self._running_handlers: set[asyncio.Task] = set()
 
+    @asynccontextmanager
+    async def _authority(self, session, **selectors):
+        """Conceal AUTH boundary failures without swallowing owner errors."""
+        try:
+            async with self._authorization(session).prepare_outbox_dispatch(**selectors) as prepared:
+                yield prepared
+        except AuthorizationBoundaryError:
+            raise DeliveryUnavailable("outbox_delivery_unavailable") from None
+
     def _handler_done(self, task: asyncio.Task) -> None:
         """Retain running calls and consume failures without keeping provider text."""
         self._running_handlers.discard(task)
         if not task.cancelled():
             task.exception()
+
+    async def candidates(self, *, after: UUID | None = None, limit: int = 100) -> DeliveryCandidatePage:
+        """Return selectors after closing SQL; a later scan revisits IDs behind the cursor."""
+        if (after is not None and type(after) is not UUID) or type(limit) is not int or not 1 <= limit <= 500:
+            raise DeliveryUnavailable("outbox_delivery_unavailable")
+        async with self._sessions() as session:
+            return await DeliveryRepository(session).candidates(self._registry.keys, after=after, limit=limit)
+
+    async def deliver(self, event_id: UUID, project_id: UUID, owner: str) -> DeliveryReceipt | None:
+        """Reuse recovery and claim/invoke; duplicate transport cannot bypass custody."""
+        recovered = await self.recover(event_id, project_id)
+        if recovered is not None:
+            return recovered
+        claim = await self.claim(event_id, project_id, owner)
+        return await self.invoke(claim) if claim is not None else None
 
     async def claim(self, event_id: UUID, project_id: UUID, owner: str) -> OutboxClaim | None:
         """Commit one eligible exact registered claim, or leave unavailable work alone."""
@@ -184,7 +213,7 @@ class OutboxDelivery:
             )
         facts = _facts(claim, OutboxDispatchPhase.CLAIM)
         async with self._sessions() as session, session.begin():
-            async with self._authorization(session).prepare_outbox_dispatch(
+            async with self._authority(session,
                 facts=facts,
                 request_id=uuid4(),
                 correlation_id=uuid4(),
@@ -200,7 +229,7 @@ class OutboxDelivery:
                     or claim.claim_expires_at <= locked_now
                 ):
                     return None
-                _allow(await prepared.consume(_facts(claim, OutboxDispatchPhase.CLAIM)))
+                decision_id = _allow(await prepared.consume(_facts(claim, OutboxDispatchPhase.CLAIM)))
                 if await database_time(session) >= claim.claim_expires_at:
                     raise DeliveryUnavailable("outbox_delivery_unavailable")
                 event.delivery_state = "claimed"
@@ -214,7 +243,7 @@ class OutboxDelivery:
                 session.add(
                     OutboxDeliveryAttempt(
                         **{**claim.model_dump(), "project_id": str(project_id)},
-                        stage="claimed",
+                        stage="claimed", claim_decision_event_id=decision_id,
                     )
                 )
                 await session.flush()
@@ -225,7 +254,7 @@ class OutboxDelivery:
         claim = _checked_claim(claim)
         facts = _facts(claim, OutboxDispatchPhase.INVOKE)
         async with self._sessions() as session, session.begin():
-            async with self._authorization(session).prepare_outbox_dispatch(
+            async with self._authority(session,
                 facts=facts,
                 request_id=uuid4(),
                 correlation_id=uuid4(),
@@ -246,11 +275,12 @@ class OutboxDelivery:
                     return None
                 if canonical_json_hash(event.payload) != claim.payload_digest:
                     raise DeliveryUnavailable("outbox_delivery_unavailable")
-                _allow(await prepared.consume(_facts(claim, OutboxDispatchPhase.INVOKE)))
+                decision_id = _allow(await prepared.consume(_facts(claim, OutboxDispatchPhase.INVOKE)))
                 now = await database_time(session)
                 if now >= claim.claim_expires_at:
                     raise DeliveryUnavailable("outbox_delivery_unavailable")
                 attempt.stage, attempt.invoked_at = "invoked", now
+                attempt.invoke_decision_event_id = decision_id
                 envelope = OutboxEventEnvelope(
                     claim=claim,
                     payload_json=_encode(event.payload),
@@ -339,7 +369,7 @@ class OutboxDelivery:
         claim = _checked_claim(receipt.claim)
         facts = _facts(claim, OutboxDispatchPhase.FINALIZE, receipt.outcome_digest)
         async with self._sessions() as session, session.begin():
-            async with self._authorization(session).prepare_outbox_dispatch(
+            async with self._authority(session,
                 facts=facts,
                 request_id=uuid4(),
                 correlation_id=uuid4(),
@@ -373,13 +403,14 @@ class OutboxDelivery:
                     or (completed < claim.claim_expires_at <= now)
                 ):
                     raise DeliveryUnavailable("outbox_delivery_unavailable")
-                _allow(
+                decision_id = _allow(
                     await prepared.consume(
                         _facts(claim, OutboxDispatchPhase.FINALIZE, receipt.outcome_digest)
                     )
                 )
                 if completed < claim.claim_expires_at <= await database_time(session):
                     raise DeliveryUnavailable("outbox_delivery_unavailable")
+                attempt.finalize_decision_event_id = decision_id
                 attempt.stage, attempt.outcome_json, attempt.outcome_digest = (
                     "completed",
                     receipt.outcome_json,

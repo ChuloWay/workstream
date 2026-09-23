@@ -1,6 +1,8 @@
 """Canonical exact-resource digests shared by kernel decisions and prepared bindings."""
 
 from pydantic import BaseModel
+from app.modules.authorization.domain.outbox_dispatch import OutboxDispatchResourceContext
+from app.modules.authorization.api.outbox_dispatch import outbox_dispatch_resource_digest
 from app.modules.authorization.domain.guide_activation import ProjectGuideActivationResourceContext
 from app.modules.authorization.domain.guide_proposals import GuideProposalResourceContext
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
@@ -19,6 +21,9 @@ from app.core.hashing import canonical_json_hash
 
 def authorization_resource_digest(resource: BaseModel) -> str:
     """Preserve purpose-specific public digest parity and canonical fallback custody."""
+    if type(resource) is OutboxDispatchResourceContext:
+        resource.validate_identity()
+        return outbox_dispatch_resource_digest(resource.facts)
     if type(resource) in (GuideProposalResourceContext, PostPolicyResourceContext, ProjectGuideActivationResourceContext):
         resource.validate_identity()
         return resource.facts.digest

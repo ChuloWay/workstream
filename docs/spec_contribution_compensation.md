@@ -847,7 +847,7 @@ remain unchanged, and downgrade refuses retained binding audit evidence.
 
 | ActionId | PermissionId | Principal / target | Protocol | Feature owner |
 |---|---|---|---:|---|
-| `outbox.dispatch` | registered planned `outbox.dispatch` | fixed dispatcher / exact event and phase | T | AUTH-OUTBOX-01 registration and CON-02B hidden mechanics complete; AUTH-OUTBOX-02 activation remains |
+| `outbox.dispatch` | active `outbox.dispatch` | fixed dispatcher / exact event and phase | T | AUTH-OUTBOX-02 shared authority, phase custody and worker composition complete |
 | `compensation.adapter_binding.read` | `compensation.adapter_binding.manage` | covered human Finance Authority / binding | Q | WS-ARCH-001-CP03B (active; CP01A registration custody) |
 | `compensation.adapter_binding.create` | `compensation.adapter_binding.manage` | covered human Finance Authority / binding collection | T | WS-ARCH-001-CP03B (active; CP01A registration custody) |
 | `compensation.adapter_binding.suspend` | `compensation.adapter_binding.manage` | covered human Finance Authority / active binding | T | WS-ARCH-001-CP03B (active; CP01A registration custody) |
@@ -894,8 +894,8 @@ The shared outbox is generic infrastructure:
 - CON-02A owns persistence and append/flush in the caller transaction.
 - CON-02B supplies hidden claim/invoke/finalize, retained per-generation delivery
   receipts, bounded safe retry/dead-letter, exact replay, an explicit handler
-  registry and project-scoped drain observations. Production delivery is unavailable
-  until AUTH-OUTBOX-02 activates the exact dispatcher authority and audit bindings.
+  registry and project-scoped drain observations. AUTH-OUTBOX-02 activates exact
+  dispatcher authority and audit bindings, with an empty production feature registry.
   Manual requeue, cancellation and archival controls need separate authority.
 - CON-02C owns the shared lifecycle audit participant.
 
@@ -910,10 +910,9 @@ claim or mutate OutboxEvent rows.
 The hidden delivery owner commits a claim, then commits its invocation marker,
 then releases every database session before calling a handler. Finalization opens
 a fresh transaction. Each phase prepares and consumes exact phase-specific AUTH
-facts before mutation. CON-02B tests those mechanics with explicitly synthetic
-ports; it stores no fictional allowed audit evidence while the action is planned.
-AUTH-OUTBOX-02 adds the evaluator, audit vocabulary, decision foreign keys and exact
-matching database guards together with production composition. It refuses retained
+facts before mutation. PostgreSQL delivery tests use real fixed-service AUTH/PREP.
+AUTH-OUTBOX-02 supplies the evaluator, audit vocabulary, decision foreign keys and
+exact matching database guards together with Celery composition. It refuses retained
 attempts without provable authority instead of inventing or deleting evidence.
 
 A handler receives immutable event facts and canonical JSON payload text. The
@@ -1103,9 +1102,9 @@ answers:
 2. The human must classify all pre-production legacy economic rows for
    deterministic rebuild or explicit migration before a replacement migration
    or CP09 cleanup changes those rows.
-3. AUTH-OUTBOX-01 has delivered the exact dispatcher identity, planned action,
-   static row and typed context; CON-02B has delivered hidden delivery mechanics.
-   AUTH-OUTBOX-02 still owns live evaluator, audit custody and composition.
+3. AUTH-OUTBOX-01 delivered the exact dispatcher contract; CON-02B delivered
+   hidden delivery mechanics. AUTH-OUTBOX-02 delivers the live evaluator,
+   immutable phase audit custody and Celery delivery/recovery composition.
    Outbound delivery, reconciliation, projection rebuild and callback execution
    require their own exact feature-authority contracts before activation.
 4. Optional contribution evidence remains deferred unless separately approved

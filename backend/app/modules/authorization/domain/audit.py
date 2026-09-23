@@ -12,6 +12,7 @@ from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.catalogue import ActionId, PermissionId
 
 CONTEXT_DIGEST_RESOURCE_TYPES = (
+    "outbox_event",
     "task_authority",
     "artifact_put_attempt",
     "artifact_verification_job",
@@ -36,6 +37,7 @@ CONTEXT_DIGEST_RESOURCE_TYPES = (
 
 
 AuthorizationDecisionResourceType = Literal[
+    "outbox_event",
     "task_authority",
     "actor_profile",
     "actor_authorization_context",

@@ -189,10 +189,18 @@ class OutboxEvent(Base):
 
 
 class OutboxDeliveryAttempt(Base):
-    """Retained delivery custody, deliberately not AUTH evidence before activation."""
+    """Retained delivery custody bound to immutable real phase decisions."""
 
     __tablename__ = "outbox_delivery_attempts"
     __table_args__ = (
+        CheckConstraint(
+            "(stage = 'claimed' and invoke_decision_event_id is null and finalize_decision_event_id is null) or "
+            "(stage = 'invoked' and invoke_decision_event_id is not null and finalize_decision_event_id is null) or "
+            "(stage = 'completed' and finalize_decision_event_id is not null and "
+            "((invoked_at is null and invoke_decision_event_id is null) or "
+            "(invoked_at is not null and invoke_decision_event_id is not null)))",
+            name="phase_decisions",
+        ),
         CheckConstraint("claim_generation between 1 and 2147483647", name="generation"),
         CheckConstraint("claim_owner ~ '^[A-Za-z0-9._:-]{1,120}$'", name="owner"),
         CheckConstraint("payload_digest ~ '^sha256:[0-9a-f]{64}$'", name="payload_digest"),
@@ -215,6 +223,10 @@ class OutboxDeliveryAttempt(Base):
             name="outcome",
         ),
     )
+
+    claim_decision_event_id: Mapped[str] = mapped_column(String(36), ForeignKey("audit_events.id"), unique=True, nullable=False)
+    invoke_decision_event_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("audit_events.id"), unique=True)
+    finalize_decision_event_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("audit_events.id"), unique=True)
 
     event_id: Mapped[UUID] = mapped_column(ForeignKey("outbox_events.event_id"), primary_key=True)
     claim_generation: Mapped[int] = mapped_column(BigInteger, primary_key=True)

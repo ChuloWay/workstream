@@ -1,4 +1,4 @@
-"""Explicit unregistered composition for the hidden OUTBOX owner."""
+"""Explicit composition of the shared delivery owner; feature registration is separate."""
 
 from collections.abc import Callable
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -22,4 +22,14 @@ def outbox_delivery(
         authorization_factory=authorization_factory,
         registry=registry,
         options=options,
+    )
+
+
+def production_outbox_delivery(session_factory):
+    """Install real dispatcher authority with no unapproved feature handler."""
+    from app.adapters.auth import outbox_dispatch_authorization
+
+    return outbox_delivery(
+        session_factory, authorization_factory=outbox_dispatch_authorization,
+        registry=HandlerRegistry([]), options=DeliveryOptions(),
     )

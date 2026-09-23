@@ -1,7 +1,7 @@
 # AUTH-OUTBOX-02 — Authorized shared delivery and retained phase decisions
 
 - Initiative: `WS-AUTH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: Activate only shared dispatcher mechanics through existing AUTH/PREP, bind every retained phase to real authorization evidence, and compose the existing delivery owner in Celery without feature-handler authority.
 
 ## Intent
@@ -10,7 +10,7 @@ Committed background requests need a provisioned, revocable dispatcher before
 assignment invalidation and later post-submit routing can use shared delivery.
 Delivery authority must never authorize the product effect requested by an event.
 
-## Current behavior
+## Starting boundary
 
 Merged CON-02B supplies claim/invoke/finalize/recover and committed observation in
 `backend/app/modules/outbox/`. AUTH-OUTBOX-01 supplies exact phase facts, digest,
@@ -33,7 +33,9 @@ binding, single consumption and audit emission. Reuse those owners.
   Celery registration: explicit empty production handler registry until feature
   owners install separately authorized handlers; no runtime plugin discovery.
 - Affected tests in AUTH/OUTBOX/audit/worker/migration/catalogue suites and their
-  existing lane/ownership metadata; preserve required proof while replacing
+  existing lane/ownership metadata; exact AUTH structural-debt reconciliation
+  after extracting guards from oversized shared owners (no raised limits);
+ preserve required proof while replacing
   permissive fake-ALLOW database fixtures with real authority evidence.
 - Current AUTH/CON/ARCH/POL navigation, canonical specs, operating docs and
   capability roadmap reflecting the intended merged boundary.
@@ -119,25 +121,25 @@ in that exception.
 
 ## Acceptance criteria
 
-- [ ] Exact provisioned active dispatcher can claim, invoke and finalize with
+- Exact provisioned active dispatcher can claim, invoke and finalize with
   three real, independently bound audit decisions; no human/other service can.
-- [ ] Missing, suspended/deactivated or revoked service denies without startup
+- Missing, suspended/deactivated or revoked service denies without startup
   failure or mutation. Revocation between phases prevents the next phase.
-- [ ] Prepared handles reject fact/phase substitution, reuse, session/root
+- Prepared handles reject fact/phase substitution, reuse, session/root
   replacement and post-close use; lock order is identical across all phases.
-- [ ] Wrong project/event/generation/digest/owner/lease and forged decision IDs
+- Wrong project/event/generation/digest/owner/lease and forged decision IDs
   reject at the proper boundary with valid surrounding fields and controls.
-- [ ] SQL independently rejects omitted/wrong-phase/foreign/non-ALLOW decision
+- SQL independently rejects omitted/wrong-phase/foreign/non-ALLOW decision
   references and preserves original custody; rollback includes staged audit.
-- [ ] Historical/concurrent finalization replay preserves original immutable
+- Historical/concurrent finalization replay preserves original immutable
   receipts while live authority is rechecked. Expired invoked work remains
   unknown; never-invoked expiry preserves the existing bounded safe retry.
-- [ ] Forward migration preserves valid unattempted rows and refuses retained
+- Forward migration preserves valid unattempted rows and refuses retained
   attempts without fictional audit backfill or deletion.
-- [ ] Actual worker functions use the canonical operation, survive duplicate
+- Actual worker functions use the canonical operation, survive duplicate
   broker delivery, and recover publication/process failure with bounded scans;
   no installed production feature handler or feature action is implied.
-- [ ] Existing delivery/append/custody tests retain their required behavioral
+- Existing delivery/append/custody tests retain their required behavioral
   assertions under real authorization. Exact CI selection has no skips and
   affected code remains at least 90 percent covered.
 
@@ -151,19 +153,19 @@ in that exception.
 
 ## Evidence
 
-Planned tests must exercise real PostgreSQL and canonical AUTH rather than
+Delivery tests exercise real PostgreSQL and canonical AUTH rather than
 injecting arbitrary ALLOW UUIDs. For each denial isolate the changed field from a
 valid baseline. Mutation probes remove only the relevant prepared/SQL guard so
 the named assertion proves that boundary, not an earlier malformed fixture.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Existing owner feasibility | Inspect AUTH PREP/kernel, OUTBOX writers and actual Celery composition | Source inspection | Plan review and runtime proof pending |
-| Exact phase custody | New AUTH/outbox PostgreSQL integration, independent SQL substitution and rollback tests | Planned | No live activation claim yet |
-| Prepared and revocation safety | Real actor/link revocation and concurrent phase tests with distinct events | Planned | Must prove serialization, not just one mocked task |
-| Migration preservation | Isolated 0027 to new-head upgrade with retained row snapshots and refusal control | Planned | No retained data repair authorized |
-| Worker path | Actual worker functions plus real database recovery and broker-envelope rejection | Planned | Do not claim live broker transport without running it |
-| Gate integrity | Existing lint/boundary/ownership, lane selection, docs/links and hosted full CI | Planned | Exact final head required |
+| Existing owner feasibility | AUTH PREP/kernel, OUTBOX writers and actual Celery composition | Existing owners reused; plan review accepted exact phase custody | Feature authority remains separate |
+| Exact phase custody | AUTH/outbox PostgreSQL integration, independent SQL substitution and rollback tests | Real decisions for all phases; owner/outcome SQL mutation probes detect guard removal | Adversarial audit clones prove rejection only, never live authority |
+| Prepared and revocation safety | Fact substitutions, root/session/close controls, distinct-event concurrency and revocation during a real lock wait | Original receipt/decision IDs retained on replay; fresh authority required | No external provider side-effect claim |
+| Migration preservation | Isolated 0027 upgrades; claimed/invoked/completed refusal; full row/schema snapshots | Unattempted rows preserved; unprovable attempts rejected before schema changes | No retained data repair authorized |
+| Worker path | Actual Celery functions and database recovery with a test-only registered handler | Duplicate invocation fenced; bounded scans continue after failed publication | No live broker transport claim; production feature registry empty |
+| Gate integrity | Lint/boundary/ownership, exact lane catalogue, docs/links and hosted full CI | Commands and exact-head results recorded in the PR | Hosted and reviewer freshness belongs to PR evidence |
 
 ## Review findings
 
@@ -194,7 +196,7 @@ a wrong action/permission, so live-AUTH proof alone cannot replace those defense
 
 ### Named implementation proof inventory
 
-These are planned additions/strengthenings, not executed evidence:
+Named implementation proof (exact command results and reviewed head belong to the PR):
 
 - `test_delivery_rejects_malformed_authorization_decision`: retain the OUTBOX
   defensive port-result contract for wrong type, DENY, wrong action and wrong
@@ -205,9 +207,9 @@ These are planned additions/strengthenings, not executed evidence:
   with tests that canonical AUTH can never drive through those cases.
 - `test_real_dispatcher_records_exact_phase_decisions`: real provisioned actor,
   three distinct phase decisions, canonical digest and immutable custody.
-- `test_dispatcher_lifecycle_and_matrix_denials`: missing/suspended/deactivated/
+- `test_dispatcher_lifecycle_denies_without_claim and the exact fixed-service matrix tests`: missing/suspended/deactivated/
   revoked, human and foreign-service controls; dispatcher denied ART/TASK/CHECKER.
-- `test_prepared_dispatch_binds_root_session_and_all_facts`: independent phase,
+- `test_prepared_dispatch_binds_all_facts, test_prepared_dispatch_cannot_cross_root_transaction and test_prepared_dispatch_cannot_move_to_another_session`: independent phase,
   event/project/generation/owner/lease/payload/outcome changes, reuse/close/root
   replacement, each paired with valid original input.
 - `test_phase_decision_sql_substitutions`: valid phase rows plus exactly one
@@ -223,12 +225,30 @@ These are planned additions/strengthenings, not executed evidence:
   `test_dispatch_activation_refuses_unauthorized_attempts`: actual predecessor
   claimed/invoked/completed rows and exact surrounding custody before refusal;
   preserve pending/cancelled snapshots, repeated upgrade and no deletion.
-- `test_worker_duplicate_delivery_and_expired_recovery`: actual task function,
+- `test_worker_duplicate_delivery and test_worker_expired_recovery`: actual task function,
   real owner/AUTH and explicit test-only async registry. Distinct uninvoked
   versus invoked expiry controls; one handler call after duplicate transport.
-- `test_worker_scan_continuation_and_publication_failure`: stable bounded
+- `test_worker_scan_continues_after_failed_publication and test_worker_scan_closes_sql_before_publication_and_retries_missing_hints`: stable bounded
   selector pages, failed publication retained, later pages progress, SQL closed
   before broker work; malformed selectors/task UUID reject before database work.
-- `test_empty_production_registry_has_no_feature_authority`: no claims on
+- `test_empty_production_registry_does_not_claim_feature_work`: no claims on
   unsupported events and no registered product effect; structure proof limits
   live composition to the canonical owner/worker roots.
+
+### Affected shared-owner cleanup
+
+The existing AUTH structural guard prohibited growing the already oversized
+kernel/runtime/PREP functions. Exact service scope and resource matching now live
+in the existing `domain/prepared_service.py`; setup lineage checking moved intact
+from runtime to `domain/project_setup_finalization.py`. PREP separates common
+request/root/resource validation from action-specific consumption. Existing
+callers use these canonical helpers; no compatibility entry point remains.
+The affected files/functions shrink and the debt ledger records their exact new
+spans/hashes without changing limits. Existing shared-PREP contracts protect
+setup, post-policy and task behavior.
+
+Two root outbox delivery tests moved into the existing PostgreSQL custody suite
+with the provisioned real-AUTH fixture; their terminal-reopen, archival and
+retry/claim assertions remain. Append-only transaction tests remain in place.
+The old blanket worker-import prohibition is replaced by the existing exact
+composition guard permitting only `workers/outbox.py` and no public route.

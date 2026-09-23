@@ -9,9 +9,10 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   immutable ContributionRecords and optional
   project-policy-driven compensation awards without coupling lifecycle truth to
   an economic provider.
-- Next usable boundary: AUTH-OUTBOX-02 live authority/audit binding and worker
-  integration after delivered AUTH-OUTBOX-01 contract and CON-02B hidden delivery.
-  Downstream work remains ARCH-03B assignment invalidation and ARCH-03C authority/public activation, after
+- Next usable boundary: ARCH-03B assignment invalidation and its exact feature
+  authority, then ARCH-03C authority/public activation. AUTH-OUTBOX-02 delivers
+  shared live dispatcher authority, phase audit custody and Celery recovery after
+  CON-02B delivery mechanics. This follows
   completed ARCH-03B8 hidden task audit evidence and ARCH-03B7 requirements projections and ARCH-03B6 locked-context projections and ARCH-03B5 current work context and ARCH-03B4 hidden contributor/management task detail, ARCH-03B3 hidden management/operational queues and ARCH-03B2 contributor-ready queue facts, ARCH-03B1 detached metadata and CP08 lineage
   and minimal writers, ARCH-03A internal guide context,
   [CP07 activation/binding](../WS-ARCH-001/WS-ARCH-001-CP07.md) and
@@ -91,8 +92,8 @@ registry has no production entries here; each future feature integration must
 prove its own AUTH boundary before installing its handler. Unknown invocation
 effects stop for reconciliation; no unconditional handler-entry guarantee is made.
 Manual reopening, cancellation and archival controls need their own authorized
-operational boundary. Production worker registration and real broker transport
-proof remain AUTH-OUTBOX-02 integration, after the hidden mechanics. Focused
+operational boundary. AUTH-OUTBOX-02 delivers production worker registration with
+an empty feature registry; actual worker/SQL proof does not claim live broker transport. Focused
 architecture/security/QA and affected CI/docs reviewers inspect real PostgreSQL
 proofs and unchanged hosted coverage. The original detailed dispatcher record
 remains in the archive; its old directory paths and relative sequencing do

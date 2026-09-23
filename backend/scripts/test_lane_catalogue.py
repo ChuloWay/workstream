@@ -213,6 +213,9 @@ SHARED_FOUNDATION_MODULES = (
     "tests/outbox/test_recovery_postgresql.py",
     "tests/outbox/test_custody_postgresql.py",
     "tests/outbox/test_drain_postgresql.py",
+    "tests/outbox/test_authority_postgresql.py",
+    "tests/outbox/test_authority_custody_postgresql.py",
+    "tests/outbox/test_worker_postgresql.py",
 
     "tests/test_policy_identity_lineage.py",
     "tests/test_project_policy_mutations.py",
@@ -398,6 +401,7 @@ LANES = (
             "tests/test_database_reset.py",
             "tests/tasks/test_contribution_lineage_migration.py",
             "tests/outbox/test_migration.py",
+            "tests/outbox/test_authority_migration.py",
             ADMIN_RUNNER_MODULE,
         ),
     ),

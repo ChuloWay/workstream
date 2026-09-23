@@ -9,6 +9,7 @@ from app.modules.authorization.api import (
 )
 from app.modules.authorization.api.guide_proposal_review import GuideProposalAuthorizationPort
 from app.modules.authorization.api.post_policy import PostPolicyAuthorizationPort
+from app.modules.authorization.api.outbox_dispatch import OutboxDispatchAuthorizationPort
 from app.modules.authorization.guide_compilation import ProjectGuideCompilationAuthorizationAdapter
 from app.modules.authorization.prepared import fixed_service_prepared_authorization
 from app.modules.authorization.runtime import PreparedAuthorizationUnsupported
@@ -187,3 +188,10 @@ def guide_activation_authorization(
     from app.modules.authorization.guide_activation_authorization import GuideActivationAuthorizationAdapter
 
     return GuideActivationAuthorizationAdapter(session, context)
+
+
+def outbox_dispatch_authorization(session: AsyncSession) -> "OutboxDispatchAuthorizationPort":
+    """Compose the one fixed dispatcher through canonical AUTH/PREP."""
+    from app.modules.authorization.outbox_dispatch_authorization import OutboxDispatchAuthorizationAdapter
+
+    return OutboxDispatchAuthorizationAdapter(session)

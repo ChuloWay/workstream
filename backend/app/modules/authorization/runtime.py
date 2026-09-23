@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 from app.modules.authorization.domain.guide_compilation import ProjectGuideCompilationExecuteResourceContext, ProjectGuideCompilationRequestResourceContext
 from app.modules.authorization.domain.resource_digest import authorization_resource_digest as authorization_resource_digest
 from app.modules.authorization.domain.guide_proposals import GuideProposalResourceContext
-from app.modules.authorization.domain.project_setup_finalization import ProjectSetupFinalizationResourceContext
+from app.modules.authorization.domain.project_setup_finalization import ProjectSetupFinalizationResourceContext, require_setup_custody
 from app.modules.authorization.domain.guide_compilation_projections import ProjectGuideProjectionResourceContext
 from app.modules.authorization.domain.audit import (
     AuthorizationDecision as AuthorizationDecision,
@@ -30,6 +30,7 @@ from app.modules.authorization.domain.guide_mutations import (
 )
 from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
+from app.modules.authorization.domain.outbox_dispatch import OutboxDispatchResourceContext
 from app.modules.authorization.domain.guide_activation import ProjectGuideActivationResourceContext
 from app.modules.authorization.service_actor_schemas import ServiceActorProvisionResourceContext
 from app.modules.authorization.catalogue import ActionId
@@ -606,32 +607,6 @@ class ProjectSetupServiceCustodyContext(BaseModel):
     stale_output_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
 
-def _require_setup_custody(
-    custody: ProjectSetupServiceCustodyContext,
-    *,
-    label: str,
-    expected_step: str,
-    setup_generation: int,
-    stale_output_digest: str | None,
-    scope_project_id: UUID,
-    guide_id: UUID,
-    source_snapshot_id: UUID,
-) -> None:
-    """Reject setup-service custody that does not match the protected lineage."""
-    if custody.expected_step != expected_step:
-        raise ValueError(f"{label} setup-service step is inconsistent")
-    if custody.setup_generation != setup_generation:
-        raise ValueError(f"{label} setup generation is inconsistent")
-    if custody.stale_output_digest != stale_output_digest:
-        raise ValueError(f"{label} stale output is inconsistent")
-    if (
-        custody.scope_project_id != scope_project_id
-        or custody.guide_id != guide_id
-        or custody.source_snapshot_id != source_snapshot_id
-    ):
-        raise ValueError(f"{label} setup lineage is inconsistent")
-
-
 class ProjectGuideSufficiencyMutationResourceContext(BaseModel):
     """Canonical snapshot and report facts for sufficiency mutations."""
 
@@ -673,7 +648,7 @@ class ProjectGuideSufficiencyMutationResourceContext(BaseModel):
         if service_execution:
             if self.target_kind != "run":
                 raise ValueError("only a sufficiency run may use setup-service authority")
-            _require_setup_custody(
+            require_setup_custody(
                 self.setup_service_custody,
                 label="sufficiency",
                 expected_step="guide_sufficiency",
@@ -748,7 +723,7 @@ class ProjectSubmissionArtifactPolicyMutationResourceContext(BaseModel):
         if service_execution != (self.target_kind == "derive"):
             raise ValueError("policy derivation requires setup-service authority")
         if service_execution:
-            _require_setup_custody(
+            require_setup_custody(
                 self.setup_service_custody,
                 label="submission policy",
                 expected_step="submission_artifact_policy",
@@ -1231,6 +1206,7 @@ AuthorizationResourceContext = (
     | ProjectGuideSufficiencyMutationResourceContext
     | ProjectSubmissionArtifactPolicyMutationResourceContext
     | PostPolicyResourceContext
+    | OutboxDispatchResourceContext
     | ProjectSetupRunMutationResourceContext
     | ProjectGuideActivationResourceContext
     | ProjectGuideCompilationRequestResourceContext
