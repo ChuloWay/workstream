@@ -6,7 +6,7 @@
   with committed claim custody, bounded automatic recovery and truthful drain
   facts. Production dispatch remains unavailable until AUTH-OUTBOX-02.
 
-## Intent and current owners
+## Intent
 
 The project/task lifecycle needs durable follow-up after a transaction commits.
 Reuse `OutboxEvent`, the caller-transaction append participant, existing delivery
@@ -23,7 +23,7 @@ Existing event projection and new custody must agree at transaction commit;
 deferred constraints protect both mutation directions, not only normal service
 writes. A completed custody outcome remains immutable.
 
-## Scope and reconciliation
+## Bounded change
 
 Allowed files:
 
@@ -95,6 +95,54 @@ guards bind custody and the event's projection in the same transaction and deny
 deletion, rewriting and unsupported transitions. Retained attempts lacking
 provable custody stop migration; migration must not create fictional evidence.
 
+### Closed facts and outcomes
+
+`OutboxClaim` preserves event UUID, project UUID, payload digest, generation,
+owner and both UTC lease timestamps. `OutboxEventEnvelope` adds the original
+immutable event type/version/aggregate/correlation/idempotency facts and canonical
+JSON payload text. Recompute its digest before delivery; do not place a mutable
+dictionary or ORM instance inside a nominally frozen envelope.
+
+One custody row per `(event_id, claim_generation)` stores those exact claim
+facts and CLAIM decision UUID, then optional INVOKE decision UUID/`invoked_at`,
+then FINALIZE decision UUID and the complete canonical outcome. Decision IDs
+link to consumed AUTH decisions; they are not independent authority. Before
+each mutation, require a returned `AuthorizationDecision` with exact
+ALLOW/action/permission, following locked fact comparison and fresh DB-time
+checks. Production AUTH decision/audit integration remains OUTBOX-02; test
+authority is explicit and must not be presented as live AUTH evidence.
+
+Closed handler results are acknowledge, safe retry, or nonretryable failure.
+They carry no arbitrary result text or provider payload. Canonical finalization
+contains `delivery_state`, closed `error_code`, `next_attempt_at`, `finalized_at`,
+`invocation_unknown` and the preserved nullable `invoked_at`. Hash all those
+fields including nulls; AUTH's resource facts separately bind the complete claim.
+
+| Source result | Event projection | Error and timestamps | Unknown |
+|---|---|---|---|
+| Handler acknowledge | acknowledged | error null, retry null, finalized DB time | false |
+| Explicit safe retry, budget available | retryable | RETRY_REQUESTED, bounded retry DB time, finalized null | false |
+| Explicit retry, budget exhausted | dead_letter | ATTEMPTS_EXHAUSTED, retry null, finalized DB time | false |
+| Explicit nonretryable failure | dead_letter | HANDLER_REJECTED, retry null, finalized DB time | false |
+| Never-invoked lease expiry, budget available | retryable | LEASE_EXPIRED_BEFORE_INVOKE, bounded retry DB time, finalized null | false |
+| Never-invoked expiry, budget exhausted | dead_letter | ATTEMPTS_EXHAUSTED, retry null, finalized DB time | false |
+| Invoked exception/timeout/interruption/expiry | dead_letter | INVOKE_OUTCOME_UNKNOWN, retry null, finalized DB time | true |
+
+`invoked_at`/INVOKE decision are both null only for never-invoked custody.
+CLAIM decision is always present; FINALIZE decision/outcome/digest/receipt time
+are present only when completed. Receipt completion time is DB-owned even when
+the current event's `finalized_at` is null for retryable. Replays return the
+original decision IDs, times, digest and disposition, with no extra receipt.
+Cancellation/crash before finalization may leave invoked custody for later
+expiry recovery; it must never manufacture a successful outcome.
+
+Commit-time mapping is closed: generation-zero pending/cancelled events have no
+attempt; a claimed event matches its latest claimed/invoked custody; retryable
+or terminal attempted events match their completed custody exactly. An archival
+timestamp does not change that completed receipt. Earlier generations remain
+immutable completed evidence. Manual reopening without new coherent custody
+cannot commit, including raw SQL that the earlier persistence-only guard allowed.
+
 Use database time for eligibility, leases and retry scheduling. The existing
 event trigger forbids `claimed -> claimed`; recovery finalizes an expired claim
 that was never invoked to retry/dead-letter and only then permits a new generation.
@@ -139,7 +187,7 @@ Database/observation failure raises a bounded failure, never an empty result.
 The observation is a snapshot, not authority or a substitute for the consuming
 lifecycle owner's fence and feature obligation evidence.
 
-## Acceptance and verification
+## Acceptance criteria
 
 1. Real PostgreSQL append/claim transaction rollback preserves existing append
    behavior; denied, mismatched or changed AUTH facts create no delivery writes.
@@ -169,7 +217,7 @@ lifecycle owner's fence and feature obligation evidence.
    boundaries, exact lane selection, docs/links/stale wording and final hosted
    CI. Changed subsystem coverage >=90%; preserve global coverage and all gates.
 
-## Named future proof
+## Evidence
 
 These are planned nodes, not executed evidence:
 
@@ -220,7 +268,7 @@ runner, not a deselected broad suite. Register every module exactly once in the
 existing lanes, with migration tests in the schema lane. Broker transport is not
 part of this hidden owner boundary and must be proven when worker wiring is added.
 
-## Risk and review
+## Risk and review routing
 
 L1: bounded shared delivery, concurrency, authorization consumption and retained
 database evidence. Required focused tracks: security/architecture/reuse, QA/test

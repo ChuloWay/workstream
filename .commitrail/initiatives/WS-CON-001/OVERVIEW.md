@@ -73,23 +73,28 @@ the hidden policy behavior.
 
 Disposition: Planned. Risk: L1. Consume
 [AUTH OUTBOX-01/02](../WS-AUTH-001/planning/PLAN.md#ws-auth-001-outbox-01--unavailable-dispatcher-contract).
-Shared outbox owns hidden claim/lease fencing, typed handler registry,
-invoke/finalize, bounded retry/dead-letter/replay and drain observation. Reuse
+The [current bounded record](WS-CON-001-02B.md) reconciles hidden claim/lease
+fencing, committed attempt/outcome custody, typed handler contracts,
+invoke/finalize, bounded safe retry/dead-letter/exact replay and drain observation. Reuse
 the existing outbox rows and caller-session append service; do not implement
 contribution, compensation, checker, TASK or provider behavior here.
-Allowed files are the shared outbox module, its composition/worker registration,
-bounded configuration and focused tests/docs. Each handler receives immutable
+Allowed files include the shared outbox module, its custody migration and explicit
+composition, bounded options and focused tests/docs. Each handler receives immutable
 event/claim facts, validates the committed claim through a public port and
 returns a typed outcome without mutating outbox rows. Commit claim before
 handler invocation; hold no row lock across handler/provider I/O.
 
 Prove independent-session lease expiry, stale-worker fencing, crash before and
-after invoke/finalize, redelivery, exact replay, retention and non-false-zero
-drain observation. Dispatcher identity cannot execute any feature action and
-registration refuses handlers without their own authority manifest. Production
-stays unavailable until AUTH-OUTBOX-02. Focused architecture/security/QA and
-changed workflow/test reviewers inspect these proofs, using real PostgreSQL/
-Redis and unchanged hosted coverage. The original detailed dispatcher record
+after invoke/finalize, redelivery, exact replay and non-false-zero drain observation.
+Dispatcher identity cannot execute any feature action. The exact type/version
+registry has no production entries here; each future feature integration must
+prove its own AUTH boundary before installing its handler. Unknown invocation
+effects stop for reconciliation; no unconditional handler-entry guarantee is made.
+Manual reopening, cancellation and archival controls need their own authorized
+operational boundary. Production worker registration and real broker transport
+proof remain AUTH-OUTBOX-02 integration, after the hidden mechanics. Focused
+architecture/security/QA and affected CI/docs reviewers inspect real PostgreSQL
+proofs and unchanged hosted coverage. The original detailed dispatcher record
 remains in the archive; its old directory paths and relative sequencing do
 not override this current contract.
 
