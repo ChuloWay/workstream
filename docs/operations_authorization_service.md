@@ -684,11 +684,12 @@ actor, project, role, and cause event before a consumer changes product state.
 Revoking one role must leave the other project roles and all AdminRoleGrants
 unchanged.
 
-The closed registry now has sixteen fixed-service identities: fifteen
-action-bearing identities with twenty-four matrix memberships, plus the
+The closed registry now has seventeen fixed-service identities: sixteen
+action-bearing identities with twenty-five matrix memberships, plus the
 target-only `workstream.compensation.adapter` identity. The action-bearing
 set comprises seven ART identities, project setup, six exact REV identities,
-and the active shared outbox dispatcher. Missing provisioned rows deny without stopping the application.
+the active shared outbox dispatcher, and the task assignment reconciler. Missing
+provisioned rows deny without stopping the application.
 The target-only identity has no matrix membership, and the REV actions remain
 unavailable. Dispatcher authority grants no feature permission. Do not create a
 shared review service or a database service-grant table.

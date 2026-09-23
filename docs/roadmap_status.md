@@ -48,7 +48,7 @@ outside v0.1.
 
 ## Status Vocabulary
 
-The automated-acceptance branch is a newly clarified **planned** v0.1
+The automated-acceptance branch is a **planned** v0.1
 requirement, not a live capability. The existing versioned ReviewPolicy now
 persists the setting: `human_review_required: bool = true`. True requires human
 review after required checks pass; false leads to authorized FinalAcceptance
@@ -80,21 +80,23 @@ still belongs to the complete v0.1 release. See the
 
 ## Executive Snapshot
 
-Workstream already has strong backend foundations for identity, authorization,
-projects, guide ingestion, immutable artifact storage, tasks, submissions, and
-checker execution. The new unified Project Guide compiler and its two
-deterministic projections are implemented behind hidden boundaries. The
-contributor artifact path can prepare verified bytes, publish a ready
-admission, create the immutable Submission, and bind it atomically, but its
-public legacy cutover is intentionally deferred.
+Identity, authorization, guide ingestion, automatic unified compilation and
+public manager proposal/approval operations are implemented. Terminal guide
+activation is implemented internally but not publicly exposed. Task policy
+lineage, contributor artifact preparation and immutable Submission creation have
+tested foundations; their complete public integration remains unfinished.
 
-CP08 already locks the guide's ContributionPolicyVersion into claimable work
-and carries it through Assignment and hidden Submission creation. The current
-critical path is to complete public guide activation and intake integration,
-then carry one admitted Submission through a durable current post-submit checker result
-with `routing_recommendation = allow_review`. That fact unlocks the live
-review/revision path. Review decisions must then create contribution and
-conditional compensation facts atomically before v0.1 can be released.
+Exact assignment-invalidation authority is implemented internally. Next is
+ARCH-03C2: atomic producer wiring and first handler registration, followed by
+separately bounded public task integration. Guide activation/intake integration and
+durable post-submit evaluation follow the owner contracts. Required success
+then branches on the locked ReviewPolicy: true routes to human `allow_review`;
+false invokes shared authorized acceptance without a human Review. Both routing
+integrations remain planned. Human review/revision, contribution and conditional
+compensation effects, operations and release proof complete v0.1.
+
+The [independent MCP package](../mcp_server/README.md) implements one profile
+tool. It is not a deployed service or the complete proposed tool catalogue.
 
 ## Pre-Submission And Post-Submission Checking
 
@@ -212,8 +214,11 @@ cannot be reused as post-submission review-gate evidence. See the
   bearer unchanged and Workstream verifies it. The
   [local one-tool experiment](../experiments/mcp_caller_token/README.md) passed
   15 real-process checks and 24 focused tests, including first admission and
-  caller isolation. Independent profile-tool packaging remains planned; this
-  is custom authentication proof, not a deployed MCP service or a 27-tool release.
+  caller isolation. Merged PR #418 delivered the
+  [independent one-tool package](../mcp_server/README.md), container and additive
+  CI, including real-API profile/lifecycle parity. The remaining 26 mapped tools
+  and deployment remain separate work; packaging and local fixture proof do not
+  certify a deployed Flow issuer, public MCP gateway or every MCP client.
   The public-client drill targets currently usable APIs only; hidden and
   unfinished lifecycle routes are not completion targets. Draft-guide policy
   probes additionally cover optional fields, conditional headers and exact
@@ -391,53 +396,22 @@ Only open pull requests describe transient work. Use the repository's
 [open pull-request view](https://github.com/Flow-Research/workstream/pulls) to
 see whether any item below is already under review.
 
-Hidden unified-guide setup finalization and its exact authorization gate are
-complete. ARCH-04A consolidation supplies one current post-submit catalogue,
-compiler/parser and registered implementation per checker ID. Active consumers
-validate the canonical policy body and matching stored summaries. Immutable
-phase contracts and structural-handler conformance remain distinct from live
-phase execution, which is still unavailable. POL-04B1 supplies hidden automatic
-request authority and source-operation custody, with current-authority replay
-checks for both triggers. POL-04B connects those contracts and unified
-finalization to automatic initial setup execution, replacing the separate
-inference methods and prompts. Runtime adapter, model and instructions are
-independently configured. Compilation stops at findings and draft pre/post
-policies. POL-05A adds hidden complete-proposal review, correction and pre-policy
-approval custody, replacing manual artifact-policy approval. AUTH-12F4 supplies exact-project manager authority. POL-05B exposes manager review,
-approval and manual correction dispatch through the same compiler. The reconciled
-[dependency and ownership plan](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
-permits selected-policy validation independently after completed CP05. The
-selected delivery order finishes unified setup, separate pre/post approval and
-the delivered POL-07B facade, CP06 validation, CP07 hidden activation/binding
-and AUTH-12H live manager authority; public activation wiring remains pending.
-This priority adds no dependency on CP06 to live setup. Plans are not
-implementation claims.
-The sequence below describes product dependencies; production activation still
-requires its exact owner-proven prerequisites.
+Delivered capabilities are summarized in the [scoreboard](#end-to-end-lifecycle-scoreboard);
+their evidence is linked under [completed work](#what-has-been-completed).
+The [dependency and ownership plan](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
+owns implementation sequencing. The existing checker phase service supports
+hidden pre-submit execution/replay, but production post-submit execution remains
+unavailable. Live setup does not wait for downstream task/checker execution.
 
 The next dependency-safe product sequence is:
 
-POL-07B completes the internal checker phase service and removes the standalone
-JSON precheck. Hidden ZIP preparation uses one pre command for both execution
-and completed replay, preserving ART's reservation, authority and canonical
-evidence ownership. Production post execution remains unavailable; value-contract
-proof does not replace ARCH-04B/04C/04D/04E custody, execution and routing work.
-Setup receipts remain immutable. The next guide boundary is:
-
-1. **Complete the guide and task lineage contracts.** CP05 authorization,
-   CP06 selected-policy validation, CP07 hidden activation/binding and AUTH-12H
-   live manager authority and ARCH-03A complete internal guide context are complete.
-   CP08 task-attempt lineage and its minimal existing writers are complete.
-   ARCH-03B1 detached project/guide display and ARCH-03B2 hidden contributor-ready
-   queue facts are complete. ARCH-03B3 hidden management/operational queues are
-   complete, as are ARCH-03B4 hidden contributor/management detail and ARCH-03B5
-   replacement of the existing live work-context projections. ARCH-03B6 locked-context projections
-   are complete, with operational/audit reads still internal. ARCH-03B7 requirements projections are complete; the retained requirements route keeps its existing authority wrapper. ARCH-03B8 bounded task audit evidence is complete and internal;
-   ARCH-03B9 hidden exact-assignment invalidation is complete, using the shared
-   committed invocation and same-transaction fence. ARCH-03C1 supplies real
-   feature authority and decision-bound receipts. ARCH-03C2 next supplies atomic
-   producer wiring and first registration, before public task authority/exposure. HTTP activation exposure remains
-   pending and is not implied by an internal public port. The operation requires exact
+1. **Integrate the delivered guide/task foundations.** CP08 lineage and
+   ARCH-03B1–03B9 owner operations are delivered at the exposure boundaries
+   listed above. ARCH-03C1 supplies exact reconciler authority and decision-bound
+   receipts. ARCH-03C2 next supplies atomic originating producer wiring and first
+   handler registration; public task authority and exposure remain separately
+   bounded. Public guide activation remains pending and is not implied by an
+   internal public port. Guide activation requires exact
    current compilation, sufficiency, separate pre/post approvals, review/revision
    inputs and an explicitly selected published ContributionPolicyVersion.
    Registered checker implementations and configuration are checked without a
@@ -516,30 +490,39 @@ second permission system.
 ## Critical Dependency Map
 
 ```text
-Hidden unified compilation, projections and setup finalization (complete)
-  -> AUTH finalization gate (complete)
-  -> automatic request authority and replay custody (complete)
-  -> live unified compilation cutover
-  -> Project Manager approval + effective pre-submit policy
-  -> deterministic post-submit policy + single checker port
-
-Hidden ContributionPolicy behavior (complete)
-  -> AUTH policy action activation (complete)
-  -> CON selected-policy validation (complete)
-  -> Project Guide policy-version binding
-
-Both chains
-  -> terminal Project Guide activation
-  -> Task readiness and assignment lineage
-  -> artifact preparation + locked pre-submission intake checks
-  -> ready admission after intake and custody checks
-  -> immutable admitted Submission
-  -> durable current post-submit result
-  -> canonical allow_review
-  -> REV admission, lease, packet, decision and revision
-  -> atomic ContributionRecord / CompensationAward effects
-  -> fulfillment, reconciliation and release proof
+Delivered foundations (not a claim of full public integration)
+  automatic unified setup + separate manager pre/post approvals
+  ContributionPolicy validation + internal guide activation/binding
+  task/assignment/Submission lineage + hidden intake/creation
+  shared dispatcher + exact-authorized hidden assignment invalidation
+    |
+    v
+Remaining integration
+  ARCH-03C2 invalidation producer + first handler registration
+  -> bounded ARCH-03C public task authority and wiring
+  -> public guide activation + approved-guide intake integration
+  -> immutable admitted Submission through the public path
+  -> durable current post-submit result + required checks pass
+       |
+       +-- locked true -> allow_review -> human Review
+       |                                    | accept
+       |                                    v
+       +-- locked false -> authorized ----> shared FinalAcceptance
+                           automated        + submitter ContributionRecord
+                           trigger          + applicable awards (atomic)
+                                               |
+                                               v
+                         fulfillment, reconciliation and release proof
 ```
+
+Human `needs_revision` follows controlled revision; `reject` records a rejected
+outcome. Every final human decision records reviewer work and any applicable
+reviewer award atomically; the false branch creates neither. Both acceptance
+triggers use the same operation. Shared acceptance persistence
+and CON participation must exist before false/pass routing is activated; human
+queues and leases are not prerequisites for that branch. The diagram shows the
+successful evaluation branches; failure/remediation and recovery remain required
+by the sequence and release gates below. Neither branch is live end to end yet.
 
 No claim-time policy selection exists. A normal task claim copies the version
 already locked on the ready task. Review claim copies the version stamped on

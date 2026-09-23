@@ -180,6 +180,15 @@ Before reporting completion:
   the PR; do not make a no-op roadmap edit. Do not defer an affected roadmap
   update to a separate post-merge PR. Do not treat planned/open work as already
   delivered on `main`.
+- Reconcile each affected capability across the roadmap's executive summary,
+  scoreboard, dependency diagram, remaining gates and trace references, plus
+  its current initiative overview/change record and index next boundary.
+  Compare with merged owners, routes and tests: implemented, publicly exposed
+  and deployed are different claims. Preserve every supported policy branch
+  in summaries and diagrams; do not imply a new dependency by omitting one.
+  Keep summaries short and link detailed evidence instead of repeating change
+  histories. Update only affected claims in the same PR; this is a review
+  responsibility, not a new gate, status file or post-merge reconciliation step.
 - verify the local XLSX has one sheet only when local sheet exports are present
 - verify the current Workstream definition appears in README and local sheet exports when local sheet exports are present
 - update related docs/templates and local sheet exports together when the roadmap changes
