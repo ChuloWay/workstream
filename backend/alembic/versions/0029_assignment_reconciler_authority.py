@@ -75,6 +75,7 @@ def upgrade():
               'task_status',facts->'task_status','locked_context_hash',facts->'locked_context_hash')
             and jsonb_typeof(facts->'delivery_generation')='number'
             and (facts->>'delivery_generation') ~ '^[1-9][0-9]*$'
+            and (facts->>'delivery_generation')::numeric <= 2147483647
             and not exists(select 1 from jsonb_each(target) f where jsonb_typeof(f.value)<>'string'
               or (f.value#>>'{}') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
             and not exists(select 1 from jsonb_each(facts) f where f.key in ('cause_event_id','delivery_event_id')

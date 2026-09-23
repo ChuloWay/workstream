@@ -240,14 +240,15 @@ registration, hidden ART behavior/resource composition, then dedicated AUTH
 evaluator integration and activation. ART never writes availability. AUTH-12,
 AUTH-14, and AUTH-15 are not alternate artifact activation paths.
 
-These are 74 approved `PermissionId` values. `ActionId` values are a separate
+These are 75 approved `PermissionId` values. `ActionId` values are a separate
 closed registry layer and are not included in that permission count. AUTH-05A's
 typed and PostgreSQL audit registry accepts the exact historical 49. The three
 approved Operator recovery identifiers, 16 artifact identifiers,
 `review.queue.override`, and the two AUTH-11A read-only project inspection
-permissions plus the two compilation permissions and the unavailable
-`outbox.dispatch` permission are the exact 25 post-`0020`
-permissions. AUTH-07A, AUTH-11A, and
+permissions plus the two compilation permissions and the now-active
+`outbox.dispatch` permission form the first 25 post-`0020`
+permissions. ARCH-03C1 adds `task.assignment.authority_reconcile` as the 26th
+post-`0020` permission. AUTH-07A, AUTH-11A, and
 WS-XINT-002-01 add
 their matching typed/SQL audit parity without making them executable.
 
@@ -612,6 +613,7 @@ closed:
 | `workstream.review.artifact_reference_reconciliation` | `review.artifact_reference.reconcile` |
 | `workstream.review.projection` | `review.projection.rebuild` |
 | `workstream.outbox.dispatcher` | active shared mechanics only: `outbox.dispatch` |
+| `workstream.task.assignment_reconciler` | active hidden assignment effect only: `task.assignment.authority_reconcile` |
 | `workstream.compensation.adapter` | target-only; no action membership |
 
 The hidden 04B2 prepared resource first locks fixed-service authority using
@@ -672,8 +674,10 @@ Routers cannot invent identifiers or evaluate grant unions.
 
 ### Pre-Review Service Authority
 
-`outbox.dispatch` is active for the fixed dispatcher and included in the current
-catalogue counts. It authorizes shared delivery mechanics only. The other rows are proposed specification
+`outbox.dispatch` and `task.assignment.authority_reconcile` are active for their
+separate fixed services and included in current catalogue counts. The dispatcher
+authorizes shared delivery mechanics; the reconciler authorizes the hidden
+assignment effect. The remaining checker/router rows are proposed specification
 amendments for human design review: they are not registered or active and are
 excluded from those counts. The named implementation boundaries must register
 typed parity, prove hidden behavior and activate only their exact manifests;

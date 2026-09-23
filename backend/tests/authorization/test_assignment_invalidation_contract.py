@@ -132,3 +132,18 @@ def test_public_resource_selector_preserves_uuid_and_stable_invalid_identity():
     )
     assert authorization_resource_selector_id("project", "bad-id") != authorization_resource_selector_id("task", "bad-id")
     assert not hasattr(runtime, "authorization_resource_selector_id")
+
+
+def test_assignment_generation_matches_outbox_bounds():
+    from app.modules.tasks.api.assignment_invalidation import assignment_invalidation_resource_digest
+
+    value = facts()
+    maximum = value.model_copy(update={"delivery_generation": 2147483647})
+    assert assignment_invalidation_resource(maximum).facts.delivery_generation == 2147483647
+    assert assignment_invalidation_resource_digest(maximum).startswith("sha256:")
+    for generation in (0, 2147483648):
+        changed = value.model_copy(update={"delivery_generation": generation})
+        with pytest.raises(ValueError):
+            assignment_invalidation_resource(changed)
+        with pytest.raises(ValueError):
+            assignment_invalidation_resource_digest(changed)

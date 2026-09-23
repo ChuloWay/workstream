@@ -21,7 +21,7 @@ permission `task.assignment.authority_reconcile`. Reuse ACTORS provisioning,
 AUTH's fixed-service matrix, canonical PREP, closed audit vocabulary and TASK's
 existing exact facts. Do not introduce a second public facts schema. AUTH's
 private resource binds the complete target, cause and invocation digests,
-delivery generation, task state and locked context. Preparation and consumption
+delivery generation (1 through 2147483647, matching OUTBOX), task state and locked context. Preparation and consumption
 must bind the same action, project, session, root transaction and exact facts.
 The authorization decision and TASK release evidence share the effect transaction.
 Request UUID is the delivery event UUID; correlation UUID is the immutable
@@ -77,12 +77,17 @@ existing UNKNOWN handling, without automatic uncertain-effect repetition.
   `app/adapters/audit/__init__.py` for exact release/decision custody.
 - Focused tests under `tests/authorization/`, `tests/tasks/`, `tests/migrations/`,
   existing catalogue/identity/ownership expectations; exact test module entries
-  in `backend/scripts/test_lane_catalogue.py` and their inventory assertions.
+  in `backend/scripts/test_lane_catalogue.py` and their inventory assertions;
+  `backend/scripts/external_api_drill.py` for its exact permission oracle.
 - `tests/conftest.py` for the inspected new schema fingerprint only;
   `backend/scripts/behavior_ownership.py` and its tests for exact new module
   registrations, `.ci/behavior-ownership/partition.v1.json` and digest; this record,
   adopted 03C contract, ARCH/AUTH/CON/POL overview navigation, `.commitrail/INDEX.md`,
   current README, TASK/AUTH architecture/operating docs and `docs/roadmap_status.md`.
+- Current ARCH `planning/PLAN.md`, `planning/CHUNK_MAP.md` and adopted 03B parent
+  contract; AUTH `planning/PLAN.md`, POL `planning/CHUNK_MAP.md`, and
+  `docs/operations_project_operating_manual.md` to reconcile completed authority
+  with the remaining producer/registration and public boundaries.
 
 ### Prohibited changes
 
@@ -112,7 +117,8 @@ authorization vocabulary; it neither provisions actors nor manufactures evidence
   Permission-definition/API drill expectations advance from 74 to 75; the
   service permission is metadata-visible but absent from all human role grants.
 - Direct-SQL receipt substitutions (action, permission, service actor,
-  project/task/resource and digest) reject while a complete valid control commits.
+  project/task/resource and digest) reject while a complete valid control passes the same insert guard under nested
+  rollback; the real-release test separately proves commit.
   Migration locking excludes concurrent actor provisioning during CHECK replacement.
 - Remove the superseded deny implementation and its obsolete-only tests;
   retain or replace every required denial, custody and lifecycle regression.
@@ -120,7 +126,7 @@ authorization vocabulary; it neither provisions actors nor manufactures evidence
 ## Evidence
 
 Use real PostgreSQL with the owned `backend/scripts/run_isolated_tests.py`
-runner. New named test modules will be `tests/authorization/test_assignment_invalidation_contract.py`,
+runner. Implemented test modules are `tests/authorization/test_assignment_invalidation_contract.py`,
 `tests/tasks/test_assignment_invalidation_authority.py`, and
 `tests/migrations/test_assignment_reconciler_authority.py`. Reuse existing
 `tests/tasks/invalidation_support.py` and real cause/invocation fixtures; do not
@@ -150,7 +156,7 @@ topology. It must never backfill retained invalidation audit rows. Separately
 bounded public task activation follows. Foreground authority remains immediate;
 background release never grants access while a contributor lacks authority.
 
-### Exact planned regression functions
+### Named regression functions
 
 - `test_reconciler_registration_is_exact`: singleton matrix, all human roles and
   unrelated services excluded, public permission count and availability correct.
@@ -180,7 +186,8 @@ background release never grants access while a contributor lacks authority.
   `test_release_receipt_rejects_substitution`: predecessor/control, exact upgrade
   and repeated head, atomic refusal, lock-wait proof and direct-SQL negatives.
 
-These are future execution targets, not test results. Preserve the existing
+These implemented functions describe proof boundaries, not execution results.
+Exact-head command results remain PR evidence. Preserve the existing
 full real-cause, custody, start/Submission race and replacement-work regressions.
 
 ## Review size and source reconciliation
@@ -217,3 +224,13 @@ import-only consumers, `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`,
 `IMPORT_LEDGER.md`. No new private edge or compatibility alias is permitted.
 Review this repair through CI-integrity and architecture/reuse; prove selector
 identity parity, intact test assertions and no newly admitted structural debt.
+
+### Review-driven contract proof
+
+The copied delivery generation shares OUTBOX's signed-integer upper bound in
+both TASK facts and the receipt guard. Pure boundary controls and self-consistent
+direct-SQL receipt/decision substitutions reject zero and oversized generations.
+Malformed authority digests stop before AUDIT. A well-formed wrong digest starts
+with genuine PREP, reaches the AUDIT equality guard after a real decision and
+staged TASK effect, and rolls all effects back. These are required behavior
+regressions, not compatibility tests.

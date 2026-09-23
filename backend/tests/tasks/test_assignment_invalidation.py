@@ -110,6 +110,16 @@ async def test_valid_delivery_cannot_substitute_target_or_cause(task_client, mon
 
 
 async def test_invalid_authority_results_rollback(task_client, monkeypatch):
+    from app.adapters.audit import _AssignmentInvalidationAudit
+
+    audit_calls = []
+    original = _AssignmentInvalidationAudit.record_release
+
+    async def observed_audit(owner, evidence):
+        audit_calls.append(evidence)
+        await original(owner, evidence)
+
+    monkeypatch.setattr(_AssignmentInvalidationAudit, "record_release", observed_audit)
     s = await setup_assignment(task_client, monkeypatch)
     await revoke(s)
     _, envelope = await invoked(s)
@@ -118,6 +128,8 @@ async def test_invalid_authority_results_rollback(task_client, monkeypatch):
         None,
         AssignmentInvalidationAuthority("not-a-uuid", uuid4(), "sha256:" + "a" * 64),
         AssignmentInvalidationAuthority(uuid4(), "not-a-uuid", "sha256:" + "a" * 64),
+        AssignmentInvalidationAuthority(uuid4(), uuid4(), None),
+        AssignmentInvalidationAuthority(uuid4(), uuid4(), "not-a-digest"),
     ):
 
         class InvalidPrepared(PreparedAssignmentInvalidation):
@@ -136,6 +148,7 @@ async def test_invalid_authority_results_rollback(task_client, monkeypatch):
         )
         assert await bad(envelope) is HandlerOutcome.REJECT
         assert await snapshot(s) == before
+        assert audit_calls == []
 
 
 async def test_audit_failure_rolls_back_every_effect(task_client, monkeypatch):

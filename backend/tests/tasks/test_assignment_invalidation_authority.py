@@ -284,3 +284,82 @@ async def test_release_receipt_rejects_substitution(task_client, monkeypatch):
         transaction = await session.begin_nested()
         await session.execute(insert(AuditEvent).values(**control))
         await transaction.rollback()
+
+
+async def test_real_authority_digest_mismatch_rolls_back(task_client, monkeypatch):
+    from dataclasses import replace
+    from app.adapters.audit import _AssignmentInvalidationAudit
+    from app.modules.authorization.assignment_invalidation_authorization import _PreparedReconciliation
+    from app.modules.tasks.api.assignment_invalidation import assignment_invalidation_resource_digest
+
+    s = await setup_assignment(task_client, monkeypatch)
+    await revoke(s)
+    target, envelope = await invoked(s)
+    before, prior_decisions = await snapshot(s), await decisions(s)
+    consume = _PreparedReconciliation.consume
+    record = _AssignmentInvalidationAudit.record_release
+    observed = []
+
+    async def wrong_digest(owner, facts):
+        authority = await consume(owner, facts)
+        altered = "sha256:" + "f" * 64
+        assert altered != authority.resource_context_digest
+        return replace(authority, resource_context_digest=altered)
+
+    async def observe_real_decision(owner, evidence):
+        assert evidence.authority.resource_context_digest != assignment_invalidation_resource_digest(evidence.facts)
+        event = await owner._repo._session.get(AuditEvent, str(evidence.authority.decision_id))
+        assert event.event_type == "SensitiveAuthorizationAllowed"
+        task = await owner._repo._session.get(WorkstreamTask, s.task["id"])
+        assignment = await owner._repo._session.get(TaskAssignment, s.assignment["id"])
+        assert task.status == "ready" and assignment.status == "authority_revoked"
+        observed.append(event.id)
+        await record(owner, evidence)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(_PreparedReconciliation, "consume", wrong_digest)
+        patch.setattr(_AssignmentInvalidationAudit, "record_release", observe_real_decision)
+        assert await s.handler(envelope) is HandlerOutcome.REJECT
+    assert len(observed) == 1
+    assert await snapshot(s) == before
+    assert await decisions(s) == prior_decisions
+    async with s.sessions() as session:
+        assert await assignment_invalidation_audit(session).read_release(target) is None
+
+
+async def test_release_receipt_rejects_out_of_range_generation(task_client, monkeypatch):
+    from app.core.hashing import canonical_json_hash
+
+    s = await setup_assignment(task_client, monkeypatch)
+    await revoke(s)
+    target, envelope = await invoked(s)
+    assert await s.handler(envelope) is HandlerOutcome.ACKNOWLEDGE
+    async with s.sessions() as session, session.begin():
+        receipt = dict((await session.execute(select(AuditEvent.__table__).where(
+            AuditEvent.id == str(assignment_invalidation_evidence_id(target))
+        ))).mappings().one())
+        decision = dict((await session.execute(select(AuditEvent.__table__).where(
+            AuditEvent.id == receipt["event_payload"]["references"]["authorization_decision_id"]
+        ))).mappings().one())
+        for generation in (0, 2147483648, 2147483647):
+            changed, allowed = deepcopy(receipt), deepcopy(decision)
+            changed["id"], allowed["id"] = str(uuid4()), str(uuid4())
+            payload = changed["event_payload"]
+            payload["assignment_invalidation_facts"]["delivery_generation"] = generation
+            digest = canonical_json_hash({"resource_context": {
+                "resource_type": "task_authority", "resource_id": changed["entity_id"],
+                "scope_project_id": payload["references"]["project_id"],
+                "facts": payload["assignment_invalidation_facts"],
+            }})
+            payload["authorization_resource_digest"] = digest
+            payload["references"]["authorization_decision_id"] = allowed["id"]
+            allowed["after_facts"] = {"allowed": True, "resource_context_digest": digest}
+            async with session.begin_nested() as nested:
+                await session.execute(insert(AuditEvent).values(**allowed))
+                if generation == 2147483647:
+                    await session.execute(insert(AuditEvent).values(**changed))
+                else:
+                    with pytest.raises(DBAPIError, match="assignment release authority mismatch"):
+                        async with session.begin_nested():
+                            await session.execute(insert(AuditEvent).values(**changed))
+                await nested.rollback()

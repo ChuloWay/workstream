@@ -35,7 +35,7 @@ class AssignmentInvalidationAuthorityFacts(BaseModel):
     target: AssignmentInvalidationTarget
     cause_event_id: UUID
     delivery_event_id: UUID
-    delivery_generation: int = Field(ge=1)
+    delivery_generation: int = Field(ge=1, le=2147483647)
     cause_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     invocation_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     task_status: str

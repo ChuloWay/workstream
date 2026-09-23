@@ -205,9 +205,12 @@ audit locked-context projections through one historical resolver. Operational an
 audit methods remain internal. ARCH-03B7 supplies immutable contributor and manager
 requirements from the original locked effective policy. Its separate manager read
 is internal; the existing submission-requirements route retains its role/creator
-visibility wrapper pending ARCH-03C. ARCH-03B8 supplies bounded internal Audit Authority task evidence;
-assignment invalidation also needs shared delivery
-claims, and authorization/public cutover remains ARCH-03C.
+visibility wrapper pending ARCH-03C. ARCH-03B8 supplies bounded internal Audit
+Authority task evidence. ARCH-03B9 supplies hidden exact-assignment invalidation,
+AUTH-OUTBOX-02 supplies shared delivery, and ARCH-03C1 supplies exact reconciler
+authority and decision-bound receipts. ARCH-03C2 still owns atomic producer
+publication and first handler registration with enforced prefork topology; public
+task authority/cutover remains separately bounded under ARCH-03C.
 
 The intended unified flow uses one compilation result for sufficiency and
 artifact/pre-submit/post-submit proposals. Once finalized, its `ProjectSetupRun`,
