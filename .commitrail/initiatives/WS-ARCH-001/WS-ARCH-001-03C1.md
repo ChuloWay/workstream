@@ -197,3 +197,23 @@ Plan inspection closed wrong resource-token, missing decision-reference proof,
 unspecified request/correlation mapping, and potentially masked rollback tests.
 Current proof distinguishes historical replay from live authority; only new
 effects require current service status.
+
+### Existing structural-debt repair
+
+The frozen structural guard rejects growth in the touched AUTH runtime and
+PREP binding parser, and same-size edits to the monolithic permission test.
+Do not raise limits or grant an exception. Group the exact fixed-service
+binding parser calls in the existing `domain/prepared_service.py`; relocate the
+unchanged selector-ID helper from `runtime.py` to existing public `api/facts.py`
+and update its three consumers (`api/routes/auth.py`, PROJECTS
+`authorization_reads.py` and `router.py`) directly, without a runtime reexport.
+Move only the permission-definition response assertions into
+`tests/authorization/test_catalogue.py`, advancing only the intentional count;
+keep role policy, scopes and role-response assertions in their existing test.
+Record its original assertions and refresh the shrinking debt inventory.
+Allowed additional paths are AUTH `api/facts.py`/`api/__init__.py`, those
+import-only consumers, `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`,
+`assertion-maps/WS-ARCH-001-03C1.json`, and removal of any now-stale entry from
+`IMPORT_LEDGER.md`. No new private edge or compatibility alias is permitted.
+Review this repair through CI-integrity and architecture/reuse; prove selector
+identity parity, intact test assertions and no newly admitted structural debt.

@@ -4,7 +4,7 @@ from __future__ import annotations
 from types import MappingProxyType
 from enum import StrEnum
 from typing import Literal
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
@@ -1246,10 +1246,3 @@ AuthorizationResourceContext = (
     | AdapterBindingReadResourceContext | AdapterBindingMutationResourceContext
     | ContributionPolicyReadResourceContext | ContributionPolicyMutationResourceContext
 )
-
-
-def authorization_resource_selector_id(resource_type: str, raw_id: str) -> UUID:
-    try:
-        return UUID(raw_id)
-    except (TypeError, ValueError, AttributeError):
-        return uuid5(NAMESPACE_URL, f"workstream:{resource_type}-selector:{raw_id}")

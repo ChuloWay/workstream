@@ -4,6 +4,8 @@ from collections import Counter
 
 import pytest
 
+from app.modules.authorization.admin_service import AdminRoleGrantService
+
 from app.modules.authorization.catalogue import (
     ACTION_IDS, ACTION_DEFINITIONS, ACTION_BY_ID, PERMISSION_IDS,
     HISTORICAL_PERMISSION_IDS, NEW_PERMISSION_IDS, ActionId, PermissionId,
@@ -118,3 +120,11 @@ def test_proposal_actions_have_exact_executable_authority(action):
     assert definition is ACTION_BY_ID[action]
     assert definition.availability is ActionAvailability.ACTIVE
     assert definition.owner is ActionOwner.AUTH_12F4
+
+
+def test_permission_definition_response_is_exact() -> None:
+    permission_response = AdminRoleGrantService.permission_definitions()
+    assert permission_response.total == 75
+    assert [item.permission_id.value for item in permission_response.items] == sorted(
+        permission.value for permission in PermissionId
+    )

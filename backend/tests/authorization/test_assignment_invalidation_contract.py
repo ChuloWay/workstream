@@ -95,3 +95,40 @@ async def test_malformed_reconciler_input_denies_before_database():
             raise AssertionError("malformed input reached preparation")
     with pytest.raises(ValueError, match="invalid assignment reconciliation authority"):
         parse_assignment_invalidation_binding(ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE, {}, ValueError)
+
+
+def test_fixed_service_bindings_preserve_both_exact_contracts():
+    from app.modules.authorization.domain.prepared_service import prepared_fixed_service_bindings
+
+    resource = assignment_invalidation_resource(facts())
+    assignment = prepared_fixed_service_bindings(
+        ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE, resource.model_dump(mode="json"), ValueError,
+    )
+    assert assignment == {"assignment_invalidation_context": resource, "outbox_dispatch_digest": None}
+    digest = "sha256:" + "a" * 64
+    assert prepared_fixed_service_bindings(ActionId.OUTBOX_DISPATCH, {"outbox_dispatch_digest": digest}, ValueError) == {
+        "assignment_invalidation_context": None, "outbox_dispatch_digest": digest,
+    }
+    assert prepared_fixed_service_bindings(ActionId.ACTOR_PROFILE_READ_SELF, {}, ValueError) == {
+        "assignment_invalidation_context": None, "outbox_dispatch_digest": None,
+    }
+    for action, message in (
+        (ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE, "invalid assignment reconciliation authority"),
+        (ActionId.OUTBOX_DISPATCH, "invalid prepared outbox authority"),
+    ):
+        with pytest.raises(ValueError, match=message):
+            prepared_fixed_service_bindings(action, {}, ValueError)
+
+
+def test_public_resource_selector_preserves_uuid_and_stable_invalid_identity():
+    from uuid import NAMESPACE_URL, uuid5
+    from app.modules.authorization.api import authorization_resource_selector_id
+    from app.modules.authorization import runtime
+
+    valid = uuid4()
+    assert authorization_resource_selector_id("project", str(valid)) == valid
+    assert authorization_resource_selector_id("project", "bad-id") == uuid5(
+        NAMESPACE_URL, "workstream:project-selector:bad-id",
+    )
+    assert authorization_resource_selector_id("project", "bad-id") != authorization_resource_selector_id("task", "bad-id")
+    assert not hasattr(runtime, "authorization_resource_selector_id")

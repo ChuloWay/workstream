@@ -52,7 +52,7 @@ from app.modules.authorization.domain.prepared_adapter_bindings import (
     parse_prepared_adapter_binding,
     prepared_adapter_binding_matches,
 )
-from app.modules.authorization.domain.prepared_service import project_setup_resource_matches
+from app.modules.authorization.domain.prepared_service import project_setup_resource_matches, prepared_fixed_service_bindings
 from app.modules.authorization.domain.prepared_guide_mutations import parse_prepared_guide_mutation
 from app.modules.authorization.domain.guide_compilation_projections import (
     ProjectGuideProjectionResourceContext,
@@ -63,10 +63,10 @@ from app.modules.authorization.prepared_proposal_replay import (
 from app.modules.authorization.domain.prepared_service import prepared_request_digest
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
 from app.modules.authorization.domain.assignment_invalidation import (
-    AssignmentInvalidationResourceContext, parse_assignment_invalidation_binding,
+    AssignmentInvalidationResourceContext,
 )
 from app.modules.authorization.domain.outbox_dispatch import (
-    OutboxDispatchResourceContext, prepared_outbox_digest,
+    OutboxDispatchResourceContext,
 )
 from app.modules.authorization.prepared_projection_replay import (
     parse_setup_bindings, setup_context_matches,
@@ -843,12 +843,7 @@ class PreparedAuthorizationService:
             scope=scope,
             idempotency_key=caller_input.idempotency_key,
             request_digest=prepared_request_digest(caller_input.request_value),
-            assignment_invalidation_context=parse_assignment_invalidation_binding(
-                action_id, caller_input.request_value, PreparedAuthorizationHandleInvalid,
-            ),
-            outbox_dispatch_digest=prepared_outbox_digest(
-                action_id, caller_input.request_value, PreparedAuthorizationHandleInvalid,
-            ),
+            **prepared_fixed_service_bindings(action_id, caller_input.request_value, PreparedAuthorizationHandleInvalid),
             project_create_operation_id=operation_id,
             project_create_project_id=project_id,
             project_create_generation=operation_generation,

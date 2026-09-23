@@ -6,8 +6,8 @@ from uuid import UUID
 
 from app.core.hashing import canonical_json_hash
 from app.modules.authorization.catalogue import ActionId
-from app.modules.authorization.domain.assignment_invalidation import AssignmentInvalidationResourceContext
-from app.modules.authorization.domain.outbox_dispatch import OutboxDispatchResourceContext
+from app.modules.authorization.domain.assignment_invalidation import AssignmentInvalidationResourceContext, parse_assignment_invalidation_binding
+from app.modules.authorization.domain.outbox_dispatch import OutboxDispatchResourceContext, prepared_outbox_digest
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext, DERIVE
 from app.modules.authorization.domain.guide_compilation import (
     ProjectGuideCompilationExecuteResourceContext,
@@ -127,3 +127,11 @@ def fixed_service_resource_matches(action_id, resource, project_id, artifact_typ
 def prepared_request_digest(value):
     """One canonical request commitment shared by PREP issuance and consumption."""
     return canonical_json_hash({"domain": "workstream.prepared_authorization.request.v1", "request": value})
+
+
+def prepared_fixed_service_bindings(action, request, invalid_error):
+    """Keep exact dispatcher and assignment effect commitments with service guards."""
+    return {
+        "assignment_invalidation_context": parse_assignment_invalidation_binding(action, request, invalid_error),
+        "outbox_dispatch_digest": prepared_outbox_digest(action, request, invalid_error),
+    }

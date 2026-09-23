@@ -2317,11 +2317,7 @@ def test_administrative_role_policy_and_definition_responses_are_exact() -> None
         for permission in ADMIN_ROLE_PERMISSIONS[AdminRole.AUDIT_AUTHORITY]
     )
 
-    permission_response, role_response = AdminRoleGrantService.permission_definitions(), AdminRoleGrantService.role_definitions()
-    assert permission_response.total == 75
-    assert [item.permission_id.value for item in permission_response.items] == sorted(
-        permission.value for permission in PermissionId
-    )
+    role_response = AdminRoleGrantService.role_definitions()
     assert role_response.total == 5
     assert [item.role for item in role_response.items] == list(AdminRole)
     assert [list(item.allowed_scopes) for item in role_response.items] == [

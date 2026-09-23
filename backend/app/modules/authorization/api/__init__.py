@@ -27,7 +27,7 @@ from .errors import (
     AuthorizationUnavailable,
     PreparedAuthorizationInvalid,
 )
-from .facts import ActorIdentityFacts, ActorKind, JsonScalar, ResourceFacts, ResourceValue
+from .facts import authorization_resource_selector_id, ActorIdentityFacts, ActorKind, JsonScalar, ResourceFacts, ResourceValue
 from .ports import AuthorizationPort, PreparedAuthorizationPort, PreparedHandleT
 from .project_guide_compilation import (
     ProjectGuideCompilationAuthorizationPort,
@@ -75,6 +75,7 @@ from .project_setup_finalization import (
 )
 
 __all__ = (
+    "authorization_resource_selector_id",
     "FINALIZATION_ACTION",
     "FINALIZATION_PERMISSION",
     "FINALIZATION_RESOURCE",
