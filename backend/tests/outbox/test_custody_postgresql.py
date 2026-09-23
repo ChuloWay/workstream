@@ -256,7 +256,7 @@ async def test_sql_claim_lease_is_bounded(delivery_harness):
                     OutboxDeliveryAttempt(
                         event_id=event.event_id,
                         project_id=str(h.project),
-                        payload_digest=event.payload_digest,
+                        payload_digest=canonical_json_hash(event.payload),
                         claim_generation=1,
                         claim_owner="bounded",
                         claimed_at=now,
