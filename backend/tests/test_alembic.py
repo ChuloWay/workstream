@@ -86,6 +86,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0028_outbox_dispatch_authority",
         "0027_outbox_delivery_custody",
         "0026_outbox_dispatch_identity",
         "0025_task_command_replay",

@@ -64,7 +64,7 @@ existing UNKNOWN handling, without automatic uncertain-effect repetition.
 
 - `backend/app/modules/actors/api/service_identities.py` and ACTORS closed
   identity tests, migration environment current-head admission and affected head
-  expectations in OUTBOX migration tests; new `backend/alembic/versions/0029_assignment_reconciler_authority.py`.
+  expectations in OUTBOX migration tests and `tests/test_alembic.py`; new `backend/alembic/versions/0029_assignment_reconciler_authority.py`.
 - AUTH `catalogue.py`, `admin_schemas.py` (exact public permission count),
   `runtime.py`, `prepared.py`, private
   `assignment_invalidation_authorization.py`, `domain/assignment_invalidation.py`,

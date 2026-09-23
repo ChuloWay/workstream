@@ -344,6 +344,7 @@ async def test_release_receipt_rejects_out_of_range_generation(task_client, monk
         for generation in (0, 2147483648, 2147483647):
             changed, allowed = deepcopy(receipt), deepcopy(decision)
             changed["id"], allowed["id"] = str(uuid4()), str(uuid4())
+            allowed["entity_id"] = allowed["id"]
             payload = changed["event_payload"]
             payload["assignment_invalidation_facts"]["delivery_generation"] = generation
             digest = canonical_json_hash({"resource_context": {

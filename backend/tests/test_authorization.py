@@ -1993,7 +1993,7 @@ def test_fixed_service_action_matrix_and_activation_are_exact_and_immutable() ->
         identity: {action.value for action in actions}
         for identity, actions in SERVICE_ACTIONS_BY_IDENTITY.items()
     } == expected
-    assert sum(map(len, SERVICE_ACTIONS_BY_IDENTITY.values())) == 24
+    assert sum(map(len, SERVICE_ACTIONS_BY_IDENTITY.values())) == 25
     assert FUTURE_INTENT_REQUIRED_ACTIONS == {
         ActionId.REVIEW_FINDING_EVIDENCE_INGEST,
         ActionId.REVIEW_FINDING_RESPONSE_EVIDENCE_INGEST,
@@ -2053,7 +2053,7 @@ def test_submission_artifact_policy_draft_actions_have_exact_child_owners() -> N
     approval = ACTION_BY_ID[ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_APPROVE]
     assert (approval.owner, approval.availability) == (ActionOwner.AUTH_12F4, ActionAvailability.ACTIVE)
     active_internal = {
-        ActionId.OUTBOX_DISPATCH, ActionId.ARTIFACT_VERIFICATION_EXECUTE, ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
+        ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE, ActionId.OUTBOX_DISPATCH, ActionId.ARTIFACT_VERIFICATION_EXECUTE, ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
         ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE,
         ActionId.ARTIFACT_PENDING_WORK_SCAN,
         ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE,
