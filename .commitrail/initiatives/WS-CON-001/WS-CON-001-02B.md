@@ -36,7 +36,8 @@ Allowed files:
 - `backend/app/adapters/outbox.py`: explicit owner composition requiring the
   AUTH preparation factory; no default, permissive adapter or runtime registry.
 - Focused `backend/tests/outbox/` contracts, PostgreSQL and recovery tests;
-  `tests/test_outbox.py` only the obsolete persistence-only structure assertion;
+  `tests/test_outbox.py` affected raw-transition fixtures, obsolete persistence-only
+  structure assertion and superseded dead-letter-reopening expectation;
   migration graph, exact schema/reset inventory, lane/ownership registrations
   and their exact tests where the new files/table require them.
 - `docs/spec_shared_outbox.md`, affected current capability/navigation and
@@ -50,8 +51,10 @@ baseline rewriting; gate, coverage or assertion weakening.
 The old archived proposal conflated delivery with manual operational controls.
 `operations.outbox.retry` is only a planned permission, without an executable
 action/port. Dead-letter operator requeue, pending cancellation and delayed
-archival therefore remain separate authorized operational work. Existing SQL
-guards and their tests remain. Replay here means exact committed claim/outcome
+archival therefore remain separate authorized operational work. Preserve existing
+SQL protections; 0027 additionally rejects reopening a completed delivery without
+new coherent custody. Repair valid raw-SQL fixtures to stage matching custody so
+their negative assertions still reach the original guard. Replay means exact committed claim/outcome
 redelivery, not an unauthorized manual reopening of terminal work. Actual worker
 registration and broker transport belong to AUTH-OUTBOX-02 integration; this PR
 must not claim live Redis delivery proof or install a worker that can bypass the
@@ -62,7 +65,8 @@ missing authority adapter.
 1. Discover one exact event without locking. Build proposed facts from its
    canonical project, payload digest and generation using database time.
 2. In a fresh root transaction, prepare AUTH before any outbox row lock. Lock
-   and refresh the exact event, recompose and compare facts, consume one matching
+   and refresh the exact event, recompose and compare facts, and recheck proposed
+   lease validity using locked `clock_timestamp()` after any lock wait. Only then consume one matching
    allow decision, and persist claim plus custody atomically. Commit before
    returning a claim. A competing or changed candidate does not gain authority.
 3. In another fresh transaction, prepare INVOKE, lock event then custody in the
@@ -73,9 +77,11 @@ missing authority adapter.
    a dispatcher authority handle or its session. Its own feature composition
    must obtain feature authority and validate the committed claim through the
    public port. The port reads an independent transaction, so an uncommitted
-   claim cannot validate. Delivery is at least once across generations; feature
-   effects must use immutable event identity/idempotency, not generation, to
-   deduplicate. No concrete feature handler is installed here.
+   claim cannot validate. Safe explicit retries can invoke multiple generations;
+   feature effects must deduplicate by immutable event identity, not generation.
+   There is no unconditional at-least-once guarantee: a crash after invocation
+   custody commits but before handler entry is conservatively unknown, even when
+   the handler actually ran zero times. No concrete feature handler is installed here.
 5. Reopen a fresh FINALIZE authorization/transaction. Bind every outcome, error,
    retry and timestamp field through the OUTBOX-owned canonical outcome digest.
    Recompose exact facts under locks, consume authority, then atomically apply
@@ -111,14 +117,22 @@ recoverable custody rather than claiming successful handler completion.
 Registry entries use exact event type/version and a typed handler. No dynamic
 plugins, default handler or feature inference from event names. Registry
 metadata is not authority. Production registrations stay empty until concrete
-feature integrations supply and prove their own AUTH boundary; an absent or
-unknown registration cannot silently acknowledge an event.
+feature integrations supply and prove their own AUTH boundary. Unknown or absent
+registrations remain unclaimed and counted as unsupported; they are neither
+acknowledged nor silently excluded from observation.
 
 ## Drain and recovery limits
 
-Expose one same-session, project-scoped, nonlocking observation of all relevant
+Expose one same-session, project-scoped, nonlocking SQL statement observing all relevant
 events and custody, including unsupported event types and future retry times.
-Count pending, claimed, retryable, invoked and unresolved execution separately.
+Pending/claimed/retryable are disjoint event-state counts, including future
+eligibility and expired leases. Invoked counts invocation custody not completed
+and overlaps claimed; unresolved counts completed unknown invocation custody and
+does not overlap invoked. Unsupported counts nonterminal events without an exact
+registry entry and overlaps their event-state counts. Report dead-letter events
+separately. Do not sum overlapping counts or expose a readiness boolean. A single
+statement binds these facts to one READ COMMITTED snapshot; multiple separate
+queries are not equivalent.
 An expired invocation may still be physically running; recovery cannot certify
 its termination. Preserve that uncertainty rather than returning false zero.
 Database/observation failure raises a bounded failure, never an empty result.
@@ -146,15 +160,65 @@ lifecycle owner's fence and feature obligation evidence.
    mechanics use explicitly injected test authority only in labeled tests.
 8. Replace the obsolete no-dispatch-anywhere test with append-only transaction
    ownership plus no broker/public/live composition assertions. Retain existing
-   immutable-envelope, replay, SQL transition, cancellation and archival tests.
+   immutable-envelope, replay, SQL transition, cancellation and archival protections.
+   Replace the now-obsolete permissive dead-letter-reopen assertion with rejection
+   and preservation; retain its generation/error-code protection using reachable
+   typed retry custody. No production caller currently uses that reopening path.
 9. Run focused tests, real PostgreSQL proof, meaningful mutation probes for
    generation/outcome binding and committed-only validation, structural/module
    boundaries, exact lane selection, docs/links/stale wording and final hosted
    CI. Changed subsystem coverage >=90%; preserve global coverage and all gates.
 
-Named new tests and reproducible commands are finalized with the implementation;
-planned tests are not claimed as executed evidence. Broker transport is not part
-of this hidden owner boundary and must be proven when worker wiring is added.
+## Named future proof
+
+These are planned nodes, not executed evidence:
+
+- `tests/outbox/test_delivery_postgresql.py::test_claim_race_commits_one_generation`:
+  two independent sessions, one committed winner, loser consumes no authority;
+  remove the refreshed-generation comparison and require this test to fail.
+- `test_claim_lease_expiring_behind_lock_consumes_no_authority`: hold the event
+  row in another transaction beyond the proposed lease, then release it. No
+  consume/write occurs; removing locked clock revalidation must fail the proof.
+- `test_claim_validator_requires_committed_exact_facts`: an uncommitted insert
+  cannot validate; after commit it can, while independent project/event/payload/
+  owner/generation/lease substitutions fail. A validator reading its writer's
+  session instead of an independent transaction must fail the uncommitted case.
+- `test_invoke_releases_locks_and_runs_generation_once`: handler takes the event
+  lock using another connection; concurrent duplicate invocation runs once.
+- `tests/outbox/test_recovery_postgresql.py::test_crash_before_invoke_recovers`:
+  claim commit then process loss; expiry is retryable without invented invocation.
+- `test_crash_after_invoke_commit_before_handler_entry_is_unknown`: invocation
+  persisted, zero handler calls; expiry is unknown/dead-letter, not ack or retry.
+- `test_crash_after_handler_before_finalize_is_unknown`: handler ran, finalize
+  absent; expiry preserves unknown evidence and cannot re-invoke automatically.
+- `test_finalize_commit_and_exact_replay`: before-commit fault rolls back both
+  writes; after-commit response loss replays the original receipt; substituted
+  outcome/claim facts reject. Removing outcome comparison must fail the test.
+- `test_retry_backoff_and_exhaustion`: explicit retry plus a valid successful
+  control; verify database times, bounds and exhaustion without changing limits.
+- `tests/outbox/test_custody_postgresql.py::test_projection_and_receipt_commit_together`:
+  direct SQL separately mutates each side with otherwise valid facts, requires
+  rejection and rollback; paired valid write commits. Disable each deferred
+  guard separately and require its corresponding negative to fail.
+- `test_completed_custody_is_immutable`: field substitutions, deletion and
+  truncation each reject at their intended guard, with valid receipt controls.
+- `tests/outbox/test_migration.py::test_pending_events_preserved_without_fabricated_attempts`
+  and `test_attempted_events_refuse_unprovable_migration`: real 0026 -> 0027 with
+  retained pending and each reachable attempted state, comparing rows, schema
+  and revision. Refusal must not be an unrelated setup/downgrade failure.
+- `tests/outbox/test_drain_postgresql.py::test_drain_uses_one_snapshot_and_exact_project`:
+  interleaved foreign-project decoys, committed rows locked by another connection,
+  future retries, unsupported events and unknown invocations. One nonblocking
+  SQL statement; removing the project predicate or splitting the snapshot must fail.
+- `test_drain_failure_never_returns_zero`: a database error raises bounded failure.
+- `tests/outbox/test_contracts.py::test_append_transaction_and_hidden_delivery_boundaries`:
+  append remains flush-only; no broker, route, production handler or live AUTH
+  adapter is installed. Retain real planned-action denial from AUTH-OUTBOX-01.
+
+Run the new modules and retained `test_outbox.py` through the canonical isolated
+runner, not a deselected broad suite. Register every module exactly once in the
+existing lanes, with migration tests in the schema lane. Broker transport is not
+part of this hidden owner boundary and must be proven when worker wiring is added.
 
 ## Risk and review
 
