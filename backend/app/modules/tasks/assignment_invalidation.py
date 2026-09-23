@@ -109,8 +109,11 @@ class AssignmentInvalidationOperation:
             return HandlerOutcome.REJECT
         facts = AssignmentInvalidationAuthorityFacts(
             target=target,
-            cause=cause,
-            envelope=envelope,
+            cause_event_id=cause.cause_event_id,
+            delivery_event_id=envelope.claim.event_id,
+            delivery_generation=envelope.claim.claim_generation,
+            cause_digest=canonical_json_hash(cause.model_dump(mode="json")),
+            invocation_digest=canonical_json_hash(envelope.model_dump(mode="json")),
             task_status=task.status,
             locked_context_hash=canonical_json_hash(
                 {

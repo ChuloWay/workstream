@@ -59,6 +59,16 @@ async def test_exact_real_cause_releases_only_pre_submit_assignment(
     assert added[0]["event_type"] == "TaskAssignmentAuthorityRevoked"
     assert all(event in events for event in before[2])
     assert [stage for stage, _ in s.trace] == ["prepare", "consume", "close"]
+    from app.adapters.audit import committed_authority_invalidation
+    from app.core.hashing import canonical_json_hash
+
+    cause = await committed_authority_invalidation(s.sessions).read_invalidation(s.invalidation_id)
+    facts = s.trace[0][1]
+    assert facts.target == target and facts.cause_event_id == cause.cause_event_id
+    assert facts.delivery_event_id == envelope.claim.event_id
+    assert facts.delivery_generation == envelope.claim.claim_generation
+    assert facts.cause_digest == canonical_json_hash(cause.model_dump(mode="json"))
+    assert facts.invocation_digest == canonical_json_hash(envelope.model_dump(mode="json"))
     after = await snapshot(s)
     assert await s.handler(envelope) is HandlerOutcome.ACKNOWLEDGE
     assert await snapshot(s) == after

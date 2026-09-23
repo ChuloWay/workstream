@@ -58,7 +58,10 @@ revocation, profile suspension/deactivation or identity-link revocation.
 Reviewer/admin role changes and reactivation cannot release assignments.
 
 Require an explicit feature authorization port; shared dispatcher authority
-does not authorize TASK writes. Keep production unavailable until the exact
+does not authorize TASK writes. TASK's public authority facts contain its own
+exact target, cause/delivery identifiers and canonical digests of the validated
+cause and complete invocation; they do not import other owners' public types.
+Keep production unavailable until the exact
 fixed-service implementation and originating event wiring land in 03C.
 
 Serialize on TASK then its exact assignment. Only a consistent active assignment

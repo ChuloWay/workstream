@@ -6,9 +6,6 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.audit.api import AuthorityInvalidationFacts
-from app.modules.outbox.api import OutboxEventEnvelope
-
 ASSIGNMENT_INVALIDATION_EVENT = "TaskAssignmentAuthorityInvalidationRequested"
 
 
@@ -32,8 +29,11 @@ class AssignmentInvalidationAuthorityFacts(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
     target: AssignmentInvalidationTarget
-    cause: AuthorityInvalidationFacts
-    envelope: OutboxEventEnvelope
+    cause_event_id: UUID
+    delivery_event_id: UUID
+    delivery_generation: int = Field(ge=1)
+    cause_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    invocation_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     task_status: str
     locked_context_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
