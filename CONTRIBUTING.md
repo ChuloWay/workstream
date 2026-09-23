@@ -107,6 +107,11 @@ active queue or approval gate.
   PR to reflect its intended merged outcome, including relevant changes from
   `main`. If there is no impact, explain why in the PR instead of making a
   no-op edit. Do not defer this to a separate post-merge roadmap PR.
+  Reconcile affected summaries, scoreboard rows, dependency diagrams, release
+  gates and current initiative navigation—not only the newest detail paragraph.
+  Distinguish implemented, publicly exposed and deployed behavior, preserve
+  policy branches, and link detailed evidence instead of repeating its history.
+  This adds no separate gate, status file or post-merge step.
 - In the change record, declare the intended merge outcome and durable
   disposition (`Planned`, `Complete`, `Stopped`, or `Superseded`). Update an
   initiative overview or index row only when its durable meaning changes.
