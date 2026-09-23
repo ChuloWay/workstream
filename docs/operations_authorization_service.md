@@ -1273,5 +1273,6 @@ The closed identity catalogue admits `workstream.outbox.dispatcher`, and the
 protected permission catalogue lists `outbox.dispatch`. This registration does
 not enable the dispatcher: the action remains planned and no human role receives it.
 Provisioning through the existing administrative operation cannot bypass that
-availability gate. Shared delivery and its live authority await CON-02B and
-AUTH-OUTBOX-02; no TASK, checker, artifact or compensation permission is inherited.
+availability gate. CON-02B supplies hidden shared delivery and recovery; live
+AUTH evidence and production composition remain AUTH-OUTBOX-02 work. No TASK,
+checker, artifact or compensation permission is inherited.

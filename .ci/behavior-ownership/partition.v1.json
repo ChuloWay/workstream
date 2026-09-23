@@ -798,7 +798,23 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/modules/outbox/api.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/outbox/delivery.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/outbox/delivery_repository.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/modules/outbox/models.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/outbox/registry.py"
     },
     {
       "group": "shared",
@@ -1341,7 +1357,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "85e32ab897d7602bd501d1b29621a773db8bdc2407c51cdfceef85820b0404f1",
+  "authority_digest": "75ca7560d1f9e191a23ec83e3ce3354a4ec936936b19db7843a959e127405321",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

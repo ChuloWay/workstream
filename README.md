@@ -309,9 +309,10 @@ Independent initiatives and branches may proceed concurrently. Start with
 [CONTRIBUTING.md](CONTRIBUTING.md) before proposing repository work.
 
 The shared outbox dispatcher has a registered but unavailable fixed identity and
-phase-bound authorization contract (AUTH-OUTBOX-01). Reliable delivery mechanics
-and live activation remain CON-02B and AUTH-OUTBOX-02; registration does not enable
-background task or checker effects.
+phase-bound authorization contract (AUTH-OUTBOX-01). CON-02B adds hidden delivery,
+crash recovery and immutable receipts. AUTH-OUTBOX-02 still owns live authorization,
+audit binding and Celery worker integration; no background task or checker effect is
+activated by these hidden mechanics.
 
 ## Developer Quickstart
 

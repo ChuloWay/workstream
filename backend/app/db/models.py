@@ -45,7 +45,7 @@ from app.modules.contributions.models import (  # noqa: F401
     Iso4217CurrencyCode,
     ProjectCompensationUnit,
 )
-from app.modules.outbox.models import OutboxEvent  # noqa: F401
+from app.modules.outbox.models import OutboxDeliveryAttempt, OutboxEvent  # noqa: F401
 from app.modules.projects.models import (  # noqa: F401
     EffectiveProjectSubmissionArtifactPolicy,
     GuideSourceSnapshot,

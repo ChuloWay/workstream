@@ -45,7 +45,7 @@ checker-remediation boundary before public Submission cutover.
 | ARCH-04C | ARCH-04A, ARCH-04B, ARCH-04B2, POL-07 | CHECKERS durable execution/result/currentness and worker recovery |
 | ARCH-04D | ARCH-04B, ARCH-04C | AUTH post-submit materialization/result activation |
 | AUTH-OUTBOX-01 | Merged shared outbox persistence and AUTH service/PREP foundations | Complete: planned dispatcher identity/action/matrix and unavailable typed authority contract |
-| CON-02B | AUTH-OUTBOX-01 | Shared hidden dispatcher/claim fencing, typed handlers and recovery |
+| CON-02B | AUTH-OUTBOX-01 | Complete: shared hidden dispatcher/claim fencing, typed handlers and recovery |
 | AUTH-OUTBOX-02 | CON-02B exact hidden manifest | Exact dispatcher mechanics only; no feature authority |
 | ARCH-04E1A | ARCH-04C | TASK routing-manifest schema/public facts and accepted-effects port, no handlers or REV dependency |
 | ARCH-04E1B | ARCH-04E1A, CON-02B hidden contract; shared REV-04B + CON-03C/07 + REV-12A shared fence foundation for false | TASK hidden handlers; consume one shared acceptance operation on false/pass |
@@ -85,11 +85,10 @@ Current supporting contracts are [ARCH-04B2](chunks/WS-ARCH-001-04B-art-post-sub
 Each numbered section is a current bounded design, expanded into its own change
 record on implementation; the parent is not a multi-owner implementation PR.
 
-An outbox row is not a running dispatcher. The existing shared module supplies
-append/flush and idempotency, but delivery is still CON-02B work. Reuse that
-existing boundary: AUTH-OUTBOX-01 has supplied planned dispatcher metadata and typed
-authority; CON-02B builds hidden claim/invoke/finalize mechanics; AUTH then
-activates that exact manifest. None depends on ContributionRecord, fulfillment
+The shared module supplies append/flush and idempotency, and CON-02B supplies
+hidden claim/invoke/finalize, custody and recovery. AUTH-OUTBOX-01 has supplied
+planned dispatcher metadata and typed authority; AUTH-OUTBOX-02 must activate
+that exact manifest and bind real audit evidence before production integration. None depends on ContributionRecord, fulfillment
 or REV implementation. TASK must not implement an alternative outbox worker.
 Registration and activation are distinct product-authority changes, not
 extra planning/administrator approval ceremonies.

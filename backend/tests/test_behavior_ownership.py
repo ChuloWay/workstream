@@ -1970,3 +1970,20 @@ def test_outbox_contract_partition_transition_is_exact():
     for targets in ([added], [retained, added, "backend/app/modules/authorization/api/unreviewed.py"]):
         with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
             ownership._validate_additive_partition_transition(_partition(sorted(targets)), trusted)
+
+
+def test_outbox_delivery_partition_additions_are_exact():
+    """Only four eligible delivery files are added; existing owners stay unchanged."""
+    retained = "backend/app/core/config.py"
+    targets = {
+        "backend/app/modules/outbox/api.py",
+        "backend/app/modules/outbox/registry.py", "backend/app/modules/outbox/delivery.py",
+        "backend/app/modules/outbox/delivery_repository.py",
+    }
+    assert ownership.CON_02B_DELIVERY_TARGETS == targets
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(_partition(sorted([retained, *targets])), trusted)
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted([retained, *targets, "backend/app/modules/outbox/unreviewed.py"])), trusted,
+        )

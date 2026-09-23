@@ -65,8 +65,7 @@ class OutboxEvent(Base):
             name="delivery_state",
         ),
         CheckConstraint(
-            "attempt_count >= 0 and claim_generation >= 0 "
-            "and attempt_count = claim_generation",
+            "attempt_count >= 0 and claim_generation >= 0 and attempt_count = claim_generation",
             name="delivery_counters",
         ),
         CheckConstraint(
@@ -110,8 +109,7 @@ class OutboxEvent(Base):
             "and last_error_code is not null and finalized_at is not null) or "
             "(delivery_state = 'cancelled' and next_attempt_at is null and claim_owner is null "
             "and claimed_at is null and claim_expires_at is null and finalized_at is not null "
-            "and ((attempt_count = 0 and last_attempt_at is null and last_error_code is null) "
-            "or (attempt_count > 0 and last_attempt_at is not null)))",
+            "and attempt_count = 0 and last_attempt_at is null and last_error_code is null)",
             name="delivery_state_shape",
         ),
         Index(
@@ -188,3 +186,44 @@ class OutboxEvent(Base):
     last_error_code: Mapped[str | None] = mapped_column(String(80))
     finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OutboxDeliveryAttempt(Base):
+    """Retained delivery custody, deliberately not AUTH evidence before activation."""
+
+    __tablename__ = "outbox_delivery_attempts"
+    __table_args__ = (
+        CheckConstraint("claim_generation between 1 and 2147483647", name="generation"),
+        CheckConstraint("claim_owner ~ '^[A-Za-z0-9._:-]{1,120}$'", name="owner"),
+        CheckConstraint("payload_digest ~ '^sha256:[0-9a-f]{64}$'", name="payload_digest"),
+        CheckConstraint(
+            "claim_expires_at > claimed_at and claim_expires_at <= claimed_at + interval '1 hour'",
+            name="lease",
+        ),
+        CheckConstraint(
+            "(stage = 'claimed' and invoked_at is null and outcome_json is null "
+            "and outcome_digest is null) or "
+            "(stage = 'invoked' and invoked_at is not null and invoked_at >= claimed_at and invoked_at < claim_expires_at "
+            "and outcome_json is null and outcome_digest is null) or "
+            "(stage = 'completed' and outcome_json is not null and outcome_digest is not null "
+            "and (invoked_at is null or (invoked_at >= claimed_at and invoked_at < claim_expires_at)))",
+            name="stage_shape",
+        ),
+        CheckConstraint(
+            "outcome_json is null or coalesce(outbox_delivery_outcome_valid("
+            "outcome_json, outcome_digest, claimed_at, claim_expires_at, invoked_at), false)",
+            name="outcome",
+        ),
+    )
+
+    event_id: Mapped[UUID] = mapped_column(ForeignKey("outbox_events.event_id"), primary_key=True)
+    claim_generation: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False)
+    payload_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    claim_owner: Mapped[str] = mapped_column(String(120), nullable=False)
+    claimed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    claim_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    stage: Mapped[str] = mapped_column(String(16), nullable=False)
+    invoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    outcome_json: Mapped[str | None] = mapped_column(String(2048))
+    outcome_digest: Mapped[str | None] = mapped_column(String(71))
