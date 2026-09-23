@@ -177,6 +177,8 @@ phase contract. Worker discovery/continuation and test-only handler composition
 are explicit. Existing claim/finalization race barriers must run before real
 PREP acquires the service locks; post-consumption lease delay stays separate.
 Do not replace real authority with a fake merely to preserve a race schedule.
+Retain isolated malformed-port-result contract controls: real AUTH cannot emit
+a wrong action/permission, so live-AUTH proof alone cannot replace those defenses.
 
 ## Reconciliation
 
@@ -194,6 +196,13 @@ Do not replace real authority with a fake merely to preserve a race schedule.
 
 These are planned additions/strengthenings, not executed evidence:
 
+- `test_delivery_rejects_malformed_authorization_decision`: retain the OUTBOX
+  defensive port-result contract for wrong type, DENY, wrong action and wrong
+  permission with a valid control and per-check mutations. A controlled port is
+  permitted only for this pure/service boundary proof; it supplies no evidence
+  of live authority or database custody. All PostgreSQL and concurrency proofs
+  use real PREP decisions; do not replace required malformed-result assertions
+  with tests that canonical AUTH can never drive through those cases.
 - `test_real_dispatcher_records_exact_phase_decisions`: real provisioned actor,
   three distinct phase decisions, canonical digest and immutable custody.
 - `test_dispatcher_lifecycle_and_matrix_denials`: missing/suspended/deactivated/
