@@ -1,10 +1,12 @@
-"""Real TASK/AUTH/OUTBOX fixtures; ONLY feature authority is a synthetic hidden seam."""
+"""Real TASK/AUTH/OUTBOX fixtures with traced canonical feature authority."""
 
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
 
+from app.adapters.auth import assignment_invalidation_authorization
 from app.adapters.tasks import TransactionalAssignmentInvalidationHandler
 from app.db import session as db_session
 from app.modules.actors.api import ServiceIdentity
@@ -15,7 +17,7 @@ from app.modules.outbox.service import OutboxService
 from app.modules.outbox.registry import HandlerRegistry
 from app.modules.tasks.api.assignment_invalidation import (
     ASSIGNMENT_INVALIDATION_EVENT,
-    AssignmentInvalidationAuthority,
+    PreparedAssignmentInvalidation,
     AssignmentInvalidationTarget,
 )
 from app.modules.tasks.models import AuditEvent, TaskAssignment, WorkstreamTask
@@ -29,26 +31,48 @@ from tests.test_tasks import (
 )
 
 
-class SyntheticFeatureAuthority:
-    """Does NOT register/allow the future AUTH action or manufacture AUTH audit rows."""
+class TracedFeatureAuthority:
+    """Observe calls without replacing canonical service/PREP behavior."""
 
-    def __init__(self, trace):
-        self.trace = trace
+    def __init__(self, session, trace):
+        self.owner, self.trace = assignment_invalidation_authorization(session), trace
 
-    async def prepare(self, facts):
+    @asynccontextmanager
+    async def prepare_assignment_invalidation(self, facts):
         self.trace.append(("prepare", facts))
-        return facts
+        async with self.owner.prepare_assignment_invalidation(facts) as prepared:
+            trace = self.trace
 
-    async def consume(self, handle, facts):
-        assert handle is facts
-        self.trace.append(("consume", facts))
-        return AssignmentInvalidationAuthority(uuid4(), uuid4())
+            class TracedPrepared(PreparedAssignmentInvalidation):
+                async def consume(self, current):
+                    trace.append(("consume", current))
+                    return await prepared.consume(current)
 
-    def close(self, handle):
-        self.trace.append(("close", handle))
+            try:
+                yield TracedPrepared()
+            finally:
+                self.trace.append(("close", facts))
 
 
-async def setup_assignment(client, monkeypatch, *, started=False, artifact_settings=None):
+async def provision_reconciler(sessions):
+    actor_id, link_id = uuid4(), uuid4()
+    async with sessions() as session, session.begin():
+        session.add(ActorProfile(
+            id=str(actor_id), actor_kind="service", status="active",
+            provisioning_method="manual_service_provisioning",
+            service_identity=ServiceIdentity.TASK_ASSIGNMENT_RECONCILER.value,
+            created_by=str(actor_id),
+        ))
+        await session.flush()
+        session.add(ActorIdentityLink(
+            id=str(link_id), actor_profile_id=str(actor_id), issuer="workstream.internal",
+            subject=ServiceIdentity.TASK_ASSIGNMENT_RECONCILER.value,
+            subject_kind="service", status="active", linked_by="workstream:system:bootstrap",
+        ))
+    return actor_id, link_id
+
+
+async def setup_assignment(client, monkeypatch, *, started=False, artifact_settings=None, reconciler=True):
     if artifact_settings is not None:
         from app.modules.artifacts.repository import ArtifactRepository
         from app.modules.artifacts.service import _claim_and_validate_storage_namespace
@@ -107,12 +131,13 @@ async def setup_assignment(client, monkeypatch, *, started=False, artifact_setti
             )
         )
         admin_identity = (admin.issuer, admin.subject)
+    feature_actor, feature_link = await provision_reconciler(sessions) if reconciler else (None, None)
     trace = []
     h.delivery = h.build(HandlerRegistry([(ASSIGNMENT_INVALIDATION_EVENT, 1, h.handle)]))
     handler = TransactionalAssignmentInvalidationHandler(
         sessions,
         observer=h.delivery,
-        authorization_factory=lambda session: SyntheticFeatureAuthority(trace),
+        authorization_factory=lambda session: TracedFeatureAuthority(session, trace),
     )
     return SimpleNamespace(
         client=client,
@@ -127,6 +152,7 @@ async def setup_assignment(client, monkeypatch, *, started=False, artifact_setti
         handler=handler,
         trace=trace,
         admin_identity=admin_identity,
+        feature_actor=feature_actor, feature_link=feature_link,
     )
 
 

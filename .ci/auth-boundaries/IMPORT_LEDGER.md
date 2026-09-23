@@ -30,7 +30,6 @@ backend/app/api/routes/auth.py
   app.modules.authorization.catalogue
   app.modules.authorization.kernel
   app.modules.authorization.read_service
-  app.modules.authorization.runtime
 backend/app/db/models.py
   app.modules.authorization.models
 backend/app/interfaces/artifact_operations.py

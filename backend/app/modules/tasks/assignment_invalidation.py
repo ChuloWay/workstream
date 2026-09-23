@@ -1,5 +1,6 @@
 """Hidden, caller-transaction release of one exact pre-submit assignment."""
 
+import re
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -89,7 +90,7 @@ class AssignmentInvalidationOperation:
         prior = await self._audit.read_release(target)
         if prior is not None:
             if (
-                prior.target != target
+                prior.facts.target != target
                 or assignment.status != "authority_revoked"
                 or assignment.released_at is None
             ):
@@ -125,13 +126,14 @@ class AssignmentInvalidationOperation:
                 }
             ),
         )
-        handle = await self._authorization.prepare(facts)
-        try:
-            authority = await self._authorization.consume(handle, facts)
+        async with self._authorization.prepare_assignment_invalidation(facts) as prepared:
+            authority = await prepared.consume(facts)
             if (
                 type(authority) is not AssignmentInvalidationAuthority
                 or type(authority.actor_profile_id) is not UUID
                 or type(authority.decision_id) is not UUID
+                or type(authority.resource_context_digest) is not str
+                or re.fullmatch(r"sha256:[0-9a-f]{64}", authority.resource_context_digest) is None
             ):
                 raise AssignmentInvalidationUnavailable(
                     "assignment reconciliation authority unavailable"
@@ -141,13 +143,10 @@ class AssignmentInvalidationOperation:
                 raise AssignmentInvalidationUnavailable(
                     "assignment reconciliation custody unavailable"
                 )
-            before = task.status
             assignment.status, assignment.released_at = "authority_revoked", custody.observed_at
             task.status, task.assigned_to = "ready", None
             await self._audit.record_release(
-                AssignmentInvalidationEvidence(target, authority, before)
+                AssignmentInvalidationEvidence(facts, authority)
             )
             await self._session.flush()
-        finally:
-            self._authorization.close(handle)
         return HandlerOutcome.ACKNOWLEDGE

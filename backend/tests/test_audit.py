@@ -1310,6 +1310,21 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
             if event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED:
                 references[LifecycleAuditReferenceKind.AUTHORITY_INVALIDATION] = uuid4()
                 transition["to_status"] = "ready"
+                from app.modules.tasks.api.assignment_invalidation import (
+                    AssignmentInvalidationAuthorityFacts, AssignmentInvalidationTarget,
+                    assignment_invalidation_resource_digest,
+                )
+                facts = AssignmentInvalidationAuthorityFacts(
+                    target=AssignmentInvalidationTarget(
+                        project_id=references[LifecycleAuditReferenceKind.PROJECT], task_id=entity_id,
+                        assignment_id=references[LifecycleAuditReferenceKind.ASSIGNMENT], contributor_id=uuid4(),
+                        authority_invalidation_event_id=references[LifecycleAuditReferenceKind.AUTHORITY_INVALIDATION],
+                    ), cause_event_id=uuid4(), delivery_event_id=uuid4(), delivery_generation=1,
+                    cause_digest="sha256:" + "a" * 64, invocation_digest="sha256:" + "b" * 64,
+                    task_status=transition["from_status"], locked_context_hash="sha256:" + "c" * 64,
+                )
+                transition["assignment_invalidation_facts"] = facts.model_dump(mode="json")
+                transition["authorization_resource_digest"] = assignment_invalidation_resource_digest(facts)
             value = _lifecycle_input(
                 entity_type=entity_type,
                 entity_id=entity_id,
@@ -1692,3 +1707,35 @@ def test_lifecycle_input_rejects_invalid_reason_state_shapes(
 ) -> None:
     with pytest.raises(ValidationError, match=message):
         _lifecycle_input(**overrides)
+
+
+def test_assignment_release_snapshot_is_bounded_copied_and_event_specific():
+    from tests.authorization.test_assignment_invalidation_contract import facts
+    from app.modules.tasks.api.assignment_invalidation import assignment_invalidation_resource_digest
+
+    value = facts()
+    snapshot = value.model_dump(mode="json")
+    options = {
+        "entity_type": LifecycleAuditEntityType.TASK,
+        "entity_id": value.target.task_id,
+        "event_type": LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED,
+        "reason": LifecycleAuditReason.STATE_CHANGED,
+        "from_status": "claimed", "to_status": "ready",
+        "references": {
+            LifecycleAuditReferenceKind.PROJECT: value.target.project_id,
+            LifecycleAuditReferenceKind.TASK: value.target.task_id,
+            LifecycleAuditReferenceKind.ASSIGNMENT: value.target.assignment_id,
+            LifecycleAuditReferenceKind.AUTHORIZATION_DECISION: uuid4(),
+            LifecycleAuditReferenceKind.AUTHORITY_INVALIDATION: value.target.authority_invalidation_event_id,
+        },
+        "authorization_resource_digest": assignment_invalidation_resource_digest(value),
+        "assignment_invalidation_facts": snapshot,
+    }
+    admitted = _lifecycle_input(**options)
+    snapshot["target"]["task_id"] = str(uuid4())
+    assert admitted.assignment_invalidation_facts == value.model_dump(mode="json")
+    for bad in ({"oversized": "x" * 4096}, {"non_json": object()}, {"not_finite": float("nan")}):
+        with pytest.raises(ValidationError, match="invalid bounded assignment facts"):
+            _lifecycle_input(**{**options, "assignment_invalidation_facts": bad})
+    with pytest.raises(ValidationError, match="restricted to release"):
+        _lifecycle_input(assignment_invalidation_facts=value.model_dump(mode="json"))

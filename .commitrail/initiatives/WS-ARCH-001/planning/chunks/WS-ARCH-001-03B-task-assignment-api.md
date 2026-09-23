@@ -11,7 +11,8 @@ assignment transaction, not a second claim implementation. CP08 completes the co
 The [03B2 child](../../WS-ARCH-001-03B2.md) supplies hidden contributor-ready
 queue facts and pagination, without live AUTH or HTTP exposure. The [03B8 child](../../WS-ARCH-001-03B8.md) completes hidden task audit evidence.
 [03B9](../../WS-ARCH-001-03B9.md) completes hidden exact-assignment invalidation;
-03C retains its real feature authority, producer wiring and registration. The
+03C1 completes its real feature authority. 03C2 retains atomic producer wiring
+and first registration, followed by bounded public activation. The
 [03B3 child](../../WS-ARCH-001-03B3.md) delivers hidden all-state management
 and status-only operational queue facts.
 The [03B4 child](../../WS-ARCH-001-03B4.md) delivers hidden contributor and
@@ -68,9 +69,9 @@ holds the OUTBOX event/attempt fence through the hidden TASK effect transaction.
 AUTH invalidation audit rows still are not dispatched events. Actor-wide
 invalidation needs bounded per-project/per-assignment TASK fan-out; TASK and
 REV effects cannot share an implicit acknowledgement. The hidden handler
-requires its own feature authority port; real fixed-service authority and
-production registration remain 03C.
-03C must wire AUTH invalidation events durably in their originating transaction;
+uses the real fixed-service feature authority completed by ARCH-03C1.
+ARCH-03C2 owns atomic producer wiring and first production registration,
+including durable AUTH invalidation events in their originating transaction;
 a response hint such as `auth13_assignment` is not a delivered reconciliation.
 
 Reuse and extend `TaskSubmissionContextPort`, `TaskSubmissionContextFacts`, and
@@ -99,7 +100,8 @@ test-delta impact.
    are complete. Existing public audit/recovery readers remain required until
    their explicit 03C authority replacement.
 3. [03B9](../../WS-ARCH-001-03B9.md) hidden assignment invalidation is complete.
-   Next is ARCH-03C producer wiring, exact feature AUTH and public activation.
+   03C1 exact feature AUTH is complete. Next is ARCH-03C2 atomic producer
+   publication and first registration, followed by bounded public activation.
    No parallel worker or fabricated claim value substitutes for those dependencies.
 
 ## Merge state

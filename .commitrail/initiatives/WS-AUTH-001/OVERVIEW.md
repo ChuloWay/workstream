@@ -21,8 +21,9 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Public post-policy composition: POL-06B delivered using existing AUTH-12G.
 - Completed activation boundary: AUTH-12H exact-project manager authority for
   CP07 complete-guide activation/binding, with live-authority replay.
-- Next usable boundary: ARCH-03C exact assignment-reconciler authority and
-  atomic producer wiring, then public task activation. ARCH-03B9 supplies the
+- Next usable boundary: ARCH-03C2 atomic producer wiring and first handler
+  registration, then public task activation. ARCH-03C1 supplies exact fixed-service
+  reconciliation authority and decision-bound release receipts. ARCH-03B9 supplies the
   hidden exact-assignment operation and transaction fence. AUTH-OUTBOX-02 delivers
   shared live dispatcher authority, phase audit custody and Celery recovery after
   CON-02B delivery mechanics. This follows

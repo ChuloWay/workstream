@@ -29,7 +29,7 @@ from app.modules.authorization.admin_service import AdminRoleGrantService
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.kernel import AuthorizationService
 from app.modules.authorization.read_service import ActorAuthorizationContextReadService
-from app.modules.authorization.runtime import authorization_resource_selector_id
+from app.modules.authorization.api import authorization_resource_selector_id
 from app.modules.projects.service import ProjectService
 
 actors_router = APIRouter(prefix="/actors", tags=["actors"])

@@ -3,6 +3,7 @@
 from app.modules.actors.api import ServiceIdentity
 
 FIXED_SERVICE_ACTION_EXPECTATIONS = {
+    ServiceIdentity.TASK_ASSIGNMENT_RECONCILER: {"task.assignment.authority_reconcile"},
     ServiceIdentity.OUTBOX_DISPATCHER: {"outbox.dispatch"},
     ServiceIdentity.ARTIFACT_VERIFIER: {"artifact.verification.execute"},
     ServiceIdentity.ARTIFACT_PUT_RESOLVER: {"artifact.put_attempt.resolve"},
@@ -249,7 +250,7 @@ historical_permissions = frozenset("""actor.profile.read_self actor.profile.upda
     audit.read audit.export""".split())
 
 new_permissions = frozenset(
-    """outbox.dispatch project.setup_diagnostic.read project.effective_policy.read
+    """task.assignment.authority_reconcile outbox.dispatch project.setup_diagnostic.read project.effective_policy.read
     operations.task.start_override operations.submission_gate.repair
     operations.checker.retry artifact.binding.read artifact.replica.read
     artifact.receipt.read artifact.verification_job.read
@@ -262,6 +263,7 @@ new_permissions = frozenset(
 )
 
 expected = {
+    "task.assignment.authority_reconcile": ("task.assignment.authority_reconcile", "WS-ARCH-001-03C1"),
     "outbox.dispatch": ("outbox.dispatch", "WS-AUTH-001-OUTBOX-01"),
     "actor.profile.read_self": ("actor.profile.read_self", "WS-AUTH-001-07B"),
     "actor.profile.update_self": ("actor.profile.update_self", "WS-AUTH-001-07B"),
@@ -408,6 +410,7 @@ expected = {
 
 
 AUDIT_ALLOWED_ACTION_VALUES = {
+    "task.assignment.authority_reconcile",
     "outbox.dispatch",
     "project.guide.activate",
     "project.post_submit_checker_policy.derive",

@@ -1,5 +1,6 @@
 """Shared audit owner composition for typed product transition ports."""
 
+import json
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +16,8 @@ from app.modules.audit.repository import AuditRepository, LIFECYCLE_AUTH_SOURCE
 from app.modules.tasks.api.assignment_invalidation import (
     AssignmentInvalidationAuditPort, AssignmentInvalidationEvidence,
     AssignmentInvalidationAuthority, AssignmentInvalidationUnavailable,
-    assignment_invalidation_evidence_id,
+    assignment_invalidation_evidence_id, AssignmentInvalidationAuthorityFacts,
+    assignment_invalidation_resource_digest,
 )
 from app.modules.tasks.api import TaskAuthorityOperation, TaskTransitionAuditPort, TaskTransitionFacts
 
@@ -77,31 +79,55 @@ class _AssignmentInvalidationAudit:
             refs = row.event_payload["references"]
             decision = UUID(refs["authorization_decision_id"])
             expected = {key.value: str(value) for key, value in self._references(target, decision).items()}
+            digest = row.event_payload["authorization_resource_digest"]
+            facts = AssignmentInvalidationAuthorityFacts.model_validate_json(
+                json.dumps(row.event_payload["assignment_invalidation_facts"])
+            )
+            authorization = await self._repo.get_authority_event(str(decision))
             if (
                 row.event_domain != "legacy_lifecycle" or row.auth_source != LIFECYCLE_AUTH_SOURCE
                 or row.entity_type != "task" or row.entity_id != str(target.task_id)
                 or row.event_type != LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED.value
                 or row.from_status not in {"claimed", "in_progress"} or row.to_status != "ready"
-                or row.event_payload != {"references": expected}
+                or row.event_payload != {"references": expected, "authorization_resource_digest": digest,
+                                         "assignment_invalidation_facts": facts.model_dump(mode="json")}
+                or facts.target != target or facts.task_status != row.from_status
+                or assignment_invalidation_resource_digest(facts) != digest
+                or authorization is None
+                or authorization.event_type != "SensitiveAuthorizationAllowed"
+                or authorization.action_id != "task.assignment.authority_reconcile"
+                or authorization.permission_id != "task.assignment.authority_reconcile"
+                or authorization.actor_id != row.actor_id
+                or authorization.resource_type != "task"
+                or authorization.resource_id != str(target.task_id)
+                or authorization.project_id != str(target.project_id)
+                or authorization.request_id != str(facts.delivery_event_id)
+                or authorization.correlation_id != str(target.authority_invalidation_event_id)
+                or authorization.after_facts != {"allowed": True, "resource_context_digest": digest}
                 or row.reason != LifecycleAuditReason.STATE_CHANGED.value or row.is_dev_auth
             ):
                 raise ValueError("invalid release receipt")
-            return AssignmentInvalidationEvidence(target, AssignmentInvalidationAuthority(
-                actor_profile_id=UUID(row.actor_id), decision_id=decision,
-            ), row.from_status)
+            return AssignmentInvalidationEvidence(facts, AssignmentInvalidationAuthority(
+                actor_profile_id=UUID(row.actor_id), decision_id=decision, resource_context_digest=digest,
+            ))
         except (AttributeError, KeyError, TypeError, ValueError):
             raise AssignmentInvalidationUnavailable("assignment reconciliation unavailable") from None
 
     async def record_release(self, evidence):
-        target = evidence.target
+        facts = AssignmentInvalidationAuthorityFacts.model_validate(evidence.facts.model_dump())
+        if assignment_invalidation_resource_digest(facts) != evidence.authority.resource_context_digest:
+            raise AssignmentInvalidationUnavailable("assignment reconciliation authority differs")
+        target = facts.target
         await self._participant.add_event(LifecycleAuditEventInput(
             event_id=assignment_invalidation_evidence_id(target),
             entity_type=LifecycleAuditEntityType.TASK, entity_id=target.task_id,
             event_type=LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED,
             actor_id=evidence.authority.actor_profile_id,
             reason=LifecycleAuditReason.STATE_CHANGED,
-            from_status=evidence.from_status, to_status="ready",
+            from_status=evidence.facts.task_status, to_status="ready",
             references=self._references(target, evidence.authority.decision_id),
+            authorization_resource_digest=evidence.authority.resource_context_digest,
+            assignment_invalidation_facts=facts.model_dump(mode="json"),
         ))
 
 

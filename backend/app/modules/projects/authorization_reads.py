@@ -10,13 +10,13 @@ from uuid import UUID
 from app.core.hashing import canonical_json_hash
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.kernel import AuthorizationService
+from app.modules.authorization.api import authorization_resource_selector_id
 from app.modules.authorization.runtime import (
     PROJECT_DIAGNOSTIC_TARGET_KIND_BY_ACTION,
     PROJECT_POLICY_READ_TARGET_KIND_BY_ACTION,
     ProjectActiveGuideReadResourceContext,
     ProjectDiagnosticReadResourceContext,
     ProjectPolicyReadResourceContext,
-    authorization_resource_selector_id,
 )
 from app.modules.projects.models import (
     GuideSufficiencyReport,

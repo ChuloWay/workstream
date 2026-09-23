@@ -52,7 +52,7 @@ from app.modules.authorization.domain.prepared_adapter_bindings import (
     parse_prepared_adapter_binding,
     prepared_adapter_binding_matches,
 )
-from app.modules.authorization.domain.prepared_service import project_setup_resource_matches
+from app.modules.authorization.domain.prepared_service import project_setup_resource_matches, prepared_fixed_service_bindings
 from app.modules.authorization.domain.prepared_guide_mutations import parse_prepared_guide_mutation
 from app.modules.authorization.domain.guide_compilation_projections import (
     ProjectGuideProjectionResourceContext,
@@ -62,8 +62,11 @@ from app.modules.authorization.prepared_proposal_replay import (
 )
 from app.modules.authorization.domain.prepared_service import prepared_request_digest
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
+from app.modules.authorization.domain.assignment_invalidation import (
+    AssignmentInvalidationResourceContext,
+)
 from app.modules.authorization.domain.outbox_dispatch import (
-    OutboxDispatchResourceContext, prepared_outbox_digest,
+    OutboxDispatchResourceContext,
 )
 from app.modules.authorization.prepared_projection_replay import (
     parse_setup_bindings, setup_context_matches,
@@ -177,6 +180,7 @@ class _PreparedAuthorizationBinding:
     scope: PreparedAuthorityScope
     idempotency_key: UUID
     request_digest: str
+    assignment_invalidation_context: AssignmentInvalidationResourceContext | None = None
     outbox_dispatch_digest: str | None = None
     task_authority_context: TaskAuthorityResourceContext | None = None
     project_create_operation_id: UUID | None = None
@@ -521,6 +525,11 @@ class PreparedAuthorizationService:
         final_scope = self._scope_from_resource(expected_action_id, final_resource_context)
         if final_scope != issuance.binding.scope:
             raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle")
+        if expected_action_id is ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE and (
+            type(final_resource_context) is not AssignmentInvalidationResourceContext
+            or issuance.binding.assignment_invalidation_context != final_resource_context
+        ):
+            raise PreparedAuthorizationHandleInvalid("invalid assignment reconciliation authority")
         if expected_action_id is ActionId.OUTBOX_DISPATCH and (
             type(final_resource_context) is not OutboxDispatchResourceContext
             or issuance.binding.outbox_dispatch_digest != authorization_resource_digest(final_resource_context)
@@ -834,9 +843,7 @@ class PreparedAuthorizationService:
             scope=scope,
             idempotency_key=caller_input.idempotency_key,
             request_digest=prepared_request_digest(caller_input.request_value),
-            outbox_dispatch_digest=prepared_outbox_digest(
-                action_id, caller_input.request_value, PreparedAuthorizationHandleInvalid,
-            ),
+            **prepared_fixed_service_bindings(action_id, caller_input.request_value, PreparedAuthorizationHandleInvalid),
             project_create_operation_id=operation_id,
             project_create_project_id=project_id,
             project_create_generation=operation_generation,
@@ -897,7 +904,7 @@ class PreparedAuthorizationService:
                 artifact_resource_type=artifact_resource[0],
                 artifact_resource_id=resource.resource_id,
             )
-        if isinstance(resource, (ProjectGuideProjectionResourceContext, PostPolicyResourceContext, OutboxDispatchResourceContext)):
+        if isinstance(resource, (ProjectGuideProjectionResourceContext, PostPolicyResourceContext, OutboxDispatchResourceContext, AssignmentInvalidationResourceContext)):
             return PreparedAuthorityScope(
                 kind=PreparedAuthorityScopeKind.PROJECT,
                 project_id=resource.scope_project_id,

@@ -27,8 +27,9 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   Production post-submit phase execution remains unavailable.
 - Intent: compile one locked guide and its policies into authoritative,
   versioned project behavior without circular subsystem authority.
-- Next usable boundary: ARCH-03C exact assignment-reconciler authority and
-  atomic producer wiring, then public task activation. ARCH-03B9 supplies the
+- Next usable boundary: ARCH-03C2 atomic producer wiring and first handler
+  registration, then public task activation. ARCH-03C1 supplies exact fixed-service
+  reconciliation authority and decision-bound release receipts. ARCH-03B9 supplies the
   hidden exact-assignment operation and transaction fence. AUTH-OUTBOX-02 delivers
   shared live dispatcher authority, phase audit custody and Celery recovery after
   CON-02B delivery mechanics. This follows

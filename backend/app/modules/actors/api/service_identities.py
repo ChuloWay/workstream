@@ -14,6 +14,7 @@ class ServiceIdentity(StrEnum):
     ARTIFACT_GUIDE_READER = "workstream.artifact.guide_reader"
     ARTIFACT_MATERIALIZER = "workstream.artifact.materializer"
     ARTIFACT_CHECKER_OUTPUT = "workstream.artifact.checker_output"
+    TASK_ASSIGNMENT_RECONCILER = "workstream.task.assignment_reconciler"
     OUTBOX_DISPATCHER = "workstream.outbox.dispatcher"
     PROJECT_SETUP = "workstream.project.setup"
     REVIEW_PREFERENCE_EXPIRY = "workstream.review.preference_expiry"

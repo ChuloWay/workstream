@@ -72,10 +72,10 @@ from app.modules.projects.repository import ProjectRepository
 from app.modules.projects.guide_compilation.diagnostics import compilation_setup_response
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.kernel import AuthorizationService
+from app.modules.authorization.api import authorization_resource_selector_id
 from app.modules.authorization.runtime import (
     MatchedAuthorityKind,
     ProjectReadResourceContext,
-    authorization_resource_selector_id,
 )
 
 LOGGER = logging.getLogger(__name__)

@@ -684,11 +684,12 @@ actor, project, role, and cause event before a consumer changes product state.
 Revoking one role must leave the other project roles and all AdminRoleGrants
 unchanged.
 
-The closed registry now has sixteen fixed-service identities: fifteen
-action-bearing identities with twenty-four matrix memberships, plus the
+The closed registry now has seventeen fixed-service identities: sixteen
+action-bearing identities with twenty-five matrix memberships, plus the
 target-only `workstream.compensation.adapter` identity. The action-bearing
 set comprises seven ART identities, project setup, six exact REV identities,
-and the active shared outbox dispatcher. Missing provisioned rows deny without stopping the application.
+the active shared outbox dispatcher, and the task assignment reconciler. Missing
+provisioned rows deny without stopping the application.
 The target-only identity has no matrix membership, and the REV actions remain
 unavailable. Dispatcher authority grants no feature permission. Do not create a
 shared review service or a database service-grant table.
@@ -989,8 +990,13 @@ privacy-bounded denial event, and then translates the conflict.
 A replay reference is internal only. Active administrative routes load the
 canonical resource and evaluate current authority again before responding;
 later route owners must preserve the same rule. There is no production assignment-invalidation consumer registered. ARCH-03B9
-supplies the hidden exact-assignment handler; ARCH-03C must activate its fixed
-service and atomically publish assignment-specific events from AUTH mutations.
+supplies the hidden exact-assignment handler; ARCH-03C1 supplies its sole fixed
+service `workstream.task.assignment_reconciler` and permission
+`task.assignment.authority_reconcile`. No human or dispatcher inherits it.
+ARCH-03C2 must atomically publish assignment-specific events from AUTH mutations
+and register the handler with enforced prefork routing. Provisioning the service
+alone does not dispatch events. Release receipts retain the real decision and
+resource digest; later service revocation does not invalidate historical receipts.
 An audit invalidation row alone is not a dispatched reconciliation.
 
 ## Project Role Read Operations

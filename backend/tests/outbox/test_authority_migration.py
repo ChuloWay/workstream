@@ -132,8 +132,14 @@ def test_dispatch_activation_preserves_unattempted_rows(
         after = asyncio.run(snapshot(isolated_database_env))
         assert after["revision"] == REVISION and after["rows"] == before["rows"]
         assert after["rows"]["outbox_delivery_attempts"] == []
-        command.upgrade(config(), "head")
+        command.upgrade(config(), REVISION)
         assert asyncio.run(snapshot(isolated_database_env)) == after
+        command.upgrade(config(), "head")
+        current = asyncio.run(snapshot(isolated_database_env))
+        assert current["revision"] == "0029_assignment_authority"
+        assert current["rows"] == after["rows"]
+        command.upgrade(config(), "head")
+        assert asyncio.run(snapshot(isolated_database_env)) == current
 
 
 @pytest.mark.parametrize("state", ["claimed", "invoked", "completed"])

@@ -38,7 +38,9 @@ checker-remediation boundary before public Submission cutover.
 | [ARCH-03B7](../WS-ARCH-001-03B7.md) | ARCH-03B6 | Complete: immutable contributor/management requirements through one historical translator and TASK-before-visibility locking; retained HTTP authority unchanged |
 | [ARCH-03B8](../WS-ARCH-001-03B8.md) | ARCH-03B7 | Complete: bounded hidden task audit evidence with atomic scope and exact transition references |
 | [ARCH-03B9](../WS-ARCH-001-03B9.md) | ARCH-03B8, CON-02B and AUTH-OUTBOX-02 | Complete: hidden exact-assignment invalidation with committed cause and delivery custody |
-| ARCH-03C | ARCH-03B, AUTH-OUTBOX-02 | AUTH exact task/assignment activation and integrated readiness proof |
+| [ARCH-03C1](../WS-ARCH-001-03C1.md) | ARCH-03B9, AUTH-OUTBOX-02 | Complete: exact reconciler authority and decision-bound release receipts |
+| ARCH-03C2 | ARCH-03C1 | Planned next: atomic originating producer publication and first handler registration with enforced prefork topology |
+| ARCH-03C public cutover | ARCH-03C2 and hidden TASK owner contracts | Planned: exact public task/assignment authority and integrated readiness proof |
 | CP09 (later cleanup coordination) | All legacy consumers replaced, including CHECKER and public 02I path | Physical economic deletion; not on the allow_review critical path |
 | ARCH-04B | ARCH-04A, POL-07, ARCH-03C, merged ARCH-02H | ART exact stored Submission materialization |
 | ARCH-04B2 | ARCH-04A and merged ART admission/verification/binding foundations | ART bounded checker output/log ingestion and verified binding, no routing |
@@ -70,9 +72,11 @@ CP08 completes its schema and minimal existing writers together. Projections
 through 03B8 are complete: detached metadata, queues, detail, work context,
 locked context, requirements and bounded audit evidence. ARCH-03B9 completes
 hidden exact-assignment invalidation on the delivered shared dispatcher.
-ARCH-03C still owns real feature authority and originating-transaction-only
-per-assignment producer events, registration and public exposure; it must never
-backfill or dispatch retained invalidation rows. Subsequent
+ARCH-03C1 completes exact reconciler authority and decision-bound receipts.
+ARCH-03C2 next owns originating-transaction-only per-assignment producer events
+and first handler registration with enforced prefork topology; it must never
+backfill or dispatch retained invalidation rows. Public TASK activation remains
+separately bounded under ARCH-03C. Subsequent
 PR-sized contracts name exact files, public types, current migration head and
 runnable proof before implementation; they refine this design, not create a
 new permission requirement.

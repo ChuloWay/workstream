@@ -86,9 +86,9 @@ def test_dispatch_identity_upgrade_preserves_records_and_exact_schema(
         assert next(iter(removed))[0] == next(iter(added))[0] == 'ck_actor_profiles_kind_service_identity'
         definition = next(iter(added))[1]
         identities = re.findall(r'workstream\.[a-z_]+\.[a-z_]+', definition)
-        assert set(identities) == set(SERVICE_IDENTITY_VALUES) and len(identities) == len(SERVICE_IDENTITY_VALUES)
+        assert set(identities) == (set(SERVICE_IDENTITY_VALUES) - {"workstream.task.assignment_reconciler"}) and len(identities) == len(SERVICE_IDENTITY_VALUES) - 1
         model = next(c for c in ActorProfile.__table__.constraints if c.name == 'ck_actor_profiles_kind_service_identity')
-        assert set(re.findall(r'workstream\.[a-z_]+\.[a-z_]+', str(model.sqltext))) == set(identities)
+        assert set(re.findall(r'workstream\.[a-z_]+\.[a-z_]+', str(model.sqltext))) == set(identities) | {"workstream.task.assignment_reconciler"}
         asyncio.run(seed(isolated_database_env, IDENTITY))
 
 
@@ -98,7 +98,7 @@ def test_dispatch_identity_head_upgrade_is_repeatable(isolated_database_env, mig
         command.upgrade(config(), 'head')
         asyncio.run(seed(isolated_database_env, IDENTITY))
         before = asyncio.run(snapshot(isolated_database_env))
-        assert before['revision'] == '0028_outbox_dispatch_authority'
+        assert before['revision'] == '0029_assignment_authority'
         command.upgrade(config(), 'head')
         assert asyncio.run(snapshot(isolated_database_env)) == before
 

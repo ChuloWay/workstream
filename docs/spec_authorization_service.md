@@ -240,14 +240,15 @@ registration, hidden ART behavior/resource composition, then dedicated AUTH
 evaluator integration and activation. ART never writes availability. AUTH-12,
 AUTH-14, and AUTH-15 are not alternate artifact activation paths.
 
-These are 74 approved `PermissionId` values. `ActionId` values are a separate
+These are 75 approved `PermissionId` values. `ActionId` values are a separate
 closed registry layer and are not included in that permission count. AUTH-05A's
 typed and PostgreSQL audit registry accepts the exact historical 49. The three
 approved Operator recovery identifiers, 16 artifact identifiers,
 `review.queue.override`, and the two AUTH-11A read-only project inspection
-permissions plus the two compilation permissions and the unavailable
-`outbox.dispatch` permission are the exact 25 post-`0020`
-permissions. AUTH-07A, AUTH-11A, and
+permissions plus the two compilation permissions and the now-active
+`outbox.dispatch` permission form the first 25 post-`0020`
+permissions. ARCH-03C1 adds `task.assignment.authority_reconcile` as the 26th
+post-`0020` permission. AUTH-07A, AUTH-11A, and
 WS-XINT-002-01 add
 their matching typed/SQL audit parity without making them executable.
 
@@ -612,6 +613,7 @@ closed:
 | `workstream.review.artifact_reference_reconciliation` | `review.artifact_reference.reconcile` |
 | `workstream.review.projection` | `review.projection.rebuild` |
 | `workstream.outbox.dispatcher` | active shared mechanics only: `outbox.dispatch` |
+| `workstream.task.assignment_reconciler` | active hidden assignment effect only: `task.assignment.authority_reconcile` |
 | `workstream.compensation.adapter` | target-only; no action membership |
 
 The hidden 04B2 prepared resource first locks fixed-service authority using
@@ -629,8 +631,8 @@ than a separate generation counter.
 
 `workstream.project.setup` was the eighth fixed identity when AUTH-12B merged;
 02C expanded that registry to fourteen identities. The current registry has
-sixteen identities after the target-only compensation adapter and shared outbox
-dispatcher registrations. AUTH-12E activates
+seventeen identities after the target-only compensation adapter, shared outbox
+dispatcher and task assignment reconciler registrations. AUTH-12E activates
 `project.guide_sufficiency.run`, AUTH-12F3 activates policy derivation, and
 AUTH-12I activates exact unified compilation execution. AUTH-12B2 activates
 exact setup finalization; AUTH-12G activates
@@ -672,8 +674,10 @@ Routers cannot invent identifiers or evaluate grant unions.
 
 ### Pre-Review Service Authority
 
-`outbox.dispatch` is active for the fixed dispatcher and included in the current
-catalogue counts. It authorizes shared delivery mechanics only. The other rows are proposed specification
+`outbox.dispatch` and `task.assignment.authority_reconcile` are active for their
+separate fixed services and included in current catalogue counts. The dispatcher
+authorizes shared delivery mechanics; the reconciler authorizes the hidden
+assignment effect. The remaining checker/router rows are proposed specification
 amendments for human design review: they are not registered or active and are
 excluded from those counts. The named implementation boundaries must register
 typed parity, prove hidden behavior and activate only their exact manifests;
@@ -682,7 +686,7 @@ a planning document does not grant a service permission.
 | ActionId / PermissionId | Sole fixed identity | Exact target and guards | Current activation custodian |
 |---|---|---|---|
 | `outbox.dispatch` | `workstream.outbox.dispatcher` | Event/claim generation/lease and exact phase; fresh authority for claim, invoke and finalize; no feature authority | AUTH-OUTBOX-02 authority/phase custody and Celery composition complete; feature handlers remain separate |
-| `task.assignment.authority_reconcile` | `workstream.task.assignment_reconciler` | Committed exact AUTH invalidation event, project/actor/grant-or-link, active pre-submit assignment; no wrong-role or submitted-history mutation | ARCH-03B9 hidden handler and transaction fence complete; ARCH-03C real authority, atomic producer wiring and registration |
+| `task.assignment.authority_reconcile` | `workstream.task.assignment_reconciler` | Committed exact AUTH invalidation event, project/actor/grant-or-link, active pre-submit assignment; no wrong-role or submitted-history mutation | ARCH-03B9 hidden handler/fence and ARCH-03C1 real feature authority/decision receipts complete; ARCH-03C2 atomic producer wiring and registration |
 | `checker.post_submit.execute` | `workstream.checker.post_submit` | Immutable Submission/request/generation, locked compiled policy, attempt and admitted service; exact pre-I/O authority | ARCH-04C hidden behavior, ARCH-04D activation |
 | `checker.post_submit.finalize` | `workstream.checker.post_submit` | Exact execution request/fence, accepted result digest and required verified output bindings; fresh post-I/O authority and atomic evidence | ARCH-04C hidden behavior, ARCH-04D activation |
 | `task.post_submit.route` | `workstream.task.post_submit_router` | Committed completion event/claim, exact current CHECKER result/fence, immutable Submission, locked ReviewPolicy and TASK pre-review state; true permits admission, false/pass permits the shared acceptance consequence after its proof; never a human review decision or generic CON write | ARCH-04E1B hidden handler plus shared REV/CON proof for false, ARCH-04E2 activation, ARCH-04E3 live composition |

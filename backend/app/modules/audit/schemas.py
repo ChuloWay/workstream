@@ -266,6 +266,8 @@ class LifecycleAuditEventInput(BaseModel):
     from_status: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,29}$")] | None = None
     to_status: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,29}$")] | None = None
     references: dict[LifecycleAuditReferenceKind, UUID] = Field(default_factory=dict)
+    assignment_invalidation_facts: dict[str, object] | None = None
+    authorization_resource_digest: Annotated[str, Field(pattern=r"^sha256:[0-9a-f]{64}$")] | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -290,6 +292,18 @@ class LifecycleAuditEventInput(BaseModel):
     @model_validator(mode="after")
     def validate_lifecycle_shape(self) -> Self:
         """Keep state transitions distinct from immutable fact creation."""
+        if (self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED) != (self.authorization_resource_digest is not None):
+            raise ValueError("release requires its exact authorization digest")
+        if (self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED) != (self.assignment_invalidation_facts is not None):
+            raise ValueError("assignment facts restricted to release")
+        if self.assignment_invalidation_facts is not None:
+            try:
+                encoded = json.dumps(self.assignment_invalidation_facts, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+                if len(encoded.encode("utf-8")) > 4096:
+                    raise ValueError("oversized assignment facts")
+                self.assignment_invalidation_facts = json.loads(encoded)
+            except (TypeError, ValueError):
+                raise ValueError("invalid bounded assignment facts") from None
         if self.entity_type is LifecycleAuditEntityType.TASK:
             expected = {
                 LifecycleAuditEventType.TASK_CLAIMED: ("ready", "claimed"),

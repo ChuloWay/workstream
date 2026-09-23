@@ -1,9 +1,17 @@
 # Chunk Contract: WS-ARCH-001-03C AUTH Task Readiness Activation
 
-Status: non-executable planning skeleton after reviewed 03A/03B manifests.
+Status: Planned. The exact feature-authority boundary is adopted by
+[03C1](../../WS-ARCH-001-03C1.md). The remaining public surface manifest below
+remains a planning skeleton requiring a current-source contract before execution.
 Risk: L1. Outcome: the exact
 task/claim/assignment actions below become usable only through the owner
 public APIs and one integrated readiness proof.
+
+Execution sequence: 03C1 real fixed-service assignment authority and exact
+decision receipts; 03C2 originating atomic producer fan-out plus first handler
+registration with enforced prefork topology; then bounded public task activation.
+03C1 does not publish or dispatch retained invalidations. Combining the first
+producer with handler registration keeps newly emitted events drainable.
 
 Allowed: AUTH public API/catalogue/evaluator/PREP composition, delivery-root
 wiring, exact `tasks/router.py` route switch/declarations, focused AUTH/TASK
@@ -56,14 +64,14 @@ through those separate project-management projections; the submitter action
 mapping must not silently remove management reads or grant managers a
 Submitter identity. 03B owns all projection fields and concealment guards.
 
-The pre-submit invalidation handler proposes fixed identity
+03C1 delivers the pre-submit invalidation handler's fixed identity
 `workstream.task.assignment_reconciler` and sole action/permission
 `task.assignment.authority_reconcile`. It consumes only an exact committed
 AUTH invalidation event and the TASK-owned 03B handler manifest; no human,
 dispatcher or unrelated service receives it. The [03B9 hidden operation](../../WS-ARCH-001-03B9.md) supplies exact cause
 validation, assignment release, replay and a same-transaction OUTBOX fence.
-Shared dispatch authority is delivered by AUTH-OUTBOX-02. Live reconciliation
-still requires this exact feature AUTH activation and producer wiring. Originating authority changes
+Shared dispatch authority is delivered by AUTH-OUTBOX-02. 03C1 supplies exact feature AUTH and decision-bound receipt custody. Production
+reconciliation still requires 03C2 producer wiring and first registration. Originating authority changes
 stage exact per-assignment events atomically through bounded actor/project
 fan-out. Publish only from the originating mutation transaction; never backfill
 or dispatch retained invalidation rows. Pre-repair transaction-start timestamps
@@ -96,9 +104,10 @@ Verify focused tests, PostgreSQL races, catalogue/database parity, boundary
 validators, Ruff and hosted coverage. Required reviews: authorization
 architecture, security, product/ops, QA, senior, CI and test delta.
 
-Before implementation, replace this skeleton with a current-main contract that
-enumerates exact files, commands, migration head and reviewers.
+03C1 has its adopted exact contract. Before each remaining activation, replace
+the relevant skeleton rows with a current-main contract enumerating exact files,
+commands, migration head and reviewers.
 
 ## Merge state
 
-- Outcome on merge: `planned`
+- Outcome on merge: `Planned`

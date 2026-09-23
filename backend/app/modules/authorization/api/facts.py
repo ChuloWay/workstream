@@ -7,7 +7,7 @@ from enum import StrEnum
 import math
 from types import MappingProxyType
 from typing import Mapping, TypeAlias
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 JsonScalar: TypeAlias = str | int | float | bool | None
 ResourceValue: TypeAlias = JsonScalar | UUID | tuple[JsonScalar | UUID, ...]
@@ -80,3 +80,10 @@ class ResourceFacts:
         if isinstance(self.resource_id, str):
             object.__setattr__(self, "resource_id", self.resource_id.strip())
         object.__setattr__(self, "values", MappingProxyType(dict(sorted(self.values.items()))))
+
+
+def authorization_resource_selector_id(resource_type: str, raw_id: str) -> UUID:
+    try:
+        return UUID(raw_id)
+    except (TypeError, ValueError, AttributeError):
+        return uuid5(NAMESPACE_URL, f"workstream:{resource_type}-selector:{raw_id}")

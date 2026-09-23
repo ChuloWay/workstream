@@ -4,6 +4,8 @@ from collections import Counter
 
 import pytest
 
+from app.modules.authorization.admin_service import AdminRoleGrantService
+
 from app.modules.authorization.catalogue import (
     ACTION_IDS, ACTION_DEFINITIONS, ACTION_BY_ID, PERMISSION_IDS,
     HISTORICAL_PERMISSION_IDS, NEW_PERMISSION_IDS, ActionId, PermissionId,
@@ -19,7 +21,7 @@ def test_closed_permission_and_action_catalogue_is_exact_and_non_executable() ->
     assert {item.value for item in HISTORICAL_PERMISSION_IDS} == historical_permissions
     assert {item.value for item in NEW_PERMISSION_IDS} == new_permissions
     assert {item.value for item in PERMISSION_IDS} == historical_permissions | new_permissions
-    assert len(ACTION_IDS) == len(ACTION_DEFINITIONS) == len(ACTION_BY_ID) == 117
+    assert len(ACTION_IDS) == len(ACTION_DEFINITIONS) == len(ACTION_BY_ID) == 118
     assert set(ACTION_BY_ID) == ACTION_IDS
     assert {definition.owner for definition in ACTION_DEFINITIONS} == set(ActionOwner)
     assert {
@@ -98,7 +100,7 @@ def test_closed_permission_and_action_catalogue_is_exact_and_non_executable() ->
     }
     assert all(not owner.value.startswith("WS-REV-") for owner in ActionOwner)
     assert Counter(definition.availability for definition in ACTION_DEFINITIONS) == {
-        ActionAvailability.ACTIVE: 79,
+        ActionAvailability.ACTIVE: 80,
         ActionAvailability.PLANNED: 38,
     }
     assert resolve_executable_action(ActionId.ACTOR_PROFILE_READ_SELF).permission_id is PermissionId.ACTOR_PROFILE_READ_SELF
@@ -118,3 +120,11 @@ def test_proposal_actions_have_exact_executable_authority(action):
     assert definition is ACTION_BY_ID[action]
     assert definition.availability is ActionAvailability.ACTIVE
     assert definition.owner is ActionOwner.AUTH_12F4
+
+
+def test_permission_definition_response_is_exact() -> None:
+    permission_response = AdminRoleGrantService.permission_definitions()
+    assert permission_response.total == 75
+    assert [item.permission_id.value for item in permission_response.items] == sorted(
+        permission.value for permission in PermissionId
+    )

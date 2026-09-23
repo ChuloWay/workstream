@@ -9,8 +9,9 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   immutable ContributionRecords and optional
   project-policy-driven compensation awards without coupling lifecycle truth to
   an economic provider.
-- Next usable boundary: ARCH-03C exact assignment-reconciler authority and
-  atomic producer wiring, then public task activation. ARCH-03B9 supplies the
+- Next usable boundary: ARCH-03C2 atomic producer wiring and first handler
+  registration, then public task activation. ARCH-03C1 supplies exact fixed-service
+  reconciliation authority and decision-bound release receipts. ARCH-03B9 supplies the
   hidden exact-assignment operation and transaction fence. AUTH-OUTBOX-02 delivers
   shared live dispatcher authority, phase audit custody and Celery recovery after
   CON-02B delivery mechanics. This follows
@@ -49,7 +50,8 @@ the hidden policy behavior.
    activation/binding, and AUTH-12H supplies its live manager authority. ARCH-03A completes the internal context port;
    CP08 delivers lineage fields and existing Task/Assignment/Submission writers together.
    ARCH-03B8 hidden task audit evidence and ARCH-03B9 hidden assignment
-   invalidation are complete; ARCH-03C retains real authority and producer wiring.
+   invalidation are complete; ARCH-03C1 supplies real feature authority and
+   exact decision receipts. ARCH-03C2 retains producer wiring and registration.
    CP09 removes the replaced legacy
    economic path only after all consumers are replaced, including CHECKERS and
    public Submission cutover; it does not block canonical `allow_review`.
