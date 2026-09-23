@@ -220,6 +220,26 @@ async def test_profile_update_transport_failure_is_uncertain_and_not_retried() -
             json=profile_fixture(updated_at="not-a-date"),
             headers={"content-type": "application/json"},
         ),
+        lambda: httpx.Response(
+            200,
+            json=profile_fixture(updated_at="2026-09-23 12:34:56+00:00"),
+            headers={"content-type": "application/json"},
+        ),
+        lambda: httpx.Response(
+            200,
+            json=profile_fixture(updated_at="20260923T123456+0000"),
+            headers={"content-type": "application/json"},
+        ),
+        lambda: httpx.Response(
+            200,
+            json=profile_fixture(updated_at="2026-09-23T12:34:56"),
+            headers={"content-type": "application/json"},
+        ),
+        lambda: httpx.Response(
+            200,
+            json=profile_fixture(updated_at="2026-09-23T12:34:56+24:00"),
+            headers={"content-type": "application/json"},
+        ),
     ],
 )
 async def test_profile_update_invalid_success_is_uncertain(response: typing.Any) -> None:
