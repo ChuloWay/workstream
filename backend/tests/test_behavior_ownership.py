@@ -1973,10 +1973,10 @@ def test_outbox_contract_partition_transition_is_exact():
 
 
 def test_outbox_delivery_partition_additions_are_exact():
-    """Only five concrete delivery files are added; existing owners stay unchanged."""
+    """Only four eligible delivery files are added; existing owners stay unchanged."""
     retained = "backend/app/core/config.py"
     targets = {
-        "backend/app/adapters/outbox/__init__.py", "backend/app/modules/outbox/api.py",
+        "backend/app/modules/outbox/api.py",
         "backend/app/modules/outbox/registry.py", "backend/app/modules/outbox/delivery.py",
         "backend/app/modules/outbox/delivery_repository.py",
     }

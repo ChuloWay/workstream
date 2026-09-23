@@ -33,10 +33,6 @@
       "target": "backend/app/adapters/auth/metrics.py"
     },
     {
-      "group": "shared",
-      "target": "backend/app/adapters/outbox/__init__.py"
-    },
-    {
       "group": "lifecycle",
       "target": "backend/app/adapters/project_agents/openai_agent_sdk.py"
     },
@@ -1361,7 +1357,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "5a13ccc43af9eaa2743751c3dfe8294973c0bc5ea4896ce5e7cf00921892636c",
+  "authority_digest": "75ca7560d1f9e191a23ec83e3ce3354a4ec936936b19db7843a959e127405321",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
