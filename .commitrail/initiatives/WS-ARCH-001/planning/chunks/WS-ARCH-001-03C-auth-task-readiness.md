@@ -17,8 +17,8 @@ role-only fallback or public Submission cutover.
 The bounded [project-grant repair](../../../../changes/task-project-grant-authorization.md)
 owns the active `task.claim`, `task.start`, `task.work_context.read`,
 `project.task.work_context.read` and `operations.task.start_override` actions.
-Reuse those registrations and extend their exact locked-context proof when
-03B delivers contribution-policy attempt lineage. The other rows below remain
+Reuse those registrations and extend their exact locked-context proof with the
+CP08-delivered contribution-policy attempt lineage. The other rows below remain
 proposed registrations, not claims of usable actions. This repair does not
 activate the queue, remaining projections or invalidation handler.
 
