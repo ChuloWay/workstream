@@ -35,6 +35,9 @@ separate hidden TASK behavior from originating AUTH event wiring and activation.
   adapter composition through existing owners.
 - Focused contract, PostgreSQL, race, rollback and fault-injection tests;
   exact test-lane and ownership registrations for those files.
+- Existing deterministic TASK test-lane partition, its exact workflow and
+  evidence inventory, isolated-runner namespace tests, and current backend
+  testing documentation when required to complete the added regression suite.
 - This record, adopted 03B/03C plans, initiative navigation, current roadmap
   and applicable TASK/AUTH operating and architecture documentation.
 
@@ -155,6 +158,38 @@ from the effect would leave an unsafe intermediate operation.
   product_ops, documentation; ci_integrity for lane/ownership registration.
 - Human review focus: exact invalidation target, delayed delivery/reclaim,
   submitted-history preservation and hidden-versus-live scope.
+
+### Bounded CI workload repair
+
+The added real-AUTH and full-policy fixtures exceeded the single TASK lane's
+existing 1,200-second execution budget in two hosted runs. Both completed all
+new feature cases with no assertion failures, but left 50–55 retained TASK
+cases unfinished. Shortening the lease wait alone cannot recover that work.
+Do not reduce scenarios, share seeded database state, raise the timeout, or
+move TASK tests into an unrelated owner lane.
+
+Extend the existing deterministic node-ID partition mechanism to
+`task_lifecycle_a` and `task_lifecycle_b`. The eight-lane suite must retain the
+exact canonical node union, execute each node once, and keep independent
+database/role/MinIO custody and cleanup. Require all eight coverage inputs and
+successful lane exits. The partition algorithm, 1,200-second timeout, schema
+checks, skip/deselection rejection and coverage thresholds remain unchanged.
+
+Allowed repair paths are `backend/scripts/test_lane_catalogue.py`,
+`backend/scripts/validate_test_lane_evidence.py`, `.github/workflows/backend.yml`,
+`backend/tests/test_ci_lane_catalogue.py`,
+`backend/tests/test_ci_test_lanes.py` (its exact seven-value timing fixture),
+`backend/tests/test_test_lane_evidence.py`,
+`backend/tests/test_isolated_database_runner.py`,
+`scripts/test_lightweight_agent_gates.py`, this record,
+`docs/operations_backend_testing.md`, and `docs/roadmap_status.md`.
+No application or feature-regression behavior changes are included.
+CI-integrity and architecture plan review cover the partition; final
+CI-integrity, QA/test-delta and documentation replay must verify the repair.
+Proof must reject either missing TASK partition and an exchanged owner,
+reconcile the complete hosted node union without overlap, and retain exact
+coverage and resource-cleanup evidence. The extra runner is the explicit
+resource tradeoff for preserving the full isolated regression suite.
 
 ## Evidence
 
