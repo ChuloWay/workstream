@@ -5,7 +5,21 @@
 - Purpose: Contributor implementation guide with confirmed caller-token design
 - Repository baseline reconciled: `723c88ff125b7692163891a1dea3d7eb81b07cb3`
 - Pinned API handoff baseline: `6feef39834737eed106773fdaed6003561fd021a`
-- Current change: [Combined planning and first-chunk contract](WS-MCP-002-01.md)
+- Delivered boundary: [One-tool profile foundation](WS-MCP-002-01.md), merged in PR #418.
+- Next usable boundary: separately bound deployment work or the next verified
+  public-API tool binding; no later tool starts automatically.
+
+## Current implementation
+
+[`mcp_server/`](../../../mcp_server/README.md) is an independently packaged
+Streamable HTTP adapter with one tool, `workstream_profile_get`, a container,
+selected response-schema validation and additive CI. Its integration tests
+exercise the installed adapter against the real Workstream API. Workstream
+still owns token verification and authorization. This is delivered packaging,
+not proof of a deployed public gateway, production Flow integration or the
+remaining 26 tools. The initiative remains Planned because that larger scope
+is unfinished. The baseline hashes below describe the original design/proof,
+not the current repository head.
 
 ## 1. What I Understand We Are Building
 
@@ -366,9 +380,16 @@ The maintainer's [clarification](https://github.com/Flow-Research/workstream/pul
 
 ## 9. Chunk Map and PR Boundaries
 
-The caller-token decision is settled. Continue with the first profile binding below: capture its current OpenAPI schema and custom semantics, package the proven path, and test it. Reconcile each later binding with its public API when that chunk starts; do not reopen credential architecture or require all 27 implementations before the first one.
+The caller-token decision is settled and the first profile binding is delivered.
+Reconcile each later binding with its public API when that chunk starts; do not
+reopen credential architecture or repeat the independent foundation.
 
-The following stable IDs replace the four broad headings. Each row is one intended implementation PR and one observable outcome. Paths are proposed ownership under the new `mcp_server/` package, not claims that those files exist. Tool names below omit only the common `workstream_` prefix. Every one of the 27 names in section 6 appears exactly once. All chunks also own their matching combined change record and directly affected tests/docs; they do not own backend product behavior.
+The following stable IDs replace the four broad headings. Row 01 is complete;
+rows 02–10 remain planned, with proposed ownership under `mcp_server/`, not
+claims that later tools exist. Each row is one bounded outcome. Tool names omit
+only the common `workstream_` prefix; all 27 names in section 6 appear exactly
+once. Each row also owns its change record and affected tests/docs, not backend
+product behavior.
 
 | Change ID and outcome | Depends on | Owned modules and exact new tools | PR acceptance evidence and next usable boundary |
 | --- | --- | --- | --- |
@@ -393,7 +414,10 @@ Every binding chunk includes its route/body/query/header/status tests, public AP
 - **Credential contract (settled):** use section 5 unchanged caller-token forwarding. No further resource registration, token exchange or owner credential decision is required for this design.
 - **Workflow limits:** agree that document upload/setup completion and recovery of lost/stale policy selectors remain outside this catalogue. No automatic extra endpoint, hidden route or write-as-read workaround.
 
-The first record now includes the executed local experiment and the still-planned production foundation. Its implementation PR will update that same `WS-MCP-002-01.md` record, not introduce a second intent/plan/risk bundle. Before each later chunk starts, create its own combined record from the current template. The earlier planning and unpublished experiment records are consolidated here; each PR contains one change record.
+The first record includes the earlier experiment and the delivered independent
+foundation. Before each later chunk starts, create its own combined record from
+the current template. Earlier planning and experiment context is retained here;
+do not create another record to repeat completed packaging.
 
 I will follow the current Commitrail process: one initiative overview for this multi-PR effort and one change record for each implementation PR. Each record will state the allowed files, non-goals, acceptance criteria, risks, and required review. Open PRs will be checked for overlapping changes before each boundary starts.
 
@@ -401,21 +425,21 @@ Review will follow the repository's risk routing, including security and archite
 
 ## 10. Contributor continuation
 
-Start with [WS-MCP-002-01](WS-MCP-002-01.md) and the
-[executable local drill](../../../experiments/mcp_caller_token/README.md).
+The delivered [WS-MCP-002-01](WS-MCP-002-01.md) and
+[package README](../../../mcp_server/README.md) describe the implemented boundary.
+The [executable local drill](../../../experiments/mcp_caller_token/README.md)
+is earlier design evidence, not work to implement again.
 The local proof passed 15 named real-process checks and 24 focused tests using
 unmodified Workstream and isolated PostgreSQL. Three distinct callers include
 first admission through MCP; concurrent clients and alternating credentials on
 one HTTP client preserve identity and denial. These tests use local signed
 fixtures, not a deployed Flow issuer or a live model call.
 
-Package only `workstream_profile_get` first: closed empty input, fixed
-`GET /api/v1/actors/me`, and the exact authorized `ActorProfileSelfResponse`.
-Capture the current profile schema and preserve API semantics, including first
-admission without grants. The existing experiment is a reproducible starting
-point, not the production package: independent installation/container execution,
-deployment hardening, full response-schema validation, lifecycle integration and
-supported-client evidence remain required by the first contract.
+The package implements only `workstream_profile_get`: closed empty input, fixed
+`GET /api/v1/actors/me`, and the authorized `ActorProfileSelfResponse`.
+It captures that response schema and preserves first admission without grants.
+Do not repeat its packaging work. Future deployment needs its own environment
+and supported-client proof; later bindings need current route/schema verification.
 
 Keep the 27-tool inventory and later mutation boundaries. Guide uploads/setup
 completion and missing policy-selector recovery remain outside that inventory;
