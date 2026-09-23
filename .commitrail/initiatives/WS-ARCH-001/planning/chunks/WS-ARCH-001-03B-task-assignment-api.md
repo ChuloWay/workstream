@@ -69,9 +69,9 @@ holds the OUTBOX event/attempt fence through the hidden TASK effect transaction.
 AUTH invalidation audit rows still are not dispatched events. Actor-wide
 invalidation needs bounded per-project/per-assignment TASK fan-out; TASK and
 REV effects cannot share an implicit acknowledgement. The hidden handler
-requires its own feature authority port; real fixed-service authority and
-production registration remain 03C.
-03C must wire AUTH invalidation events durably in their originating transaction;
+uses the real fixed-service feature authority completed by ARCH-03C1.
+ARCH-03C2 owns atomic producer wiring and first production registration,
+including durable AUTH invalidation events in their originating transaction;
 a response hint such as `auth13_assignment` is not a delivered reconciliation.
 
 Reuse and extend `TaskSubmissionContextPort`, `TaskSubmissionContextFacts`, and
