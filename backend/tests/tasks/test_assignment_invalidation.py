@@ -74,9 +74,17 @@ async def test_valid_delivery_cannot_substitute_target_or_cause(task_client, mon
         _, crossed = await invoked(s, target=target.model_copy(update={field: uuid4()}))
         assert await s.handler(crossed) is HandlerOutcome.REJECT
         assert await snapshot(s) == before
-    from tests.projects.guide_fixtures import create_project
-
-    other_project = await create_project(s.client, name="Other invalidation project")
+    response = await s.client.post(
+        "/api/v1/projects",
+        headers=auth_headers(),
+        json={
+            "name": "Other invalidation project",
+            "slug": "other-invalidation-project",
+            "description": "Isolation proof",
+        },
+    )
+    assert response.status_code == 201, response.text
+    other_project = response.json()
     _, crossed_project = await invoked(
         s, target=target.model_copy(update={"project_id": UUID(other_project["id"])})
     )
