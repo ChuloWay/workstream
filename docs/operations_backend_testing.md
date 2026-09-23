@@ -105,14 +105,14 @@ If provisioning fails, confirm the local PostgreSQL provisioning credential can 
 
 ## Hosted semantic-lane full-suite proof
 
-The required GitHub check remains `Backend / test`. Seven matrix jobs each own a
+The required GitHub check remains `Backend / test`. Eight matrix jobs each own a
 digest-pinned PostgreSQL service container, a digest-pinned MinIO container,
 and exactly one dependency lane. A step-level curl health loop admits MinIO
 before collection. This is semantic fan-out, not arbitrary test-count sharding:
 lane ownership remains repository-defined and exact.
 
 The explicit inventory lives in `backend/scripts/test_lane_catalogue.py`.
-Authorization preflight runs alongside the seven lanes. The final `test` job
+Authorization preflight runs alongside the eight lanes. The final `test` job
 requires both preflight and every lane to succeed before validating evidence and
 coverage; failed, cancelled or skipped prerequisites remain blocking. This saves
 serial waiting on valid changes at the cost of lane work when preflight fails.
@@ -120,7 +120,7 @@ Assertion-map validation analyzes each exact historical revision/module once per
 invocation, then checks every referenced node and assertion against that analysis.
 It does not cache current source or reuse analysis across validation calls.
 
-The six ordinary lanes use private, 2 GiB RAM-backed PostgreSQL data directories
+The seven ordinary lanes use private, 2 GiB RAM-backed PostgreSQL data directories
 to reduce ephemeral reset I/O. A runtime guard verifies the mount, capacity,
 data directory and enabled `fsync`, `full_page_writes` and `synchronous_commit`
 before tests. Real SQL, transaction, lock, isolation and coverage checks remain.
@@ -130,8 +130,8 @@ This is not a production configuration or proof of host-power-loss durability:
 An exhausted mount fails the job; it does not silently change storage or skip tests.
 
 The `project_lifecycle_a`, `project_lifecycle_b`, and `project_lifecycle_c` lanes
-partition PROJECT nodes; the single `task_lifecycle` lane owns TASK and checker
-nodes. The single `schema_contracts` lane owns all baseline/PostgreSQL schema, reset and
+partition PROJECT nodes; `task_lifecycle_a` and `task_lifecycle_b` use the same
+deterministic partition mechanism for TASK and checker nodes. The single `schema_contracts` lane owns all baseline/PostgreSQL schema, reset and
 isolated-runner contracts. The
 `shared_foundations_a` and `shared_foundations_b` lanes deterministically
 partition exact node IDs from the remaining authorization, artifact, API, and
@@ -187,7 +187,7 @@ Each executed lane uploads one seven-day bundle per attempt, and the final job
 uploads the reconciled `.ci/test-lanes` tree and downloaded diagnostics under its
 own attempt-specific artifact name. Older diagnostic artifacts are preserved.
 Its summary
-records the exact head, canonical node count, seven lane results, elapsed time,
+records the exact head, canonical node count, eight lane results, elapsed time,
 and raw-file digests. Per-lane evidence records collected, completed, skipped,
 and deselected exact node IDs plus the bound resource-isolation metadata and
 coverage digest. Resource metadata is mode `0600`, omits credentials, and proves

@@ -166,7 +166,7 @@ cannot be reused as post-submission review-gate evidence. See the
 - GitHub CI distributes the backend suite across semantic lanes, rejects
   skipped/deselected tests, preserves global coverage, and requires at least
   90 percent coverage for new or materially changed backend subsystems.
-  Its seven-lane allocation uses three project lanes, one task lane, two
+  Its eight-lane allocation uses three project lanes, two task lanes, two
   shared-foundation lanes and one schema lane. Database resets batch trigger
   commands within the existing transaction while retaining full schema checks;
   authorization preflight runs alongside lanes and remains mandatory at fan-in.
@@ -493,7 +493,7 @@ Setup receipts remain immutable. The next guide boundary is:
 The [behavior-first audit](../.commitrail/initiatives/WS-QUAL-003/OVERVIEW.md)
 has delivered focused PROJECT proof repairs, fixture separation, real
 rollback checks, a shared AUTH concurrency-observer repair, and a rebalance of
-the seven hosted CI lanes. The audit also corrected concrete sufficiency and
+the hosted CI lanes. The audit also corrected concrete sufficiency and
 submission-policy validation defects. These are delivered bounded repairs,
 not a claim that every test or subsystem is fully audited.
 

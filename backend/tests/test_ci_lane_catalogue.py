@@ -25,7 +25,7 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
     runner.validate_lane_inventory(discovered)
 
     assigned = [module for lane in LANES for module in lane.modules]
-    assert len(LANES) == 7
+    assert len(LANES) == 8
     assert all(lane.requires_postgres for lane in LANES)
     assert Counter(assigned)[catalogue.SCHEMA_MODULE] == 1
     assert all(
@@ -166,7 +166,8 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         }
     )
     assert (
-        modules_by_lane["task_lifecycle"]
+        modules_by_lane["task_lifecycle_a"]
+        == modules_by_lane["task_lifecycle_b"]
         == {
             "tests/tasks/test_contribution_lineage.py",
             "tests/tasks/test_project_display.py",
@@ -353,7 +354,7 @@ def test_schema_nodes_share_one_lane() -> None:
 
 
 @pytest.mark.parametrize(
-    ("names", "modules"), catalogue.PARTITION_GROUPS, ids=("shared", "project")
+    ("names", "modules"), catalogue.PARTITION_GROUPS, ids=("shared", "project", "task")
 )
 def test_owner_nodes_partition_deterministically(names, modules) -> None:
     module = modules[0]
@@ -370,20 +371,34 @@ def test_owner_nodes_partition_deterministically(names, modules) -> None:
     assert len(first["nodes"]) == len(nodes)
 
 
-def test_task_nodes_have_one_owner() -> None:
-    module = catalogue.TASK_MODULES[0]
-    nodes = [f"{module}::test_task_{index}" for index in range(100)]
-
+def test_task_nodes_have_one_partition_owner() -> None:
+    nodes = [
+        f"{module}::test_task_{index}"
+        for module in catalogue.TASK_MODULES
+        for index in range(10)
+    ]
     assert all(
-        task_module not in catalogue.PARTITION_LANES_BY_MODULE
-        for task_module in catalogue.TASK_MODULES
+        catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_TASK_LANES
+        for module in catalogue.TASK_MODULES
     )
     first = runner.build_manifest("a" * 40, nodes)
-    second = runner.build_manifest("a" * 40, list(reversed(nodes)))
-
-    assert first == second
-    assert {row["lane"] for row in first["nodes"]} == {catalogue.TASK_LANE}
+    assert first == runner.build_manifest("a" * 40, list(reversed(nodes)))
+    partitions = {
+        name: {row["nodeid"] for row in first["nodes"] if row["lane"] == name}
+        for name in catalogue.PARTITIONED_TASK_LANES
+    }
+    left, right = partitions.values()
+    assert left and right and not left.intersection(right)
+    assert left | right == set(nodes)
+    assert len(first["nodes"]) == len(nodes)
     assert [row["nodeid"] for row in first["nodes"]] == sorted(nodes)
+
+
+@pytest.mark.parametrize("missing", catalogue.PARTITIONED_TASK_LANES)
+def test_either_missing_task_partition_rejects_inventory(missing) -> None:
+    lanes = tuple(lane for lane in LANES if lane.name != missing)
+    with pytest.raises(LaneError, match="invalid_lane_names"):
+        runner.validate_lane_inventory(runner.discover_test_modules(), lanes=lanes)
 
 
 def test_manifest_has_no_exclusion_escape_hatch() -> None:
@@ -479,7 +494,7 @@ def test_collect_only_rejects_selected_lane(
 def test_partition_rejects_wrong_owner_pair(monkeypatch: pytest.MonkeyPatch) -> None:
     lanes = list(LANES)
     project_index = next(i for i, lane in enumerate(lanes) if lane.name == "project_lifecycle_b")
-    task_index = next(i for i, lane in enumerate(lanes) if lane.name == "task_lifecycle")
+    task_index = next(i for i, lane in enumerate(lanes) if lane.name == "task_lifecycle_a")
     project, task = lanes[project_index], lanes[task_index]
     lanes[project_index] = replace(project, name=task.name)
     lanes[task_index] = replace(task, name=project.name)
@@ -517,6 +532,8 @@ def test_workflow_lane_inventory_matches_catalogue() -> None:
     assert source.count("path: backend/.ci/download\n          merge-multiple: false") == 1
     assert '--expected-head "${GITHUB_SHA}"' in source
     assert '--run-attempt "${GITHUB_RUN_ATTEMPT}"' in source
+    assert 'test "${#coverage_files[@]}" -eq 8' in source
+    assert "len(lanes) != 8" in source
     assert 'Path(".ci/download"), expected_head, int(os.environ["GITHUB_RUN_ATTEMPT"])' in source
     assert 'timing_path = bundle / "job-start-epoch.txt"' in source
     assert "name: backend-semantic-lane-evidence-${{ steps.identity.outputs.tree_sha }}-attempt-${{ github.run_attempt }}" in source

@@ -10,7 +10,7 @@ PARTITIONED_PROJECT_LANES = (
     "project_lifecycle_b",
     "project_lifecycle_c",
 )
-TASK_LANE = "task_lifecycle"
+PARTITIONED_TASK_LANES = ("task_lifecycle_a", "task_lifecycle_b")
 
 
 @dataclass(frozen=True)
@@ -390,6 +390,7 @@ TASK_MODULES = (
 PARTITION_GROUPS = (
     (PARTITIONED_SHARED_LANES, SHARED_FOUNDATION_MODULES),
     (PARTITIONED_PROJECT_LANES, PROJECT_MODULES),
+    (PARTITIONED_TASK_LANES, TASK_MODULES),
 )
 PARTITION_LANES_BY_MODULE = {
     module: names for names, modules in PARTITION_GROUPS for module in modules
@@ -409,5 +410,5 @@ LANES = (
         ),
     ),
     *(TestLane(name, PROJECT_MODULES) for name in PARTITIONED_PROJECT_LANES),
-    TestLane(TASK_LANE, TASK_MODULES),
+    *(TestLane(name, TASK_MODULES) for name in PARTITIONED_TASK_LANES),
 )
