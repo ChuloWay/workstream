@@ -51,6 +51,19 @@ def _audit_vocabulary():
         )
 
 
+def _protect_service_identity():
+    """Keep the fixed principal immutable in the existing actor history guard."""
+    definition = op.get_bind().execute(sa.text(
+        "select pg_get_functiondef('guard_actor_profile_history()'::regprocedure)"
+    )).scalar_one()
+    for row in ("new", "old"):
+        anchor = f"{row}.provisioning_method,{row}.created_by"
+        if definition.count(anchor) != 1:
+            raise RuntimeError("actor profile history guard shape changed")
+        definition = definition.replace(anchor, f"{row}.provisioning_method,{row}.service_identity,{row}.created_by")
+    op.execute(definition)
+
+
 def upgrade():
     """Refuse unprovable attempts before changing schema or retained data."""
     op.execute("lock table outbox_delivery_attempts, outbox_events in access exclusive mode")
@@ -62,6 +75,7 @@ def upgrade():
           end if;
         end $$;
     """)
+    _protect_service_identity()
     _audit_vocabulary()
     for phase in ("claim", "invoke", "finalize"):
         column = phase + "_decision_event_id"

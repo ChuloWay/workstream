@@ -1270,7 +1270,7 @@ continues to deny; public activation and downstream task lineage remain pending.
 ## Shared outbox dispatcher
 
 `workstream.outbox.dispatcher` has the active `outbox.dispatch` permission only.
-Provision it through the existing administrative service operation; workers do
+Provision it through the existing administrative service operation; Celery workers do
 not create identities. Missing or inactive provisioning denies each new phase.
 No human role receives dispatch authority, and no TASK, checker, artifact or
 compensation permission is inherited.
@@ -1282,5 +1282,5 @@ rediscovered; expired claims are recovered even if their handler was removed.
 Each delivery phase uses fresh AUTH/PREP and retains its exact decision reference.
 Unknown invoked effects remain terminal for reconciliation. The production
 handler registry is empty until feature-specific authority and handlers land.
-Worker retries cover infrastructure failure with at most three retries and a
+Celery worker retries cover infrastructure failure with at most three retries and a
 30-second exponential delay; they never authorize repeating an invocation.

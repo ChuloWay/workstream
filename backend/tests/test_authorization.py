@@ -2054,6 +2054,7 @@ def test_submission_artifact_policy_draft_actions_have_exact_child_owners() -> N
     assert approval.owner is ActionOwner.AUTH_12F4
     assert approval.availability is ActionAvailability.ACTIVE
     active_internal = {
+        ActionId.OUTBOX_DISPATCH,
         ActionId.ARTIFACT_VERIFICATION_EXECUTE, ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
         ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE,
         ActionId.ARTIFACT_PENDING_WORK_SCAN,

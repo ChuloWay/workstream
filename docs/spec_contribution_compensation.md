@@ -847,7 +847,7 @@ remain unchanged, and downgrade refuses retained binding audit evidence.
 
 | ActionId | PermissionId | Principal / target | Protocol | Feature owner |
 |---|---|---|---:|---|
-| `outbox.dispatch` | active `outbox.dispatch` | fixed dispatcher / exact event and phase | T | AUTH-OUTBOX-02 shared authority, phase custody and worker composition complete |
+| `outbox.dispatch` | active `outbox.dispatch` | fixed dispatcher / exact event and phase | T | AUTH-OUTBOX-02 shared authority, phase custody and Celery worker composition complete |
 | `compensation.adapter_binding.read` | `compensation.adapter_binding.manage` | covered human Finance Authority / binding | Q | WS-ARCH-001-CP03B (active; CP01A registration custody) |
 | `compensation.adapter_binding.create` | `compensation.adapter_binding.manage` | covered human Finance Authority / binding collection | T | WS-ARCH-001-CP03B (active; CP01A registration custody) |
 | `compensation.adapter_binding.suspend` | `compensation.adapter_binding.manage` | covered human Finance Authority / active binding | T | WS-ARCH-001-CP03B (active; CP01A registration custody) |
@@ -952,7 +952,9 @@ disjoint; invoked overlaps claimed, unsupported overlaps nonterminal states, and
 unresolved unknown invocation remains visible after dead-letter. Counts must not
 be summed as readiness. Database failure is an error, never zero work. Lifecycle
 release still requires the consuming owner's fence and feature obligation evidence.
-No concrete handler, public route, Celery worker or broker transport is installed here.
+AUTH-OUTBOX-02 installs shared Celery delivery and recovery tasks. No concrete
+feature handler or public dispatch route is installed; task-function tests do not
+claim live broker transport proof.
 
 REV stages the audit and outbox rows for the Review decision after the reviewer
 operation and the applicable branch/submitter operation. Those rows share the

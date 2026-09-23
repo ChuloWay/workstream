@@ -28,14 +28,16 @@ binding, single consumption and audit emission. Reuse those owners.
 - OUTBOX attempt decision references, existing writer receipt consumption,
   exact owner checks, bounded candidate discovery and delivery composition.
 - One forward migration after 0027: audit vocabulary and immutable exact
-  phase decision matching/FKs, schema fingerprint and affected migration proof.
+  phase decision matching/FKs, schema fingerprint and affected migration proof;
+  include `service_identity` in the existing actor-profile immutable-history
+  comparison on which fixed-service admission depends.
 - `app/adapters/auth/`, `app/adapters/outbox/`, `app/workers/outbox.py` and existing
   Celery registration: explicit empty production handler registry until feature
   owners install separately authorized handlers; no runtime plugin discovery.
 - Affected tests in AUTH/OUTBOX/audit/worker/migration/catalogue suites and their
   existing lane/ownership metadata; exact AUTH structural-debt reconciliation
   after extracting guards from oversized shared owners (no raised limits);
- preserve required proof while replacing
+  preserve required proof while replacing
   permissive fake-ALLOW database fixtures with real authority evidence.
 - Current AUTH/CON/ARCH/POL navigation, canonical specs, operating docs and
   capability roadmap reflecting the intended merged boundary.
@@ -207,7 +209,8 @@ Named implementation proof (exact command results and reviewed head belong to th
   with tests that canonical AUTH can never drive through those cases.
 - `test_real_dispatcher_records_exact_phase_decisions`: real provisioned actor,
   three distinct phase decisions, canonical digest and immutable custody.
-- `test_dispatcher_lifecycle_denies_without_claim and the exact fixed-service matrix tests`: missing/suspended/deactivated/
+- `test_dispatcher_lifecycle_denies_without_claim`,
+  `test_dispatch_registration_is_exact_and_active`, and `test_dispatch_service_admission`: missing/suspended/deactivated/
   revoked, human and foreign-service controls; dispatcher denied ART/TASK/CHECKER.
 - `test_prepared_dispatch_binds_all_facts, test_prepared_dispatch_cannot_cross_root_transaction and test_prepared_dispatch_cannot_move_to_another_session`: independent phase,
   event/project/generation/owner/lease/payload/outcome changes, reuse/close/root
@@ -252,3 +255,13 @@ with the provisioned real-AUTH fixture; their terminal-reopen, archival and
 retry/claim assertions remain. Append-only transaction tests remain in place.
 The old blanket worker-import prohibition is replaced by the existing exact
 composition guard permitting only `workers/outbox.py` and no public route.
+
+Review traced a missing shared prerequisite: the existing actor-history guard
+protected profile kind/provisioning identity but omitted `service_identity`.
+The forward migration adds that field to the same immutable comparison, preserving
+all lifecycle rules and retained data. The regression starts with a persisted
+foreign service, rejects relabeling, proves no dispatch custody is created, and
+pairs it with a legitimately provisioned dispatcher. A mutation removes only the
+new comparison. Issuer/subject remain opaque credential bindings; they do not name
+the local fixed service. Handler-timeout proof uses an ample lease so it does not
+accidentally test the separately protected lease-expiry boundary.

@@ -173,6 +173,10 @@ async def test_handler_failure_is_unknown_not_retryable(delivery_harness, fault)
     import asyncio
 
     h = delivery_harness
+    if fault == "timeout":
+        # Isolate handler timeout from the independently tested lease-expiry guard.
+        h.options = h.options.model_copy(update={"lease_seconds": 30})
+        h.delivery = h.build()
 
     async def fail(envelope):
         if fault == "exception":

@@ -408,6 +408,7 @@ expected = {
 
 
 AUDIT_ALLOWED_ACTION_VALUES = {
+    "outbox.dispatch",
     "project.guide.activate",
     "project.post_submit_checker_policy.derive",
     "project.post_submit_checker_policy.approve",

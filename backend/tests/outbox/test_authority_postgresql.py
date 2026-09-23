@@ -6,6 +6,10 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select, text
+from sqlalchemy.exc import DBAPIError
+
+from app.modules.actors.api import ServiceIdentity
+from app.modules.actors.models import ActorIdentityLink, ActorProfile
 
 from app.adapters.auth import outbox_dispatch_authorization
 from app.modules.authorization.api import (
@@ -351,3 +355,46 @@ async def test_prepared_dispatch_cannot_move_to_another_session(delivery_harness
                     await other.service.consume(prepared._handle, ActionId.OUTBOX_DISPATCH,
                         prepared._input, outbox_dispatch_resource(facts))
             assert (await prepared.consume(facts)).action_id == "outbox.dispatch"
+
+
+async def test_fixed_service_identity_cannot_be_relabelled(outbox_factory):
+    factory, project = outbox_factory
+    h = Harness(factory, project)
+    foreign_id = str(uuid4())
+
+    async def provision(identity, actor_id):
+        async with factory() as session, session.begin():
+            session.add(ActorProfile(
+                id=actor_id, actor_kind="service", status="active",
+                provisioning_method="manual_service_provisioning",
+                service_identity=identity.value, created_by=actor_id,
+            ))
+            await session.flush()
+            session.add(ActorIdentityLink(
+                id=str(uuid4()), actor_profile_id=actor_id,
+                issuer="configured-provider", subject=str(uuid4()),
+                subject_kind="service", status="active", linked_by=actor_id,
+            ))
+
+    await provision(ServiceIdentity.PROJECT_SETUP, foreign_id)
+    event = await h.append()
+    with pytest.raises(DBAPIError, match="actor profile identity is immutable"):
+        async with factory() as session, session.begin():
+            await session.execute(text(
+                "update actor_profiles set service_identity=:identity where id=:id"
+            ), {"identity": ServiceIdentity.OUTBOX_DISPATCHER.value, "id": foreign_id})
+
+    async with factory() as session:
+        profile = await session.get(ActorProfile, foreign_id)
+        assert profile.service_identity == ServiceIdentity.PROJECT_SETUP.value
+        assert (await session.scalars(select(OutboxDeliveryAttempt))).all() == []
+        assert (await session.scalars(select(AuditEvent).where(
+            AuditEvent.action_id == "outbox.dispatch"
+        ))).all() == []
+    with pytest.raises(DeliveryUnavailable):
+        await h.delivery.claim(event.event_id, project, "foreign-principal")
+
+    await provision(ServiceIdentity.OUTBOX_DISPATCHER, str(uuid4()))
+    claim = await h.delivery.claim(event.event_id, project, "provisioned-dispatcher")
+    assert claim is not None
+    assert claim.event_id == event.event_id
