@@ -54,7 +54,9 @@ The old archived proposal conflated delivery with manual operational controls.
 action/port. Dead-letter operator requeue, pending cancellation and delayed
 archival therefore remain separate authorized operational work. Preserve existing
 SQL protections; 0027 additionally rejects reopening a completed delivery without
-new coherent custody. Repair valid raw-SQL fixtures to stage matching custody so
+new coherent custody and removes the obsolete attempted-cancellation branch from
+the event shape. Cancellation remains valid only at generation zero; adding
+manual attempted-event cancellation requires its own authorized closed outcome. Repair valid raw-SQL fixtures to stage matching custody so
 their negative assertions still reach the original guard. Replay means exact committed claim/outcome
 redelivery, not an unauthorized manual reopening of terminal work. Actual worker
 registration and broker transport belong to AUTH-OUTBOX-02 integration; this PR
@@ -183,7 +185,10 @@ retain their task until it ends and consume its exception, but never accept a la
 result or retry unknown effects. Cancellation/crash leaves durable
 recoverable custody rather than claiming successful handler completion.
 
-Registry entries use exact event type/version and a typed handler. No dynamic
+Registry entries use exact event type/version and a typed async handler. Reject
+synchronous functions, synchronous awaitable factories and handler classes before
+invocation; admit coroutine functions, bound async methods and async callable
+instances without executing them during registration. No dynamic
 plugins, default handler or feature inference from event names. Registry
 metadata is not authority. Production registrations stay empty until concrete
 feature integrations supply and prove their own AUTH boundary. Unknown or absent
@@ -307,11 +312,17 @@ Current command results and review freshness belong in the PR, not this record.
   Removing the outcome-expiry guard must fail these negatives.
 - `test_sql_completion_time_and_retry_bounds` and `test_sql_claim_lease_is_bounded`:
   paired writes isolate future completion, retry delay and lease limits.
+- `test_attempted_cancellation_rejects_without_changing_custody`: claimed and
+  invoked events reject cancellation at the event-shape check, preserve custody,
+  and can still finalize normally. Pending cancellation remains valid.
+- `test_registry_accepts_async_handler_forms` and
+  `test_registry_rejects_sync_handlers_without_calling_them`: admit the supported
+  async registration forms and reject synchronous work before any side effect.
 - `test_completed_custody_is_immutable`: field substitutions, deletion and
   truncation each reject at their intended guard, with valid receipt controls.
-- `tests/outbox/test_migration.py::test_pending_events_preserved_without_fabricated_attempts`
+- `tests/outbox/test_migration.py::test_unattempted_events_preserved_without_fabricated_attempts`
   and `test_attempted_events_refuse_unprovable_migration`: real 0026 -> 0027 with
-  retained pending and each reachable attempted state, comparing rows, schema
+  retained pending, generation-zero cancelled and each reachable attempted state, comparing rows, schema
   and revision. Refusal must not be an unrelated setup/downgrade failure.
 - `tests/outbox/test_drain_postgresql.py::test_drain_uses_one_snapshot_and_exact_project`:
   interleaved foreign-project decoys, committed rows locked by another connection,

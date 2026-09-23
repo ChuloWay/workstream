@@ -925,7 +925,9 @@ it reserves nothing and supplies no feature authority or commit-time guarantee.
 Feature effects deduplicate by immutable event identity across generations.
 
 Unknown event type/version registrations remain pending and visible as unsupported.
-There is no default handler. Claim expiry before invocation can retry with bounded
+There is no default handler. Registration requires a coroutine function, bound
+async method or async callable instance; synchronous handlers and factories reject
+before invocation. Claim expiry before invocation can retry with bounded
 exponential backoff; an explicit safe handler retry can also create another attempt.
 An exception, timeout, cancellation or crash after the invocation marker commits
 has unknown effects and stops in dead-letter on finalization/recovery. This includes
@@ -936,7 +938,9 @@ physically, but its later result cannot replace the recorded unknown outcome.
 
 The database requires the current event projection and delivery receipt to agree
 at transaction commit in both mutation directions. Completed receipts cannot be
-changed, removed or reopened. Finalization replay retains every original delivery
+changed, removed or reopened. Cancellation is a generation-zero persistence state;
+an attempted event has no cancellation outcome in this closed delivery contract.
+Finalization replay retains every original delivery
 identity, timestamp and digest even after a newer attempt starts. Concurrent
 finalizers may reauthorize the stored winner's digest once without another write.
 Database guards reject expired invoked non-unknown outcomes, future completion,

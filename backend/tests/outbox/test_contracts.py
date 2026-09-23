@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.modules.outbox.api import DeliveryOptions, OutboxClaim
+from app.modules.outbox.api import DeliveryOptions, HandlerOutcome, OutboxClaim
 from app.modules.outbox.registry import HandlerRegistry
 
 
@@ -106,13 +106,16 @@ def test_invalid_claims_reject(changes):
 
 @pytest.mark.parametrize("key", [("bad key", 1), ("valid", 0), ("valid", True)])
 def test_registry_rejects_invalid_exact_keys(key):
+    async def handler(envelope):
+        return HandlerOutcome.ACKNOWLEDGE
+
     with pytest.raises(ValueError):
-        HandlerRegistry([(*key, lambda envelope: None)])
+        HandlerRegistry([(*key, handler)])
 
 
 def test_registry_rejects_duplicates_and_has_no_default():
-    def handler(envelope):
-        return None
+    async def handler(envelope):
+        return HandlerOutcome.ACKNOWLEDGE
 
     with pytest.raises(ValueError):
         HandlerRegistry([("event", 1, handler), ("event", 1, handler)])
@@ -150,3 +153,60 @@ def test_invalid_timezone_is_sanitized(field, fault):
     for error in caught.value.errors(include_input=False):
         original = error.get("ctx", {}).get("error")
         assert original.__cause__ is original.__context__ is None
+
+
+@pytest.mark.parametrize("kind", ["function", "bound_method", "callable_object"])
+async def test_registry_accepts_async_handler_forms(kind):
+    async def handler(envelope):
+        return HandlerOutcome.ACKNOWLEDGE
+
+    class AsyncHandler:
+        async def handle(self, envelope):
+            return HandlerOutcome.ACKNOWLEDGE
+
+        async def __call__(self, envelope):
+            return HandlerOutcome.ACKNOWLEDGE
+
+    instance = AsyncHandler()
+    selected = {"function": handler, "bound_method": instance.handle, "callable_object": instance}[
+        kind
+    ]
+    registry = HandlerRegistry([("event", 1, selected)])
+    assert registry.get("event", 1) is selected
+    assert await registry.get("event", 1)(None) is HandlerOutcome.ACKNOWLEDGE
+
+
+@pytest.mark.parametrize(
+    "kind", ["sync_function", "sync_callable", "awaitable_factory", "class", "noncallable"]
+)
+def test_registry_rejects_sync_handlers_without_calling_them(kind):
+    called = []
+
+    async def result():
+        return HandlerOutcome.ACKNOWLEDGE
+
+    def sync_function(envelope):
+        called.append(envelope)
+        return HandlerOutcome.ACKNOWLEDGE
+
+    def awaitable_factory(envelope):
+        called.append(envelope)
+        return result()
+
+    class SyncHandler:
+        __call__ = staticmethod(sync_function)
+
+    class AsyncHandler:
+        async def __call__(self, envelope):
+            return HandlerOutcome.ACKNOWLEDGE
+
+    handler = {
+        "sync_function": sync_function,
+        "sync_callable": SyncHandler(),
+        "awaitable_factory": awaitable_factory,
+        "class": AsyncHandler,
+        "noncallable": None,
+    }[kind]
+    with pytest.raises(ValueError, match="outbox registration is invalid"):
+        HandlerRegistry([("event", 1, handler)])
+    assert called == []

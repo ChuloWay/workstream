@@ -40,7 +40,7 @@ async def seed(url, state):
             await OutboxService(session).append(event)
         connection = await asyncpg.connect(url.replace("+asyncpg", ""))
         try:
-            if state != "pending":
+            if state not in ("pending", "unattempted_cancelled"):
                 await connection.execute(
                     "update outbox_events set delivery_state='claimed',attempt_count=1,claim_generation=1,"
                     "next_attempt_at=null,claim_owner='worker',claimed_at=statement_timestamp(),"
@@ -48,7 +48,13 @@ async def seed(url, state):
                     "where event_id=$1",
                     event.event_id,
                 )
-            if state not in ("pending", "claimed"):
+            if state == "unattempted_cancelled":
+                await connection.execute(
+                    "update outbox_events set delivery_state='cancelled',next_attempt_at=null,"
+                    "finalized_at=statement_timestamp() where event_id=$1",
+                    event.event_id,
+                )
+            elif state not in ("pending", "claimed"):
                 await connection.execute(
                     "update outbox_events set delivery_state=$2::text,claim_owner=null,claimed_at=null,claim_expires_at=null,"
                     "next_attempt_at=case when $2::text='retryable' then statement_timestamp()+interval '1 second' else null end,"
@@ -82,12 +88,13 @@ async def snapshot(url):
         await connection.close()
 
 
-def test_pending_events_preserved_without_fabricated_attempts(
-    isolated_database_env, migration_lock, migration_schema_at
+@pytest.mark.parametrize("state", ["pending", "unattempted_cancelled"])
+def test_unattempted_events_preserved_without_fabricated_attempts(
+    isolated_database_env, migration_lock, migration_schema_at, state
 ):
     with migration_lock():
         migration_schema_at(PREDECESSOR)
-        asyncio.run(seed(isolated_database_env, "pending"))
+        asyncio.run(seed(isolated_database_env, state))
         before = asyncio.run(snapshot(isolated_database_env))
         assert before["revision"] == PREDECESSOR and before["attempt_table"] is None
         command.upgrade(config(), REVISION)

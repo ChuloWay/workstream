@@ -1,6 +1,7 @@
 """Explicit static feature registrations; registry membership is not authority."""
 
 from collections.abc import Iterable
+import inspect
 import re
 from types import MappingProxyType
 
@@ -20,6 +21,11 @@ class HandlerRegistry:
                 or type(version) is not int
                 or not 1 <= version <= 32767
                 or not callable(handler)
+                or isinstance(handler, type)
+                or not (
+                    inspect.iscoroutinefunction(handler)
+                    or inspect.iscoroutinefunction(getattr(handler, "__call__", None))
+                )
                 or (event_type, version) in handlers
             ):
                 raise ValueError("outbox registration is invalid")

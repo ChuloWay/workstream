@@ -270,3 +270,51 @@ async def test_sql_claim_lease_is_bounded(delivery_harness):
     h.delivery = h.build()
     claim = await h.delivery.claim(event.event_id, h.project, "bounded")
     assert (claim.claim_expires_at - claim.claimed_at).total_seconds() == 3600
+
+
+@pytest.mark.parametrize("invoked", [False, True])
+async def test_attempted_cancellation_rejects_without_changing_custody(delivery_harness, invoked):
+    h = delivery_harness
+    claim = await h.claim()
+    if invoked:
+        await h.delivery._begin_invocation(claim)
+    async with h.factory() as session:
+        with pytest.raises(DBAPIError, match="ck_outbox_events_delivery_state_shape"):
+            async with session.begin():
+                await session.execute(
+                    text(
+                        "update outbox_events set delivery_state='cancelled',claim_owner=null,"
+                        "claimed_at=null,claim_expires_at=null,finalized_at=clock_timestamp() "
+                        "where event_id=:id"
+                    ),
+                    {"id": claim.event_id},
+                )
+        event = await session.get(OutboxEvent, claim.event_id)
+        attempt = await DeliveryRepository(session).attempt(claim)
+        assert event.delivery_state == "claimed" and event.claim_owner == claim.claim_owner
+        assert attempt.stage == ("invoked" if invoked else "claimed")
+        assert attempt.outcome_json is None
+    if not invoked:
+        await h.delivery._begin_invocation(claim)
+    assert await h.delivery.finalize(claim, FinalizationCause.ACKNOWLEDGE)
+
+    # Generation-zero cancellation remains a valid persistence state.
+    pending = await h.append()
+    async with h.factory() as session, session.begin():
+        await session.execute(
+            text(
+                "update outbox_events set delivery_state='cancelled',next_attempt_at=null,"
+                "finalized_at=clock_timestamp() where event_id=:id"
+            ),
+            {"id": pending.event_id},
+        )
+    async with h.factory() as session:
+        event = await session.get(OutboxEvent, pending.event_id)
+        assert event.delivery_state == "cancelled" and event.claim_generation == 0
+        assert (
+            await session.scalars(
+                select(OutboxDeliveryAttempt).where(
+                    OutboxDeliveryAttempt.event_id == pending.event_id
+                )
+            )
+        ).all() == []

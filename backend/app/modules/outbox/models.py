@@ -109,8 +109,7 @@ class OutboxEvent(Base):
             "and last_error_code is not null and finalized_at is not null) or "
             "(delivery_state = 'cancelled' and next_attempt_at is null and claim_owner is null "
             "and claimed_at is null and claim_expires_at is null and finalized_at is not null "
-            "and ((attempt_count = 0 and last_attempt_at is null and last_error_code is null) "
-            "or (attempt_count > 0 and last_attempt_at is not null)))",
+            "and attempt_count = 0 and last_attempt_at is null and last_error_code is null)",
             name="delivery_state_shape",
         ),
         Index(

@@ -18,6 +18,31 @@ def upgrade() -> None:
           end if;
         end $$;
     """)
+    # Attempted cancellation has no outcome in the closed delivery contract.
+    # Preserve generation-zero cancellation without retaining that obsolete branch.
+    op.drop_constraint(op.f("ck_outbox_events_delivery_state_shape"), "outbox_events")
+    op.create_check_constraint(
+        op.f("ck_outbox_events_delivery_state_shape"),
+        "outbox_events",
+        "(delivery_state = 'pending' and attempt_count = 0 and next_attempt_at is not null and "
+        "claim_owner is null and claimed_at is null and claim_expires_at is null and "
+        "last_attempt_at is null and last_error_code is null and finalized_at is null and "
+        "archived_at is null) or (delivery_state = 'claimed' and attempt_count > 0 and "
+        "next_attempt_at is null and claim_owner is not null and claimed_at is not null and "
+        "claim_expires_at is not null and last_attempt_at = claimed_at and finalized_at is null and "
+        "archived_at is null) or (delivery_state = 'retryable' and attempt_count > 0 and "
+        "next_attempt_at is not null and claim_owner is null and claimed_at is null and "
+        "claim_expires_at is null and last_attempt_at is not null and last_error_code is not null "
+        "and finalized_at is null and archived_at is null) or (delivery_state = 'acknowledged' and "
+        "attempt_count > 0 and next_attempt_at is null and claim_owner is null and claimed_at is "
+        "null and claim_expires_at is null and last_attempt_at is not null and finalized_at is not "
+        "null) or (delivery_state = 'dead_letter' and attempt_count > 0 and next_attempt_at is null "
+        "and claim_owner is null and claimed_at is null and claim_expires_at is null and "
+        "last_attempt_at is not null and last_error_code is not null and finalized_at is not null) "
+        "or (delivery_state = 'cancelled' and next_attempt_at is null and claim_owner is null and "
+        "claimed_at is null and claim_expires_at is null and finalized_at is not null and "
+        "attempt_count = 0 and last_attempt_at is null and last_error_code is null) ",
+    )
     # Reuse the existing pure canonical JSON serializer; it does not read PROJECTS data.
     op.execute("""
         create function outbox_delivery_outcome_valid(
