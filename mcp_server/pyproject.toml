@@ -32,10 +32,12 @@ packages = ["workstream_mcp"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "contracts/profile_get.json" = "workstream_mcp/contracts/profile_get.json"
+"contracts/profile_update.json" = "workstream_mcp/contracts/profile_update.json"
+"contracts/authorization_context_get.json" = "workstream_mcp/contracts/authorization_context_get.json"
 
 [tool.hatch.build.targets.sdist]
 include = [
-  "/contracts/profile_get.json",
+  "/contracts/*.json",
   "/workstream_mcp",
   "/pyproject.toml",
 ]

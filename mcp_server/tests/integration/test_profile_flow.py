@@ -50,7 +50,13 @@ async def _ready(url: str, process: subprocess.Popen[str]) -> None:
     raise AssertionError("subprocess readiness timeout")
 
 
-async def _call(mcp_url: str, token: str) -> tuple[dict[str, Any], bool]:
+async def _call(
+    mcp_url: str,
+    token: str,
+    *,
+    name: str = "workstream_profile_get",
+    arguments: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], bool]:
     async with httpx.AsyncClient(
         headers={"Authorization": f"Bearer {token}"},
         follow_redirects=False,
@@ -60,7 +66,7 @@ async def _call(mcp_url: str, token: str) -> tuple[dict[str, Any], bool]:
         transport = streamable_http_client(mcp_url + "/mcp", http_client=http_client)
         async with Client(server=transport, mode="2026-07-28") as client:
             assert client.protocol_version == "2026-07-28"
-            result = await client.call_tool("workstream_profile_get", {})
+            result = await client.call_tool(name, arguments or {})
     dump = result.model_dump()
     if "structuredContent" in dump and dump["structuredContent"] is not None:
         content = dump["structuredContent"]
@@ -298,6 +304,72 @@ async def test_installed_mcp_preserves_profile_and_lifecycle_parity() -> None:
 
                 _bootstrap_access_administrator(first["mcp-admin"]["actor_profile_id"], env)
                 admin_token = tokens["mcp-admin"]
+
+                updated, failed = await _call(
+                    mcp_url,
+                    tokens["mcp-first-b"],
+                    name="workstream_profile_update",
+                    arguments={"display_name": "  MCP Profile Owner  ", "contact_email": None},
+                )
+                assert not failed
+                assert updated["display_name"] == "MCP Profile Owner"
+                assert updated["contact_email"] is None
+                direct_updated = await direct.get(
+                    "/api/v1/actors/me",
+                    headers={"Authorization": f"Bearer {tokens['mcp-first-b']}"},
+                )
+                assert direct_updated.status_code == 200
+                assert direct_updated.json()["display_name"] == "MCP Profile Owner"
+
+                manager_grant = await direct.post(
+                    "/api/v1/admin-role-grants",
+                    headers={
+                        "Authorization": f"Bearer {admin_token}",
+                        "Idempotency-Key": str(uuid4()),
+                    },
+                    json={
+                        "target_actor_profile_id": first["mcp-first-a"]["actor_profile_id"],
+                        "role": "project_manager",
+                        "scope_type": "system",
+                        "reason": "MCP authorization-context integration proof",
+                    },
+                )
+                assert manager_grant.status_code == 201, manager_grant.text
+                project = await direct.post(
+                    "/api/v1/projects",
+                    headers={
+                        "Authorization": f"Bearer {tokens['mcp-first-a']}",
+                        "Idempotency-Key": str(uuid4()),
+                    },
+                    json={
+                        "name": "MCP Context Integration",
+                        "slug": f"mcp-context-{uuid4().hex}",
+                        "description": "Exact-project MCP authorization context proof",
+                    },
+                )
+                assert project.status_code == 201, project.text
+                context, failed = await _call(
+                    mcp_url,
+                    tokens["mcp-first-a"],
+                    name="workstream_authorization_context_get",
+                    arguments={"project_id": project.json()["id"]},
+                )
+                assert not failed
+                assert context["actor_profile_id"] == first["mcp-first-a"]["actor_profile_id"]
+                assert context["project_id"] == project.json()["id"]
+                assert context["admin_roles"] == ["project_manager"]
+                assert context["project_roles"] == []
+
+                concealed, failed = await _call(
+                    mcp_url,
+                    tokens["mcp-first-b"],
+                    name="workstream_authorization_context_get",
+                    arguments={"project_id": project.json()["id"]},
+                )
+                assert failed
+                assert concealed["status"] == 404
+                assert concealed["code"] == "project_authorization_resource_not_found"
+
                 await _admin_transition(
                     direct,
                     token=admin_token,

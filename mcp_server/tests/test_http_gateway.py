@@ -5,7 +5,7 @@ import typing
 
 import httpx2 as httpx
 import pytest
-from conftest import profile_fixture
+from conftest import authorization_context_fixture, profile_fixture
 
 from workstream_mcp.config import Settings
 from workstream_mcp.http_gateway import WorkstreamGateway, create_http_client
@@ -150,3 +150,82 @@ def test_outbound_client_disables_environment_proxy_and_redirects() -> None:
         assert client._trust_env is False
     finally:
         asyncio.run(client.aclose())
+
+
+@pytest.mark.asyncio
+async def test_profile_update_uses_one_unkeyed_patch_and_preserves_payload() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            200,
+            json=profile_fixture(display_name="Victor", contact_email=None),
+            headers={"content-type": "application/json"},
+        )
+
+    client = httpx.AsyncClient(base_url="http://api.test", transport=httpx.MockTransport(handler))
+    try:
+        result = await WorkstreamGateway(settings(), client).profile_update(
+            "Bearer opaque", {"display_name": "Victor", "contact_email": None}
+        )
+    finally:
+        await client.aclose()
+
+    assert result.failure is None
+    assert len(seen) == 1
+    assert seen[0].method == "PATCH"
+    assert seen[0].url.path == "/api/v1/actors/me"
+    assert seen[0].headers.get("idempotency-key") is None
+    assert seen[0].headers.get("if-match") is None
+    assert seen[0].read() == b'{"display_name":"Victor","contact_email":null}'
+
+
+@pytest.mark.asyncio
+async def test_profile_update_transport_failure_is_uncertain_and_not_retried() -> None:
+    calls = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        raise httpx.ReadError("private upstream detail")
+
+    client = httpx.AsyncClient(base_url="http://api.test", transport=httpx.MockTransport(handler))
+    try:
+        result = await WorkstreamGateway(settings(), client).profile_update(
+            "Bearer opaque", {"display_name": "Victor"}
+        )
+    finally:
+        await client.aclose()
+
+    assert calls == 1
+    assert result.failure is not None
+    assert result.failure.error == "workstream_execution_uncertain"
+    assert result.failure.retryable is False
+
+
+@pytest.mark.asyncio
+async def test_authorization_context_uses_fixed_path_and_encoded_project_query() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            200,
+            json=authorization_context_fixture(),
+            headers={"content-type": "application/json"},
+        )
+
+    client = httpx.AsyncClient(base_url="http://api.test", transport=httpx.MockTransport(handler))
+    try:
+        result = await WorkstreamGateway(settings(), client).authorization_context_get(
+            "Bearer opaque", "project/with ? reserved"
+        )
+    finally:
+        await client.aclose()
+
+    assert result.failure is None
+    assert len(seen) == 1
+    assert seen[0].method == "GET"
+    assert seen[0].url.path == "/api/v1/actors/me/authorization-context"
+    assert seen[0].url.params["project_id"] == "project/with ? reserved"

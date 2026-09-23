@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "9f5209efbf3e67b8e1a50ed1bc635c2fdfd344c1d90457dc1cd200cc0745abdd",
+  "canonical_sha256": "8288e4a31900baf3764c4f116ab8195f78bcd8ed7a9a73ae1ce117745d6152b2",
   "components": {
     "schemas": {
       "ActorProfileSelfResponse": {
@@ -109,6 +109,38 @@
         "title": "ActorProfileSelfResponse",
         "type": "object"
       },
+      "ActorProfileUpdateRequest": {
+        "additionalProperties": false,
+        "description": "Human-owned display fields accepted by the canonical self API.",
+        "properties": {
+          "contact_email": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Email"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          }
+        },
+        "title": "ActorProfileUpdateRequest",
+        "type": "object"
+      },
       "ApiError": {
         "additionalProperties": false,
         "description": "Canonical machine-readable API error.",
@@ -167,12 +199,31 @@
         ],
         "title": "ApiErrorResponse",
         "type": "object"
+      },
+      "HTTPValidationError": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "detail",
+          "error"
+        ],
+        "type": "object"
       }
     }
   },
   "operation": {
-    "description": "Return the caller's canonical Contributor-domain profile.",
-    "operationId": "read_current_actor_profile_api_v1_actors_me_get",
+    "description": "Update only the caller-owned canonical display fields.",
+    "operationId": "update_current_actor_profile_api_v1_actors_me_patch",
     "parameters": [
       {
         "in": "header",
@@ -197,6 +248,16 @@
         }
       }
     ],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/ActorProfileUpdateRequest"
+          }
+        }
+      },
+      "required": true
+    },
     "responses": {
       "200": {
         "content": {
@@ -307,6 +368,32 @@
           }
         }
       },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        },
+        "description": "Validation Error",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
       "500": {
         "content": {
           "application/json": {
@@ -365,17 +452,17 @@
         "HTTPBearer": []
       }
     ],
-    "summary": "Read Current Actor Profile",
+    "summary": "Update Current Actor Profile",
     "tags": [
       "actors"
     ],
-    "x-workstream-action-id": "actor.profile.read_self"
+    "x-workstream-action-id": "actor.profile.update_self"
   },
   "schema_version": 1,
   "source": {
-    "action_id": "actor.profile.read_self",
+    "action_id": "actor.profile.update_self",
     "backend_git_sha": "0c701e03b87d9d676dd7895d3b872d24ad603d6a",
-    "method": "GET",
+    "method": "PATCH",
     "openapi_version": "3.1.0",
     "path": "/api/v1/actors/me"
   }
