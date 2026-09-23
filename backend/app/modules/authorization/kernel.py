@@ -32,8 +32,7 @@ from app.modules.authorization.domain.action_groups import (
 from app.modules.authorization.domain.audit import CONTEXT_DIGEST_RESOURCE_TYPES
 from app.modules.authorization.domain.audit_targets import project_authority_audit_target
 from app.modules.authorization.domain.prepared_service import (
-    is_project_setup_scope,
-    project_setup_resource_matches,
+    fixed_service_scope_project, fixed_service_resource_matches,
 )
 from app.modules.authorization.policy import ACTIVE_GUIDE_ADMIN_ROLES
 from app.modules.authorization.domain.task_authority import (
@@ -394,15 +393,7 @@ class AuthorizationService:
             if action.availability is not ActionAvailability.ACTIVE:
                 raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.ACTION_UNAVAILABLE)
             expected_resource = _ARTIFACT_INTERNAL_RESOURCES.get(action_id)
-            project_setup_action = is_project_setup_scope(action_id, scope)
-            if not project_setup_action and (
-                expected_resource is None
-                or scope.kind is not PreparedAuthorityScopeKind.ARTIFACT_INTERNAL
-                or scope.artifact_resource_type != expected_resource[0]
-            ):
-                raise PreparedAuthorizationUnsupported(
-                    AuthorizationDenialCode.RESOURCE_GUARD_DENIED
-                )
+            project_id = fixed_service_scope_project(action_id, scope, expected_resource)
             locked = await self._admin.lock_request_actor(
                 context.identity_link_id, context.actor_profile_id
             )
@@ -416,7 +407,7 @@ class AuthorizationService:
                 transaction=transaction,
                 context=context,
                 action_id=action_id,
-                scope_project_id=scope.project_id if project_setup_action else None,
+                scope_project_id=project_id,
                 matched_grant_id=None,
                 matched_grant_scope_project_id=None,
                 matched_grant_status=None,
@@ -943,20 +934,9 @@ class AuthorizationService:
                 denial = AuthorizationDenialCode.ACTION_UNAVAILABLE
             if denial is None and action_id not in SERVICE_ACTIONS_BY_IDENTITY.get(context.service_identity, ()):
                 denial = AuthorizationDenialCode.PERMISSION_NOT_GRANTED
-            setup_match = project_setup_resource_matches(
-                action_id, resource_context, authority.scope_project_id
-            )
-            if denial is None and setup_match is False:
-                denial = AuthorizationDenialCode.RESOURCE_GUARD_DENIED
-            elif (
-                denial is None
-                and setup_match is None
-                and (
-                    expected_resource is None
-                    or not isinstance(resource_context, expected_resource[1])
-                    or resource_context.resource_type != authority.artifact_resource_type
-                    or resource_context.resource_id != authority.artifact_resource_id
-                )
+            if denial is None and not fixed_service_resource_matches(
+                action_id, resource_context, authority.scope_project_id,
+                authority.artifact_resource_type, authority.artifact_resource_id, expected_resource,
             ):
                 denial = AuthorizationDenialCode.RESOURCE_GUARD_DENIED
             if denial is None:

@@ -63,6 +63,7 @@ def create_celery_app() -> Celery:
             "app.workers.checkers",
             "app.workers.project_setup",
             "app.workers.post_policy",
+            "app.workers.outbox",
         ],
     )
     celery_app.conf.update(
@@ -74,6 +75,9 @@ def create_celery_app() -> Celery:
         task_serializer="json",
         timezone="UTC",
         beat_schedule={
+            "outbox-delivery-recovery": {
+                "task": "workstream.outbox.scan_pending", "schedule": 60.0,
+            },
             "post-policy-approval-recovery": {
                 "task": "workstream.project_setup.scan_post_policy_approvals",
                 "schedule": 60.0,

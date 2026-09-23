@@ -162,3 +162,17 @@ class DrainObservation(DeliveryValue):
     unresolved: int
     unsupported: int
     dead_letter: int
+
+
+class DeliveryCandidate(DeliveryValue):
+    """Untrusted delivery selectors, without payload or authority facts."""
+
+    event_id: UUID
+    project_id: UUID
+
+
+class DeliveryCandidatePage(DeliveryValue):
+    """Bounded UUID-keyset discovery; eligibility is rechecked by delivery."""
+
+    items: tuple[DeliveryCandidate, ...]
+    next_after: UUID | None

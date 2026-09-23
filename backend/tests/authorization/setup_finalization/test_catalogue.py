@@ -129,6 +129,7 @@ def test_exact_active_action_inventory():
         for definition in ACTION_DEFINITIONS
         if definition.availability is ActionAvailability.ACTIVE
     } == {
+        ActionId.OUTBOX_DISPATCH,
         ActionId.PROJECT_GUIDE_ACTIVATE,
         ActionId.ACTOR_PROFILE_READ_SELF,
         ActionId.ACTOR_PROFILE_UPDATE_SELF,

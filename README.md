@@ -308,11 +308,11 @@ the repository is changed; it does not define runtime task or review records.
 Independent initiatives and branches may proceed concurrently. Start with
 [CONTRIBUTING.md](CONTRIBUTING.md) before proposing repository work.
 
-The shared outbox dispatcher has a registered but unavailable fixed identity and
-phase-bound authorization contract (AUTH-OUTBOX-01). CON-02B adds hidden delivery,
-crash recovery and immutable receipts. AUTH-OUTBOX-02 still owns live authorization,
-audit binding and Celery worker integration; no background task or checker effect is
-activated by these hidden mechanics.
+The shared outbox dispatcher uses the fixed service identity and phase-specific
+AUTH/PREP decisions for claim, invocation and finalization. AUTH-OUTBOX-02 binds
+those decisions to immutable delivery receipts and supplies Celery delivery and
+bounded recovery scans. The production handler registry is empty: assignment
+invalidation and checker routing need their own authorized feature handlers.
 
 ## Developer Quickstart
 
@@ -413,7 +413,7 @@ cd backend
 uv sync --locked --extra dev --extra agents
 uv run --env-file .env uvicorn app.main:app --reload
 # In another terminal, from backend/:
-uv run --env-file .env celery -A app.workers.celery_app worker --beat --loglevel=info
+uv run --env-file .env celery -A app.workers.celery_app worker --pool=prefork --beat --loglevel=info
 ```
 
 The model key must be in the process environment; `--env-file` supplies it without

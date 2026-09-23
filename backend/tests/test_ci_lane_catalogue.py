@@ -231,6 +231,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/test_database_reset.py",
         "tests/tasks/test_contribution_lineage_migration.py",
         "tests/outbox/test_migration.py",
+        "tests/outbox/test_authority_migration.py",
         runner.ADMIN_RUNNER_MODULE,
     } == modules_by_lane["schema_contracts"]
     assert {

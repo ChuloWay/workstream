@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from app.core.hashing import canonical_json_hash
 from app.modules.authorization.catalogue import ActionId
+from app.modules.authorization.domain.outbox_dispatch import OutboxDispatchResourceContext
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext, DERIVE
 from app.modules.authorization.domain.guide_compilation import (
     ProjectGuideCompilationExecuteResourceContext,
@@ -93,3 +95,32 @@ def project_setup_resource_matches(
             and resource.scope_project_id == project_id
         )
     return None
+
+
+def fixed_service_scope_project(action_id, scope, artifact_resource):
+    """Admit exact setup, dispatcher or artifact scopes without conflating owners."""
+    outbox = (action_id is ActionId.OUTBOX_DISPATCH
+              and scope.kind is PreparedAuthorityScopeKind.PROJECT and scope.project_id is not None)
+    if is_project_setup_scope(action_id, scope) or outbox:
+        return scope.project_id
+    if (artifact_resource is None or scope.kind is not PreparedAuthorityScopeKind.ARTIFACT_INTERNAL
+            or scope.artifact_resource_type != artifact_resource[0]):
+        from app.modules.authorization.runtime import PreparedAuthorizationUnsupported, AuthorizationDenialCode
+        raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.RESOURCE_GUARD_DENIED)
+    return None
+
+
+def fixed_service_resource_matches(action_id, resource, project_id, artifact_type, artifact_id, expected):
+    """Check the final resource against the exact prepared service scope."""
+    if action_id is ActionId.OUTBOX_DISPATCH:
+        return type(resource) is OutboxDispatchResourceContext and resource.scope_project_id == project_id
+    setup = project_setup_resource_matches(action_id, resource, project_id)
+    if setup is not None:
+        return setup
+    return (expected is not None and isinstance(resource, expected[1])
+            and resource.resource_type == artifact_type and resource.resource_id == artifact_id)
+
+
+def prepared_request_digest(value):
+    """One canonical request commitment shared by PREP issuance and consumption."""
+    return canonical_json_hash({"domain": "workstream.prepared_authorization.request.v1", "request": value})

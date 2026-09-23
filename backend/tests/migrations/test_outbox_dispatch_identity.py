@@ -98,7 +98,7 @@ def test_dispatch_identity_head_upgrade_is_repeatable(isolated_database_env, mig
         command.upgrade(config(), 'head')
         asyncio.run(seed(isolated_database_env, IDENTITY))
         before = asyncio.run(snapshot(isolated_database_env))
-        assert before['revision'] == '0027_outbox_delivery_custody'
+        assert before['revision'] == '0028_outbox_dispatch_authority'
         command.upgrade(config(), 'head')
         assert asyncio.run(snapshot(isolated_database_env)) == before
 

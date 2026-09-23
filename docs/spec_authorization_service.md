@@ -611,7 +611,7 @@ closed:
 | `workstream.review.reconciliation` | `review.reconcile.run` |
 | `workstream.review.artifact_reference_reconciliation` | `review.artifact_reference.reconcile` |
 | `workstream.review.projection` | `review.projection.rebuild` |
-| `workstream.outbox.dispatcher` | planned/unavailable: `outbox.dispatch` |
+| `workstream.outbox.dispatcher` | active shared mechanics only: `outbox.dispatch` |
 | `workstream.compensation.adapter` | target-only; no action membership |
 
 The hidden 04B2 prepared resource first locks fixed-service authority using
@@ -629,7 +629,7 @@ than a separate generation counter.
 
 `workstream.project.setup` was the eighth fixed identity when AUTH-12B merged;
 02C expanded that registry to fourteen identities. The current registry has
-sixteen identities after the target-only compensation adapter and planned outbox
+sixteen identities after the target-only compensation adapter and shared outbox
 dispatcher registrations. AUTH-12E activates
 `project.guide_sufficiency.run`, AUTH-12F3 activates policy derivation, and
 AUTH-12I activates exact unified compilation execution. AUTH-12B2 activates
@@ -672,8 +672,8 @@ Routers cannot invent identifiers or evaluate grant unions.
 
 ### Pre-Review Service Authority
 
-`outbox.dispatch` is registered and included in the current catalogue counts,
-but remains planned and unavailable. The other rows are proposed specification
+`outbox.dispatch` is active for the fixed dispatcher and included in the current
+catalogue counts. It authorizes shared delivery mechanics only. The other rows are proposed specification
 amendments for human design review: they are not registered or active and are
 excluded from those counts. The named implementation boundaries must register
 typed parity, prove hidden behavior and activate only their exact manifests;
@@ -681,7 +681,7 @@ a planning document does not grant a service permission.
 
 | ActionId / PermissionId | Sole fixed identity | Exact target and guards | Current activation custodian |
 |---|---|---|---|
-| `outbox.dispatch` | `workstream.outbox.dispatcher` | Event/claim generation/lease and exact phase; fresh authority for claim, invoke and finalize; no feature authority | AUTH-OUTBOX-01 registration complete (planned/unavailable); CON-02B hidden mechanics complete; AUTH-OUTBOX-02 activation remains |
+| `outbox.dispatch` | `workstream.outbox.dispatcher` | Event/claim generation/lease and exact phase; fresh authority for claim, invoke and finalize; no feature authority | AUTH-OUTBOX-02 authority/phase custody and Celery composition complete; feature handlers remain separate |
 | `task.assignment.authority_reconcile` | `workstream.task.assignment_reconciler` | Committed exact AUTH invalidation event, project/actor/grant-or-link, active pre-submit assignment; no wrong-role or submitted-history mutation | ARCH-03B hidden handler, ARCH-03C activation |
 | `checker.post_submit.execute` | `workstream.checker.post_submit` | Immutable Submission/request/generation, locked compiled policy, attempt and admitted service; exact pre-I/O authority | ARCH-04C hidden behavior, ARCH-04D activation |
 | `checker.post_submit.finalize` | `workstream.checker.post_submit` | Exact execution request/fence, accepted result digest and required verified output bindings; fresh post-I/O authority and atomic evidence | ARCH-04C hidden behavior, ARCH-04D activation |
@@ -1526,13 +1526,14 @@ blocks `human_review_required=false`. Public activation wiring remains pending.
 
 ### Registered outbox dispatcher contract
 
-`outbox.dispatch` is registered but planned, with sole fixed identity
-`workstream.outbox.dispatcher`. No human role receives it. The existing protected
-permission catalogue lists the metadata; provisioning the identity does not
-enable execution. Claim/invoke/finalize facts bind `outbox_event`, exact event
+`outbox.dispatch` is active, with sole fixed identity
+`workstream.outbox.dispatcher`. No human role receives it. The existing administrative
+service provisioning operation supplies the actor and identity link; missing,
+suspended/deactivated or revoked provisioning denies delivery. Claim/invoke/finalize facts bind `outbox_event`, exact event
 and project, payload digest, generation, claim owner and UTC lease. Finalize
 also requires the exact OUTBOX-owned outcome digest. These facts and decisions
-are not portable authority. The abstract preparation port has no live adapter;
-CON-02B owns committed claim/lease validation and outcome hashing, and
-AUTH-OUTBOX-02 owns fresh transaction-bound authority and exact recomposed-fact
-consumption. A pre-invocation decision cannot authorize post-I/O finalization.
+are not portable authority. The live adapter uses canonical PREP, holding service
+profile/link locks before event/attempt locks. CON-02B owns committed claim/lease
+validation and outcome hashing. AUTH-OUTBOX-02 binds exact recomposed facts and
+stores immutable claim/invoke/finalize audit references with matching SQL guards.
+Historical replay retains its original references and consumes fresh live authority. A pre-invocation decision cannot authorize post-I/O finalization.

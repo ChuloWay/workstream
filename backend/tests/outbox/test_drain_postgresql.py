@@ -3,10 +3,10 @@
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import event as sqlalchemy_event
+from sqlalchemy import text, event as sqlalchemy_event
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.modules.outbox.api import DeliveryPersistenceError, FinalizationCause, HandlerOutcome
+from app.modules.outbox.api import DeliveryPersistenceError, DeliveryUnavailable, FinalizationCause, HandlerOutcome
 from app.modules.outbox.delivery_repository import DeliveryRepository
 from project_create_fixtures import seed_historical_project
 
@@ -73,3 +73,51 @@ async def test_drain_failure_never_returns_zero(delivery_harness, monkeypatch):
     monkeypatch.setattr(AsyncSession, "execute", failed)
     with pytest.raises(DeliveryPersistenceError, match="^outbox_observation_failed$"):
         await h.delivery.drain(h.project)
+
+
+async def test_candidates_are_bounded_nonlocking_selectors_with_expired_recovery(delivery_harness):
+    from app.modules.outbox.registry import HandlerRegistry
+    h = delivery_harness
+    pending = [await h.append() for _ in range(3)]
+    await h.append(event_type="Unsupported")
+    expired = await h.claim()
+    async with h.factory() as session:
+        await session.execute(text("select pg_sleep(3.05)"))
+    statements = []
+    bind = h.factory.kw["bind"].sync_engine
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    sqlalchemy_event.listen(bind, "before_cursor_execute", capture)
+    try:
+        first = await h.delivery.candidates(limit=2)
+        second = await h.delivery.candidates(limit=2, after=first.next_after)
+    finally:
+        sqlalchemy_event.remove(bind, "before_cursor_execute", capture)
+    expected = sorted([event.event_id for event in pending] + [expired.event_id])
+    assert [item.event_id for item in first.items + second.items] == expected
+    assert first.next_after == expected[1] and second.next_after is None
+    assert {item.project_id for item in first.items + second.items} == {h.project}
+    assert len(statements) == 2
+    for statement in statements:
+        selected = statement.split("FROM")[0].lower()
+        assert "payload" not in selected and "claim_owner" not in selected
+        assert "FOR UPDATE" not in statement
+    # Removing a handler does not strand a committed claim needing recovery.
+    empty = h.build(HandlerRegistry([]))
+    page = await empty.candidates()
+    assert [item.event_id for item in page.items] == [expired.event_id]
+    assert await empty.deliver(expired.event_id, h.project, "recovery")
+    assert (await empty.candidates()).items == ()
+    assert h.handled == []
+
+
+@pytest.mark.parametrize("kwargs", [{"limit": 0}, {"limit": 501}, {"limit": True}, {"after": "bad"}])
+async def test_candidate_bounds_reject_before_database(delivery_harness, monkeypatch, kwargs):
+    h = delivery_harness
+    def forbidden():
+        pytest.fail("invalid selector opened a session")
+    monkeypatch.setattr(h.delivery, "_sessions", forbidden)
+    with pytest.raises(DeliveryUnavailable):
+        await h.delivery.candidates(**kwargs)

@@ -5,12 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import and_, cast, func, literal, or_, select
+from sqlalchemy import and_, cast, func, literal, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.outbox.api import (
     CommittedInvocationObservation,
+    DeliveryCandidate, DeliveryCandidatePage,
     DrainObservation,
     OutboxClaim,
 )
@@ -52,6 +53,22 @@ class DeliveryRepository:
     def __init__(self, session: AsyncSession) -> None:
         """Bind one owner session."""
         self.session = session
+
+    async def candidates(self, registered, *, after: UUID | None, limit: int) -> DeliveryCandidatePage:
+        """One nonlocking statement includes due supported work and all expired claims."""
+        e = OutboxEvent
+        now = func.statement_timestamp()
+        query = select(e.event_id, e.project_id).where(or_(
+            and_(e.delivery_state.in_(("pending", "retryable")), e.next_attempt_at <= now,
+                 tuple_(e.event_type, e.event_version).in_(sorted(registered))),
+            and_(e.delivery_state == "claimed", e.claim_expires_at <= now),
+        ))
+        if after is not None:
+            query = query.where(e.event_id > after)
+        rows = (await self.session.execute(query.order_by(e.event_id).limit(limit + 1))).all()
+        items = tuple(DeliveryCandidate(event_id=UUID(str(row.event_id)), project_id=UUID(row.project_id))
+                      for row in rows[:limit])
+        return DeliveryCandidatePage(items=items, next_after=items[-1].event_id if len(rows) > limit else None)
 
     async def event(
         self, event_id: UUID, project_id: UUID, *, lock: bool = False

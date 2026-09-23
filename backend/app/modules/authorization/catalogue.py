@@ -318,7 +318,7 @@ _CONTRIBUTION_POLICY_ACTION_IDS = (
 
 
 ACTION_DEFINITIONS = (
-    _planned(ActionId.OUTBOX_DISPATCH, PermissionId.OUTBOX_DISPATCH, ActionOwner.AUTH_OUTBOX_01),
+    _active(ActionId.OUTBOX_DISPATCH, PermissionId.OUTBOX_DISPATCH, ActionOwner.AUTH_OUTBOX_01),
     _active(
         ActionId.ACTOR_PROFILE_READ_SELF, PermissionId.ACTOR_PROFILE_READ_SELF, ActionOwner.AUTH_07B
     ),
@@ -916,6 +916,7 @@ def _index_actions(
     if len(indexed) != len(definitions) or set(indexed) != ACTION_IDS:
         raise RuntimeError("authorization action catalogue is incomplete")
     active_actions = {
+        ActionId.OUTBOX_DISPATCH,
         ActionId.PROJECT_GUIDE_ACTIVATE,
         *_CONTRIBUTION_POLICY_ACTION_IDS,
         *GUIDE_PROPOSAL_ACTION_IDS,
@@ -1097,6 +1098,7 @@ _EXPECTED_SERVICE_ACTION_MEMBERSHIPS = frozenset(
 
 
 _ACTIVE_SERVICE_ACTIONS = {
+    ActionId.OUTBOX_DISPATCH,
     ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE,
     ActionId.PROJECT_SETUP_RUN_UPDATE,
     ActionId.ARTIFACT_VERIFICATION_EXECUTE,

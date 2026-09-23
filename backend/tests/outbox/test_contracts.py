@@ -32,12 +32,12 @@ def _outbox_imports(source):
         "import app.adapters.outbox as adapter",
     ],
 )
-def test_hidden_composition_guard_detects_import_forms(source):
+def test_composition_guard_detects_import_forms(source):
     assert _outbox_imports(source)
     assert not _outbox_imports("from app.modules.tasks import service as outbox")
 
 
-def test_append_transaction_and_hidden_delivery_boundaries():
+def test_append_transaction_and_explicit_delivery_boundaries():
     root = Path(__file__).resolve().parents[2] / "app"
     for name in ("service.py", "repository.py"):
         tree = ast.parse((root / "modules/outbox" / name).read_text())
@@ -49,7 +49,13 @@ def test_append_transaction_and_hidden_delivery_boundaries():
         )
     for directory in (root / "workers", root / "api/routes"):
         for path in directory.rglob("*.py"):
-            assert not _outbox_imports(path.read_text()), path
+            if path == root / "workers/outbox.py":
+                imports = [node for node in ast.walk(ast.parse(path.read_text()))
+                           if isinstance(node, ast.ImportFrom) and node.module == "app.adapters.outbox"]
+                assert len(imports) == 1
+                assert [name.name for name in imports[0].names] == ["production_outbox_delivery"]
+            else:
+                assert not _outbox_imports(path.read_text()), path
     tree = ast.parse((root / "modules/outbox/api.py").read_text())
     assert not any(
         isinstance(node, ast.ImportFrom)
@@ -210,3 +216,25 @@ def test_registry_rejects_sync_handlers_without_calling_them(kind):
     with pytest.raises(ValueError, match="outbox registration is invalid"):
         HandlerRegistry([("event", 1, handler)])
     assert called == []
+
+
+@pytest.mark.parametrize("fault", ["type", "deny", "action", "permission", "decision_id"])
+def test_delivery_rejects_malformed_authorization_decision(fault):
+    """Controlled port-result proof only; no claim of live authority or SQL custody."""
+    from dataclasses import replace
+    from uuid import uuid4
+    from app.modules.authorization.api.decisions import AuthorizationDecision, DecisionOutcome
+    from app.modules.outbox.api import DeliveryUnavailable
+    from app.modules.outbox.delivery import _allow
+
+    valid = AuthorizationDecision(uuid4(), "outbox.dispatch", "outbox.dispatch", DecisionOutcome.ALLOW)
+    assert _allow(valid) == str(valid.decision_id)
+    invalid = {
+        "type": object(),
+        "deny": replace(valid, outcome=DecisionOutcome.DENY, denial_code="denied"),
+        "action": replace(valid, action_id="task.claim"),
+        "permission": replace(valid, permission_id="task.claim"),
+        "decision_id": replace(valid, decision_id="not-a-uuid"),
+    }[fault]
+    with pytest.raises(DeliveryUnavailable):
+        _allow(invalid)

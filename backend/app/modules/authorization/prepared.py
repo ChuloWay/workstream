@@ -60,7 +60,11 @@ from app.modules.authorization.domain.guide_compilation_projections import (
 from app.modules.authorization.prepared_proposal_replay import (
     parse_review_bindings, review_context_matches, validate_review_replay,
 )
+from app.modules.authorization.domain.prepared_service import prepared_request_digest
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
+from app.modules.authorization.domain.outbox_dispatch import (
+    OutboxDispatchResourceContext, prepared_outbox_digest,
+)
 from app.modules.authorization.prepared_projection_replay import (
     parse_setup_bindings, setup_context_matches,
     validate_projection_replay,
@@ -173,6 +177,7 @@ class _PreparedAuthorizationBinding:
     scope: PreparedAuthorityScope
     idempotency_key: UUID
     request_digest: str
+    outbox_dispatch_digest: str | None = None
     task_authority_context: TaskAuthorityResourceContext | None = None
     project_create_operation_id: UUID | None = None
     project_create_project_id: UUID | None = None
@@ -503,15 +508,8 @@ class PreparedAuthorizationService:
             raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle")
         return issuance
 
-    async def consume(
-        self,
-        handle: PreparedAuthorizationHandle,
-        expected_action_id: ActionId,
-        caller_input: PreparedAuthorizationInput,
-        final_resource_context: AuthorizationResourceContext,
-    ) -> AuthorizationDecision:
-        """Consume one exact capability before evaluating and evidencing final facts."""
-        issuance = self._live_issuance(handle)
+    def _validate_consumption(self, issuance, expected_action_id, caller_input, final_resource_context):
+        """Bind consumption to its issued request, root transaction and exact resource."""
         if expected_action_id is not issuance.binding.action_id:
             raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle")
         rebound = self._binding(expected_action_id, caller_input, issuance.binding.scope)
@@ -523,6 +521,22 @@ class PreparedAuthorizationService:
         final_scope = self._scope_from_resource(expected_action_id, final_resource_context)
         if final_scope != issuance.binding.scope:
             raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle")
+        if expected_action_id is ActionId.OUTBOX_DISPATCH and (
+            type(final_resource_context) is not OutboxDispatchResourceContext
+            or issuance.binding.outbox_dispatch_digest != authorization_resource_digest(final_resource_context)
+        ):
+            raise PreparedAuthorizationHandleInvalid("invalid prepared outbox authority")
+
+    async def consume(
+        self,
+        handle: PreparedAuthorizationHandle,
+        expected_action_id: ActionId,
+        caller_input: PreparedAuthorizationInput,
+        final_resource_context: AuthorizationResourceContext,
+    ) -> AuthorizationDecision:
+        """Consume one exact capability before evaluating and evidencing final facts."""
+        issuance = self._live_issuance(handle)
+        self._validate_consumption(issuance, expected_action_id, caller_input, final_resource_context)
         if expected_action_id in TASK_ACTIONS and (
             not isinstance(final_resource_context, TaskAuthorityResourceContext)
             or issuance.binding.task_authority_context != final_resource_context
@@ -819,11 +833,9 @@ class PreparedAuthorizationService:
             actor_ref=self._context.actor_profile_id,
             scope=scope,
             idempotency_key=caller_input.idempotency_key,
-            request_digest=canonical_json_hash(
-                {
-                    "domain": "workstream.prepared_authorization.request.v1",
-                    "request": caller_input.request_value,
-                }
+            request_digest=prepared_request_digest(caller_input.request_value),
+            outbox_dispatch_digest=prepared_outbox_digest(
+                action_id, caller_input.request_value, PreparedAuthorizationHandleInvalid,
             ),
             project_create_operation_id=operation_id,
             project_create_project_id=project_id,
@@ -885,7 +897,7 @@ class PreparedAuthorizationService:
                 artifact_resource_type=artifact_resource[0],
                 artifact_resource_id=resource.resource_id,
             )
-        if isinstance(resource, (ProjectGuideProjectionResourceContext, PostPolicyResourceContext)):
+        if isinstance(resource, (ProjectGuideProjectionResourceContext, PostPolicyResourceContext, OutboxDispatchResourceContext)):
             return PreparedAuthorityScope(
                 kind=PreparedAuthorityScopeKind.PROJECT,
                 project_id=resource.scope_project_id,

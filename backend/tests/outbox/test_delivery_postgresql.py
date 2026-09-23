@@ -1,4 +1,4 @@
-"""Real PostgreSQL races with explicitly synthetic phase authorization."""
+"""Real PostgreSQL races using canonical fixed-service phase authorization."""
 
 import asyncio
 from dataclasses import replace
@@ -8,8 +8,8 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import event as sqlalchemy_event, select, text
 
-from app.modules.authorization.api.decisions import DecisionOutcome
-from app.modules.authorization.api.outbox_dispatch import OutboxDispatchPhase
+from app.adapters.auth import outbox_dispatch_authorization
+from app.modules.authorization.api.outbox_dispatch import OutboxDispatchFacts, OutboxDispatchPhase
 from app.modules.outbox.api import DeliveryUnavailable, FinalizationCause, HandlerOutcome
 from app.modules.outbox.delivery_repository import DeliveryRepository, database_time
 from app.modules.outbox.models import OutboxDeliveryAttempt, OutboxEvent
@@ -66,10 +66,16 @@ async def test_claim_validator_requires_committed_invocation(delivery_harness):
     claim = await h.claim()
     assert await h.delivery.observe_invocation(claim) is None
     async with h.factory() as writer, writer.begin():
-        attempt = await DeliveryRepository(writer).attempt(claim, lock=True)
-        attempt.stage, attempt.invoked_at = "invoked", await database_time(writer)
-        await writer.flush()
-        assert await h.delivery.observe_invocation(claim) is None
+        facts = OutboxDispatchFacts(**claim.model_dump(), phase=OutboxDispatchPhase.INVOKE)
+        async with outbox_dispatch_authorization(writer).prepare_outbox_dispatch(
+            facts=facts, request_id=uuid4(), correlation_id=uuid4(),
+        ) as prepared:
+            attempt = await DeliveryRepository(writer).attempt(claim, lock=True)
+            decision = await prepared.consume(facts)
+            attempt.invoke_decision_event_id = str(decision.decision_id)
+            attempt.stage, attempt.invoked_at = "invoked", await database_time(writer)
+            await writer.flush()
+            assert await h.delivery.observe_invocation(claim) is None
     observed = await h.delivery.observe_invocation(claim)
     assert (
         observed.claim == claim
@@ -90,7 +96,7 @@ async def test_claim_validator_requires_committed_invocation(delivery_harness):
 
 
 @pytest.mark.parametrize("phase", list(OutboxDispatchPhase))
-@pytest.mark.parametrize("fault", ["deny", "action", "permission", "phase", "facts"])
+@pytest.mark.parametrize("fault", ["phase", "facts"])
 async def test_each_phase_denies_mismatch_and_reused_authority(delivery_harness, phase, fault):
     h = delivery_harness
     event = await h.append()
@@ -100,13 +106,7 @@ async def test_each_phase_denies_mismatch_and_reused_authority(delivery_harness,
     if phase is OutboxDispatchPhase.FINALIZE:
         assert await h.delivery._begin_invocation(claim)
     consumed = len(h.consumed)
-    if fault == "deny":
-        h.outcome = DecisionOutcome.DENY
-    elif fault == "action":
-        h.action = "task.claim"
-    elif fault == "permission":
-        h.permission = "task.claim"
-    elif fault == "facts":
+    if fault == "facts":
         h.substitute = lambda facts: replace(facts, claim_owner="substituted")
     else:
         h.substitute = lambda facts: replace(

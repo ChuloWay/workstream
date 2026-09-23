@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import json
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, model_validator
@@ -16,6 +16,10 @@ from app.modules.authorization.api.project_setup_finalization import (
     setup_finalization_identity,
 )
 from app.modules.authorization.catalogue import ActionId
+
+if TYPE_CHECKING:
+    from app.modules.authorization.runtime import ProjectSetupServiceCustodyContext
+
 
 _STRICT = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -188,3 +192,29 @@ def finalization_replay_event_matches(
         and after.get("allowed") is True
         and (after.get("resource_context_digest") == finalization_resource_digest(resource))
     )
+
+
+def require_setup_custody(
+    custody: ProjectSetupServiceCustodyContext,
+    *,
+    label: str,
+    expected_step: str,
+    setup_generation: int,
+    stale_output_digest: str | None,
+    scope_project_id: UUID,
+    guide_id: UUID,
+    source_snapshot_id: UUID,
+) -> None:
+    """Reject setup-service custody that does not match the protected lineage."""
+    if custody.expected_step != expected_step:
+        raise ValueError(f"{label} setup-service step is inconsistent")
+    if custody.setup_generation != setup_generation:
+        raise ValueError(f"{label} setup generation is inconsistent")
+    if custody.stale_output_digest != stale_output_digest:
+        raise ValueError(f"{label} stale output is inconsistent")
+    if (
+        custody.scope_project_id != scope_project_id
+        or custody.guide_id != guide_id
+        or custody.source_snapshot_id != source_snapshot_id
+    ):
+        raise ValueError(f"{label} setup lineage is inconsistent")

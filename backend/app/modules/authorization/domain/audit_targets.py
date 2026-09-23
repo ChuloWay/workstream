@@ -1,6 +1,7 @@
 """Exact project resource audit selectors, without raw product facts."""
 
 from app.modules.authorization.catalogue import ActionId
+from app.modules.authorization.domain.outbox_dispatch import OutboxDispatchResourceContext
 from app.modules.authorization.domain.guide_proposals import GuideProposalResourceContext
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
 from app.modules.authorization.domain.action_groups import (
@@ -63,7 +64,7 @@ def project_authority_audit_target(
             AdapterBindingMutationResourceContext,
             ProjectGuideProjectionResourceContext,
             ProjectSetupFinalizationResourceContext,
-            GuideProposalResourceContext, PostPolicyResourceContext,
+            GuideProposalResourceContext, PostPolicyResourceContext, OutboxDispatchResourceContext,
         ),
     ):
         project_id = str(getattr(resource, "project_id", None) or resource.scope_project_id)

@@ -1,4 +1,4 @@
-"""Pure contract for planned, phase-specific outbox dispatcher authority."""
+"""Pure contract for phase-specific outbox dispatcher authority."""
 
 from __future__ import annotations
 
@@ -116,11 +116,11 @@ def outbox_dispatch_resource_digest(facts: OutboxDispatchFacts) -> str:
 
 
 class PreparedOutboxDispatch(ABC):
-    """Nominal one-phase authority; no concrete implementation is active yet.
+    """Nominal one-phase authority implemented by the canonical AUTH/PREP owner.
 
-    OUTBOX-02 must bind each preparation to its exact session/root transaction,
-    recompose and compare all facts before single consumption, and revalidate
-    current authority plus committed ownership for invocation/finalization.
+    Each preparation binds its exact session/root transaction and recomposed
+    phase facts before single consumption. AUTH revalidates the fixed principal;
+    OUTBOX verifies locked committed ownership for invocation/finalization.
     No handle crosses commit, lease wait or handler/provider I/O.
     """
 

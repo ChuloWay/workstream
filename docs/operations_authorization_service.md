@@ -688,9 +688,9 @@ The closed registry now has sixteen fixed-service identities: fifteen
 action-bearing identities with twenty-four matrix memberships, plus the
 target-only `workstream.compensation.adapter` identity. The action-bearing
 set comprises seven ART identities, project setup, six exact REV identities,
-and the planned/unavailable outbox dispatcher. Missing provisioned rows deny without stopping the application.
-The target-only identity has no matrix membership, and the REV and outbox dispatcher actions remain
-unavailable, so registry membership alone grants no authority. Do not create a
+and the active shared outbox dispatcher. Missing provisioned rows deny without stopping the application.
+The target-only identity has no matrix membership, and the REV actions remain
+unavailable. Dispatcher authority grants no feature permission. Do not create a
 shared review service or a database service-grant table.
 
 Historically, AUTH-12B extended the registry to an eighth identity,
@@ -1267,12 +1267,34 @@ or later ContributionPolicy retirement does not rewrite that evidence. Revoked
 actor/link/grant authority denies replay. Composition without the explicit adapter
 continues to deny; public activation and downstream task lineage remain pending.
 
-## Planned outbox dispatcher identity
+## Shared outbox dispatcher
 
-The closed identity catalogue admits `workstream.outbox.dispatcher`, and the
-protected permission catalogue lists `outbox.dispatch`. This registration does
-not enable the dispatcher: the action remains planned and no human role receives it.
-Provisioning through the existing administrative operation cannot bypass that
-availability gate. CON-02B supplies hidden shared delivery and recovery; live
-AUTH evidence and production composition remain AUTH-OUTBOX-02 work. No TASK,
-checker, artifact or compensation permission is inherited.
+`workstream.outbox.dispatcher` has the active `outbox.dispatch` permission only.
+Provision it through the existing administrative service operation; Celery workers do
+not create identities. Missing or inactive provisioning denies each new phase.
+No human role receives dispatch authority, and no TASK, checker, artifact or
+compensation permission is inherited.
+
+Celery registers `workstream.outbox.deliver_event` and a 60-second
+`workstream.outbox.scan_pending` sweep. The sweep reads bounded UUID pages and
+closes SQL before publishing event/project selectors. Failed publication is
+rediscovered; expired claims are recovered even if their handler was removed.
+Each delivery phase uses fresh AUTH/PREP and retains its exact decision reference.
+Unknown invoked effects remain terminal for reconciliation. The production
+handler registry is empty until feature-specific authority and handlers land.
+Celery worker retries cover infrastructure failure with at most three retries and a
+30-second exponential delay; they never authorize repeating an invocation.
+
+Delivery requires Celery's prefork process pool. `deliver_event` has a 300-second
+hard execution limit, independent of its 240-second handler timeout and covering
+async shutdown as well. The prefork parent acknowledges a hard timeout instead
+of requeuing that timed-out invocation. A committed UNKNOWN remains terminal;
+if termination interrupts finalization, the existing expired-invocation recovery
+records UNKNOWN without calling the handler again. Ordinary Celery worker-loss
+redelivery remains fenced by the same durable invocation custody.
+
+Eager execution and solo/thread/greenlet pools do not provide this process
+containment. Before registering the first production feature handler, its Celery worker
+and routing composition must enforce prefork execution. The shared app's other
+jobs and guide-only solo drill do not establish delivery containment. The
+production OUTBOX handler registry remains empty.

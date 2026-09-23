@@ -173,6 +173,10 @@ async def test_handler_failure_is_unknown_not_retryable(delivery_harness, fault)
     import asyncio
 
     h = delivery_harness
+    if fault == "timeout":
+        # Isolate handler timeout from the independently tested lease-expiry guard.
+        h.options = h.options.model_copy(update={"lease_seconds": 30})
+        h.delivery = h.build()
 
     async def fail(envelope):
         if fault == "exception":
@@ -220,6 +224,12 @@ async def test_concurrent_same_outcome_finalizers_replay_winner(delivery_harness
     async with h.factory() as session:
         attempts = (await session.scalars(select(OutboxDeliveryAttempt))).all()
         assert len(attempts) == 1 and attempts[0].outcome_json == receipts[0].outcome_json
+        from app.modules.tasks.models import AuditEvent
+        original_ids = {attempts[0].claim_decision_event_id, attempts[0].invoke_decision_event_id,
+                        attempts[0].finalize_decision_event_id}
+        assert len(original_ids) == 3 and None not in original_ids
+        audits = (await session.scalars(select(AuditEvent).where(AuditEvent.action_id == "outbox.dispatch"))).all()
+        assert len(audits) == 4 and original_ids < {audit.id for audit in audits}
 
 
 async def test_running_handler_expiry_preserves_unknown_and_late_replay(delivery_harness):

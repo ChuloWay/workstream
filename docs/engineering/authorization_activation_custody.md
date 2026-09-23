@@ -82,9 +82,10 @@ historically reconciled PostgreSQL parity through migration `0036`, now folded
 into the v0.1 baseline. At that historical boundary, the closed registry contained
 fifteen service identities: fourteen action-bearing identities with twenty-three
 matrix memberships plus the target-only `workstream.compensation.adapter`.
-AUTH-OUTBOX-01 adds the planned/unavailable dispatcher. The current registry has
-sixteen identities, fifteen action-bearing identities and twenty-four memberships;
-registration does not activate `outbox.dispatch`.
+AUTH-OUTBOX-01 registered the dispatcher; AUTH-OUTBOX-02 activates only its shared
+delivery mechanics with exact phase audit custody. The current registry has
+sixteen identities, fifteen action-bearing identities and twenty-four memberships.
+Feature handlers and their own authority remain separate.
 CP01A registered four initially unavailable adapter-binding actions and CP01B
 registered five initially unavailable ContributionPolicy actions; neither
 changes fixed-service identity or matrix membership. CP01C corrects only the
