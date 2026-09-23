@@ -35,7 +35,7 @@ separate hidden TASK behavior from originating AUTH event wiring and activation.
   adapter composition through existing owners.
 - Focused contract, PostgreSQL, race, rollback and fault-injection tests;
   exact test-lane and ownership registrations for those files.
-- Existing deterministic TASK test-lane partition, its exact workflow and
+- Existing deterministic test-lane partition mechanism, its exact workflow and
   evidence inventory, isolated-runner namespace tests, and current backend
   testing documentation when required to complete the added regression suite.
 - This record, adopted 03B/03C plans, initiative navigation, current roadmap
@@ -178,7 +178,7 @@ checks, skip/deselection rejection and coverage thresholds remain unchanged.
 Allowed repair paths are `backend/scripts/test_lane_catalogue.py`,
 `backend/scripts/validate_test_lane_evidence.py`, `.github/workflows/backend.yml`,
 `backend/tests/test_ci_lane_catalogue.py`,
-`backend/tests/test_ci_test_lanes.py` (its exact seven-value timing fixture),
+`backend/tests/test_ci_test_lanes.py` (its exact lane-timing fixture),
 `backend/tests/test_test_lane_evidence.py`,
 `backend/tests/test_isolated_database_runner.py`,
 `scripts/test_lightweight_agent_gates.py`, this record,

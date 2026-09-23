@@ -41,7 +41,7 @@ unset WORKSTREAM_TEST_ADMIN_DATABASE_URL
 ```
 
 Run both phases for the legacy sequential local diagnostic. Hosted CI instead
-uses seven independent matrix jobs, one per semantic lane, with a 20-minute lane
+uses eight independent matrix jobs, one per semantic lane, with a 20-minute lane
 limit and a separate fail-closed fan-in job.
 
 The runner removes the admin URL before child launch, overwrites both child database URLs,
@@ -165,7 +165,7 @@ SHA, lane and numeric run attempt, containing its manifest, lane evidence,
 isolation record, and coverage data. The final `test`
 job runs with `if: always()`, downloads available diagnostic bundles, then
 rejects any failed, cancelled, or skipped matrix result before fan-in. Fan-in
-selects the highest numeric attempt available for each of the seven declared
+selects the highest numeric attempt available for each of the eight declared
 lanes from separately downloaded artifact directories. It rejects malformed,
 foreign or future attempt names and never falls back from an incomplete or
 corrupt latest bundle to an older passing one. For the selected bundles it
@@ -175,7 +175,7 @@ rejects symlinks or surplus lanes.
 After fan-in, independent validation rejects missing, duplicated, foreign,
 deselected, unexpectedly skipped, interrupted, or partially completed nodes.
 It also binds the exact head, manifest, per-lane isolation metadata, evidence,
-and coverage-file SHA-256 digests. Only then are exactly seven regular,
+and coverage-file SHA-256 digests. Only then are exactly eight regular,
 non-symlink coverage files copied byte-for-byte for one literal
 `coverage combine`. The 78 percent global floor and every protected 90 percent
 subsystem floor remain blocking. The real API contract drill remains a separate
