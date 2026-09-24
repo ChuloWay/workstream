@@ -73,8 +73,9 @@ async def test_claim_validator_requires_committed_invocation(delivery_harness):
         ) as prepared:
             attempt = await DeliveryRepository(writer).attempt(claim, lock=True)
             decision = await prepared.consume(facts)
+            invoked_at = await database_time(writer)
             attempt.invoke_decision_event_id = str(decision.decision_id)
-            attempt.stage, attempt.invoked_at = "invoked", await database_time(writer)
+            attempt.stage, attempt.invoked_at = "invoked", invoked_at
             await writer.flush()
             assert await h.delivery.observe_invocation(envelope) is None
     observed = await h.delivery.observe_invocation(envelope)

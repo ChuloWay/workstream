@@ -7,6 +7,8 @@ from uuid import UUID
 
 import pytest
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.sql import operators
+from sqlalchemy.sql.elements import BindParameter, Null
 
 from app.modules.projects import submission_policy_mutation_service as module
 from app.modules.projects.submission_policy_mutation_repository import (
@@ -247,7 +249,20 @@ async def test_completion_requires_exact_pending_row(repo_case, matched):
         "setup_task_id": None,
         "correlation_id": None,
     }
-    assert sorted(sql.split(" AND ")) == sorted(
-        expected_predicate(field, value) for field, value in fields.items()
-    )
+    # Check the exact guard structure, independent of dialect-rendered bind casts.
+    whereclause = case.session.scalar.await_args.args[0].whereclause
+    assert whereclause.operator is operators.and_
+    clauses = list(whereclause.clauses)
+    assert len(clauses) == len(fields)
+    assert {clause.left.name for clause in clauses} == set(fields)
+    for clause in clauses:
+        assert clause.left.table.name == "submission_policy_mutation_idempotency_records"
+        expected = fields[clause.left.name]
+        if expected is None:
+            assert clause.operator is operators.is_
+            assert isinstance(clause.right, Null)
+        else:
+            assert clause.operator is operators.eq
+            assert isinstance(clause.right, BindParameter)
+            assert clause.right.value == expected
     assert params == {f"{field}_1": value for field, value in fields.items() if value is not None}

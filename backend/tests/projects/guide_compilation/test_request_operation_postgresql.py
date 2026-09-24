@@ -297,7 +297,8 @@ async def test_request_operation_rejects_every_change(
             assert expected_error in message
             if statement.startswith("truncate"):
                 assert getattr(error.value.orig, "sqlstate", None) == "0A000"
-                assert "project_guide_compilation_request_operations" in message
+                detail = getattr(error.value.orig.__cause__, "detail", "") or ""
+                assert "project_guide_compilation_request_operations" in message + detail
         async with engine.connect() as connection:
             count = await connection.scalar(
                 text("select count(*) from project_guide_compilation_request_operations")
