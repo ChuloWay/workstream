@@ -146,7 +146,7 @@ async def assert_deferred_missing_receipt(session, command, row):
             {"id": str(command.setup_run_id)},
         )
     ).one()
-    assert tuple(stored[:3]) == (
+    assert (stored[0], *(str(value) if value is not None else None for value in stored[1:3])) == (
         row.setup_outcome, row.sufficiency_report_id, row.artifact_policy_id
     )
     assert stored.finished_at == await session.scalar(text("select transaction_timestamp()"))
@@ -426,14 +426,14 @@ async def test_receipt_rejects_existing_foreign_compilation_and_projection_owner
     clean_postgres_database, field
 ):
     async with database_case(clean_postgres_database) as (values, factory, first):
-        next_context = await second_generation(factory, values)
+        next_context, requested = await second_generation(factory, values, first)
         next_values = values | {key: uuid4() for key in ("operation", "request", "key")}
         current = await compilation_and_projections(
             clean_postgres_database,
             factory,
             next_values,
             compilation_context=next_context,
-            predecessor_id=first.compilation_id,
+            requested=requested,
         )
         before = await stored_state(factory, current)
         with pytest.raises(

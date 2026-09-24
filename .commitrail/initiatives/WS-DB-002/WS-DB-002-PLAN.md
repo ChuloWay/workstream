@@ -72,6 +72,13 @@ PostgreSQL tests reject substituted projection correlation and UUID4 finalizatio
 and activation operations. Natural compilation recovery also rejects changed
 request, idempotency-key and actor facts instead of trusting a stored winner.
 Public grant issue/revoke replay checks pass. Final frozen review remains required.
+Hosted regression diagnosis identified native-UUID cursor binds, raw-driver fixture
+types and a manual-policy PREP identity mismatch. Repairs retain exact prepared
+resource binding: allocate the actual record IDs before preparation, and recover
+an already committed same-key winner under the existing project lock with fresh
+authorization. Projection finalization also checks its exact correlation selector.
+The real MinIO source build and startup passed; that infrastructure result does
+not certify the still-required full backend regression and coverage run.
 The retained registered-actor dependency now uses the resolved canonical profile
 ID instead of deriving a second identity; its focused regression and PostgreSQL
 review-queue reservation pass. Outbox exact replay, concurrent commit/rollback

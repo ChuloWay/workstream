@@ -180,7 +180,11 @@ async def proposal_case(url, *, classification="draft_ready", guide_version="v1"
                 .mappings()
                 .one()
             )
-        actor = ActorIdentityFacts(UUID(row["id"]), UUID(row["link"]), ActorKind.HUMAN)
+        actor = ActorIdentityFacts(
+            UUID(str(row["id"])),
+            UUID(str(row["link"])),
+            ActorKind.HUMAN,
+        )
         yield values, factory, command, actor, row["grant"]
 
 
@@ -305,7 +309,9 @@ async def finalize_corrected_attempt(factory, values, actor, correction):
     assert runtime.calls == 1
     from app.modules.projects.guide_compilation.models import ProjectGuideSetupFinalization
     async with factory() as session:
-        finalization = await session.get(ProjectGuideSetupFinalization, UUID(receipt["finalization_id"]))
+        finalization = await session.get(
+            ProjectGuideSetupFinalization, UUID(str(receipt["finalization_id"]))
+        )
         compilation_id = finalization.compilation_id
     return ProjectGuideSetupFinalizationCommand(
         project_id=values["project"], guide_id=values["guide"],

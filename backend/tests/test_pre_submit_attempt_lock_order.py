@@ -102,8 +102,8 @@ async def _seed_second_contributor_task(harness):
         await connection.execute(text(
             "insert into actor_identity_links "
             "(id,actor_profile_id,issuer,subject,subject_kind,status,linked_by,last_verified_at) "
-            "values (:link,:actor,'flow-test',:actor,'human','active','test',now())"
-        ), {"actor": str(actor_id), "link": str(link_id)})
+            "values (:link,:actor,'flow-test',:subject,'human','active','test',now())"
+        ), {"actor": str(actor_id), "subject": str(actor_id), "link": str(link_id)})
         await seed_started_task_for_artifact_test(connection, {
             "project": str(project_id), "task": str(task_id),
             "assignment": str(assignment_id), "actor": str(actor_id),

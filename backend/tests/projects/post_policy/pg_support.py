@@ -61,7 +61,7 @@ class PreparedPostPolicy(PreparedPostPolicyOperation):
             'SELECT actor_id,action_id,project_id,after_facts FROM audit_events WHERE id=:id'
         ), dict(id=str(decision_event_id)))).mappings().one()
         if (row['actor_id'] != str(self.port.actor.actor_profile_id) or row['action_id'] != self.locator.action_id
-                or row['project_id'] != str(self.port.project_id)
+                or row['project_id'] != self.port.project_id
                 or row['after_facts'] != dict(allowed=True, resource_context_digest=facts.digest)):
             raise AuthorizationDenied('post-policy replay evidence mismatch')
 

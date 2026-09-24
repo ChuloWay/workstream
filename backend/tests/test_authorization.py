@@ -10279,7 +10279,7 @@ async def test_committed_record_rejects_additional_success_and_invalidation(
             resource_id=str(request.actor_profile_id),
             reason="authority_state_changed",
             idempotency_reference=claim.record_id,
-            invalidation_cause_event_id=UUID(cause_id),
+            invalidation_cause_event_id=UUID(int=cause_id.int),
             invalidation_target_kind="actor_profile",
             invalidation_target_ref=str(request.actor_profile_id),
             before_facts={"effective": True},
@@ -11431,7 +11431,7 @@ async def test_issue_mismatch_derives_project_and_omits_nonexistent_grant_resour
                 {"id": str(event_id)},
             )
         ).one()
-    assert row == (str(project), None, None)
+    assert row == (project, None, None)
 
 
 @pytest.mark.asyncio

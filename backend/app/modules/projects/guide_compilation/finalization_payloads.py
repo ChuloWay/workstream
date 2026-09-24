@@ -13,6 +13,7 @@ from app.modules.authorization.api import (
     FINALIZATION_SERVICE,
     ProjectSetupFinalizationAuthorityReceipt,
     ProjectSetupFinalizationFacts,
+    projection_preparation_identity,
     setup_finalization_authority_digest,
     setup_finalization_fact_values,
     setup_finalization_facts_digest,
@@ -223,6 +224,10 @@ def require_projection(view, op, source_digest, result) -> None:
     ):
         if getattr(op, name) != getattr(c, name):
             deny()
+    _, expected_correlation_id = projection_preparation_identity(
+        attempt_id=a.id,
+        component=op.component,
+    )
     if (
         op.compilation_id != c.id
         or op.attempt_id != a.id
@@ -233,6 +238,7 @@ def require_projection(view, op, source_digest, result) -> None:
         or op.result_schema_version != result["schema_version"]
         or op.compilation_agent_name != result["agent_name"]
         or op.compilation_agent_version != result["agent_version"]
+        or op.correlation_id != expected_correlation_id
     ):
         deny()
     if (

@@ -28,6 +28,7 @@ def case():
 
     projects = SimpleNamespace(
         add_submission_artifact_policy=AsyncMock(side_effect=stamp_created),
+        get_project=AsyncMock(return_value=SimpleNamespace(id=str(rows.PROJECT))),
         get_submission_artifact_policy=AsyncMock(return_value=prior),
         supersede_draft_submission_artifact_policy=AsyncMock(return_value=True),
     )

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import hashlib
-from uuid import UUID
 from app.core.identifiers import new_record_id
 
 import pytest
@@ -33,11 +32,11 @@ def test_candidate_exists_query_is_backed_by_one_link_per_profile_constraint() -
 @pytest.fixture
 async def candidate_rows(actor_database_env):
     created_at = datetime(2026, 7, 22, tzinfo=UTC)
-    caller_id = UUID(int=1)
-    eligible_ids = [UUID(int=value) for value in (5, 6, 7)]
-    inactive_id = UUID(int=2)
-    revoked_id = UUID(int=3)
-    service_id = UUID(int=4)
+    caller_id = new_record_id()
+    eligible_ids = sorted(new_record_id() for _ in range(3))
+    inactive_id = new_record_id()
+    revoked_id = new_record_id()
+    service_id = new_record_id()
     async with db_session.get_session_factory()() as session:
         profiles = [
             ActorProfile(

@@ -292,7 +292,7 @@ async def test_request_operation_rejects_every_change(
         async with engine.begin() as connection:
             with pytest.raises(DBAPIError) as error:
                 await connection.execute(text(statement))
-            message = str(error.value)
+            message = str(error.value.orig)
             assert expected_error in message
             if statement.startswith("truncate"):
                 assert getattr(error.value.orig, "sqlstate", None) == "0A000"

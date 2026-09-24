@@ -206,14 +206,14 @@ async def test_mixed_generation_projection_set_denies_finalization_without_consu
     clean_postgres_database, component, monkeypatch
 ):
     async with database_case(clean_postgres_database) as (values, factory, first):
-        next_context = await second_generation(factory, values)
+        next_context, requested = await second_generation(factory, values, first)
         next_values = values | {key: uuid4() for key in ("operation", "request", "key")}
         current = await compilation_and_projections(
             clean_postgres_database,
             factory,
             next_values,
             compilation_context=next_context,
-            predecessor_id=first.compilation_id,
+            requested=requested,
         )
         before = await stored_state(factory, current)
         async with factory() as session, session.begin():

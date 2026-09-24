@@ -116,10 +116,10 @@ class ActivationHandle(PreparedGuideActivation):
             .mappings()
             .one()
         )
-        assert row["actor_id"] == str(self.locator.actor_profile_id)
+        assert str(row["actor_id"]) == str(self.locator.actor_profile_id)
         assert row["action_id"] == "project.guide.activate"
-        assert row["project_id"] == str(self.locator.project_id)
-        assert row["resource_id"] == str(self.locator.guide_id)
+        assert str(row["project_id"]) == str(self.locator.project_id)
+        assert str(row["resource_id"]) == str(self.locator.guide_id)
         assert row["after_facts"] == dict(allowed=True, resource_context_digest=facts.digest)
 
 

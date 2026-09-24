@@ -88,11 +88,14 @@ async def test_initial_attempt_reservation_uses_fresh_record_identity(monkeypatc
         packet=packet,
     )
     attempt_id = UUID("018f0000-0000-7000-8000-000000000001")
-    nonce = UUID("018f0000-0000-7000-8000-000000000002")
-    generated = iter((attempt_id, nonce))
+    nonce = UUID("62c5f90b-1a80-4c62-8ba6-ec76168e2d73")
     monkeypatch.setattr(
         "app.modules.artifacts.pre_submit_attempts.new_record_id",
-        lambda: next(generated),
+        lambda: attempt_id,
+    )
+    monkeypatch.setattr(
+        "app.modules.artifacts.pre_submit_attempts.uuid4",
+        lambda: nonce,
     )
     session = SimpleNamespace(
         in_transaction=lambda: True,
@@ -110,6 +113,8 @@ async def test_initial_attempt_reservation_uses_fresh_record_identity(monkeypatc
 
     assert reservation.attempt_id == attempt_id
     assert reservation.claim_nonce == nonce
+    assert reservation.attempt_id.version == 7
+    assert reservation.claim_nonce.version == 4
     values = session.scalar.await_args.args[0].compile().params
     assert values["id"] == str(attempt_id)
     assert values["claim_nonce"] == str(nonce)

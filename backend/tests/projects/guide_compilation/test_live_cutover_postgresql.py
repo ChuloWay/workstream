@@ -878,5 +878,5 @@ async def _published_continuation_snapshots(factory):
                 "where p.id=:id"
             ), {"id": put_id})
             assert snapshot_id is not None
-            snapshots.add(UUID(snapshot_id))
+            snapshots.add(UUID(str(snapshot_id)))
     return snapshots

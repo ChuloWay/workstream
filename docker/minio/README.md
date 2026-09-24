@@ -21,9 +21,11 @@ docker compose up -d --wait minio
 ```
 
 Compose builds the shared recipe and retains the existing named artifact volume,
-loopback port, credentials and health check. No volume reset is required by this
-image change. The first build requires network access and Go compilation
-resources; do not launch it on an already memory-constrained workstation.
+loopback port, credentials and health check. The recipe does not reset that
+volume. Fresh-volume CI does not certify an upgrade of retained storage; back up
+and verify retained data before changing its running image. The first build
+requires network access and Go compilation resources; do not launch it on an
+already memory-constrained workstation.
 Subsequent builds reuse Docker layers.
 
 Backend CI builds or restores one image cache keyed by the exact Git commit,

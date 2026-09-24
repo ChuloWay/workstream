@@ -257,6 +257,9 @@ def test_current_head_installs_compensation_binding_lifecycle(
                 "where table_schema='public' and table_name='alembic_version' "
                 "and column_name='version_num'"
             )
+            assert await connection.fetchval(
+                "select version_num from alembic_version"
+            ) == HEAD_REVISION
             triggers = await connection.fetch(
                 "select tgname from pg_trigger t join pg_class c on c.oid=t.tgrelid "
                 "where c.relname=any($1::text[]) and not t.tgisinternal",
@@ -292,7 +295,8 @@ def test_current_head_installs_compensation_binding_lifecycle(
 
     exists, revision_length, triggers, functions, binding_checks = asyncio.run(contract())
     assert exists is True
-    assert revision_length == 64
+    # Historical long revision names are gone; the fresh root must fit and be stamped.
+    assert revision_length >= len(HEAD_REVISION)
     assert triggers >= {
         "project_compensation_binding_update_guard",
         "compensation_binding_event_insert_guard",

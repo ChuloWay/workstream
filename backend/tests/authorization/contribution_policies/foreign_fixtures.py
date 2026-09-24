@@ -1,6 +1,6 @@
 """Foreign historical parents reuse the already provisioned fixed service identity."""
 
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 from app.db import session as db_session
 from app.modules.compensation.models import ProjectCompensationAdapterBinding
@@ -10,7 +10,7 @@ from project_create_fixtures import insert_historical_project
 
 async def foreign_project(target, *, with_binding=False):
     """Seed distinct project/binding rows without creating another service identity."""
-    project, binding = uuid4(), uuid4()
+    project, binding = new_record_id(), new_record_id()
     assert project != target.project and binding != target.binding
     async with db_session.get_session_factory()() as session, session.begin():
         await insert_historical_project(

@@ -14,6 +14,7 @@ from app.modules.actors.api import ServiceIdentity
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.outbox.api import DeliveryOptions
 from app.modules.outbox.api import OutboxAppendInput
+from app.modules.outbox.models import OutboxEvent
 from app.modules.outbox.service import OutboxService
 from app.modules.outbox.registry import HandlerRegistry
 from app.modules.tasks.api.assignment_invalidation import (
@@ -211,6 +212,27 @@ async def invoked(s, *, target=None):
         contributor_id=UUID(s.grant["actor_profile_id"]),
         authority_invalidation_event_id=s.invalidation_id,
     )
+    canonical_key = (
+        f"assignment-invalidation:{target.authority_invalidation_event_id}:"
+        f"{target.assignment_id}"
+    )
+    payload = target.model_dump(mode="json")
+    async with s.sessions() as session:
+        published = await session.scalar(
+            select(OutboxEvent).where(OutboxEvent.idempotency_key == canonical_key)
+        )
+    used_event_ids = getattr(s, "used_invalidation_event_ids", set())
+    can_use_publication = (
+        published is not None
+        and published.event_id not in used_event_ids
+        and published.event_type == ASSIGNMENT_INVALIDATION_EVENT
+        and published.event_version == 1
+        and published.aggregate_type == "task_assignment"
+        and published.aggregate_id == target.assignment_id
+        and published.project_id == str(target.project_id)
+        and published.causation_event_id == target.authority_invalidation_event_id
+        and published.payload == payload
+    )
     value = OutboxAppendInput(
         event_type=ASSIGNMENT_INVALIDATION_EVENT,
         event_version=1,
@@ -220,14 +242,21 @@ async def invoked(s, *, target=None):
         correlation_id=str(new_record_id()),
         causation_event_id=target.authority_invalidation_event_id,
         idempotency_key=(
-            f"assignment-invalidation:{target.authority_invalidation_event_id}:"
-            f"{target.assignment_id}"
+            canonical_key
+            if published is None
+            else f"assignment-invalidation-fixture:{new_record_id()}"
         ),
-        payload=target.model_dump(mode="json"),
+        payload=payload,
     )
-    async with s.sessions() as session, session.begin():
-        result = await OutboxService(session).append(value)
-    claim = await s.h.delivery.claim(result.event_id, target.project_id, "assignment-test")
+    if can_use_publication:
+        event_id = published.event_id
+    else:
+        async with s.sessions() as session, session.begin():
+            result = await OutboxService(session).append(value)
+        event_id = result.event_id
+    used_event_ids.add(event_id)
+    s.used_invalidation_event_ids = used_event_ids
+    claim = await s.h.delivery.claim(event_id, target.project_id, "assignment-test")
     assert claim is not None
     envelope = await s.h.delivery._begin_invocation(claim)
     assert envelope is not None

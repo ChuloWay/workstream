@@ -150,7 +150,7 @@ class AuditRepository:
             event.event_domain == "legacy_lifecycle",
         ]
         if after_created_at is not None:
-            conditions.append(tuple_(event.created_at, event.id) > tuple_(after_created_at, str(after_event_id)))
+            conditions.append(tuple_(event.created_at, event.id) > tuple_(after_created_at, after_event_id))
         refs = event.event_payload["references"]
         typed_transition = and_(
             event.auth_source == LIFECYCLE_AUTH_SOURCE,

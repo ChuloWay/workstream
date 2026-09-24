@@ -64,8 +64,8 @@ async def test_corrected_generation_replaces_policy_and_retains_original_receipt
                 'SELECT id,lifecycle_status,approval_operation_id,supersession_operation_id FROM checker_policies ORDER BY lifecycle_status'
             ))).all()
             assert rows == [
-                (str(second.target.policy_id), 'compiled', None, None),
-                (str(first.target.policy_id), 'superseded', approved.operation_id,
+                (second.target.policy_id, 'compiled', None, None),
+                (first.target.policy_id, 'superseded', approved.operation_id,
                  correction.operation_id if origin == 'post_policy' else second.operation_id)]
         await operate(factory, actor, command.project_id, grant, 'request_correction',
             PostPolicyCorrection(target=second.target, idempotency_key=uuid4(), reason='Reconsider the next evaluation requirements'))

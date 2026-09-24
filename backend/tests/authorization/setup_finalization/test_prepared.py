@@ -5,9 +5,11 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.identifiers import new_record_id
 from app.modules.authorization.api import (
     PreparedAuthorizationInvalid,
     ProjectGuideProjectionLocator,
+    projection_preparation_identity,
 )
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.domain.guide_compilation_projections import (
@@ -40,6 +42,22 @@ def legacy_resource(project_id):
         correlation_id=uuid4(),
         stale_output_digest=DIGEST,
     )
+
+
+def sufficiency_projection(case, attempt_id):
+    output_id = new_record_id()
+    facts = sufficiency_facts(case.facts.project_id, attempt_id, output_id)
+    _, correlation_id = projection_preparation_identity(
+        attempt_id=attempt_id, component="guide_sufficiency"
+    )
+    identity = guide_sufficiency_projection_identity(
+        operation_id=new_record_id(),
+        correlation_id=correlation_id,
+        output_id=output_id,
+        actor_profile_id=case.first.actor_profile_id,
+        identity_link_id=case.first.identity_link_id,
+    )
+    return identity, facts
 
 
 @pytest.mark.parametrize("first", ["consume", "replay"])
@@ -96,13 +114,9 @@ async def test_transaction_and_closed_handle_denial(monkeypatch, mutation, opera
 async def test_exact_resource_kinds_cannot_be_substituted(monkeypatch, kind):
     case = Case(monkeypatch)
     attempt_id = uuid4()
-    identity = guide_sufficiency_projection_identity(
-        attempt_id=attempt_id,
-        actor_profile_id=case.first.actor_profile_id,
-        identity_link_id=case.first.identity_link_id,
-    )
+    identity, facts = sufficiency_projection(case, attempt_id)
     projection = projection_resource_context(
-        "guide_sufficiency", identity, sufficiency_facts(case.facts.project_id, attempt_id)
+        "guide_sufficiency", identity, facts
     )
     resource = legacy_resource(case.facts.project_id) if kind == "legacy" else projection
     async with case.prepare() as prepared:
@@ -122,12 +136,13 @@ async def test_finalization_cannot_consume_projection_preparation(monkeypatch):
         locator = ProjectGuideProjectionLocator(
             project_id=case.facts.project_id, attempt_id=uuid4()
         )
-        identity = guide_sufficiency_projection_identity(
-            attempt_id=locator.attempt_id,
-            actor_profile_id=case.first.actor_profile_id,
-            identity_link_id=case.first.identity_link_id,
+        identity, facts = sufficiency_projection(case, locator.attempt_id)
+        context = projection_prepare_context(
+            "guide_sufficiency",
+            locator,
+            identity.actor_profile_id,
+            identity.identity_link_id,
         )
-        context = projection_prepare_context("guide_sufficiency", locator, identity)
         caller = PreparedAuthorizationInput(
             idempotency_key=identity.operation_id, request_value=context.model_dump(mode="json")
         )
@@ -140,7 +155,7 @@ async def test_finalization_cannot_consume_projection_preparation(monkeypatch):
                 handle, ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN, caller, case.resource()
             )
         resource = projection_resource_context(
-            "guide_sufficiency", identity, sufficiency_facts(locator.project_id, locator.attempt_id)
+            "guide_sufficiency", identity, facts
         )
         decision = await service.consume(
             handle, ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN, caller, resource

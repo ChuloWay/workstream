@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
+from app.core.identifiers import new_record_id
 from app.modules.projects.guide_activation.custody import load_guide_activation
 from app.modules.projects.models import ProjectGuide
 from .pg_support import activation_case, activation_service
@@ -233,7 +234,7 @@ async def test_database_rejects_active_insert_and_copied_activation_audit(clean_
                         "SELECT :new,project_id,'forged-active','active',created_by,task_examples,task_examples_hash "
                         "FROM project_guides WHERE id=:guide"
                     ),
-                    dict(new=str(uuid4()), guide=str(command.target.proposal.guide_id)),
+                    dict(new=str(new_record_id()), guide=str(command.target.proposal.guide_id)),
                 )
             await session.rollback()
         async with factory() as session, session.begin():
@@ -255,8 +256,8 @@ async def test_database_rejects_active_insert_and_copied_activation_audit(clean_
                         "FROM guide_mutation_idempotency_records r WHERE operation_id=:original"
                     ),
                     dict(
-                        id=str(uuid4()),
-                        operation=str(uuid4()),
+                        id=str(new_record_id()),
+                        operation=str(new_record_id()),
                         key=str(uuid4()),
                         original=receipt.operation_id,
                     ),

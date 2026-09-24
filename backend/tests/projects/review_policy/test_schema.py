@@ -9,7 +9,10 @@ from sqlalchemy.exc import DBAPIError
 from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from app.modules.projects.models import ReviewPolicy
-from projects.client_fixtures import project_client as project_client
+from projects.client_fixtures import (
+    project_client as project_client,
+    project_database_env as project_database_env,
+)
 from projects.guide_fixtures import complete_guide_payload, create_guide, create_project
 
 

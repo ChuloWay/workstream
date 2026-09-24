@@ -113,10 +113,13 @@ async def compilation_and_projections(
     compilation_context=None,
     predecessor_id=None,
     outcome=None,
+    requested=None,
 ):
     """Persist one accepted compilation with real custody guards and real projection adapters."""
     compilation_context = compilation_context or context(values)
-    requested = await request_compilation(factory, values, compilation_context, predecessor_id)
+    requested = requested or await request_compilation(
+        factory, values, compilation_context, predecessor_id
+    )
     supplied_outcome = outcome is not None
     outcome = outcome or result()
     if classification != "draft_ready" and not supplied_outcome:

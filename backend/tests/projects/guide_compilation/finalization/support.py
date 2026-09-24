@@ -18,6 +18,7 @@ from app.modules.authorization.api import (
     ProjectSetupFinalizationAuthorityReceipt,
     artifact_policy_projection_identity,
     guide_sufficiency_projection_identity,
+    projection_preparation_identity,
     setup_finalization_authority_digest,
     setup_finalization_preparation_identity,
 )
@@ -129,9 +130,12 @@ def projected_view(empty, lineage, outcome, actor, link):
         ("guide_sufficiency", guide_sufficiency_projection_identity),
         ("submission_artifact_policy", artifact_policy_projection_identity),
     ):
+        _, correlation_id = projection_preparation_identity(
+            attempt_id=attempt, component=component
+        )
         identity = factory(
             operation_id=new_record_id(),
-            correlation_id=new_record_id(),
+            correlation_id=correlation_id,
             output_id=new_record_id(),
             actor_profile_id=actor,
             identity_link_id=link,
@@ -163,11 +167,8 @@ def projected_view(empty, lineage, outcome, actor, link):
             )
         )
     sufficient, policy = operations
-    output_lineage = {
-        key: value
-        for key, value in lineage.items()
-        if key not in {"setup_run_id", "setup_generation"}
-    }
+    output_lineage = {key: value for key, value in lineage.items()
+                      if key not in {"setup_run_id", "setup_generation"}}
     report = SimpleNamespace(
         **output_lineage,
         id=str(sufficient.output_id),

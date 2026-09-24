@@ -54,7 +54,7 @@ async def test_uncertain_restart_returns_unresolved_without_redispatch(
                 identity=identity(context(values)),
                 runtime_configuration=runtime_configuration(),
             )
-        facts = _preflight(values, requested.attempt_id)
+        facts = _preflight(values, requested.attempt_id, requested.operation_id)
         async with factory() as session:
             first = await _execution_service(session, service).fence_dispatch(
                 actor=service, facts=facts

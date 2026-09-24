@@ -2,6 +2,7 @@
 
 from contextlib import asynccontextmanager
 import json
+from types import SimpleNamespace
 from app.core.identifiers import new_record_id
 
 import pytest
@@ -83,8 +84,8 @@ class Harness:
     async def append(self, **changes):
         event = _event(changes.pop("project_id", self.project), **changes)
         async with self.factory() as session, session.begin():
-            await OutboxService(session).append(event)
-        return event
+            result = await OutboxService(session).append(event)
+        return SimpleNamespace(event_id=result.event_id, **event.model_dump())
 
     async def claim(self, **changes):
         event = await self.append(**changes)

@@ -35,7 +35,10 @@ async def test_active_guide_lookup_scope_and_cardinality(method, count):
     statement = session.execute.call_args.args[0]
     compiled = statement.compile(dialect=postgresql.dialect())
     assert compiled.params == {"project_id_1": "project-target", "status_1": "active"}
-    assert "WHERE project_guides.project_id = %(project_id_1)s AND project_guides.status = %(status_1)s" in str(compiled)
+    assert (
+        "WHERE project_guides.project_id = %(project_id_1)s::UUID "
+        "AND project_guides.status = %(status_1)s"
+    ) in str(compiled)
     if method == "lock_active_guide":
         assert statement._for_update_arg is not None
         assert str(compiled).endswith("FOR UPDATE")

@@ -114,8 +114,8 @@ class ProjectGuideDocumentUploadTargets:
             )
         )
         return GuideDocumentUploadTarget(
-            snapshot_id=UUID(row.id),
-            setup_id=UUID(row.setup_id),
+            snapshot_id=UUID(str(row.id)),
+            setup_id=UUID(str(row.setup_id)),
             setup_generation=row.setup_generation,
             media_type=row.media_type,
             other_document_bytes=int(used),

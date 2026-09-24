@@ -64,13 +64,15 @@ async def test_assignment_insert_rejects_same_project_wrong_stamp_direct_sql(tas
         assert other.contribution_policy_version_id != expected
         statement = text(
             "INSERT INTO task_assignments(id,task_id,project_id,contributor_id,assigned_by,status,"
-            "submitter_contribution_policy_version_id) VALUES(:id,:task,:project,:actor,:actor,'active',:policy)"
+            "submitter_contribution_policy_version_id) "
+            "VALUES(:id,:task,:project,:actor,:assigned_by,'active',:policy)"
         )
         params = dict(
             id=str(new_record_id()),
             task=task["id"],
             project=project["id"],
             actor=actor,
+            assigned_by=actor,
             policy=other.contribution_policy_version_id,
         )
         with pytest.raises(DBAPIError, match="assignment contribution stamp differs from task"):
@@ -260,10 +262,12 @@ async def test_assignment_insert_rejects_foreign_project_tuples_direct_sql(task_
         assert local.locked_contribution_policy_version_id != other.locked_contribution_policy_version_id
         statement = text(
             "INSERT INTO task_assignments(id,task_id,project_id,contributor_id,assigned_by,status,"
-            "submitter_contribution_policy_version_id) VALUES(:id,:task,:project,:actor,:actor,'active',:policy)"
+            "submitter_contribution_policy_version_id) "
+            "VALUES(:id,:task,:project,:actor,:assigned_by,'active',:policy)"
         )
         params = dict(id=str(new_record_id()), task=local.id, project=local.project_id,
-                      actor=local.created_by, policy=local.locked_contribution_policy_version_id)
+                      actor=local.created_by, assigned_by=local.created_by,
+                      policy=local.locked_contribution_policy_version_id)
         # Isolate each selector, then also reject an internally valid foreign
         # tuple. A policy mismatch alone cannot prove project binding.
         for changed in (

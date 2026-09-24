@@ -249,18 +249,18 @@ async def insert_historical_project(
         await connection.execute(
             text("alter table projects disable trigger project_creation_custody")
         )
-    try:
+    await connection.execute(
+        text(
+            "insert into projects (id, name, slug, status) values (:id, :name, :slug, :status)"
+        ),
+        {"id": project_id, "name": name, "slug": slug, "status": status},
+    )
+    # On SQL failure the caller must roll back, restoring transactional trigger
+    # state. Another statement in the aborted transaction would mask the cause.
+    if has_cutover:
         await connection.execute(
-            text(
-                "insert into projects (id, name, slug, status) values (:id, :name, :slug, :status)"
-            ),
-            {"id": project_id, "name": name, "slug": slug, "status": status},
+            text("alter table projects enable trigger project_creation_custody")
         )
-    finally:
-        if has_cutover:
-            await connection.execute(
-                text("alter table projects enable trigger project_creation_custody")
-            )
 
 
 async def seed_fixture_actor(

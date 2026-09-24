@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
+from app.core.identifiers import new_record_id
 
 from app.modules.authorization.api import AuthorizationDenied
 from app.modules.projects.api.guide_proposals import GuideProposalError
@@ -17,7 +18,7 @@ from .pg_support import PreparedPostPolicy, prepare_post_policy, operate
 async def foreign_manager(factory, owner):
     from project_create_fixtures import seed_historical_project
 
-    project = uuid4()
+    project = new_record_id()
     async with factory() as session, session.begin():
         await seed_historical_project(session, project_id=str(project), name='Foreign owner', slug=f'foreign-{project}')
     actor, grant = await seed_review_actor(factory, project)

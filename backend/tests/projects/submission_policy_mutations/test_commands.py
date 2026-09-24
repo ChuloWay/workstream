@@ -1,7 +1,7 @@
 """Manual mutation orchestration; PostgreSQL atomicity remains separately tested."""
 
 from dataclasses import replace
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import UUID
 
 import pytest
 
@@ -53,10 +53,9 @@ async def test_mutation_binds_exact_prepared_facts(case, command):
         select_update(case)
     await invoke(case, command)
     action = module.ActionId(f"project.submission_artifact_policy.{command}")
-    prefix = f"workstream:submission-policy:{{}}:{action.value}:{rows.ACTOR}:{rows.LINK}:"
-    prefix += f"{rows.PROJECT}:{rows.POLICY if command == 'update' else 'create'}:{rows.KEY}"
-    operation_id = uuid5(NAMESPACE_URL, prefix.format("operation"))
-    committed_id = uuid5(NAMESPACE_URL, prefix.format("policy"))
+    reserved = case.replay.reserve.await_args.kwargs
+    operation_id = reserved["operation_id"]
+    committed_id = UUID(reserved["policy_id"])
     selected_id = rows.POLICY if command == "update" else committed_id
     version = "manual-v2" if command == "update" else "manual-v1"
     summary = "replacement" if command == "update" else "initial"
@@ -119,20 +118,10 @@ async def test_mutation_binds_exact_prepared_facts(case, command):
         project_id=rows.PROJECT,
     )
     case.prepared.prepare.assert_awaited_once_with(action, caller, scope)
-    persisted = case.projects.add_submission_artifact_policy.await_args.args[0]
-    actual_operation_id = case.replay.reserve.await_args.kwargs["operation_id"]
-    committed_id = UUID(persisted.id)
-    exact = expected.model_copy(
-        update={
-            "resource_id": committed_id,
-            "operation_id": actual_operation_id,
-            "policy_id": committed_id if command == "create" else rows.POLICY,
-            "successor_policy_id": committed_id if command == "update" else None,
-        }
-    )
-    assert actual_operation_id.version == 7
+    assert operation_id.version == 7
     assert committed_id.version == 7
-    case.prepared.consume.assert_awaited_once_with(case.handle, action, caller, exact)
+    assert reserved["resource_context_json"] == expected.model_dump(mode="json")
+    case.prepared.consume.assert_awaited_once_with(case.handle, action, caller, expected)
 
 
 @pytest.mark.parametrize("command", ["create", "update"])

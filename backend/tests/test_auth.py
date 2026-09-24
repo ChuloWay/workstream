@@ -567,7 +567,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
 
         state = await service_state(ServiceIdentity.ARTIFACT_VERIFIER)
         assert state is not None
-        assert state[0] == created_body["actor_profile_id"]
+        assert state[0] == UUID(created_body["actor_profile_id"])
         assert state[1:5] == (
             "service",
             "active",
@@ -2036,7 +2036,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_matrix(
         }
         assert (await run_admin_bootstrap(profiles["admin"], execute=True))[0] == 0
         states = {name: await actor_link_state(actor_id) for name, actor_id in profiles.items()}
-        links = {name: UUID(state[2]) for name, state in states.items()}
+        links = {name: UUID(int=state[2].int) for name, state in states.items()}
 
         async def atomic_state(target: UUID) -> tuple:
             async with db_session.get_session_factory()() as session:

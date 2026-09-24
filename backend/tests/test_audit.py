@@ -1019,11 +1019,11 @@ async def test_database_rejects_malformed_and_mutated_audit_rows(audit_factory) 
             )
         ).all()
         observed_rows = {row.id: [row.reason, row.event_domain] for row in rows}
-        assert observed_rows[str(value.event_id)] == [
+        assert observed_rows[value.event_id] == [
             "authorization_evaluation",
             "authority",
         ]
-        assert observed_rows[legacy_id] == [None, "legacy_lifecycle"]
+        assert observed_rows[UUID(legacy_id)] == [None, "legacy_lifecycle"]
         assert len(observed_rows) == 2
 
         with pytest.raises(IntegrityError):

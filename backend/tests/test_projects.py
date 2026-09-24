@@ -1038,7 +1038,7 @@ async def test_project_role_grant_repository_filters_and_uses_strict_keyset(
         grants = []
         for index, grant_id in enumerate(grant_ids):
             role = ("submitter", "reviewer", "submitter")[index]
-            snapshot_id = uuid4()
+            snapshot_id = new_record_id()
             snapshots.append(
                 ProjectRoleQualificationSnapshot(
                     id=snapshot_id,
@@ -3831,17 +3831,17 @@ async def test_submission_artifact_policy_replay_postgres_converges_exact_reserv
             await connection.execute(
                 text(
                     "insert into actor_profiles(id,actor_kind,status,provisioning_method,"
-                    "created_by) values(:actor,'human','active','automatic_first_access',:actor)"
+                    "created_by) values(:actor,'human','active','automatic_first_access',:created_by)"
                 ),
-                ids,
+                {**ids, "created_by": ids["actor"]},
             )
             await connection.execute(
                 text(
                     "insert into actor_identity_links(id,actor_profile_id,issuer,subject,"
                     "subject_kind,status,linked_by,last_verified_at) values(:link,:actor,"
-                    "'https://identity.test',:actor,'human','active',:actor,clock_timestamp())"
+                    "'https://identity.test',:subject,'human','active',:linked_by,clock_timestamp())"
                 ),
-                ids,
+                {**ids, "subject": ids["actor"], "linked_by": ids["actor"]},
             )
             for table, trigger in GUIDE_CREATION_CUSTODY_TRIGGERS:
                 await connection.execute(text(f"alter table {table} disable trigger {trigger}"))

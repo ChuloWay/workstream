@@ -174,7 +174,7 @@ async def _harness(tmp_path: Path, database_url: str) -> _Harness:
     actor_id, identity_link_id = new_record_id(), new_record_id()
     lineage = request.effective_plan.lineage
     params = {
-        "actor": str(actor_id), "link": str(identity_link_id),
+        "actor": str(actor_id), "subject": str(actor_id), "link": str(identity_link_id),
         "project": str(lineage.project_id), "guide": str(lineage.guide_id),
         "snapshot": str(lineage.source_snapshot_id),
         "snapshot_hash": lineage.source_snapshot_hash, **policy,
@@ -193,7 +193,7 @@ async def _harness(tmp_path: Path, database_url: str) -> _Harness:
         await connection.execute(text(
             "insert into actor_identity_links "
             "(id,actor_profile_id,issuer,subject,subject_kind,status,linked_by,last_verified_at) "
-            "values (:link,:actor,'flow-test',:actor,'human','active','test',now())"
+            "values (:link,:actor,'flow-test',:subject,'human','active','test',now())"
         ), params)
         await seed_started_task_for_artifact_test(connection, params)
         await install_submitter_grant(connection, params)

@@ -631,11 +631,11 @@ async def test_contributor_operation_commits_before_lifecycle_change(
     assert isinstance(observed_after_task_commit, dict)
     if operation == "claim":
         assert task_result.assignment.contributor_id == race.contributor_id
-        assert observed_after_task_commit["task"] == ("claimed", race.contributor_id)
+        assert observed_after_task_commit["task"] == ("claimed", UUID(race.contributor_id))
         assignments = observed_after_task_commit["assignments"]
         assert isinstance(assignments, list)
         assert len(assignments) == 1
-        assert assignments[0][1] == race.contributor_id
+        assert assignments[0][1] == UUID(race.contributor_id)
     else:
         assert isinstance(task_result, AuditEvent)
         assert task_result.event_type == "SensitiveAuthorizationAllowed"

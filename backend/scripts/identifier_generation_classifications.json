@@ -63,7 +63,6 @@
     "app/modules/projects/guide_compilation/request_inputs.py|CompilationRequestInputs.resolve|Assign:0c7863287c00cc67|0": "uuid5:call:deterministic_selector",
     "app/modules/projects/guide_compilation/request_inputs.py|automatic_request_selector|Return:aad7cfaea39c9164|0": "uuid5:call:deterministic_selector",
     "app/modules/projects/post_policy/service.py|PostPolicyService.review_package|Assign:b25ee018694a582e|0": "uuid5:call:deterministic_selector",
-    "app/modules/projects/submission_policy_mutation_service.py|SubmissionPolicyMutationService._stable_uuid|Return:392161ba12b672fc|0": "uuid5:call:deterministic_selector",
     "app/schemas/auth.py|actor_id_from_external_identity|Return:dd984f00544f3859|0": "uuid5:call:external_identity_locator",
     "scripts/admin_api_drill.py|AuthorityDrill.bootstrap|Assign:3ff4b9de90df342c|0": "uuid4:call:transport_token",
     "scripts/admin_api_drill.py|AuthorityDrill.bootstrap|Assign:4db652f80f8e4ea6|0": "uuid4:call:drill_namespace",

@@ -479,7 +479,7 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
     try:
         async with engine.begin() as connection:
             params = {
-                "actor": str(actor_id),
+                "actor": str(actor_id), "subject": str(actor_id),
                 "link": str(identity_link_id),
                 "project": str(lineage.project_id),
                 "guide": str(lineage.guide_id),
@@ -506,7 +506,7 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                     "insert into actor_identity_links "
                     "(id,actor_profile_id,issuer,subject,subject_kind,status,linked_by,"
                     "last_verified_at) values "
-                    "(:link,:actor,'flow-test',:actor,'human','active','test',now())"
+                    "(:link,:actor,'flow-test',:subject,'human','active','test',now())"
                 ),
                 params,
             )

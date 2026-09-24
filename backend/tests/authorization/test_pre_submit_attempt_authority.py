@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.core.identifiers import new_record_id
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.authorization import PreparedPreSubmitMaterializationAuthorization
@@ -36,7 +37,7 @@ def _facts() -> PreSubmitMaterializationAuthorityFacts:
 
 
 async def _seed_materializer(factory: async_sessionmaker) -> str:
-    actor_id, link_id = str(uuid4()), str(uuid4())
+    actor_id, link_id = str(new_record_id()), str(new_record_id())
     async with factory.begin() as session:
         session.add(ActorProfile(
             id=actor_id, actor_kind="service", status="active",

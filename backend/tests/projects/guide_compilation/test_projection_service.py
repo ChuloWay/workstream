@@ -83,9 +83,12 @@ class _MalformedAuthorization(_ProjectionAuthorization):
     async def prepare_sufficiency_projection(self, locator):
         async with super().prepare_sufficiency_projection(locator) as capability:
             if self._mode == "identity":
-                capability.identity = replace(
-                    capability.identity, output_id=uuid4()
-                )
+                original = capability.identity
+
+                def malformed_identity(**values):
+                    return replace(original(**values), output_id=uuid4())
+
+                capability.identity = malformed_identity
             else:
                 original = capability.consume_new
 

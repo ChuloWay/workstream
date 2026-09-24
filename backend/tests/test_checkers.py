@@ -3707,7 +3707,7 @@ async def test_worker_cannot_see_hidden_checker_results(
     async with db_session.get_session_factory()() as session:
         session.add(
             CheckerResult(
-                id="hidden-result",
+                id=str(new_record_id()),
                 checker_run_id=run["id"],
                 task_id=started_task["id"],
                 submission_id=created_id,
