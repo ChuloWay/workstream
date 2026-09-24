@@ -116,6 +116,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/migrations/test_outbox_dispatch_identity.py",
     "tests/migrations/test_assignment_reconciler_authority.py",
     "tests/migrations/test_task_management_receipts.py",
+    "tests/migrations/test_task_queue_authority.py",
     "tests/migrations/test_project_role_scope.py",
     "tests/test_mutation_policy.py",
     "tests/test_s3_artifact_store.py",
@@ -357,6 +358,11 @@ PROJECT_MODULES = (
 )
 
 TASK_MODULES = (
+    "tests/tasks/test_public_queues.py",
+    "tests/authorization/task_queues/test_authority.py",
+    "tests/authorization/task_queues/test_contracts.py",
+    "tests/authorization/task_queues/test_transactions.py",
+    "tests/authorization/task_queues/test_concurrency.py",
     "tests/tasks/test_command_replay.py",
     "tests/tasks/test_contribution_lineage.py",
     "tests/tasks/test_project_display.py",

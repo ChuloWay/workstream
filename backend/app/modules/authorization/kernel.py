@@ -38,6 +38,8 @@ from app.modules.authorization.policy import ACTIVE_GUIDE_ADMIN_ROLES
 from app.modules.authorization.domain.task_authority import (
     TASK_ACTIONS, TaskAuthorityResourceContext,
 )
+from app.modules.authorization.domain.task_queues import TASK_QUEUE_ACTIONS, queue_read_denial
+from app.modules.authorization.domain.project_reads import project_read_denial
 from app.modules.authorization.repository import AdminAuthorizationRepository
 from app.modules.authorization.schemas import AdminRole
 from app.modules.authorization.runtime import (
@@ -694,6 +696,12 @@ class AuthorizationService:
             ) = await self._admin_denial(action, resource_context, context)
             if denial is None:
                 matched_kind = MatchedAuthorityKind.ADMIN_ROLE_GRANT
+        elif action is not None and action.action_id in TASK_QUEUE_ACTIONS:
+            (denial, context, matched_kind, matched_grant_id, matched_project_id,
+             revalidated) = await queue_read_denial(
+                action, resource_context, context, self._admin,
+                self._locked_human_context, self._lifecycle_denial,
+            )
         elif action is not None and action.action_id is ActionId.PROJECT_READ:
             (
                 denial,
@@ -702,7 +710,10 @@ class AuthorizationService:
                 matched_grant_id,
                 matched_project_id,
                 revalidated,
-            ) = await self._project_read_denial(action, resource_context, context)
+            ) = await project_read_denial(
+                action, resource_context, context, self._admin,
+                self._revalidate_actor_self, self._lifecycle_denial,
+            )
         elif action is not None and action.action_id is ActionId.ACTOR_AUTHORIZATION_CONTEXT_READ:
             if (
                 isinstance(context, HumanAuthorizationContext)
@@ -744,87 +755,6 @@ class AuthorizationService:
             matched_grant_id=matched_grant_id,
             matched_project_id=matched_project_id,
             revalidated=revalidated,
-        )
-
-    async def _project_read_denial(
-        self,
-        action,
-        resource: AuthorizationResourceContext,
-        context: AuthorizationContext,
-    ) -> tuple[
-        AuthorizationDenialCode | None,
-        AuthorizationContext,
-        MatchedAuthorityKind | None,
-        UUID | None,
-        UUID | None,
-        bool,
-    ]:
-        """Authorize one canonical project through admin or contributor grants."""
-        if not isinstance(context, HumanAuthorizationContext) or not isinstance(
-            resource, ProjectReadResourceContext
-        ):
-            return AuthorizationDenialCode.RESOURCE_GUARD_DENIED, context, None, None, None, False
-        if action.availability is not ActionAvailability.ACTIVE:
-            return AuthorizationDenialCode.ACTION_UNAVAILABLE, context, None, None, None, False
-        if self._revalidate_actor_self is None:
-            return AuthorizationDenialCode.RESOURCE_GUARD_DENIED, context, None, None, None, False
-        context = await self._revalidate_actor_self(context, resource)
-        lifecycle = self._lifecycle_denial(context)
-        if lifecycle is not None:
-            return lifecycle, context, None, None, None, True
-        if not resource.project_exists:
-            return (
-                AuthorizationDenialCode.RESOURCE_NOT_FOUND,
-                context,
-                None,
-                None,
-                None,
-                True,
-            )
-        # Keep the matched grant stable through response projection and commit so a
-        # concurrent revoke cannot authorize a stale read from this transaction.
-        admin_grant = await self._admin.find_effective_grant(
-            context.actor_profile_id,
-            action.permission_id,
-            scope_project_id=resource.scope_project_id,
-            system_scope_only=False,
-            for_update=True,
-        )
-        if admin_grant is not None:
-            return (
-                None,
-                context,
-                MatchedAuthorityKind.ADMIN_ROLE_GRANT,
-                admin_grant.id,
-                resource.scope_project_id,
-                True,
-            )
-        project_grant = await self._admin.find_active_project_role_any(
-            project_id=resource.scope_project_id,
-            actor_profile_id=context.actor_profile_id,
-            for_update=True,
-        )
-        if project_grant is not None:
-            return (
-                None,
-                context,
-                MatchedAuthorityKind.PROJECT_ROLE_GRANT,
-                project_grant.id,
-                resource.scope_project_id,
-                True,
-            )
-        out_of_scope = await self._admin.has_effective_permission_any_scope(
-            context.actor_profile_id, action.permission_id
-        ) or await self._admin.has_active_project_role_any_project(context.actor_profile_id)
-        return (
-            AuthorizationDenialCode.SCOPE_NOT_AUTHORIZED
-            if out_of_scope
-            else AuthorizationDenialCode.PERMISSION_NOT_GRANTED,
-            context,
-            None,
-            None,
-            None,
-            True,
         )
 
     async def _authorization_context_denial(

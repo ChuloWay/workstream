@@ -244,6 +244,7 @@ def authorization_http_error(exc: AuthorizationDenied) -> StructuredHTTPExceptio
         "resource_not_found": "Resource not found",
     }
     concealed_project_reads = {
+        ActionId.TASK_QUEUE_READ, ActionId.PROJECT_TASK_QUEUE_READ, ActionId.OPERATIONS_TASK_QUEUE_READ,
         ActionId.PROJECT_CONTRIBUTOR_CANDIDATE_LIST,
         ActionId.PROJECT_ROLE_GRANT_LIST,
         ActionId.PROJECT_ROLE_GRANT_READ,
@@ -448,3 +449,12 @@ async def prepared_authorization_service(
             await session.rollback()
     finally:
         service.close()
+
+
+async def get_task_queue_authorization(
+    request: Request,
+    authority: Annotated[AuthorizationService, Depends(get_authorization_service)],
+):
+    """Reuse the existing decision transaction and denial-restaging owner."""
+    from app.adapters.auth import task_queue_authorization
+    return task_queue_authorization(authority, request.app.state.settings.pagination_cursor_hmac_secret)

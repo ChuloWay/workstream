@@ -598,7 +598,9 @@ verification and a same-transaction delivery fence. ARCH-03C1 supplies real
 fixed-service authority and exact decision receipts; ARCH-03C2 supplies atomic
 AUTH event publication and production handler registration. ARCH-03C3 replaces
 the create/screen/release role-only path with exact Project Manager authority,
-atomic audit evidence and durable replay. Public queue and remaining task-read
+atomic audit evidence and durable replay. ARCH-03C4 exposes separate contributor-ready,
+manager-planning and Operator-status queues with current scoped grants and signed
+pagination. Remaining task-detail, requirements, locked-context and audit read
 authority cutover remains pending. Canonical checker materialization follows in
 ARCH-04B/04C.
 

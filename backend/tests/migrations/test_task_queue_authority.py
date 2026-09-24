@@ -1,0 +1,83 @@
+"""Exact queue audit pairs and retained evidence under the real forward migration."""
+
+import asyncio
+from uuid import uuid4
+
+import asyncpg
+from alembic import command
+import pytest
+
+from tests.migrations.test_outbox_dispatch_identity import config
+
+pytestmark = pytest.mark.postgres_schema_contract
+CONSTRAINT = "ck_audit_events_authorization_action_evidence"
+PAIRS = (
+    ("task.queue.read", "task.queue.read"),
+    ("project.task.queue.read", "project.task.manage"),
+    ("operations.task.queue.read", "operations.status.read"),
+)
+
+
+async def insert(connection, action, permission, *, allowed=True):
+    identity, project = str(uuid4()), str(uuid4())
+    await connection.execute(
+        """insert into audit_events(
+        id,entity_type,entity_id,event_type,actor_id,actor_roles,claim_snapshot,
+        auth_source,is_dev_auth,event_payload,event_domain,event_version,actor_ref_kind,
+        request_id,correlation_id,permission_id,action_id,reason,project_id,resource_type,
+        resource_id,after_facts,matched_grant_id,target_ref_kind,target_ref_id,denial_code)
+        values($1,'authorization_decision',$1,$2,$3,'[]','{}','local_authority',false,'{}',
+        'authority',1,'actor_profile',$4,$5,$6,$7,'authorization_evaluation',$8,'project',$8,
+        json_build_object('allowed',$9::boolean,'resource_context_digest','sha256:'||repeat('a',64)),
+        $10,'project',$8,$11)""",
+        identity, "SensitiveAuthorizationAllowed" if allowed else "SensitiveAuthorizationDenied",
+        str(uuid4()), str(uuid4()), str(uuid4()), permission, action, project, allowed,
+        str(uuid4()) if allowed else None, None if allowed else "permission_not_granted",
+    )
+    return await connection.fetchval("select to_jsonb(a)::text from audit_events a where id=$1", identity)
+
+
+def test_upgrade_preserves_authorization_evidence(isolated_database_env, migration_lock, migration_schema_at):
+    with migration_lock():
+        migration_schema_at("0030_task_management")
+        async def seed():
+            connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+            try:
+                return await insert(connection, "project.read", "project.read")
+            finally:
+                await connection.close()
+        before = asyncio.run(seed())
+        command.upgrade(config(), "0031_task_queue_authority")
+        async def read():
+            connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+            try:
+                return await connection.fetchval("select to_jsonb(a)::text from audit_events a")
+            finally:
+                await connection.close()
+        assert asyncio.run(read()) == before
+        command.upgrade(config(), "head")
+        assert asyncio.run(read()) == before
+
+
+@pytest.mark.parametrize("remove_guard", [False, True])
+def test_queue_audit_permission_pairs_are_closed(isolated_database_env, migration_lock, migration_schema_at, remove_guard):
+    with migration_lock():
+        migration_schema_at("head")
+        async def probe():
+            connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+            try:
+                if remove_guard:
+                    await connection.execute(f"alter table audit_events drop constraint {CONSTRAINT}")
+                for action, permission in PAIRS:
+                    for allowed in (False, True):
+                        assert await insert(connection, action, permission, allowed=allowed)
+                        with pytest.raises(asyncpg.CheckViolationError) as failure:
+                            await insert(connection, action, "project.read", allowed=allowed)
+                        assert failure.value.constraint_name == CONSTRAINT
+            finally:
+                await connection.close()
+        if remove_guard:
+            with pytest.raises(pytest.fail.Exception, match="DID NOT RAISE"):
+                asyncio.run(probe())
+        else:
+            asyncio.run(probe())

@@ -43,7 +43,8 @@ _OUTBOX_IDENTITY_REVISION = "0026_outbox_dispatch_identity"
 _OUTBOX_CUSTODY_REVISION = "0027_outbox_delivery_custody"
 _OUTBOX_AUTHORITY_REVISION = "0028_outbox_dispatch_authority"
 _ASSIGNMENT_AUTHORITY_REVISION = "0029_assignment_authority"
-_CURRENT_HEAD_REVISION = "0030_task_management"
+_TASK_MANAGEMENT_REVISION = "0030_task_management"
+_CURRENT_HEAD_REVISION = "0031_task_queue_authority"
 _RECREATE_GUIDANCE = (
     "Workstream v0.1 requires a fresh database; recreate this database before "
     "running the 0001_v01_baseline migration"
@@ -99,6 +100,7 @@ def do_run_migrations(connection: Connection) -> None:
             (_OUTBOX_CUSTODY_REVISION,),
             (_OUTBOX_AUTHORITY_REVISION,),
             (_ASSIGNMENT_AUTHORITY_REVISION,),
+            (_TASK_MANAGEMENT_REVISION,),
             (_CURRENT_HEAD_REVISION,),
         ):
             raise RuntimeError(_RECREATE_GUIDANCE)

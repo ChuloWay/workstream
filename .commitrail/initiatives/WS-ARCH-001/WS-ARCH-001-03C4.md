@@ -64,19 +64,25 @@ use the canonical rollback/restage path. Projection, serialization or audit
 failure rolls back the allow decision and returns no successful page. No role
 claim, creator identity, different project grant or service actor is sufficient.
 
-Use the existing signed cursor implementation in the API composition root;
-TASK ports keep their existing typed timestamp/UUID cursor. One adapter factory exposes the existing repository satisfying all three
-queue protocols; no separate wrappers or query implementations. Public response schemas stay TASK-owned.
+A dependency-free AUTH public queue port carries request and cursor facts.
+Its AUTH-owned adapter uses the existing kernel and signed cursor codec; the
+existing AUTH adapter root and request dependency compose it. TASK-owned routes
+use their existing repository projections and response schemas directly, keeping
+private AUTH imports out of delivery code. TASK queue ports retain their typed
+timestamp/UUID cursor. No second evaluator, codec or query implementation.
 The migration only extends exact action/permission audit evidence pairs; no new
 tables, retained-row rewrites, backfill or data deletion.
 
 ## Allowed scope
 
 - AUTH catalogue/runtime/kernel and focused `domain/task_queues.py` evaluator;
-  existing request-dependency error concealment and signed cursor reuse.
+  adjacent existing project-read evaluator extraction; exact frozen structural
+  debt reconciliation after shrinking the kernel (no limit growth);
+  existing request-dependency error concealment, dependency-free public queue
+  port, AUTH-owned cursor adapter and composition-root factory.
 - TASK queue API docstrings, response schemas and existing adapter factories;
   queue SQL only if a concrete regression requires correction.
-- API queue composition route and router registration.
+- TASK queue composition route and registration through its existing router.
 - Additive Alembic 0031 action evidence constraint, migration admission/schema
   fingerprint and affected migration-head/inventory tests.
 - Focused AUTH/TASK/API/migration tests, real API drill, lane test inventory.
@@ -134,7 +140,7 @@ They describe required future proof, not executed results.
   `test_queue_authority_matrix` (signed requests, each of the three actions,
   independent roles/scopes, PM system and project positive controls),
   `test_queue_conceals_absent_and_unauthorized_projects`,
-  `test_queue_revalidates_actor_link_and_grant`,
+  `test_queue_revalidates_grant` and `test_queue_rejects_inactive_identity`,
   `test_queue_project_lifecycle` (persist a paused Project as a guards-on fixture;
   do not claim a public pause operation ran).
 - `backend/tests/tasks/test_public_queues.py`:
@@ -196,3 +202,19 @@ concealment, privacy, cursor replay, read/revoke ordering and atomic evidence.
 - Next usable boundary: remaining task-detail/requirements/locked-context/audit
   read authority, then public guide/intake integration per the parent roadmap.
 - Remaining risks: bounded live pages are not snapshots; claim always rechecks.
+
+## Implementation boundary reconciliation
+
+The dependency guard rejected private AUTH/TASK imports in the draft delivery
+wiring. TASK now registers its own queue router; AUTH exposes a typed public
+port through its existing adapter/dependency root. No import debt was added.
+The kernel's frozen size limit required an adjacent owner cleanup: its existing
+project-read evaluator moves unchanged to `domain/project_reads.py`, with no
+compatibility method and no change to grants, locks or audit behavior. Existing
+project-read tests remain required. Simple catalogue declarations and the runtime
+type union use their established compact style; no limits or assertions change.
+The signed role matrix reuses a valid activated project within each audience
+test, issuing a distinct actor and grant per case; no authority cases are omitted.
+The diff is larger than the L1 guideline because three related queue projections
+share one authority/cursor boundary and require migration, matrix, transaction,
+concurrency and SQL-privacy proof. It introduces no additional product workflow.

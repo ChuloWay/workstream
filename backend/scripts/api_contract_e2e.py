@@ -1988,6 +1988,39 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
         assert renewed_submitter.status_code == 201, renewed_submitter.text
         assert renewed_submitter.json()["id"] != role_grant_id
         assert renewed_submitter.json()["status"] == "active"
+        # Public discovery uses three independent grant-backed projections.
+        operator_token = issue_flow_token(
+            f"real-api-queue-operator-{run_id}", [], issuer=flow_issuer,
+            audience=flow_audience, secret=flow_secret,
+        )
+        operator_actor = await request_json(client, "GET", "/api/v1/actors/me", operator_token)
+        operator_grant = await client.post(
+            "/api/v1/admin-role-grants",
+            headers=auth_headers(manager_token) | {"Idempotency-Key": str(uuid4())},
+            json={"target_actor_profile_id": operator_actor["actor_profile_id"],
+                  "role": "operator", "scope_type": "system", "scope_project_id": None,
+                  "reason": "Inspect bounded task status queue"},
+        )
+        assert operator_grant.status_code == 201, operator_grant.text
+        queue_paths = {
+            "ready": f"/api/v1/projects/{project['id']}/tasks/ready",
+            "management": f"/api/v1/projects/{project['id']}/tasks",
+            "operational": f"/api/v1/operations/projects/{project['id']}/tasks",
+        }
+        for kind, token, forbidden in (
+            ("ready", worker_token, project_reader_token),
+            ("management", project_reader_token, worker_token),
+            ("operational", operator_token, worker_token),
+        ):
+            page = await request_json(client, "GET", queue_paths[kind], token)
+            assert page["project_id"] == project["id"]
+            item = next(item for item in page["items"] if item["task_id"] == task["id"])
+            if kind == "operational":
+                assert set(item) == {"task_id", "project_id", "status", "created_at", "updated_at"}
+            else:
+                assert item["title"] == task["title"]
+                assert "source_ref" not in item and "assigned_to" not in item
+            await request_json(client, "GET", queue_paths[kind], forbidden, expected_status=404)
         removed_project_manager = await client.post(
             f"/api/v1/admin-role-grants/{project_manager_grant.json()['resource_id']}/revoke",
             headers=auth_headers(manager_token) | {"Idempotency-Key": str(uuid4())},
@@ -2106,6 +2139,8 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             {"reason": "real worker claim"},
             idempotency_key=str(uuid4()),
         )
+        after_claim = await request_json(client, "GET", queue_paths["ready"], worker_token)
+        assert task["id"] not in {item["task_id"] for item in after_claim["items"]}
         assert claim["task"]["locked_contribution_policy_version_id"] == active["contribution_policy_version_id"]
         assert claim["assignment"]["submitter_contribution_policy_version_id"] == screened[
             "locked_contribution_policy_version_id"

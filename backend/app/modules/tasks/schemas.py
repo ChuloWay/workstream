@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
+from app.modules.tasks.api import ReadyTaskSummary, ManagementTaskSummary, OperationalTaskSummary
 
 from datetime import datetime
 from decimal import Decimal
@@ -490,3 +491,30 @@ class AuditEventResponse(BaseModel):
     reason: str | None
     event_payload: dict[str, Any]
     created_at: datetime
+
+
+class ContributorTaskQueueResponse(BaseModel):
+    """A live ready page; its cursor neither reserves work nor conveys authority."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    project_id: UUID
+    items: tuple[ReadyTaskSummary, ...]
+    next_cursor: str | None
+
+
+class ManagementTaskQueueResponse(BaseModel):
+    """Project planning facts with a bounded continuation."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    project_id: UUID
+    items: tuple[ManagementTaskSummary, ...]
+    next_cursor: str | None
+
+
+class OperationalTaskQueueResponse(BaseModel):
+    """Status-only project discovery, excluding management and work content."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    project_id: UUID
+    items: tuple[OperationalTaskSummary, ...]
+    next_cursor: str | None
