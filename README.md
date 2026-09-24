@@ -466,6 +466,13 @@ the local services with:
 docker compose up -d --wait postgres redis minio
 ```
 
+MinIO is built from verified, pinned upstream source using the shared
+[development/CI image recipe](docker/minio/README.md), rather than an unavailable
+vendor image. The first build needs network access and compilation resources;
+later builds reuse Docker's cache. CI builds or restores this image once and
+shares it across the existing backend jobs. This does not change the hosted
+AWS S3 provider or delete existing artifact volumes.
+
 If either default host port is already in use, set
 `WORKSTREAM_POSTGRES_HOST_PORT` or `WORKSTREAM_REDIS_HOST_PORT` before running
 Compose. Native-backend users must put the same selected ports in

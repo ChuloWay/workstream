@@ -15,9 +15,73 @@ permissions:
   pull-requests: read
 
 env:
-  MINIO_IMAGE: quay.io/minio/minio:latest@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+  MINIO_IMAGE: workstream-minio:source
 
 jobs:
+  minio-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      artifact: ${{ steps.identity.outputs.artifact }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Bind source image to this workflow attempt
+        id: identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          echo "artifact=minio-source-${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
+
+      - name: Cache exact source image
+        id: cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ runner.temp }}/minio-image/minio.tar
+          key: minio-source-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('docker/minio/**') }}
+
+      - name: Build source-pinned MinIO once
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/minio-image"
+          docker build --tag "${MINIO_IMAGE}" docker/minio
+          docker save --output "${RUNNER_TEMP}/minio-image/minio.tar" "${MINIO_IMAGE}"
+
+      - name: Verify the cached or freshly built provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker load --input "${RUNNER_TEMP}/minio-image/minio.tar"
+          docker run --rm "${MINIO_IMAGE}" --version
+          docker run --detach --rm --name minio-build-probe \
+            --publish 127.0.0.1:9000:9000 \
+            --env MINIO_ROOT_USER=workstream-minio \
+            --env MINIO_ROOT_PASSWORD=workstream-minio-secret-key \
+            "${MINIO_IMAGE}" server /data --address :9000
+          trap 'docker logs minio-build-probe; docker stop minio-build-probe' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null; then
+              cd "${RUNNER_TEMP}/minio-image"
+              sha256sum minio.tar > minio.tar.sha256
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ${{ steps.identity.outputs.artifact }}
+          path: ${{ runner.temp }}/minio-image/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+
   auth-boundary-preflight:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -76,6 +140,7 @@ jobs:
           python -m scripts.behavior_ownership validate
 
   lanes:
+    needs: minio-image
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -156,10 +221,18 @@ jobs:
         working-directory: backend
         run: docstr-coverage --config .docstr.yaml
 
+      - name: Download source-pinned MinIO image
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ needs.minio-image.outputs.artifact }}
+          path: ${{ runner.temp }}/minio-image
+
       - name: Start real MinIO artifact provider
         shell: bash
         run: |
           set -euo pipefail
+          (cd "${RUNNER_TEMP}/minio-image" && sha256sum --check minio.tar.sha256)
+          docker load --input "${RUNNER_TEMP}/minio-image/minio.tar"
           docker run --detach --rm --name workstream-minio \
             --publish 127.0.0.1:9000:9000 \
             --env MINIO_ROOT_USER=workstream-minio \
@@ -243,7 +316,7 @@ jobs:
 
   test:
     if: ${{ always() }}
-    needs: [auth-boundary-preflight, lanes]
+    needs: [auth-boundary-preflight, lanes, minio-image]
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -297,10 +370,18 @@ jobs:
         working-directory: backend
         run: python -m pip install -e ".[dev,agents]"
 
+      - name: Download source-pinned MinIO image
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ needs.minio-image.outputs.artifact }}
+          path: ${{ runner.temp }}/minio-image
+
       - name: Start real MinIO API provider
         shell: bash
         run: |
           set -euo pipefail
+          (cd "${RUNNER_TEMP}/minio-image" && sha256sum --check minio.tar.sha256)
+          docker load --input "${RUNNER_TEMP}/minio-image/minio.tar"
           docker run --detach --rm --name workstream-minio \
             --publish 127.0.0.1:9000:9000 \
             --env MINIO_ROOT_USER=workstream-minio \

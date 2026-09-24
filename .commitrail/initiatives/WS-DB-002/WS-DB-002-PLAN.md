@@ -23,6 +23,16 @@ identity registry, unrelated cleanup, or reset of unverified/shared targets.
 Assess roadmap technical-foundation and operating impact at completion; update
 affected sections without claiming new product exposure. No separate planning PR.
 
+The human also approved repairing the unavailable MinIO container distribution
+within this PR: retain MinIO and real S3 tests, build its pinned upstream source
+with verified inputs under `docker/minio/`, and reuse that image in CI and local
+Compose. Build/cache once per Backend workflow and distribute the image to its
+existing jobs; do not compile once per test lane, publish a new registry, replace
+the provider, weaken checks, or change artifact volumes. Source/build pins and
+license provenance must be explicit, and fresh-build health plus existing S3
+tests must pass before readiness. These additions include affected workflow
+contract tests under `scripts/`.
+
 ## Acceptance criteria
 
 - Define generated record IDs versus meaningful natural/external keys.

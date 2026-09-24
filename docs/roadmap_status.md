@@ -164,6 +164,8 @@ cannot be reused as post-submission review-gate evidence. See the
   compatibility stamping. Local Compose uses a separate UUIDv7 database volume.
 - AWS S3 is the hosted artifact target, MinIO proves the storage protocol in
   development and CI, and all storage access stays behind `ArtifactStore`.
+  Development/CI MinIO uses a shared pinned-source build; existing artifact
+  volumes and real S3-protocol tests remain unchanged.
 - Private extraction scratch is bounded by `ArtifactScratchManager`; it is not
   durable artifact storage.
 - Cross-module behavior is moving through explicit public ports under the

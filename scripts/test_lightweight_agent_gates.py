@@ -138,7 +138,7 @@ class LightweightAgentGateTests(unittest.TestCase):
         )
         self.assertIn(
             "  test:\n    if: ${{ always() }}\n"
-            "    needs: [auth-boundary-preflight, lanes]", workflow
+            "    needs: [auth-boundary-preflight, lanes, minio-image]", workflow
         )
         self.assertIn("Require preflight and every semantic lane", workflow)
         self.assertIn("python -m scripts.merge_test_lane_evidence", workflow)
@@ -181,10 +181,33 @@ class LightweightAgentGateTests(unittest.TestCase):
                     rf"(?m)^{package}==[^ ]+ \\\n    --hash=sha256:[0-9a-f]{{64}}$",
                 )
 
+    def test_minio_source_image_is_built_once_and_shared_without_bypassing_lanes(self) -> None:
+        workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
+        image_job = workflow.split("\n  minio-image:\n", 1)[1].split("\n  auth-boundary-preflight:\n", 1)[0]
+        self.assertEqual(workflow.count('docker build --tag "${MINIO_IMAGE}" docker/minio'), 1)
+        self.assertNotIn("quay.io/minio", workflow)
+        self.assertIn("hashFiles('docker/minio/**')", image_job)
+        self.assertNotIn("restore-keys:", image_job)
+        self.assertIn("minio-source-${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}", image_job)
+        self.assertIn("artifact: ${{ steps.identity.outputs.artifact }}", image_job)
+        self.assertIn("sha256sum minio.tar > minio.tar.sha256", image_job)
+        self.assertIn("/minio/health/live", image_job)
+        self.assertIn("if-no-files-found: error", image_job)
+        self.assertNotIn("continue-on-error", image_job)
+        for name, end in (("lanes", "test"), ("test", None)):
+            job = workflow.split(f"\n  {name}:\n", 1)[1]
+            if end:
+                job = job.split(f"\n  {end}:\n", 1)[0]
+            self.assertIn("name: ${{ needs.minio-image.outputs.artifact }}", job)
+            self.assertIn("sha256sum --check minio.tar.sha256", job)
+            self.assertIn('docker load --input "${RUNNER_TEMP}/minio-image/minio.tar"', job)
+            self.assertIn('"${MINIO_IMAGE}" server /data --address :9000', job)
+
     def test_parallel_preflight_and_lanes_fail_closed_at_fan_in(self) -> None:
         workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
         lanes = workflow.split("\n  lanes:\n", 1)[1].split("\n  test:\n", 1)[0]
-        self.assertNotRegex(lanes, r"(?m)^    needs:")
+        self.assertRegex(lanes, r"(?m)^    needs: minio-image$")
+        self.assertNotIn("needs: auth-boundary-preflight", lanes)
         step = workflow.split(
             "      - name: Require preflight and every semantic lane\n", 1
         )[1].split("\n      - name:", 1)[0]
