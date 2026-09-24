@@ -3,7 +3,7 @@
 - Disposition: Planned
 - Prepared by: OxVictor
 - Purpose: Contributor implementation guide with confirmed caller-token design
-- Repository baseline reconciled: `27aac3d9a070be5d7d6ee8498d57992805a880e1`
+- Repository baseline reconciled: `2a3a392fe014583a0675c0a3e1f5612daba0fda4`
 - Pinned API handoff baseline: `6feef39834737eed106773fdaed6003561fd021a`
 - Delivered foundation: [One-tool profile foundation](WS-MCP-002-01.md), merged in PR #418.
 - Current change: [Own profile editing and project authorization context](WS-MCP-002-02.md).

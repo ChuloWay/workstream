@@ -461,7 +461,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "actor.profile.update_self",
-    "backend_git_sha": "27aac3d9a070be5d7d6ee8498d57992805a880e1",
+    "backend_git_sha": "2a3a392fe014583a0675c0a3e1f5612daba0fda4",
     "method": "PATCH",
     "openapi_version": "3.1.0",
     "path": "/api/v1/actors/me"

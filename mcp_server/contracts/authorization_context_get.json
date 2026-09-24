@@ -1,10 +1,13 @@
 {
-  "canonical_sha256": "b992928e39009529a50e29bb620dfb088d74ee76754fd8bb00bfad6e07bce5c0",
+  "canonical_sha256": "9d1c41524c08e0a831ceeb2a7220e688f7d66ebfd660d0585a73980428d88ada",
   "components": {
     "schemas": {
       "ActionId": {
         "description": "Closed action identifiers reserved by approved owner chunks.",
         "enum": [
+          "project.task.create",
+          "project.task.screen",
+          "project.task.release",
           "task.claim",
           "task.start",
           "task.work_context.read",
@@ -509,7 +512,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "actor.authorization_context.read",
-    "backend_git_sha": "27aac3d9a070be5d7d6ee8498d57992805a880e1",
+    "backend_git_sha": "2a3a392fe014583a0675c0a3e1f5612daba0fda4",
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/actors/me/authorization-context"
