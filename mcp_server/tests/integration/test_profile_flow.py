@@ -15,6 +15,8 @@ import pytest
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 
+from workstream_mcp.tools.profile import normalize_update_input
+
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / "backend"
 sys.path.insert(0, str(BACKEND / "scripts"))
@@ -305,21 +307,39 @@ async def test_installed_mcp_preserves_profile_and_lifecycle_parity() -> None:
                 _bootstrap_access_administrator(first["mcp-admin"]["actor_profile_id"], env)
                 admin_token = tokens["mcp-admin"]
 
-                updated, failed = await _call(
-                    mcp_url,
-                    tokens["mcp-first-b"],
-                    name="workstream_profile_update",
-                    arguments={"display_name": "  MCP Profile Owner  ", "contact_email": None},
-                )
-                assert not failed
-                assert updated["display_name"] == "MCP Profile Owner"
-                assert updated["contact_email"] is None
-                direct_updated = await direct.get(
-                    "/api/v1/actors/me",
-                    headers={"Authorization": f"Bearer {tokens['mcp-first-b']}"},
-                )
-                assert direct_updated.status_code == 200
-                assert direct_updated.json()["display_name"] == "MCP Profile Owner"
+                for arguments, expected_name, expected_email in (
+                    (
+                        {"display_name": "Initial Owner", "contact_email": " owner@example.com "},
+                        "Initial Owner",
+                        "owner@example.com",
+                    ),
+                    (
+                        {"display_name": "  MCP Profile Owner  "},
+                        "MCP Profile Owner",
+                        "owner@example.com",
+                    ),
+                    (
+                        {"contact_email": None},
+                        "MCP Profile Owner",
+                        None,
+                    ),
+                ):
+                    updated, failed = await _call(
+                        mcp_url,
+                        tokens["mcp-first-b"],
+                        name="workstream_profile_update",
+                        arguments=arguments,
+                    )
+                    assert not failed
+                    assert updated["display_name"] == expected_name
+                    assert updated["contact_email"] == expected_email
+                    direct_updated = await direct.get(
+                        "/api/v1/actors/me",
+                        headers={"Authorization": f"Bearer {tokens['mcp-first-b']}"},
+                    )
+                    assert direct_updated.status_code == 200
+                    assert direct_updated.json()["display_name"] == expected_name
+                    assert direct_updated.json()["contact_email"] == expected_email
 
                 manager_grant = await direct.post(
                     "/api/v1/admin-role-grants",
@@ -451,3 +471,38 @@ async def test_installed_mcp_preserves_profile_and_lifecycle_parity() -> None:
             _stop(api)
             api_log.close()
             mcp_log.close()
+
+
+@pytest.mark.parametrize("field", ["display_name", "contact_email"])
+@pytest.mark.parametrize(
+    ("value", "expected", "valid"),
+    [
+        (" \tOwner\r\n", "Owner", True),
+        ("\u2003Owner\u00a0", "Owner", True),
+        ("Owner  Name", "Owner  Name", True),
+        (None, None, True),
+        ("", None, False),
+        (" \t\r\n", None, False),
+        ("\u2003\u00a0", None, False),
+        ("Owner\x00Name", None, False),
+        ("\x00Owner", None, False),
+        ("Owner\x00", None, False),
+    ],
+)
+def test_profile_normalization_matches_backend(
+    field: str, value: str | None, expected: str | None, valid: bool
+) -> None:
+    """Compare non-OpenAPI normalization semantics with the authoritative model."""
+    from app.modules.actors.schemas import ActorProfileUpdateRequest
+
+    arguments = {field: value}
+    if not valid:
+        with pytest.raises(ValueError):
+            ActorProfileUpdateRequest.model_validate(arguments)
+        with pytest.raises(ValueError):
+            normalize_update_input(arguments)
+        return
+
+    backend = ActorProfileUpdateRequest.model_validate(arguments).model_dump(exclude_unset=True)
+    assert backend == {field: expected}
+    assert normalize_update_input(arguments) == backend
