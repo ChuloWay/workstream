@@ -437,7 +437,7 @@ async def test_duplicate_request_insert_is_classified_as_concurrent_replay(
                         actor=actor,
                         facts=facts,
                         attempt=attempt,
-                        authorization_decision_event_id=UUID(event_id),
+                        authorization_decision_event_id=UUID(str(event_id)),
                     )
     finally:
         await engine.dispose()

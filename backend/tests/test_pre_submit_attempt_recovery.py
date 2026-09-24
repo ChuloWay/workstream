@@ -514,7 +514,7 @@ async def test_database_rejects_same_resource_different_packet_evidence_completi
         )
         result_columns = tuple(column.name for column in PreSubmitEvidenceResult.__table__.columns)
         result_replacements = {
-            "id": "gen_random_uuid()::text",
+            "id": ":new_result",
             "evidence_set_id": ":new_evidence",
             "created_at": "transaction_timestamp()",
         }
@@ -522,7 +522,7 @@ async def test_database_rejects_same_resource_different_packet_evidence_completi
             f"insert into pre_submit_evidence_results ({', '.join(result_columns)}) "
             f"select {', '.join(result_replacements.get(column, column) for column in result_columns)} "
             "from pre_submit_evidence_results where evidence_set_id=:source_evidence "
-            "order by result_order"
+            "and result_order=:result_order"
         )
         with pytest.raises(DBAPIError, match="pre-submit evidence packet mismatch"):
             async with harness.engine.begin() as connection:
@@ -533,11 +533,16 @@ async def test_database_rejects_same_resource_different_packet_evidence_completi
                     "correct_request_digest": second_reservation.request_digest,
                     "source_evidence": source_evidence,
                 })
-                copied = await connection.execute(text(copy_results_sql), {
-                    "new_evidence": new_evidence,
-                    "source_evidence": source_evidence,
-                })
-                assert copied.rowcount == len(first.execution.entries)
+                copied_results = 0
+                for result_order in range(len(first.execution.entries)):
+                    copied = await connection.execute(text(copy_results_sql), {
+                        "new_result": str(new_record_id()),
+                        "new_evidence": new_evidence,
+                        "source_evidence": source_evidence,
+                        "result_order": result_order,
+                    })
+                    copied_results += copied.rowcount
+                assert copied_results == len(first.execution.entries)
                 await connection.execute(text(
                     "update pre_submit_execution_attempts set status='completed',"
                     "evidence_set_id=:evidence where id=:attempt"

@@ -100,7 +100,7 @@ def second_source_graph(control):
     graph["audit_events"] = [row for row in graph["audit_events"] if row["id"] == source["authorization_decision_event_id"]]
     replacements = {str(row["id"]): str(new_record_id()) for rows in graph.values() for row in rows}
     ledger = graph["guide_mutation_idempotency_records"][0]
-    replacements[str(ledger["operation_id"])] = str(uuid4())
+    replacements[str(ledger["operation_id"])] = str(new_record_id())
     replacements[str(ledger["idempotency_key"])] = str(uuid4())
     serialized = json.dumps(graph, default=str)
     for old, new in replacements.items():

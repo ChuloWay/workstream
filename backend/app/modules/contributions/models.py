@@ -7,17 +7,8 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import (
-    CheckConstraint,
-    DateTime,
-    ForeignKey,
-    ForeignKeyConstraint,
-    Index,
-    Integer,
-    Numeric,
-    String,
-    UniqueConstraint,
-    Uuid,
-    text,
+    CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint,
+    Index, Integer, Numeric, String, UniqueConstraint, Uuid, text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 

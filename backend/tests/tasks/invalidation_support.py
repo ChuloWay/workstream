@@ -204,7 +204,7 @@ async def revoke(s, kind="grant"):
     return s.invalidation_id
 
 
-async def invoked(s, *, target=None):
+async def invoked(s, *, target=None, synthetic_transport=False):
     target = target or AssignmentInvalidationTarget(
         project_id=UUID(s.project["id"]),
         task_id=UUID(s.task["id"]),
@@ -217,45 +217,37 @@ async def invoked(s, *, target=None):
         f"{target.assignment_id}"
     )
     payload = target.model_dump(mode="json")
-    async with s.sessions() as session:
-        published = await session.scalar(
-            select(OutboxEvent).where(OutboxEvent.idempotency_key == canonical_key)
-        )
-    used_event_ids = getattr(s, "used_invalidation_event_ids", set())
-    can_use_publication = (
-        published is not None
-        and published.event_id not in used_event_ids
-        and published.event_type == ASSIGNMENT_INVALIDATION_EVENT
-        and published.event_version == 1
-        and published.aggregate_type == "task_assignment"
-        and published.aggregate_id == target.assignment_id
-        and published.project_id == str(target.project_id)
-        and published.causation_event_id == target.authority_invalidation_event_id
-        and published.payload == payload
-    )
-    value = OutboxAppendInput(
-        event_type=ASSIGNMENT_INVALIDATION_EVENT,
-        event_version=1,
-        aggregate_type="task_assignment",
-        aggregate_id=target.assignment_id,
-        project_id=target.project_id,
-        correlation_id=str(new_record_id()),
-        causation_event_id=target.authority_invalidation_event_id,
-        idempotency_key=(
-            canonical_key
-            if published is None
-            else f"assignment-invalidation-fixture:{new_record_id()}"
-        ),
-        payload=payload,
-    )
-    if can_use_publication:
+    if not synthetic_transport:
+        async with s.sessions() as session:
+            published = await session.scalar(
+                select(OutboxEvent).where(OutboxEvent.idempotency_key == canonical_key)
+            )
+        assert published is not None, "canonical assignment invalidation publication is required"
+        assert (
+            published.event_type == ASSIGNMENT_INVALIDATION_EVENT
+            and published.event_version == 1
+            and published.aggregate_type == "task_assignment"
+            and published.aggregate_id == target.assignment_id
+            and published.project_id == str(target.project_id)
+            and published.causation_event_id == target.authority_invalidation_event_id
+            and published.payload == payload
+        ), "canonical assignment invalidation publication does not match target"
         event_id = published.event_id
     else:
+        value = OutboxAppendInput(
+            event_type=ASSIGNMENT_INVALIDATION_EVENT,
+            event_version=1,
+            aggregate_type="task_assignment",
+            aggregate_id=target.assignment_id,
+            project_id=target.project_id,
+            correlation_id=str(new_record_id()),
+            causation_event_id=target.authority_invalidation_event_id,
+            idempotency_key=f"assignment-invalidation-fixture:{new_record_id()}",
+            payload=payload,
+        )
         async with s.sessions() as session, session.begin():
             result = await OutboxService(session).append(value)
         event_id = result.event_id
-    used_event_ids.add(event_id)
-    s.used_invalidation_event_ids = used_event_ids
     claim = await s.h.delivery.claim(event_id, target.project_id, "assignment-test")
     assert claim is not None
     envelope = await s.h.delivery._begin_invocation(claim)

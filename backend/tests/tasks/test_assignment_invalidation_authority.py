@@ -21,7 +21,7 @@ from app.modules.tasks.api.assignment_invalidation import (
 )
 from app.modules.tasks.models import AuditEvent, TaskAssignment, WorkstreamTask
 from tests.authorization.test_assignment_invalidation_contract import facts, substitutions
-from tests.test_tasks import auth_headers, set_dev_actor
+from tests.test_tasks import auth_headers, delete_audit_fixture_as_owner, set_dev_actor
 from tests.test_tasks import task_client as task_client, task_database_env as task_database_env
 from tests.tasks.invalidation_support import setup_assignment, revoke, invoked, snapshot
 
@@ -245,12 +245,13 @@ async def test_release_receipt_rejects_substitution(task_client, monkeypatch):
     await revoke(s)
     target, envelope = await invoked(s)
     assert await s.handler(envelope) is HandlerOutcome.ACKNOWLEDGE
-    async with s.sessions() as session, session.begin():
+    async with s.sessions() as session:
         stored = await AuditRepository(session).assignment_release_event(
             target.assignment_id, target.authority_invalidation_event_id,
         )
         assert stored is not None
         receipt = {column.key: getattr(stored, column.key) for column in AuditEvent.__table__.columns}
+        await delete_audit_fixture_as_owner(session, receipt["id"])
         other_decision = await session.scalar(select(AuditEvent.id).where(
             AuditEvent.action_id == "task.claim", AuditEvent.event_type == "SensitiveAuthorizationAllowed"
         ))
@@ -340,12 +341,13 @@ async def test_release_receipt_rejects_out_of_range_generation(task_client, monk
     await revoke(s)
     target, envelope = await invoked(s)
     assert await s.handler(envelope) is HandlerOutcome.ACKNOWLEDGE
-    async with s.sessions() as session, session.begin():
+    async with s.sessions() as session:
         stored = await AuditRepository(session).assignment_release_event(
             target.assignment_id, target.authority_invalidation_event_id,
         )
         assert stored is not None
         receipt = {column.key: getattr(stored, column.key) for column in AuditEvent.__table__.columns}
+        await delete_audit_fixture_as_owner(session, receipt["id"])
         decision = dict((await session.execute(select(AuditEvent.__table__).where(
             AuditEvent.id == receipt["event_payload"]["references"]["authorization_decision_id"]
         ))).mappings().one())

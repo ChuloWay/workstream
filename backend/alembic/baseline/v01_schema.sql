@@ -4226,7 +4226,8 @@ CREATE FUNCTION public.require_guide_proposal_correction() RETURNS trigger
           END IF;
           PERFORM require_guide_proposal_authority(c.actor_profile_id,c.identity_link_id,c.admin_role_grant_id,
             c.project_id,c.authorization_decision_event_id,'project.guide_compilation.correction.request',
-            'project.guide_compilation.request','project_guide_compilation_correction',c.operation_id,
+            'project.guide_compilation.request','project_guide_compilation_correction',
+            (c.resource_context_json->'locator'->>'operation_id')::uuid,
             c.resource_context_json->'locator'->>'operation_id',c.resource_context_digest);
         END IF;
         IF successor.status<>'correction_requested' AND NOT EXISTS(

@@ -40,9 +40,10 @@ async def _insert_service(database_url: str, identity: str) -> str:
             await connection.execute(
                 "insert into actor_profiles "
                 "(id,actor_kind,status,provisioning_method,service_identity,created_by) "
-                "values($1,'service','active','manual_service_provisioning',$2,$1)",
+                "values($1,'service','active','manual_service_provisioning',$2,$3)",
                 actor_id,
                 identity,
+                actor_id,
             )
             await connection.execute(
                 "insert into actor_identity_links "

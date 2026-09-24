@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
+from app.core.identifiers import new_record_id
 from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
 from app.modules.projects.api.post_policy import PostPolicyApproval
 from app.modules.projects.post_policy.models import PostPolicyOperation
@@ -55,7 +56,7 @@ async def test_direct_sql_rejects_one_substituted_commitment(clean_postgres_data
                 elif change == 'foreign_grant':
                     row['admin_role_grant_id'] = foreign_grant
                 else:
-                    wrong_event = str(uuid4())
+                    wrong_event = str(new_record_id())
                     await session.execute(text(
                         'INSERT INTO audit_events SELECT (jsonb_populate_record(NULL::audit_events, '
                         'to_jsonb(source)||CAST(:patch AS jsonb))).* FROM audit_events source WHERE id=:id'),

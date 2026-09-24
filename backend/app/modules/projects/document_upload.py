@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.orm import aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -87,7 +87,7 @@ class ProjectGuideDocumentUploadTargets:
                 root.identity_link_id == source.identity_link_id,
                 root.project_id == source.project_id,
                 root.project_id == str(project_id),
-                root.response_json["setup"]["id"].as_string() == source.setup_run_id,
+                root.response_json["setup"]["id"].as_string() == cast(source.setup_run_id, String),
             )
         )
         if for_update:

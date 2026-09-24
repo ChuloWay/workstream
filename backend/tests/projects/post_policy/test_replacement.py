@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
+from app.core.identifiers import new_record_id
 from app.core.hashing import canonical_json_hash
 from app.modules.projects.api.guide_proposals import GuideProposalApproval, GuideProposalSelection
 from app.modules.projects.api.post_policy import PostPolicyApproval, PostPolicyCorrection, PostPolicyDerive
@@ -79,7 +80,7 @@ async def test_corrected_generation_replaces_policy_and_retains_original_receipt
                         "INSERT INTO checker_policies SELECT (jsonb_populate_record(NULL::checker_policies, "
                         "to_jsonb(source)||jsonb_build_object('id',cast(:id as text)))).* "
                         "FROM checker_policies source WHERE id=:source"),
-                        dict(id=str(uuid4()), source=str(policy.target.policy_id)))
+                        dict(id=str(new_record_id()), source=str(policy.target.policy_id)))
 
 
 async def test_fresh_predecessor_decisions_reject_after_successor_upstream_approval(clean_postgres_database):

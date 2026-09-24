@@ -53,7 +53,9 @@ class PreparedProposal(PreparedGuideProposalOperation):
             if approval
             else "project_guide_compilation_correction"
         )
-        resource = facts.artifact_policy_id if approval else facts.locator.operation_id
+        resource = self.port.resource_override or (
+            facts.artifact_policy_id if approval else facts.locator.operation_id
+        )
         decision = new_record_id()
         await self.port.session.execute(
             text(
@@ -110,17 +112,21 @@ class PreparedProposal(PreparedGuideProposalOperation):
         if (
             row["actor_id"] != str(self.port.actor.actor_profile_id)
             or row["action_id"] != facts.locator.action_id
-            or row["project_id"] != str(self.port.project_id)
+            or str(row["project_id"]) != str(self.port.project_id)
             or row["after_facts"] != {"allowed": True, "resource_context_digest": facts.digest}
         ):
             raise AuthorizationDenied("retained proposal evidence mismatch")
 
 
 class ProposalAuthority:
-    def __init__(self, session, actor, project_id, grant_id, *, on_consume=None, close_error=False):
+    def __init__(
+        self, session, actor, project_id, grant_id, *, on_consume=None, close_error=False,
+        resource_override=None,
+    ):
         self.session, self.actor = session, actor
         self.project_id, self.grant_id = project_id, grant_id
         self.on_consume, self.close_error = on_consume, close_error
+        self.resource_override = resource_override
         self.consumed = 0
         self.last_facts = None
 
@@ -185,7 +191,7 @@ async def proposal_case(url, *, classification="draft_ready", guide_version="v1"
             UUID(str(row["link"])),
             ActorKind.HUMAN,
         )
-        yield values, factory, command, actor, row["grant"]
+        yield values, factory, command, actor, UUID(str(row["grant"]))
 
 
 async def read_package(factory, command, actor, grant_id):

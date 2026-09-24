@@ -9,7 +9,11 @@ from sqlalchemy.exc import DBAPIError
 
 from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
 from app.modules.projects.api.guide_proposals import GuideProposalError, GuideProposalSelection
-from app.modules.projects.api.post_policy import PostPolicyApproval, PostPolicyDerive
+from app.modules.projects.api.post_policy import (
+    PostPolicyApproval,
+    PostPolicyDerive,
+    post_policy_human_authorization_selector,
+)
 from app.modules.projects.post_policy.service import PostPolicyService
 from tests.projects.guide_compilation.helpers import service_actor
 from tests.projects.guide_compilation.proposals.pg_support import proposal_case, revoke_review_grant
@@ -45,7 +49,11 @@ async def test_missing_approval_receipt_hits_the_specific_deferred_guard(clean_p
                 receipt = await service.approve(payload, actor=actor, request_id=uuid4())
                 assert receipt.kind == 'approve'
                 assert await session.scalar(text("SELECT count(*) FROM audit_events WHERE correlation_id=:id"),
-                                            dict(id=receipt.operation_id)) == 1
+                                            dict(id=post_policy_human_authorization_selector(
+                                                actor.actor_profile_id,
+                                                payload.idempotency_key,
+                                                "approve",
+                                            ))) == 1
                 assert await session.scalar(text("SELECT approval_operation_id FROM checker_policies WHERE id=:id"),
                                             dict(id=str(projected.target.policy_id))) == receipt.operation_id
                 # Run this exact deferred guard before unrelated deferred foreign keys.

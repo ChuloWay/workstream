@@ -46,7 +46,11 @@ async def test_concrete_finalization_is_atomic(clean_postgres_database, classifi
             assert event["event_type"] == "SensitiveAuthorizationAllowed"
             assert event["actor_ref_kind"] == "actor_profile"
             assert event["actor_id"] == str(values["actor"])
-            request_id, _ = setup_finalization_preparation_identity(authority.locator)
+            request_id, _ = setup_finalization_preparation_identity(
+                authority.locator.setup_run_id,
+                authority.locator.setup_generation,
+                authority.locator.compilation_id,
+            )
             assert event["request_id"] == request_id
             assert event["correlation_id"] == authority.facts.correlation_id
             assert event["resource_type"] == "project_guide_setup_finalization"

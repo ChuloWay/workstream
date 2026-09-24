@@ -5,6 +5,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select
 
+from app.core.identifiers import new_record_id
 from app.adapters.artifacts import guide_document_manifest_port
 from app.modules.checkers.catalogue import (
     build_pre_submission_checker_catalogue,
@@ -52,7 +53,7 @@ async def approve(factory, command, actor, grant, payload):
         raise exc from exc.__context__
 
 
-async def correct(factory, command, actor, grant, payload):
+async def correct(factory, command, actor, grant, payload, *, authority_resource=None):
     try:
         async with factory() as session, session.begin():
             return await GuideProposalService(
@@ -62,6 +63,7 @@ async def correct(factory, command, actor, grant, payload):
                     actor,
                     command.project_id,
                     grant,
+                    resource_override=authority_resource,
                 ),
             ).request_correction(payload, actor=actor, request_id=uuid4())
     except GuideProposalError as exc:
@@ -281,6 +283,32 @@ async def test_correction_uses_canonical_human_request_and_binds_feedback(clean_
             )
             assert attempt.status == "compilation_reserved"
             assert context.material.source_snapshot_id == package.target.source_snapshot_id
+
+
+async def test_correction_rejects_authority_for_a_substituted_locator_operation(
+    clean_postgres_database,
+):
+    from sqlalchemy.exc import DBAPIError
+
+    async with proposal_case(clean_postgres_database) as (_, factory, command, actor, grant):
+        package = await read_package(factory, command, actor, grant)
+        payload = GuideProposalCorrection(
+            target=package.target,
+            idempotency_key=uuid4(),
+            reason="Reconsider the existing source evidence.",
+        )
+        with pytest.raises(DBAPIError, match="guide proposal authority evidence mismatch"):
+            await correct(
+                factory,
+                command,
+                actor,
+                grant,
+                payload,
+                authority_resource=new_record_id(),
+            )
+
+        receipt = await correct(factory, command, actor, grant, payload)
+        assert receipt.target_digest == package.target.digest
 
 
 async def test_approval_rejects_every_substituted_target_identity(clean_postgres_database):

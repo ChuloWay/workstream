@@ -12,6 +12,7 @@ from app.adapters.tasks import (
 from app.modules.outbox.api import HandlerOutcome
 from app.modules.tasks.api.assignment_invalidation import (
     AssignmentInvalidationAuthority,
+    AssignmentInvalidationTarget,
     PreparedAssignmentInvalidation,
 )
 from app.modules.tasks.models import TaskAssignment, WorkstreamTask, Submission
@@ -90,13 +91,42 @@ async def test_exact_real_cause_releases_only_pre_submit_assignment(
     assert len(s.trace) == 3
 
 
+@pytest.mark.parametrize("origin", ["missing", "mismatched"])
+async def test_fixture_requires_exact_canonical_publication_by_default(
+    task_client, monkeypatch, origin
+):
+    s = await setup_assignment(task_client, monkeypatch)
+    await revoke(s)
+    target = AssignmentInvalidationTarget(
+        project_id=UUID(s.project["id"]),
+        task_id=UUID(s.task["id"]),
+        assignment_id=UUID(s.assignment["id"]),
+        contributor_id=UUID(s.grant["actor_profile_id"]),
+        authority_invalidation_event_id=s.invalidation_id,
+    )
+    if origin == "missing":
+        target = target.model_copy(
+            update={"authority_invalidation_event_id": new_record_id()}
+        )
+        message = "canonical assignment invalidation publication is required"
+    else:
+        target = target.model_copy(update={"contributor_id": new_record_id()})
+        message = "canonical assignment invalidation publication does not match target"
+    with pytest.raises(AssertionError, match=message):
+        await invoked(s, target=target)
+
+
 async def test_valid_delivery_cannot_substitute_target_or_cause(task_client, monkeypatch):
     s = await setup_assignment(task_client, monkeypatch)
     await revoke(s)
     target, envelope = await invoked(s)
     before = await snapshot(s)
     for field in ("task_id", "assignment_id", "contributor_id", "authority_invalidation_event_id"):
-        _, crossed = await invoked(s, target=target.model_copy(update={field: new_record_id()}))
+        _, crossed = await invoked(
+            s,
+            target=target.model_copy(update={field: new_record_id()}),
+            synthetic_transport=True,
+        )
         assert await s.handler(crossed) is HandlerOutcome.REJECT
         assert await snapshot(s) == before
     for bad in (
@@ -202,12 +232,14 @@ async def test_old_delivery_cannot_release_real_replacement_claim(task_client, m
     assert before_restore[1][0]["assigned_at"] <= cause.recorded_at < new_assignment["assigned_at"]
     # A fully committed forged event cannot reuse an old cause for a newer assignment.
     _, retargeted = await invoked(
-        s, target=target.model_copy(update={"assignment_id": UUID(new_assignment["id"])})
+        s,
+        target=target.model_copy(update={"assignment_id": UUID(new_assignment["id"])}),
+        synthetic_transport=True,
     )
     assert await s.handler(retargeted) is HandlerOutcome.REJECT
     assert await snapshot(s) == after
     # A fresh transport event for the same immutable cause still addresses only the old assignment.
-    _, duplicate = await invoked(s, target=target)
+    _, duplicate = await invoked(s, target=target, synthetic_transport=True)
     assert await s.handler(duplicate) is HandlerOutcome.ACKNOWLEDGE
     assert await s.handler(envelope) is HandlerOutcome.ACKNOWLEDGE
     assert await snapshot(s) == after

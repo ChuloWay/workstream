@@ -1057,7 +1057,8 @@ async def test_database_rejects_malformed_and_mutated_audit_rows(audit_factory) 
             {"permission_id": "secret-bearer-value"},
             {"reason": "secret-bearer-value"},
         ):
-            with pytest.raises(IntegrityError):
+            with pytest.raises(DBAPIError if "id" in patch else IntegrityError,
+                               match="invalid UUID" if "id" in patch else None):
                 values = {
                     "id": str(new_record_id()),
                     "actor_id": "workstream:system:bootstrap",

@@ -81,7 +81,7 @@ async def test_concurrent_events_for_same_cause_have_one_effect(task_client, mon
     s = await setup_assignment(task_client, monkeypatch)
     await revoke(s)
     target, first = await invoked(s)
-    _, second = await invoked(s, target=target)
+    _, second = await invoked(s, target=target, synthetic_transport=True)
     before = await snapshot(s)
     outcomes = await asyncio.wait_for(asyncio.gather(s.handler(first), s.handler(second)), 10)
     assert outcomes == [HandlerOutcome.ACKNOWLEDGE, HandlerOutcome.ACKNOWLEDGE]

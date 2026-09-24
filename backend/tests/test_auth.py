@@ -2424,7 +2424,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_matrix(
         assert provisioned_service.status_code == 201, provisioned_service.text
         service_id = UUID(provisioned_service.json()["actor_profile_id"])
         service_state = await actor_link_state(service_id)
-        service_link = UUID(service_state[2])
+        service_link = UUID(int=service_state[2].int)
         service_revoke = await client.post(
             f"/api/v1/actor-identity-links/{service_link}/revoke",
             headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},

@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import text
 
 from app.modules.projects.api.guide_proposals import GuideProposalError
+from app.modules.projects.api.post_policy import post_policy_derive_authorization_selector
 from tests.projects.guide_compilation.helpers import service_actor
 from tests.projects.guide_compilation.proposals.pg_support import (
     proposal_case,
@@ -39,7 +40,9 @@ async def test_setup_service_derives_with_exact_evidence(clean_postgres_database
             )
             assert row["actor_id"] == str(service_actor(values).actor_profile_id)
             assert row["matched_grant_id"] is None and str(row["correlation_id"]) == str(
-                receipt.operation_id
+                post_policy_derive_authorization_selector(
+                    payload.upstream_approval_operation_id
+                )
             )
             assert (
                 await session.scalar(text("SELECT count(*) FROM project_post_policy_operations"))
