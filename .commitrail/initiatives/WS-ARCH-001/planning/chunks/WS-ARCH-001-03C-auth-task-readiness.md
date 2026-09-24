@@ -1,11 +1,11 @@
 # Chunk Contract: WS-ARCH-001-03C AUTH Task Readiness Activation
 
-Status: Planned. The exact feature-authority boundary is adopted by
-[03C1](../../WS-ARCH-001-03C1.md). The remaining public surface manifest below
-remains a planning skeleton requiring a current-source contract before execution.
-Risk: L1. Outcome: the exact
-task/claim/assignment actions below become usable only through the owner
-public APIs and one integrated readiness proof.
+Status: Planned for the remaining public queue and task-read rows. Completed
+03C1–03C3 supply fixed-service authority, producer/handler integration and manager
+commands; their rows remain below for context. The remaining rows require a
+current-source contract before execution.
+Risk: L1. Outcome: each remaining action becomes usable only through its owner
+public API and integrated readiness proof.
 
 Execution sequence: 03C1 real fixed-service assignment authority and exact
 decision receipts; completed 03C2 originating atomic producer fan-out plus first handler
