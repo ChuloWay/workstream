@@ -327,7 +327,7 @@ class WorkstreamTask(Base):
     rejection_criteria: Mapped[str | None] = mapped_column(Text)
     deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[str] = mapped_column(String(100), nullable=False)
-    assigned_to: Mapped[str | None] = mapped_column(String(100), index=True)
+    assigned_to: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

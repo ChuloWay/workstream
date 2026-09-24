@@ -254,7 +254,8 @@ human lineage. Exact foreign keys
 indexes `ix_task_assignments_contributor_id` and
 `ix_submissions_contributor_id` preserve lookup behavior.
 
-Both columns are non-null `varchar(36)` foreign keys. PostgreSQL
+Both columns are non-null native PostgreSQL `uuid` foreign keys; their Python
+owners expose canonical UUID strings. PostgreSQL
 rejects a missing profile with SQLSTATE `23503` and a service profile with
 `23514`. Suspended and deactivated human profiles remain valid historical
 references. The v0.1 baseline has no downgrade path.

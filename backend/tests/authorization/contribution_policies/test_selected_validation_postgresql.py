@@ -8,6 +8,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 
 from app.adapters.contributions import contribution_policy_validation_port
+from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from app.modules.contributions.api import (
     ContributionPolicyUnavailable,
@@ -183,7 +184,7 @@ async def test_preloaded_graph_is_refreshed_after_draft_edit_and_publication(
                 )
                 concurrent.add(
                     ContributionAwardDefinition(
-                        id=uuid4(),
+                        id=new_record_id(),
                         contribution_rule_id=rule.id,
                         contribution_policy_version_id=draft.contribution_policy_version_id,
                         project_id=str(target.project),

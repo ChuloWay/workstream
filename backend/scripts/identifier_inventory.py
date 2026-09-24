@@ -5,10 +5,11 @@ from __future__ import annotations
 import argparse
 import ast
 from collections import Counter
+from hashlib import sha256
 import json
 from pathlib import Path
 import re
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 if __package__:
     from scripts.schema_baseline_sql import split_sql_statements
@@ -16,6 +17,8 @@ else:
     from schema_baseline_sql import split_sql_statements
 
 FORMAT = "workstream-identifier-inventory-1"
+GENERATION_CLASSIFICATION_FORMAT = "workstream-uuid-generation-classifications-1"
+GENERATION_CLASSIFICATIONS = "identifier_generation_classifications.json"
 SEMANTIC_KEYS = {
     "actor_profile_migration_state": ("seeded schema-state singleton, not a record sequence", ("id",)),
     "api_rate_control_counters": ("rate-limit scope and digest", ("control_scope", "key_digest")),
@@ -31,6 +34,9 @@ SEMANTIC_KEYS = {
         "project instrument and unit code",
         ("project_id", "instrument_type", "unit_code"),
     ),
+}
+SEMANTIC_UUID_REFERENCES = {
+    ("workstream_tasks", "assigned_to"): "actor_profiles.id",
 }
 _CREATE = re.compile(
     r"CREATE\s+TABLE\s+(?:public\.)?\"?([A-Za-z_]\w*)\"?\s*\((.*)\)\s*$", re.I | re.S
@@ -331,54 +337,184 @@ def parse_schema(backend_root: Path) -> dict[str, dict[str, Any]]:
     return tables
 
 
-def scan_generation_sites(roots: Iterable[Path], report_root: Path) -> list[dict[str, Any]]:
+def _generation_owner(node: ast.AST, parents: Mapping[ast.AST, ast.AST]) -> str:
+    names = []
+    while node in parents:
+        node = parents[node]
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            names.append(node.name)
+    return ".".join(reversed(names)) or "<module>"
+
+
+def _generation_expression_key(
+    node: ast.AST, parents: Mapping[ast.AST, ast.AST]
+) -> tuple[str, str]:
+    """Return a line-independent key for this exact expression in its statement."""
+    statement: ast.AST = node
+    while statement in parents and not isinstance(statement, ast.stmt):
+        statement = parents[statement]
+
+    child: ast.AST = node
+    path = []
+    while child is not statement:
+        parent = parents[child]
+        for field, value in ast.iter_fields(parent):
+            if value is child:
+                path.append(field)
+                break
+            if isinstance(value, list) and child in value:
+                path.append(f"{field}[{value.index(child)}]")
+                break
+        child = parent
+    semantic = f"{ast.dump(statement, include_attributes=False)}@{'/'.join(reversed(path))}"
+    kind = type(statement).__name__
+    return f"{kind}:{sha256(semantic.encode()).hexdigest()[:16]}", ast.unparse(statement)
+
+
+def _load_generation_classifications(backend_root: Path) -> dict[str, Any]:
+    path = backend_root / "scripts" / GENERATION_CLASSIFICATIONS
+    if not path.exists():
+        return {"format": GENERATION_CLASSIFICATION_FORMAT, "categories": {}, "sites": {}}
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if value.get("format") != GENERATION_CLASSIFICATION_FORMAT:
+        raise ValueError(f"unsupported generation classification format in {path}")
+    if not isinstance(value.get("categories"), dict) or not isinstance(value.get("sites"), dict):
+        raise ValueError(f"invalid generation classifications in {path}")
+    return value
+
+
+def _uuid_bindings(tree: ast.AST) -> tuple[dict[str, str], set[str]]:
+    direct, modules = {}, set()
+    for item in ast.walk(tree):
+        if isinstance(item, ast.ImportFrom) and item.module == "uuid":
+            direct.update(
+                {
+                    alias.asname or alias.name: alias.name
+                    for alias in item.names
+                    if alias.name in {"uuid4", "uuid5"}
+                }
+            )
+        if isinstance(item, ast.Import):
+            modules.update(
+                alias.asname or alias.name for alias in item.names if alias.name == "uuid"
+            )
+    return direct, modules
+
+
+def _uuid_occurrences(
+    tree: ast.AST,
+    parents: Mapping[ast.AST, ast.AST],
+    direct: Mapping[str, str],
+    modules: set[str],
+) -> list[tuple[ast.AST, str, str]]:
+    occurrences = []
+    for item in ast.walk(tree):
+        generator = None
+        usage = "reference"
+        if isinstance(item, ast.Call):
+            usage = "call"
+            generator = direct.get(item.func.id) if isinstance(item.func, ast.Name) else None
+            function = item.func
+        else:
+            function = item
+            if isinstance(item, ast.Name) and isinstance(item.ctx, ast.Load):
+                generator = direct.get(item.id)
+        if (
+            isinstance(function, ast.Attribute)
+            and isinstance(function.value, ast.Name)
+            and function.value.id in modules
+            and function.attr in {"uuid4", "uuid5"}
+        ):
+            generator = function.attr
+        if not generator:
+            continue
+        parent = parents.get(item)
+        if usage == "reference" and isinstance(parent, ast.Call) and parent.func is item:
+            continue
+        occurrences.append((item, generator, usage))
+    return sorted(occurrences, key=lambda value: (value[0].lineno, value[0].col_offset))
+
+
+def _classified_generation_site(
+    node: ast.AST,
+    generator: str,
+    usage: str,
+    relative: str,
+    parents: Mapping[ast.AST, ast.AST],
+    occurrence: int,
+    categories: Mapping[str, str],
+    classified_sites: Mapping[str, str],
+) -> dict[str, Any]:
+    owner = _generation_owner(node, parents)
+    expression_key, expression = _generation_expression_key(node, parents)
+    site_key = f"{relative}|{owner}|{expression_key}|{occurrence}"
+    registered = classified_sites.get(site_key)
+    registered_parts = registered.split(":", maxsplit=2) if registered else ()
+    classification = (
+        registered_parts[2]
+        if len(registered_parts) == 3
+        and registered_parts[0] == generator
+        and registered_parts[1] == usage
+        and registered_parts[2] in categories
+        else "unclassified"
+    )
+    return {
+        "generator": generator,
+        "usage": usage,
+        "path": relative,
+        "line": node.lineno,
+        "column": node.col_offset + 1,
+        "owner": owner,
+        "expression_key": expression_key,
+        "occurrence": occurrence,
+        "expression": expression,
+        "site_key": site_key,
+        "classification": classification,
+        "reason": categories.get(classification),
+    }
+
+
+def scan_generation_sites(
+    roots: Iterable[Path],
+    report_root: Path,
+    classifications: Mapping[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    classifications = classifications or {"categories": {}, "sites": {}}
+    categories = classifications.get("categories", {})
+    classified_sites = classifications.get("sites", {})
     sites = []
     for root in roots:
         for path in sorted(root.rglob("*.py")):
             if path.name == Path(__file__).name:
                 continue
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-            direct, modules = {}, set()
-            for item in ast.walk(tree):
-                if isinstance(item, ast.ImportFrom) and item.module == "uuid":
-                    direct.update(
-                        {
-                            alias.asname or alias.name: alias.name
-                            for alias in item.names
-                            if alias.name in {"uuid4", "uuid5"}
-                        }
+            parents = {
+                child: parent
+                for parent in ast.walk(tree)
+                for child in ast.iter_child_nodes(parent)
+            }
+            direct, modules = _uuid_bindings(tree)
+            occurrences = _uuid_occurrences(tree, parents, direct, modules)
+            semantic_occurrences: Counter[tuple[str, str]] = Counter()
+            for node, generator, usage in occurrences:
+                relative = path.relative_to(report_root).as_posix()
+                owner = _generation_owner(node, parents)
+                expression_key, _expression = _generation_expression_key(node, parents)
+                occurrence_key = (owner, expression_key)
+                occurrence = semantic_occurrences[occurrence_key]
+                semantic_occurrences[occurrence_key] += 1
+                sites.append(
+                    _classified_generation_site(
+                        node,
+                        generator,
+                        usage,
+                        relative,
+                        parents,
+                        occurrence,
+                        categories,
+                        classified_sites,
                     )
-                if isinstance(item, ast.Import):
-                    modules.update(
-                        alias.asname or alias.name for alias in item.names if alias.name == "uuid"
-                    )
-            for call in (item for item in ast.walk(tree) if isinstance(item, ast.Call)):
-                generator = direct.get(call.func.id) if isinstance(call.func, ast.Name) else None
-                if (
-                    isinstance(call.func, ast.Attribute)
-                    and isinstance(call.func.value, ast.Name)
-                    and call.func.value.id in modules
-                    and call.func.attr in {"uuid4", "uuid5"}
-                ):
-                    generator = call.func.attr
-                if generator:
-                    relative = path.relative_to(report_root).as_posix()
-                    candidate = (
-                        "script_boundary_requires_review"
-                        if relative.startswith("scripts/")
-                        else "deterministic_replay_requires_owner_review"
-                        if generator == "uuid5"
-                        else "uuid4_boundary_requires_review"
-                    )
-                    sites.append(
-                        {
-                            "generator": generator,
-                            "path": relative,
-                            "line": call.lineno,
-                            "column": call.col_offset + 1,
-                            "candidate": candidate,
-                        }
-                    )
+                )
     return sorted(sites, key=lambda item: (item["path"], item["line"], item["column"]))
 
 
@@ -405,6 +541,68 @@ def _key(table: dict[str, Any], orm_present: bool) -> dict[str, str]:
         "classification": "unresolved",
         "reason": "non-conventional key requires owner classification",
     }
+
+
+def _string_uuid_references(tables: list[dict[str, Any]]) -> list[dict[str, str]]:
+    table_names = {table["name"] for table in tables}
+    references = []
+    for table in tables:
+        for column in table["columns"]:
+            if column["storage_kind"] != "string":
+                continue
+            explicit = SEMANTIC_UUID_REFERENCES.get((table["name"], column["name"]))
+            targets = set(column.get("foreign_keys", []))
+            if explicit:
+                targets.add(explicit)
+            for target in targets:
+                target_table, _, target_column = target.rpartition(".")
+                conventional = (
+                    _IDENTIFIER.match(column["name"])
+                    and _IDENTIFIER.match(target_column)
+                    and target_table not in SEMANTIC_KEYS
+                )
+                if target_table in table_names and (target == explicit or conventional):
+                    references.append(
+                        {
+                            "table": table["name"],
+                            "column": column["name"],
+                            "target": target,
+                            "current_storage": column["storage_type"],
+                            "candidate": "convert relationship to native UUID",
+                        }
+                    )
+    return sorted(
+        references, key=lambda item: (item["table"], item["column"], item["target"])
+    )
+
+
+def _generation_inventory(backend_root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    classifications = _load_generation_classifications(backend_root)
+    generation = scan_generation_sites(
+        (backend_root / "app", backend_root / "scripts"), backend_root, classifications
+    )
+    observed = {site["site_key"] for site in generation}
+    unresolved = [
+        {
+            "kind": "generation_site",
+            "path": site["path"],
+            "owner": site["owner"],
+            "expression_key": site["expression_key"],
+            "reason": "UUID generation site lacks an exact owner-backed classification",
+        }
+        for site in generation
+        if site["classification"] == "unclassified"
+    ]
+    unresolved.extend(
+        {
+            "kind": "stale_generation_classification",
+            "site_key": site_key,
+            "reason": "classified UUID generation site is no longer present",
+        }
+        for site_key in classifications["sites"]
+        if site_key not in observed
+    )
+    return generation, unresolved
 
 
 def build_inventory(backend_root: Path) -> dict[str, Any]:
@@ -466,25 +664,9 @@ def build_inventory(backend_root: Path) -> dict[str, Any]:
                     entry["candidates"].append("reconcile primary key in fresh schema baseline")
         tables.append(entry)
 
-    table_names = {table["name"] for table in tables}
-    references = [
-        {
-            "table": table["name"],
-            "column": column["name"],
-            "target": target,
-            "current_storage": column["storage_type"],
-            "candidate": "convert relationship to native UUID",
-        }
-        for table in tables
-        for column in table["columns"]
-        if column["storage_kind"] == "string" and _IDENTIFIER.match(column["name"])
-        for target in column.get("foreign_keys", [])
-        if target.rpartition(".")[0] in table_names and _IDENTIFIER.match(target.rpartition(".")[2])
-        if target.rpartition(".")[0] not in SEMANTIC_KEYS
-    ]
-    generation = scan_generation_sites(
-        (backend_root / "app", backend_root / "scripts"), backend_root
-    )
+    references = _string_uuid_references(tables)
+    generation, generation_unresolved = _generation_inventory(backend_root)
+    unresolved.extend(generation_unresolved)
     classifications = Counter(table["key"]["classification"] for table in tables)
     generators = Counter(site["generator"] for site in generation)
     return {
@@ -503,9 +685,7 @@ def build_inventory(backend_root: Path) -> dict[str, Any]:
             "unresolved": len(unresolved),
         },
         "tables": tables,
-        "string_uuid_references": sorted(
-            references, key=lambda item: (item["table"], item["column"], item["target"])
-        ),
+        "string_uuid_references": references,
         "generation_sites": generation,
         "unresolved": unresolved,
     }
@@ -539,11 +719,16 @@ def render_text(report: dict[str, Any]) -> str:
             ),
             "GENERATION SITES",
             *(
-                f"{item['generator']} {item['path']}:{item['line']} {item['candidate']}"
+                f"{item['generator']} {item['path']}:{item['line']} "
+                f"{item['owner']} {item['classification']}"
                 for item in report["generation_sites"]
             ),
             "UNRESOLVED",
-            *(f"{item['kind']} {item['table']}: {item['reason']}" for item in report["unresolved"]),
+            *(
+                f"{item['kind']} {item.get('table', item.get('path', item.get('site_key')))}: "
+                f"{item['reason']}"
+                for item in report["unresolved"]
+            ),
         ]
     )
     return "\n".join(lines) + "\n"

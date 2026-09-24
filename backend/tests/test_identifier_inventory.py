@@ -5,10 +5,12 @@ from pathlib import Path
 
 from scripts.identifier_inventory import (
     FORMAT,
+    _string_uuid_references,
     _sql_created_table,
     build_inventory,
     parse_orm_models,
     render_text,
+    scan_generation_sites,
 )
 
 
@@ -21,6 +23,10 @@ def test_current_repository_inventory_has_no_unowned_or_mismatched_keys() -> Non
     report = build_inventory(Path(__file__).resolve().parents[1])
     assert report["unresolved"] == []
     assert report["string_uuid_references"] == []
+    assert all(
+        site["classification"] != "unclassified" and site["reason"]
+        for site in report["generation_sites"]
+    )
 
 
 def test_orm_ast_inventory_captures_multiline_and_table_level_foreign_keys(
@@ -92,6 +98,45 @@ CREATE TABLE public.delivery_attempts (
     assert columns["event_id"]["foreign_keys"] == []
 
 
+def test_semantic_uuid_reference_includes_task_assignee_without_id_suffix() -> None:
+    references = _string_uuid_references(
+        [
+            {
+                "name": "actor_profiles",
+                "columns": [
+                    {
+                        "name": "id",
+                        "storage_type": "Uuid(as_uuid=False)",
+                        "storage_kind": "native_uuid",
+                        "foreign_keys": [],
+                    }
+                ],
+            },
+            {
+                "name": "workstream_tasks",
+                "columns": [
+                    {
+                        "name": "assigned_to",
+                        "storage_type": "String(100)",
+                        "storage_kind": "string",
+                        "foreign_keys": [],
+                    }
+                ],
+            },
+        ]
+    )
+
+    assert references == [
+        {
+            "table": "workstream_tasks",
+            "column": "assigned_to",
+            "target": "actor_profiles.id",
+            "current_storage": "String(100)",
+            "candidate": "convert relationship to native UUID",
+        }
+    ]
+
+
 def test_build_inventory_reports_cutover_candidates_and_unresolved_schema_objects(
     tmp_path: Path,
 ) -> None:
@@ -120,10 +165,10 @@ class WidgetUse:
     _write(
         backend / "app/writers.py",
         """
-def reserve():
-    from uuid import uuid4
-    operation_id = uuid4()
-    return operation_id
+from uuid import uuid4
+
+def persist_widget(session):
+    session.add(Widget(id=str(uuid4())))
 """,
     )
     _write(
@@ -186,7 +231,7 @@ def upgrade():
         "key_classifications": {"generated_surrogate": 2, "unresolved": 2},
         "string_uuid_reference_candidates": 1,
         "generation_sites": {"uuid4": 1, "uuid5": 1},
-        "unresolved": 2,
+        "unresolved": 4,
     }
     assert report["string_uuid_references"] == [
         {
@@ -197,14 +242,25 @@ def upgrade():
             "candidate": "convert relationship to native UUID",
         }
     ]
-    assert {item["table"] for item in report["unresolved"]} == {
+    assert {item["table"] for item in report["unresolved"] if "table" in item} == {
         "delayed_records",
         "migration_state",
     }
-    assert {site["candidate"] for site in report["generation_sites"]} == {
-        "script_boundary_requires_review",
-        "uuid4_boundary_requires_review",
+    assert {site["classification"] for site in report["generation_sites"]} == {
+        "unclassified"
     }
+    generation_issues = [
+        item for item in report["unresolved"] if item["kind"] == "generation_site"
+    ]
+    assert {item["path"] for item in generation_issues} == {
+        "app/writers.py",
+        "scripts/drill.py",
+    }
+    row_writer = next(
+        site for site in report["generation_sites"] if site["path"] == "app/writers.py"
+    )
+    assert row_writer["owner"] == "persist_widget"
+    assert "Widget(id=str(uuid4()))" in row_writer["expression"]
     assert json.loads(json.dumps(report))["summary"] == report["summary"]
     text = render_text(report)
     assert "widget_uses.widget_id -> widgets.id" in text
@@ -219,6 +275,38 @@ def upgrade():
     manifest["constraints"] = [row for row in manifest["constraints"] if row["table_name"] != "widget_uses"]
     manifest["constraints"][0]["definition"] = "PRIMARY KEY (different_key)"
     _write(manifest_path, json.dumps(manifest))
-    unresolved = {(row["kind"], row["table"]) for row in build_inventory(backend)["unresolved"]}
+    unresolved = {
+        (row["kind"], row["table"])
+        for row in build_inventory(backend)["unresolved"]
+        if "table" in row
+    }
     assert ("missing_schema_table", "widget_uses") in unresolved
     assert ("primary_key_shape_mismatch", "widgets") in unresolved
+
+
+def test_generation_site_keys_ignore_lines_but_detect_generator_references(
+    tmp_path: Path,
+) -> None:
+    backend = tmp_path / "backend"
+    path = backend / "app/defaults.py"
+    source = """
+from uuid import uuid4
+import uuid
+
+def model_column(mapped_column):
+    return mapped_column(default=uuid4)
+
+def dataclass_field(field):
+    return field(default_factory=uuid.uuid4)
+"""
+    _write(path, source)
+    first = scan_generation_sites((backend / "app",), backend)
+    _write(path, "\n\n" + source)
+    shifted = scan_generation_sites((backend / "app",), backend)
+
+    assert len(first) == 2
+    assert {site["usage"] for site in first} == {"reference"}
+    assert {site["classification"] for site in first} == {"unclassified"}
+    assert [site["site_key"] for site in first] == [
+        site["site_key"] for site in shifted
+    ]

@@ -1,10 +1,11 @@
 """Real originating authority mutations atomically append exact assignment work."""
 
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 from sqlalchemy import select
 
+from app.core.identifiers import new_record_id
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.api.assignment_invalidation import ASSIGNMENT_INVALIDATION_EVENT
 from tests.test_tasks import task_client as task_client, task_database_env as task_database_env
@@ -65,6 +66,7 @@ async def test_actor_fanout_publishes_every_page(task_client, monkeypatch, fail_
         f"/api/v1/actors/{s.grant['actor_profile_id']}/suspend",
         headers=auth_headers(), json={"reason": "Complete atomic fanout"},
     )
+    assert response.status_code == (200 if fail_after is None else 503), response.text
     assert len(calls) == 101 and {str(value) for value in calls} == expected
     async with s.sessions() as session:
         events = (await session.scalars(select(OutboxEvent))).all()
@@ -101,7 +103,7 @@ async def _seed_additional_assignments(s, count):
         ))).mappings().one())
         locked = {key: value for key, value in original.items() if key.startswith("locked_")}
         for _ in range(count):
-            task_id, assignment_id = str(uuid4()), str(uuid4())
+            task_id, assignment_id = str(new_record_id()), str(new_record_id())
             draft = original | {"id": task_id, "status": "draft", "assigned_to": None}
             draft.update(dict.fromkeys(locked))
             await session.execute(insert(WorkstreamTask).values(**draft))

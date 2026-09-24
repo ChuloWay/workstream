@@ -55,6 +55,13 @@ def test_every_relational_uuid_reference_uses_the_same_native_type():
     assert checked > 0
 
 
+def test_task_assignee_relationship_uses_native_uuid():
+    assigned_to = Base.metadata.tables["workstream_tasks"].c.assigned_to
+    assert isinstance(assigned_to.type, Uuid) and assigned_to.type.native_uuid
+    assert assigned_to.type.as_uuid is False
+    assert str(assigned_to.type.compile(dialect=postgresql.dialect())) == "UUID"
+
+
 def test_natural_key_classification_has_no_stale_table_exceptions():
     assert NATURAL_PRIMARY_KEYS.keys() <= Base.metadata.tables.keys()
 

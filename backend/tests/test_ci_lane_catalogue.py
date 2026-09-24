@@ -536,6 +536,17 @@ def test_workflow_lane_inventory_matches_catalogue() -> None:
     assert "name: backend-semantic-lane-evidence-${{ steps.identity.outputs.tree_sha }}-attempt-${{ github.run_attempt }}" in source
 
 
+def test_record_identifier_foundation_has_blocking_coverage_floor() -> None:
+    source = (runner.ROOT.parent / ".github/workflows/backend.yml").read_text()
+    step = source.split("      - name: Record identifier foundation coverage\n", 1)[1].split("      - name:", 1)[0]
+    assert "continue-on-error" not in step
+    assert "if:" not in step
+    assert shlex.split(step.split("        run: ", 1)[1]) == [
+        "coverage", "report", "--include=app/core/identifiers.py",
+        "--precision=2", "--fail-under=90",
+    ]
+
+
 def test_project_read_coverage_gate_selects_relocated_proof() -> None:
     """The dedicated gate must run all read proof at its current locations."""
     source = (runner.ROOT.parent / ".github/workflows/backend.yml").read_text()

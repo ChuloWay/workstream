@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import select
 
 from app.core.config import get_settings
+from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from app.main import create_app
 from app.modules.actors.models import ActorIdentityLink
@@ -68,7 +69,7 @@ async def project_client(project_database_env: str) -> AsyncIterator[AsyncClient
             assert link is not None
             session.add(
                 AdminRoleGrant(
-                    id=uuid4(),
+                    id=new_record_id(),
                     target_actor_profile_id=link.actor_profile_id,
                     role="project_manager",
                     scope_type="system",
@@ -120,7 +121,7 @@ async def ensure_access_administrator_bootstrap() -> tuple[UUID, UUID, UUID]:
         )
         if grant is None:
             grant = AdminRoleGrant(
-                id=uuid4(),
+                id=new_record_id(),
                 target_actor_profile_id=link.actor_profile_id,
                 role="access_administrator",
                 scope_type="system",

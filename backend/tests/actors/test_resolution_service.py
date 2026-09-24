@@ -23,10 +23,6 @@ from app.modules.actors.service import (
     UnsupportedSubjectKind,
 )
 from app.modules.actors.api import ServiceIdentity
-from app.schemas.auth import (
-    actor_id_from_external_identity,
-)
-
 from tests.actors.support import ISSUER, verified_token, resolved_actor
 from app.modules.tasks.models import AuditEvent
 
@@ -194,7 +190,7 @@ async def test_deactivated_actor_denies_direct_self_update(actor_database_env: s
 @pytest.fixture
 async def known_service(actor_database_env):
     service_token = verified_token("known-service", kind="service")
-    service_actor_id = actor_id_from_external_identity(ISSUER, service_token.subject)
+    service_actor_id = str(new_record_id())
     async with db_session.get_session_factory()() as session:
         session.add_all(
             [

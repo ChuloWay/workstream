@@ -21,7 +21,7 @@ those separately. References: [RFC 9562](https://www.rfc-editor.org/rfc/rfc9562.
 [Python UUID](https://docs.python.org/3.14/library/uuid.html),
 [PostgreSQL UUID](https://www.postgresql.org/docs/18/datatype-uuid.html).
 
-## Current-source findings
+## Pre-change discovery findings (base before this cutover)
 
 Discovery is based on main after ARCH-03C3. Refresh the inventory before coding;
 the following is an owner map, not a claim that every column has been audited.

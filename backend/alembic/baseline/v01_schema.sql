@@ -7685,7 +7685,7 @@ CREATE TABLE public.workstream_tasks (
     rejection_criteria text,
     deadline_at timestamp with time zone,
     created_by character varying(100) NOT NULL,
-    assigned_to character varying(100),
+    assigned_to uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     locked_guide_source_snapshot_id uuid,
