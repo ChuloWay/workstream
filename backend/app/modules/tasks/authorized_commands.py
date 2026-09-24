@@ -1,5 +1,7 @@
 """Canonical project-authorized task commands with one transaction owner."""
 
+import json
+from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -10,18 +12,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.hashing import canonical_json_hash
 from app.db.errors import integrity_constraint_name
 from app.modules.tasks.api.authorization import (
+    TaskAuthorityDecision,
     TaskAuthorityFacts,
     TaskAuthorityOperation,
     TaskAuthorizationPort,
 )
 from app.modules.tasks.api.task_detail import ContributorTaskDetailRequest, ManagementTaskDetailRequest
-from app.modules.tasks.api.transition_audit import TaskTransitionAuditPort, TaskTransitionFacts
+from app.modules.tasks.api.transition_audit import TaskPolicyLineage, TaskTransitionAuditPort, TaskTransitionFacts
 from app.modules.tasks.models import TaskAssignment, TaskCommandReceipt, WorkstreamTask
 from app.modules.tasks.command_replay import TaskCommandReplay
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.schemas import (
     ContributorTaskLifecycle, ContributorTaskWorkContext, ManagementTaskWorkContext,
     AssignmentResponse,
+    TaskCreate,
     TaskResponse,
     TaskWithAssignmentResponse,
 )
@@ -29,6 +33,7 @@ from app.modules.tasks.service import (
     LOCKED_CONTEXT_REQUIRED_FIELDS,
     TaskAssignmentConflict,
     TaskNotFound,
+    TaskProjectNotReady,
     TaskService,
     TaskTransitionBlocked,
     TaskValidationError,
@@ -90,7 +95,8 @@ class AuthorizedTaskCommands:
         project_id: UUID | None = None,
         idempotency_key: UUID | None = None,
         receipt: TaskCommandReceipt | None = None,
-    ) -> tuple[WorkstreamTask, TaskAssignment | None, UUID]:
+        request_digest: str | None = None,
+    ) -> tuple[WorkstreamTask, TaskAssignment | None, TaskAuthorityDecision]:
         # Match submission creation: TASK/assignment locks precede AUTH locks.
         task = await self._repo.get_task(str(task_id), for_update=True)
         if task is None or (project_id is not None and task.project_id != str(project_id)):
@@ -100,12 +106,106 @@ class AuthorizedTaskCommands:
             task, assignment, operation, reason, idempotency_key,
             self._replay.replay_assignment(receipt, task_id) if receipt else None,
         )
+        if request_digest is not None:
+            facts = replace(facts, request_digest=request_digest,
+                            replay_command_id=self._replay.manager_replay(receipt, operation, task_id, self._actor_id, idempotency_key) if receipt else None)
         handle = await self._authorization.prepare(facts)
         try:
             decision_id = await self._authorization.consume(handle, facts)
             return task, assignment, decision_id
         finally:
             self._authorization.close(handle)
+
+    async def create_task(self, project_id: UUID, payload: TaskCreate, *, idempotency_key: UUID) -> TaskResponse:
+        """Authorize the exact proposed task before creating it in the same transaction."""
+        operation = TaskAuthorityOperation.CREATE
+        async with self._session.begin():
+            receipt, digest, reserved = await self._replay.reserve(
+                self._actor_id, operation, idempotency_key, uuid4(), None,
+                request_value={"project_id": str(project_id), "payload": payload.model_dump(mode="json")},
+            )
+            # A duplicate may address an existing task: keep TASK before AUTH.
+            current = await self._repo.get_task(receipt.task_id, for_update=True) if not reserved else None
+            proposed = WorkstreamTask(id=receipt.task_id, project_id=str(project_id), status="draft",
+                                     created_by=str(self._actor_id), **payload.model_dump())
+            facts = replace(self._facts(proposed, None, operation, None, idempotency_key),
+                            request_digest=digest, replay_command_id=self._replay.manager_replay(receipt, operation, UUID(proposed.id), self._actor_id, idempotency_key))
+            handle = await self._authorization.prepare(facts)
+            try:
+                decision_id = await self._authorization.consume(handle, facts)
+            finally:
+                self._authorization.close(handle)
+            project = await self._contexts._project_contexts.read_project_display(project_id)
+            if project is None or project.id != project_id:
+                raise TaskProjectNotReady("project not found")
+            task = current if current is not None else proposed
+            replayed = self._replay.recover(receipt, digest, self._facts(task, None, operation, None),
+                                           task, None, reserved=reserved)
+            if replayed is not None:
+                return replayed
+            task = await self._repo.add_task(task)
+            await self._record_management(task, operation, decision_id, None, None)
+            response = self._contexts.task_response_for_authority(task, can_manage=True)
+            self._replay.complete(receipt, None, self._facts(task, None, operation, None), response)
+            await self._session.flush()
+        return response
+
+    async def screen(self, task_id: UUID, reason: str | None, *, idempotency_key: UUID) -> TaskResponse:
+        return await self._manage_transition(task_id, TaskAuthorityOperation.SCREEN, reason, idempotency_key)
+
+    async def release(self, task_id: UUID, reason: str | None, *, idempotency_key: UUID) -> TaskResponse:
+        return await self._manage_transition(task_id, TaskAuthorityOperation.RELEASE, reason, idempotency_key)
+
+    async def _manage_transition(
+        self, task_id: UUID, operation: TaskAuthorityOperation, reason: str | None, key: UUID,
+    ) -> TaskResponse:
+        async with self._session.begin():
+            receipt, digest, reserved = await self._replay.reserve(self._actor_id, operation, key, task_id, reason)
+            task, assignment, decision_id = await self._locked_task(
+                task_id, operation, reason, idempotency_key=key, receipt=receipt, request_digest=digest,
+            )
+            replayed = self._replay.recover(receipt, digest, self._facts(task, assignment, operation, reason),
+                                           task, assignment, reserved=reserved)
+            if replayed is not None:
+                return replayed
+            before = task.status
+            target = "screening" if operation is TaskAuthorityOperation.SCREEN else "ready"
+            self._contexts._ensure_transition_allowed(before, target)
+            if operation is TaskAuthorityOperation.SCREEN:
+                context = await self._contexts._load_active_policy_context(task.project_id)
+                self._contexts._validate_task_contract_fields(task)
+                self._contexts._stamp_locked_context(task, context)
+            else:
+                if not reason or not reason.strip():
+                    raise TaskValidationError("release decision reason is required")
+                self._contexts._ensure_locked_context(task)
+                context = await self._contexts._load_locked_task_context(task)
+                self._contexts._validate_installed_plans(context.facts)
+            task.status = target
+            await self._session.flush()
+            await self._record_management(task, operation, decision_id, before, reason)
+            await self._session.flush()
+            await self._session.refresh(task)
+            response = self._contexts.task_response_for_authority(task, can_manage=True)
+            self._replay.complete(receipt, None, self._facts(task, None, operation, reason), response)
+            await self._session.flush()
+        return response
+
+    async def _record_management(
+        self, task: WorkstreamTask, operation: TaskAuthorityOperation,
+        decision_id: TaskAuthorityDecision, before: str | None, reason: str | None,
+    ) -> None:
+        await self._audit.record(TaskTransitionFacts(
+            operation=operation, project_id=UUID(task.project_id), task_id=UUID(task.id),
+            assignment_id=None, actor_profile_id=self._actor_id, authorization_decision_id=decision_id.decision_id,
+            authority=decision_id,
+            from_status=before, to_status=task.status, reason=reason,
+            source_type=task.source_type if operation is TaskAuthorityOperation.CREATE else None,
+            locked_lineage=TaskPolicyLineage.model_validate_json(json.dumps({
+                field: str(getattr(task, field)) if isinstance(getattr(task, field), UUID) else getattr(task, field)
+                for field in TaskPolicyLineage.model_fields}))
+            if operation is not TaskAuthorityOperation.CREATE else None,
+        ))
 
     async def claim(
         self, task_id: UUID, reason: str | None = None, *, idempotency_key: UUID,
@@ -147,7 +247,7 @@ class AuthorizedTaskCommands:
                     )
                 )
                 task.assigned_to = str(self._actor_id)
-                await self._transition(task, assignment, "claimed", decision_id, reason)
+                await self._transition(task, assignment, "claimed", decision_id.decision_id, reason)
                 await self._session.flush()
                 await self._session.refresh(task)
                 response = TaskWithAssignmentResponse(
@@ -198,7 +298,7 @@ class AuthorizedTaskCommands:
                 task,
                 assignment,
                 "in_progress",
-                decision_id,
+                decision_id.decision_id,
                 reason,
                 operator_override=operator_override,
             )

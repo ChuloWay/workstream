@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+from tests.migration_fixtures import current_schema_revision
+
 from uuid import UUID
 
 from alembic import command
@@ -136,7 +138,7 @@ def test_dispatch_activation_preserves_unattempted_rows(
         assert asyncio.run(snapshot(isolated_database_env)) == after
         command.upgrade(config(), "head")
         current = asyncio.run(snapshot(isolated_database_env))
-        assert current["revision"] == "0029_assignment_authority"
+        assert current["revision"] == current_schema_revision()
         assert current["rows"] == after["rows"]
         command.upgrade(config(), "head")
         assert asyncio.run(snapshot(isolated_database_env)) == current

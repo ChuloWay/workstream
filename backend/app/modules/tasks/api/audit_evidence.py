@@ -67,7 +67,10 @@ class AuditTaskEvidence:
             or not isinstance(self.actor_id, str) or not _aware(self.created_at)
             or any(value is not None and not isinstance(value, str) for value in (self.from_status, self.to_status))
             or any(value is not None and not isinstance(value, UUID) for value in (self.assignment_id, self.authorization_decision_id))
-            or (self.assignment_id is None) != (self.authorization_decision_id is None)
+            or (self.event_type in {"TaskCreated", "TaskScreened", "TaskReleased"}
+                and (self.assignment_id is not None or self.authorization_decision_id is None))
+            or (self.event_type not in {"TaskCreated", "TaskScreened", "TaskReleased"}
+                and (self.assignment_id is None) != (self.authorization_decision_id is None))
         ):
             raise ValueError("task evidence facts are invalid")
 

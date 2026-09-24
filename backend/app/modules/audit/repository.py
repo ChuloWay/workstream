@@ -150,6 +150,9 @@ class AuditRepository:
         typed_transition = and_(
             event.auth_source == LIFECYCLE_AUTH_SOURCE,
             event.event_type.in_((
+                LifecycleAuditEventType.TASK_CREATED.value,
+                LifecycleAuditEventType.TASK_SCREENED.value,
+                LifecycleAuditEventType.TASK_RELEASED.value,
                 LifecycleAuditEventType.TASK_CLAIMED.value,
                 LifecycleAuditEventType.TASK_STARTED.value,
                 LifecycleAuditEventType.TASK_START_OVERRIDDEN.value,

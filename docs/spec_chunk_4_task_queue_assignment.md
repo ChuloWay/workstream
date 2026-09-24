@@ -34,14 +34,17 @@ Contributor commands and work context use canonical project authority:
 
 | Surface | Authority |
 |---|---|
+| `POST /api/v1/projects/{project_id}/tasks` | Covered Project Manager; existing project; guide not required for draft |
+| `POST /api/v1/tasks/{task_id}/screen` | Covered Project Manager; draft; approved active guide and complete policy lineage |
+| `POST /api/v1/tasks/{task_id}/release` | Covered Project Manager; screening; frozen policy validation and nonblank decision reason |
 | `POST /api/v1/tasks/{task_id}/claim` | Active same-project Submitter; ready, unassigned task |
 | `POST /api/v1/tasks/{task_id}/start` | Active same-project Submitter; exact own active assignment |
 | `GET /api/v1/tasks/{task_id}/work-context` | Active same-project Submitter; ready unassigned task or exact own assignment |
 | `GET /api/v1/projects/{project_id}/tasks/{task_id}/work-context` | Covered Project Manager; exact route project and task |
 | `POST /api/v1/operations/tasks/{task_id}/start` | System Operator; another contributor's active assignment and nonblank reason |
 
-The older task-management foundation also retains create, detail, screen,
-release, submission-requirements, locked-context and audit reads. Their broader
+Task detail, submission-requirements, locked-context and audit reads retain their
+existing wrappers. Their broader
 replacement and projection contracts remain owned by ARCH-03B/03C; this bounded
 repair does not certify those routes as fully cut over.
 
@@ -391,3 +394,27 @@ routing with enforced non-eager prefork execution. Real PostgreSQL tests prove
 originating publication, rollback and both claim/loss orderings; a real Redis
 and prefork drill exercises production delivery. This does not activate public
 queue APIs, timed contributor leases or voluntary skip.
+
+### Manager readiness commands
+
+Create, screen and release require exactly one UUID `Idempotency-Key`. Header
+validation precedes canonical actor resolution and product SQL; token verification
+and rate controls still apply first. Authority comes from a covering Project
+Manager grant, never token roles or task creation attribution.
+
+Each command commits its task change, AUTH decision, shared lifecycle evidence and
+immutable replay receipt in one transaction. Create binds the project and full
+normalized payload; screen/release bind the task and reason. A retry rechecks live
+authority. An unchanged request returns its original result only while task state
+and locked context still match. Task advancement conflicts; activating a successor
+guide alone does not change the task's frozen policy selection. Separate actors
+and actions have separate replay namespaces. These receipts do not invent an
+assignment for manager work.
+
+`TaskCreated`, `TaskScreened` and `TaskReleased` retain exact task/project/decision
+references without assignment. Creation retains source type; screen/release retain
+complete locked policy references. The internal audit projection exposes its fixed
+scalar fields, including the decision reference, without private payloads.
+
+A new command for an invalid task state is denied by AUTH with 403. A currently
+authorized replay whose task has advanced returns 409 instead of mutating it.

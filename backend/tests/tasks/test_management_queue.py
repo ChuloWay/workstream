@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import select
 
 from app.db import session as db_session
 from app.modules.tasks.api import (
@@ -110,15 +110,15 @@ async def test_management_queue_pagination(task_client, monkeypatch, method):
         assert end.items == () and end.next_cursor is None
         missing = await read(TaskQueueRequest(uuid4()))
         assert missing.items == () and missing.next_cursor is None
-    async with factory() as session, session.begin():
-        await session.execute(delete(WorkstreamTask).where(
-            WorkstreamTask.id.in_([draft["id"], *(row["id"] for row in outsiders)]),
-        ))
+    # A cursor is a position, not a foreign key to a retained task.
+    missing_cursor = replace(first_cursor, task_id=uuid4(), created_at=first_cursor.created_at + timedelta(microseconds=1))
     async with factory() as session:
-        continued = await getattr(TaskRepository(session), method)(replace(request, after=first_cursor))
+        assert await session.get(WorkstreamTask, str(missing_cursor.task_id)) is None
+        continued = await getattr(TaskRepository(session), method)(replace(request, after=missing_cursor))
         assert [item.task_id for item in continued.items] == expected[1:2]
-        empty = await getattr(TaskRepository(session), method)(TaskQueueRequest(UUID(foreign["id"])))
-        assert empty.items == () and empty.next_cursor is None
+        foreign_page = await getattr(TaskRepository(session), method)(TaskQueueRequest(UUID(foreign["id"])))
+        assert {item.task_id for item in foreign_page.items} == {UUID(row["id"]) for row in outsiders}
+
 
 
 @pytest.mark.parametrize("method", READS)

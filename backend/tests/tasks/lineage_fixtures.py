@@ -4,9 +4,15 @@ from app.core.config import get_settings
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.tasks import task_service
+from app.adapters.tasks import task_commands
+from app.adapters.audit import task_transition_audit
+from app.modules.authorization.task_authorization import PreparedTaskAuthorization
+from app.modules.authorization.runtime import ActorKind, ActorStatus, HumanAuthorizationContext, IdentityLinkStatus
+from app.modules.actors.models import ActorIdentityLink
+from sqlalchemy import select
+from uuid import UUID, uuid4
+from tests.project_create_fixtures import grant_fixture_admin_role
 from app.modules.tasks.models import TaskAssignment, WorkstreamTask
-from app.schemas.auth import ActorContext
 
 
 async def seed_started_task_for_artifact_test(connection, params):
@@ -23,18 +29,20 @@ async def seed_started_task_for_artifact_test(connection, params):
         )
         session.add(task)
         await session.flush()
-        actor = ActorContext(
-            actor_id=params["actor"],
-            external_subject=params["actor"],
-            external_issuer="flow-test",
-            roles=("project_manager",),
-            claim_snapshot={},
-            auth_source="dev_mock",
-            is_dev_auth=True,
+        await grant_fixture_admin_role(session, params["actor"], project_id=params["project"])
+        link = await session.scalar(select(ActorIdentityLink).where(
+            ActorIdentityLink.actor_profile_id == params["actor"], ActorIdentityLink.status == "active"))
+        context = HumanAuthorizationContext(
+            actor_profile_id=UUID(params["actor"]), actor_kind=ActorKind.HUMAN,
+            actor_status=ActorStatus.ACTIVE, identity_link_id=UUID(link.id),
+            identity_link_status=IdentityLinkStatus.ACTIVE, request_id=uuid4(), correlation_id=uuid4(),
         )
-        service = task_service(session, settings=get_settings())
-        await service.move_to_screening(actor, task.id, "ART fixture initial screening")
-        await service.release_to_ready(actor, task.id, "ART fixture ready")
+        await session.commit()
+        commands = task_commands(session, authorization=PreparedTaskAuthorization(session, context),
+                                 audit=task_transition_audit(session), actor_profile_id=context.actor_profile_id,
+                                 settings=get_settings())
+        await commands.screen(UUID(task.id), "ART fixture initial screening", idempotency_key=uuid4())
+        await commands.release(UUID(task.id), "ART fixture ready", idempotency_key=uuid4())
         session.add(
             TaskAssignment(
                 id=params["assignment"],

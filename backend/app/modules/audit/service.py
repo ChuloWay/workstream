@@ -92,11 +92,17 @@ class LifecycleAuditParticipant:
             claim_snapshot={},
             auth_source=LIFECYCLE_AUTH_SOURCE,
             is_dev_auth=False,
-            reason=value.task_reason if value.task_reason is not None else value.reason.value,
-            event_payload={"references": references, **(
+            reason=(None if value.event_type.value == "TaskCreated" else
+                    value.task_reason if value.task_reason is not None else value.reason.value),
+            event_payload={"references": references,
+                           **({"source_type": value.source_type} if value.source_type is not None else {}),
+                           **(value.locked_lineage if value.locked_lineage is not None else {}),
+                           **({"manager_authority_facts": value.manager_authority_facts,
+                               "authorization_resource_digest": value.authorization_resource_digest}
+                              if value.manager_authority_facts is not None else {}), **(
                 {"authorization_resource_digest": value.authorization_resource_digest,
                  "assignment_invalidation_facts": value.assignment_invalidation_facts}
-                if value.authorization_resource_digest is not None else {}
+                if value.assignment_invalidation_facts is not None else {}
             )},
             event_domain="legacy_lifecycle",
             event_version=None,

@@ -46,7 +46,6 @@ from app.modules.actors.models import (
     LegacyActorIdentity,
     LegacyWorkflowEligibility,
 )
-from app.modules.projects.api import ProjectDisplayFacts
 from app.modules.projects.models import (
     EffectiveProjectSubmissionArtifactPolicy,
     GuideSourceSnapshot,
@@ -75,7 +74,6 @@ from project_create_fixtures import (
 )
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.submission_composition import build_submission
-from app.modules.tasks.schemas import TaskCreate
 from app.modules.tasks.service import (
     TaskLockedContextInvalid,
     TaskServiceError,
@@ -358,44 +356,6 @@ def task_service_actor(*roles: str) -> ActorContext:
     )
 
 
-async def test_task_service_create_persists_canonical_attribution_and_audit() -> None:
-    actor = task_service_actor("project_manager")
-    session = MagicMock(spec=AsyncSession)
-    session.commit = AsyncMock()
-    session.refresh = AsyncMock()
-    service = task_service(session, settings=get_settings())
-    project = ProjectDisplayFacts(uuid4(), "Project", "project", None)
-    service._project_contexts.read_project_display = AsyncMock(return_value=project)
-    service._repo.add_task = AsyncMock(side_effect=lambda task: task)
-    service._write_task_audit = AsyncMock()
-    response = MagicMock(name="task_response")
-    service._task_response = MagicMock(return_value=response)
-    payload = TaskCreate.model_validate(complete_task_payload())
-
-    result = await service.create_task(actor, str(project.id), payload)
-
-    assert service._repo.add_task.await_args is not None
-    task = service._repo.add_task.await_args.args[0]
-    assert result is response
-    assert isinstance(task, WorkstreamTask)
-    assert task.project_id == str(project.id)
-    assert task.created_by == actor.actor_id
-    assert task.status == "draft"
-    assert task.title == payload.title
-    service._write_task_audit.assert_awaited_once_with(
-        actor,
-        task,
-        event_type="task_created",
-        from_status=None,
-        to_status="draft",
-        reason=None,
-        event_payload={"source_type": payload.source_type},
-    )
-    session.commit.assert_awaited_once_with()
-    session.refresh.assert_awaited_once_with(task)
-    service._task_response.assert_called_once_with(actor, task)
-
-
 async def test_task_service_read_contexts_preserve_visibility_and_operator_scope() -> None:
     actor = task_service_actor("project_manager")
     session = MagicMock(spec=AsyncSession)
@@ -425,65 +385,6 @@ async def test_task_service_read_contexts_preserve_visibility_and_operator_scope
     assert service._load_locked_task_context.await_count == 2
     service._contributor_submission_requirements_response.assert_called_once_with(task, context)
     service._management_locked_context_response.assert_called_once_with(task, context)
-
-
-async def test_task_service_screen_and_release_own_transaction_boundaries() -> None:
-    actor = task_service_actor("project_manager")
-    session = MagicMock(spec=AsyncSession)
-    session.commit = AsyncMock()
-    session.refresh = AsyncMock()
-    service = task_service(session, settings=get_settings())
-    draft_task = MagicMock(spec=WorkstreamTask)
-    draft_task.id = "task-1"
-    draft_task.project_id = "project-1"
-    draft_task.status = "draft"
-    screened_task = MagicMock(spec=WorkstreamTask)
-    screened_task.id = draft_task.id
-    screened_task.project_id = draft_task.project_id
-    screened_task.status = "screening"
-    active_context = MagicMock(name="activated_policy_facts")
-    screen_response = MagicMock(name="screen_response")
-    release_response = MagicMock(name="release_response")
-    service._get_task = AsyncMock(side_effect=(draft_task, screened_task))
-    service._ensure_transition_allowed = MagicMock()
-    service._load_active_policy_context = AsyncMock(return_value=active_context)
-    service._validate_task_contract_fields = MagicMock()
-    service._stamp_locked_context = MagicMock()
-    service._validate_installed_plans = MagicMock()
-    service._change_task_status = AsyncMock()
-    service._ensure_locked_context = MagicMock()
-    service._load_locked_task_context = AsyncMock(return_value=MagicMock())
-    service._task_response = MagicMock(side_effect=(screen_response, release_response))
-
-    assert (
-        await service.move_to_screening(actor, draft_task.id, "screening complete")
-        is screen_response
-    )
-    assert (
-        await service.release_to_ready(actor, screened_task.id, "release approved")
-        is release_response
-    )
-
-    service._stamp_locked_context.assert_called_once_with(draft_task, active_context)
-    assert service._change_task_status.await_args_list[0].args == (
-        actor,
-        draft_task,
-        "screening",
-        "screening complete",
-    )
-    assert service._change_task_status.await_args_list[1].args == (
-        actor,
-        screened_task,
-        "ready",
-        "release approved",
-    )
-    service._ensure_locked_context.assert_called_once_with(screened_task)
-    service._load_locked_task_context.assert_awaited_once_with(screened_task)
-    assert session.commit.await_count == 2
-    assert session.refresh.await_args_list[0].args == (draft_task,)
-    assert session.refresh.await_args_list[1].args == (screened_task,)
-
-
 
 
 async def test_task_service_finalize_requeues_locked_latest_submission(
@@ -1548,7 +1449,7 @@ async def test_task_router_service_errors_use_canonical_request_context(
         raise TaskServiceError("bounded task failure")
 
     cases = [
-        ("create_task", "POST", "/api/v1/projects/project-id/tasks", complete_task_payload()),
+        ("create_task", "POST", f"/api/v1/projects/{uuid4()}/tasks", complete_task_payload()),
         ("get_task", "GET", "/api/v1/tasks/task-id", None),
         (
             "get_task_submission_requirements",
@@ -1557,8 +1458,8 @@ async def test_task_router_service_errors_use_canonical_request_context(
             None,
         ),
         ("get_task_locked_context", "GET", "/api/v1/tasks/task-id/locked-context", None),
-        ("move_to_screening", "POST", "/api/v1/tasks/task-id/screen", None),
-        ("release_to_ready", "POST", "/api/v1/tasks/task-id/release", None),
+        ("screen", "POST", f"/api/v1/tasks/{uuid4()}/screen", None),
+        ("release", "POST", f"/api/v1/tasks/{uuid4()}/release", None),
         ("list_task_submissions", "GET", "/api/v1/tasks/task-id/submissions", None),
         ("get_submission", "GET", "/api/v1/submissions/submission-id", None),
         ("finalize_submission", "POST", "/api/v1/submissions/submission-id/finalize", None),
@@ -1566,7 +1467,10 @@ async def test_task_router_service_errors_use_canonical_request_context(
     ]
 
     for service_method, method, path, payload in cases:
-        monkeypatch.setattr("app.modules.tasks.service.TaskService." + service_method, fail_with_service_error)
+        owner = ("app.modules.tasks.authorized_commands.AuthorizedTaskCommands."
+                 if service_method in {"create_task", "screen", "release"}
+                 else "app.modules.tasks.service.TaskService.")
+        monkeypatch.setattr(owner + service_method, fail_with_service_error)
         response = await task_client.request(
             method,
             path,
@@ -2412,7 +2316,7 @@ async def test_stored_role_metadata_does_not_authorize_task_creation(
     )
 
     assert response.status_code == 403
-    assert "actor lacks required role" in response.json()["detail"]
+    assert response.json()["detail"] == "Task authority denied"
 
 
 
@@ -3162,10 +3066,11 @@ async def test_submitted_task_rejects_earlier_lifecycle_actions_without_new_task
         headers=auth_headers(),
     )
 
-    assert screen.status_code == 409
-    assert release.status_code == 409
-    # Canonical AUTH rejects the stale contributor resource before a TASK
-    # transition can occur; retained management commands still report conflict.
+    assert screen.status_code == 403
+    assert release.status_code == 403
+    assert screen.json()["error"]["code"] == "permission_not_granted"
+    assert release.json()["error"]["code"] == "permission_not_granted"
+    # Canonical AUTH rejects stale manager and contributor resources before TASK writes.
     assert claim.status_code == 403, claim.text
     assert claim.json()["error"]["code"] == "permission_not_granted"
     assert start.status_code == 403, start.text
@@ -4776,7 +4681,8 @@ async def test_invalid_transitions_are_rejected(
         json={"reason": "start"},
     )
 
-    assert release_from_draft.status_code == 409
+    assert release_from_draft.status_code == 403
+    assert release_from_draft.json()["error"]["code"] == "permission_not_granted"
     assert start_from_draft.status_code == 403
     assert start_from_draft.json()["error"]["code"] == "permission_not_granted"
     async with db_session.get_session_factory()() as session:

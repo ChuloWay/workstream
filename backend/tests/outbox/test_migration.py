@@ -1,6 +1,8 @@
 """Forward-only custody migration preserves data or refuses unprovable attempts."""
 
 import asyncio
+from tests.migration_fixtures import current_schema_revision
+
 from pathlib import Path
 from uuid import uuid4
 
@@ -114,7 +116,7 @@ def test_unattempted_events_preserved_without_fabricated_attempts(
         assert asyncio.run(count()) == 0
         command.upgrade(config(), "head")
         assert asyncio.run(snapshot(isolated_database_env)) == {
-            **after, "revision": "0029_assignment_authority",
+            **after, "revision": current_schema_revision(),
         }
 
 

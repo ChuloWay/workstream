@@ -697,14 +697,17 @@ cannot borrow another row. Existing ART materializer/output identities retain
 their separate permissions and allow evidence. No prepared handle crosses a
 commit, I/O, lease wait or message boundary.
 
-Proposed human task actions and existing permission mappings are enumerated in
-the [ARCH-03C manifest](../.commitrail/initiatives/WS-ARCH-001/planning/chunks/WS-ARCH-001-03C-auth-task-readiness.md#proposed-exact-surfaceaction-manifest).
+Human task actions and existing permission mappings are enumerated in
+the [ARCH-03C manifest](../.commitrail/initiatives/WS-ARCH-001/planning/chunks/WS-ARCH-001-03C-auth-task-readiness.md#exact-surfaceaction-manifest).
 In particular, `task.start` uses existing `task.claim` entitlement plus exact
 own-assignment guards; Operator recovery remains the distinct
 `operations.task.start_override` permission with a system-scoped human grant.
 Separate management/operational/audit projections preserve their respective
 permissions rather than switching one action's mapping based on token roles.
-No human role's allowed permission set is broadened by those proposed actions.
+ARCH-03C3 activates `project.task.create`, `project.task.screen` and
+`project.task.release` under existing `project.task.manage`; no new permission or
+broader Project Manager permission set is introduced. Remaining queue, detail
+and projection actions in the manifest are proposed.
 
 The [AUTH-12F4 contract](../.commitrail/initiatives/WS-AUTH-001/planning/chunks/WS-AUTH-001-12F4-submission-policy-approval.md)
 activates exact complete-compilation review-package read and correction under

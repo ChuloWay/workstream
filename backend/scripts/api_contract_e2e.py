@@ -1050,9 +1050,11 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
         audience=flow_audience,
         secret=flow_secret,
     )
+    # Retained task-read wrappers still require this claim; manager mutations
+    # require the separate exact project grant issued below.
     project_reader_token = issue_flow_token(
         f"real-api-project-reader-{run_id}",
-        [],
+        ["project_manager"],
         issuer=flow_issuer,
         audience=flow_audience,
         secret=flow_secret,
@@ -1701,25 +1703,28 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             visible_checker_policy["effective_policy_id"] == visible_effective_policy["id"],
             "active checker policy read returned the wrong effective policy",
         )
-        await request_json(
-            client,
-            "POST",
-            f"/api/v1/projects/{project['id']}/tasks",
-            worker_token,
-            {
-                "title": "Worker must not create task",
-                "description": "Unauthorized task create probe.",
-                "source_type": "manual",
-                "acceptance_criteria": "Must fail.",
-            },
-            403,
-        )
-
+        for denied_token in (
+            worker_token, manager_token, role_claim_only_token, wrong_project_manager_token,
+        ):
+            await request_json(
+                client,
+                "POST",
+                f"/api/v1/projects/{project['id']}/tasks",
+                denied_token,
+                {
+                    "title": "Unauthorized actor must not create task",
+                    "description": "Unauthorized task create probe.",
+                    "source_type": "manual",
+                    "acceptance_criteria": "Must fail.",
+                },
+                403,
+                idempotency_key=str(uuid4()),
+            )
         task = await request_json(
             client,
             "POST",
             f"/api/v1/projects/{project['id']}/tasks",
-            manager_token,
+            project_reader_token,
             {
                 "title": "Real API task",
                 "description": "Exercise the full backend API contract lifecycle over HTTP.",
@@ -1734,14 +1739,16 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
                 "rejection_criteria": "Evidence is missing.",
             },
             201,
+            idempotency_key=str(uuid4()),
         )
-        await request_json(client, "GET", f"/api/v1/tasks/{task['id']}", manager_token)
+        await request_json(client, "GET", f"/api/v1/tasks/{task['id']}", project_reader_token)
         screened = await request_json(
             client,
             "POST",
             f"/api/v1/tasks/{task['id']}/screen",
-            manager_token,
+            project_reader_token,
             {"reason": "real API screening passed"},
+            idempotency_key=str(uuid4()),
         )
         assert screened["locked_guide_version"] == "v1"
         assert screened["locked_review_policy_generation"] == 1
@@ -1753,8 +1760,9 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             client,
             "POST",
             f"/api/v1/tasks/{task['id']}/release",
-            manager_token,
+            project_reader_token,
             {"reason": "real API release"},
+            idempotency_key=str(uuid4()),
         )
 
         canonical_actor = await request_json(
@@ -2073,7 +2081,7 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             client,
             "GET",
             f"/api/v1/tasks/{task['id']}/locked-context",
-            manager_token,
+            project_reader_token,
         )
         ensure(
             locked_context["locked_guide_source_snapshot_hash"].startswith("sha256:"),
@@ -2142,20 +2150,23 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
         )
         ensure(submissions == [], "claim/start unexpectedly created a Submission")
         audit_events = await request_json(
-            client, "GET", f"/api/v1/tasks/{task['id']}/audit-events", manager_token,
+            client, "GET", f"/api/v1/tasks/{task['id']}/audit-events", project_reader_token,
         )
         audit_transitions = {
             (event["event_type"], event["from_status"], event["to_status"])
             for event in audit_events
         }
         assert audit_transitions == {
-            ("task_created", None, "draft"),
-            ("task_status_changed", "draft", "screening"),
-            ("task_status_changed", "screening", "ready"),
+            ("TaskCreated", None, "draft"),
+            ("TaskScreened", "draft", "screening"),
+            ("TaskReleased", "screening", "ready"),
             ("TaskClaimed", "ready", "claimed"),
             ("TaskStarted", "claimed", "in_progress"),
         }
         for event in audit_events:
+            if event["event_type"] in {"TaskCreated", "TaskScreened", "TaskReleased"}:
+                assert event["actor_id"] == project_reader_profile["actor_profile_id"]
+                assert event["event_payload"]["references"]["authorization_decision_id"]
             if event["event_type"] in {"TaskClaimed", "TaskStarted"}:
                 assert event["actor_id"] == canonical_actor["actor_profile_id"]
                 assert event["actor_roles"] == [] and event["claim_snapshot"] == {}

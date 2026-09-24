@@ -6,7 +6,8 @@ from collections.abc import Mapping
 from enum import StrEnum
 import json
 import re
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Literal, Self
+
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -77,6 +78,75 @@ _FACT_VALUES: dict[str, frozenset[str]] = {
 }
 
 
+def _task_policy_lineage(value: Mapping[str, object]) -> dict[str, object]:
+    """AUDIT owns the exact serialized evidence shape independently of TASK."""
+    uuid_fields = {
+        "locked_guide_source_snapshot_id", "locked_effective_project_submission_artifact_policy_id",
+        "locked_pre_submit_checker_policy_id", "locked_post_submit_checker_policy_id",
+        "locked_review_policy_id", "locked_revision_policy_id", "locked_contribution_policy_version_id",
+    }
+    hash_fields = {
+        "locked_guide_source_snapshot_hash", "locked_effective_project_submission_artifact_policy_hash",
+        "locked_pre_submit_checker_bundle_hash", "locked_post_submit_checker_policy_hash",
+        "locked_review_policy_hash", "locked_revision_policy_hash",
+    }
+    generation_fields = {"locked_review_policy_generation", "locked_revision_policy_generation"}
+    version_fields = {"locked_guide_version", "locked_post_submit_checker_policy_version"}
+    if set(value) != uuid_fields | hash_fields | generation_fields | version_fields:
+        raise ValueError("task policy lineage requires exact fields")
+    for key, item in value.items():
+        if key in generation_fields:
+            valid = type(item) is int and item > 0
+        elif not isinstance(item, str):
+            valid = False
+        elif key in uuid_fields:
+            valid = bool(re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", item))
+        elif key in hash_fields:
+            valid = bool(re.fullmatch(r"sha256:[0-9a-f]{64}", item))
+        else:
+            valid = bool(item.strip())
+        if not valid:
+            raise ValueError("task policy lineage value is invalid")
+    encoded = json.dumps(dict(value), allow_nan=False, sort_keys=True, separators=(",", ":"))
+    if len(encoded.encode()) > 8192:
+        raise ValueError("task policy lineage exceeds audit bound")
+    return json.loads(encoded)
+
+
+def _manager_authority_facts(event: LifecycleAuditEventInput) -> dict[str, object]:
+    """Validate AUDIT's bounded serialized copy of the consumed pre-write facts."""
+    from app.core.hashing import canonical_json_hash
+
+    facts = dict(event.manager_authority_facts or {})
+    required = {'resource_type', 'resource_id', 'scope_project_id', 'actor_profile_id',
+                'identity_link_id', 'task_status', 'assigned_to', 'assignment_id',
+                'assignment_contributor_id', 'locked_context_hash', 'reason',
+                'idempotency_key', 'replay_assignment_id', 'request_digest', 'replay_command_id'}
+    if set(facts) != required or len(json.dumps(facts).encode()) > 4096:
+        raise ValueError('invalid bounded manager authority facts')
+    for key in ('resource_id', 'scope_project_id', 'actor_profile_id', 'identity_link_id', 'idempotency_key'):
+        value = facts[key]
+        if not isinstance(value, str) or str(UUID(value)) != value:
+            raise ValueError('invalid manager authority identity')
+    for key in ('locked_context_hash', 'request_digest'):
+        if not isinstance(facts[key], str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', facts[key]):
+            raise ValueError('invalid manager authority digest')
+    if (facts['resource_type'] != 'task_authority'
+            or facts['resource_id'] != str(event.entity_id)
+            or facts['scope_project_id'] != str(event.references.get(LifecycleAuditReferenceKind.PROJECT))
+            or facts['actor_profile_id'] != str(event.actor_id)
+            or facts['task_status'] != (event.from_status or 'draft')
+            or any(facts[key] is not None for key in ('assigned_to', 'assignment_id',
+                   'assignment_contributor_id', 'replay_assignment_id', 'replay_command_id'))
+            or (facts['reason'] is not None and not isinstance(facts['reason'], str))
+            or (facts['reason'] if facts['reason'] and facts['reason'].strip() else None) != event.task_reason):
+        raise ValueError('manager authority does not match event')
+    digest = canonical_json_hash({'resource_context': {key: value for key, value in facts.items() if value is not None}})
+    if digest != event.authorization_resource_digest:
+        raise ValueError('manager authority digest mismatch')
+    return json.loads(json.dumps(facts))
+
+
 class LifecycleAuditEntityType(StrEnum):
     """Closed product-fact namespaces admitted by the shared participant."""
 
@@ -94,6 +164,9 @@ class LifecycleAuditEntityType(StrEnum):
 class LifecycleAuditEventType(StrEnum):
     """Canonical REV/CON lifecycle facts admitted by the shared participant."""
 
+    TASK_CREATED = "TaskCreated"
+    TASK_SCREENED = "TaskScreened"
+    TASK_RELEASED = "TaskReleased"
     TASK_CLAIMED = "TaskClaimed"
     TASK_STARTED = "TaskStarted"
     TASK_START_OVERRIDDEN = "TaskStartOverridden"
@@ -159,6 +232,9 @@ class LifecycleAuditReferenceKind(StrEnum):
 _LIFECYCLE_EVENT_ENTITY = {
     **dict.fromkeys(
         (
+            LifecycleAuditEventType.TASK_CREATED,
+            LifecycleAuditEventType.TASK_SCREENED,
+            LifecycleAuditEventType.TASK_RELEASED,
             LifecycleAuditEventType.TASK_CLAIMED,
             LifecycleAuditEventType.TASK_STARTED,
             LifecycleAuditEventType.TASK_START_OVERRIDDEN,
@@ -213,6 +289,9 @@ _LIFECYCLE_EVENT_ENTITY = {
 }
 
 _LIFECYCLE_EVENT_REQUIRED_REFERENCES = {
+    **dict.fromkeys((LifecycleAuditEventType.TASK_CREATED, LifecycleAuditEventType.TASK_SCREENED,
+                     LifecycleAuditEventType.TASK_RELEASED),
+                    frozenset({LifecycleAuditReferenceKind.AUTHORIZATION_DECISION})),
     LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED: frozenset({
         LifecycleAuditReferenceKind.ASSIGNMENT,
         LifecycleAuditReferenceKind.AUTHORIZATION_DECISION,
@@ -262,10 +341,13 @@ class LifecycleAuditEventInput(BaseModel):
     event_type: LifecycleAuditEventType
     actor_id: UUID
     reason: LifecycleAuditReason
+    source_type: Literal["manual", "markdown_import", "csv_import"] | None = None
+    locked_lineage: dict[str, object] | None = None
     task_reason: Annotated[str, Field(min_length=1, max_length=1000)] | None = None
     from_status: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,29}$")] | None = None
     to_status: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,29}$")] | None = None
     references: dict[LifecycleAuditReferenceKind, UUID] = Field(default_factory=dict)
+    manager_authority_facts: dict[str, object] | None = None
     assignment_invalidation_facts: dict[str, object] | None = None
     authorization_resource_digest: Annotated[str, Field(pattern=r"^sha256:[0-9a-f]{64}$")] | None = None
 
@@ -292,7 +374,12 @@ class LifecycleAuditEventInput(BaseModel):
     @model_validator(mode="after")
     def validate_lifecycle_shape(self) -> Self:
         """Keep state transitions distinct from immutable fact creation."""
-        if (self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED) != (self.authorization_resource_digest is not None):
+        manager = self.event_type in {LifecycleAuditEventType.TASK_CREATED, LifecycleAuditEventType.TASK_SCREENED, LifecycleAuditEventType.TASK_RELEASED}
+        if manager != (self.manager_authority_facts is not None):
+            raise ValueError("manager event requires exact authority facts")
+        if manager:
+            self.manager_authority_facts = _manager_authority_facts(self)
+        if (manager or self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED) != (self.authorization_resource_digest is not None):
             raise ValueError("release requires its exact authorization digest")
         if (self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED) != (self.assignment_invalidation_facts is not None):
             raise ValueError("assignment facts restricted to release")
@@ -304,8 +391,17 @@ class LifecycleAuditEventInput(BaseModel):
                 self.assignment_invalidation_facts = json.loads(encoded)
             except (TypeError, ValueError):
                 raise ValueError("invalid bounded assignment facts") from None
+        if (self.event_type is LifecycleAuditEventType.TASK_CREATED) != (self.source_type is not None):
+            raise ValueError("source type is required only for task creation")
+        if (self.event_type in {LifecycleAuditEventType.TASK_SCREENED, LifecycleAuditEventType.TASK_RELEASED}) != (self.locked_lineage is not None):
+            raise ValueError("manager transition requires complete policy lineage")
+        if self.locked_lineage is not None:
+            self.locked_lineage = _task_policy_lineage(self.locked_lineage)
         if self.entity_type is LifecycleAuditEntityType.TASK:
             expected = {
+                LifecycleAuditEventType.TASK_CREATED: (None, "draft"),
+                LifecycleAuditEventType.TASK_SCREENED: ("draft", "screening"),
+                LifecycleAuditEventType.TASK_RELEASED: ("screening", "ready"),
                 LifecycleAuditEventType.TASK_CLAIMED: ("ready", "claimed"),
                 LifecycleAuditEventType.TASK_STARTED: ("claimed", "in_progress"),
                 LifecycleAuditEventType.TASK_START_OVERRIDDEN: ("claimed", "in_progress"),
@@ -316,13 +412,13 @@ class LifecycleAuditEventInput(BaseModel):
                 raise ValueError("task event requires its exact transition")
             if self.task_reason is not None and not self.task_reason.strip():
                 raise ValueError("task reason must not be blank")
-            if self.event_type is LifecycleAuditEventType.TASK_START_OVERRIDDEN and self.task_reason is None:
+            if self.event_type in {LifecycleAuditEventType.TASK_START_OVERRIDDEN, LifecycleAuditEventType.TASK_RELEASED} and self.task_reason is None:
                 raise ValueError("task start override requires a reason")
         elif self.task_reason is not None:
             raise ValueError("task reason is restricted to task transitions")
         if self.reason is LifecycleAuditReason.STATE_CHANGED:
             if (
-                self.from_status is None
+                (self.from_status is None and self.event_type is not LifecycleAuditEventType.TASK_CREATED)
                 or self.to_status is None
                 or self.from_status == self.to_status
             ):

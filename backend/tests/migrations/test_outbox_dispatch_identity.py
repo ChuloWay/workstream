@@ -1,6 +1,8 @@
 """Real PostgreSQL identity constraint and retained-data proof for 0026."""
 
 import asyncio
+from tests.migration_fixtures import current_schema_revision
+
 from pathlib import Path
 import re
 from uuid import uuid4
@@ -98,7 +100,7 @@ def test_dispatch_identity_head_upgrade_is_repeatable(isolated_database_env, mig
         command.upgrade(config(), 'head')
         asyncio.run(seed(isolated_database_env, IDENTITY))
         before = asyncio.run(snapshot(isolated_database_env))
-        assert before['revision'] == '0029_assignment_authority'
+        assert before['revision'] == current_schema_revision()
         command.upgrade(config(), 'head')
         assert asyncio.run(snapshot(isolated_database_env)) == before
 

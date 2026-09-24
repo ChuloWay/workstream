@@ -7,6 +7,9 @@ from uuid import UUID
 
 
 class TaskAuthorityOperation(StrEnum):
+    CREATE = "project.task.create"
+    SCREEN = "project.task.screen"
+    RELEASE = "project.task.release"
     CLAIM = "task.claim"
     START = "task.start"
     START_OVERRIDE = "operations.task.start_override"
@@ -28,6 +31,17 @@ class TaskAuthorityFacts:
     reason: str | None = None
     idempotency_key: UUID | None = None
     replay_assignment_id: UUID | None = None
+    request_digest: str | None = None
+    replay_command_id: UUID | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TaskAuthorityDecision:
+    """Exact consumed AUTH evidence, including immutable pre-write context JSON."""
+    decision_id: UUID
+    identity_link_id: UUID
+    resource_context_digest: str
+    resource_context_json: str
 
 
 class TaskAuthorityDenied(RuntimeError):
@@ -39,6 +53,6 @@ class TaskAuthorizationPort(Protocol):
 
     async def prepare(self, facts: TaskAuthorityFacts) -> object: ...
 
-    async def consume(self, handle: object, facts: TaskAuthorityFacts) -> UUID: ...
+    async def consume(self, handle: object, facts: TaskAuthorityFacts) -> TaskAuthorityDecision: ...
 
     def close(self, handle: object) -> None: ...

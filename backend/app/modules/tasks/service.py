@@ -33,10 +33,8 @@ from app.modules.checkers.service import (
 )
 from app.modules.tasks.authorization import can_admin_or_task_creator_manage
 from app.modules.tasks.lifecycle import (
-    TASK_STATUS_DRAFT,
     TASK_STATUS_EVALUATION_PENDING,
     TASK_STATUS_READY,
-    TASK_STATUS_SCREENING,
     TASK_STATUS_SUBMITTED,
     InvalidTaskTransition,
     ensure_allowed_transition,
@@ -59,7 +57,6 @@ from app.modules.tasks.schemas import (
     ManagementTaskSubmissionRequirements,
     SubmissionPackagingRequirements,
     SubmissionResponse,
-    TaskCreate,
     ManagementTaskLockedContext,
     OperationalTaskLockedContext,
     AuditTaskLockedContext,
@@ -229,71 +226,6 @@ class TaskService:
         self._session = session
         self._repo = TaskRepository(session)
 
-    async def create_task(
-        self,
-        actor: ActorContext,
-        project_id: str,
-        payload: TaskCreate,
-    ) -> TaskResponse:
-        """Create a draft task under a project.
-
-        Args:
-            actor: Verified Flow actor context for the current request.
-            project_id: Project that owns the task.
-            payload: Draft task fields.
-
-        Returns:
-            Created task response.
-
-        Raises:
-            PermissionDenied: If the actor cannot create tasks.
-            TaskProjectNotReady: If the project id is unknown.
-        """
-        require_any_role(actor, PROJECT_OPERATOR_ROLES)
-        try:
-            project_identity = UUID(project_id)
-        except ValueError as exc:
-            raise TaskProjectNotReady("project not found") from exc
-        if str(project_identity) != project_id:
-            raise TaskProjectNotReady("project not found")
-        project = await self._project_contexts.read_project_display(project_identity)
-        if project is None or project.id != project_identity:
-            raise TaskProjectNotReady("project not found")
-
-        task = WorkstreamTask(
-            id=str(uuid4()),
-            project_id=project_id,
-            source_type=payload.source_type,
-            source_ref=payload.source_ref,
-            source_payload_hash=payload.source_payload_hash,
-            import_batch_id=payload.import_batch_id,
-            external_task_id=payload.external_task_id,
-            title=payload.title,
-            description=payload.description,
-            task_type=payload.task_type,
-            difficulty=payload.difficulty,
-            skill_tags=payload.skill_tags,
-            estimated_time_minutes=payload.estimated_time_minutes,
-            status=TASK_STATUS_DRAFT,
-            acceptance_criteria=payload.acceptance_criteria,
-            rejection_criteria=payload.rejection_criteria,
-            deadline_at=payload.deadline_at,
-            created_by=actor.actor_id,
-        )
-        task = await self._repo.add_task(task)
-        await self._write_task_audit(
-            actor,
-            task,
-            event_type="task_created",
-            from_status=None,
-            to_status=TASK_STATUS_DRAFT,
-            reason=None,
-            event_payload={"source_type": task.source_type},
-        )
-        await self._session.commit()
-        await self._session.refresh(task)
-        return self._task_response(actor, task)
-
     async def get_task(self, actor: ActorContext, task_id: str) -> TaskResponse:
         """Return one task visible to authorized workflow actors.
 
@@ -424,73 +356,6 @@ class TaskService:
         """Read hidden audit references without evidence or policy bodies."""
         task, _context = await self._read_locked_context(project_id, task_id)
         return AuditTaskLockedContext(**self._locked_context_reference_values(task))
-
-    async def move_to_screening(
-        self,
-        actor: ActorContext,
-        task_id: str,
-        reason: str | None = None,
-    ) -> TaskResponse:
-        """Move a draft task to screening and lock active guide context.
-
-        Args:
-            actor: Verified Flow actor context for the current request.
-            task_id: Draft task to screen.
-            reason: Optional transition reason stored in audit.
-
-        Returns:
-            Updated task response.
-
-        Raises:
-            PermissionDenied: If the actor cannot screen tasks.
-            TaskNotFound: If the task id is unknown.
-            TaskProjectNotReady: If active guide or policies are missing.
-            TaskValidationError: If required task fields are incomplete.
-        """
-        require_any_role(actor, PROJECT_OPERATOR_ROLES)
-        task = await self._get_task(task_id, for_update=True)
-        self._ensure_transition_allowed(task.status, TASK_STATUS_SCREENING)
-
-        facts = await self._load_active_policy_context(task.project_id)
-        self._validate_task_contract_fields(task)
-        self._stamp_locked_context(task, facts)
-        await self._change_task_status(actor, task, TASK_STATUS_SCREENING, reason)
-        await self._session.commit()
-        await self._session.refresh(task)
-        return self._task_response(actor, task)
-
-    async def release_to_ready(
-        self,
-        actor: ActorContext,
-        task_id: str,
-        reason: str | None = None,
-    ) -> TaskResponse:
-        """Release a screened task to the ready queue.
-
-        Args:
-            actor: Verified Flow actor context for the current request.
-            task_id: Screened task to release.
-            reason: Optional transition reason stored in audit.
-
-        Returns:
-            Updated task response.
-
-        Raises:
-            PermissionDenied: If the actor cannot release tasks.
-            TaskTransitionBlocked: If locked policy context is incomplete.
-        """
-        require_any_role(actor, PROJECT_OPERATOR_ROLES)
-        task = await self._get_task(task_id, for_update=True)
-        self._ensure_transition_allowed(task.status, TASK_STATUS_READY)
-        if reason is None or not reason.strip():
-            raise TaskValidationError("release decision reason is required")
-        self._ensure_locked_context(task)
-        context = await self._load_locked_task_context(task)
-        self._validate_installed_plans(context.facts)
-        await self._change_task_status(actor, task, TASK_STATUS_READY, reason)
-        await self._session.commit()
-        await self._session.refresh(task)
-        return self._task_response(actor, task)
 
     async def list_task_submissions(
         self,

@@ -32,11 +32,11 @@ class TaskCommandReplay:
 
     async def reserve(
         self, actor_id: UUID, operation: TaskAuthorityOperation, key: UUID,
-        task_id: UUID, reason: str | None,
+        task_id: UUID, reason: str | None, *, request_value: dict | None = None,
     ) -> tuple[TaskCommandReceipt, str, bool]:
         if not isinstance(key, UUID):
             raise ValueError("task command requires an idempotency UUID")
-        digest = canonical_json_hash({"task_id": str(task_id), "reason": reason})
+        digest = canonical_json_hash(request_value if request_value is not None else {"task_id": str(task_id), "reason": reason})
         inserted_id = uuid4()
         receipt_id = await self._session.scalar(
             insert(TaskCommandReceipt).values(
@@ -52,6 +52,18 @@ class TaskCommandReplay:
         if receipt is None:
             raise RuntimeError("task command reservation disappeared")
         return receipt, digest, receipt_id == inserted_id
+
+    @staticmethod
+    def manager_replay(
+        receipt: TaskCommandReceipt, operation: TaskAuthorityOperation, task_id: UUID,
+        actor_id: UUID, key: UUID | None,
+    ) -> UUID | None:
+        """The namespace lookup, never request input, supplies post-state admission."""
+        if (receipt.status == "committed" and receipt.action_id == operation.value
+                and receipt.task_id == str(task_id) and receipt.actor_profile_id == str(actor_id)
+                and key is not None and receipt.idempotency_key == key):
+            return receipt.id
+        return None
 
     @staticmethod
     def replay_assignment(receipt: TaskCommandReceipt, task_id: UUID) -> UUID | None:
@@ -72,6 +84,18 @@ class TaskCommandReplay:
             if reserved:
                 return None
             raise TaskReplayConflict("idempotency_pending")
+        if facts.operation in {TaskAuthorityOperation.CREATE, TaskAuthorityOperation.SCREEN, TaskAuthorityOperation.RELEASE}:
+            try:
+                response = TaskResponse.model_validate(receipt.response)
+            except ValidationError as exc:
+                raise TaskReplayConflict("task_replay_state_changed") from exc
+            if (receipt.assignment_id is not None or receipt.contributor_id is not None
+                    or receipt.locked_context_hash != facts.locked_context_hash
+                    or response.id != task.id or response.project_id != task.project_id
+                    or response.status != task.status or assignment is not None
+                    or task.assigned_to is not None):
+                raise TaskReplayConflict("task_replay_state_changed")
+            return response
         if (
             assignment is None or assignment.status != "active"
             or receipt.assignment_id != assignment.id
@@ -100,14 +124,14 @@ class TaskCommandReplay:
 
     @staticmethod
     def complete(
-        receipt: TaskCommandReceipt, assignment: TaskAssignment, facts: TaskAuthorityFacts,
+        receipt: TaskCommandReceipt, assignment: TaskAssignment | None, facts: TaskAuthorityFacts,
         response: TaskResponse | TaskWithAssignmentResponse,
     ) -> None:
         """Stage the result alongside the assignment, transition and evidence."""
         if receipt.status != "pending":
             raise RuntimeError("task command receipt already completed")
-        receipt.assignment_id = assignment.id
-        receipt.contributor_id = assignment.contributor_id
+        receipt.assignment_id = assignment.id if assignment else None
+        receipt.contributor_id = assignment.contributor_id if assignment else None
         receipt.locked_context_hash = facts.locked_context_hash
         receipt.response = response.model_dump(mode="json")
         receipt.status = "committed"

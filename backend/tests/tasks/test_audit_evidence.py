@@ -119,7 +119,7 @@ async def test_task_evidence_project_scope(task_client):
             assert (await session.get(WorkstreamTask, task["id"])).status == status
             page = await read_once(session, request(project, task))
             assert page.project_id == UUID(project["id"]) and page.task_id == UUID(task["id"])
-            assert page.items and page.items[0].event_type == "task_created"
+            assert page.items and page.items[0].event_type == "TaskCreated"
         for value in (request(project, outsider), AuditTaskEvidenceRequest(uuid4(), UUID(tasks["draft"]["id"])),
                       AuditTaskEvidenceRequest(UUID(project["id"]), uuid4())):
             assert await read_once(session, value) is None
@@ -137,7 +137,9 @@ async def test_task_evidence_project_move(task_client):
             assert row.status == "draft"
             row.project_id = other["id"]
         assert await read_once(reader, request(project, task)) is None
-        assert (await read_once(reader, request(other, task))).items[0].event_type == "task_created"
+        # A moved draft cannot reattribute its immutable creation decision.
+        with pytest.raises(TaskEvidenceInvalid):
+            await read_once(reader, request(other, task))
 
 
 async def test_task_evidence_pagination(task_client):

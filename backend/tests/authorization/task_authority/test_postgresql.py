@@ -102,12 +102,14 @@ async def test_real_project_grant_allows_exact_task_authority(admin_access):
         async with session.begin():
             handle = await authority.prepare(exact)
             decision = await authority.consume(handle, exact)
-        row = await session.get(AuditEvent, str(decision))
+        row = await session.get(AuditEvent, str(decision.decision_id))
+        assert decision.identity_link_id == request_context.identity_link_id
         assert row.matched_grant_id == grant_id
         assert row.action_id == "task.claim" and row.permission_id == "task.claim"
         assert row.project_id == str(project)
         assert row.after_facts["allowed"] is True
         assert row.after_facts["resource_context_digest"].startswith("sha256:")
+        assert decision.resource_context_digest == row.after_facts["resource_context_digest"]
 
 
 @pytest.mark.asyncio

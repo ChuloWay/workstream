@@ -44,10 +44,13 @@ def test_reconciler_migration_preserves_records(isolated_database_env, migration
             asyncio.run(seed(isolated_database_env, IDENTITY))
         stable = asyncio.run(snapshot(isolated_database_env))
         command.upgrade(config(), "head")
-        assert asyncio.run(snapshot(isolated_database_env)) == stable
+        head = asyncio.run(snapshot(isolated_database_env))
+        assert (head["actors"], head["links"]) == (stable["actors"], stable["links"])
+        command.upgrade(config(), "head")
+        assert asyncio.run(snapshot(isolated_database_env)) == head
         with pytest.raises(RuntimeError, match="cannot be downgraded"):
             asyncio.run(run_guarded_revision_downgrade(isolated_database_env, REVISION))
-        assert asyncio.run(snapshot(isolated_database_env)) == stable
+        assert asyncio.run(snapshot(isolated_database_env)) == head
 
 
 async def retained_release(url):

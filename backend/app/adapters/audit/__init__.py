@@ -27,7 +27,16 @@ class _TaskTransitionAudit:
         self._participant = LifecycleAuditParticipant(session)
 
     async def record(self, facts: TaskTransitionFacts) -> None:
+        authority_facts = json.loads(facts.authority.resource_context_json) if facts.authority else None
+        if facts.authority and (
+            facts.authority.decision_id != facts.authorization_decision_id
+            or authority_facts.get("identity_link_id") != str(facts.authority.identity_link_id)
+        ):
+            raise ValueError("task authority evidence mismatch")
         event_type = {
+            TaskAuthorityOperation.CREATE: LifecycleAuditEventType.TASK_CREATED,
+            TaskAuthorityOperation.SCREEN: LifecycleAuditEventType.TASK_SCREENED,
+            TaskAuthorityOperation.RELEASE: LifecycleAuditEventType.TASK_RELEASED,
             TaskAuthorityOperation.CLAIM: LifecycleAuditEventType.TASK_CLAIMED,
             TaskAuthorityOperation.START: LifecycleAuditEventType.TASK_STARTED,
             TaskAuthorityOperation.START_OVERRIDE: LifecycleAuditEventType.TASK_START_OVERRIDDEN,
@@ -37,10 +46,14 @@ class _TaskTransitionAudit:
             event_type=event_type, from_status=facts.from_status, to_status=facts.to_status,
             actor_id=facts.actor_profile_id, reason=LifecycleAuditReason.STATE_CHANGED,
             task_reason=facts.reason if facts.reason and facts.reason.strip() else None,
+            source_type=facts.source_type,
+            manager_authority_facts=authority_facts,
+            authorization_resource_digest=facts.authority.resource_context_digest if facts.authority else None,
+            locked_lineage=facts.locked_lineage.model_dump(mode="json") if facts.locked_lineage else None,
             references={
                 LifecycleAuditReferenceKind.PROJECT: facts.project_id,
                 LifecycleAuditReferenceKind.TASK: facts.task_id,
-                LifecycleAuditReferenceKind.ASSIGNMENT: facts.assignment_id,
+                **({LifecycleAuditReferenceKind.ASSIGNMENT: facts.assignment_id} if facts.assignment_id else {}),
                 LifecycleAuditReferenceKind.AUTHORIZATION_DECISION: facts.authorization_decision_id,
             },
         ))
