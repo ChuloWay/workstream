@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from sqlalchemy import text
 
+from app.core.identifiers import new_record_id
 from app.adapters.auth import (
     artifact_policy_projection_authorization,
     guide_sufficiency_projection_authorization,
@@ -46,7 +47,7 @@ from ..helpers import (
 
 async def request_compilation(factory, values, compilation_context, predecessor_id):
     """Exercise real human request authority using a narrowly seeded project manager."""
-    human, link = uuid4(), uuid4()
+    human, link = new_record_id(), new_record_id()
     async with factory() as session, session.begin():
         await session.execute(
             text(
@@ -77,7 +78,9 @@ async def request_compilation(factory, values, compilation_context, predecessor_
     )
     attempt_identity = identity(compilation_context)
     all_facts = asdict(
-        persistence_facts(values, uuid4(), attempt_identity, predecessor_id=predecessor_id)
+        persistence_facts(
+            values, new_record_id(), attempt_identity, predecessor_id=predecessor_id
+        )
     )
     facts = ProjectGuideCompilationRequestFacts(
         **{

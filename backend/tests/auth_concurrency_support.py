@@ -1,7 +1,7 @@
 """AUTH test ordering and fresh PostgreSQL activity observation, not authority."""
 
 import asyncio
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 from httpx import AsyncClient, Response
 import pytest
@@ -58,7 +58,7 @@ async def ordered_control_requests(
     """Order two real requests; preserve hook failures and finish owned tasks."""
     original_lock_control = AdminAuthorizationRepository.lock_control
     first_locked = asyncio.Event()
-    waiter_name = f"auth-ordered-{uuid4().hex}"
+    waiter_name = f"auth-ordered-{new_record_id().hex}"
     hook_failures: list[Exception] = []
     tasks: list[asyncio.Task] = []
 

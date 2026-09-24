@@ -3,9 +3,8 @@
 from dataclasses import dataclass
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from sqlalchemy import select
-
 from app.core.hashing import canonical_json_hash
+from app.core.identifiers import new_record_id
 from app.interfaces.project_agents import ProjectGuideCorrectionFeedback
 from app.modules.authorization.api.guide_proposal_review import (
     GuideProposalAuthorityReceipt,
@@ -61,7 +60,6 @@ async def request_proposal_correction(session, authorization, command, *, actor,
 async def stage_proposal_correction(session, command, actor, locator, prepared, *, locked=None):
     """Use an already-prepared capability; no product writes or nested authority."""
     target = command.target
-    operation_id = locator.operation_id
     repository = GuideProposalRepository(session)
     request_digest = canonical_json_hash(command.model_dump(mode="json"))
     if not isinstance(prepared, PreparedGuideProposalOperation):
@@ -73,12 +71,8 @@ async def stage_proposal_correction(session, command, actor, locator, prepared, 
         ))
     if locked.target != target:
         raise GuideProposalError("proposal_stale")
-    existing = await session.scalar(
-        select(ProjectGuideProposalCorrection)
-        .where(
-            ProjectGuideProposalCorrection.operation_id == operation_id,
-        )
-        .with_for_update()
+    existing = await repository.correction_for_actor_key(
+        actor.actor_profile_id, command.idempotency_key
     )
     if existing is not None:
         receipt = await _replay_correction(
@@ -87,7 +81,7 @@ async def stage_proposal_correction(session, command, actor, locator, prepared, 
         return StagedGuideCorrection(locked, receipt, None, None)
     if not locked.current:
         raise GuideProposalError("proposal_stale")
-    successor_id = uuid5(operation_id, "setup-successor")
+    operation_id, successor_id = new_record_id(), new_record_id()
     feedback = ProjectGuideCorrectionFeedback(
         operation_id=operation_id,
         predecessor_compilation_id=target.compilation_id,

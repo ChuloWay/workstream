@@ -20,7 +20,8 @@ from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest  # type: ignore[import-not-found]
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -322,7 +323,7 @@ async def test_controlled_endpoint_provisions_review_and_adapter_target_identiti
         for identity in identities:
             response = await client.post(
                 "/api/v1/service-actors",
-                headers={**headers, "Idempotency-Key": str(uuid4())},
+                headers={**headers, "Idempotency-Key": str(new_record_id())},
                 json={
                     "service_identity": identity.value,
                     "subject": f"xint003-02c:{identity.value}",
@@ -520,13 +521,13 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
         }
         unprovisioned_service = await client.post(
             "/api/v1/service-actors",
-            headers={**service_headers, "Idempotency-Key": str(uuid4())},
+            headers={**service_headers, "Idempotency-Key": str(new_record_id())},
             json=payload,
         )
         assert unprovisioned_service.status_code == 403
         assert unprovisioned_service.json()["error"]["code"] == "service_actor_not_provisioned"
         assert await service_state(ServiceIdentity.ARTIFACT_VERIFIER) is None
-        key = str(uuid4())
+        key = str(new_record_id())
         created = await client.post(
             "/api/v1/service-actors",
             headers={**admin_headers, "Idempotency-Key": key},
@@ -570,7 +571,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
         assert state[11] is None
         service_human_path_denial = await client.post(
             "/api/v1/service-actors",
-            headers={**service_headers, "Idempotency-Key": str(uuid4())},
+            headers={**service_headers, "Idempotency-Key": str(new_record_id())},
             json=payload,
         )
         assert service_human_path_denial.status_code == 403
@@ -629,7 +630,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
 
         fixed_identity_conflict = await client.post(
             "/api/v1/service-actors",
-            headers={**admin_headers, "Idempotency-Key": str(uuid4())},
+            headers={**admin_headers, "Idempotency-Key": str(new_record_id())},
             json=payload | {"subject": "another-subject"},
         )
         assert fixed_identity_conflict.status_code == 409
@@ -639,7 +640,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
         )
         subject_conflict = await client.post(
             "/api/v1/service-actors",
-            headers={**admin_headers, "Idempotency-Key": str(uuid4())},
+            headers={**admin_headers, "Idempotency-Key": str(new_record_id())},
             json=payload | {"service_identity": ServiceIdentity.ARTIFACT_PUT_RESOLVER.value},
         )
         assert subject_conflict.status_code == 409
@@ -648,7 +649,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
 
         denied = await client.post(
             "/api/v1/service-actors",
-            headers={**ordinary_headers, "Idempotency-Key": str(uuid4())},
+            headers={**ordinary_headers, "Idempotency-Key": str(new_record_id())},
             json=payload | {"service_identity": ServiceIdentity.ARTIFACT_PUT_RESOLVER.value},
         )
         assert denied.status_code == 403
@@ -656,7 +657,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
         for kind, headers in nonhuman_headers.items():
             unsupported = await client.post(
                 "/api/v1/service-actors",
-                headers={**headers, "Idempotency-Key": str(uuid4())},
+                headers={**headers, "Idempotency-Key": str(new_record_id())},
                 json=payload | {"service_identity": ServiceIdentity.ARTIFACT_PUT_RESOLVER.value},
             )
             assert unsupported.status_code == 403
@@ -666,7 +667,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
         rejected_reason = "private-" + "y" * 520
         invalid = await client.post(
             "/api/v1/service-actors",
-            headers={**admin_headers, "Idempotency-Key": str(uuid4())},
+            headers={**admin_headers, "Idempotency-Key": str(new_record_id())},
             json=payload | {"subject": rejected_subject, "reason": rejected_reason},
         )
         assert invalid.status_code == 422
@@ -675,7 +676,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
         whitespace_subject = " private-service-subject "
         whitespace = await client.post(
             "/api/v1/service-actors",
-            headers={**admin_headers, "Idempotency-Key": str(uuid4())},
+            headers={**admin_headers, "Idempotency-Key": str(new_record_id())},
             json=payload
             | {
                 "service_identity": ServiceIdentity.ARTIFACT_PUT_RESOLVER.value,
@@ -687,7 +688,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
         invalid_identity = "private-unknown-service-identity"
         unknown = await client.post(
             "/api/v1/service-actors",
-            headers={**admin_headers, "Idempotency-Key": str(uuid4())},
+            headers={**admin_headers, "Idempotency-Key": str(new_record_id())},
             json=payload | {"service_identity": invalid_identity},
         )
         assert unknown.status_code == 422
@@ -711,7 +712,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
             assert service_denial.json()["error"]["code"] == expected_code
         assert await service_state(ServiceIdentity.ARTIFACT_VERIFIER) == state
 
-        race_key = str(uuid4())
+        race_key = str(new_record_id())
         scheduler_payload = payload | {
             "service_identity": ServiceIdentity.ARTIFACT_SCHEDULER.value,
             "subject": "auth09b-scheduler",
@@ -722,7 +723,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
         assert [response.status_code for response in same_replays] == [201, 201]
         assert same_replays[0].json() == same_replays[1].json()
 
-        drift_key = str(uuid4())
+        drift_key = str(new_record_id())
         materializer_payload = payload | {
             "service_identity": ServiceIdentity.ARTIFACT_MATERIALIZER.value,
             "subject": "auth09b-materializer-a",
@@ -747,8 +748,8 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
         }
         fixed_race = await run_reservation_race(
             (
-                (output_payload, str(uuid4())),
-                (output_payload | {"subject": "auth09b-output-b"}, str(uuid4())),
+                (output_payload, str(new_record_id())),
+                (output_payload | {"subject": "auth09b-output-b"}, str(new_record_id())),
             )
         )
         assert sorted(response.status_code for response in fixed_race) == [201, 409]
@@ -768,7 +769,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
                         "service_identity": ServiceIdentity.ARTIFACT_BINDING.value,
                         "subject": shared_subject,
                     },
-                    str(uuid4()),
+                    str(new_record_id()),
                 ),
                 (
                     payload
@@ -776,7 +777,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
                         "service_identity": ServiceIdentity.ARTIFACT_GUIDE_READER.value,
                         "subject": shared_subject,
                     },
-                    str(uuid4()),
+                    str(new_record_id()),
                 ),
             )
         )
@@ -797,7 +798,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
             "service_identity": failure_identity.value,
             "subject": "auth09b-evidence-retry",
         }
-        failure_key = str(uuid4())
+        failure_key = str(new_record_id())
         before_failure = await authority_counts()
         original_add_authority_event = AuditService.add_authority_event
 
@@ -830,7 +831,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
             "service_identity": ServiceIdentity.ARTIFACT_PUT_RESOLVER.value,
             "subject": "auth09b-commit-retry",
         }
-        commit_key = str(uuid4())
+        commit_key = str(new_record_id())
         before_commit_failure = await authority_counts()
         original_commit = AsyncSession.commit
         fail_next_commit = True
@@ -867,7 +868,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
         }
         setup_created = await client.post(
             "/api/v1/service-actors",
-            headers={**admin_headers, "Idempotency-Key": str(uuid4())},
+            headers={**admin_headers, "Idempotency-Key": str(new_record_id())},
             json=setup_payload,
         )
         assert setup_created.status_code == 201, setup_created.text
@@ -895,7 +896,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
         app.state.auth_verifier = CanonicalIssuerUnavailable()
         unavailable = await client.post(
             "/api/v1/service-actors",
-            headers={**admin_headers, "Idempotency-Key": str(uuid4())},
+            headers={**admin_headers, "Idempotency-Key": str(new_record_id())},
             json=payload,
         )
         app.state.auth_verifier = verifier
@@ -1096,7 +1097,7 @@ async def test_service_actor_provisioning_failure_and_authority_races_are_atomic
         assert (await run_admin_bootstrap(first_id, execute=True))[0] == 0
         second_grant = await client.post(
             "/api/v1/admin-role-grants",
-            headers={**first_headers, "Idempotency-Key": str(uuid4())},
+            headers={**first_headers, "Idempotency-Key": str(new_record_id())},
             json={
                 "target_actor_profile_id": str(second_id),
                 "role": "access_administrator",
@@ -1130,7 +1131,7 @@ async def test_service_actor_provisioning_failure_and_authority_races_are_atomic
         original_add_authority_event = AuditService.add_authority_event
         original_complete = AuthorityIdempotencyRepository.complete
         for identity, subject, failed_event, fail_completion in failure_cases:
-            key = str(uuid4())
+            key = str(new_record_id())
             payload = {
                 "service_identity": identity.value,
                 "subject": subject,
@@ -1196,7 +1197,7 @@ async def test_service_actor_provisioning_failure_and_authority_races_are_atomic
             "subject": same_pair_subject,
             "reason": "Serialize one exact binding across distinct request keys",
         }
-        same_pair_keys = (str(uuid4()), str(uuid4()))
+        same_pair_keys = (str(new_record_id()), str(new_record_id()))
         original_reserve = AuthorityIdempotencyRepository.reserve
         reservation_ready = asyncio.Event()
         reservation_arrivals = 0
@@ -1275,7 +1276,7 @@ async def test_service_actor_provisioning_failure_and_authority_races_are_atomic
         assert first_grant_id is not None
         crossed_identity = ServiceIdentity.ARTIFACT_MATERIALIZER
         crossed_subject = "auth09b-crossed-revocation"
-        crossed_key = str(uuid4())
+        crossed_key = str(new_record_id())
         crossed_payload = {
             "service_identity": crossed_identity.value,
             "subject": crossed_subject,
@@ -1304,7 +1305,7 @@ async def test_service_actor_provisioning_failure_and_authority_races_are_atomic
                     ),
                     client.post(
                         f"/api/v1/admin-role-grants/{first_grant_id}/revoke",
-                        headers={**second_headers, "Idempotency-Key": str(uuid4())},
+                        headers={**second_headers, "Idempotency-Key": str(new_record_id())},
                         json={"reason": "Revoke while service provisioning is queued"},
                     ),
                 ),
@@ -1550,7 +1551,7 @@ async def test_actor_profile_lifecycle_real_postgres_matrix(
 
         provisioned_service = await client.post(
             "/api/v1/service-actors",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={
                 "service_identity": ServiceIdentity.ARTIFACT_VERIFIER.value,
                 "subject": "auth09d-a-service-target",
@@ -1562,7 +1563,7 @@ async def test_actor_profile_lifecycle_real_postgres_matrix(
         service_before = await profile_state(service_target_id)
         service_suspend = await client.post(
             f"/api/v1/actors/{service_target_id}/suspend",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Suspend fixed service target"},
         )
         assert service_suspend.status_code == 200, service_suspend.text
@@ -1572,7 +1573,7 @@ async def test_actor_profile_lifecycle_real_postgres_matrix(
         assert service_suspended[10:] == service_before[10:]
         service_reactivate = await client.post(
             f"/api/v1/actors/{service_target_id}/reactivate",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Reactivate fixed service target"},
         )
         assert service_reactivate.status_code == 200, service_reactivate.text
@@ -1583,7 +1584,7 @@ async def test_actor_profile_lifecycle_real_postgres_matrix(
         assert service_active[10:] == service_before[10:]
         service_deactivate = await client.post(
             f"/api/v1/actors/{service_target_id}/deactivate",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Terminally deactivate fixed service target"},
         )
         assert service_deactivate.status_code == 200, service_deactivate.text
@@ -1684,7 +1685,7 @@ async def test_actor_profile_lifecycle_real_postgres_matrix(
         failed_keys: list[str] = []
         for owner, attribute, original, failure in failure_stages:
             before_failure = await lifecycle_atomic_state(failure_target)
-            failure_key = str(uuid4())
+            failure_key = str(new_record_id())
             failed_keys.append(failure_key)
             monkeypatch.setattr(owner, attribute, failure)
             try:
@@ -1723,35 +1724,35 @@ async def test_actor_profile_lifecycle_real_postgres_matrix(
         assert reused_failed_key.status_code == 200, reused_failed_key.text
         restored_failure_target = await client.post(
             f"/api/v1/actors/{failure_target}/reactivate",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Restore failure matrix target"},
         )
         assert restored_failure_target.status_code == 200, restored_failure_target.text
 
         missing = await client.post(
-            f"/api/v1/actors/{uuid4()}/suspend",
-            headers={**headers["ordinary"], "Idempotency-Key": str(uuid4())},
+            f"/api/v1/actors/{new_record_id()}/suspend",
+            headers={**headers["ordinary"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "must not disclose the target"},
         )
         assert missing.status_code == 403
         assert missing.json()["error"]["code"] == "permission_not_granted"
         authorized_missing = await client.post(
-            f"/api/v1/actors/{uuid4()}/suspend",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            f"/api/v1/actors/{new_record_id()}/suspend",
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "authorized target lookup"},
         )
         assert authorized_missing.status_code == 404
         assert authorized_missing.json()["error"]["code"] == "actor_not_found"
         self_denial = await client.post(
             f"/api/v1/actors/{profiles['admin']}/suspend",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "self suspension must fail"},
         )
         assert self_denial.status_code == 403
         assert self_denial.json()["error"]["code"] == "resource_guard_denied"
         self_deactivate = await client.post(
             f"/api/v1/actors/{profiles['admin']}/deactivate",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "self deactivation must fail"},
         )
         assert self_deactivate.status_code == 403
@@ -1759,7 +1760,7 @@ async def test_actor_profile_lifecycle_real_postgres_matrix(
 
         delegated = await client.post(
             "/api/v1/admin-role-grants",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={
                 "target_actor_profile_id": str(profiles["ordinary"]),
                 "role": "access_administrator",
@@ -1769,7 +1770,7 @@ async def test_actor_profile_lifecycle_real_postgres_matrix(
             },
         )
         assert delegated.status_code == 201, delegated.text
-        authority_replay_key = str(uuid4())
+        authority_replay_key = str(new_record_id())
         delegated_mutation = await client.post(
             f"/api/v1/actors/{profiles['replay_target']}/suspend",
             headers={**headers["ordinary"], "Idempotency-Key": authority_replay_key},
@@ -1778,7 +1779,7 @@ async def test_actor_profile_lifecycle_real_postgres_matrix(
         assert delegated_mutation.status_code == 200, delegated_mutation.text
         disable_delegate = await client.post(
             f"/api/v1/actors/{profiles['ordinary']}/suspend",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Temporarily remove caller authority"},
         )
         assert disable_delegate.status_code == 200, disable_delegate.text
@@ -1793,14 +1794,14 @@ async def test_actor_profile_lifecycle_real_postgres_matrix(
         assert await profile_state(profiles["ordinary"]) == delegate_disabled_state
         restore_delegate = await client.post(
             f"/api/v1/actors/{profiles['ordinary']}/reactivate",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Restore delegated administrator"},
         )
         assert restore_delegate.status_code == 200, restore_delegate.text
 
         target_before = await profile_state(profiles["target"])
         reason = "  Investigate bounded lifecycle access  "
-        suspend_key = str(uuid4())
+        suspend_key = str(new_record_id())
         original_add_event = AuditService.add_authority_event
 
         async def fail_lifecycle_success(service, event):
@@ -1848,7 +1849,7 @@ async def test_actor_profile_lifecycle_real_postgres_matrix(
         assert mismatch.status_code == 409
         assert mismatch.json()["error"]["code"] == "idempotency_mismatch"
 
-        conflict_key = str(uuid4())
+        conflict_key = str(new_record_id())
         conflict = await client.post(
             f"/api/v1/actors/{profiles['target']}/suspend",
             headers={**headers["admin"], "Idempotency-Key": conflict_key},
@@ -1894,13 +1895,13 @@ async def test_actor_profile_lifecycle_real_postgres_matrix(
 
         deactivated = await client.post(
             f"/api/v1/actors/{profiles['target']}/deactivate",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Terminal security response"},
         )
         assert deactivated.status_code == 200, deactivated.text
         terminal = await client.post(
             f"/api/v1/actors/{profiles['target']}/reactivate",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "must remain terminal"},
         )
         assert terminal.status_code == 409
@@ -2181,7 +2182,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_matrix(
             final_key = ""
             for owner, attribute, original, failure in stages:
                 before = await atomic_state(failure_target)
-                final_key = str(uuid4())
+                final_key = str(new_record_id())
                 monkeypatch.setattr(owner, attribute, failure)
                 try:
                     response = await client.post(
@@ -2219,8 +2220,8 @@ async def test_actor_identity_link_lifecycle_real_postgres_matrix(
         )
         assert reactivate_after_failures.status_code == 200, reactivate_after_failures.text
 
-        missing_link = uuid4()
-        private_missing_key = str(uuid4())
+        missing_link = new_record_id()
+        private_missing_key = str(new_record_id())
         private_missing = await client.post(
             f"/api/v1/actor-identity-links/{missing_link}/revoke",
             headers={**headers["ordinary"], "Idempotency-Key": private_missing_key},
@@ -2229,7 +2230,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_matrix(
         assert private_missing.status_code == 403
         assert private_missing.json()["error"]["code"] == "permission_not_granted"
         assert await idempotency_count(private_missing_key) == 0
-        authorized_missing_key = str(uuid4())
+        authorized_missing_key = str(new_record_id())
         missing_caller_before = await actor_link_state(profiles["admin"])
         missing_events_before = await link_authorization_events(missing_link)
         authorized_missing = await client.post(
@@ -2254,7 +2255,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_matrix(
                 None,
             ),
         )
-        self_key = str(uuid4())
+        self_key = str(new_record_id())
         self_revoke = await client.post(
             f"/api/v1/actor-identity-links/{links['admin']}/revoke",
             headers={**headers["admin"], "Idempotency-Key": self_key},
@@ -2266,7 +2267,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_matrix(
 
         target_before = await actor_link_state(profiles["target"])
         normalized_reason = "  Investigate exact identity link  "
-        revoke_key = str(uuid4())
+        revoke_key = str(new_record_id())
         revoked = await client.post(
             f"/api/v1/actor-identity-links/{links['target']}/revoke",
             headers={**headers["admin"], "Idempotency-Key": revoke_key},
@@ -2298,7 +2299,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_matrix(
         assert mismatch.json()["error"]["code"] == "idempotency_mismatch"
         assert await actor_link_state(profiles["admin"]) == caller_before_mismatch
         assert await actor_link_state(profiles["target"]) == target_revoked
-        conflict_key = str(uuid4())
+        conflict_key = str(new_record_id())
         caller_before_conflict = await actor_link_state(profiles["admin"])
         conflict = await client.post(
             f"/api/v1/actor-identity-links/{links['target']}/revoke",
@@ -2347,25 +2348,25 @@ async def test_actor_identity_link_lifecycle_real_postgres_matrix(
 
         repair_for_suspension = await client.post(
             f"/api/v1/actor-identity-links/{links['target']}/reactivate",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Prepare suspended owner proof"},
         )
         assert repair_for_suspension.status_code == 200, repair_for_suspension.text
         suspend_owner = await client.post(
             f"/api/v1/actors/{profiles['target']}/suspend",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Suspend owner while repairing link"},
         )
         assert suspend_owner.status_code == 200, suspend_owner.text
         suspended_revoke = await client.post(
             f"/api/v1/actor-identity-links/{links['target']}/revoke",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Revoke suspended owner link"},
         )
         assert suspended_revoke.status_code == 200, suspended_revoke.text
         suspended_reactivate = await client.post(
             f"/api/v1/actor-identity-links/{links['target']}/reactivate",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Repair suspended owner link"},
         )
         assert suspended_reactivate.status_code == 200, suspended_reactivate.text
@@ -2378,14 +2379,14 @@ async def test_actor_identity_link_lifecycle_real_postgres_matrix(
         assert owner_still_blocked.json()["error"]["code"] == "actor_suspended"
         restore_owner = await client.post(
             f"/api/v1/actors/{profiles['target']}/reactivate",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Restore suspended owner"},
         )
         assert restore_owner.status_code == 200, restore_owner.text
 
         delegated = await client.post(
             "/api/v1/admin-role-grants",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={
                 "target_actor_profile_id": str(profiles["ordinary"]),
                 "role": "access_administrator",
@@ -2397,19 +2398,19 @@ async def test_actor_identity_link_lifecycle_real_postgres_matrix(
         assert delegated.status_code == 201, delegated.text
         ordinary_revoke = await client.post(
             f"/api/v1/actor-identity-links/{links['ordinary']}/revoke",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Revoke delegated actor link"},
         )
         assert ordinary_revoke.status_code == 200, ordinary_revoke.text
         revoke_grant = await client.post(
             f"/api/v1/admin-role-grants/{delegated.json()['resource_id']}/revoke",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Revoke grant independently"},
         )
         assert revoke_grant.status_code == 200, revoke_grant.text
         ordinary_reactivate = await client.post(
             f"/api/v1/actor-identity-links/{links['ordinary']}/reactivate",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Reactivate without restoring grant"},
         )
         assert ordinary_reactivate.status_code == 200, ordinary_reactivate.text
@@ -2425,7 +2426,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_matrix(
 
         provisioned_service = await client.post(
             "/api/v1/service-actors",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={
                 "service_identity": ServiceIdentity.ARTIFACT_SCHEDULER.value,
                 "subject": "auth09d-b-service-link-target",
@@ -2438,13 +2439,13 @@ async def test_actor_identity_link_lifecycle_real_postgres_matrix(
         service_link = UUID(service_state[2])
         service_revoke = await client.post(
             f"/api/v1/actor-identity-links/{service_link}/revoke",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Revoke fixed service link"},
         )
         assert service_revoke.status_code == 200, service_revoke.text
         service_reactivate = await client.post(
             f"/api/v1/actor-identity-links/{service_link}/reactivate",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Reactivate fixed service link without admission"},
         )
         assert service_reactivate.status_code == 200, service_reactivate.text
@@ -2452,11 +2453,11 @@ async def test_actor_identity_link_lifecycle_real_postgres_matrix(
 
         deactivate_target = await client.post(
             f"/api/v1/actors/{profiles['target']}/deactivate",
-            headers={**headers["admin"], "Idempotency-Key": str(uuid4())},
+            headers={**headers["admin"], "Idempotency-Key": str(new_record_id())},
             json={"reason": "Terminal owner proof"},
         )
         assert deactivate_target.status_code == 200, deactivate_target.text
-        terminal_key = str(uuid4())
+        terminal_key = str(new_record_id())
         terminal_link = await client.post(
             f"/api/v1/actor-identity-links/{links['target']}/revoke",
             headers={**headers["admin"], "Idempotency-Key": terminal_key},
@@ -2596,19 +2597,19 @@ async def test_actor_profile_lifecycle_real_postgres_concurrency(
                     original_reserve,
                 )
 
-        shared_key = str(uuid4())
+        shared_key = str(new_record_id())
         same_key = await concurrent_posts((shared_key, shared_key))
         assert [response.status_code for response in same_key] == [200, 200]
         assert same_key[0].json() == same_key[1].json()
 
         reactivated = await client.post(
             f"/api/v1/actors/{target_id}/reactivate",
-            headers={**admin_headers, "Idempotency-Key": str(uuid4())},
+            headers={**admin_headers, "Idempotency-Key": str(new_record_id())},
             json={"reason": "Prepare distinct-key race"},
         )
         assert reactivated.status_code == 200, reactivated.text
 
-        competing_keys = (str(uuid4()), str(uuid4()))
+        competing_keys = (str(new_record_id()), str(new_record_id()))
         different_keys = await concurrent_posts(competing_keys)
         assert sorted(response.status_code for response in different_keys) == [200, 409]
         loser = next(
@@ -2620,7 +2621,7 @@ async def test_actor_profile_lifecycle_real_postgres_concurrency(
 
         reactivated_again = await client.post(
             f"/api/v1/actors/{target_id}/reactivate",
-            headers={**admin_headers, "Idempotency-Key": str(uuid4())},
+            headers={**admin_headers, "Idempotency-Key": str(new_record_id())},
             json={"reason": "Prove losing key remains reusable"},
         )
         assert reactivated_again.status_code == 200, reactivated_again.text
@@ -2644,7 +2645,7 @@ async def test_actor_profile_lifecycle_real_postgres_concurrency(
         async def grant_access_administrator(target: UUID, reason: str) -> str:
             response = await client.post(
                 "/api/v1/admin-role-grants",
-                headers={**admin_headers, "Idempotency-Key": str(uuid4())},
+                headers={**admin_headers, "Idempotency-Key": str(new_record_id())},
                 json={
                     "target_actor_profile_id": str(target),
                     "role": "access_administrator",
@@ -2673,7 +2674,7 @@ async def test_actor_profile_lifecycle_real_postgres_concurrency(
                 f"/api/v1/actors/{target}/{transition}",
                 request_headers,
                 {"reason": f"Ordered {transition} proof for {name}"},
-                str(uuid4()),
+                str(new_record_id()),
             )
 
         reusable_keys: list[str] = []
@@ -2719,7 +2720,7 @@ async def test_actor_profile_lifecycle_real_postgres_concurrency(
         reactivate_first_id, _ = await create_race_actor("reactivate-first")
         prepared_reactivate_first = await client.post(
             f"/api/v1/actors/{reactivate_first_id}/suspend",
-            headers={**admin_headers, "Idempotency-Key": str(uuid4())},
+            headers={**admin_headers, "Idempotency-Key": str(new_record_id())},
             json={"reason": "Prepare reactivation-first race"},
         )
         assert prepared_reactivate_first.status_code == 200, prepared_reactivate_first.text
@@ -2743,7 +2744,7 @@ async def test_actor_profile_lifecycle_real_postgres_concurrency(
         suspended_deactivate_first_id, _ = await create_race_actor("suspended-deactivate-first")
         prepared_deactivate_first = await client.post(
             f"/api/v1/actors/{suspended_deactivate_first_id}/suspend",
-            headers={**admin_headers, "Idempotency-Key": str(uuid4())},
+            headers={**admin_headers, "Idempotency-Key": str(new_record_id())},
             json={"reason": "Prepare deactivation-first suspended race"},
         )
         assert prepared_deactivate_first.status_code == 200, prepared_deactivate_first.text
@@ -2791,7 +2792,7 @@ async def test_actor_profile_lifecycle_real_postgres_concurrency(
 
         grant_race_id, grant_race_headers = await create_race_actor("grant-race")
         await grant_access_administrator(grant_race_id, "Profile and grant race participant")
-        grant_race_key = str(uuid4())
+        grant_race_key = str(new_record_id())
         profile_grant_race = await ordered_requests(
             "profile-loss-first",
             (
@@ -2819,11 +2820,11 @@ async def test_actor_profile_lifecycle_real_postgres_concurrency(
         await grant_access_administrator(reciprocal_two_id, "Reciprocal administrator two")
         disable_bootstrap = await client.post(
             f"/api/v1/actors/{admin_id}/suspend",
-            headers={**reciprocal_one_headers, "Idempotency-Key": str(uuid4())},
+            headers={**reciprocal_one_headers, "Idempotency-Key": str(new_record_id())},
             json={"reason": "Leave exactly two effective administrators"},
         )
         assert disable_bootstrap.status_code == 200, disable_bootstrap.text
-        reciprocal_second_key = str(uuid4())
+        reciprocal_second_key = str(new_record_id())
         reciprocal = await ordered_requests(
             "reciprocal-one-first",
             (
@@ -3009,7 +3010,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
         ) -> UUID:
             response = await client.post(
                 "/api/v1/admin-role-grants",
-                headers={**caller_headers, "Idempotency-Key": str(uuid4())},
+                headers={**caller_headers, "Idempotency-Key": str(new_record_id())},
                 json={
                     "target_actor_profile_id": str(target_id),
                     "role": "access_administrator",
@@ -3141,7 +3142,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
             first_blocker_acquired = asyncio.Event()
             release_first = asyncio.Event()
             second_entered = asyncio.Event()
-            waiter_name = f"auth09db-link-{uuid4().hex}"
+            waiter_name = f"auth09db-link-{new_record_id().hex}"
             same_key = keys[0] == keys[1]
 
             async def observed_reserve(self, **kwargs):
@@ -3261,15 +3262,15 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
                         link_id,
                         "revoke",
                         bootstrap_headers,
-                        str(uuid4()),
+                        str(new_record_id()),
                         "Prepare revoked-link concurrency row",
                     )
                     assert prepared.status_code == 200, prepared.text
                 before = await audit_counts()
                 keys = (
-                    (shared := str(uuid4()), shared)
+                    (shared := str(new_record_id()), shared)
                     if key_kind == "same"
-                    else (str(uuid4()), str(uuid4()))
+                    else (str(new_record_id()), str(new_record_id()))
                 )
                 responses = await concurrent_link_posts(link_id, operation, keys)
                 statuses = sorted(response.status_code for response in responses)
@@ -3315,7 +3316,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
                 f"/api/v1/actor-identity-links/{link_id}/{operation}",
                 caller_headers,
                 {"reason": f"Ordered {operation} for {name}"},
-                str(uuid4()),
+                str(new_record_id()),
             )
 
         ordered_rows = (
@@ -3333,7 +3334,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
                     link_id,
                     "revoke",
                     bootstrap_headers,
-                    str(uuid4()),
+                    str(new_record_id()),
                     "Prepare ordered revoked-link row",
                 )
                 assert prepared.status_code == 200, prepared.text
@@ -3385,7 +3386,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
             b_grant = await grant_admin(b_id, custodian[1], f"Grant {name} administrator B")
             disabled = await client.post(
                 f"/api/v1/actors/{custodian[0]}/suspend",
-                headers={**a_headers, "Idempotency-Key": str(uuid4())},
+                headers={**a_headers, "Idempotency-Key": str(new_record_id())},
                 json={"reason": f"Leave exactly two administrators for {name}"},
             )
             assert disabled.status_code == 200, disabled.text
@@ -3425,7 +3426,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
                 f"/api/v1/actors/{b[0]}/suspend",
                 a[2],
                 {"reason": "Profile loss before link loss"},
-                str(uuid4()),
+                str(new_record_id()),
             ),
             link_request("profile-first-b", a[1], "revoke", b[2]),
             "actor_suspended",
@@ -3446,7 +3447,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
                 f"/api/v1/actors/{b[0]}/suspend",
                 a[2],
                 {"reason": "Profile loss after link loss"},
-                str(uuid4()),
+                str(new_record_id()),
             ),
             "identity_link_revoked",
             "ActorIdentityLinkRevoked",
@@ -3466,7 +3467,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
                 f"/api/v1/admin-role-grants/{a[3]}/revoke",
                 b[2],
                 {"reason": "Grant loss after link loss"},
-                str(uuid4()),
+                str(new_record_id()),
             ),
             "identity_link_revoked",
             "ActorIdentityLinkRevoked",
@@ -3485,7 +3486,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
                 f"/api/v1/admin-role-grants/{a[3]}/revoke",
                 b[2],
                 {"reason": "Grant loss before link loss"},
-                str(uuid4()),
+                str(new_record_id()),
             ),
             link_request("grant-link-a", b[1], "revoke", a[2]),
             "permission_not_granted",
@@ -3506,7 +3507,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
         c_grant = await grant_admin(c_id, custodian[1], "Grant three-way administrator C")
         remove_custodian = await client.post(
             f"/api/v1/actors/{custodian[0]}/suspend",
-            headers={**a_headers, "Idempotency-Key": str(uuid4())},
+            headers={**a_headers, "Idempotency-Key": str(new_record_id())},
             json={"reason": "Leave exactly three administrators"},
         )
         assert remove_custodian.status_code == 200, remove_custodian.text
@@ -3515,8 +3516,8 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
         release_first = asyncio.Event()
         second_entered = asyncio.Event()
         third_entered = asyncio.Event()
-        second_name = f"auth09db-three-second-{uuid4().hex}"
-        third_name = f"auth09db-three-third-{uuid4().hex}"
+        second_name = f"auth09db-three-second-{new_record_id().hex}"
+        third_name = f"auth09db-three-third-{new_record_id().hex}"
 
         async def three_way_lock_control(self):
             task_name = current_task_name()
@@ -3540,7 +3541,7 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
             three_way_lock_control,
         )
         three_before = await audit_counts()
-        three_keys = (str(uuid4()), str(uuid4()), str(uuid4()))
+        three_keys = (str(new_record_id()), str(new_record_id()), str(new_record_id()))
         try:
             first_task = asyncio.create_task(
                 client.post(
@@ -3623,10 +3624,10 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
             before_target = await actor_state(target_id)
             before_admin = await actor_state(custodian[0])
             before_events = await audit_counts()
-            lifecycle_key = str(uuid4())
+            lifecycle_key = str(new_record_id())
             self_name = f"self-{index}"
             lifecycle_name = f"lifecycle-{index}"
-            waiter_name = f"auth09db-self-{uuid4().hex}"
+            waiter_name = f"auth09db-self-{new_record_id().hex}"
             self_lock_owner = ActorService
             self_lock_attribute = "lock_actor_self_for_authorization"
             original_self_lock = getattr(self_lock_owner, self_lock_attribute)

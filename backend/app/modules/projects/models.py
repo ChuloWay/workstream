@@ -34,6 +34,7 @@ class Project(Base):
 
     __tablename__ = "projects"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         CheckConstraint(
             "(created_by_actor_profile_id is null and created_via_identity_link_id is null "
             "and created_by_admin_role_grant_id is null and creation_scope_type is null "
@@ -45,7 +46,7 @@ class Project(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     slug: Mapped[str] = mapped_column(String(120), nullable=False, unique=True, index=True)
     description: Mapped[str | None] = mapped_column(Text)
@@ -78,6 +79,8 @@ class ProjectCreateIdempotencyRecord(Base):
 
     __tablename__ = "project_create_idempotency_records"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
         UniqueConstraint(
             "actor_profile_id",
             "action_id",
@@ -107,7 +110,7 @@ class ProjectCreateIdempotencyRecord(Base):
     idempotency_key: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
     request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
     operation_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
-    project_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    project_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     operation_generation: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -119,6 +122,8 @@ class GuideMutationIdempotencyRecord(Base):
 
     __tablename__ = "guide_mutation_idempotency_records"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
         UniqueConstraint(
             "actor_profile_id",
             "action_id",
@@ -129,6 +134,12 @@ class GuideMutationIdempotencyRecord(Base):
         UniqueConstraint("operation_id", "project_id", "resource_id", name="uq_guide_mutation_operation_resource"),
         Index("uq_guide_activation_audit_decision", text("(activation_authority_json->>'authorization_decision_event_id')"),
               unique=True, postgresql_where=text("action_id='project.guide.activate'")),
+        Index(
+            "uq_guide_activation_resource",
+            "resource_id",
+            unique=True,
+            postgresql_where=text("action_id='project.guide.activate'"),
+        ),
         CheckConstraint(
             "(action_id='project.guide.activate' and activation_facts_json is not null "
             "and activation_authority_json is not null) or "
@@ -167,7 +178,7 @@ class GuideMutationIdempotencyRecord(Base):
     resource_context_digest: Mapped[str] = mapped_column(String(71), nullable=False)
     operation_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False)
-    resource_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    resource_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     operation_generation: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     response_json: Mapped[dict | None] = mapped_column(JSON)
@@ -183,6 +194,8 @@ class GuideSufficiencyMutationIdempotencyRecord(Base):
 
     __tablename__ = "guide_sufficiency_mutation_idempotency_records"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
         UniqueConstraint(
             "actor_profile_id",
             "idempotency_key",
@@ -241,6 +254,8 @@ class SubmissionPolicyMutationIdempotencyRecord(Base):
 
     __tablename__ = "submission_policy_mutation_idempotency_records"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
         Index(
             "uq_submission_policy_human_replay_namespace",
             "actor_profile_id",
@@ -327,7 +342,7 @@ class SubmissionPolicyMutationIdempotencyRecord(Base):
     source_snapshot_id: Mapped[str] = mapped_column(
         ForeignKey("guide_source_snapshots.id"), nullable=False
     )
-    policy_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     setup_run_id: Mapped[str | None] = mapped_column(ForeignKey("project_setup_runs.id"))
     setup_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
     setup_task_id: Mapped[UUID | None] = mapped_column(Uuid())
@@ -352,6 +367,8 @@ class PolicyMutationIdempotencyRecord(Base):
 
     __tablename__ = "policy_mutation_idempotency_records"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
         UniqueConstraint(
             "actor_profile_id",
             "action_id",
@@ -396,7 +413,7 @@ class PolicyMutationIdempotencyRecord(Base):
     operation_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False)
     guide_id: Mapped[str] = mapped_column(ForeignKey("project_guides.id"), nullable=False)
-    policy_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     response_json: Mapped[dict | None] = mapped_column(JSON)
@@ -409,6 +426,13 @@ class ProjectGuide(Base):
 
     __tablename__ = "project_guides"
     __table_args__ = (
+        CheckConstraint(
+            "activation_operation_id is null or "
+            "((get_byte(uuid_send(activation_operation_id), 6) >> 4) = 7 and "
+            "(get_byte(uuid_send(activation_operation_id), 8) & 192) = 128)",
+            name="activation_operation_id_uuid7",
+        ),
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint(
             "project_id", "version", "contribution_policy_version_id",
             name="uq_guides_project_version_contribution",
@@ -509,7 +533,7 @@ class ProjectGuide(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     version: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)
@@ -531,7 +555,7 @@ class ProjectGuide(Base):
         Uuid(), ForeignKey("admin_role_grants.id")
     )
     last_mutation_scope_type: Mapped[str | None] = mapped_column(String(16))
-    last_mutation_scope_project_id: Mapped[str | None] = mapped_column(String(36))
+    last_mutation_scope_project_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     last_mutation_action_id: Mapped[str | None] = mapped_column(String(160))
     last_authorization_decision_event_id: Mapped[str | None] = mapped_column(
         ForeignKey("audit_events.id")
@@ -543,10 +567,10 @@ class ProjectGuide(Base):
         onupdate=func.now(),
     )
     superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    selected_review_policy_id: Mapped[str | None] = mapped_column(String(36))
+    selected_review_policy_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     selected_review_policy_generation: Mapped[int | None] = mapped_column(Integer)
     selected_review_policy_hash: Mapped[str | None] = mapped_column(String(71))
-    selected_revision_policy_id: Mapped[str | None] = mapped_column(String(36))
+    selected_revision_policy_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     selected_revision_policy_generation: Mapped[int | None] = mapped_column(Integer)
     selected_revision_policy_hash: Mapped[str | None] = mapped_column(String(71))
 
@@ -562,6 +586,7 @@ class PostSubmitCheckerPolicy(Base):
 
     __tablename__ = "checker_policies"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["project_id", "guide_version"],
             ["project_guides.project_id", "project_guides.version"],
@@ -616,7 +641,7 @@ class PostSubmitCheckerPolicy(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     guide_id: Mapped[str] = mapped_column(
         ForeignKey("project_guides.id"), nullable=False, index=True
@@ -628,10 +653,10 @@ class PostSubmitCheckerPolicy(Base):
         index=True,
     )
     source_snapshot_hash: Mapped[str] = mapped_column(String(71), nullable=False)
-    effective_policy_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    effective_policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
     effective_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False, index=True)
     pre_submit_checker_policy_id: Mapped[str] = mapped_column(
-        String(36),
+        Uuid(as_uuid=False),
         nullable=False,
         index=True,
     )
@@ -676,6 +701,7 @@ class ReviewPolicy(Base):
 
     __tablename__ = "review_policies"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         CheckConstraint(
             "semantics_format in ('v1','v2') and (semantics_format <> 'v1' or human_review_required)",
             name="review_policy_semantics_format",
@@ -723,7 +749,7 @@ class ReviewPolicy(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     guide_version: Mapped[str] = mapped_column(String(50), nullable=False)
     policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -743,7 +769,7 @@ class ReviewPolicy(Base):
         Uuid(), ForeignKey("admin_role_grants.id")
     )
     creation_scope_type: Mapped[str | None] = mapped_column(String(16))
-    creation_scope_project_id: Mapped[str | None] = mapped_column(String(36))
+    creation_scope_project_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     creation_action_id: Mapped[str | None] = mapped_column(String(160))
     authorization_decision_event_id: Mapped[str | None] = mapped_column(
         ForeignKey("audit_events.id")
@@ -765,6 +791,7 @@ class RevisionPolicy(Base):
 
     __tablename__ = "revision_policies"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["project_id", "guide_version"],
             ["project_guides.project_id", "project_guides.version"],
@@ -810,7 +837,7 @@ class RevisionPolicy(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     guide_version: Mapped[str] = mapped_column(String(50), nullable=False)
     policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -826,7 +853,7 @@ class RevisionPolicy(Base):
         Uuid(), ForeignKey("admin_role_grants.id")
     )
     creation_scope_type: Mapped[str | None] = mapped_column(String(16))
-    creation_scope_project_id: Mapped[str | None] = mapped_column(String(36))
+    creation_scope_project_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     creation_action_id: Mapped[str | None] = mapped_column(String(160))
     authorization_decision_event_id: Mapped[str | None] = mapped_column(
         ForeignKey("audit_events.id")
@@ -847,6 +874,7 @@ class PaymentPolicy(Base):
 
     __tablename__ = "payment_policies"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["project_id", "guide_version"],
             ["project_guides.project_id", "project_guides.version"],
@@ -855,7 +883,7 @@ class PaymentPolicy(Base):
         UniqueConstraint("project_id", "guide_version", name="uq_payment_policies_project_version"),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     guide_version: Mapped[str] = mapped_column(String(50), nullable=False)
     base_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
@@ -872,6 +900,7 @@ class GuideSourceSnapshot(Base):
 
     __tablename__ = "guide_source_snapshots"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["project_id", "guide_version"],
             ["project_guides.project_id", "project_guides.version"],
@@ -892,7 +921,7 @@ class GuideSourceSnapshot(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     guide_id: Mapped[str] = mapped_column(
         ForeignKey("project_guides.id"), nullable=False, index=True
@@ -911,7 +940,7 @@ class GuideSourceSnapshot(Base):
         Uuid(), ForeignKey("admin_role_grants.id")
     )
     creation_scope_type: Mapped[str | None] = mapped_column(String(16))
-    creation_scope_project_id: Mapped[str | None] = mapped_column(String(36))
+    creation_scope_project_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     creation_action_id: Mapped[str | None] = mapped_column(String(160))
     authorization_decision_event_id: Mapped[str | None] = mapped_column(
         ForeignKey("audit_events.id")
@@ -926,6 +955,7 @@ class GuideSourceSnapshotItem(Base):
 
     __tablename__ = "guide_source_snapshot_items"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint(
             "source_snapshot_id",
             "item_order",
@@ -938,7 +968,7 @@ class GuideSourceSnapshotItem(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     source_snapshot_id: Mapped[str] = mapped_column(
         ForeignKey("guide_source_snapshots.id"),
         nullable=False,
@@ -957,6 +987,7 @@ class GuideSourceArtifactIngest(Base):
 
     __tablename__ = "guide_source_artifact_ingests"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         CheckConstraint("byte_count >= 0", name="ck_guide_source_artifact_ingests_bytes"),
         CheckConstraint(
             "sha256 ~ '^sha256:[0-9a-f]{64}$'",
@@ -964,7 +995,7 @@ class GuideSourceArtifactIngest(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     source_item_id: Mapped[str] = mapped_column(
         ForeignKey("guide_source_snapshot_items.id"), nullable=False, unique=True, index=True
     )
@@ -982,6 +1013,7 @@ class ProjectSetupRun(Base):
 
     __tablename__ = "project_setup_runs"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         CheckConstraint(
             "status in ("
             "'awaiting_documents', "
@@ -1028,7 +1060,7 @@ class ProjectSetupRun(Base):
         CheckConstraint("setup_generation > 0", name="ck_project_setup_runs_generation_positive"),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     guide_id: Mapped[str] = mapped_column(
         ForeignKey("project_guides.id"), nullable=False, index=True
@@ -1078,7 +1110,7 @@ class ProjectSetupRun(Base):
         Uuid(), ForeignKey("admin_role_grants.id")
     )
     authorization_scope_type: Mapped[str | None] = mapped_column(String(16))
-    authorization_scope_project_id: Mapped[str | None] = mapped_column(String(36))
+    authorization_scope_project_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     authorization_action_id: Mapped[str | None] = mapped_column(String(160))
     authorization_decision_event_id: Mapped[str | None] = mapped_column(
         ForeignKey("audit_events.id")
@@ -1098,6 +1130,7 @@ class GuideSufficiencyReport(Base):
 
     __tablename__ = "guide_sufficiency_reports"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         CheckConstraint(
             "status in ('passed', 'blocked', 'passed_with_warnings')",
             name="ck_guide_sufficiency_reports_status",
@@ -1183,7 +1216,7 @@ class GuideSufficiencyReport(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     guide_id: Mapped[str] = mapped_column(
         ForeignKey("project_guides.id"), nullable=False, index=True
@@ -1250,6 +1283,7 @@ class GuideSufficiencyReportSourceUsage(Base):
 
     __tablename__ = "guide_sufficiency_report_source_usages"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             [
                 "extraction_usage_id",
@@ -1285,18 +1319,18 @@ class GuideSufficiencyReportSourceUsage(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     report_id: Mapped[str] = mapped_column(
         ForeignKey("guide_sufficiency_reports.id", ondelete="CASCADE"), nullable=False, index=True
     )
     item_order: Mapped[int] = mapped_column(Integer, nullable=False)
-    source_item_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    binding_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    content_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    extraction_usage_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    extraction_attempt_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    extracted_content_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    project_setup_run_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_item_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    binding_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    content_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    extraction_usage_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    extraction_attempt_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    extracted_content_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    project_setup_run_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     setup_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
     canonical_output_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
 
@@ -1306,6 +1340,7 @@ class SubmissionArtifactPolicy(Base):
 
     __tablename__ = "submission_artifact_policies"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         CheckConstraint(
             "lifecycle_status in ('draft', 'approved', 'superseded')",
             name="ck_submission_artifact_policies_lifecycle_status",
@@ -1375,7 +1410,7 @@ class SubmissionArtifactPolicy(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     guide_id: Mapped[str] = mapped_column(
         ForeignKey("project_guides.id"), nullable=False, index=True
@@ -1446,6 +1481,7 @@ class EffectiveProjectSubmissionArtifactPolicy(Base):
 
     __tablename__ = "effective_project_submission_artifact_policies"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         CheckConstraint(
             "lifecycle_status in ('approved', 'superseded')",
             name="ck_effective_psap_lifecycle_status",
@@ -1487,7 +1523,7 @@ class EffectiveProjectSubmissionArtifactPolicy(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     guide_id: Mapped[str] = mapped_column(
         ForeignKey("project_guides.id"), nullable=False, index=True
@@ -1500,7 +1536,7 @@ class EffectiveProjectSubmissionArtifactPolicy(Base):
     )
     source_snapshot_hash: Mapped[str] = mapped_column(String(71), nullable=False)
     submission_artifact_policy_id: Mapped[str] = mapped_column(
-        String(36), nullable=False, index=True
+        Uuid(as_uuid=False), nullable=False, index=True
     )
     submission_artifact_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
     lifecycle_status: Mapped[str] = mapped_column(
@@ -1535,6 +1571,7 @@ class PreSubmitCheckerPolicy(Base):
 
     __tablename__ = "pre_submit_checker_policies"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         CheckConstraint(
             "lifecycle_status in ('pending_compilation', 'compiled', 'superseded')",
             name="ck_pre_submit_checker_policies_lifecycle_status",
@@ -1586,7 +1623,7 @@ class PreSubmitCheckerPolicy(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     guide_id: Mapped[str] = mapped_column(
         ForeignKey("project_guides.id"), nullable=False, index=True
@@ -1598,7 +1635,7 @@ class PreSubmitCheckerPolicy(Base):
         index=True,
     )
     source_snapshot_hash: Mapped[str] = mapped_column(String(71), nullable=False)
-    effective_policy_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    effective_policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
     effective_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False, index=True)
     lifecycle_status: Mapped[str] = mapped_column(
         String(30),

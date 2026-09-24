@@ -7,6 +7,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from sqlalchemy import select
 
 from app.core.hashing import canonical_json_hash
+from app.core.identifiers import new_record_id
 from app.interfaces.project_agents import validate_project_guide_compilation_result
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.authorization.api.guide_proposal_review import (
@@ -45,6 +46,14 @@ from .request_inputs import CompilationRequestInputs
 APPROVAL_ACTION = "project.submission_artifact_policy.approve"
 
 
+def approval_authorization_selector(actor_profile_id: UUID, idempotency_key: UUID) -> UUID:
+    """Stable non-row selector used only to prepare approval authority."""
+    return uuid5(
+        NAMESPACE_URL,
+        f"workstream.guide-proposal-approval:{actor_profile_id}:{idempotency_key}",
+    )
+
+
 async def approve_proposal(
     session,
     authorization,
@@ -59,9 +68,8 @@ async def approve_proposal(
 ) -> GuideProposalApprovalReceipt:
     """Compile and persist in the caller transaction after exact authority closes."""
     target = command.target
-    operation_id = uuid5(
-        NAMESPACE_URL,
-        f"workstream.guide-proposal-approval:{actor.actor_profile_id}:{command.idempotency_key}",
+    selector_id = approval_authorization_selector(
+        actor.actor_profile_id, command.idempotency_key
     )
     locator = GuideProposalAuthorizationLocator(
         project_id=target.project_id,
@@ -70,7 +78,7 @@ async def approve_proposal(
         actor_profile_id=actor.actor_profile_id,
         identity_link_id=actor.identity_link_id,
         action_id=APPROVAL_ACTION,
-        operation_id=operation_id,
+        operation_id=selector_id,
         request_id=request_id,
     )
     repository = GuideProposalRepository(session)
@@ -89,7 +97,17 @@ async def approve_proposal(
         if locked.target != target:
             raise GuideProposalError("proposal_stale")
         package = await repository.package(locked)
-        existing = await session.get(ProjectGuideProposalApproval, operation_id)
+        reservation = await replay_repository.find_human_namespace(
+            actor_profile_id=str(actor.actor_profile_id),
+            idempotency_key=command.idempotency_key,
+        )
+        existing = (
+            await session.get(ProjectGuideProposalApproval, reservation.operation_id)
+            if reservation is not None
+            else None
+        )
+        if reservation is not None and existing is None:
+            raise GuideProposalError("operation_conflict")
         if existing is not None:
             return await _replay_approval(
                 existing, target, request_digest, actor, package, locator, command, prepared
@@ -116,7 +134,7 @@ async def approve_proposal(
             session,
             locked,
             command,
-            operation_id,
+            new_record_id(),
             material,
             pre_capabilities,
             post_capabilities,
@@ -176,10 +194,7 @@ async def _compile_approval(
     compiled = planner.compile_policy_bundle(
         effective_policy=effective_body, effective_policy_hash=effective_hash,
     )
-    effective_id, pre_id = (
-        uuid5(operation_id, "effective-policy"),
-        uuid5(operation_id, "pre-policy"),
-    )
+    effective_id, pre_id = new_record_id(), new_record_id()
     version = target.guide_version
     plan = planner.compile_effective_plan(
         lineage=EffectivePreSubmissionPlanLineage(

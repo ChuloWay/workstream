@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 from alembic.config import Config
@@ -2673,7 +2673,7 @@ async def create_checker_trial_project(
     """
     project_response = await client.post(
         "/api/v1/projects",
-        headers=auth_headers() | {"Idempotency-Key": str(uuid4())},
+        headers=auth_headers() | {"Idempotency-Key": str(new_record_id())},
         json={
             "name": slug.replace("-", " ").title(),
             "slug": slug,
@@ -3356,7 +3356,7 @@ async def test_retained_packet_setup_failure_stays_blocked_until_repaired(
 ) -> None:
     project_response = await checker_client.post(
         "/api/v1/projects",
-        headers=auth_headers() | {"Idempotency-Key": str(uuid4())},
+        headers=auth_headers() | {"Idempotency-Key": str(new_record_id())},
         json={
             "name": "Task Setup Checker Project",
             "slug": "task-setup-checker-project",
@@ -3958,7 +3958,7 @@ async def test_canonical_policy_sidecars_deny_before_manual_execution(field: str
         if damage == "crossed":
             replacement = (previous + 1 if type(previous) is int else
                            "sha256:" + "b" * 64 if "sha256:" in previous else
-                           "other" if name.endswith("version") else str(uuid4()))
+                           "other" if name.endswith("version") else str(new_record_id()))
         setattr(submission, name, replacement)
     elif field == "catalogue":
         from tests.checkers.post_submit.support import altered_catalogue

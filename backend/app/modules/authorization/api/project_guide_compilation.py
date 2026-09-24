@@ -261,6 +261,7 @@ class ProjectGuideCompilationAuthorizationPort(Protocol[PreparedHandleT]):
         *,
         handle: PreparedHandleT,
         actor: ActorIdentityFacts,
+        prepared_facts: ProjectGuideCompilationRequestFacts,
         facts: ProjectGuideCompilationRequestFacts,
         origin: ProjectGuideCompilationRequestOrigin,
     ) -> UUID: ...

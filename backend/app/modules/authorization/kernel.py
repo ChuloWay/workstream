@@ -8,7 +8,8 @@ from app.modules.authorization.domain.post_policy import PostPolicyResourceConte
 from collections.abc import Awaitable, Callable
 from types import MappingProxyType
 from typing import NoReturn
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1030,7 +1031,7 @@ class AuthorizationService:
             grant_id=matched_grant_id if denial is None else None,
         ) or authorization_resource_digest(resource_context)
         decision = AuthorizationDecision(
-            decision_id=uuid4(),
+            decision_id=new_record_id(),
             action_id=action.action_id if action is not None else None,
             permission_id=action.permission_id if action is not None else None,
             allowed=denial is None,

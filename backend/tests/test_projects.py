@@ -28,6 +28,7 @@ from project_create_fixtures import guide_example_columns, guide_snapshot_column
 
 from app.core.config import get_settings
 from app.core.hashing import canonical_json_hash
+from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from app.db.base import Base
 from app.main import create_app
@@ -907,7 +908,7 @@ async def add_local_admin_role_for_default_actor(role: str, *, project_id: str |
     actor_id, _, grantor_id = await ensure_access_administrator_bootstrap()
     async with db_session.get_session_factory()() as session:
         grant = AdminRoleGrant(
-            id=uuid4(),
+            id=new_record_id(),
             target_actor_profile_id=actor_id,
             role=role,
             scope_type="project" if project_id is not None else "system",
@@ -943,7 +944,7 @@ async def add_project_role_for_default_actor(project_id: str, role: str) -> tupl
     actor_id, link_id, admin_grant_id = await ensure_access_administrator_bootstrap()
     async with db_session.get_session_factory()() as session:
         snapshot = ProjectRoleQualificationSnapshot(
-            id=uuid4(),
+            id=new_record_id(),
             project_id=project_id,
             actor_profile_id=actor_id,
             requested_role=role,
@@ -966,7 +967,7 @@ async def add_project_role_for_default_actor(project_id: str, role: str) -> tupl
         session.add(snapshot)
         await session.flush()
         grant = ProjectRoleGrant(
-            id=uuid4(),
+            id=new_record_id(),
             project_id=project_id,
             actor_profile_id=actor_id,
             role=role,
@@ -988,12 +989,12 @@ async def add_project_role_for_default_actor(project_id: str, role: str) -> tupl
 async def test_project_role_grant_repository_filters_and_uses_strict_keyset(
     project_database_env: str,
 ) -> None:
-    project_id = uuid4()
-    actor_id = uuid4()
-    grantor_id = uuid4()
-    admin_grant_id = uuid4()
+    project_id = new_record_id()
+    actor_id = new_record_id()
+    grantor_id = new_record_id()
+    admin_grant_id = new_record_id()
     granted_at = datetime(2026, 7, 22, tzinfo=UTC)
-    grant_ids = sorted((uuid4(), uuid4(), uuid4()), key=str)
+    grant_ids = sorted((new_record_id(), new_record_id(), new_record_id()), key=str)
     async with db_session.get_session_factory()() as session:
         session.add_all(
             [
@@ -1010,7 +1011,7 @@ async def test_project_role_grant_repository_filters_and_uses_strict_keyset(
         session.add_all(
             [
                 ActorIdentityLink(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     actor_profile_id=str(profile_id),
                     issuer="https://identity.test",
                     subject=f"project-role-read-{profile_id}",
@@ -1548,7 +1549,7 @@ async def test_policy_mutation_api_commits_exact_custody_and_rejects_direct_appe
         assert replay_count == 1
         session.add(
             ReviewPolicy(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 project_id=policy.project_id,
                 guide_version=policy.guide_version,
                 policy_generation=2,
@@ -2799,12 +2800,12 @@ async def test_guide_source_metadata_database_rejects_unattributed_and_mismatche
         session.add(
             ProjectGuide(
                 **guide_example_columns(),
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 project_id=project["id"],
                 version="unattributed",
                 status="draft",
                 change_summary=None,
-                created_by=str(uuid4()),
+                created_by=str(new_record_id()),
             )
         )
         await session.flush()
@@ -3636,7 +3637,7 @@ async def test_submission_policy_rejects_snapshot_item_drift(
                     "'appended','manual','text/plain')"
                 ),
                 {
-                    "id": str(uuid4()),
+                    "id": str(new_record_id()),
                     "snapshot_id": snapshot["id"],
                 },
             )
@@ -3822,7 +3823,10 @@ async def test_submission_artifact_policy_replay_postgres_converges_exact_reserv
 ) -> None:
     """The real partial index makes concurrent exact human reservations converge."""
     engine = create_async_engine(isolated_database_env)
-    ids = {name: str(uuid4()) for name in ("actor", "link", "project", "guide", "snapshot")}
+    ids = {
+        name: str(new_record_id())
+        for name in ("actor", "link", "project", "guide", "snapshot")
+    }
     snapshot = guide_snapshot_columns(ids["snapshot"])
     digest = snapshot["bundle_hash"]
     try:
@@ -3862,7 +3866,7 @@ async def test_submission_artifact_policy_replay_postgres_converges_exact_reserv
             for table, trigger in GUIDE_CREATION_CUSTODY_TRIGGERS:
                 await connection.execute(text(f"alter table {table} enable trigger {trigger}"))
 
-        operation_id, policy_id, key = uuid4(), str(uuid4()), uuid4()
+        operation_id, policy_id, key = new_record_id(), str(new_record_id()), uuid4()
         values = {
             "actor_profile_id": ids["actor"],
             "identity_link_id": ids["link"],
@@ -5896,7 +5900,7 @@ async def test_project_create_copied_key_cannot_cross_actor_namespace(
         assert second_link is not None
         session.add(
             AdminRoleGrant(
-                id=uuid4(),
+                id=new_record_id(),
                 target_actor_profile_id=second_link.actor_profile_id,
                 role="project_manager",
                 scope_type="system",

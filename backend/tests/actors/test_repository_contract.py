@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import hashlib
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import UniqueConstraint, event
@@ -68,7 +69,7 @@ async def candidate_rows(actor_database_env):
         session.add_all(
             [
                 ActorIdentityLink(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     actor_profile_id=str(actor_id),
                     issuer=ISSUER,
                     subject=f"candidate-{actor_id}",
@@ -85,7 +86,7 @@ async def candidate_rows(actor_database_env):
         )
         session.add(
             ActorIdentityLink(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 actor_profile_id=str(service_id),
                 issuer=ISSUER,
                 subject=f"candidate-service-{service_id}",

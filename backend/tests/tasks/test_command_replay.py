@@ -341,7 +341,7 @@ async def test_task_key_validated_before_provisioning(task_client, monkeypatch, 
         assert await session.scalar(select(func.count()).select_from(ActorProfile)) == before
 
 
-async def test_committed_receipt_is_immutable_through_sql(task_client, task_database_env, monkeypatch):
+async def test_committed_receipt_is_immutable_through_sql(task_client, monkeypatch):
     _, task, _ = await _setup(task_client, monkeypatch)
     response = await task_client.post(f"/api/v1/tasks/{task['id']}/claim", headers=auth_headers())
     assert response.status_code == 200, response.text
@@ -359,8 +359,4 @@ async def test_committed_receipt_is_immutable_through_sql(task_client, task_data
             await session.rollback()
     async with db_session.get_session_factory()() as session, session.begin():
         assert (await session.execute(text("update task_command_receipts set id=id"))).rowcount == 4
-    assert await _counts(task["id"]) == (1, 1, 1)
-    from tests.migration_fixtures import run_guarded_revision_downgrade
-    with pytest.raises(RuntimeError, match="task command history prevents downgrade"):
-        await run_guarded_revision_downgrade(task_database_env, "0025_task_command_replay")
     assert await _counts(task["id"]) == (1, 1, 1)

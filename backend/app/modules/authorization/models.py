@@ -32,6 +32,7 @@ class AuthorityIdempotencyRecord(Base):
 
     __tablename__ = "authority_idempotency_records"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint(
             "actor_ref_kind",
             "actor_ref",
@@ -116,6 +117,7 @@ class AdminRoleGrant(Base):
 
     __tablename__ = "admin_role_grants"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         CheckConstraint(
             "role in ('access_administrator','operator','project_manager',"
             "'finance_authority','audit_authority')",
@@ -216,6 +218,7 @@ class ProjectRoleQualificationSnapshot(Base):
 
     __tablename__ = "project_role_qualification_snapshots"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         CheckConstraint("requested_role in ('submitter','reviewer')", name="role"),
         CheckConstraint(
             "project_role_availability_is_safe(skills_snapshot) and "
@@ -270,6 +273,7 @@ class ProjectRoleGrant(Base):
 
     __tablename__ = "project_role_grants"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         CheckConstraint("role in ('submitter','reviewer')", name="role"),
         CheckConstraint("grant_method='manual'", name="grant_method"),
         CheckConstraint(
@@ -322,10 +326,10 @@ class ProjectRoleGrant(Base):
 
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
     project_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("projects.id"), nullable=False
+        Uuid(as_uuid=False), ForeignKey("projects.id"), nullable=False
     )
     actor_profile_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("actor_profiles.id"), nullable=False
+        Uuid(as_uuid=False), ForeignKey("actor_profiles.id"), nullable=False
     )
     role: Mapped[str] = mapped_column(String(24), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="active")

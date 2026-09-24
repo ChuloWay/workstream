@@ -1,7 +1,7 @@
 """Hidden terminal ContributionPolicy retirement behavior."""
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -16,9 +16,9 @@ from tests.contributions.policy_test_support import service_fixture
 @pytest.mark.asyncio
 async def test_retire_is_terminal_and_attributable() -> None:
     fixture = service_fixture()
-    policy_id, version_id = uuid4(), uuid4()
+    policy_id, version_id = new_record_id(), new_record_id()
     request = ContributionPolicyRetireRequest(
-        operation_id=uuid4(),
+        operation_id=new_record_id(),
         actor_profile_id=fixture.actor_id,
         project_id=fixture.project_id,
         contribution_policy_id=policy_id,
@@ -66,9 +66,9 @@ def test_retire_blocks_future_selection_without_rewriting_history() -> None:
 @pytest.mark.asyncio
 async def test_retired_aggregate_cannot_be_resurrected() -> None:
     fixture = service_fixture()
-    policy_id, version_id = uuid4(), uuid4()
+    policy_id, version_id = new_record_id(), new_record_id()
     request = ContributionPolicyRetireRequest(
-        operation_id=uuid4(),
+        operation_id=new_record_id(),
         actor_profile_id=fixture.actor_id,
         project_id=fixture.project_id,
         contribution_policy_id=policy_id,

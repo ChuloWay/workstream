@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from uuid import UUID, uuid4
+from app.core.identifiers import new_record_id
 
 from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient
@@ -94,7 +95,7 @@ class _AllowOperatorAuthority:
         return ArtifactOperatorAuthorizationEvidence(
             action_id=facts.action_id,
             permission_id=ACTION_BY_ID[facts.action_id].permission_id.value,
-            decision_id=uuid4(),
+            decision_id=new_record_id(),
         )
 
 
@@ -155,10 +156,10 @@ async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
             content_id = replica.content_id
             source_job_id = source_job.id
             source_job_cas_version = source_job.cas_version
-            binding_id = "00000000-0000-0000-0000-000000000101"
-            second_binding_id = "00000000-0000-0000-0000-000000000102"
-            observation_receipt_id = "00000000-0000-0000-0000-000000000201"
-            verification_receipt_id = "00000000-0000-0000-0000-000000000202"
+            binding_id = "00000000-0000-7000-8000-000000000101"
+            second_binding_id = "00000000-0000-7000-8000-000000000102"
+            observation_receipt_id = "00000000-0000-7000-8000-000000000201"
+            verification_receipt_id = "00000000-0000-7000-8000-000000000202"
             app = create_app(settings)
 
             async def session_override():

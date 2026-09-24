@@ -10,6 +10,7 @@ from uuid import uuid4
 from sqlalchemy import text
 
 from app.adapters.auth import setup_finalization_authorization
+from app.core.identifiers import new_record_id
 from app.modules.authorization.api import PreparedSetupFinalization, AuthorizationUnavailable
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.kernel import AuthorizationService
@@ -46,7 +47,7 @@ async def concrete_finalize(factory, command):
 
 async def seed_lifecycle_admin(factory):
     """Seed eligible admin prerequisites only; decisions and mutations use production owners."""
-    actor, link, grant = uuid4(), uuid4(), uuid4()
+    actor, link, grant = new_record_id(), new_record_id(), new_record_id()
     async with factory() as session, session.begin():
         await session.execute(
             text(
@@ -166,10 +167,11 @@ class ObservedAuthorization:
     def __init__(self, session, *, fault=None, after_prepare=None):
         self.delegate = setup_finalization_authorization(session)
         self.fault, self.after_prepare = fault, after_prepare
-        self.facts = self.handle = self.receipt = None
+        self.facts = self.handle = self.receipt = self.locator = None
 
     @asynccontextmanager
     async def prepare_setup_finalization(self, locator):
+        self.locator = locator
         async with self.delegate.prepare_setup_finalization(locator) as prepared:
             if self.after_prepare is not None:
                 await self.after_prepare()

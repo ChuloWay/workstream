@@ -18,6 +18,7 @@ class PostPolicyOperation(Base):
 
     __tablename__ = "project_post_policy_operations"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
         ForeignKeyConstraint(
             ["compilation_id", "project_id", "guide_id"],
             ["project_guide_compilations.id", "project_guide_compilations.project_id", "project_guide_compilations.guide_id"],
@@ -60,10 +61,10 @@ class PostPolicyOperation(Base):
     operation_id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
     idempotency_key: Mapped[UUID] = mapped_column(Uuid, nullable=False)
-    project_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    guide_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    project_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    guide_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     compilation_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
-    policy_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     upstream_approval_operation_id: Mapped[UUID] = mapped_column(
         ForeignKey("project_guide_proposal_approvals.operation_id"), nullable=False,
     )
@@ -76,7 +77,7 @@ class PostPolicyOperation(Base):
     receipt_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     output_digest: Mapped[str] = mapped_column(String(71), nullable=False)
     actor_profile_id: Mapped[str] = mapped_column(ForeignKey("actor_profiles.id"), nullable=False)
-    identity_link_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    identity_link_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     admin_role_grant_id: Mapped[UUID | None] = mapped_column(ForeignKey("admin_role_grants.id"))
     service_identity: Mapped[str | None] = mapped_column(String(100))
     authorization_decision_event_id: Mapped[str] = mapped_column(ForeignKey("audit_events.id"), nullable=False)

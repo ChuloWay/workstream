@@ -43,7 +43,7 @@ def repo_case():
         return record if operation_id == record.operation_id else None
 
     repository.find_by_operation = AsyncMock(side_effect=find_operation)
-    repository._find_namespace = AsyncMock(
+    repository.find_human_namespace = AsyncMock(
         side_effect=AssertionError("exact operation must not use namespace fallback")
     )
     return SimpleNamespace(session=session, repository=repository, record=record, values=values)
@@ -109,10 +109,10 @@ async def test_reservation_rejects_different_operation_in_human_namespace(repo_c
         assert actual == selectors
         return case.record
 
-    case.repository._find_namespace.side_effect = find_namespace
+        case.repository.find_human_namespace.side_effect = find_namespace
     lookups = MagicMock()
     lookups.attach_mock(case.repository.find_by_operation, "operation")
-    lookups.attach_mock(case.repository._find_namespace, "namespace")
+    lookups.attach_mock(case.repository.find_human_namespace, "namespace")
     assert await case.repository.reserve(**values) == ("mismatch", case.record)
     assert lookups.mock_calls == [
         call.operation(values["operation_id"]),
@@ -158,7 +158,7 @@ def expected_predicate(field, value):
 
 async def test_namespace_query_binds_exact_human_selectors(repo_case):
     case = repo_case
-    await SubmissionPolicyMutationReplayRepository._find_namespace(
+    await SubmissionPolicyMutationReplayRepository.find_human_namespace(
         case.repository,
         actor_profile_id=str(rows.ACTOR),
         idempotency_key=rows.KEY,

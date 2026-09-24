@@ -48,7 +48,7 @@ async def test_replay_requires_current_pm_admission(case, command):
         scope_project_id=rows.PROJECT,
         allowed_roles=frozenset({module.AdminRole.PROJECT_MANAGER}),
     )
-    case.replay.find_by_operation.assert_not_awaited()
+    case.replay.find_human_namespace.assert_not_awaited()
     case.projects.get_submission_artifact_policy.assert_not_awaited()
     case.prepared.consume.assert_not_awaited()
 

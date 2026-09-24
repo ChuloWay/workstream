@@ -4,7 +4,8 @@ from dataclasses import replace
 import pickle
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
-from uuid import uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -15,7 +16,11 @@ from app.modules.artifacts.pre_submit_attempts import (
     logical_request,
 )
 from app.modules.artifacts.pre_submit_evidence import PreSubmitEvidenceConflict
-from app.modules.artifacts.submission_materialization import PreparedBundleMaterializationService
+from app.modules.artifacts.submission_materialization import (
+    PreparedBundleMaterializationRequest,
+    PreparedBundleMaterializationService,
+)
+from app.modules.checkers.api import SubmissionPacketView
 from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue
 from tests.test_default_pre_submit_execution import _plan, _request
 from tests.test_effective_pre_submit_execution import _context
@@ -28,7 +33,9 @@ def test_attempt_claim_cannot_be_constructed_or_serialized() -> None:
         pickle.dumps(object.__new__(PreSubmitAttemptClaim))
 
 
-def test_logical_attempt_identity_binds_packet_policy_and_archive_but_not_retry_generation() -> None:
+def test_logical_attempt_identity_binds_packet_policy_and_archive_but_not_retry_generation() -> (
+    None
+):
     context = _context()
     plan = _plan(build_pre_submission_checker_catalogue())
     packet = SimpleNamespace(summary="Original work", contributor_attestation="rights_confirmed")
@@ -44,17 +51,73 @@ def test_logical_attempt_identity_binds_packet_policy_and_archive_but_not_retry_
         return canonical_json_hash(logical_request(current_context, plan, view))
 
     original = digest()
-    assert digest(replace(context, prepared_generation_id=uuid4())) == original
-    assert digest(current_packet=SimpleNamespace(
-        summary="Changed work", contributor_attestation=packet.contributor_attestation,
-    )) != original
+    assert digest(replace(context, prepared_generation_id=new_record_id())) == original
+    assert (
+        digest(
+            current_packet=SimpleNamespace(
+                summary="Changed work",
+                contributor_attestation=packet.contributor_attestation,
+            )
+        )
+        != original
+    )
     assert digest(replace(context, locked_checker_policy_sha256="sha256:" + "e" * 64)) != original
     assert digest(replace(context, archive_sha256="sha256:" + "f" * 64)) != original
 
 
+@pytest.mark.asyncio
+async def test_initial_attempt_reservation_uses_fresh_record_identity(monkeypatch) -> None:
+    context = _context()
+    plan = _plan(build_pre_submission_checker_catalogue())
+    packet = SubmissionPacketView(
+        summary="Completed exact work.",
+        contributor_attestation="rights_confirmed",
+    )
+    request = PreparedBundleMaterializationRequest(
+        prepared_authorization=object(),
+        task_id=context.task_id,
+        assignment_id=context.assignment_id,
+        submission_artifact_policy_id=plan.lineage.effective_policy_id,
+        checker_policy_id=plan.lineage.pre_submit_policy_id,
+        predecessor_submission_version=None,
+        prepared_artifact=SimpleNamespace(generation_id=context.prepared_generation_id),
+        effective_plan=plan,
+        inspection=object(),
+        manifest=object(),
+        change_gate=object(),
+        packet=packet,
+    )
+    attempt_id = UUID("018f0000-0000-7000-8000-000000000001")
+    nonce = UUID("018f0000-0000-7000-8000-000000000002")
+    generated = iter((attempt_id, nonce))
+    monkeypatch.setattr(
+        "app.modules.artifacts.pre_submit_attempts.new_record_id",
+        lambda: next(generated),
+    )
+    session = SimpleNamespace(
+        in_transaction=lambda: True,
+        in_nested_transaction=lambda: False,
+        scalar=AsyncMock(return_value=str(attempt_id)),
+    )
+
+    reservation = await PreSubmitAttemptStore(session).reserve(
+        context=context,
+        plan=plan,
+        packet=packet,
+        idempotency_key=new_record_id(),
+        request=request,
+    )
+
+    assert reservation.attempt_id == attempt_id
+    assert reservation.claim_nonce == nonce
+    values = session.scalar.await_args.args[0].compile().params
+    assert values["id"] == str(attempt_id)
+    assert values["claim_nonce"] == str(nonce)
+
+
 def _claim(request, session, *, spent=False, foreign=False):
     claim = object.__new__(PreSubmitAttemptClaim)
-    claim.attempt_id, claim._nonce = uuid4(), uuid4()
+    claim.attempt_id, claim._nonce = new_record_id(), new_record_id()
     claim.request_digest = "sha256:" + "1" * 64
     claim._request = replace(request, prepared_authorization=None)
     claim._started, claim._execution = spent, None
@@ -64,7 +127,8 @@ def _claim(request, session, *, spent=False, foreign=False):
 
 @pytest.mark.parametrize("claim_kind", ("absent", "foreign", "spent", "missing_reservation"))
 async def test_invalid_attempt_claim_never_builds_processor_or_opens_workspace(
-    tmp_path, claim_kind: str,
+    tmp_path,
+    claim_kind: str,
 ) -> None:
     request, _inspector, manager, _preparation, catalogue = await _request(tmp_path)
     session = SimpleNamespace(
@@ -74,9 +138,11 @@ async def test_invalid_attempt_claim_never_builds_processor_or_opens_workspace(
     )
     authorization = SimpleNamespace(consume=AsyncMock())
     processor_build = Mock(side_effect=AssertionError("invalid claim built CHECKER processor"))
-    preparation = SimpleNamespace(_process_prepared_submission=AsyncMock(
-        side_effect=AssertionError("invalid claim opened scratch"),
-    ))
+    preparation = SimpleNamespace(
+        _process_prepared_submission=AsyncMock(
+            side_effect=AssertionError("invalid claim opened scratch"),
+        )
+    )
     service = PreparedBundleMaterializationService(
         session=session,
         authorization=authorization,
@@ -109,19 +175,24 @@ async def test_completed_replay_rejects_missing_result_metadata_before_capabilit
     missing_field: str,
 ) -> None:
     plan = _plan(build_pre_submission_checker_catalogue())
-    attempt_id, evidence_id = str(uuid4()), str(uuid4())
+    attempt_id, evidence_id = str(new_record_id()), str(new_record_id())
     request_digest = "sha256:" + "a" * 64
     evidence = SimpleNamespace(
-        id=evidence_id, attempt_id=attempt_id, attempt_request_digest=request_digest,
+        id=evidence_id,
+        attempt_id=attempt_id,
+        attempt_request_digest=request_digest,
         packet_sha256="sha256:" + "b" * 64,
     )
     row = SimpleNamespace(
-        id=attempt_id, status="completed", evidence_set_id=evidence_id,
+        id=attempt_id,
+        status="completed",
+        evidence_set_id=evidence_id,
         request_json={"packet_sha256": "sha256:" + "b" * 64},
         request_digest=request_digest,
     )
-    members = [SimpleNamespace(metadata_json=[], checker_order=entry.order)
-               for entry in plan.entries]
+    members = [
+        SimpleNamespace(metadata_json=[], checker_order=entry.order) for entry in plan.entries
+    ]
     setattr(members[0], missing_field, None)
     session = SimpleNamespace(
         get=AsyncMock(return_value=evidence),
@@ -137,32 +208,49 @@ async def test_completed_replay_rejects_nonnull_corrupt_result_before_capability
 ) -> None:
     plan = _plan(build_pre_submission_checker_catalogue())
     context = _context()
-    attempt_id, evidence_id = str(uuid4()), str(uuid4())
+    attempt_id, evidence_id = str(new_record_id()), str(new_record_id())
     request_digest = "sha256:" + "a" * 64
     evidence = SimpleNamespace(
-        id=evidence_id, attempt_id=attempt_id, attempt_request_digest=request_digest,
+        id=evidence_id,
+        attempt_id=attempt_id,
+        attempt_request_digest=request_digest,
         packet_sha256="sha256:" + "b" * 64,
-        archive_sha256=context.archive_sha256, archive_byte_count=context.archive_byte_count,
+        archive_sha256=context.archive_sha256,
+        archive_byte_count=context.archive_byte_count,
         semantic_manifest_sha256=context.semantic_manifest_sha256,
-        storage_scheme=context.storage_scheme, effective_plan_sha256=plan.plan_sha256,
+        storage_scheme=context.storage_scheme,
+        effective_plan_sha256=plan.plan_sha256,
         eligible=True,
     )
     row = SimpleNamespace(
-        id=attempt_id, status="completed", evidence_set_id=evidence_id,
+        id=attempt_id,
+        status="completed",
+        evidence_set_id=evidence_id,
         request_json={"packet_sha256": "sha256:" + "b" * 64},
-        request_digest=request_digest, prepared_generation_id=str(context.prepared_generation_id),
+        request_digest=request_digest,
+        prepared_generation_id=str(context.prepared_generation_id),
     )
-    members = [SimpleNamespace(
-        dispatch_authority="workstream.pre_submission_checker_catalogue",
-        definition_id=entry.definition_id, definition_version=entry.definition_version,
-        public_name=entry.public_name, source=entry.policy_trace_source,
-        effective_plan_sha256=plan.plan_sha256, rule_instance_id=entry.rule_instance_id,
-        locked_policy_sha256=plan.lineage.effective_policy_hash,
-        phase=entry.phase, checker_order=entry.order,
-        classification=entry.classification,
-        severity="warning" if entry.classification == "advisory" else "blocking",
-        status="passed", failure_code=None, message_code="passed", metadata_json=[],
-    ) for entry in plan.entries]
+    members = [
+        SimpleNamespace(
+            dispatch_authority="workstream.pre_submission_checker_catalogue",
+            definition_id=entry.definition_id,
+            definition_version=entry.definition_version,
+            public_name=entry.public_name,
+            source=entry.policy_trace_source,
+            effective_plan_sha256=plan.plan_sha256,
+            rule_instance_id=entry.rule_instance_id,
+            locked_policy_sha256=plan.lineage.effective_policy_hash,
+            phase=entry.phase,
+            checker_order=entry.order,
+            classification=entry.classification,
+            severity="warning" if entry.classification == "advisory" else "blocking",
+            status="passed",
+            failure_code=None,
+            message_code="passed",
+            metadata_json=[],
+        )
+        for entry in plan.entries
+    ]
     if corruption == "definition_order":
         members[0].checker_order += 1
     else:

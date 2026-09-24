@@ -1,6 +1,6 @@
 """Real originating authority mutations atomically append exact assignment work."""
 
-from uuid import UUID, uuid4, uuid5
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select
@@ -24,8 +24,10 @@ async def test_supported_causes_publish_exact_targets(task_client, monkeypatch, 
         assert event.aggregate_id == UUID(s.assignment["id"])
         assert event.project_id == s.project["id"]
         assert event.causation_event_id == s.invalidation_id
-        assert event.event_id == uuid5(s.invalidation_id, f"assignment:{s.assignment['id']}")
-        assert event.idempotency_key == f"assignment-invalidation:{event.event_id}"
+        assert event.event_id.version == 7
+        assert event.idempotency_key == (
+            f"assignment-invalidation:{s.invalidation_id}:{s.assignment['id']}"
+        )
         assert event.payload == {
             "project_id": s.project["id"], "task_id": s.task["id"],
             "assignment_id": s.assignment["id"], "contributor_id": s.grant["actor_profile_id"],

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from typing import Literal
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import func, select, text
@@ -66,7 +67,7 @@ class _ParticipantAuthorization(Authorization):
             self.consumed += 1
             raise RuntimeError("consume_failed")
         actor = await super().consume_adapter_binding_mutation(prepared, facts)
-        return uuid4() if self.mode == "wrong_actor" else actor
+        return new_record_id() if self.mode == "wrong_actor" else actor
 
 
 class _FailingRepository(AdapterBindingRepository):
@@ -122,7 +123,7 @@ async def test_consume_failure_closes_once_and_creates_no_effect(
             async with session.begin():
                 await service(session, authorization).create(
                     AdapterBindingCreateRequest(
-                        operation_id=uuid4(), actor_profile_id=actor_id,
+                        operation_id=new_record_id(), actor_profile_id=actor_id,
                         project_id=project_id, instrument_type="money",
                         adapter_actor_id=adapter_id, route_key="adapter.primary",
                     )
@@ -156,7 +157,7 @@ async def test_product_failure_rolls_back_closed_authority_and_all_effects(
             async with session.begin():
                 await binding_service.create(
                     AdapterBindingCreateRequest(
-                        operation_id=uuid4(), actor_profile_id=actor_id,
+                        operation_id=new_record_id(), actor_profile_id=actor_id,
                         project_id=project_id, instrument_type="money",
                         adapter_actor_id=adapter_id, route_key="adapter.primary",
                     )

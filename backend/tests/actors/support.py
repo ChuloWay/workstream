@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from datetime import UTC, datetime
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -23,7 +23,7 @@ RATE_SECRET = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
 
 def resolved_actor(*, subject="controlled-actor", actor_id=None):
     """Build separate ORM-shaped rows for controlled owner-port proof, not SQL."""
-    actor_id = actor_id or str(uuid4())
+    actor_id = actor_id or str(new_record_id())
     return ResolvedActor(
         profile=ActorProfile(
             id=actor_id,
@@ -33,7 +33,7 @@ def resolved_actor(*, subject="controlled-actor", actor_id=None):
             created_by=actor_id,
         ),
         identity_link=ActorIdentityLink(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             actor_profile_id=actor_id,
             issuer=ISSUER,
             subject=subject,

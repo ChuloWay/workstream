@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import pytest
 
@@ -34,6 +34,7 @@ from app.modules.authorization.runtime import (
     IdentityLinkStatus,
     ServiceAuthorizationContext,
 )
+from app.core.identifiers import new_record_id
 from app.modules.actors.api import ServiceIdentity
 from app.modules.audit.schemas import AuthorityAuditEventInput
 
@@ -50,7 +51,7 @@ def _request() -> ProjectGuideCompilationRequestFacts:
         guide_material_hash=digest,
         setup_run_id=uuid4(),
         setup_generation=1,
-        operation_id=uuid4(),
+        operation_id=uuid5(NAMESPACE_URL, "workstream.test.compilation-request-selector"),
         request_id=uuid4(),
         idempotency_key=uuid4(),
         pre_catalogue_id="pre",
@@ -183,9 +184,10 @@ def test_from_prepared_preserves_the_existing_authorization_composition() -> Non
 @pytest.mark.asyncio
 async def test_request_prepare_and_consume_bind_the_exact_project_context() -> None:
     actor, facts = _actor(), _request()
+    exact = replace(facts, operation_id=new_record_id())
     adapter, prepared = _adapter(actor)
     handle = await adapter.prepare_request(origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"), actor=actor, facts=facts)
-    event_id = await adapter.consume_request(origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"), handle=handle, actor=actor, facts=facts)
+    event_id = await adapter.consume_request(origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"), handle=handle, actor=actor, prepared_facts=facts, facts=exact)
     assert handle is prepared.handle
     assert event_id == prepared.event_id
     assert [call[1] for call in prepared.calls] == [
@@ -344,11 +346,12 @@ async def test_real_kernel_exact_project_manager_request_succeeds_and_replay_den
         context.actor_profile_id, context.identity_link_id, PublicActorKind.HUMAN
     )
     facts = _request()
+    exact = replace(facts, operation_id=new_record_id())
     handle = await adapter.prepare_request(origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"), actor=actor, facts=facts)
-    event_id = await adapter.consume_request(origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"), handle=handle, actor=actor, facts=facts)
+    event_id = await adapter.consume_request(origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"), handle=handle, actor=actor, prepared_facts=facts, facts=exact)
     assert [event.event_id for event in evidence.events] == [event_id]
     with pytest.raises(PreparedAuthorizationInvalid):
-        await adapter.consume_request(origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"), handle=handle, actor=actor, facts=facts)
+        await adapter.consume_request(origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"), handle=handle, actor=actor, prepared_facts=facts, facts=exact)
 
 
 @pytest.mark.parametrize(

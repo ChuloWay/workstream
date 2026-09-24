@@ -6,7 +6,8 @@ import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import func, select
@@ -38,7 +39,7 @@ from tests.test_pre_submit_attempt_recovery import _harness
 
 
 async def _seed_manager(harness) -> tuple[UUID, UUID]:
-    actor_id, link_id = uuid4(), uuid4()
+    actor_id, link_id = new_record_id(), new_record_id()
     project_id = harness.request.effective_plan.lineage.project_id
     async with harness.factory() as session:
         session.add_all([
@@ -85,7 +86,7 @@ async def _issue_runtime(session, actor_id: UUID, link_id: UUID):
         actor_profile_id=actor_id, actor_kind=ActorKind.HUMAN,
         actor_status=ActorStatus.ACTIVE, identity_link_id=link_id,
         identity_link_status=IdentityLinkStatus.ACTIVE,
-        request_id=uuid4(), correlation_id=uuid4(),
+        request_id=new_record_id(), correlation_id=new_record_id(),
     )
     repository = AdminAuthorizationRepository(session)
     authority = AuthorizationService(session, context, admin_repository=repository)
@@ -160,7 +161,7 @@ async def test_role_issue_and_pre_submit_execution_complete_without_project_cont
                 target_id = UUID(await session.scalar(select(
                     ActorIdentityLink.actor_profile_id,
                 ).where(ActorIdentityLink.id == materializer_link_id)))
-        application_name = f"pol07a_role_issue_{uuid4().hex[:12]}"
+        application_name = f"pol07a_role_issue_{new_record_id().hex[:12]}"
         issue_engine = create_async_engine(
             isolated_database_env,
             connect_args={"server_settings": {"application_name": application_name}},
@@ -203,7 +204,7 @@ async def test_role_issue_and_pre_submit_execution_complete_without_project_cont
                 ))
                 await asyncio.wait_for(project_locked.wait(), timeout=30)
                 assert paused_project.backend_pid is not None
-                issue_key = uuid4()
+                issue_key = new_record_id()
                 body = _issue_body(target_id)
                 issue_task = asyncio.create_task(_issue_role(
                     issue_session, project_id, body, issue_key,
@@ -278,7 +279,7 @@ async def test_target_created_after_prepare_is_locked_before_project(
     try:
         manager_id, manager_link_id = await _seed_manager(harness)
         project_id = harness.request.effective_plan.lineage.project_id
-        target_id, target_link_id = uuid4(), uuid4()
+        target_id, target_link_id = new_record_id(), new_record_id()
         async with harness.factory() as session:
             prepared, resolved = await _issue_runtime(session, manager_id, manager_link_id)
             original_prepare = prepared.prepare
@@ -313,7 +314,7 @@ async def test_target_created_after_prepare_is_locked_before_project(
             )
             try:
                 issued = await _issue_role(
-                    session, project_id, _issue_body(target_id), uuid4(),
+                    session, project_id, _issue_body(target_id), new_record_id(),
                     resolved, prepared,
                 )
                 assert issued.status == "active"

@@ -17,6 +17,12 @@ def _write(path: Path, value: str) -> None:
     path.write_text(value, encoding="utf-8")
 
 
+def test_current_repository_inventory_has_no_unowned_or_mismatched_keys() -> None:
+    report = build_inventory(Path(__file__).resolve().parents[1])
+    assert report["unresolved"] == []
+    assert report["string_uuid_references"] == []
+
+
 def test_orm_ast_inventory_captures_multiline_and_table_level_foreign_keys(
     tmp_path: Path,
 ) -> None:
@@ -203,3 +209,16 @@ def upgrade():
     text = render_text(report)
     assert "widget_uses.widget_id -> widgets.id" in text
     assert "migration_state: schema table has no ORM owner" in text
+
+    # A manifest that silently loses a model or changes its key must not be
+    # treated as a complete inventory just because the remaining types match.
+    manifest_path = backend / "alembic/baseline/v01_baseline_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["tables"] = [row for row in manifest["tables"] if row["name"] != "widget_uses"]
+    manifest["columns"] = [row for row in manifest["columns"] if row["table_name"] != "widget_uses"]
+    manifest["constraints"] = [row for row in manifest["constraints"] if row["table_name"] != "widget_uses"]
+    manifest["constraints"][0]["definition"] = "PRIMARY KEY (different_key)"
+    _write(manifest_path, json.dumps(manifest))
+    unresolved = {(row["kind"], row["table"]) for row in build_inventory(backend)["unresolved"]}
+    assert ("missing_schema_table", "widget_uses") in unresolved
+    assert ("primary_key_shape_mismatch", "widgets") in unresolved

@@ -8,7 +8,8 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from threading import Event, Thread
 from types import SimpleNamespace
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from unittest.mock import AsyncMock, Mock, call
@@ -41,12 +42,12 @@ async def test_production_authority_denies_prepare_and_consume() -> None:
     authority = DenyArtifactInternalAuthority()
     facts = ArtifactPutAttemptAuthorityFacts(
         resource_type=ArtifactInternalResourceType.PUT_ATTEMPT,
-        resource_id=uuid4(),
+        resource_id=new_record_id(),
         operation_identity="sha256:" + "1" * 64,
         namespace_fingerprint="sha256:" + "2" * 64,
         sha256="sha256:" + "3" * 64,
         byte_count=1,
-        executor_id=uuid4(),
+        executor_id=new_record_id(),
         execution_generation=1,
     )
     with pytest.raises(ArtifactAuthorityDeniedError):
@@ -55,7 +56,7 @@ async def test_production_authority_denies_prepare_and_consume() -> None:
             action_id=ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
             facts=facts,
             phase="claim",
-            idempotency_key=uuid4(),
+            idempotency_key=new_record_id(),
         )
     with pytest.raises(ArtifactAuthorityDeniedError):
         await authority.consume(
@@ -151,7 +152,7 @@ def test_eager_internal_tasks_use_lazy_process_runtime(
     )
     continuation_delay = Mock()
     monkeypatch.setattr(worker_module.continue_guide_setup, "delay", continuation_delay)
-    attempt_id, job_id = uuid4(), uuid4()
+    attempt_id, job_id = new_record_id(), new_record_id()
 
     worker_module.resolve_put_attempt.delay(str(attempt_id))
     worker_module.verify_object.delay(str(job_id))
@@ -194,8 +195,8 @@ def test_eager_internal_tasks_use_lazy_process_runtime(
     job_delay = Mock()
     monkeypatch.setattr(worker_module.resolve_put_attempt, "delay", put_delay)
     monkeypatch.setattr(worker_module.verify_object, "delay", job_delay)
-    attempt_id = str(uuid4())
-    job_id = str(uuid4())
+    attempt_id = str(new_record_id())
+    job_id = str(new_record_id())
     worker_module.resolve_put_attempt(attempt_id)
     worker_module.verify_object(job_id)
     assert operation.await_count == 2
@@ -464,7 +465,7 @@ async def test_internal_operation_rejects_kind_and_restages_denial(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     with pytest.raises(ValueError, match="unsupported artifact internal operation"):
-        await internal_worker_adapter.run_artifact_internal_operation("unknown", uuid4())
+        await internal_worker_adapter.run_artifact_internal_operation("unknown", new_record_id())
 
     monkeypatch.setattr(
         internal_worker_adapter,
@@ -503,7 +504,7 @@ async def test_internal_operation_rejects_kind_and_restages_denial(
     )
     authority = PreparedArtifactInternalAuthority(
         session, service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-        request_id=uuid4(), correlation_id=uuid4(),
+        request_id=new_record_id(), correlation_id=new_record_id(),
     )
     authority.persist_denial = AsyncMock(side_effect=persist_denial)
     monkeypatch.setattr(
@@ -524,7 +525,7 @@ async def test_internal_operation_rejects_kind_and_restages_denial(
     )
 
     with pytest.raises(ArtifactAuthorityDeniedError, match="authority denied"):
-        await internal_worker_adapter.run_artifact_internal_operation("put", uuid4())
+        await internal_worker_adapter.run_artifact_internal_operation("put", new_record_id())
 
     session.rollback.assert_awaited_once_with()
     authority.persist_denial.assert_awaited_once_with()
@@ -561,7 +562,7 @@ async def test_pending_scan_returns_count_and_restages_denial(
     monkeypatch.setattr(internal_worker_adapter, "get_settings", Mock(return_value=Mock()))
     authority = PreparedArtifactInternalAuthority(
         session, service_identity=ServiceIdentity.ARTIFACT_SCHEDULER,
-        request_id=uuid4(), correlation_id=uuid4(),
+        request_id=new_record_id(), correlation_id=new_record_id(),
     )
     authority.persist_denial = AsyncMock(side_effect=persist_denial)
     monkeypatch.setattr(

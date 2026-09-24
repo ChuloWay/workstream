@@ -30,7 +30,7 @@ def test_resource_substitution_rejects(field):
         ProjectGuideActivationResourceContext(**values)
 
 
-@pytest.mark.parametrize("field", ["project_id", "guide_id", "operation_id"])
+@pytest.mark.parametrize("field", ["project_id", "guide_id"])
 def test_locator_must_match_receipt(field):
     facts = activation_facts()
     facts = facts.model_copy(update={"locator": facts.locator.model_copy(update={field: uuid4()})})

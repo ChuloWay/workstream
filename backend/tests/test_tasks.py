@@ -13,7 +13,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, call
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest  # type: ignore[import-not-found]
 from alembic.config import Config
@@ -85,24 +86,24 @@ from app.schemas.auth import ActorContext
 def _locked_task_context_references() -> TaskLockedProjectContextReferences:
     """Build complete immutable locked references for focused unit tests."""
     return TaskLockedProjectContextReferences(locked_contribution_policy_version_id=UUID(int=100),
-        project_id=uuid4(),
+        project_id=new_record_id(),
         guide_version="v1",
-        source_snapshot_id=uuid4(),
+        source_snapshot_id=new_record_id(),
         source_snapshot_hash="sha256:" + "1" * 64,
-        effective_policy_id=uuid4(),
+        effective_policy_id=new_record_id(),
         effective_policy_hash="sha256:" + "2" * 64,
-        pre_submit_policy_id=uuid4(),
+        pre_submit_policy_id=new_record_id(),
         pre_submit_policy_bundle_hash="sha256:" + "3" * 64,
     )
 
 
 def test_task_submission_context_public_facts_are_immutable_and_consistent() -> None:
     """Reject mutation, invalid failures, and inconsistent lifecycle facts."""
-    predecessor = SubmissionPredecessorFacts(submission_id=uuid4(), version=2)
+    predecessor = SubmissionPredecessorFacts(submission_id=new_record_id(), version=2)
     facts = TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
-        task_id=uuid4(),
-        assignment_id=uuid4(),
-        contributor_id=uuid4(),
+        task_id=new_record_id(),
+        assignment_id=new_record_id(),
+        contributor_id=new_record_id(),
         status="needs_revision",
         kind="revision",
         predecessor=predecessor,
@@ -117,23 +118,23 @@ def test_task_submission_context_public_facts_are_immutable_and_consistent() -> 
     with pytest.raises(FrozenInstanceError):
         facts.status = "in_progress"  # type: ignore[misc]
     with pytest.raises(ValueError, match="version is invalid"):
-        SubmissionPredecessorFacts(submission_id=uuid4(), version=0)
+        SubmissionPredecessorFacts(submission_id=new_record_id(), version=0)
     with pytest.raises(ValueError, match="reference is empty"):
         TaskLockedProjectContextReferences(locked_contribution_policy_version_id=UUID(int=100),
-            project_id=uuid4(),
+            project_id=new_record_id(),
             guide_version=" ",
-            source_snapshot_id=uuid4(),
+            source_snapshot_id=new_record_id(),
             source_snapshot_hash="sha256:" + "1" * 64,
-            effective_policy_id=uuid4(),
+            effective_policy_id=new_record_id(),
             effective_policy_hash="sha256:" + "2" * 64,
-            pre_submit_policy_id=uuid4(),
+            pre_submit_policy_id=new_record_id(),
             pre_submit_policy_bundle_hash="sha256:" + "3" * 64,
         )
     with pytest.raises(ValueError, match="predecessor is inconsistent"):
         TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
-            task_id=uuid4(),
-            assignment_id=uuid4(),
-            contributor_id=uuid4(),
+            task_id=new_record_id(),
+            assignment_id=new_record_id(),
+            contributor_id=new_record_id(),
             status="in_progress",
             kind="initial",
             predecessor=predecessor,
@@ -141,9 +142,9 @@ def test_task_submission_context_public_facts_are_immutable_and_consistent() -> 
         )
     with pytest.raises(ValueError, match="predecessor is inconsistent"):
         TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
-            task_id=uuid4(),
-            assignment_id=uuid4(),
-            contributor_id=uuid4(),
+            task_id=new_record_id(),
+            assignment_id=new_record_id(),
+            contributor_id=new_record_id(),
             status="needs_revision",
             kind="initial",
             predecessor=None,
@@ -154,10 +155,10 @@ def test_task_submission_context_public_facts_are_immutable_and_consistent() -> 
 @pytest.mark.asyncio
 async def test_task_repository_locks_initial_and_revision_submission_context() -> None:
     """Project exact initial and revision facts through the owner-local port."""
-    contributor_id = uuid4()
-    task_id = uuid4()
-    assignment_id = uuid4()
-    predecessor_id = uuid4()
+    contributor_id = new_record_id()
+    task_id = new_record_id()
+    assignment_id = new_record_id()
+    predecessor_id = new_record_id()
     references = _locked_task_context_references()
     task = MagicMock(
         project_id=str(references.project_id),
@@ -252,9 +253,9 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
 @pytest.mark.asyncio
 async def test_task_repository_rejects_stale_submission_predecessor() -> None:
     """Reject a predecessor selector that is no longer the latest Submission."""
-    task_id = uuid4()
-    contributor_id = uuid4()
-    assignment_id = uuid4()
+    task_id = new_record_id()
+    contributor_id = new_record_id()
+    assignment_id = new_record_id()
     task = MagicMock(assigned_to=str(contributor_id), status="in_progress",
                      project_id="same-project", locked_contribution_policy_version_id=UUID(int=100))
     assignment = MagicMock(
@@ -266,7 +267,7 @@ async def test_task_repository_rejects_stale_submission_predecessor() -> None:
     repository = TaskRepository(session)
     repository.get_task = AsyncMock(return_value=task)
     repository.get_latest_submission_for_task = AsyncMock(
-        return_value=MagicMock(id=str(uuid4()), version=1, contributor_id=str(contributor_id))
+        return_value=MagicMock(id=str(new_record_id()), version=1, contributor_id=str(contributor_id))
     )
 
     with pytest.raises(
@@ -278,7 +279,7 @@ async def test_task_repository_rejects_stale_submission_predecessor() -> None:
                 task_id=task_id,
                 assignment_id=assignment_id,
                 contributor_id=contributor_id,
-                predecessor_submission_id=uuid4(),
+                predecessor_submission_id=new_record_id(),
             )
         )
 
@@ -289,10 +290,10 @@ async def test_task_repository_rejects_invalid_revision_lineage(
     cross_contributor: bool,
 ) -> None:
     """Reject crossed lifecycle state and cross-contributor predecessors."""
-    task_id = uuid4()
-    contributor_id = uuid4()
-    assignment_id = uuid4()
-    predecessor_id = uuid4()
+    task_id = new_record_id()
+    contributor_id = new_record_id()
+    assignment_id = new_record_id()
+    predecessor_id = new_record_id()
     task = MagicMock(assigned_to=str(contributor_id), status="in_progress")
     assignment = MagicMock(
         task_id=str(task_id), contributor_id=str(contributor_id), status="active"
@@ -300,7 +301,7 @@ async def test_task_repository_rejects_invalid_revision_lineage(
     predecessor = MagicMock(
         id=str(predecessor_id),
         version=1,
-        contributor_id=str(uuid4()) if cross_contributor else str(contributor_id),
+        contributor_id=str(new_record_id()) if cross_contributor else str(contributor_id),
     )
     session = MagicMock()
     session.scalar = AsyncMock(return_value=assignment)
@@ -690,7 +691,7 @@ def alembic_config() -> Config:
 def auth_headers(token: str = "task-token") -> dict[str, str]:
     return {
         "Authorization": f"Bearer {token}",
-        "Idempotency-Key": str(uuid4()),
+        "Idempotency-Key": str(new_record_id()),
     }
 
 
@@ -896,7 +897,7 @@ def complete_submission_payload(package_hash: str = "sha256:package-v1") -> dict
 async def create_active_project(client: AsyncClient, *, slug: str = "task-queue-project") -> dict:
     project_response = await client.post(
         "/api/v1/projects",
-        headers=auth_headers() | {"Idempotency-Key": str(uuid4())},
+        headers=auth_headers() | {"Idempotency-Key": str(new_record_id())},
         json={
             "name": "Task Queue Project",
             "slug": slug,
@@ -1041,7 +1042,7 @@ async def seed_task_test_actor(subject: str, *, stored_role: str = "worker") -> 
                     created_by=worker_actor_id,
                 ),
                 ActorIdentityLink(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     actor_profile_id=worker_actor_id,
                     issuer="flow-test",
                     subject=subject,
@@ -1170,7 +1171,7 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
         task_id=revision_request.task_id,
         assignment_id=revision_request.assignment_id,
         contributor_id=revision_request.contributor_id,
-        predecessor_submission_id=uuid4(),
+        predecessor_submission_id=new_record_id(),
     )
     async with db_session.get_session_factory()() as session:
         with pytest.raises(
@@ -1195,7 +1196,7 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
 
     replacement_subject = "worker-submission-context-replacement"
     replacement_contributor_id = await seed_task_test_actor(replacement_subject)
-    replacement_assignment_id = str(uuid4())
+    replacement_assignment_id = str(new_record_id())
     async with db_session.get_session_factory()() as session:
         await session.execute(
             update(TaskAssignment)
@@ -1243,7 +1244,7 @@ async def test_task_repository_postgresql_submission_context_lock_serializes_rac
     subject = "worker-submission-context-race"
     task = await create_started_task(task_client, project["id"], monkeypatch, subject)
     request = await _submission_context_request_for_started_task(task["id"], actor_id(subject))
-    contender_name = f"task-context-{uuid4()}"
+    contender_name = f"task-context-{new_record_id()}"
 
     holder = db_session.get_session_factory()()
     contender = db_session.get_session_factory()()
@@ -1449,7 +1450,7 @@ async def test_task_router_service_errors_use_canonical_request_context(
         raise TaskServiceError("bounded task failure")
 
     cases = [
-        ("create_task", "POST", f"/api/v1/projects/{uuid4()}/tasks", complete_task_payload()),
+        ("create_task", "POST", f"/api/v1/projects/{new_record_id()}/tasks", complete_task_payload()),
         ("get_task", "GET", "/api/v1/tasks/task-id", None),
         (
             "get_task_submission_requirements",
@@ -1458,8 +1459,8 @@ async def test_task_router_service_errors_use_canonical_request_context(
             None,
         ),
         ("get_task_locked_context", "GET", "/api/v1/tasks/task-id/locked-context", None),
-        ("screen", "POST", f"/api/v1/tasks/{uuid4()}/screen", None),
-        ("release", "POST", f"/api/v1/tasks/{uuid4()}/release", None),
+        ("screen", "POST", f"/api/v1/tasks/{new_record_id()}/screen", None),
+        ("release", "POST", f"/api/v1/tasks/{new_record_id()}/release", None),
         ("list_task_submissions", "GET", "/api/v1/tasks/task-id/submissions", None),
         ("get_submission", "GET", "/api/v1/submissions/submission-id", None),
         ("finalize_submission", "POST", "/api/v1/submissions/submission-id/finalize", None),
@@ -1575,7 +1576,7 @@ async def test_task_create_and_transitions_reject_client_supplied_policy_context
 async def test_screening_requires_active_guide_context(task_client: AsyncClient) -> None:
     project_response = await task_client.post(
         "/api/v1/projects",
-        headers=auth_headers() | {"Idempotency-Key": str(uuid4())},
+        headers=auth_headers() | {"Idempotency-Key": str(new_record_id())},
         json={"name": "No Guide", "slug": "no-guide"},
     )
     assert project_response.status_code == 201, project_response.text
@@ -2768,7 +2769,7 @@ async def test_database_rejects_submission_without_post_submit_policy_context(
         assert task is not None
         assignment = await session.scalar(select(TaskAssignment).where(TaskAssignment.task_id == task.id))
         submission = Submission(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             task_id=task.id,
             task_assignment_id=assignment.id,
             contributor_id=actor_id("worker-one"),
@@ -2826,7 +2827,7 @@ async def test_database_rejects_checker_run_without_post_submit_policy_context(
         assert task is not None
         assert submission is not None
         checker_run = db_models.CheckerRun(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             task_id=task.id,
             submission_id=submission.id,
             submission_version=submission.version,
@@ -4618,7 +4619,7 @@ async def test_database_enforces_unique_submission_version(
         assert persisted is not None
         task = await session.get(WorkstreamTask, persisted.task_id)
         session.add(build_submission(
-            submission_id=str(uuid4()), task=task, contributor_id=persisted.contributor_id,
+            submission_id=str(new_record_id()), task=task, contributor_id=persisted.contributor_id,
             task_assignment_id=persisted.task_assignment_id,
             contribution_policy_version_id=persisted.contribution_policy_version_id,
             version=persisted.version, summary="duplicate",
@@ -4705,7 +4706,7 @@ async def test_database_enforces_one_active_assignment_per_task(task_client: Asy
         session.add_all(
             [
                 TaskAssignment(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     task_id=ready_task["id"],
                     project_id=project["id"],
                     submitter_contribution_policy_version_id=UUID(ready_task["locked_contribution_policy_version_id"]),
@@ -4714,7 +4715,7 @@ async def test_database_enforces_one_active_assignment_per_task(task_client: Asy
                     status="active",
                 ),
                 TaskAssignment(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     task_id=ready_task["id"],
                     project_id=project["id"],
                     submitter_contribution_policy_version_id=UUID(ready_task["locked_contribution_policy_version_id"]),
@@ -4740,7 +4741,7 @@ async def test_released_assignment_does_not_block_new_active_assignment(
         session.add_all(
             [
                 TaskAssignment(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     task_id=ready_task["id"],
                     project_id=project["id"],
                     submitter_contribution_policy_version_id=UUID(ready_task["locked_contribution_policy_version_id"]),
@@ -4749,7 +4750,7 @@ async def test_released_assignment_does_not_block_new_active_assignment(
                     status="released",
                 ),
                 TaskAssignment(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     task_id=ready_task["id"],
                     project_id=project["id"],
                     submitter_contribution_policy_version_id=UUID(ready_task["locked_contribution_policy_version_id"]),

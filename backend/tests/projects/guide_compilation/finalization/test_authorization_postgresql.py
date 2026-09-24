@@ -11,6 +11,7 @@ from app.modules.authorization.api import (
     AuthorizationDenied,
     PreparedAuthorizationInvalid,
     ProjectSetupFinalizationLocator,
+    setup_finalization_preparation_identity,
     setup_finalization_authority_digest,
 )
 from app.modules.projects.api import ProjectGuideSetupFinalizationError
@@ -45,7 +46,8 @@ async def test_concrete_finalization_is_atomic(clean_postgres_database, classifi
             assert event["event_type"] == "SensitiveAuthorizationAllowed"
             assert event["actor_ref_kind"] == "actor_profile"
             assert event["actor_id"] == str(values["actor"])
-            assert event["request_id"] == authority.facts.operation_id
+            request_id, _ = setup_finalization_preparation_identity(authority.locator)
+            assert event["request_id"] == request_id
             assert event["correlation_id"] == authority.facts.correlation_id
             assert event["resource_type"] == "project_guide_setup_finalization"
             assert event["resource_id"] == str(result.finalization_id)
@@ -201,8 +203,9 @@ async def test_missing_history_denies_at_concrete_auth_boundary(clean_postgres_d
         facts = authority.facts
         locator = ProjectSetupFinalizationLocator(
             project_id=facts.project_id,
-            operation_id=facts.operation_id,
-            correlation_id=facts.correlation_id,
+            setup_run_id=facts.setup_run_id,
+            setup_generation=facts.setup_generation,
+            compilation_id=facts.compilation_id,
         )
         async with factory() as session, session.begin():
             adapter = ObservedAuthorization(session).delegate

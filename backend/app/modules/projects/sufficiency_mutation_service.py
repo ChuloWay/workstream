@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import AsyncIterator, Literal, cast
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from pydantic import JsonValue
 from sqlalchemy.exc import IntegrityError
@@ -279,7 +280,7 @@ class GuideSufficiencyMutationService:
     ) -> AsyncIterator[GuideSufficiencyMutationOutcome]:
         """Create one explicitly human-authored sufficiency report."""
         action = ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_CREATE
-        report_id, operation_id = uuid4(), uuid4()
+        report_id, operation_id = new_record_id(), new_record_id()
         snapshot_id = UUID(payload.source_snapshot_id)
         initial = await self._lineage(project_id, guide_id, snapshot_id, lock=False)
         caller, digest = self._caller(
@@ -440,7 +441,7 @@ class GuideSufficiencyMutationService:
             or report.guide_id != str(guide_id)
         ):
             raise SufficiencyReportNotFound("guide sufficiency report not found")
-        snapshot_id, operation_id = UUID(report.source_snapshot_id), uuid4()
+        snapshot_id, operation_id = UUID(report.source_snapshot_id), new_record_id()
         initial = await self._lineage(project_id, guide_id, snapshot_id, lock=False)
         caller, digest = self._caller(
             action=action,

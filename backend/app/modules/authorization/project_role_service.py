@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy.sql import func
 from sqlalchemy.exc import IntegrityError
@@ -122,7 +123,7 @@ class ProjectRoleGrantMutationService:
             actor_ref=str(actor_profile_id),
             request=request.model_dump(),
             context=AuthorityMismatchContext(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 request_id=decision.request_id,
                 correlation_id=decision.correlation_id,
                 matched_grant_id=decision.matched_grant_id,
@@ -139,7 +140,7 @@ class ProjectRoleGrantMutationService:
         code: str,
         action_id: ActionId,
     ) -> None:
-        event_id = uuid4()
+        event_id = new_record_id()
         await self._audit.add_authority_event(
             AuthorityAuditEventInput(
                 event_id=event_id,
@@ -187,7 +188,7 @@ class ProjectRoleGrantMutationService:
         evidence = request.qualification
         snapshot = await self.repository.add_project_role_snapshot(
             ProjectRoleQualificationSnapshot(
-                id=uuid4(),
+                id=new_record_id(),
                 project_id=str(request.project_id),
                 actor_profile_id=str(request.target_actor_id),
                 requested_role=request.role.value,
@@ -202,7 +203,7 @@ class ProjectRoleGrantMutationService:
         try:
             grant = await self.repository.add_project_role_grant(
                 ProjectRoleGrant(
-                    id=uuid4(),
+                    id=new_record_id(),
                     project_id=str(request.project_id),
                     actor_profile_id=str(request.target_actor_id),
                     role=request.role.value,
@@ -244,7 +245,7 @@ class ProjectRoleGrantMutationService:
             ),
             success=(
                 AuthorityAuditEventInput(
-                    event_id=uuid4(),
+                    event_id=new_record_id(),
                     event_type=AuthorityEventType.PROJECT_ROLE_QUALIFICATION_CAPTURED,
                     entity_type="qualification_snapshot",
                     entity_id=str(snapshot.id),
@@ -257,7 +258,7 @@ class ProjectRoleGrantMutationService:
                     **common,
                 ),
                 AuthorityAuditEventInput(
-                    event_id=uuid4(),
+                    event_id=new_record_id(),
                     event_type=AuthorityEventType.PROJECT_ROLE_GRANT_ISSUED,
                     entity_type="project_role_grant",
                     entity_id=str(grant.id),
@@ -312,7 +313,7 @@ class ProjectRoleGrantMutationService:
                 http_status=200,
             ),
             success=AuthorityAuditEventInput(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 event_type=AuthorityEventType.PROJECT_ROLE_GRANT_REVOKED,
                 entity_type="project_role_grant",
                 entity_id=str(grant.id),
@@ -335,7 +336,7 @@ class ProjectRoleGrantMutationService:
                 after_facts=_facts(grant),
             ),
             invalidation=AuthorityInvalidationContext(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 request_id=decision.request_id,
                 correlation_id=decision.correlation_id,
                 target_ref_kind=AuthorityResourceType.PROJECT_ROLE_GRANT,

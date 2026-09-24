@@ -2,7 +2,8 @@
 
 from contextlib import asynccontextmanager
 import pytest
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 from sqlalchemy import select
 
 from app.adapters.tasks import (
@@ -12,7 +13,6 @@ from app.modules.outbox.api import HandlerOutcome
 from app.modules.tasks.api.assignment_invalidation import (
     AssignmentInvalidationAuthority,
     PreparedAssignmentInvalidation,
-    assignment_invalidation_evidence_id,
 )
 from app.modules.tasks.models import TaskAssignment, WorkstreamTask, Submission
 from app.modules.tasks.service import TaskService
@@ -56,7 +56,9 @@ async def test_exact_real_cause_releases_only_pre_submit_assignment(
         k: v for k, v in before[1][0].items() if k not in {"status", "released_at"}
     }
     added = [event for event in events if event["id"] not in {old["id"] for old in before[2]}]
-    assert len(added) == 1 and added[0]["id"] == str(assignment_invalidation_evidence_id(target))
+    assert len(added) == 1 and UUID(str(added[0]["id"])).version == 7
+    assert added[0]["event_payload"]["references"]["assignment_id"] == str(target.assignment_id)
+    assert added[0]["event_payload"]["references"]["authority_invalidation_event_id"] == str(target.authority_invalidation_event_id)
     assert added[0]["event_type"] == "TaskAssignmentAuthorityRevoked"
     assert all(event in events for event in before[2])
     claim_event = next(event for event in before[2] if event["event_type"] == "TaskClaimed")
@@ -94,7 +96,7 @@ async def test_valid_delivery_cannot_substitute_target_or_cause(task_client, mon
     target, envelope = await invoked(s)
     before = await snapshot(s)
     for field in ("task_id", "assignment_id", "contributor_id", "authority_invalidation_event_id"):
-        _, crossed = await invoked(s, target=target.model_copy(update={field: uuid4()}))
+        _, crossed = await invoked(s, target=target.model_copy(update={field: new_record_id()}))
         assert await s.handler(crossed) is HandlerOutcome.REJECT
         assert await snapshot(s) == before
     for bad in (
@@ -126,10 +128,10 @@ async def test_invalid_authority_results_rollback(task_client, monkeypatch):
     before = await snapshot(s)
     for result in (
         None,
-        AssignmentInvalidationAuthority("not-a-uuid", uuid4(), "sha256:" + "a" * 64),
-        AssignmentInvalidationAuthority(uuid4(), "not-a-uuid", "sha256:" + "a" * 64),
-        AssignmentInvalidationAuthority(uuid4(), uuid4(), None),
-        AssignmentInvalidationAuthority(uuid4(), uuid4(), "not-a-digest"),
+        AssignmentInvalidationAuthority("not-a-uuid", new_record_id(), "sha256:" + "a" * 64),
+        AssignmentInvalidationAuthority(new_record_id(), "not-a-uuid", "sha256:" + "a" * 64),
+        AssignmentInvalidationAuthority(new_record_id(), new_record_id(), None),
+        AssignmentInvalidationAuthority(new_record_id(), new_record_id(), "not-a-digest"),
     ):
 
         class InvalidPrepared(PreparedAssignmentInvalidation):
@@ -328,19 +330,21 @@ async def test_release_requires_root_transaction_and_exact_prior_receipt(task_cl
     assert await s.handler(envelope) is HandlerOutcome.ACKNOWLEDGE
     before = await snapshot(s)
     async with s.sessions() as session:
-        row = await session.get(AuditEvent, str(assignment_invalidation_evidence_id(target)))
+        row = await AuditRepository(session).assignment_release_event(
+            target.assignment_id, target.authority_invalidation_event_id,
+        )
         original = {column.key: getattr(row, column.key) for column in AuditEvent.__table__.columns}
     for altered in (
         {**original, "event_payload": {"references": {}}},
-        {**original, "entity_id": str(uuid4())},
+        {**original, "entity_id": str(new_record_id())},
     ):
 
-        async def bad_receipt(owner, event_id):
-            assert event_id == assignment_invalidation_evidence_id(target)
+        async def bad_receipt(owner, assignment_id, cause_id):
+            assert (assignment_id, cause_id) == (target.assignment_id, target.authority_invalidation_event_id)
             return SimpleNamespace(**altered)
 
         with monkeypatch.context() as patch:
-            patch.setattr(AuditRepository, "lifecycle_event", bad_receipt)
+            patch.setattr(AuditRepository, "assignment_release_event", bad_receipt)
             assert await s.handler(envelope) is HandlerOutcome.REJECT
         assert await snapshot(s) == before
     async with s.sessions() as session, session.begin():

@@ -6,7 +6,8 @@ import asyncio
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from pydantic import ValidationError
 import pytest
@@ -59,11 +60,11 @@ def contribution_database_env(
 
 
 async def _seed_project() -> tuple[str, str, str, UUID, UUID]:
-    project_id = str(uuid4())
-    creator_id = str(uuid4())
-    adapter_actor_id = str(uuid4())
-    money_binding_id = uuid4()
-    points_binding_id = uuid4()
+    project_id = str(new_record_id())
+    creator_id = str(new_record_id())
+    adapter_actor_id = str(new_record_id())
+    money_binding_id = new_record_id()
+    points_binding_id = new_record_id()
     async with db_session.get_session_factory()() as session:
         session.add_all(
             [
@@ -88,7 +89,7 @@ async def _seed_project() -> tuple[str, str, str, UUID, UUID]:
         session.add_all(
             [
                 ActorIdentityLink(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     actor_profile_id=creator_id,
                     issuer="https://contributions.test",
                     subject=f"creator-{creator_id}",
@@ -98,7 +99,7 @@ async def _seed_project() -> tuple[str, str, str, UUID, UUID]:
                     last_verified_at=datetime.now(UTC),
                 ),
                 ActorIdentityLink(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     actor_profile_id=adapter_actor_id,
                     issuer="https://contributions.test",
                     subject=f"adapter-{adapter_actor_id}",
@@ -174,8 +175,8 @@ async def _draft_policy(
     *,
     policy_id: UUID | None = None,
 ) -> tuple[UUID, UUID]:
-    policy_id = policy_id or uuid4()
-    version_id = uuid4()
+    policy_id = policy_id or new_record_id()
+    version_id = new_record_id()
     async with db_session.get_session_factory()() as session:
         session.add(
             ContributionPolicy(
@@ -209,7 +210,7 @@ async def _add_rule(
     *,
     binding_id: UUID | None = None,
 ) -> UUID:
-    rule_id = uuid4()
+    rule_id = new_record_id()
     async with db_session.get_session_factory()() as session:
         session.add(
             ContributionRule(
@@ -223,7 +224,7 @@ async def _add_rule(
         if binding_id is not None:
             session.add(
                 ContributionAwardDefinition(
-                    id=uuid4(),
+                    id=new_record_id(),
                     contribution_rule_id=rule_id,
                     contribution_policy_version_id=version_id,
                     project_id=project_id,
@@ -260,7 +261,7 @@ async def _publish_version(
         )
         await service.publish(
             ContributionPolicyPublishRequest(
-                operation_id=uuid4(),
+                operation_id=new_record_id(),
                 actor_profile_id=actor_id,
                 project_id=UUID(version.project_id),
                 contribution_policy_id=version.contribution_policy_id,
@@ -284,7 +285,7 @@ async def _retire_version(version_id: UUID, creator_id: str) -> None:
         )
         await service.retire(
             ContributionPolicyRetireRequest(
-                operation_id=uuid4(),
+                operation_id=new_record_id(),
                 actor_profile_id=actor_id,
                 project_id=UUID(version.project_id),
                 contribution_policy_id=version.contribution_policy_id,
@@ -372,15 +373,15 @@ def test_contribution_models_register_closed_canonical_tables() -> None:
 def test_award_definition_input_rejects_noncanonical_quantity(quantity: object) -> None:
     with pytest.raises(ValidationError):
         ContributionAwardDefinitionInput(
-            id=uuid4(),
-            contribution_rule_id=uuid4(),
-            contribution_policy_version_id=uuid4(),
-            project_id=str(uuid4()),
+            id=new_record_id(),
+            contribution_rule_id=new_record_id(),
+            contribution_policy_version_id=new_record_id(),
+            project_id=str(new_record_id()),
             contribution_type="accepted_submission",
             instrument_type="money",
             unit_code="USD",
             quantity=quantity,
-            adapter_binding_id=uuid4(),
+            adapter_binding_id=new_record_id(),
         )
 
 
@@ -391,29 +392,29 @@ def test_award_definition_input_rejects_noncanonical_quantity(quantity: object) 
 def test_award_definition_input_rejects_wrong_unit_shape(instrument: str, unit: str) -> None:
     with pytest.raises(ValidationError):
         ContributionAwardDefinitionInput(
-            id=uuid4(),
-            contribution_rule_id=uuid4(),
-            contribution_policy_version_id=uuid4(),
-            project_id=str(uuid4()),
+            id=new_record_id(),
+            contribution_rule_id=new_record_id(),
+            contribution_policy_version_id=new_record_id(),
+            project_id=str(new_record_id()),
             contribution_type="accepted_submission",
             instrument_type=instrument,
             unit_code=unit,
             quantity="1.25",
-            adapter_binding_id=uuid4(),
+            adapter_binding_id=new_record_id(),
         )
 
 
 def test_award_definition_input_returns_exact_decimal() -> None:
     value = ContributionAwardDefinitionInput(
-        id=uuid4(),
-        contribution_rule_id=uuid4(),
-        contribution_policy_version_id=uuid4(),
-        project_id=str(uuid4()),
+        id=new_record_id(),
+        contribution_rule_id=new_record_id(),
+        contribution_policy_version_id=new_record_id(),
+        project_id=str(new_record_id()),
         contribution_type="accepted_submission",
         instrument_type="money",
         unit_code="USD",
         quantity="1.230000000000000000",
-        adapter_binding_id=uuid4(),
+        adapter_binding_id=new_record_id(),
     )
     assert value.quantity_decimal() == Decimal("1.230000000000000000")
 
@@ -421,10 +422,10 @@ def test_award_definition_input_returns_exact_decimal() -> None:
 def test_project_compensation_unit_input_rejects_unknown_currency() -> None:
     with pytest.raises(ValidationError):
         ProjectCompensationUnitInput(
-            project_id=str(uuid4()),
+            project_id=str(new_record_id()),
             instrument_type="money",
             unit_code="ZZZ",
-            created_by=str(uuid4()),
+            created_by=str(new_record_id()),
         )
 
 
@@ -432,15 +433,15 @@ def test_project_compensation_unit_input_rejects_unknown_currency() -> None:
 def test_award_definition_input_rejects_fractional_project_points(quantity: str) -> None:
     with pytest.raises(ValidationError):
         ContributionAwardDefinitionInput(
-            id=uuid4(),
-            contribution_rule_id=uuid4(),
-            contribution_policy_version_id=uuid4(),
-            project_id=str(uuid4()),
+            id=new_record_id(),
+            contribution_rule_id=new_record_id(),
+            contribution_policy_version_id=new_record_id(),
+            project_id=str(new_record_id()),
             contribution_type="accepted_submission",
             instrument_type="project_points",
             unit_code="merit.points",
             quantity=quantity,
-            adapter_binding_id=uuid4(),
+            adapter_binding_id=new_record_id(),
         )
 
 
@@ -542,7 +543,7 @@ async def test_each_incomplete_policy_graph_shape_is_rejected(
         with pytest.raises(IntegrityError):
             session.add(
                 ContributionAwardDefinition(
-                    id=uuid4(),
+                    id=new_record_id(),
                     contribution_rule_id=rule_id,
                     contribution_policy_version_id=duplicate_version_id,
                     project_id=project_id,
@@ -587,7 +588,7 @@ async def test_database_rejects_unconfigured_units_and_fractional_points(
     )
     invalid_definitions = (
         ContributionAwardDefinition(
-            id=uuid4(),
+            id=new_record_id(),
             contribution_rule_id=rule_id,
             contribution_policy_version_id=version_id,
             project_id=project_id,
@@ -598,7 +599,7 @@ async def test_database_rejects_unconfigured_units_and_fractional_points(
             adapter_binding_id=money_binding_id,
         ),
         ContributionAwardDefinition(
-            id=uuid4(),
+            id=new_record_id(),
             contribution_rule_id=rule_id,
             contribution_policy_version_id=version_id,
             project_id=project_id,
@@ -655,7 +656,7 @@ async def test_database_rejects_unknown_iso_code_and_overprecision(
         with pytest.raises(IntegrityError):
             session.add(
                 ContributionAwardDefinition(
-                    id=uuid4(),
+                    id=new_record_id(),
                     contribution_rule_id=rule_id,
                     contribution_policy_version_id=version_id,
                     project_id=project_id,
@@ -690,7 +691,7 @@ async def test_database_rejects_each_invalid_quantity_edge(
         with pytest.raises(IntegrityError):
             session.add(
                 ContributionAwardDefinition(
-                    id=uuid4(),
+                    id=new_record_id(),
                     contribution_rule_id=rule_id,
                     contribution_policy_version_id=version_id,
                     project_id=project_id,
@@ -714,7 +715,7 @@ async def test_database_accepts_exact_maximum_quantity_edge(
     maximum = Decimal("99999999999999999999.999999999999999999")
     async with db_session.get_session_factory()() as session:
         definition = ContributionAwardDefinition(
-            id=uuid4(),
+            id=new_record_id(),
             contribution_rule_id=rule_id,
             contribution_policy_version_id=version_id,
             project_id=project_id,
@@ -825,7 +826,7 @@ async def test_published_definition_cannot_be_reparented_to_draft_version(
     async with db_session.get_session_factory()() as session:
         session.add(
             ContributionAwardDefinition(
-                id=uuid4(),
+                id=new_record_id(),
                 contribution_rule_id=compensated_rule_id,
                 contribution_policy_version_id=published_version_id,
                 project_id=project_id,
@@ -905,7 +906,7 @@ async def test_publishability_race_cannot_use_uncommitted_rule(
         async with db_session.get_session_factory()() as session:
             session.add(
                 ContributionRule(
-                    id=uuid4(),
+                    id=new_record_id(),
                     contribution_policy_version_id=version_id,
                     project_id=project_id,
                     contribution_type="completed_review",
@@ -972,7 +973,7 @@ async def test_publish_lock_rejects_concurrent_draft_child_mutation(
             assert version is not None
             await service.publish(
                 ContributionPolicyPublishRequest(
-                    operation_id=uuid4(),
+                    operation_id=new_record_id(),
                     actor_profile_id=actor_id,
                     project_id=UUID(project_id),
                     contribution_policy_id=version.contribution_policy_id,
@@ -988,7 +989,7 @@ async def test_publish_lock_rejects_concurrent_draft_child_mutation(
                 await session.execute(text("set local lock_timeout='500ms'"))
                 session.add(
                     ContributionAwardDefinition(
-                        id=uuid4(),
+                        id=new_record_id(),
                         contribution_rule_id=compensated_rule_id,
                         contribution_policy_version_id=version_id,
                         project_id=project_id,

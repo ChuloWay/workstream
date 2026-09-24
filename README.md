@@ -387,7 +387,7 @@ uv sync --locked --extra dev --python python3
 .venv/bin/python -m uvicorn app.main:app --reload
 ```
 
-The v0.1 schema starts at the single `0001_v01_baseline` Alembic revision.
+The v0.1 schema starts at the single `0001_uuid7_v01` Alembic revision.
 Development databases stamped with any earlier revision are intentionally not
 upgradeable: delete and recreate the local database, then run `alembic upgrade
 head`. Workstream never rewrites or compatibility-stamps an old database.
@@ -436,12 +436,22 @@ docker compose down
 For the native workflow, stop Uvicorn with `Ctrl+C` before running
 `docker compose down` for the backing services.
 
-To deliberately delete the local Postgres and MinIO volumes as well, run the
-following destructive reset command:
+Database recreation is destructive and must be scoped to your disposable local
+environment. First stop its API, Celery workers and scheduler. Confirm the Compose
+project name, database host/port and attached volume with `docker compose ps` and
+`docker volume inspect <exact-volume-name>`. Do not reset a shared environment or
+another worktree's services. Remove only the verified disposable PostgreSQL volume
+after stopping that Compose project's containers; do not use `down --volumes`,
+which also removes artifact storage.
 
-```bash
-docker compose down --volumes
-```
+The UUIDv7 schema uses the distinct, Compose-project-scoped
+`workstream_postgres_uuid7_data` volume. Starting it does not convert or erase the
+old development volume. Once you have verified that the old volume is disposable
+and has no remaining consumers, it can be removed separately by its exact name.
+Recreate this environment's Redis container with a fresh anonymous volume before
+restarting Celery workers: queued jobs from the discarded database must not run against
+the new one. Use a fresh private artifact bucket/namespace for the new database;
+do not delete retained/shared S3 or MinIO objects as part of a database reset.
 
 ### Backing Services And Artifact Storage
 

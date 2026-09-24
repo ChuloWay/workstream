@@ -1,0 +1,53 @@
+"""Real PostgreSQL enforcement, independent of ORM input validation."""
+
+from collections.abc import Callable
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
+
+import pytest
+from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from app.core.identifiers import new_record_id
+from app.modules.actors.models import ActorProfile
+
+
+@pytest.mark.parametrize(
+    "invalid_identity",
+    [uuid4, lambda: uuid5(NAMESPACE_URL, "workstream:invalid-row-id")],
+    ids=["uuid4", "uuid5"],
+)
+async def test_native_uuid_round_trip_and_direct_sql_version_guard(
+    isolated_database_env: str,
+    invalid_identity: Callable[[], UUID],
+) -> None:
+    engine = create_async_engine(isolated_database_env)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    identity = new_record_id()
+    insert = text(
+        "insert into actor_profiles "
+        "(id, actor_kind, status, provisioning_method, created_by) "
+        "values (:id, 'human', 'active', 'automatic_first_access', 'uuid7-proof')"
+    )
+    try:
+        async with sessions() as session, session.begin():
+            # V4/V5 are valid UUIDs: failure must be the version guard,
+            # not parsing, missing fields, or an unrelated business constraint.
+            with pytest.raises(IntegrityError, match="ck_actor_profiles_id_uuid7"):
+                async with session.begin_nested():
+                    await session.execute(insert, {"id": invalid_identity()})
+            await session.execute(insert, {"id": identity})
+            native, sql_type = (await session.execute(
+                text("select id, pg_typeof(id)::text from actor_profiles where id=:id"),
+                {"id": identity},
+            )).one()
+            assert isinstance(native, UUID) and native == identity
+            assert native.version == 7 and sql_type == "uuid"
+            profile = await session.scalar(select(ActorProfile).where(ActorProfile.id == str(identity)))
+            assert profile is not None and profile.id == str(identity)
+            # Rollback keeps this probe from creating a retained actor.
+            await session.rollback()
+        async with sessions() as observer:
+            assert await observer.get(ActorProfile, str(identity)) is None
+    finally:
+        await engine.dispose()

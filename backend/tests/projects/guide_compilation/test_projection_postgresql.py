@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.adapters.auth import (
     artifact_policy_projection_authorization,
     guide_sufficiency_projection_authorization,
 )
+from app.core.identifiers import new_record_id
 
 from app.adapters.artifacts import (
     guide_document_manifest_port,
@@ -82,7 +84,7 @@ class _PreparedProjection:
             project_id=facts.project_id,
             facts_digest=facts_digest,
         )
-        event_id = uuid4()
+        event_id = new_record_id()
         await self._session.execute(
             text(
                 "insert into audit_events(id,entity_type,entity_id,event_type,actor_id,"
@@ -217,6 +219,95 @@ async def _project_both(database_url: str, values: dict[str, UUID]):
             policy,
             policy_replay,
         )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_direct_projection_insert_binds_audit_correlation_to_row(
+    clean_postgres_database: str,
+) -> None:
+    """Changing only row correlation must invalidate otherwise exact authority custody."""
+    values = await seed_database(clean_postgres_database)
+    attempt_id, _ = await _persist_compilation(clean_postgres_database, values)
+    engine = create_async_engine(clean_postgres_database)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    service = GuideCompilationProjectionService(
+        factory,
+        material_factory=guide_document_manifest_port,
+        sufficiency_authorization_factory=guide_sufficiency_projection_authorization,
+        policy_authorization_factory=artifact_policy_projection_authorization,
+    )
+    try:
+        await service.project_guide_sufficiency(
+            ProjectGuideProjectionCommand(attempt_id=attempt_id)
+        )
+        async with factory() as session:
+            transaction = await session.begin()
+            try:
+                await session.execute(
+                    text(
+                        "create temporary table saved_projection_operation on commit drop as "
+                        "select * from project_guide_component_projection_operations "
+                        "where component='guide_sufficiency'"
+                    )
+                )
+                await session.execute(
+                    text(
+                        "alter table project_guide_component_projection_operations "
+                        "disable trigger projection_operation_change_guard"
+                    )
+                )
+                await session.execute(
+                    text(
+                        "delete from project_guide_component_projection_operations "
+                        "where component='guide_sufficiency'"
+                    )
+                )
+                await session.execute(
+                    text(
+                        "alter table project_guide_component_projection_operations "
+                        "enable trigger projection_operation_change_guard"
+                    )
+                )
+                # Positive control: the exact retained row still satisfies every guard.
+                await session.execute(
+                    text(
+                        "insert into project_guide_component_projection_operations "
+                        "select * from saved_projection_operation"
+                    )
+                )
+                await session.execute(
+                    text(
+                        "alter table project_guide_component_projection_operations "
+                        "disable trigger projection_operation_change_guard"
+                    )
+                )
+                await session.execute(
+                    text("delete from project_guide_component_projection_operations")
+                )
+                await session.execute(
+                    text(
+                        "alter table project_guide_component_projection_operations "
+                        "enable trigger projection_operation_change_guard"
+                    )
+                )
+                await session.execute(
+                    text("update saved_projection_operation set correlation_id=:correlation"),
+                    {"correlation": new_record_id()},
+                )
+                with pytest.raises(
+                    SQLAlchemyError, match="projection authority custody is invalid"
+                ):
+                    async with session.begin_nested():
+                        await session.execute(
+                            text(
+                                "insert into project_guide_component_projection_operations "
+                                "select * from saved_projection_operation"
+                            )
+                        )
+            finally:
+                await transaction.rollback()
     finally:
         await engine.dispose()
 

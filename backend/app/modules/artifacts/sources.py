@@ -6,7 +6,8 @@ import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import BinaryIO, Protocol, TypeVar, final
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from app.core.cancellation import await_completion_preserving_cancellation
 
@@ -176,7 +177,7 @@ class PreparedArtifact:
         prepared._owner = owner
         prepared._binding = binding
         prepared._closed = False
-        prepared._generation_id = uuid4()
+        prepared._generation_id = new_record_id()
         source = object.__new__(CommittedArtifactSource)
         source._owner = owner
         source._binding = binding

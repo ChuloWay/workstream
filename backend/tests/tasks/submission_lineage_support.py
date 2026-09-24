@@ -1,7 +1,8 @@
 """Shared real ART preparation and verifier fixture for TASK integration proofs."""
 
 from types import SimpleNamespace
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import select
 from starlette.requests import Request
@@ -29,7 +30,7 @@ async def _seed_services(factory):
             ServiceIdentity.ARTIFACT_VERIFIER,
             ServiceIdentity.ARTIFACT_BINDING,
         ):
-            actor_id, link_id = str(uuid4()), str(uuid4())
+            actor_id, link_id = str(new_record_id()), str(new_record_id())
             session.add(
                 ActorProfile(
                     id=actor_id,
@@ -71,8 +72,8 @@ async def _verified_admission(factory, store, namespace, settings, context, requ
         put_authority = PreparedArtifactInternalAuthority(
             session,
             service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-            request_id=uuid4(),
-            correlation_id=uuid4(),
+            request_id=new_record_id(),
+            correlation_id=new_record_id(),
         )
         result = await get_submission_bundle_preparation_command(
             http,
@@ -92,8 +93,8 @@ async def _verified_admission(factory, store, namespace, settings, context, requ
         verifier = PreparedArtifactInternalAuthority(
             session,
             service_identity=ServiceIdentity.ARTIFACT_VERIFIER,
-            request_id=uuid4(),
-            correlation_id=uuid4(),
+            request_id=new_record_id(),
+            correlation_id=new_record_id(),
         )
         assert (
             await ArtifactStorageOrchestrator(

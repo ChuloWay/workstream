@@ -1,7 +1,8 @@
 """Durable task command replay within the existing caller-owned transaction."""
 
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from pydantic import ValidationError
 from sqlalchemy.dialects.postgresql import insert
@@ -37,7 +38,7 @@ class TaskCommandReplay:
         if not isinstance(key, UUID):
             raise ValueError("task command requires an idempotency UUID")
         digest = canonical_json_hash(request_value if request_value is not None else {"task_id": str(task_id), "reason": reason})
-        inserted_id = uuid4()
+        inserted_id = new_record_id()
         receipt_id = await self._session.scalar(
             insert(TaskCommandReceipt).values(
                 id=inserted_id, actor_profile_id=str(actor_id), action_id=operation.value,

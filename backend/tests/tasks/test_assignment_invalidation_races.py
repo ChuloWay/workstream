@@ -1,7 +1,8 @@
 """Independent PostgreSQL ordering at the hidden effect and real TASK boundaries."""
 
 import asyncio
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import select, text
@@ -37,7 +38,7 @@ async def test_expired_delivery_waiting_for_task_cannot_release(
     observed = asyncio.Event()
     original_observe = OutboxDelivery.observe_invocation
     original_lock = TaskRepository.lock_project_task
-    waiter = "assignment-expiry-" + uuid4().hex
+    waiter = "assignment-expiry-" + new_record_id().hex
 
     async def observe(owner, value):
         result = await original_observe(owner, value)
@@ -106,7 +107,7 @@ async def test_real_start_and_pending_invalidation_serialize(
     assert restored.status_code == 200, restored.text
     context = await actor_context(s.grant["actor_profile_id"])
     acquired, release = asyncio.Event(), asyncio.Event()
-    names = {kind: f"assignment-{kind}-{uuid4().hex}" for kind in ("start", "invalidation")}
+    names = {kind: f"assignment-{kind}-{new_record_id().hex}" for kind in ("start", "invalidation")}
     loser = "invalidation" if winner == "start" else "start"
     original_get, original_lock = TaskRepository.get_task, TaskRepository.lock_project_task
 
@@ -141,7 +142,7 @@ async def test_real_start_and_pending_invalidation_serialize(
                 actor_profile_id=context.actor_profile_id,
                 settings=get_settings(),
             )
-            return await command.start(UUID(s.task["id"]), idempotency_key=uuid4())
+            return await command.start(UUID(s.task["id"]), idempotency_key=new_record_id())
 
     calls = {"start": start, "invalidation": lambda: s.handler(envelope)}
     pending = []
@@ -198,7 +199,7 @@ async def test_real_submission_and_invalidation_serialize(
     assert restored.status_code == 200, restored.text
     _, envelope = await invoked(s)
     acquired, release = asyncio.Event(), asyncio.Event()
-    names = {kind: f"assignment-{kind}-{uuid4().hex}" for kind in ("submission", "invalidation")}
+    names = {kind: f"assignment-{kind}-{new_record_id().hex}" for kind in ("submission", "invalidation")}
     loser = "invalidation" if winner == "submission" else "submission"
     original_get, original_lock = TaskRepository.get_task, TaskRepository.lock_project_task
 
@@ -229,8 +230,8 @@ async def test_real_submission_and_invalidation_serialize(
             return await compose_hidden_submission_creation_command(
                 session,
                 context,
-                request_id=uuid4(),
-                correlation_id=uuid4(),
+                request_id=new_record_id(),
+                correlation_id=new_record_id(),
             ).create(creation)
 
     calls = {"submission": submit, "invalidation": lambda: s.handler(envelope)}

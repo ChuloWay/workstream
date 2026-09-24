@@ -15,7 +15,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import func, select, text
@@ -188,12 +189,12 @@ def _context(
     actor_kind: ActorKind = ActorKind.HUMAN,
 ) -> AuthorizationContext:
     common = dict(
-        actor_profile_id=actor_profile_id or uuid4(),
+        actor_profile_id=actor_profile_id or new_record_id(),
         actor_status=ActorStatus.ACTIVE,
-        identity_link_id=identity_link_id or uuid4(),
+        identity_link_id=identity_link_id or new_record_id(),
         identity_link_status=IdentityLinkStatus.ACTIVE,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
     if actor_kind is ActorKind.SERVICE:
         return ServiceAuthorizationContext(
@@ -247,10 +248,10 @@ async def _seed_guide(
 ) -> tuple[str, str]:
     await _seed_human_actor(session, context)
     captured_by = str(context.actor_profile_id)
-    project_id = str(uuid4())
-    guide_id = str(uuid4())
-    snapshot_id = str(uuid4())
-    item_id = str(uuid4())
+    project_id = str(new_record_id())
+    guide_id = str(new_record_id())
+    snapshot_id = str(new_record_id())
+    item_id = str(new_record_id())
     await seed_historical_project(
         session,
         project_id=project_id,
@@ -322,11 +323,11 @@ async def _seed_checker_output_relationships(session, namespace, *, policy_bundl
     values, effective, _pre = policy_bundle
     project_id, guide_id = (str(values[key]) for key in ("project", "guide"))
     effective_policy_id = effective["id"]
-    task_id = str(uuid4())
-    submission_id = str(uuid4())
-    contributor_id = str(uuid4())
-    contributor_link_id = str(uuid4())
-    checker_run_id = str(uuid4())
+    task_id = str(new_record_id())
+    submission_id = str(new_record_id())
+    contributor_id = str(new_record_id())
+    contributor_link_id = str(new_record_id())
+    checker_run_id = str(new_record_id())
     guide_version = "v1"
     now = datetime.now(UTC)
     existing_post = await session.scalar(select(PostSubmitCheckerPolicy).where(
@@ -367,7 +368,7 @@ async def _seed_checker_output_relationships(session, namespace, *, policy_bundl
     from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
     from app.modules.tasks.submission_composition import build_submission
 
-    assignment_id = str(uuid4())
+    assignment_id = str(new_record_id())
     await seed_started_task_for_artifact_test(await session.connection(), {
         "task": task_id, "assignment": assignment_id, "project": project_id,
         "actor": contributor_id,
@@ -479,7 +480,7 @@ async def _admit_checker_output(session, settings, namespace, source, *, policy_
         .where(ActorProfile.service_identity == ServiceIdentity.ARTIFACT_CHECKER_OUTPUT.value)
     )).one_or_none()
     if existing is None:
-        actor_id, link_id = uuid4(), uuid4()
+        actor_id, link_id = new_record_id(), new_record_id()
         session.add(ActorProfile(id=str(actor_id), actor_kind="service", status="active",
             provisioning_method="manual_service_provisioning",
             service_identity=ServiceIdentity.ARTIFACT_CHECKER_OUTPUT.value, created_by="test"))
@@ -864,7 +865,7 @@ async def test_simultaneous_put_claims_have_one_generation_winner(
                     expected_generation=0,
                 )
 
-        first, second = await asyncio.gather(claim(uuid4()), claim(uuid4()))
+        first, second = await asyncio.gather(claim(new_record_id()), claim(new_record_id()))
         winners = [result for result in (first, second) if result is not None]
         assert len(winners) == 1
         assert winners[0].execution_generation == 1
@@ -887,8 +888,8 @@ async def test_expired_lease_takeover_rejects_stale_terminal_completion(
     namespace = _namespace(settings)
     engine = create_async_engine(admission_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    first_executor = uuid4()
-    second_executor = uuid4()
+    first_executor = new_record_id()
+    second_executor = new_record_id()
     try:
         async with factory() as seed_session:
             async with minted_source(tmp_path / "takeover", b"take over") as source:
@@ -1107,7 +1108,7 @@ async def test_scanner_uses_due_time_page_bound_and_duplicate_publication(
                     "executor_id = :executor, execution_mode = 'observation', "
                     "lease_expires_at = clock_timestamp() - interval '10 seconds' where id = :id"
                 ),
-                {"id": attempt_ids[2], "executor": str(uuid4())},
+                {"id": attempt_ids[2], "executor": str(new_record_id())},
             )
             await session.commit()
             published: list[str] = []
@@ -1220,7 +1221,7 @@ async def test_verification_claim_takeover_and_scanner_due_order_are_fenced(
             factory, settings, namespace, store, tmp_path, policy_bundle,
         )
 
-        first_executor = uuid4()
+        first_executor = new_record_id()
         async with factory() as claim_session, claim_session.begin():
             first_claim = await ArtifactRepository(claim_session).claim_verification_job(
                 job_id=UUID(job_ids[2]),
@@ -1257,7 +1258,7 @@ async def test_verification_claim_takeover_and_scanner_due_order_are_fenced(
                 cutoff=datetime.now(UTC), limit=3
             )
             assert due_ids == tuple(job_ids)
-        second_executor = uuid4()
+        second_executor = new_record_id()
         async with factory() as takeover_session, takeover_session.begin():
             takeover = await ArtifactRepository(takeover_session).claim_verification_job(
                 job_id=UUID(job_ids[2]),
@@ -1371,7 +1372,7 @@ async def test_existing_replica_immutable_fact_conflict_is_fenced(
                 )
                 await orchestrator.ensure_storage_namespace()
                 conflicting_content = ArtifactContent(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     sha256="sha256:" + "f" * 64,
                     byte_count=999,
                     media_type="application/octet-stream",
@@ -1383,7 +1384,7 @@ async def test_existing_replica_immutable_fact_conflict_is_fenced(
                 assert conflict_attempt is not None
                 session.add(
                     ArtifactReplica(
-                        id=str(uuid4()),
+                        id=str(new_record_id()),
                         content_id=conflicting_content.id,
                         storage_namespace_id="primary",
                         namespace_fingerprint=namespace.namespace_fingerprint,
@@ -1441,7 +1442,7 @@ async def test_verification_resource_drift_after_read_is_stale_without_terminal_
                 assert attempt is not None and attempt.replica_id is not None and job is not None
                 original_replica_id = attempt.replica_id
                 unrelated_content = ArtifactContent(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     sha256="sha256:" + "f" * 64,
                     byte_count=999,
                     media_type="application/octet-stream",
@@ -1450,7 +1451,7 @@ async def test_verification_resource_drift_after_read_is_stale_without_terminal_
                 session.add(unrelated_content)
                 await session.flush()
                 unrelated_replica = ArtifactReplica(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     content_id=unrelated_content.id,
                     storage_namespace_id=attempt.storage_namespace_id,
                     namespace_fingerprint=attempt.namespace_fingerprint,
@@ -1513,7 +1514,7 @@ async def test_verification_rechecks_relationship_after_prepare_before_io(
                 attempt = await session.get(ArtifactPutAttempt, str(admission.attempt_id))
                 assert job is not None and attempt is not None
                 unrelated_content = ArtifactContent(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     sha256="sha256:" + "e" * 64,
                     byte_count=777,
                     media_type="application/octet-stream",
@@ -1522,7 +1523,7 @@ async def test_verification_rechecks_relationship_after_prepare_before_io(
                 session.add(unrelated_content)
                 await session.flush()
                 unrelated_replica = ArtifactReplica(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     content_id=unrelated_content.id,
                     storage_namespace_id=attempt.storage_namespace_id,
                     namespace_fingerprint=attempt.namespace_fingerprint,
@@ -1945,7 +1946,7 @@ async def test_guide_admission_derives_three_scopes_without_provider_evidence(
                     ArtifactAuthorityDeniedError,
                     match="guide artifact ingest is unavailable",
                 ):
-                    denied = _DenyGuidePreparedAuthorization(uuid4())
+                    denied = _DenyGuidePreparedAuthorization(new_record_id())
                     await ArtifactAdmissionService(
                         session,
                         settings,
@@ -1970,7 +1971,7 @@ async def test_guide_admission_derives_three_scopes_without_provider_evidence(
                 ):
                     await ArtifactAdmissionService(session, settings, namespace).admit(
                         GuideArtifactAdmissionRequest(
-                            project_id=uuid4(),
+                            project_id=new_record_id(),
                             guide_id=UUID(lineage.guide_id),
                             guide_source_snapshot_id=UUID(lineage.guide_source_snapshot_id),
                             guide_source_item_id=UUID(item_id),
@@ -2094,7 +2095,7 @@ async def test_guide_admission_consumes_real_project_manager_prep_atomically(
             lineage = await ArtifactRepository(session).get_guide_lineage(item_id)
             assert lineage is not None
             await session.rollback()
-            bootstrap_grant_id = uuid4()
+            bootstrap_grant_id = new_record_id()
             session.add(
                 AdminRoleGrant(
                     id=bootstrap_grant_id,
@@ -2117,7 +2118,7 @@ async def test_guide_admission_consumes_real_project_manager_prep_atomically(
                 ),
                 {"grant_id": bootstrap_grant_id},
             )
-            project_manager_grant_id = uuid4()
+            project_manager_grant_id = new_record_id()
             session.add(
                 AdminRoleGrant(
                     id=project_manager_grant_id,
@@ -2134,7 +2135,7 @@ async def test_guide_admission_consumes_real_project_manager_prep_atomically(
                 )
             )
             await session.commit()
-            idempotency_key = uuid4()
+            idempotency_key = new_record_id()
             denied_authority = PreparedGuideArtifactAuthorization(session)
             with pytest.raises(
                 ArtifactAuthorityDeniedError,
@@ -2143,11 +2144,11 @@ async def test_guide_admission_consumes_real_project_manager_prep_atomically(
                 async with denied_authority.transaction():
                     await denied_authority.prepare(
                         authorization_context=context,
-                        project_id=uuid4(),
+                        project_id=new_record_id(),
                         guide_id=UUID(lineage.guide_id),
                         guide_source_snapshot_id=UUID(lineage.guide_source_snapshot_id),
                         guide_source_item_id=UUID(item_id),
-                        idempotency_key=uuid4(),
+                        idempotency_key=new_record_id(),
                     )
             assert await _count(session, ArtifactAdmissionScope) == 0
             assert await _count(session, ArtifactAdmissionCharge) == 0
@@ -2171,7 +2172,7 @@ async def test_guide_admission_consumes_real_project_manager_prep_atomically(
                         guide_id=UUID(lineage.guide_id),
                         guide_source_snapshot_id=UUID(lineage.guide_source_snapshot_id),
                         guide_source_item_id=UUID(item_id),
-                        idempotency_key=uuid4(),
+                        idempotency_key=new_record_id(),
                     )
             assert await _count(session, ArtifactPutAttempt) == 0
             assert await _count(session, AuditEvent) == 0
@@ -2205,14 +2206,14 @@ async def test_guide_admission_consumes_real_project_manager_prep_atomically(
                         guide_id=UUID(lineage.guide_id),
                         guide_source_snapshot_id=UUID(lineage.guide_source_snapshot_id),
                         guide_source_item_id=UUID(item_id),
-                        idempotency_key=uuid4(),
+                        idempotency_key=new_record_id(),
                     )
             assert await _count(session, ArtifactPutAttempt) == 0
             assert await _count(session, AuditEvent) == 0
             await session.rollback()
             session.add(
                 AdminRoleGrant(
-                    id=uuid4(),
+                    id=new_record_id(),
                     target_actor_profile_id=str(context.actor_profile_id),
                     role="project_manager",
                     scope_type="project",
@@ -2317,7 +2318,7 @@ async def test_guide_admission_facts_lock_snapshot_and_item(
                         "where id = (select source_snapshot_id "
                         "from guide_source_snapshot_items where id = :item_id)",
                         {
-                            "captured_by": str(uuid4()),
+                            "captured_by": str(new_record_id()),
                             "item_id": item_id,
                         },
                         "lock timeout",
@@ -2411,8 +2412,8 @@ async def test_checker_output_requires_exact_active_fixed_service_identity(
 ) -> None:
     settings = _settings(tmp_path)
     namespace = _namespace(settings)
-    actor_id = uuid4()
-    link_id = uuid4()
+    actor_id = new_record_id()
+    link_id = new_record_id()
     context = _context(
         actor_profile_id=actor_id,
         identity_link_id=link_id,
@@ -2461,7 +2462,7 @@ async def test_checker_output_requires_exact_active_fixed_service_identity(
             await session.rollback()
             async with minted_source(tmp_path / "scratch-source", b"checker") as source:
                 service = ArtifactAdmissionService(session, settings, namespace)
-                forged = context.model_copy(update={"identity_link_id": uuid4()})
+                forged = context.model_copy(update={"identity_link_id": new_record_id()})
                 with pytest.raises(
                     ArtifactAdmissionRelationshipError,
                     match="service identity is unavailable",
@@ -2748,7 +2749,7 @@ async def test_invalid_checker_role_precedes_namespace_drift(
                     await ArtifactAdmissionService(session, settings, namespace).admit(
                         CheckerOutputArtifactAdmissionRequest(
                             authorization_context=_context(actor_kind=ActorKind.SERVICE),
-                            checker_run_id=uuid4(),
+                            checker_run_id=new_record_id(),
                             logical_role="é" * 100,
                             source=source,
                         )
@@ -2794,7 +2795,7 @@ async def _seed_verification_scan_jobs(factory, settings, namespace, store, tmp_
 
 async def _unrelated_checker_task(session, canonical_task):
     """Keep the same locked policy tuple on a distinct task for ownership rejection."""
-    unrelated_task_id = str(uuid4())
+    unrelated_task_id = str(new_record_id())
     session.add(
         WorkstreamTask(
             id=unrelated_task_id,
@@ -2853,7 +2854,7 @@ async def _unrelated_checker_task(session, canonical_task):
 
 async def _conflicting_checker_replica(session, attempt, namespace, provider_object_ref):
     """Arrange an already-known replica for the observation conflict control."""
-    content_id = str(uuid4())
+    content_id = str(new_record_id())
     session.add_all(
         [
             ArtifactContent(
@@ -2864,7 +2865,7 @@ async def _conflicting_checker_replica(session, attempt, namespace, provider_obj
                 normalized_display_name=None,
             ),
             ArtifactReplica(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 content_id=content_id,
                 storage_namespace_id=attempt.storage_namespace_id,
                 namespace_fingerprint=attempt.namespace_fingerprint,

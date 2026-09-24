@@ -1,7 +1,7 @@
 """Public AUTH fact parity for hidden ContributionPolicy publication."""
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy.orm.attributes import set_committed_value
@@ -58,9 +58,9 @@ async def test_publish_facts_match_public_auth_digest() -> None:
 @pytest.mark.asyncio
 async def test_retire_facts_match_public_auth_digest() -> None:
     fixture = service_fixture()
-    policy_id, version_id = uuid4(), uuid4()
+    policy_id, version_id = new_record_id(), new_record_id()
     request = ContributionPolicyRetireRequest(
-        operation_id=uuid4(),
+        operation_id=new_record_id(),
         actor_profile_id=fixture.actor_id,
         project_id=fixture.project_id,
         contribution_policy_id=policy_id,

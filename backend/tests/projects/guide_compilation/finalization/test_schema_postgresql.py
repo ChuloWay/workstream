@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import DBAPIError
 
+from app.core.identifiers import new_record_id
 from app.modules.projects.guide_compilation.models import ProjectGuideSetupFinalization
 from .pg_support import database_case, finalize, stored_state
 
@@ -63,7 +64,7 @@ async def test_distinct_operations_cannot_finalize_one_setup_generation(clean_po
             ":new_id" if name == "id" else ":operation" if name == "operation_id" else name
             for name in columns
         ]
-        with pytest.raises(DBAPIError):
+        with pytest.raises(DBAPIError, match="uq_finalization_setup_generation"):
             async with factory() as session, session.begin():
                 await session.execute(
                     text(
@@ -72,6 +73,10 @@ async def test_distinct_operations_cannot_finalize_one_setup_generation(clean_po
                         + ",".join(selected)
                         + " from project_guide_setup_finalizations where setup_run_id=:setup"
                     ),
-                    {"new_id": uuid4(), "operation": uuid4(), "setup": str(command.setup_run_id)},
+                    {
+                        "new_id": new_record_id(),
+                        "operation": uuid4(),
+                        "setup": str(command.setup_run_id),
+                    },
                 )
         assert await stored_state(factory, command) == before

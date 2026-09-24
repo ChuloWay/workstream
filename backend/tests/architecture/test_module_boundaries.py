@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -334,10 +334,10 @@ def test_checkers_public_planning_port_uses_the_canonical_compiler() -> None:
     policy_hash = canonical_json_hash(policy)
     compiled = compile_effective_project_submission_artifact_policy(policy, policy_hash)
     lineage = EffectivePreSubmissionPlanLineage(
-        project_id=uuid4(), guide_id=uuid4(), guide_version="1",
-        source_snapshot_id=uuid4(), source_snapshot_hash="sha256:" + "1" * 64,
-        effective_policy_id=uuid4(), effective_policy_hash=policy_hash,
-        pre_submit_policy_id=uuid4(),
+        project_id=new_record_id(), guide_id=new_record_id(), guide_version="1",
+        source_snapshot_id=new_record_id(), source_snapshot_hash="sha256:" + "1" * 64,
+        effective_policy_id=new_record_id(), effective_policy_hash=policy_hash,
+        pre_submit_policy_id=new_record_id(),
         pre_submit_policy_bundle_hash=compiled.compiled_bundle_hash,
     )
     port: EffectivePreSubmissionPlanningPort = build_pre_submission_checker_catalogue()
@@ -359,7 +359,7 @@ def test_checkers_public_execution_facts_exclude_artifact_custody() -> None:
     execution = PreSubmissionExecutionResult(
         plan_sha256="sha256:" + "1" * 64,
         custody=PreSubmissionExecutionCustody(
-            prepared_generation_id=uuid4(), archive_sha256="sha256:" + "2" * 64,
+            prepared_generation_id=new_record_id(), archive_sha256="sha256:" + "2" * 64,
             archive_byte_count=7, semantic_manifest_sha256="sha256:" + "3" * 64,
             storage_scheme="s3",
         ),

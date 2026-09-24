@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
+from app.core.identifiers import new_record_id
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.core.hashing import canonical_json_hash
 from app.modules.audit.schemas import (
@@ -195,7 +196,7 @@ async def grant_system_project_manager(
     )
     if grant is None:
         grant = AdminRoleGrant(
-            id=uuid4(),
+            id=new_record_id(),
             target_actor_profile_id=link.actor_profile_id,
             role="project_manager",
             scope_type="system",
@@ -272,9 +273,9 @@ async def seed_authorized_project(
 ) -> None:
     """Stage current project-create custody for tests of the 0044 boundary itself."""
     project_uuid = UUID(project_id)
-    actor_id = str(uuid4())
+    actor_id = str(new_record_id())
     link = ActorIdentityLink(
-        id=str(uuid4()),
+        id=str(new_record_id()),
         actor_profile_id=actor_id,
         issuer="https://project-fixture.test",
         subject=f"project-fixture-{actor_id}",
@@ -301,8 +302,8 @@ async def seed_authorized_project(
         issuer=link.issuer,
         subject=link.subject,
     )
-    operation_id = uuid4()
-    decision_id = uuid4()
+    operation_id = new_record_id()
+    decision_id = new_record_id()
     resource = ProjectCreateResourceContext(
         resource_type="project_create",
         resource_id=operation_id,
@@ -334,7 +335,7 @@ async def seed_authorized_project(
         )
     )
     reservation = ProjectCreateIdempotencyRecord(
-        id=uuid4(),
+        id=new_record_id(),
         actor_profile_id=link.actor_profile_id,
         identity_link_id=link.id,
         action_id=ActionId.PROJECT_CREATE.value,
@@ -380,7 +381,7 @@ async def ensure_fixture_bootstrap(session):
     )
     if bootstrap is None:
         bootstrap_actor = ActorProfile(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             actor_kind="human",
             status="active",
             provisioning_method="automatic_first_access",
@@ -391,7 +392,7 @@ async def ensure_fixture_bootstrap(session):
         await session.flush()
         session.add(
             ActorIdentityLink(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 actor_profile_id=bootstrap_actor.id,
                 issuer="https://project-fixture-bootstrap.test",
                 subject=f"project-fixture-bootstrap-{bootstrap_actor.id}",
@@ -403,7 +404,7 @@ async def ensure_fixture_bootstrap(session):
         )
         await session.flush()
         bootstrap = AdminRoleGrant(
-            id=uuid4(),
+            id=new_record_id(),
             target_actor_profile_id=bootstrap_actor.id,
             role="access_administrator",
             scope_type="system",
@@ -431,7 +432,7 @@ async def grant_fixture_admin_role(session, actor_id, *, role="project_manager",
     if existing is not None:
         return existing
     bootstrap = await ensure_fixture_bootstrap(session)
-    grant = AdminRoleGrant(id=uuid4(), target_actor_profile_id=str(actor_id), role=role,
+    grant = AdminRoleGrant(id=new_record_id(), target_actor_profile_id=str(actor_id), role=role,
                            scope_type=scope, scope_project_id=str(project_id) if project_id is not None else None,
                            status="active", version=1, granted_by_actor_profile_id=bootstrap.target_actor_profile_id,
                            granted_by_admin_role_grant_id=bootstrap.id, grant_reason="downstream authority fixture")

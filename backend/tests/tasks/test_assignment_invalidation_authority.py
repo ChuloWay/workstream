@@ -3,7 +3,8 @@
 import asyncio
 from copy import copy, deepcopy
 import pickle
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import insert, select, text
@@ -11,11 +12,12 @@ from sqlalchemy.exc import DBAPIError
 
 from app.adapters.auth import assignment_invalidation_authorization
 from app.adapters.audit import assignment_invalidation_audit
+from app.modules.audit.repository import AuditRepository
 from app.modules.authorization.domain.assignment_invalidation import assignment_invalidation_resource
 from app.modules.authorization.domain.resource_digest import authorization_resource_digest
 from app.modules.outbox.api import HandlerOutcome
 from app.modules.tasks.api.assignment_invalidation import (
-    AssignmentInvalidationUnavailable, assignment_invalidation_evidence_id,
+    AssignmentInvalidationUnavailable,
 )
 from app.modules.tasks.models import AuditEvent, TaskAssignment, WorkstreamTask
 from tests.authorization.test_assignment_invalidation_contract import facts, substitutions
@@ -161,7 +163,9 @@ async def test_real_reconciliation_rollback(task_client, monkeypatch):
         task = await session.get(WorkstreamTask, s.task["id"])
         assignment = await session.get(TaskAssignment, s.assignment["id"])
         decision = await session.get(AuditEvent, str(evidence.authority.decision_id))
-        receipt = await session.get(AuditEvent, str(assignment_invalidation_evidence_id(target)))
+        receipt = await AuditRepository(session).assignment_release_event(
+            target.assignment_id, target.authority_invalidation_event_id,
+        )
         assert task.status == "ready" and assignment.status == "authority_revoked"
         assert decision.event_type == "SensitiveAuthorizationAllowed"
         assert receipt.event_payload["authorization_resource_digest"] == decision.after_facts["resource_context_digest"]
@@ -211,7 +215,7 @@ async def test_reconciler_revocation_waits_for_effect(task_client, task_database
     from auth_concurrency_support import wait_for_named_database_lock
     from app.modules.authorization.repository import AdminAuthorizationRepository
 
-    waiter = "reconciler-revocation-" + uuid4().hex
+    waiter = "reconciler-revocation-" + new_record_id().hex
     original_control = AdminAuthorizationRepository.lock_control
 
     async def named_control(owner):
@@ -242,9 +246,11 @@ async def test_release_receipt_rejects_substitution(task_client, monkeypatch):
     target, envelope = await invoked(s)
     assert await s.handler(envelope) is HandlerOutcome.ACKNOWLEDGE
     async with s.sessions() as session, session.begin():
-        receipt = dict((await session.execute(select(AuditEvent.__table__).where(
-            AuditEvent.id == str(assignment_invalidation_evidence_id(target))
-        ))).mappings().one())
+        stored = await AuditRepository(session).assignment_release_event(
+            target.assignment_id, target.authority_invalidation_event_id,
+        )
+        assert stored is not None
+        receipt = {column.key: getattr(stored, column.key) for column in AuditEvent.__table__.columns}
         other_decision = await session.scalar(select(AuditEvent.id).where(
             AuditEvent.action_id == "task.claim", AuditEvent.event_type == "SensitiveAuthorizationAllowed"
         ))
@@ -252,25 +258,25 @@ async def test_release_receipt_rejects_substitution(task_client, monkeypatch):
         alternate = dict((await session.execute(select(TaskAssignment.__table__).where(
             TaskAssignment.id == s.assignment["id"]
         ))).mappings().one())
-        alternate["id"] = str(uuid4())
+        alternate["id"] = str(new_record_id())
         await session.execute(insert(TaskAssignment).values(**alternate))
         for field in ("decision", "missing_decision", "actor", "project", "task", "assignment", "valid_assignment", "cause", "digest", "extra"):
             changed = deepcopy(receipt)
-            changed["id"] = str(uuid4())
+            changed["id"] = str(new_record_id())
             refs = changed["event_payload"]["references"]
             if field in {"decision", "missing_decision"}:
-                refs["authorization_decision_id"] = other_decision if field == "decision" else str(uuid4())
+                refs["authorization_decision_id"] = other_decision if field == "decision" else str(new_record_id())
             elif field == "actor":
                 changed["actor_id"] = s.grant["actor_profile_id"]
             elif field == "task":
-                changed["entity_id"] = refs["task_id"] = str(uuid4())
+                changed["entity_id"] = refs["task_id"] = str(new_record_id())
             elif field == "valid_assignment":
                 # Every surrounding lookup succeeds; only the decision's
                 # original facts commitment distinguishes this assignment.
                 refs["assignment_id"] = alternate["id"]
                 changed["event_payload"]["assignment_invalidation_facts"]["target"]["assignment_id"] = alternate["id"]
             elif field in {"project", "assignment", "cause"}:
-                refs[{"project": "project_id", "assignment": "assignment_id", "cause": "authority_invalidation_event_id"}[field]] = str(uuid4())
+                refs[{"project": "project_id", "assignment": "assignment_id", "cause": "authority_invalidation_event_id"}[field]] = str(new_record_id())
             elif field == "digest":
                 changed["event_payload"]["authorization_resource_digest"] = "sha256:" + "f" * 64
             else:
@@ -280,7 +286,7 @@ async def test_release_receipt_rejects_substitution(task_client, monkeypatch):
                     await session.execute(insert(AuditEvent).values(**changed))
         # A complete control reaches the very same insert and guard.
         control = deepcopy(receipt)
-        control["id"] = str(uuid4())
+        control["id"] = str(new_record_id())
         transaction = await session.begin_nested()
         await session.execute(insert(AuditEvent).values(**control))
         await transaction.rollback()
@@ -335,15 +341,17 @@ async def test_release_receipt_rejects_out_of_range_generation(task_client, monk
     target, envelope = await invoked(s)
     assert await s.handler(envelope) is HandlerOutcome.ACKNOWLEDGE
     async with s.sessions() as session, session.begin():
-        receipt = dict((await session.execute(select(AuditEvent.__table__).where(
-            AuditEvent.id == str(assignment_invalidation_evidence_id(target))
-        ))).mappings().one())
+        stored = await AuditRepository(session).assignment_release_event(
+            target.assignment_id, target.authority_invalidation_event_id,
+        )
+        assert stored is not None
+        receipt = {column.key: getattr(stored, column.key) for column in AuditEvent.__table__.columns}
         decision = dict((await session.execute(select(AuditEvent.__table__).where(
             AuditEvent.id == receipt["event_payload"]["references"]["authorization_decision_id"]
         ))).mappings().one())
         for generation in (0, 2147483648, 2147483647):
             changed, allowed = deepcopy(receipt), deepcopy(decision)
-            changed["id"], allowed["id"] = str(uuid4()), str(uuid4())
+            changed["id"], allowed["id"] = str(new_record_id()), str(new_record_id())
             allowed["entity_id"] = allowed["id"]
             payload = changed["event_payload"]
             payload["assignment_invalidation_facts"]["delivery_generation"] = generation

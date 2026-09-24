@@ -7,7 +7,7 @@ import logging
 import re
 from collections.abc import Sequence
 from typing import Any
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1297,7 +1297,7 @@ def build_guide_source_snapshot_manifest(
             }
         )
     ordered_items = [
-        {"item_id": str(uuid4()), "item_order": index, **item}
+        {"item_id": str(new_record_id()), "item_order": index, **item}
         for index, item in enumerate(declared_items)
     ]
     return {

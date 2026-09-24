@@ -9,7 +9,8 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import func, select, text
@@ -170,7 +171,7 @@ async def _harness(tmp_path: Path, database_url: str) -> _Harness:
             request.packet.contributor_attestation + " " + " ".join(policy.pop("attestation_terms"))
         ),
     ))
-    actor_id, identity_link_id = uuid4(), uuid4()
+    actor_id, identity_link_id = new_record_id(), new_record_id()
     lineage = request.effective_plan.lineage
     params = {
         "actor": str(actor_id), "link": str(identity_link_id),
@@ -440,7 +441,7 @@ async def test_attempt_database_guards_reject_rewrite_delete_and_orphan_completi
             ("update pre_submit_execution_attempts set request_digest=:digest where id=:id",
              {"digest": "sha256:" + "0" * 64}),
             ("update pre_submit_execution_attempts set status='completed',evidence_set_id=:evidence "
-             "where id=:id", {"evidence": str(uuid4())}),
+             "where id=:id", {"evidence": str(new_record_id())}),
             ("delete from pre_submit_execution_attempts where id=:id", {}),
         )
         for sql, values in statements:
@@ -475,7 +476,7 @@ async def test_database_rejects_same_resource_different_packet_evidence_completi
         ))
         changed_preparation = replace(
             harness.preparation_request,
-            idempotency_key=uuid4(),
+            idempotency_key=new_record_id(),
             summary=changed_request.packet.summary,
         )
         async with harness.factory() as second_session:
@@ -484,7 +485,7 @@ async def test_database_rejects_same_resource_different_packet_evidence_completi
                 second_workflow, changed_request, changed_preparation,
             )
         assert first_reservation.request_digest != second_reservation.request_digest
-        new_evidence = str(uuid4())
+        new_evidence = str(new_record_id())
         source_evidence = str(first.evidence.evidence_set_id)
         async with harness.factory() as session:
             original_evidence = await session.get(PreSubmitEvidenceSet, source_evidence)

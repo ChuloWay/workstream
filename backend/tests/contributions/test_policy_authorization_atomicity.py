@@ -1,7 +1,7 @@
 """Fail-closed PREP ordering for ContributionPolicy mutations."""
 
 from types import SimpleNamespace
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -27,7 +27,7 @@ async def _assert_consume_rejection(reason: str) -> None:
 @pytest.mark.asyncio
 async def test_wrong_consumed_actor_creates_no_effect() -> None:
     fixture = service_fixture()
-    fixture.authorization.actor_id = uuid4()
+    fixture.authorization.actor_id = new_record_id()
 
     with pytest.raises(ContributionPolicyUnavailable):
         await fixture.service.create_draft(create_request(fixture))

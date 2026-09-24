@@ -1,11 +1,11 @@
 """Session-bound test authority stages actual evidence with strict replay validation."""
 
 from contextlib import asynccontextmanager
-from uuid import uuid4
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.core.identifiers import new_record_id
 from app.modules.authorization.api import (
     AuthorizationDenied,
     FINALIZATION_ACTION,
@@ -15,6 +15,7 @@ from app.modules.authorization.api import (
     PreparedSetupFinalization,
     ProjectSetupFinalizationAuthorityReceipt,
     setup_finalization_authority_digest,
+    setup_finalization_preparation_identity,
 )
 from app.modules.projects.api import ProjectGuideSetupFinalizationError
 from app.modules.projects.guide_compilation.finalization import GuideCompilationFinalizationService
@@ -46,14 +47,21 @@ class DatabasePrepared(PreparedSetupFinalization):
         self.require_open()
         if (
             facts.project_id != self.port.locator.project_id
-            or facts.operation_id != self.port.locator.operation_id
+            or facts.setup_run_id != self.port.locator.setup_run_id
+            or facts.setup_generation != self.port.locator.setup_generation
+            or facts.compilation_id != self.port.locator.compilation_id
         ):
             raise AuthorizationDenied("finalization locator mismatch")
         self.port.events.append("consume")
         if self.port.on_consume:
             await self.port.on_consume()
         digest = setup_finalization_authority_digest(facts, self.port.actor, self.port.link)
-        decision = uuid4()
+        decision = new_record_id()
+        request_id, correlation_id = setup_finalization_preparation_identity(
+            self.port.locator.setup_run_id,
+            self.port.locator.setup_generation,
+            self.port.locator.compilation_id,
+        )
         await self.session.execute(
             text(
                 "insert into audit_events(id,entity_type,entity_id,event_type,actor_id,actor_roles,claim_snapshot,"
@@ -67,8 +75,8 @@ class DatabasePrepared(PreparedSetupFinalization):
             dict(
                 id=str(decision),
                 actor=str(self.port.actor),
-                operation=str(facts.operation_id),
-                correlation=str(facts.correlation_id),
+                operation=str(request_id),
+                correlation=str(correlation_id),
                 permission=FINALIZATION_PERMISSION,
                 action=FINALIZATION_ACTION,
                 project=str(facts.project_id),
@@ -95,7 +103,9 @@ class DatabasePrepared(PreparedSetupFinalization):
         self.require_open()
         if (
             facts.project_id != self.port.locator.project_id
-            or facts.operation_id != self.port.locator.operation_id
+            or facts.setup_run_id != self.port.locator.setup_run_id
+            or facts.setup_generation != self.port.locator.setup_generation
+            or facts.compilation_id != self.port.locator.compilation_id
         ):
             raise AuthorizationDenied("finalization locator mismatch")
         self.port.events.append("replay")
@@ -109,6 +119,11 @@ class DatabasePrepared(PreparedSetupFinalization):
             .mappings()
             .one_or_none()
         )
+        request_id, correlation_id = setup_finalization_preparation_identity(
+            self.port.locator.setup_run_id,
+            self.port.locator.setup_generation,
+            self.port.locator.compilation_id,
+        )
         expected = dict(
             actor_id=str(self.port.actor),
             event_domain="authority",
@@ -119,8 +134,8 @@ class DatabasePrepared(PreparedSetupFinalization):
             project_id=str(facts.project_id),
             resource_type=FINALIZATION_RESOURCE,
             resource_id=str(facts.finalization_id),
-            request_id=facts.operation_id,
-            correlation_id=facts.correlation_id,
+            request_id=request_id,
+            correlation_id=correlation_id,
             denial_code=None,
         )
         if (

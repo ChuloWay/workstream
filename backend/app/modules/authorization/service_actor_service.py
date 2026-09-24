@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -125,7 +126,7 @@ class ServiceActorProvisioningService:
 
         profile = await self._actors.add_actor_profile(
             ActorProfile(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 actor_kind="service",
                 status="active",
                 provisioning_method="manual_service_provisioning",
@@ -138,7 +139,7 @@ class ServiceActorProvisioningService:
         )
         link = await self._actors.add_identity_link(
             ActorIdentityLink(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 actor_profile_id=profile.id,
                 issuer=issuer,
                 subject=subject,
@@ -160,7 +161,7 @@ class ServiceActorProvisioningService:
             request=request.model_dump(),
             response=response,
             success=AuthorityAuditEventInput(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 event_type=AuthorityEventType.SERVICE_ACTOR_PROVISIONED,
                 entity_type="actor_profile",
                 entity_id=profile.id,
@@ -183,7 +184,7 @@ class ServiceActorProvisioningService:
                 },
             ),
             invalidation=AuthorityInvalidationContext(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 request_id=decision.request_id,
                 correlation_id=decision.correlation_id,
             ),
@@ -239,7 +240,7 @@ class ServiceActorProvisioningService:
             actor_ref=str(actor_profile_id),
             request=request.model_dump(),
             context=AuthorityMismatchContext(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 request_id=decision.request_id,
                 correlation_id=decision.correlation_id,
                 matched_grant_id=decision.matched_grant_id,
@@ -256,7 +257,7 @@ class ServiceActorProvisioningService:
         """Record one privacy-bounded identity occupancy denial after rollback."""
         if not _decision_matches(decision, request):
             raise TypeError("service conflict requires exact matched authority")
-        event_id = uuid4()
+        event_id = new_record_id()
         await self._audit.add_authority_event(
             AuthorityAuditEventInput(
                 event_id=event_id,

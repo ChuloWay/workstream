@@ -3,7 +3,8 @@
 from app.core.config import get_settings
 
 import asyncio
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import select
@@ -54,7 +55,7 @@ async def test_role_issuance_and_claim_linearize_at_real_authority(
         _issue_body(UUID(contributor)).model_dump(mode="json") | {"role": "submitter"},
     )
     entered, release = asyncio.Event(), asyncio.Event()
-    names = {side: f"cp08_{side}_{uuid4().hex}" for side in ("claim", "issue")}
+    names = {side: f"cp08_{side}_{new_record_id().hex}" for side in ("claim", "issue")}
     engines = {
         side: create_async_engine(
             task_database_env,
@@ -91,7 +92,7 @@ async def test_role_issuance_and_claim_linearize_at_real_authority(
             session.info["cp08_issue"] = True
             prepared, resolved = await _issue_runtime(session, manager_id, link_id)
             return await _issue_role(
-                session, UUID(project["id"]), body, uuid4(), resolved, prepared
+                session, UUID(project["id"]), body, new_record_id(), resolved, prepared
             )
 
     async def claim():
@@ -102,7 +103,7 @@ async def test_role_issuance_and_claim_linearize_at_real_authority(
                 audit=task_transition_audit(session),
                 actor_profile_id=context.actor_profile_id,
                 contexts=task_service(session, settings=get_settings()),
-            ).claim(UUID(ready["id"]), "Concurrent initial claim", idempotency_key=uuid4())
+            ).claim(UUID(ready["id"]), "Concurrent initial claim", idempotency_key=new_record_id())
 
     pending = []
     try:
@@ -187,7 +188,7 @@ async def test_claim_keeps_frozen_policy_while_successor_activation_waits(
     )
     contributor = grant["actor_profile_id"]
     context = await actor_context(contributor)
-    name = f"cp08_activation_{uuid4().hex}"
+    name = f"cp08_activation_{new_record_id().hex}"
     engine = create_async_engine(
         task_database_env,
         connect_args={
@@ -216,7 +217,7 @@ async def test_claim_keeps_frozen_policy_while_successor_activation_waits(
                 audit=task_transition_audit(session),
                 actor_profile_id=context.actor_profile_id,
                 contexts=task_service(session, settings=get_settings()),
-            ).claim(UUID(ready["id"]), "Claim exact prior guide during successor activation", idempotency_key=uuid4())
+            ).claim(UUID(ready["id"]), "Claim exact prior guide during successor activation", idempotency_key=new_record_id())
 
     pending = []
     try:

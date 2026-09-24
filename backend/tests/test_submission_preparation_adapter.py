@@ -1,6 +1,6 @@
 """Focused ART adapter proofs for AUTH submission preparation."""
 
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -30,9 +30,9 @@ def test_artifact_adapter_composes_active_preparation_authority() -> None:
 @pytest.mark.asyncio
 async def test_final_preparation_rejects_cross_request_facts() -> None:
     authority = object.__new__(PreparedSubmissionBundlePreparationAuthorization)
-    project_id, actor_id, link_id, task_id, assignment_id = (uuid4() for _ in range(5))
+    project_id, actor_id, link_id, task_id, assignment_id = (new_record_id() for _ in range(5))
     authority._input = PreparedAuthorizationInput(
-        idempotency_key=uuid4(),
+        idempotency_key=new_record_id(),
         request_value={
             "scope_project_id": str(project_id),
             "actor_profile_id": str(actor_id),
@@ -47,21 +47,21 @@ async def test_final_preparation_rejects_cross_request_facts() -> None:
         identity_link_id=link_id,
         project_id=project_id,
         task_id=task_id,
-        assignment_id=uuid4(),
+        assignment_id=new_record_id(),
         predecessor_submission_id=None,
         predecessor_submission_version=None,
-        pre_submit_evidence_set_id=uuid4(),
-        prepared_generation_id=uuid4(),
-        guide_id=uuid4(),
+        pre_submit_evidence_set_id=new_record_id(),
+        prepared_generation_id=new_record_id(),
+        guide_id=new_record_id(),
         guide_version="v1",
-        source_snapshot_id=uuid4(),
+        source_snapshot_id=new_record_id(),
         source_snapshot_sha256=_sha("1"),
-        effective_policy_id=uuid4(),
+        effective_policy_id=new_record_id(),
         effective_policy_sha256=_sha("2"),
-        pre_submit_policy_id=uuid4(),
+        pre_submit_policy_id=new_record_id(),
         pre_submit_policy_sha256=_sha("3"),
         effective_plan_sha256=_sha("4"),
-        semantic_manifest_id=uuid4(),
+        semantic_manifest_id=new_record_id(),
         semantic_manifest_sha256=_sha("5"),
         archive_sha256=_sha("6"),
         archive_byte_count=42,

@@ -10,6 +10,8 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.identifiers import new_record_id
+
 from app.interfaces.project_agents import (
     ProjectGuideCompilationResult,
 )
@@ -83,12 +85,16 @@ def test_projection_identities_and_digests_are_component_specific() -> None:
     """Keep operation, output, facts, and authority domains disjoint."""
     attempt_id, actor_id, link_id = uuid4(), uuid4(), uuid4()
     sufficiency_identity = guide_sufficiency_projection_identity(
-        attempt_id=attempt_id,
+        operation_id=new_record_id(),
+        correlation_id=uuid4(),
+        output_id=new_record_id(),
         actor_profile_id=actor_id,
         identity_link_id=link_id,
     )
     policy_identity = artifact_policy_projection_identity(
-        attempt_id=attempt_id,
+        operation_id=new_record_id(),
+        correlation_id=uuid4(),
+        output_id=new_record_id(),
         actor_profile_id=actor_id,
         identity_link_id=link_id,
     )
@@ -167,9 +173,9 @@ def test_projection_locator_identity_and_receipt_fail_closed() -> None:
     with pytest.raises(ValueError):
         ProjectGuideProjectionLocator(project_id=cast(UUID, "bad"), attempt_id=attempt_id)
     identity_values = {
-        "operation_id": uuid4(),
+        "operation_id": new_record_id(),
         "correlation_id": uuid4(),
-        "output_id": uuid4(),
+        "output_id": new_record_id(),
         "actor_profile_id": actor_id,
         "identity_link_id": link_id,
     }
@@ -193,7 +199,9 @@ def test_projection_locator_identity_and_receipt_fail_closed() -> None:
             ProjectGuideProjectionAuthorityReceipt(**(receipt | {field: value}))
 
     identity = guide_sufficiency_projection_identity(
-        attempt_id=attempt_id,
+        operation_id=new_record_id(),
+        correlation_id=uuid4(),
+        output_id=new_record_id(),
         actor_profile_id=actor_id,
         identity_link_id=link_id,
     )

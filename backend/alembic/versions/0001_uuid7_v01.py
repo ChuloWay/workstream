@@ -1,4 +1,4 @@
-"""Install the clean v0.1 Workstream schema baseline."""
+"""Install the native-UUID, UUIDv7-record v0.1 schema on a fresh database."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 from scripts.schema_baseline_sql import split_sql_statements
 
-revision = "0001_v01_baseline"
+revision = "0001_uuid7_v01"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -17,7 +17,7 @@ depends_on = None
 _BASELINE_DIRECTORY = Path(__file__).resolve().parents[1] / "baseline"
 _RECREATE_GUIDANCE = (
     "Workstream v0.1 requires a fresh database; recreate this database before "
-    "running the 0001_v01_baseline migration"
+    "running the 0001_uuid7_v01 migration"
 )
 
 
@@ -71,7 +71,9 @@ def upgrade() -> None:
     schema = split_sql_statements(
         (_BASELINE_DIRECTORY / "v01_schema.sql").read_text(encoding="utf-8")
     )
-    triggers = tuple(statement for statement in schema if statement.startswith("CREATE TRIGGER "))
+    triggers = tuple(statement for statement in schema if statement.startswith(
+        ("CREATE TRIGGER ", "CREATE CONSTRAINT TRIGGER ")
+    ))
     _execute(tuple(statement for statement in schema if statement not in triggers))
     _execute(
         split_sql_statements(
@@ -83,4 +85,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Reject destructive downgrade of the clean v0.1 baseline."""
-    raise RuntimeError("0001_v01_baseline cannot be downgraded; recreate the database")
+    raise RuntimeError("0001_uuid7_v01 cannot be downgraded; recreate the database")

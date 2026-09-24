@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
@@ -30,14 +31,14 @@ class ProjectCreateRepository:
     ) -> tuple[str, ProjectCreateIdempotencyRecord]:
         """Reserve or lock one actor-scoped project-create replay namespace."""
         values = {
-            "id": uuid4(),
+            "id": new_record_id(),
             "actor_profile_id": actor_profile_id,
             "identity_link_id": identity_link_id,
             "action_id": "project.create",
             "idempotency_key": idempotency_key,
             "request_digest": request_digest,
-            "operation_id": uuid4(),
-            "project_id": str(uuid4()),
+            "operation_id": new_record_id(),
+            "project_id": str(new_record_id()),
             "operation_generation": 1,
             "status": "pending",
         }

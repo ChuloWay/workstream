@@ -10,7 +10,8 @@ from app.modules.authorization.task_authorization import PreparedTaskAuthorizati
 from app.modules.authorization.runtime import ActorKind, ActorStatus, HumanAuthorizationContext, IdentityLinkStatus
 from app.modules.actors.models import ActorIdentityLink
 from sqlalchemy import select
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 from tests.project_create_fixtures import grant_fixture_admin_role
 from app.modules.tasks.models import TaskAssignment, WorkstreamTask
 
@@ -35,14 +36,14 @@ async def seed_started_task_for_artifact_test(connection, params):
         context = HumanAuthorizationContext(
             actor_profile_id=UUID(params["actor"]), actor_kind=ActorKind.HUMAN,
             actor_status=ActorStatus.ACTIVE, identity_link_id=UUID(link.id),
-            identity_link_status=IdentityLinkStatus.ACTIVE, request_id=uuid4(), correlation_id=uuid4(),
+            identity_link_status=IdentityLinkStatus.ACTIVE, request_id=new_record_id(), correlation_id=new_record_id(),
         )
         await session.commit()
         commands = task_commands(session, authorization=PreparedTaskAuthorization(session, context),
                                  audit=task_transition_audit(session), actor_profile_id=context.actor_profile_id,
                                  settings=get_settings())
-        await commands.screen(UUID(task.id), "ART fixture initial screening", idempotency_key=uuid4())
-        await commands.release(UUID(task.id), "ART fixture ready", idempotency_key=uuid4())
+        await commands.screen(UUID(task.id), "ART fixture initial screening", idempotency_key=new_record_id())
+        await commands.release(UUID(task.id), "ART fixture ready", idempotency_key=new_record_id())
         session.add(
             TaskAssignment(
                 id=params["assignment"],

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from sqlalchemy import Uuid
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
@@ -47,6 +48,7 @@ class ActorProfile(Base):
 
     __tablename__ = "actor_profiles"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         CheckConstraint(f"actor_kind in ({_sql_values(ACTOR_KINDS)})", name="actor_kind"),
         CheckConstraint(
             f"status in ({_sql_values(ACTOR_PROFILE_STATUSES)})", name="status"
@@ -95,7 +97,7 @@ class ActorProfile(Base):
         UniqueConstraint("service_identity", name="service_identity"),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     provisioning_method: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -127,6 +129,7 @@ class ActorIdentityLink(Base):
 
     __tablename__ = "actor_identity_links"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         CheckConstraint(f"subject_kind in ({_sql_values(ACTOR_KINDS)})", name="subject_kind"),
         CheckConstraint(
             f"status in ({_sql_values(IDENTITY_LINK_STATUSES)})", name="status"
@@ -167,7 +170,7 @@ class ActorIdentityLink(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     actor_profile_id: Mapped[str] = mapped_column(
         ForeignKey("actor_profiles.id"), nullable=False
     )
@@ -224,6 +227,7 @@ class LegacyWorkflowEligibility(Base):
 
     __tablename__ = "legacy_workflow_eligibility"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         CheckConstraint(
             f"profile_type in ({_sql_values(LEGACY_PROFILE_TYPES)})",
             name="profile_type",
@@ -241,7 +245,7 @@ class LegacyWorkflowEligibility(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     actor_id: Mapped[str] = mapped_column(
         ForeignKey("legacy_actor_identities.actor_id"), nullable=False, index=True
     )

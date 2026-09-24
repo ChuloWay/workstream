@@ -10,6 +10,7 @@ import hashlib
 
 from sqlalchemy import select
 
+from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from app.modules.actors.models import ActorProfile, ActorIdentityLink
 from app.modules.artifacts.models import ArtifactContent, ArtifactReplica, ArtifactStorageNamespace, ArtifactPutAttempt, ArtifactOperationReceipt
@@ -42,12 +43,12 @@ async def create_committed_document_fixture(source_snapshot_id: str, *, sessions
             await session.flush()
         content = await session.scalar(select(ArtifactContent).where(ArtifactContent.sha256 == SOURCE_SHA256))
         if content is None:
-            content = ArtifactContent(id=str(uuid4()), sha256=SOURCE_SHA256, byte_count=len(SOURCE_BYTES), media_type="application/pdf", normalized_display_name="guide.pdf")
+            content = ArtifactContent(id=str(new_record_id()), sha256=SOURCE_SHA256, byte_count=len(SOURCE_BYTES), media_type="application/pdf", normalized_display_name="guide.pdf")
             session.add(content)
             await session.flush()
         replica = await session.scalar(select(ArtifactReplica).where(ArtifactReplica.content_id == content.id, ArtifactReplica.storage_namespace_id == namespace.id))
         if replica is None:
-            replica = ArtifactReplica(id=str(uuid4()), content_id=content.id, storage_namespace_id=namespace.id, namespace_fingerprint=namespace.namespace_fingerprint, adapter=namespace.adapter, provider_profile=namespace.provider_profile, provider_object_ref=f"fixtures/{content.id}", verification_state="pending", availability_state="unknown", integrity_state="unknown")
+            replica = ArtifactReplica(id=str(new_record_id()), content_id=content.id, storage_namespace_id=namespace.id, namespace_fingerprint=namespace.namespace_fingerprint, adapter=namespace.adapter, provider_profile=namespace.provider_profile, provider_object_ref=f"fixtures/{content.id}", verification_state="pending", availability_state="unknown", integrity_state="unknown")
             session.add(replica)
             await session.flush()
         for item in items:
@@ -55,11 +56,11 @@ async def create_committed_document_fixture(source_snapshot_id: str, *, sessions
             existing = await session.scalar(select(GuideSourceArtifactIngest).where(GuideSourceArtifactIngest.source_item_id == item.id))
             if existing is not None:
                 continue
-            session.add(GuideSourceArtifactIngest(id=str(uuid4()), source_item_id=item.id, actor_profile_id=actor.id, sha256=SOURCE_SHA256, byte_count=len(SOURCE_BYTES), media_type="application/pdf"))
-            put = ArtifactPutAttempt(id=str(uuid4()), producer_request_type="guide", producer_type="actor_profile", producer_ref=actor.id, project_id=snapshot.project_id, guide_source_item_id=item.id, sha256=SOURCE_SHA256, byte_count=len(SOURCE_BYTES), media_type="application/pdf", storage_namespace_id=namespace.id, namespace_fingerprint=namespace.namespace_fingerprint, canonical_target=f"sha256/{SOURCE_SHA256[7:9]}/{SOURCE_SHA256[9:]}", operation_identity=sha256_hash(item.id), request_digest=sha256_hash("request:" + item.id), status="object_confirmed", terminal_result_code="document_stored", replica_id=replica.id, terminal_at=datetime.now(timezone.utc))
+            session.add(GuideSourceArtifactIngest(id=str(new_record_id()), source_item_id=item.id, actor_profile_id=actor.id, sha256=SOURCE_SHA256, byte_count=len(SOURCE_BYTES), media_type="application/pdf"))
+            put = ArtifactPutAttempt(id=str(new_record_id()), producer_request_type="guide", producer_type="actor_profile", producer_ref=actor.id, project_id=snapshot.project_id, guide_source_item_id=item.id, sha256=SOURCE_SHA256, byte_count=len(SOURCE_BYTES), media_type="application/pdf", storage_namespace_id=namespace.id, namespace_fingerprint=namespace.namespace_fingerprint, canonical_target=f"sha256/{SOURCE_SHA256[7:9]}/{SOURCE_SHA256[9:]}", operation_identity=sha256_hash(item.id), request_digest=sha256_hash("request:" + item.id), status="object_confirmed", terminal_result_code="document_stored", replica_id=replica.id, terminal_at=datetime.now(timezone.utc))
             session.add(put)
             await session.flush()
-            receipt = ArtifactOperationReceipt(id=str(uuid4()), contract_version=2, put_attempt_id=put.id, guide_source_item_id=item.id, replica_id=replica.id, operation="put", idempotency_key=put.operation_identity, request_digest=put.request_digest, provider_object_ref=replica.provider_object_ref, replayed=False, outcome="document_stored", attempt_number=1, correlation_id=str(uuid4()), details=[])
+            receipt = ArtifactOperationReceipt(id=str(new_record_id()), contract_version=2, put_attempt_id=put.id, guide_source_item_id=item.id, replica_id=replica.id, operation="put", idempotency_key=put.operation_identity, request_digest=put.request_digest, provider_object_ref=replica.provider_object_ref, replayed=False, outcome="document_stored", attempt_number=1, correlation_id=str(uuid4()), details=[])
             session.add(receipt)
             await session.flush()
             put.receipt_id = receipt.id
@@ -77,11 +78,11 @@ async def seed_setup_service_for_compiled_fixture(sessions):
         if actor is not None:
             assert actor.actor_kind == "service" and actor.status == "active"
             return
-        actor_id = str(uuid4())
+        actor_id = str(new_record_id())
         session.add(ActorProfile(id=actor_id, actor_kind="service", status="active",
             provisioning_method="manual_service_provisioning",
             service_identity="workstream.project.setup", created_by="compiled-guide-fixture"))
-        session.add(ActorIdentityLink(id=str(uuid4()), actor_profile_id=actor_id,
+        session.add(ActorIdentityLink(id=str(new_record_id()), actor_profile_id=actor_id,
             issuer="workstream-internal", subject="workstream.project.setup",
             subject_kind="service", status="active", linked_by="compiled-guide-fixture"))
 
@@ -95,7 +96,10 @@ async def create_compiled_report_fixture(
     from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
     from app.modules.projects.api import ProjectGuideCompilationExecutionCommand, ProjectGuideProjectionCommand, ProjectGuideCompilationExecutionClassification
     from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
-    from app.modules.projects.guide_compilation.request_inputs import CompilationRequestInputs, automatic_operation_id
+    from app.modules.projects.guide_compilation.request_inputs import (
+        CompilationRequestInputs,
+        automatic_request_selector,
+    )
     from app.modules.projects.guide_compilation.service import GuideCompilationService
     from app.modules.projects.guide_compilation.orchestrator import project_guide_compilation_execution_port
     from app.modules.projects.guide_compilation.projections import GuideCompilationProjectionService
@@ -120,7 +124,10 @@ async def create_compiled_report_fixture(
         setup.celery_task_id = project_guide_compilation_task_id(setup.id, setup.setup_generation)
         await session.commit()
     async with sessions() as session:
-        async with guide_compilation_request_authority(session, automatic_operation_id(manifest.setup_run_id, manifest.setup_generation)) as (authority, actor):
+        async with guide_compilation_request_authority(
+            session,
+            automatic_request_selector(manifest.setup_run_id, manifest.setup_generation),
+        ) as (authority, actor):
             request = await GuideCompilationService(session, authority, request_inputs=CompilationRequestInputs(guide_document_manifest_port(session), pre, post, configuration)).request_automatic(actor=actor, setup_run_id=manifest.setup_run_id)
 
     class Runtime:

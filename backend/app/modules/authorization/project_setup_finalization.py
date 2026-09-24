@@ -19,6 +19,7 @@ from app.modules.authorization.api import (
     ProjectSetupFinalizationAuthorityReceipt,
     ProjectSetupFinalizationFacts,
     ProjectSetupFinalizationLocator,
+    setup_finalization_preparation_identity,
 )
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.domain.project_setup_finalization import (
@@ -132,11 +133,14 @@ class SetupFinalizationAuthorization:
     @asynccontextmanager
     async def prepare_setup_finalization(self, locator: ProjectSetupFinalizationLocator):
         """Resolve, lock, prepare and close canonical service authority exactly once."""
+        request_id, correlation_id = setup_finalization_preparation_identity(
+            locator.setup_run_id, locator.setup_generation, locator.compilation_id
+        )
         manager = fixed_service_prepared_authorization(
             self._session,
             service_identity=ServiceIdentity.PROJECT_SETUP,
-            request_id=locator.operation_id,
-            correlation_id=locator.correlation_id,
+            request_id=request_id,
+            correlation_id=correlation_id,
         )
         with _authority_errors():
             custody = await manager.__aenter__()
@@ -146,7 +150,7 @@ class SetupFinalizationAuthorization:
                     locator, custody.actor_profile_id, custody.identity_link_id
                 )
                 caller_input = PreparedAuthorizationInput(
-                    idempotency_key=locator.operation_id,
+                    idempotency_key=request_id,
                     request_value=context.model_dump(mode="json"),
                 )
                 handle = await custody.service.prepare(

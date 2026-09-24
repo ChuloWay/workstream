@@ -7,6 +7,8 @@ from uuid import uuid4
 import asyncpg
 import pytest
 
+from app.core.identifiers import new_record_id
+
 pytestmark = pytest.mark.postgres_schema_contract
 
 
@@ -36,7 +38,7 @@ async def _registry_state(database_url: str) -> tuple[str, int, int, int]:
 
 
 async def _insert_permission_without_action(database_url: str, permission: str) -> None:
-    event_id = str(uuid4())
+    event_id = str(new_record_id())
     connection = await asyncpg.connect(database_url.replace("+asyncpg", ""))
     try:
         await connection.execute(
@@ -76,5 +78,6 @@ def test_compilation_permissions_require_exact_action_evidence(
     isolated_database_env: str,
     permission: str,
 ) -> None:
-    with pytest.raises(asyncpg.CheckViolationError):
+    with pytest.raises(asyncpg.CheckViolationError) as error:
         asyncio.run(_insert_permission_without_action(isolated_database_env, permission))
+    assert error.value.constraint_name == "ck_audit_events_authorization_action_evidence"

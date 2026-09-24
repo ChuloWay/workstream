@@ -1,7 +1,6 @@
 """Automatic request proof using real authorized source mutations and ART material."""
 
 from tests.projects.guide_compilation.helpers import runtime_configuration
-from tests.migration_fixtures import current_schema_revision
 
 from uuid import UUID
 
@@ -364,41 +363,6 @@ async def test_original_manager_revocation_does_not_rewrite_source_consent(
         ).one()
         assert row.actor_profile_id == str(actor.actor_profile_id)
         assert row.source_authorization_decision_event_id == setup.authorization_decision_event_id
-
-
-@pytest.mark.asyncio
-@pytest.mark.postgres_schema_contract
-async def test_retained_automatic_evidence_prevents_guide_creation_downgrade(
-    automatic_source, project_database_env, migration_lock
-):
-    from tests.migration_fixtures import run_guarded_revision_downgrade
-
-    factory, actor, setup_id, snapshot = automatic_source
-    await create_committed_document_fixture(snapshot["id"])
-    async with factory() as session:
-        await automatic_service(session, actor).request_automatic(
-            actor=actor, setup_run_id=setup_id
-        )
-
-    async with factory() as session:
-        assert await session.scalar(text("select version_num from alembic_version")) == current_schema_revision()
-
-    with pytest.raises(
-        RuntimeError, match="guide document creation custody cannot be downgraded"
-    ):
-        with migration_lock():
-            await run_guarded_revision_downgrade(project_database_env, "0018_guide_document_creation")
-    async with factory() as session:
-        assert (
-            await session.scalar(text("select version_num from alembic_version"))
-            == current_schema_revision()
-        )
-        assert (
-            await session.scalar(
-                text("select count(*) from project_guide_compilation_request_operations")
-            )
-            == 1
-        )
 
 
 @pytest.mark.asyncio

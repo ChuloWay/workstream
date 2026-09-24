@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import delete, select, text, update
@@ -34,7 +35,7 @@ async def _create_and_suspend(
         async with session.begin():
             created = await binding_service.create(
                 AdapterBindingCreateRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id,
+                    operation_id=new_record_id(), actor_profile_id=actor_id,
                     project_id=project_id, instrument_type="money",
                     adapter_actor_id=adapter_id, route_key=route_key,
                 )
@@ -42,7 +43,7 @@ async def _create_and_suspend(
         async with session.begin():
             suspended = await binding_service.suspend(
                 AdapterBindingSuspendRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id,
+                    operation_id=new_record_id(), actor_profile_id=actor_id,
                     project_id=project_id, adapter_binding_id=created.adapter_binding_id,
                     expected_lifecycle_version=1,
                 )
@@ -83,7 +84,7 @@ async def test_database_rejects_active_same_state_skip_retired_and_identity_chan
         async with session.begin():
             created = await binding_service.create(
                 AdapterBindingCreateRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id,
+                    operation_id=new_record_id(), actor_profile_id=actor_id,
                     project_id=project_id, instrument_type="money",
                     adapter_actor_id=adapter_id, route_key="adapter.primary",
                 )
@@ -92,7 +93,7 @@ async def test_database_rejects_active_same_state_skip_retired_and_identity_chan
             key: (
                 str(actor_id) if value == "actor"
                 else str(adapter_id) if value == "adapter"
-                else str(uuid4()) if value == "replacement"
+                else str(new_record_id()) if value == "replacement"
                 else value
             )
             for key, value in changes.items()
@@ -160,7 +161,7 @@ async def test_database_rejects_older_same_binding_suspension_reference(
         async with session.begin():
             created = await binding_service.create(
                 AdapterBindingCreateRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id,
+                    operation_id=new_record_id(), actor_profile_id=actor_id,
                     project_id=project_id, instrument_type="money",
                     adapter_actor_id=adapter_id, route_key="adapter.primary",
                 )
@@ -168,7 +169,7 @@ async def test_database_rejects_older_same_binding_suspension_reference(
         async with session.begin():
             first = await binding_service.suspend(
                 AdapterBindingSuspendRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id,
+                    operation_id=new_record_id(), actor_profile_id=actor_id,
                     project_id=project_id, adapter_binding_id=created.adapter_binding_id,
                     expected_lifecycle_version=1,
                 )
@@ -176,7 +177,7 @@ async def test_database_rejects_older_same_binding_suspension_reference(
         async with session.begin():
             await binding_service.resume(
                 AdapterBindingResumeRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id,
+                    operation_id=new_record_id(), actor_profile_id=actor_id,
                     project_id=project_id, adapter_binding_id=created.adapter_binding_id,
                     expected_lifecycle_version=2,
                 )
@@ -184,7 +185,7 @@ async def test_database_rejects_older_same_binding_suspension_reference(
         async with session.begin():
             await binding_service.suspend(
                 AdapterBindingSuspendRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id,
+                    operation_id=new_record_id(), actor_profile_id=actor_id,
                     project_id=project_id, adapter_binding_id=created.adapter_binding_id,
                     expected_lifecycle_version=3,
                 )
@@ -205,7 +206,7 @@ async def test_database_rejects_older_same_binding_suspension_reference(
                 )
                 session.add(
                     CompensationAdapterBindingLifecycleEvent(
-                        id=uuid4(), operation_id=uuid4(),
+                        id=new_record_id(), operation_id=new_record_id(),
                         request_digest="sha256:" + "0" * 64,
                         project_id=str(project_id),
                         adapter_binding_id=created.adapter_binding_id,
@@ -237,7 +238,7 @@ async def test_database_rejects_invalid_resume_lineage_or_attribution(
         assert binding_id != first_id
         suspension_id = first_suspension_id
     elif prior_case == "missing":
-        suspension_id = uuid4()
+        suspension_id = new_record_id()
 
     async with db_session.get_session_factory()() as session:
         with pytest.raises(DBAPIError):
@@ -253,7 +254,7 @@ async def test_database_rejects_invalid_resume_lineage_or_attribution(
                 )
                 session.add(
                     CompensationAdapterBindingLifecycleEvent(
-                        id=uuid4(), operation_id=uuid4(),
+                        id=new_record_id(), operation_id=new_record_id(),
                         request_digest="sha256:" + "0" * 64,
                         project_id=str(project_id), adapter_binding_id=binding_id,
                         event_type="resumed",

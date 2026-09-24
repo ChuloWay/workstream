@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
+from app.core.identifiers import new_record_id
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind, AuthorizationDenied
 from app.modules.authorization.api.guide_proposal_review import (
     GuideProposalAuthorityReceipt,
@@ -53,7 +54,7 @@ class PreparedProposal(PreparedGuideProposalOperation):
             else "project_guide_compilation_correction"
         )
         resource = facts.artifact_policy_id if approval else facts.locator.operation_id
-        decision = uuid4()
+        decision = new_record_id()
         await self.port.session.execute(
             text(
                 "INSERT INTO audit_events(id,entity_type,entity_id,event_type,actor_id,actor_roles,claim_snapshot,"
@@ -63,7 +64,7 @@ class PreparedProposal(PreparedGuideProposalOperation):
                 ":actor,'[]'::json,'{}'::json,'local_authority',false,'{}'::json,'authority',1,'actor_profile',"
                 ":request,:operation,:permission,:action,'authorization_evaluation',:project,:kind,:resource,"
                 "jsonb_build_object('allowed',true,'resource_context_digest',cast(:digest as text))::json,"
-                ":grant,'project',:project)"
+                ":grant,'project',:target_project)"
             ),
             dict(
                 id=str(decision),
@@ -73,6 +74,7 @@ class PreparedProposal(PreparedGuideProposalOperation):
                 permission=permission,
                 action=facts.locator.action_id,
                 project=str(self.port.project_id),
+                target_project=str(self.port.project_id),
                 kind=kind,
                 resource=str(resource),
                 digest=facts.digest,
@@ -321,7 +323,7 @@ async def seed_review_actor(factory, project_id, *, actor=None, role="project_ma
 
     async with factory() as session, session.begin():
         if actor is None:
-            actor = ActorIdentityFacts(uuid4(), uuid4(), ActorKind.HUMAN)
+            actor = ActorIdentityFacts(new_record_id(), new_record_id(), ActorKind.HUMAN)
             session.add(ActorProfile(id=str(actor.actor_profile_id), actor_kind="human", status="active",
                                     provisioning_method="automatic_first_access", created_by="proposal-fixture"))
             await session.flush()

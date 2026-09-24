@@ -2,7 +2,8 @@
 
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from pydantic import ValidationError
@@ -55,7 +56,7 @@ def test_requirement_contracts():
                                     credentials_allowed=False, query_strings_allowed=False,
                                     fragments_allowed=False, path_traversal_allowed=False)
     packaging = SubmissionPackagingRequirements(package_required=True, allowed_package_formats=("zip",))
-    values = dict(task_id=uuid4(), project_id=uuid4(), guide_version="guide", policy_schema_version=None,
+    values = dict(task_id=new_record_id(), project_id=new_record_id(), guide_version="guide", policy_schema_version=None,
                   merge_algorithm_version=None, required_packet_fields=("summary",), required_artifacts=(artifact,),
                   required_evidence=(evidence,), forbidden_artifacts=(forbidden,), attestation_terms=("original",),
                   manifest_required=True, artifact_hash_required=True, artifact_hash_algorithm="sha256",
@@ -66,7 +67,7 @@ def test_requirement_contracts():
         result = cls(**values)
         assert type(result) is cls and set(result.model_dump()) == FIELDS
         assert result.model_dump(mode="json")["packaging"]["allowed_package_formats"] == ["zip"]
-        for field, invalid in (("task_id", "bad"), ("project_id", str(uuid4())), ("guide_version", " "),
+        for field, invalid in (("task_id", "bad"), ("project_id", str(new_record_id())), ("guide_version", " "),
                                ("required_artifacts", [artifact]), ("attestation_terms", ["mutable"])):
             with pytest.raises(ValidationError):
                 cls(**{**values, field: invalid})
@@ -112,8 +113,8 @@ async def test_requirement_selectors_reject_before_sql():
     for method, _ in READS:
         count = 3 if method == READS[0][0] else 2
         for index in range(count):
-            for invalid in (None, "bad", str(uuid4()), 1, True):
-                args = [uuid4() for _ in range(count)]
+            for invalid in (None, "bad", str(new_record_id()), 1, True):
+                args = [new_record_id() for _ in range(count)]
                 args[index] = invalid
                 with pytest.raises(ValueError):
                     await getattr(service, method)(*args)
@@ -152,7 +153,7 @@ async def test_requirement_scope_and_assignment_visibility(task_client, monkeypa
             row = await session.get(WorkstreamTask, tasks[name]["id"])
             row.status, row.assigned_to = status, assignee
             if contributor:
-                session.add(TaskAssignment(id=str(uuid4()), task_id=row.id, project_id=row.project_id,
+                session.add(TaskAssignment(id=str(new_record_id()), task_id=row.id, project_id=row.project_id,
                     contributor_id=contributor, assigned_by=owner, status=assignment_status,
                     submitter_contribution_policy_version_id=row.locked_contribution_policy_version_id))
     async with factory() as session:
@@ -163,7 +164,7 @@ async def test_requirement_scope_and_assignment_visibility(task_client, monkeypa
             assert type(result) is cls and set(result.model_dump()) == FIELDS
             outputs.append(result.model_dump(mode="json", exclude_none=True))
             with patch.object(service, "_load_locked_task_context", wraps=service._load_locked_task_context) as resolve:
-                for task_id in (outsider["id"], str(uuid4())):
+                for task_id in (outsider["id"], str(new_record_id())):
                     with pytest.raises(TaskNotFound, match="task not found"):
                         await read_requirements(service, method, project["id"], task_id, owner)
                 resolve.assert_not_awaited()
@@ -217,9 +218,9 @@ async def test_requirement_custody_and_caller_transaction(task_client):
     project = await create_active_project(task_client)
     task = await create_ready_task(task_client, project["id"])
     draft = await create_draft_task(task_client, project["id"])
-    factory, contributor = db_session.get_session_factory(), str(uuid4())
+    factory, contributor = db_session.get_session_factory(), str(new_record_id())
     for method, cls in READS:
-        pending_id = str(uuid4())
+        pending_id = str(new_record_id())
         async with factory() as session, session.begin():
             row = await session.get(WorkstreamTask, task["id"])
             original = row.title
@@ -251,7 +252,7 @@ async def test_requirement_custody_and_caller_transaction(task_client):
 async def test_requirement_waits_for_task_before_projects(task_client):
     project = await create_active_project(task_client)
     task = await create_ready_task(task_client, project["id"])
-    factory, name = db_session.get_session_factory(), "requirements-" + uuid4().hex
+    factory, name = db_session.get_session_factory(), "requirements-" + new_record_id().hex
     async with factory() as writer, factory() as reader:
         stored = await reader.get(WorkstreamTask, task["id"])
         original_body = stored.locked_post_submit_checker_policy_body.copy()
@@ -266,7 +267,7 @@ async def test_requirement_waits_for_task_before_projects(task_client):
         with patch.object(service._repo, "read_contributor_task_detail", wraps=service._repo.read_contributor_task_detail) as detail, patch.object(service._project_contexts, "lock_locked_policy_context", wraps=service._project_contexts.lock_locked_policy_context) as resolve:
             order.attach_mock(detail, "detail")
             order.attach_mock(resolve, "projects")
-            pending = asyncio.create_task(service.read_contributor_task_submission_requirements(UUID(project["id"]), UUID(task["id"]), uuid4()))
+            pending = asyncio.create_task(service.read_contributor_task_submission_requirements(UUID(project["id"]), UUID(task["id"]), new_record_id()))
             try:
                 await asyncio.wait_for(wait_for_named_database_lock(get_settings().database_url, name,
                     expected_waiter_pid=reader_pid, expected_blocker_pid=writer_pid), timeout=10)

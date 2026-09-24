@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import asdict, replace
 from typing import Any, Literal
 from uuid import UUID
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.projects.models import ProjectSetupRun
 
@@ -23,7 +22,10 @@ from app.modules.authorization.api import (
     project_guide_compilation_execute_resource_digest,
 )
 
-from .request_inputs import CompilationRequestInputs, automatic_operation_id
+from .request_inputs import (
+    CompilationRequestInputs,
+    new_compilation_request_operation_id,
+)
 
 from .contracts import (
     CompilationAttemptIdentity,
@@ -74,14 +76,14 @@ class GuideCompilationService:
             setup = await self._session.get(ProjectSetupRun, str(setup_run_id))
             if setup is None:
                 raise GuideCompilationIntegrityError("automatic compilation setup unavailable")
-            operation = await self._session.scalar(
-                select(ProjectGuideCompilationRequestOperation).where(
-                    ProjectGuideCompilationRequestOperation.operation_id
-                    == automatic_operation_id(setup_run_id, setup.setup_generation)
-                )
+            repository = GuideCompilationRepository(self._session)
+            operation = await repository.request_operation_for_setup(
+                setup_run_id,
+                setup.setup_generation,
+                "automatic_source_ready",
+                lock=False,
             )
             if operation is not None:
-                repository = GuideCompilationRepository(self._session)
                 attempt = await repository.attempt(operation.attempt_id, lock=False)
                 facts = _request_facts(operation, attempt)
                 identity = identity_from_attempt(attempt)
@@ -113,18 +115,27 @@ class GuideCompilationService:
         correction_operation_id: UUID,
     ) -> CompilationRequestReceipt:
         """Reuse canonical human request/replay for a committed correction successor."""
-        from .correction_request import correction_request_inputs, correction_request_operation_id
+        from .correction_request import correction_request_inputs
 
         self._require_fresh_session()
         if self._request_inputs is None:
             raise GuideCompilationIntegrityError("compilation request inputs unavailable")
         async with self._session.begin():
             repository = GuideCompilationRepository(self._session)
-            operation = await self._session.scalar(
-                select(ProjectGuideCompilationRequestOperation).where(
-                    ProjectGuideCompilationRequestOperation.operation_id
-                    == correction_request_operation_id(correction_operation_id),
+            from .models import ProjectGuideProposalCorrection
+
+            correction = await self._session.get(
+                ProjectGuideProposalCorrection, correction_operation_id
+            )
+            operation = (
+                await repository.request_operation_for_setup(
+                    UUID(correction.successor_setup_run_id),
+                    correction.successor_setup_generation,
+                    "project_manager",
+                    lock=False,
                 )
+                if correction is not None
+                else None
             )
             if operation is None:
                 facts, identity = await correction_request_inputs(
@@ -158,8 +169,12 @@ class GuideCompilationService:
         try:
             async with self._session.begin():
                 repository = GuideCompilationRepository(self._session)
-                existing = await repository.matching_request_operation(
-                    actor=actor, facts=facts, origin=origin, lock=True
+                existing = (
+                    await repository.matching_request_operation(
+                        actor=actor, facts=facts, origin=origin, lock=True
+                    )
+                    if facts.operation_id.version == 7
+                    else None
                 )
                 if existing is not None:
                     await self._authorization.validate_request_replay(
@@ -174,26 +189,87 @@ class GuideCompilationService:
                     origin=origin,
                 )
                 correction_setup = None
+                prepared_facts = facts
                 if origin.trigger == "automatic_source_ready":
                     if self._request_inputs is None:
                         raise GuideCompilationIntegrityError(
                             "automatic compilation inputs unavailable"
                         )
-                    resolved = await self._request_inputs.resolve(self._session, facts.setup_run_id)
-                    if resolved != (facts, identity, origin):
+                    resolved = await self._request_inputs.resolve(
+                        self._session,
+                        facts.setup_run_id,
+                        operation_id=new_compilation_request_operation_id(),
+                        lock=True,
+                    )
+                    natural = await repository.request_operation_for_setup(
+                        facts.setup_run_id,
+                        facts.setup_generation,
+                        origin.trigger,
+                        lock=True,
+                    )
+                    if natural is not None:
+                        exact_facts = replace(
+                            prepared_facts,
+                            operation_id=natural.operation_id,
+                        )
+                        matched = await repository.matching_request_operation(
+                            actor=actor,
+                            facts=exact_facts,
+                            origin=origin,
+                            lock=True,
+                        )
+                        if matched is None:
+                            raise GuideCompilationIntegrityError(
+                                "compilation request custody is missing"
+                            )
+                        await self._authorization.validate_request_replay(
+                            actor=actor, facts=exact_facts, origin=origin
+                        )
+                        return await _request_receipt(repository, matched)
+                    facts = resolved[0]
+                    if (
+                        resolved[1:] != (identity, origin)
+                        or facts.request_id != prepared_facts.request_id
+                        or facts.idempotency_key != prepared_facts.idempotency_key
+                    ):
                         raise GuideCompilationIntegrityError(
                             "automatic compilation request input mismatch"
                         )
                 else:
                     from .correction_request import admit_correction_request
 
-                    correction_setup = await admit_correction_request(
+                    correction_setup, exact_facts, natural = await admit_correction_request(
                         self._session,
                         self._request_inputs,
                         actor=actor,
-                        facts=facts,
+                        facts=prepared_facts,
                         identity=identity,
+                        operation_id=new_compilation_request_operation_id(),
                     )
+                    if natural is not None:
+                        exact_facts = replace(
+                            prepared_facts,
+                            operation_id=natural.operation_id,
+                        )
+                        matched = await repository.matching_request_operation(
+                            actor=actor,
+                            facts=exact_facts,
+                            origin=origin,
+                            lock=True,
+                        )
+                        if matched is None:
+                            raise GuideCompilationIntegrityError(
+                                "compilation request custody is missing"
+                            )
+                        await self._authorization.validate_request_replay(
+                            actor=actor, facts=exact_facts, origin=origin
+                        )
+                        return await _request_receipt(repository, matched)
+                    if exact_facts is None:
+                        raise GuideCompilationIntegrityError(
+                            "correction compilation request input mismatch"
+                        )
+                    facts = exact_facts
                 if (
                     runtime_configuration is None
                     or runtime_configuration.instruction_version != identity.instruction_version
@@ -207,10 +283,8 @@ class GuideCompilationService:
                         "existing attempt has no authorized request custody"
                     )
                 event_id = await self._authorization.consume_request(
-                    handle=handle,
-                    actor=actor,
-                    facts=facts,
-                    origin=origin,
+                    handle=handle, actor=actor, prepared_facts=prepared_facts,
+                    facts=facts, origin=origin,
                 )
                 operation = await repository.insert_request_operation(
                     actor=actor,

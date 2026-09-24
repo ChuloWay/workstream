@@ -3,7 +3,8 @@
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import app.db.models  # noqa: F401
 from app.modules.compensation.api import (
@@ -103,7 +104,7 @@ class AllowBinding:
 
 
 def service_fixture(*, use_default_mutation_authority: bool = False) -> SimpleNamespace:
-    actor_id, project_id = uuid4(), uuid4()
+    actor_id, project_id = new_record_id(), new_record_id()
     authorization = AllowAuthorization(actor_id)
     service = ContributionPolicyService(
         FakeSession(),  # type: ignore[arg-type]
@@ -142,7 +143,7 @@ def service_fixture(*, use_default_mutation_authority: bool = False) -> SimpleNa
 
 def create_request(fixture: SimpleNamespace) -> ContributionPolicyCreateDraftRequest:
     return ContributionPolicyCreateDraftRequest(
-        operation_id=uuid4(),
+        operation_id=new_record_id(),
         actor_profile_id=fixture.actor_id,
         project_id=fixture.project_id,
         name="Canonical contribution policy",
@@ -159,7 +160,7 @@ def complete_rules() -> tuple[PolicyRuleInput, ...]:
                     instrument_type=CompensationInstrumentType.MONEY,
                     unit_code="USD",
                     quantity="10.00",
-                    adapter_binding_id=uuid4(),
+                    adapter_binding_id=new_record_id(),
                 ),
             ),
         ),

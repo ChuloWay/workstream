@@ -1,7 +1,7 @@
 """Update-draft replacement behavior."""
 
 from dataclasses import replace
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -16,11 +16,11 @@ from tests.contributions.policy_test_support import complete_rules, service_fixt
 
 def update_request(fixture: object) -> ContributionPolicyUpdateDraftRequest:
     return ContributionPolicyUpdateDraftRequest(
-        operation_id=uuid4(),
+        operation_id=new_record_id(),
         actor_profile_id=fixture.actor_id,  # type: ignore[attr-defined]
         project_id=fixture.project_id,  # type: ignore[attr-defined]
-        contribution_policy_id=uuid4(),
-        contribution_policy_version_id=uuid4(),
+        contribution_policy_id=new_record_id(),
+        contribution_policy_version_id=new_record_id(),
         rules=complete_rules(),
     )
 

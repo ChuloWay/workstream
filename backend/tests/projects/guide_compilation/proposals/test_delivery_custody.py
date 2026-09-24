@@ -1,26 +1,29 @@
 """Delivery selection requires an exact immutable request, never an attempt alone."""
 
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import uuid4, uuid5
 
 import pytest
 
 from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDeliveryError
-from app.modules.projects.guide_compilation.correction_request import correction_request_operation_id
+from app.core.identifiers import new_record_id
+from app.modules.projects.guide_compilation.correction_request import correction_request_selector
 from app.modules.projects.guide_compilation.delivery_request import manual_delivery_attempt
-from app.modules.projects.guide_compilation.request_inputs import automatic_operation_id
+from app.modules.projects.guide_compilation.request_inputs import automatic_request_selector
 
 
 def delivery_case():
-    setup = SimpleNamespace(id=str(uuid4()), project_id=str(uuid4()), guide_id=str(uuid4()),
-                            source_snapshot_id=str(uuid4()), setup_generation=2)
+    setup = SimpleNamespace(id=str(new_record_id()), project_id=str(new_record_id()), guide_id=str(new_record_id()),
+                            source_snapshot_id=str(new_record_id()), setup_generation=2)
     values = {key:getattr(setup,key) for key in ("project_id","guide_id","source_snapshot_id","setup_generation")}
-    attempt = SimpleNamespace(**values, id=uuid4(), setup_run_id=setup.id, runtime_configuration={"saved":True})
-    correction = SimpleNamespace(operation_id=uuid4(), compilation_id=uuid4(),
+    attempt = SimpleNamespace(**values, id=new_record_id(), setup_run_id=setup.id, runtime_configuration={"saved":True})
+    correction = SimpleNamespace(operation_id=new_record_id(), compilation_id=new_record_id(),
                                  project_id=setup.project_id, guide_id=setup.guide_id,
                                  successor_setup_generation=2, target_json={"source_snapshot_id":setup.source_snapshot_id})
+    selector = correction_request_selector(correction.operation_id)
     operation = SimpleNamespace(**values, attempt_id=attempt.id, setup_run_id=setup.id,
-                                operation_id=correction_request_operation_id(correction.operation_id),
+                                operation_id=new_record_id(), request_id=uuid5(selector, "request"),
+                                idempotency_key=uuid5(selector, "idempotency"),
                                 request_trigger="project_manager", expected_predecessor_compilation_id=correction.compilation_id,
                                 source_mutation_operation_id=None, source_authorization_decision_event_id=None)
     class Session:
@@ -62,9 +65,12 @@ async def test_automatic_delivery_retains_its_own_admission_path():
     session.correction = None
     assert await manual_delivery_attempt(session,setup,None) is None
     operation.request_trigger = "automatic_source_ready"
-    operation.operation_id = automatic_operation_id(setup.id,setup.setup_generation)
+    selector = automatic_request_selector(setup.id,setup.setup_generation)
+    operation.operation_id = new_record_id()
+    operation.request_id = uuid5(selector, "request")
+    operation.idempotency_key = uuid5(selector, "idempotency")
     assert await manual_delivery_attempt(session,setup,attempt) is None
-    operation.operation_id = uuid4()
+    operation.request_id = uuid4()
     with pytest.raises(ProjectGuideCompilationDeliveryError):
         await manual_delivery_attempt(session,setup,attempt)
 

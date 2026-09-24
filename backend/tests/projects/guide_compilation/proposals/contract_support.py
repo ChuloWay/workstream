@@ -1,6 +1,8 @@
 """Shared proposal values without importing collected test modules."""
 
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
+
+from app.core.identifiers import new_record_id
 
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.authorization.api.guide_proposal_review import (
@@ -16,15 +18,15 @@ HASH = "sha256:" + "a" * 64
 
 def target_values():
     return dict(
-        project_id=uuid4(),
-        guide_id=uuid4(),
-        compilation_id=uuid4(),
+        project_id=new_record_id(),
+        guide_id=new_record_id(),
+        compilation_id=new_record_id(),
         guide_version="1",
-        source_snapshot_id=uuid4(),
+        source_snapshot_id=new_record_id(),
         source_snapshot_hash=HASH,
-        setup_run_id=uuid4(),
+        setup_run_id=new_record_id(),
         setup_generation=1,
-        finalization_id=uuid4(),
+        finalization_id=new_record_id(),
         finalization_facts_digest=HASH,
         result_hash=HASH,
         component_hashes={name: HASH for name in CompilationComponentHashes.model_fields},
@@ -36,15 +38,15 @@ def target_values():
         post_catalogue_version="1",
         post_catalogue_schema_version="1",
         post_catalogue_manifest_hash=HASH,
-        artifact_policy_id=uuid4(),
+        artifact_policy_id=new_record_id(),
         artifact_policy_hash=HASH,
-        artifact_projection_operation_id=uuid4(),
+        artifact_projection_operation_id=new_record_id(),
         artifact_projection_output_digest=HASH,
     )
 
 
 def authority_case():
-    actor = ActorIdentityFacts(uuid4(), uuid4(), ActorKind.HUMAN)
+    actor = ActorIdentityFacts(new_record_id(), new_record_id(), ActorKind.HUMAN)
     target = GuideProposalTarget(**target_values())
     locator = GuideProposalAuthorizationLocator(
         project_id=target.project_id,
@@ -53,7 +55,7 @@ def authority_case():
         actor_profile_id=actor.actor_profile_id,
         identity_link_id=actor.identity_link_id,
         action_id="project.submission_artifact_policy.approve",
-        operation_id=uuid4(),
+        operation_id=uuid5(NAMESPACE_URL, "workstream.test.guide-proposal-selector"),
         request_id=uuid4(),
     )
     facts = GuideProposalAuthorizationFacts(
@@ -71,8 +73,8 @@ def authority_case():
     receipt = GuideProposalAuthorityReceipt(
         actor_profile_id=actor.actor_profile_id,
         identity_link_id=actor.identity_link_id,
-        admin_role_grant_id=uuid4(),
-        authorization_decision_event_id=uuid4(),
+        admin_role_grant_id=new_record_id(),
+        authorization_decision_event_id=new_record_id(),
         action_id=locator.action_id,
         permission_id="project.effective_policy.manage",
         scope_project_id=target.project_id,

@@ -34,6 +34,7 @@ class TaskCommandReceipt(Base):
 
     __tablename__ = "task_command_receipts"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint("actor_profile_id", "action_id", "idempotency_key", name="uq_task_command_namespace"),
         ForeignKeyConstraint(
             ["assignment_id", "task_id", "contributor_id"],
@@ -79,8 +80,8 @@ class TaskCommandReceipt(Base):
         "workstream_tasks.id", name="fk_task_command_task", deferrable=True, initially="DEFERRED",
     ))
     status: Mapped[str] = mapped_column(String(16), default="pending")
-    assignment_id: Mapped[str | None] = mapped_column(String(36))
-    contributor_id: Mapped[str | None] = mapped_column(String(36))
+    assignment_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
+    contributor_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     locked_context_hash: Mapped[str | None] = mapped_column(String(71))
     response: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -92,6 +93,7 @@ class WorkstreamTask(Base):
 
     __tablename__ = "workstream_tasks"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         CheckConstraint(
             "status = 'draft' or locked_contribution_policy_version_id is not null",
             name="contribution_policy_required",
@@ -279,30 +281,30 @@ class WorkstreamTask(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     locked_contribution_policy_version_id: Mapped[UUID | None] = mapped_column(Uuid())
     locked_guide_version: Mapped[str | None] = mapped_column(String(50))
-    locked_post_submit_checker_policy_id: Mapped[str | None] = mapped_column(String(36))
+    locked_post_submit_checker_policy_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     locked_post_submit_checker_policy_version: Mapped[str | None] = mapped_column(String(50))
     locked_post_submit_checker_policy_hash: Mapped[str | None] = mapped_column(String(71))
     locked_post_submit_checker_policy_body: Mapped[dict | None] = mapped_column(JSON)
-    locked_review_policy_id: Mapped[str | None] = mapped_column(String(36))
+    locked_review_policy_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     locked_review_policy_generation: Mapped[int | None] = mapped_column(Integer)
     locked_review_policy_hash: Mapped[str | None] = mapped_column(String(71))
-    locked_revision_policy_id: Mapped[str | None] = mapped_column(String(36))
+    locked_revision_policy_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     locked_revision_policy_generation: Mapped[int | None] = mapped_column(Integer)
     locked_revision_policy_hash: Mapped[str | None] = mapped_column(String(71))
     locked_payment_policy_version: Mapped[str | None] = mapped_column(String(50))
-    locked_guide_source_snapshot_id: Mapped[str | None] = mapped_column(String(36))
+    locked_guide_source_snapshot_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     locked_guide_source_snapshot_hash: Mapped[str | None] = mapped_column(String(71))
     locked_effective_project_submission_artifact_policy_id: Mapped[str | None] = mapped_column(
-        String(36),
+        Uuid(as_uuid=False),
     )
     locked_effective_project_submission_artifact_policy_hash: Mapped[str | None] = mapped_column(
         String(71),
     )
-    locked_pre_submit_checker_policy_id: Mapped[str | None] = mapped_column(String(36))
+    locked_pre_submit_checker_policy_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     locked_pre_submit_checker_bundle_hash: Mapped[str | None] = mapped_column(
         String(71),
     )
@@ -350,6 +352,7 @@ class TaskAssignment(Base):
 
     __tablename__ = "task_assignments"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["task_id", "project_id"], ["workstream_tasks.id", "workstream_tasks.project_id"],
             name="fk_assignments_task_project",
@@ -370,8 +373,8 @@ class TaskAssignment(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    project_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     submitter_contribution_policy_version_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
     task_id: Mapped[str] = mapped_column(
         ForeignKey("workstream_tasks.id"),
@@ -379,7 +382,7 @@ class TaskAssignment(Base):
         index=True,
     )
     contributor_id: Mapped[str] = mapped_column(
-        String(36),
+        Uuid(as_uuid=False),
         ForeignKey("actor_profiles.id"),
         nullable=False,
         index=True,
@@ -400,6 +403,7 @@ class Submission(Base):
 
     __tablename__ = "submissions"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["task_assignment_id", "task_id", "contributor_id"],
             ["task_assignments.id", "task_assignments.task_id", "task_assignments.contributor_id"],
@@ -575,21 +579,21 @@ class Submission(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     contribution_policy_version_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
     task_assignment_id: Mapped[str] = mapped_column(
         ForeignKey("task_assignments.id"), nullable=False, index=True
     )
     submission_bundle_admission_id: Mapped[str | None] = mapped_column(
-        String(36), unique=True, index=True
+        Uuid(as_uuid=False), unique=True, index=True
     )
-    artifact_binding_id: Mapped[str | None] = mapped_column(String(36), unique=True)
-    artifact_content_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    artifact_binding_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), unique=True)
+    artifact_content_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), index=True)
     task_id: Mapped[str] = mapped_column(
         ForeignKey("workstream_tasks.id"), nullable=False, index=True
     )
     contributor_id: Mapped[str] = mapped_column(
-        String(36),
+        Uuid(as_uuid=False),
         ForeignKey("actor_profiles.id"),
         nullable=False,
         index=True,
@@ -602,29 +606,29 @@ class Submission(Base):
     artifact_hash_manifest: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
     worker_attestation: Mapped[str] = mapped_column(Text, nullable=False)
     locked_guide_version: Mapped[str] = mapped_column(String(50), nullable=False)
-    locked_post_submit_checker_policy_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    locked_post_submit_checker_policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     locked_post_submit_checker_policy_version: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
     )
     locked_post_submit_checker_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
     locked_post_submit_checker_policy_body: Mapped[dict] = mapped_column(JSON, nullable=False)
-    locked_review_policy_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    locked_review_policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     locked_review_policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
     locked_review_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
-    locked_revision_policy_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    locked_revision_policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     locked_revision_policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
     locked_revision_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
     locked_payment_policy_version: Mapped[str | None] = mapped_column(String(50))
-    locked_guide_source_snapshot_id: Mapped[str | None] = mapped_column(String(36))
+    locked_guide_source_snapshot_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     locked_guide_source_snapshot_hash: Mapped[str | None] = mapped_column(String(71))
     locked_effective_project_submission_artifact_policy_id: Mapped[str | None] = mapped_column(
-        String(36),
+        Uuid(as_uuid=False),
     )
     locked_effective_project_submission_artifact_policy_hash: Mapped[str | None] = mapped_column(
         String(71),
     )
-    locked_pre_submit_checker_policy_id: Mapped[str | None] = mapped_column(String(36))
+    locked_pre_submit_checker_policy_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     locked_pre_submit_checker_bundle_hash: Mapped[str | None] = mapped_column(
         String(71),
     )
@@ -652,8 +656,9 @@ class EvidenceItem(Base):
     """Evidence reference bound to one submission version."""
 
     __tablename__ = "evidence_items"
+    __table_args__ = (CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),)
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     submission_id: Mapped[str] = mapped_column(
         ForeignKey("submissions.id"),
         nullable=False,
@@ -675,10 +680,20 @@ class AuditEvent(Base):
     """Shared append-only lifecycle and authority audit evidence."""
 
     __tablename__ = "audit_events"
+    __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        Index(
+            "uq_audit_assignment_release_cause",
+            text("(event_payload->'references'->>'assignment_id')"),
+            text("(event_payload->'references'->>'authority_invalidation_event_id')"),
+            unique=True,
+            postgresql_where=text("event_type = 'TaskAssignmentAuthorityRevoked'"),
+        ),
+    )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     entity_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
-    entity_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    entity_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
     event_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     from_status: Mapped[str | None] = mapped_column(String(30))
     to_status: Mapped[str | None] = mapped_column(String(30))
@@ -705,14 +720,14 @@ class AuditEvent(Base):
     matched_grant_id: Mapped[str | None] = mapped_column(String(100))
     permission_id: Mapped[str | None] = mapped_column(String(120))
     action_id: Mapped[str | None] = mapped_column(String(160))
-    project_id: Mapped[str | None] = mapped_column(String(36))
+    project_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     resource_type: Mapped[str | None] = mapped_column(String(80))
     resource_id: Mapped[str | None] = mapped_column(String(100))
     target_ref_kind: Mapped[str | None] = mapped_column(String(32))
     target_ref_id: Mapped[str | None] = mapped_column(String(100))
     denial_code: Mapped[str | None] = mapped_column(String(80))
     idempotency_reference: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
-    invalidation_cause_event_id: Mapped[str | None] = mapped_column(String(36))
+    invalidation_cause_event_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     invalidation_target_kind: Mapped[str | None] = mapped_column(String(32))
     invalidation_target_ref: Mapped[str | None] = mapped_column(String(100))
     before_facts: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))

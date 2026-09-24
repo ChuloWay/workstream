@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import traceback
 from typing import Any, cast
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest  # type: ignore[import-not-found]
 from pydantic import TypeAdapter
@@ -18,9 +18,11 @@ from sqlalchemy.ext.asyncio import (  # type: ignore[import-not-found]
     create_async_engine,
 )
 
+from app.core.identifiers import new_record_id
 from app.modules.outbox.api import (
     OutboxAppendDisposition,
     OutboxAppendInput,
+    OutboxAppendResult,
     OutboxIdempotencyConflict,
     OutboxInputError,
     OutboxPersistenceError,
@@ -44,7 +46,7 @@ async def outbox_factory(
     """Provide one project-scoped session factory and privileged local cleanup."""
     engine = create_async_engine(outbox_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    project_id = uuid4()
+    project_id = new_record_id()
     async with factory() as session:
         await seed_historical_project(
             session,
@@ -76,16 +78,15 @@ async def outbox_factory(
 
 def _event(project_id: UUID, **changes: Any) -> OutboxAppendInput:
     values: dict[str, Any] = {
-        "event_id": uuid4(),
         "event_type": "ContributionRecorded",
         "event_version": 1,
         "aggregate_type": "contribution_record",
-        "aggregate_id": uuid4(),
+        "aggregate_id": new_record_id(),
         "project_id": project_id,
-        "correlation_id": f"request:{uuid4()}",
-        "causation_event_id": uuid4(),
-        "idempotency_key": f"contribution:{uuid4()}:recorded:v1",
-        "payload": {"contribution_record_id": str(uuid4()), "award_ids": []},
+        "correlation_id": f"request:{new_record_id()}",
+        "causation_event_id": new_record_id(),
+        "idempotency_key": f"contribution:{new_record_id()}:recorded:v1",
+        "payload": {"contribution_record_id": str(new_record_id()), "award_ids": []},
     }
     values.update(changes)
     return OutboxAppendInput(**values)
@@ -99,13 +100,20 @@ def _unsafe_event(project_id: UUID, payload: object) -> OutboxAppendInput:
 
 
 def test_outbox_input_requires_closed_tokens_and_object_payload() -> None:
-    project_id = uuid4()
+    project_id = new_record_id()
     with pytest.raises(OutboxInputError, match="^outbox_invalid_input$"):
         _event(project_id, event_type="bad event")
     with pytest.raises(OutboxInputError, match="^outbox_invalid_input$"):
         _event(project_id, aggregate_type="BadAggregate")
     with pytest.raises(OutboxInputError, match="^outbox_invalid_input$"):
         _event(project_id, payload=[])
+
+
+def test_outbox_input_rejects_caller_supplied_event_identity() -> None:
+    values = _event(new_record_id()).model_dump()
+    values["event_id"] = new_record_id()
+    with pytest.raises(OutboxInputError, match="^outbox_invalid_input$"):
+        OutboxAppendInput(**values)
 
 
 @pytest.mark.asyncio
@@ -154,7 +162,7 @@ async def test_outbox_invalid_payload_errors_never_echo_values(
 ) -> None:
     service = OutboxService(cast(AsyncSession, None))
     with pytest.raises(OutboxInputError) as raised:
-        await service.append(_unsafe_event(uuid4(), payload))
+        await service.append(_unsafe_event(new_record_id(), payload))
     assert str(raised.value) == "outbox_invalid_input"
     assert "secret" not in str(raised.value)
 
@@ -162,13 +170,13 @@ async def test_outbox_invalid_payload_errors_never_echo_values(
 @pytest.mark.parametrize("key", ["hockey", "monkey", "turnkey"])
 def test_outbox_allows_benign_words_ending_in_key_letters(key: str) -> None:
     """Keep ordinary generic payload names outside the credential-key policy."""
-    value = _event(uuid4(), payload={key: "safe"})
+    value = _event(new_record_id(), payload={key: "safe"})
     assert value.payload == {key: "safe"}
 
 
 def test_outbox_normal_validation_detaches_rejected_secret_input() -> None:
-    values = _event(uuid4()).model_dump()
-    marker = f"private-marker-{uuid4()}"
+    values = _event(new_record_id()).model_dump()
+    marker = f"private-marker-{new_record_id()}"
     values["payload"] = {"authorization": marker}
     with pytest.raises(OutboxInputError, match="^outbox_invalid_input$") as raised:
         OutboxAppendInput(**values)
@@ -184,7 +192,7 @@ def test_outbox_normal_validation_detaches_rejected_secret_input() -> None:
 
 
 def test_outbox_all_validation_entry_points_detach_rejected_input() -> None:
-    marker = f"private-marker-{uuid4()}"
+    marker = f"private-marker-{new_record_id()}"
 
     class ExplodingDict(dict[str, object]):
         def items(self):
@@ -205,7 +213,7 @@ def test_outbox_all_validation_entry_points_detach_rejected_input() -> None:
         {"nested": ExplodingString("safe")},
     )
     for payload in hostile_payloads:
-        values = _event(uuid4()).model_dump()
+        values = _event(new_record_id()).model_dump()
         values["payload"] = payload
         calls = (
             lambda: OutboxAppendInput(**values),
@@ -227,7 +235,7 @@ def test_outbox_all_validation_entry_points_detach_rejected_input() -> None:
             assert raised.value.__context__ is None
             assert raised.value.__cause__ is None
 
-    json_values = _event(uuid4()).model_dump(mode="json")
+    json_values = _event(new_record_id()).model_dump(mode="json")
     json_values["payload"] = {"authorization": marker}
     document = json.dumps(json_values)
     for call in (
@@ -253,9 +261,9 @@ def test_outbox_rejects_hostile_top_level_payload_before_traversal() -> None:
             raise RuntimeError(marker)
 
     adapter = TypeAdapter(OutboxAppendInput)
-    values = _event(uuid4()).model_dump()
+    values = _event(new_record_id()).model_dump()
     values["payload"] = ExplodingDict(value="safe")
-    string_values = _event(uuid4()).model_dump(mode="json")
+    string_values = _event(new_record_id()).model_dump(mode="json")
     string_values["event_version"] = str(string_values["event_version"])
     string_values["payload"] = ExplodingDict(value="safe")
     for call in (
@@ -272,7 +280,7 @@ def test_outbox_rejects_hostile_top_level_payload_before_traversal() -> None:
 
 @pytest.mark.asyncio
 async def test_outbox_service_detaches_hostile_nested_container_failure() -> None:
-    marker = f"private-marker-{uuid4()}"
+    marker = f"private-marker-{new_record_id()}"
 
     class ExplodingDict(dict[str, object]):
         def items(self):
@@ -291,7 +299,7 @@ async def test_outbox_service_detaches_hostile_nested_container_failure() -> Non
         {"nested": ExplodingList(["safe"])},
         {"nested": ExplodingString("safe")},
     ):
-        value = _unsafe_event(uuid4(), payload)
+        value = _unsafe_event(new_record_id(), payload)
         with pytest.raises(OutboxInputError, match="^outbox_invalid_input$") as raised:
             await OutboxService(cast(AsyncSession, None)).append(value)
         assert_secret_not_retained(
@@ -304,7 +312,7 @@ async def test_outbox_service_detaches_hostile_nested_container_failure() -> Non
 
 
 def test_outbox_validation_entry_points_preserve_valid_modes() -> None:
-    expected = _event(uuid4(), payload={"marker": "safe"})
+    expected = _event(new_record_id(), payload={"marker": "safe"})
     adapter = TypeAdapter(OutboxAppendInput)
     python_value = OutboxAppendInput.model_validate(expected.model_dump())
     json_value = OutboxAppendInput.model_validate_json(json.dumps(expected.model_dump(mode="json")))
@@ -327,7 +335,7 @@ def test_outbox_validation_entry_points_preserve_valid_modes() -> None:
 
 @pytest.mark.asyncio
 async def test_outbox_payload_depth_nodes_members_and_budget_are_bounded() -> None:
-    project_id = uuid4()
+    project_id = new_record_id()
     nested: dict[str, Any] = {}
     cursor = nested
     for _ in range(17):
@@ -361,7 +369,7 @@ async def test_outbox_append_flushes_pending_event_without_committing(
                         "payload_digest, delivery_state, attempt_count, claim_generation, "
                         "occurred_at, next_attempt_at from outbox_events where event_id=:id"
                     ),
-                    {"id": value.event_id},
+                    {"id": result.event_id},
                 )
             ).one()
             assert result.disposition is OutboxAppendDisposition.CREATED
@@ -380,7 +388,7 @@ async def test_outbox_insert_trigger_rejects_preforged_operational_state(
     outbox_factory: tuple[async_sessionmaker[AsyncSession], UUID],
 ) -> None:
     factory, project_id = outbox_factory
-    event_id = uuid4()
+    event_id = new_record_id()
     async with factory() as session:
         async with session.begin():
             await session.execute(
@@ -398,7 +406,7 @@ async def test_outbox_insert_trigger_rejects_preforged_operational_state(
                 ),
                 {
                     "event_id": event_id,
-                    "aggregate_id": uuid4(),
+                    "aggregate_id": new_record_id(),
                     "project_id": str(project_id),
                     "correlation_id": f"forged:{event_id}",
                     "idempotency_key": f"forged:{event_id}:v1",
@@ -441,11 +449,11 @@ async def test_outbox_caller_rollback_removes_flushed_event(
     value = _event(project_id)
     async with factory() as session:
         transaction = await session.begin()
-        await OutboxService(session).append(value)
+        result = await OutboxService(session).append(value)
         assert (
             await session.scalar(
                 text("select count(*) from outbox_events where event_id=:id"),
-                {"id": value.event_id},
+                {"id": result.event_id},
             )
             == 1
         )
@@ -454,7 +462,7 @@ async def test_outbox_caller_rollback_removes_flushed_event(
         assert (
             await observer.scalar(
                 text("select count(*) from outbox_events where event_id=:id"),
-                {"id": value.event_id},
+                {"id": result.event_id},
             )
             == 0
         )
@@ -487,8 +495,8 @@ async def test_outbox_post_reservation_failure_rolls_back_caller_transaction(
     async with factory() as observer:
         assert (
             await observer.scalar(
-                text("select count(*) from outbox_events where event_id=:id"),
-                {"id": value.event_id},
+                text("select count(*) from outbox_events where idempotency_key=:key"),
+                {"key": value.idempotency_key},
             )
             == 0
         )
@@ -499,8 +507,8 @@ async def test_outbox_database_error_never_reflects_payload(
     outbox_factory: tuple[async_sessionmaker[AsyncSession], UUID],
 ) -> None:
     factory, _ = outbox_factory
-    marker = f"private-marker-{uuid4()}"
-    value = _event(uuid4(), payload={"private_marker": marker})
+    marker = f"private-marker-{new_record_id()}"
+    value = _event(new_record_id(), payload={"private_marker": marker})
     async with factory() as session:
         transaction = await session.begin()
         with pytest.raises(
@@ -554,7 +562,7 @@ async def test_outbox_snapshots_nested_payload_before_first_await(
                     text(
                         "select payload, payload_digest from outbox_events where event_id=:event_id"
                     ),
-                    {"event_id": value.event_id},
+                    {"event_id": result.event_id},
                 )
             ).one()
     assert result.disposition is OutboxAppendDisposition.CREATED
@@ -580,6 +588,7 @@ async def test_outbox_exact_replay_uses_canonical_payload_and_original_time(
         async with session.begin():
             result = await OutboxService(session).append(replay)
     assert result.disposition is OutboxAppendDisposition.REPLAYED
+    assert created.event_id.version == 7
     assert result.event_id == created.event_id
     assert result.payload_digest == created.payload_digest
     assert result.occurred_at == created.occurred_at
@@ -589,7 +598,6 @@ async def test_outbox_exact_replay_uses_canonical_payload_and_original_time(
 @pytest.mark.parametrize(
     "field",
     [
-        "event_id",
         "event_type",
         "event_version",
         "aggregate_type",
@@ -597,7 +605,6 @@ async def test_outbox_exact_replay_uses_canonical_payload_and_original_time(
         "project_id",
         "correlation_id",
         "causation_event_id",
-        "idempotency_key",
         "payload",
     ],
 )
@@ -611,16 +618,14 @@ async def test_outbox_reused_identity_with_immutable_drift_conflicts(
         async with session.begin():
             await OutboxService(session).append(value)
     changes: dict[str, Any] = {
-        "event_id": uuid4(),
         "event_type": "CompensationAwardCreated",
         "event_version": 2,
         "aggregate_type": "compensation_award",
-        "aggregate_id": uuid4(),
-        "project_id": uuid4(),
-        "correlation_id": f"request:{uuid4()}",
-        "causation_event_id": uuid4(),
-        "idempotency_key": f"changed:{uuid4()}",
-        "payload": {"contribution_record_id": str(uuid4()), "award_ids": []},
+        "aggregate_id": new_record_id(),
+        "project_id": new_record_id(),
+        "correlation_id": f"request:{new_record_id()}",
+        "causation_event_id": new_record_id(),
+        "payload": {"contribution_record_id": str(new_record_id()), "award_ids": []},
     }
     drift = OutboxAppendInput(**{**value.model_dump(), field: changes[field]})
     async with factory() as session:
@@ -637,7 +642,7 @@ async def test_outbox_conflict_does_not_retain_stored_payload(
     outbox_factory: tuple[async_sessionmaker[AsyncSession], UUID],
 ) -> None:
     factory, project_id = outbox_factory
-    marker = f"stored-conflict-{uuid4()}"
+    marker = f"stored-conflict-{new_record_id()}"
     value = _event(project_id, payload={"detail": marker})
     async with factory() as session:
         async with session.begin():
@@ -660,16 +665,22 @@ async def test_outbox_conflict_does_not_retain_stored_payload(
 
 
 @pytest.mark.asyncio
-async def test_outbox_split_event_and_idempotency_identities_conflict(
+async def test_outbox_independent_keys_mint_distinct_v7_events_and_crossed_facts_conflict(
     outbox_factory: tuple[async_sessionmaker[AsyncSession], UUID],
 ) -> None:
     factory, project_id = outbox_factory
     first = _event(project_id)
+    same_facts_new_key = OutboxAppendInput(
+        **{**first.model_dump(), "idempotency_key": f"independent:{new_record_id()}"}
+    )
     second = _event(project_id)
     async with factory() as session:
         async with session.begin():
-            await OutboxService(session).append(first)
+            first_result = await OutboxService(session).append(first)
+            independent_result = await OutboxService(session).append(same_facts_new_key)
             await OutboxService(session).append(second)
+    assert first_result.event_id.version == independent_result.event_id.version == 7
+    assert first_result.event_id != independent_result.event_id
     crossed = OutboxAppendInput(
         **{
             **first.model_dump(),
@@ -685,10 +696,10 @@ async def test_outbox_split_event_and_idempotency_identities_conflict(
 async def _blocked_append(
     session: AsyncSession,
     value: OutboxAppendInput,
-) -> tuple[OutboxAppendDisposition | None, Exception | None]:
+) -> tuple[OutboxAppendResult | None, Exception | None]:
     try:
         result = await OutboxService(session).append(value)
-        return result.disposition, None
+        return result, None
     except Exception as error:  # noqa: BLE001 - test returns exact typed race outcome
         return None, error
 
@@ -707,10 +718,12 @@ async def test_outbox_duplicate_race_replays_after_first_reserver_commits(
         await asyncio.sleep(0.05)
         assert not blocked.done()
         await winner.commit()
-        disposition, error = await asyncio.wait_for(blocked, timeout=3)
+        replay, error = await asyncio.wait_for(blocked, timeout=3)
         await contender.commit()
     assert first.disposition is OutboxAppendDisposition.CREATED
-    assert disposition is OutboxAppendDisposition.REPLAYED
+    assert replay is not None
+    assert replay.disposition is OutboxAppendDisposition.REPLAYED
+    assert replay.event_id == first.event_id
     assert error is None
 
 
@@ -723,14 +736,17 @@ async def test_outbox_duplicate_race_creates_after_first_reserver_rolls_back(
     async with factory() as reserver, factory() as contender:
         await reserver.begin()
         await contender.begin()
-        await OutboxService(reserver).append(value)
+        rolled_back = await OutboxService(reserver).append(value)
         blocked = asyncio.create_task(_blocked_append(contender, value))
         await asyncio.sleep(0.05)
         assert not blocked.done()
         await reserver.rollback()
-        disposition, error = await asyncio.wait_for(blocked, timeout=3)
+        created, error = await asyncio.wait_for(blocked, timeout=3)
         await contender.commit()
-    assert disposition is OutboxAppendDisposition.CREATED
+    assert created is not None
+    assert created.disposition is OutboxAppendDisposition.CREATED
+    assert created.event_id.version == 7
+    assert created.event_id != rolled_back.event_id
     assert error is None
 
 
@@ -741,7 +757,7 @@ async def test_outbox_changed_payload_race_conflicts_after_first_reserver_commit
     factory, project_id = outbox_factory
     value = _event(project_id)
     changed = OutboxAppendInput(
-        **{**value.model_dump(), "payload": {"contribution_record_id": str(uuid4())}}
+        **{**value.model_dump(), "payload": {"contribution_record_id": str(new_record_id())}}
     )
     async with factory() as winner, factory() as contender:
         await winner.begin()
@@ -751,9 +767,9 @@ async def test_outbox_changed_payload_race_conflicts_after_first_reserver_commit
         await asyncio.sleep(0.05)
         assert not blocked.done()
         await winner.commit()
-        disposition, error = await asyncio.wait_for(blocked, timeout=3)
+        result, error = await asyncio.wait_for(blocked, timeout=3)
         await contender.rollback()
-    assert disposition is None
+    assert result is None
     assert isinstance(error, OutboxIdempotencyConflict)
 
 
@@ -767,17 +783,17 @@ async def test_outbox_immutable_columns_delete_and_truncate_are_guarded(
     value = _event(project_id)
     async with factory() as session:
         async with session.begin():
-            await OutboxService(session).append(value)
+            result = await OutboxService(session).append(value)
         immutable_updates = (
-            f"event_id='{uuid4()}'",
+            f"event_id='{new_record_id()}'",
             "event_type='ChangedEvent'",
             "event_version=2",
             "producer='other'",
             "aggregate_type='other'",
-            f"aggregate_id='{uuid4()}'",
-            f"project_id='{uuid4()}'",
+            f"aggregate_id='{new_record_id()}'",
+            f"project_id='{new_record_id()}'",
             "correlation_id='changed'",
-            f"causation_event_id='{uuid4()}'",
+            f"causation_event_id='{new_record_id()}'",
             "idempotency_key='changed:key'",
             "payload='{}'::jsonb",
             "payload_digest='sha256:" + ("0" * 64) + "'",
@@ -788,13 +804,13 @@ async def test_outbox_immutable_columns_delete_and_truncate_are_guarded(
                 async with session.begin():
                     await session.execute(
                         text(f"update outbox_events set {assignment} where event_id=:id"),
-                        {"id": value.event_id},
+                        {"id": result.event_id},
                     )
         with pytest.raises(DBAPIError, match="outbox events cannot be deleted"):
             async with session.begin():
                 await session.execute(
                     text("delete from outbox_events where event_id=:id"),
-                    {"id": value.event_id},
+                    {"id": result.event_id},
                 )
         with pytest.raises(DBAPIError, match="outbox events cannot be truncated"):
             async with session.begin():
@@ -809,13 +825,13 @@ async def test_outbox_pending_cancellation_is_terminal_and_archivable(
     value = _event(project_id)
     async with factory() as session:
         async with session.begin():
-            await OutboxService(session).append(value)
+            result = await OutboxService(session).append(value)
             await session.execute(
                 text(
                     "update outbox_events set delivery_state='cancelled', "
                     "next_attempt_at=null, finalized_at=clock_timestamp() where event_id=:id"
                 ),
-                {"id": value.event_id},
+                {"id": result.event_id},
             )
         with pytest.raises(DBAPIError, match="illegal outbox delivery transition"):
             async with session.begin():
@@ -827,12 +843,12 @@ async def test_outbox_pending_cancellation_is_terminal_and_archivable(
                         "claim_expires_at=statement_timestamp()+interval '30 seconds', "
                         "finalized_at=null where event_id=:id"
                     ),
-                    {"id": value.event_id},
+                    {"id": result.event_id},
                 )
         async with session.begin():
             await session.execute(
                 text("update outbox_events set archived_at=clock_timestamp() where event_id=:id"),
-                {"id": value.event_id},
+                {"id": result.event_id},
             )
 
 

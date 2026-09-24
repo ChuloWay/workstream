@@ -2,7 +2,8 @@
 
 from decimal import Decimal
 from typing import cast
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -140,7 +141,7 @@ class ContributionPolicyService:
             policy = None
         if policy is None:
             policy = ContributionPolicy(
-                id=uuid4(),
+                id=new_record_id(),
                 project_id=str(request.project_id),
                 name=request.name,
                 status="draft",
@@ -157,7 +158,7 @@ class ContributionPolicyService:
             prior_number = await self._prior_version_number(policy, prior_id)
             from_policy_status = policy.status
         version = ContributionPolicyVersion(
-            id=uuid4(),
+            id=new_record_id(),
             contribution_policy_id=policy.id,
             project_id=str(request.project_id),
             version_number=version_number,
@@ -282,7 +283,7 @@ class ContributionPolicyService:
         built_rules: list[ContributionRule] = []
         definitions: list[ContributionAwardDefinition] = []
         for rule_input in rules:
-            rule_id = uuid4()
+            rule_id = new_record_id()
             built_rules.append(
                 ContributionRule(
                     id=rule_id,
@@ -314,7 +315,7 @@ class ContributionPolicyService:
                     raise ContributionPolicyConflict("contribution_policy_not_found")
                 definitions.append(
                     ContributionAwardDefinition(
-                        id=uuid4(),
+                        id=new_record_id(),
                         contribution_rule_id=rule_id,
                         contribution_policy_version_id=request.contribution_policy_version_id,
                         project_id=str(request.project_id),
@@ -391,7 +392,7 @@ class ContributionPolicyService:
     ) -> ContributionPolicyLifecycleEvent:
         """Build one immutable, attributable lifecycle event."""
         return ContributionPolicyLifecycleEvent(
-            id=uuid4(),
+            id=new_record_id(),
             operation_id=getattr(request, "operation_id"),
             request_digest=digest,
             event_type=event_type,

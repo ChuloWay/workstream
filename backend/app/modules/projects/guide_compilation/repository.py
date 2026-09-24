@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Literal
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import exists, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
@@ -104,6 +105,11 @@ class GuideCompilationRepository:
         """Bind repository operations to the caller-owned transaction."""
         self._session = session
 
+    @staticmethod
+    def new_finalization_identity() -> tuple[UUID, UUID]:
+        """Mint finalization row and operation UUIDv7 values once."""
+        return new_record_id(), new_record_id()
+
     async def finalization_attempt_id(self, command) -> UUID:
         """Resolve an exact scoped compilation without taking product locks."""
         attempt_id = await self._session.scalar(
@@ -119,16 +125,13 @@ class GuideCompilationRepository:
             raise GuideCompilationIntegrityError("finalization source unavailable")
         return attempt_id
 
-    async def finalization_receipts(self, command, operation_id):
-        """Re-query both operation and generation custody under the setup lock."""
+    async def finalization_receipts(self, command):
+        """Re-query natural finalization custody under the setup lock."""
         rows = await self._session.scalars(
             select(ProjectGuideSetupFinalization)
             .where(
-                or_(
-                    ProjectGuideSetupFinalization.operation_id == operation_id,
-                    (ProjectGuideSetupFinalization.setup_run_id == str(command.setup_run_id))
-                    & (ProjectGuideSetupFinalization.setup_generation == command.setup_generation),
-                )
+                ProjectGuideSetupFinalization.setup_run_id == str(command.setup_run_id),
+                ProjectGuideSetupFinalization.setup_generation == command.setup_generation,
             )
             .with_for_update()
             .execution_options(populate_existing=True)
@@ -315,6 +318,19 @@ class GuideCompilationRepository:
             raise GuideCompilationIntegrityError("compilation request custody is missing")
         return operation
 
+    async def request_operation_for_setup(
+        self, setup_run_id: UUID, setup_generation: int, trigger: str, *, lock: bool
+    ) -> ProjectGuideCompilationRequestOperation | None:
+        """Load the natural request owner for one immutable setup generation."""
+        statement = select(ProjectGuideCompilationRequestOperation).where(
+            ProjectGuideCompilationRequestOperation.setup_run_id == str(setup_run_id),
+            ProjectGuideCompilationRequestOperation.setup_generation == setup_generation,
+            ProjectGuideCompilationRequestOperation.request_trigger == trigger,
+        )
+        if lock:
+            statement = statement.with_for_update()
+        return await self._session.scalar(statement.execution_options(populate_existing=True))
+
     async def insert_request_operation(
         self,
         *,
@@ -465,7 +481,7 @@ class GuideCompilationRepository:
         """Claim or classify the sole attempt for one setup generation."""
         values = _identity_values(identity)
         values.update(
-            id=uuid4(),
+            id=new_record_id(),
             runtime_configuration=runtime_configuration.model_dump(mode="json"),
             runtime_configuration_hash=runtime_configuration.sha256,
             provider_idempotency_key=identity.provider_idempotency_key(),
@@ -637,7 +653,7 @@ class GuideCompilationRepository:
             )
         if current and current.setup_generation >= identity.setup_generation:
             raise GuideCompilationIntegrityError("compilation generation did not advance")
-        compilation_id = uuid4()
+        compilation_id = new_record_id()
         compilation = ProjectGuideCompilation(
             id=compilation_id,
             attempt_id=attempt.id,

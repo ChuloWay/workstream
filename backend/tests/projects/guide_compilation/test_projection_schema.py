@@ -2,39 +2,23 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime
 import json
-from pathlib import Path
 from uuid import uuid4
 
-from alembic import command
-from alembic.config import Config
 import asyncpg
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.core.identifiers import new_record_id
 from app.modules.projects.repository import ProjectRepository
 
-from tests.migration_fixtures import current_schema_revision, run_guarded_revision_downgrade
 from .helpers import SHA256, seed_database
 from .test_projection_postgresql import _project_both
 
 
 def _url(value: str) -> str:
     return value.replace("+asyncpg", "")
-
-
-def _config() -> Config:
-    return Config(Path(__file__).resolve().parents[3] / "alembic.ini")
-
-
-async def _version(database_url: str) -> str:
-    connection = await asyncpg.connect(_url(database_url))
-    try:
-        return await connection.fetchval("select version_num from alembic_version")
-    finally:
-        await connection.close()
 
 
 @pytest.mark.asyncio
@@ -262,14 +246,14 @@ async def test_verified_reports_allow_same_snapshot_across_setup_generations(
     report_ids: dict[int, str] = {}
     try:
         for generation in (1, 2):
-            report_ids[generation] = str(uuid4())
+            report_ids[generation] = str(new_record_id())
             await connection.execute(
                 "insert into guide_sufficiency_reports(id,project_id,guide_id,"
                 "guide_version,source_snapshot_id,source_snapshot_hash,status,findings,"
                 "project_setup_run_id,setup_generation,agent_material_sha256,"
                 "agent_material_byte_count,created_by,created_at) "
                 "values($1,$2,$3,'v1',$4,$5,'passed','[]'::json,$6,$7,$5,1,"
-                "'migration-test',$8)",
+                "'schema-test',$8)",
                 report_ids[generation],
                 str(values["project"]),
                 str(values["guide"]),
@@ -300,42 +284,3 @@ async def test_verified_reports_allow_same_snapshot_across_setup_generations(
         assert selected.setup_generation == 2
     finally:
         await engine.dispose()
-
-
-@pytest.mark.postgres_schema_contract
-def test_projection_migration_installs_and_replays_from_prior_schema(
-    isolated_database_env: str,
-    migration_lock,
-    migration_schema_at,
-) -> None:
-    clean_postgres_database = isolated_database_env
-    with migration_lock():
-        migration_schema_at("0008_guide_compilation_authorized_persistence")
-    assert asyncio.run(_version(clean_postgres_database)) == (
-        "0008_guide_compilation_authorized_persistence"
-    )
-    with migration_lock():
-        command.upgrade(_config(), "0009_guide_compilation_projections")
-        command.upgrade(_config(), "0009_guide_compilation_projections")
-    assert asyncio.run(_version(clean_postgres_database)) == ("0009_guide_compilation_projections")
-
-    with migration_lock():
-        command.upgrade(_config(), "head")
-    assert asyncio.run(_version(clean_postgres_database)) == current_schema_revision()
-
-
-def test_populated_projection_migration_refuses_downgrade(
-    isolated_database_env: str,
-    migration_lock,
-) -> None:
-    clean_postgres_database = isolated_database_env
-    values = asyncio.run(seed_database(clean_postgres_database))
-    asyncio.run(_project_both(clean_postgres_database, values))
-    with (
-        migration_lock(),
-        pytest.raises(RuntimeError, match="guide projection custody is non-empty"),
-    ):
-        asyncio.run(
-            run_guarded_revision_downgrade(clean_postgres_database, "0009_guide_compilation_projections")
-        )
-    assert asyncio.run(_version(clean_postgres_database)) == current_schema_revision()

@@ -18,7 +18,7 @@ import stat as stat_module
 import threading
 import time
 from typing import Any, BinaryIO, Protocol, TypeVar
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 from app.interfaces.artifacts import (
     ArtifactInputMismatchError,
@@ -464,7 +464,7 @@ class ArtifactScratchManager:
     ) -> Iterator[Path]:
         """Own one crash-recoverable private extraction workspace."""
         with self._tracked_operation():
-            workspace_name = f"extract_{uuid4().hex}"
+            workspace_name = f"extract_{new_record_id().hex}"
             self._reserve_workspace_sync(
                 workspace_name,
                 reserved_bytes=reserved_bytes,
@@ -869,7 +869,7 @@ class ArtifactScratchManager:
 
     def _allocate_sync(self) -> tuple[_ScratchReservation, int]:
         """Publish one bounded reservation before creating its private file."""
-        reservation_id = uuid4().hex
+        reservation_id = new_record_id().hex
         filename = f"prep_{reservation_id}.bin"
         now = time.time_ns()
         ttl_ns = int(self._limits.reservation_ttl_seconds * 1_000_000_000)
@@ -1258,7 +1258,7 @@ class ArtifactScratchManager:
         ).encode("utf-8")
         if len(raw) > _LEDGER_MAXIMUM_BYTES:
             raise ArtifactScratchIntegrityError("artifact scratch ledger is invalid")
-        temporary = f".ledger.{uuid4().hex}.tmp"
+        temporary = f".ledger.{new_record_id().hex}.tmp"
         descriptor: int | None = None
         replaced = False
         try:

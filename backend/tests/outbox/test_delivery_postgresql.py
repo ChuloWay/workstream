@@ -3,7 +3,7 @@
 import asyncio
 from dataclasses import replace
 from datetime import timedelta
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import event as sqlalchemy_event, select, text
@@ -69,7 +69,7 @@ async def test_claim_validator_requires_committed_invocation(delivery_harness):
     async with h.factory() as writer, writer.begin():
         facts = OutboxDispatchFacts(**claim.model_dump(), phase=OutboxDispatchPhase.INVOKE)
         async with outbox_dispatch_authorization(writer).prepare_outbox_dispatch(
-            facts=facts, request_id=uuid4(), correlation_id=uuid4(),
+            facts=facts, request_id=new_record_id(), correlation_id=new_record_id(),
         ) as prepared:
             attempt = await DeliveryRepository(writer).attempt(claim, lock=True)
             decision = await prepared.consume(facts)
@@ -83,8 +83,8 @@ async def test_claim_validator_requires_committed_invocation(delivery_harness):
         and claim.claimed_at <= observed.observed_at < claim.claim_expires_at
     )
     for changes in (
-        {"project_id": uuid4()},
-        {"event_id": uuid4()},
+        {"project_id": new_record_id()},
+        {"event_id": new_record_id()},
         {"payload_digest": "sha256:" + "0" * 64},
         {"claim_owner": "different"},
         {"claim_generation": 2},
@@ -94,8 +94,8 @@ async def test_claim_validator_requires_committed_invocation(delivery_harness):
         assert await h.delivery.observe_invocation(envelope.model_copy(update={"claim": claim.model_copy(update=changes)})) is None
     for changes in (
         {"event_type": "DifferentEvent"}, {"event_version": 2},
-        {"aggregate_type": "other"}, {"aggregate_id": uuid4()},
-        {"correlation_id": "different"}, {"causation_event_id": uuid4()},
+        {"aggregate_type": "other"}, {"aggregate_id": new_record_id()},
+        {"correlation_id": "different"}, {"causation_event_id": new_record_id()},
         {"idempotency_key": "different"},
         {"occurred_at": envelope.occurred_at + timedelta(microseconds=1)},
         {"payload_json": "{}"}, {"payload_json": "invalid"},
@@ -275,7 +275,7 @@ async def test_effect_fence_holds_custody_until_caller_transaction_ends(delivery
     claim = await h.claim()
     envelope = await h.delivery._begin_invocation(claim)
     entered = asyncio.Event()
-    waiter_name = "fence-finalizer-" + uuid4().hex
+    waiter_name = "fence-finalizer-" + new_record_id().hex
     original_event = DeliveryRepository.event
 
     async def named_event(owner, *args, **kwargs):

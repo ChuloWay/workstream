@@ -29,6 +29,7 @@ class OutboxEvent(Base):
 
     __tablename__ = "outbox_events"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(event_id), 6) >> 4) = 7 and (get_byte(uuid_send(event_id), 8) & 192) = 128", name="event_id_uuid7"),
         CheckConstraint(
             "event_type ~ '^[A-Za-z][A-Za-z0-9._:-]{0,127}$'",
             name="event_type",
@@ -224,9 +225,9 @@ class OutboxDeliveryAttempt(Base):
         ),
     )
 
-    claim_decision_event_id: Mapped[str] = mapped_column(String(36), ForeignKey("audit_events.id"), unique=True, nullable=False)
-    invoke_decision_event_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("audit_events.id"), unique=True)
-    finalize_decision_event_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("audit_events.id"), unique=True)
+    claim_decision_event_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("audit_events.id"), unique=True, nullable=False)
+    invoke_decision_event_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), ForeignKey("audit_events.id"), unique=True)
+    finalize_decision_event_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), ForeignKey("audit_events.id"), unique=True)
 
     event_id: Mapped[UUID] = mapped_column(ForeignKey("outbox_events.event_id"), primary_key=True)
     claim_generation: Mapped[int] = mapped_column(BigInteger, primary_key=True)

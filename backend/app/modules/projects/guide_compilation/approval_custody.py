@@ -308,7 +308,17 @@ async def lock_policy_approval(session, guide, snapshot, policy, effective, pre)
     require_lineage(
         view, command, require_current=False, allowed_guide_statuses=frozenset({"draft", "active"})
     )
-    require_replay(view, finalization, compose_facts(view, finalization.source_state_digest))
+    require_replay(
+        view,
+        finalization,
+        compose_facts(
+            view,
+            finalization.source_state_digest,
+            finalization_id=finalization.id,
+            operation_id=finalization.operation_id,
+            correlation_id=finalization.correlation_id,
+        ),
+    )
     if (
         target.finalization_facts_digest != finalization.facts_digest
         or target.artifact_projection_output_digest != finalization.artifact_policy_output_digest

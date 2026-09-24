@@ -4,7 +4,8 @@ import asyncio
 from dataclasses import FrozenInstanceError, asdict, replace
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import select
@@ -26,18 +27,18 @@ from tests.test_tasks import (
 @pytest.mark.parametrize("value", [0, 101, True, False, 1.5, "5", None])
 def test_ready_queue_request_validation(value):
     with pytest.raises(ValueError, match="request is invalid"):
-        TaskQueueRequest(uuid4(), limit=value)
+        TaskQueueRequest(new_record_id(), limit=value)
 
 
 def test_ready_queue_cursor_validation():
-    project = uuid4()
+    project = new_record_id()
     instant = datetime.now(UTC)
-    valid = TaskQueueCursor(project, instant, uuid4())
+    valid = TaskQueueCursor(project, instant, new_record_id())
     assert TaskQueueRequest(project, after=valid).after == valid
     for change in ({"project_id": "bad"}, {"task_id": "bad"}, {"created_at": instant.replace(tzinfo=None)}):
         with pytest.raises(ValueError, match="cursor is invalid"):
             replace(valid, **change)
-    for cursor in (replace(valid, project_id=uuid4()), {}, "cursor"):
+    for cursor in (replace(valid, project_id=new_record_id()), {}, "cursor"):
         with pytest.raises(ValueError, match="cursor differs"):
             TaskQueueRequest(project, after=cursor)
     with pytest.raises(ValueError, match="request is invalid"):
@@ -47,13 +48,13 @@ def test_ready_queue_cursor_validation():
 async def test_ready_queue_rejects_non_request_before_database():
     session = MagicMock()
     with pytest.raises(ValueError, match="request is invalid"):
-        await TaskRepository(session).read_ready_tasks({"project_id": str(uuid4())})
+        await TaskRepository(session).read_ready_tasks({"project_id": str(new_record_id())})
     session.execute.assert_not_called()
 
 
 def _assignment(task, *, status="active"):
     return TaskAssignment(
-        id=str(uuid4()), task_id=task.id, project_id=task.project_id,
+        id=str(new_record_id()), task_id=task.id, project_id=task.project_id,
         contributor_id=task.created_by, assigned_by=task.created_by, status=status,
         submitter_contribution_policy_version_id=task.locked_contribution_policy_version_id,
     )
@@ -102,10 +103,10 @@ async def test_ready_queue_filters_before_pagination(task_client):
             request, after=TaskQueueCursor(request.project_id, instant + timedelta(seconds=3), expected[1]),
         ))
         assert empty == ReadyTaskPage(request.project_id, (), None)
-        missing = await owner.read_ready_tasks(TaskQueueRequest(uuid4()))
+        missing = await owner.read_ready_tasks(TaskQueueRequest(new_record_id()))
         assert missing.items == () and missing.next_cursor is None
     # An absent position past the final row must not restart pagination.
-    missing_cursor = TaskQueueCursor(request.project_id, instant + timedelta(seconds=4), uuid4())
+    missing_cursor = TaskQueueCursor(request.project_id, instant + timedelta(seconds=4), new_record_id())
     async with factory() as session:
         assert await session.get(WorkstreamTask, str(missing_cursor.task_id)) is None
         continued = await TaskRepository(session).read_ready_tasks(replace(request, after=missing_cursor))
@@ -177,9 +178,9 @@ async def test_ready_queue_detached_projection(task_client):
             with pytest.raises(ValueError, match="summary is invalid"):
                 replace(expected, **changed)
         with pytest.raises(ValueError, match="page is invalid"):
-            replace(page, project_id=uuid4())
+            replace(page, project_id=new_record_id())
         with pytest.raises(ValueError, match="continuation differs"):
-            replace(page, next_cursor=TaskQueueCursor(page.project_id, expected.created_at, uuid4()))
+            replace(page, next_cursor=TaskQueueCursor(page.project_id, expected.created_at, new_record_id()))
 
 
 async def test_ready_queue_preserves_transaction(task_client):
@@ -190,7 +191,7 @@ async def test_ready_queue_preserves_transaction(task_client):
     async with factory() as session:
         assert not session.in_transaction()
         assert len((await TaskRepository(session).read_ready_tasks(request)).items) == 1
-        pending = WorkstreamTask(id=str(uuid4()), project_id=project["id"])
+        pending = WorkstreamTask(id=str(new_record_id()), project_id=project["id"])
         session.add(pending)  # Missing required fields: any implicit flush fails.
         assert len((await TaskRepository(session).read_ready_tasks(request)).items) == 1
         assert pending in session.new
@@ -226,5 +227,5 @@ async def test_ready_queue_has_no_public_route(task_client):
     response = await task_client.get("/openapi.json")
     assert response.status_code == 200
     assert not any("queue" in path and "task" in path for path in response.json()["paths"])
-    response = await task_client.get(f"/api/v1/projects/{uuid4()}/tasks")
+    response = await task_client.get(f"/api/v1/projects/{new_record_id()}/tasks")
     assert response.status_code == 405  # Existing project task creation only.

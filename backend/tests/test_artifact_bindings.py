@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -28,23 +29,23 @@ def _sha(character: str) -> str:
 
 def _request(*, submission_id=None) -> SubmissionAdmissionConsumptionRequest:
     references = TaskLockedProjectContextReferences(locked_contribution_policy_version_id=UUID(int=100),
-        project_id=uuid4(),
+        project_id=new_record_id(),
         guide_version="1",
-        source_snapshot_id=uuid4(),
+        source_snapshot_id=new_record_id(),
         source_snapshot_hash=_sha("1"),
-        effective_policy_id=uuid4(),
+        effective_policy_id=new_record_id(),
         effective_policy_hash=_sha("2"),
-        pre_submit_policy_id=uuid4(),
+        pre_submit_policy_id=new_record_id(),
         pre_submit_policy_bundle_hash=_sha("3"),
     )
     return SubmissionAdmissionConsumptionRequest(
-        admission_id=uuid4(),
-        submission_id=submission_id or uuid4(),
+        admission_id=new_record_id(),
+        submission_id=submission_id or new_record_id(),
         submission_version=1,
         task_context=TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
-            task_id=uuid4(),
-            assignment_id=uuid4(),
-            contributor_id=uuid4(),
+            task_id=new_record_id(),
+            assignment_id=new_record_id(),
+            contributor_id=new_record_id(),
             status="in_progress",
             kind="initial",
             predecessor=None,
@@ -56,8 +57,8 @@ def _request(*, submission_id=None) -> SubmissionAdmissionConsumptionRequest:
 def _lineage(request: SubmissionAdmissionConsumptionRequest):
     context = request.task_context
     refs = context.locked_project_context
-    content_id = str(uuid4())
-    evidence_id = str(uuid4())
+    content_id = str(new_record_id())
+    evidence_id = str(new_record_id())
     admission = SimpleNamespace(
         id=str(request.admission_id),
         status="ready",
@@ -68,10 +69,10 @@ def _lineage(request: SubmissionAdmissionConsumptionRequest):
         predecessor_submission_id=None,
         predecessor_submission_version=None,
         pre_submit_evidence_set_id=evidence_id,
-        identity_link_id=str(uuid4()),
+        identity_link_id=str(new_record_id()),
         artifact_content_id=content_id,
         locked_policy_context_hash=_sha("5"),
-        semantic_manifest_id=str(uuid4()),
+        semantic_manifest_id=str(new_record_id()),
         semantic_manifest_sha256=_sha("6"),
         archive_sha256=_sha("4"),
         archive_byte_count=9,
@@ -102,7 +103,7 @@ def _lineage(request: SubmissionAdmissionConsumptionRequest):
         semantic_manifest_sha256=admission.semantic_manifest_sha256,
         archive_sha256=admission.archive_sha256,
         archive_byte_count=admission.archive_byte_count,
-        guide_id=str(uuid4()),
+        guide_id=str(new_record_id()),
         terminal_status="passed",
         eligible=True,
     )
@@ -274,7 +275,7 @@ async def test_matching_consumed_admission_replays_exact_binding() -> None:
     admission.status = "consumed"
     admission.consumed_by_submission_id = str(request.submission_id)
     admission.consumed_by_submission_version = request.submission_version
-    binding = SimpleNamespace(id=str(uuid4()), content_id=admission.artifact_content_id)
+    binding = SimpleNamespace(id=str(new_record_id()), content_id=admission.artifact_content_id)
     session = _session(admission, evidence, content, binding)
 
     authority = _Allow()
@@ -293,7 +294,7 @@ async def test_consumed_admission_rejects_different_submission() -> None:
     request = _request()
     admission, _, _ = _lineage(request)
     admission.status = "consumed"
-    admission.consumed_by_submission_id = str(uuid4())
+    admission.consumed_by_submission_id = str(new_record_id())
     admission.consumed_by_submission_version = request.submission_version
     session = _session(admission)
 

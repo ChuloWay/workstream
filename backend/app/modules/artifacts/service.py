@@ -9,7 +9,8 @@ from collections.abc import AsyncIterable, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
@@ -470,7 +471,7 @@ class ArtifactStorageOrchestrator:
                 raise ArtifactIngestStateError("committed source does not match put attempt")
             self._validate_put_execution_namespace(candidate, persisted_namespace)
             candidate_generation = candidate.execution_generation
-        executor_id = uuid4()
+        executor_id = new_record_id()
         facts = _put_authority_facts(candidate, executor_id, candidate_generation + 1)
         async with self._session.begin() as claim_transaction:
             await self._authority.prepare(
@@ -563,7 +564,7 @@ class ArtifactStorageOrchestrator:
                 return "stale"
             self._validate_put_execution_namespace(candidate, persisted_namespace)
             candidate_generation = candidate.execution_generation
-        executor_id = uuid4()
+        executor_id = new_record_id()
         facts = _put_authority_facts(candidate, executor_id, candidate_generation + 1)
         async with self._session.begin() as claim_transaction:
             await self._authority.prepare(
@@ -674,7 +675,7 @@ class ArtifactStorageOrchestrator:
             self._validate_put_execution_namespace(attempt, persisted_namespace)
             self._validate_replica_execution_namespace(replica, persisted_namespace)
             candidate_generation = candidate.execution_generation
-        executor_id = uuid4()
+        executor_id = new_record_id()
         facts = _verification_authority_facts(
             candidate, replica, attempt, executor_id, candidate_generation + 1
         )
@@ -838,7 +839,7 @@ class ArtifactStorageOrchestrator:
                     charge.cas_version += 1
             content = await self._repo.get_or_create_content(
                 ArtifactContent(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     sha256=attempt.sha256,
                     byte_count=attempt.byte_count,
                     media_type=attempt.media_type,
@@ -847,7 +848,7 @@ class ArtifactStorageOrchestrator:
             )
             replica = await self._repo.get_or_create_replica(
                 ArtifactReplica(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     content_id=content.id,
                     storage_namespace_id=attempt.storage_namespace_id,
                     namespace_fingerprint=attempt.namespace_fingerprint,
@@ -874,7 +875,7 @@ class ArtifactStorageOrchestrator:
             if replica_identity != expected_replica_identity:
                 await self._repo.add_put_observation_receipt(
                     ArtifactPutObservationReceipt(
-                        id=str(uuid4()),
+                        id=str(new_record_id()),
                         put_attempt_id=attempt.id,
                         execution_generation=attempt.execution_generation,
                         outcome="conflict",
@@ -893,7 +894,7 @@ class ArtifactStorageOrchestrator:
             if observed:
                 observation_receipt = await self._repo.add_put_observation_receipt(
                     ArtifactPutObservationReceipt(
-                        id=str(uuid4()),
+                        id=str(new_record_id()),
                         put_attempt_id=attempt.id,
                         execution_generation=attempt.execution_generation,
                         outcome="observed_confirmed",
@@ -907,7 +908,7 @@ class ArtifactStorageOrchestrator:
             else:
                 receipt = await self._repo.add_receipt(
                     ArtifactOperationReceipt(
-                        id=str(uuid4()),
+                        id=str(new_record_id()),
                         put_attempt_id=attempt.id,
                         guide_source_item_id=attempt.guide_source_item_id,
                         checker_run_id=attempt.checker_run_id,
@@ -928,7 +929,7 @@ class ArtifactStorageOrchestrator:
             if not is_guide_document:
                 await self._repo.add_verification_job(
                     ArtifactVerificationJob(
-                        id=str(uuid4()),
+                        id=str(new_record_id()),
                         originating_put_attempt_id=attempt.id,
                         replica_id=replica.id,
                         status="pending",
@@ -1042,7 +1043,7 @@ class ArtifactStorageOrchestrator:
                     scope.cas_version += 1
             await self._repo.add_put_observation_receipt(
                 ArtifactPutObservationReceipt(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     put_attempt_id=attempt.id,
                     execution_generation=attempt.execution_generation,
                     outcome="observed_missing",
@@ -1138,7 +1139,7 @@ class ArtifactStorageOrchestrator:
             if status == "integrity_mismatch" and provider_object_ref is not None:
                 content = await self._repo.get_or_create_content(
                     ArtifactContent(
-                        id=str(uuid4()),
+                        id=str(new_record_id()),
                         sha256=attempt.sha256,
                         byte_count=attempt.byte_count,
                         media_type=attempt.media_type,
@@ -1151,7 +1152,7 @@ class ArtifactStorageOrchestrator:
                 content = locked_content
                 replica = await self._repo.get_or_create_replica(
                     ArtifactReplica(
-                        id=str(uuid4()),
+                        id=str(new_record_id()),
                         content_id=content.id,
                         storage_namespace_id=attempt.storage_namespace_id,
                         namespace_fingerprint=attempt.namespace_fingerprint,
@@ -1181,7 +1182,7 @@ class ArtifactStorageOrchestrator:
                 attempt.replica_id = replica.id
             await self._repo.add_put_observation_receipt(
                 ArtifactPutObservationReceipt(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     put_attempt_id=attempt.id,
                     execution_generation=attempt.execution_generation,
                     outcome=outcome,
@@ -1328,7 +1329,7 @@ class ArtifactStorageOrchestrator:
                 replica.last_reconciled_at = now
             verification_receipt = await self._repo.add_verification_receipt(
                 ArtifactVerificationReceipt(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     verification_job_id=job.id,
                     execution_generation=job.execution_generation,
                     outcome=outcome,
@@ -1371,7 +1372,7 @@ class ArtifactStorageOrchestrator:
         """Append typed conflict evidence without mutating unrelated artifact facts."""
         await self._repo.add_verification_receipt(
             ArtifactVerificationReceipt(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 verification_job_id=job.id,
                 execution_generation=job.execution_generation,
                 outcome="conflict",
@@ -1395,7 +1396,7 @@ class ArtifactStorageOrchestrator:
             return
         if recovery.status != "requested" or recovery.terminal_at is not None:
             raise ArtifactIngestStateError("artifact recovery envelope is already terminal")
-        audit_id = str(uuid4())
+        audit_id = str(new_record_id())
         await AuditRepository(self._session).add_audit_event(
             ArtifactRecoveryService._audit_event(
                 event_id=audit_id,
@@ -1474,7 +1475,7 @@ class ArtifactPendingWorkScanner:
         """Read one stable page then publish IDs outside the database transaction."""
         async with self._session.begin():
             cutoff = await self._repo.database_now()
-            scan_id = uuid4()
+            scan_id = new_record_id()
             initial_facts = ArtifactPendingWorkAuthorityFacts(
                 resource_type=ArtifactInternalResourceType.PENDING_WORK,
                 resource_id="workstream:artifact_pending_work",
@@ -1636,9 +1637,9 @@ class ArtifactRecoveryService:
             submission_id=canonical_submission_uuid,
         )
         context = request.authorization_context
-        retry_id = str(uuid4())
-        recovery_id = str(uuid4())
-        audit_id = str(uuid4())
+        retry_id = str(new_record_id())
+        recovery_id = str(new_record_id())
+        audit_id = str(new_record_id())
         retry = ArtifactVerificationJob(
             id=retry_id,
             originating_put_attempt_id=source.originating_put_attempt_id,
@@ -2079,7 +2080,7 @@ class ArtifactAdmissionService:
                 return await self._result(replay, replayed=True)
             database_now = await self._repo.database_now()
             attempt = ArtifactPutAttempt(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 producer_request_type=facts.request_type,
                 producer_type=facts.producer_type,
                 producer_ref=facts.producer_ref,
@@ -2115,7 +2116,7 @@ class ArtifactAdmissionService:
             if facts.pre_submit_evidence_set_id is not None:
                 await self._repo.add_submission_bundle_intent(
                     SubmissionBundleDurableIntent(
-                        id=str(uuid4()),
+                        id=str(new_record_id()),
                         pre_submit_evidence_set_id=facts.pre_submit_evidence_set_id,
                         put_attempt_id=attempt.id,
                     )
@@ -2617,7 +2618,7 @@ class ArtifactAdmissionService:
             if charge is None:
                 charge = await self._repo.add_admission_charge(
                     ArtifactAdmissionCharge(
-                        id=str(uuid4()),
+                        id=str(new_record_id()),
                         scope_type=scope.scope_type,
                         scope_id=scope.scope_id,
                         sha256=sha256,

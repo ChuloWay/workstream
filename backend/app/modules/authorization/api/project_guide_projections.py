@@ -23,6 +23,15 @@ def _uuid(kind: str, attempt_id: UUID, component: str) -> UUID:
     )
 
 
+def projection_preparation_identity(
+    *, attempt_id: UUID, component: str
+) -> tuple[UUID, UUID]:
+    """Return stable non-row request/correlation selectors for projection PREP."""
+    if component not in {_SUFFICIENCY_COMPONENT, _POLICY_COMPONENT}:
+        raise ValueError("projection component is invalid")
+    return _uuid("operation", attempt_id, component), _uuid("correlation", attempt_id, component)
+
+
 def _canonical_hash(domain: str, facts: object) -> str:
     body = {
         "domain": domain,
@@ -100,6 +109,8 @@ class ProjectGuideProjectionIdentity:
                 raise ValueError("projection identity IDs must be UUIDs")
         if self.service_identity != _SERVICE_IDENTITY:
             raise ValueError("projection service identity is invalid")
+        if any(item.version != 7 for item in (self.operation_id, self.output_id)):
+            raise ValueError("projection record identities must be UUIDv7")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -194,8 +205,9 @@ class ProjectGuideProjectionAuthorityReceipt:
 class PreparedGuideSufficiencyProjection(Protocol):
     """Single-use sufficiency authority held only inside one transaction."""
 
-    @property
-    def identity(self) -> ProjectGuideProjectionIdentity: ...
+    def identity(
+        self, *, operation_id: UUID, correlation_id: UUID, output_id: UUID
+    ) -> ProjectGuideProjectionIdentity: ...
 
     async def consume_new(
         self, facts: GuideSufficiencyProjectionFacts
@@ -209,8 +221,9 @@ class PreparedGuideSufficiencyProjection(Protocol):
 class PreparedArtifactPolicyProjection(Protocol):
     """Single-use policy authority held only inside one transaction."""
 
-    @property
-    def identity(self) -> ProjectGuideProjectionIdentity: ...
+    def identity(
+        self, *, operation_id: UUID, correlation_id: UUID, output_id: UUID
+    ) -> ProjectGuideProjectionIdentity: ...
 
     async def consume_new(
         self, facts: ArtifactPolicyProjectionFacts
@@ -238,30 +251,44 @@ class ArtifactPolicyProjectionAuthorizationPort(Protocol):
 
 
 def guide_sufficiency_projection_identity(
-    *, attempt_id: UUID, actor_profile_id: UUID, identity_link_id: UUID
+    *,
+    operation_id: UUID,
+    correlation_id: UUID,
+    output_id: UUID,
+    actor_profile_id: UUID,
+    identity_link_id: UUID,
 ) -> ProjectGuideProjectionIdentity:
-    """Derive the fixed identity for one sufficiency projection."""
+    """Build one sufficiency identity from owner-selected UUIDv7 values."""
     return _projection_identity(
-        attempt_id, _SUFFICIENCY_COMPONENT, actor_profile_id, identity_link_id
+        operation_id, correlation_id, output_id, actor_profile_id, identity_link_id
     )
 
 
 def artifact_policy_projection_identity(
-    *, attempt_id: UUID, actor_profile_id: UUID, identity_link_id: UUID
+    *,
+    operation_id: UUID,
+    correlation_id: UUID,
+    output_id: UUID,
+    actor_profile_id: UUID,
+    identity_link_id: UUID,
 ) -> ProjectGuideProjectionIdentity:
-    """Derive the fixed identity for one artifact-policy projection."""
+    """Build one policy identity from owner-selected UUIDv7 values."""
     return _projection_identity(
-        attempt_id, _POLICY_COMPONENT, actor_profile_id, identity_link_id
+        operation_id, correlation_id, output_id, actor_profile_id, identity_link_id
     )
 
 
 def _projection_identity(
-    attempt_id: UUID, component: str, actor_profile_id: UUID, identity_link_id: UUID
+    operation_id: UUID,
+    correlation_id: UUID,
+    output_id: UUID,
+    actor_profile_id: UUID,
+    identity_link_id: UUID,
 ) -> ProjectGuideProjectionIdentity:
     return ProjectGuideProjectionIdentity(
-        operation_id=_uuid("operation", attempt_id, component),
-        correlation_id=_uuid("correlation", attempt_id, component),
-        output_id=_uuid("output", attempt_id, component),
+        operation_id=operation_id,
+        correlation_id=correlation_id,
+        output_id=output_id,
         actor_profile_id=actor_profile_id,
         identity_link_id=identity_link_id,
     )
@@ -349,4 +376,5 @@ __all__ = (
     "guide_sufficiency_projection_facts_digest",
     "guide_sufficiency_projection_identity",
     "projection_authority_digest",
+    "projection_preparation_identity",
 )

@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -18,11 +18,11 @@ from tests.contributions.policy_test_support import service_fixture
 
 def _request(fixture) -> ContributionPolicyPublishRequest:
     return ContributionPolicyPublishRequest(
-        operation_id=uuid4(),
+        operation_id=new_record_id(),
         actor_profile_id=fixture.actor_id,
         project_id=fixture.project_id,
-        contribution_policy_id=uuid4(),
-        contribution_policy_version_id=uuid4(),
+        contribution_policy_id=new_record_id(),
+        contribution_policy_version_id=new_record_id(),
     )
 
 
@@ -45,21 +45,21 @@ def _install_complete_draft(
         created_by=str(request.actor_profile_id),
     )
     accepted = ContributionRule(
-        id=uuid4(),
+        id=new_record_id(),
         contribution_policy_version_id=version.id,
         project_id=policy.project_id,
         contribution_type="accepted_submission",
         compensation_mode="compensated",
     )
     reviewed = ContributionRule(
-        id=uuid4(),
+        id=new_record_id(),
         contribution_policy_version_id=version.id,
         project_id=policy.project_id,
         contribution_type="completed_review",
         compensation_mode="unpaid",
     )
     definition = ContributionAwardDefinition(
-        id=uuid4(),
+        id=new_record_id(),
         contribution_rule_id=accepted.id,
         contribution_policy_version_id=version.id,
         project_id=policy.project_id,
@@ -67,7 +67,7 @@ def _install_complete_draft(
         instrument_type="money",
         unit_code="USD",
         quantity=Decimal("10"),
-        adapter_binding_id=uuid4(),
+        adapter_binding_id=new_record_id(),
     )
     accepted.award_definitions = [definition]
     reviewed.award_definitions = []
@@ -116,7 +116,7 @@ async def test_replacement_publication_is_one_atomic_event() -> None:
     request = _request(fixture)
     policy, version = _install_complete_draft(fixture, request)
     prior = ContributionPolicyVersion(
-        id=uuid4(),
+        id=new_record_id(),
         contribution_policy_id=policy.id,
         project_id=policy.project_id,
         version_number=1,
@@ -141,7 +141,7 @@ async def test_replacement_preserves_prior_content_and_frozen_references() -> No
     request = _request(fixture)
     policy, version = _install_complete_draft(fixture, request)
     prior = ContributionPolicyVersion(
-        id=uuid4(),
+        id=new_record_id(),
         contribution_policy_id=policy.id,
         project_id=policy.project_id,
         version_number=1,
@@ -151,7 +151,7 @@ async def test_replacement_preserves_prior_content_and_frozen_references() -> No
         published_at=datetime.now(UTC),
     )
     marker = ContributionRule(
-        id=uuid4(),
+        id=new_record_id(),
         contribution_policy_version_id=prior.id,
         project_id=prior.project_id,
         contribution_type="accepted_submission",

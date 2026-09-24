@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 from httpx import ASGITransport, AsyncClient
 import pytest
@@ -123,7 +123,7 @@ async def _additional_reviewable_submission(
 
 def _queue_input(project: dict, task: dict, submission: dict) -> ReviewQueueEntryInput:
     return ReviewQueueEntryInput(
-        id=uuid4(),
+        id=new_record_id(),
         project_id=project["id"],
         task_id=task["id"],
         submission_id=submission["id"],
@@ -140,9 +140,9 @@ def _reservation_input(
     submission: dict,
 ) -> ReviewAdmissionReservationInput:
     return ReviewAdmissionReservationInput(
-        id=uuid4(),
-        idempotency_key=uuid4(),
-        operation_id=uuid4(),
+        id=new_record_id(),
+        idempotency_key=new_record_id(),
+        operation_id=new_record_id(),
         request_digest="sha256:" + "a" * 64,
         project_id=project["id"],
         task_id=task["id"],
@@ -208,7 +208,7 @@ async def test_repository_exact_replay_and_conflict(
     async with db_session.get_session_factory()() as session:
         repository = ReviewQueueRepository(session)
         first = await repository.reserve_admission(value)
-        replay = await repository.reserve_admission(value.model_copy(update={"id": uuid4()}))
+        replay = await repository.reserve_admission(value.model_copy(update={"id": new_record_id()}))
         assert first.created is True
         assert replay.created is False
         assert replay.record.id == first.record.id
@@ -237,7 +237,7 @@ async def test_database_rejects_invalid_admission_state_and_commit(
 
     async with db_session.get_session_factory()() as session:
         invalid_committed = ReviewAdmissionIdempotencyRecord(
-            **reservation_value.model_copy(update={"id": uuid4()}).model_dump(),
+            **reservation_value.model_copy(update={"id": new_record_id()}).model_dump(),
             status="committed",
             committed_at=datetime.now(UTC),
         )
@@ -282,10 +282,10 @@ async def test_database_enforces_admission_replay_and_queue_identity_constraints
         (
             base.model_copy(
                 update={
-                    "id": uuid4(),
-                    "idempotency_key": uuid4(),
-                    "operation_id": uuid4(),
-                    "project_id": str(uuid4()),
+                    "id": new_record_id(),
+                    "idempotency_key": new_record_id(),
+                    "operation_id": new_record_id(),
+                    "project_id": str(new_record_id()),
                 }
             ),
             "review admission task project mismatch",
@@ -293,9 +293,9 @@ async def test_database_enforces_admission_replay_and_queue_identity_constraints
         (
             base.model_copy(
                 update={
-                    "id": uuid4(),
-                    "idempotency_key": uuid4(),
-                    "operation_id": uuid4(),
+                    "id": new_record_id(),
+                    "idempotency_key": new_record_id(),
+                    "operation_id": new_record_id(),
                     "admitting_checker_run_id": other_submission["checker_run_id"],
                 }
             ),
@@ -311,16 +311,16 @@ async def test_database_enforces_admission_replay_and_queue_identity_constraints
 
     duplicates = (
         (
-            other.model_copy(update={"id": uuid4(), "idempotency_key": base.idempotency_key}),
+            other.model_copy(update={"id": new_record_id(), "idempotency_key": base.idempotency_key}),
             "uq_review_admission_replay_key",
         ),
         (
-            other.model_copy(update={"id": uuid4(), "operation_id": base.operation_id}),
+            other.model_copy(update={"id": new_record_id(), "operation_id": base.operation_id}),
             "uq_review_admission_operation",
         ),
         (
             base.model_copy(
-                update={"id": uuid4(), "idempotency_key": uuid4(), "operation_id": uuid4()}
+                update={"id": new_record_id(), "idempotency_key": new_record_id(), "operation_id": new_record_id()}
             ),
             "uq_review_admission_checker_run",
         ),
@@ -372,7 +372,7 @@ async def test_database_rejects_non_admissible_checker_and_project_mismatch(
             session.add(
                 ReviewQueueEntry(
                     **_queue_input(project, task, submission)
-                    .model_copy(update={"id": uuid4()})
+                    .model_copy(update={"id": new_record_id()})
                     .model_dump()
                 )
             )
@@ -384,7 +384,7 @@ async def test_database_rejects_non_admissible_checker_and_project_mismatch(
         review_client, project, monkeypatch
     )
     task_mismatch = _queue_input(project, task, submission).model_copy(
-        update={"id": uuid4(), "task_id": other_task["id"]}
+        update={"id": new_record_id(), "task_id": other_task["id"]}
     )
     async with db_session.get_session_factory()() as session:
         session.add(ReviewQueueEntry(**task_mismatch.model_dump()))
@@ -394,7 +394,7 @@ async def test_database_rejects_non_admissible_checker_and_project_mismatch(
 
     checker_mismatch = _queue_input(project, task, submission).model_copy(
         update={
-            "id": uuid4(),
+            "id": new_record_id(),
             "admitting_checker_run_id": other_submission["checker_run_id"],
         }
     )
@@ -404,7 +404,7 @@ async def test_database_rejects_non_admissible_checker_and_project_mismatch(
             await session.flush()
         await session.rollback()
 
-    other_project_id = str(uuid4())
+    other_project_id = str(new_record_id())
     async with db_session.get_session_factory()() as session:
         await insert_historical_project(
             session,
@@ -414,7 +414,7 @@ async def test_database_rejects_non_admissible_checker_and_project_mismatch(
         )
         await session.commit()
     mismatched = _queue_input(project, task, submission).model_copy(
-        update={"id": uuid4(), "project_id": other_project_id}
+        update={"id": new_record_id(), "project_id": other_project_id}
     )
     async with db_session.get_session_factory()() as session:
         session.add(ReviewQueueEntry(**mismatched.model_dump()))
@@ -436,7 +436,7 @@ async def test_database_enforces_routing_uniqueness_and_immutable_lineage(
         await session.commit()
 
     async with db_session.get_session_factory()() as session:
-        duplicate = ReviewQueueEntry(**value.model_copy(update={"id": uuid4()}).model_dump())
+        duplicate = ReviewQueueEntry(**value.model_copy(update={"id": new_record_id()}).model_dump())
         session.add(duplicate)
         with pytest.raises(IntegrityError):
             await session.flush()
@@ -501,7 +501,7 @@ async def test_database_enforces_routing_uniqueness_and_immutable_lineage(
         with pytest.raises(DBAPIError, match="review queue identity is immutable"):
             await session.execute(
                 text("update review_queue_entries set project_id=:changed where id=:id"),
-                {"changed": str(uuid4()), "id": value.id},
+                {"changed": str(new_record_id()), "id": value.id},
             )
         await session.rollback()
         with pytest.raises(DBAPIError, match="review queue entries cannot be deleted"):

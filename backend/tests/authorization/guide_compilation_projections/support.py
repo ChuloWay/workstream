@@ -5,11 +5,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
+from app.core.identifiers import new_record_id
+
 from app.modules.authorization.api import (
     ArtifactPolicyProjectionFacts,
     GuideSufficiencyProjectionFacts,
-    artifact_policy_projection_identity,
-    guide_sufficiency_projection_identity,
+    projection_preparation_identity,
 )
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.kernel import AuthorizationService
@@ -138,10 +139,8 @@ def custody(
     )
 
 
-def sufficiency_facts(project_id: UUID, attempt_id: UUID):
-    output_id = guide_sufficiency_projection_identity(
-        attempt_id=attempt_id, actor_profile_id=uuid4(), identity_link_id=uuid4()
-    ).output_id
+def sufficiency_facts(project_id: UUID, attempt_id: UUID, output_id: UUID | None = None):
+    output_id = output_id or new_record_id()
     return GuideSufficiencyProjectionFacts(
         project_id=project_id,
         attempt_id=attempt_id,
@@ -168,10 +167,8 @@ def sufficiency_facts(project_id: UUID, attempt_id: UUID):
     )
 
 
-def policy_facts(project_id: UUID, attempt_id: UUID):
-    output_id = artifact_policy_projection_identity(
-        attempt_id=attempt_id, actor_profile_id=uuid4(), identity_link_id=uuid4()
-    ).output_id
+def policy_facts(project_id: UUID, attempt_id: UUID, output_id: UUID | None = None):
+    output_id = output_id or new_record_id()
     return ArtifactPolicyProjectionFacts(
         project_id=project_id,
         attempt_id=attempt_id,
@@ -204,4 +201,22 @@ def action_for(component: str) -> ActionId:
         ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN
         if component == "guide_sufficiency"
         else ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE
+    )
+
+
+def bind_identity(prepared, facts):
+    """Bind owner-selected UUIDv7 operation values used by AUTH contract tests."""
+    output_id = getattr(facts, "report_id", None) or facts.policy_id
+    component = (
+        "guide_sufficiency"
+        if isinstance(facts, GuideSufficiencyProjectionFacts)
+        else "submission_artifact_policy"
+    )
+    _, correlation_id = projection_preparation_identity(
+        attempt_id=facts.attempt_id, component=component
+    )
+    return prepared.identity(
+        operation_id=new_record_id(),
+        correlation_id=correlation_id,
+        output_id=output_id,
     )

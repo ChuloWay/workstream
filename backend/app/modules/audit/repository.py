@@ -110,9 +110,14 @@ class AuditRepository:
                    cause.event_domain == "authority")
         )).one_or_none()
 
-    async def lifecycle_event(self, event_id: UUID):
-        """Read one exact immutable receipt, never a latest/current substitution."""
-        return await self._session.get(AuditEvent, str(event_id), populate_existing=True)
+    async def assignment_release_event(self, assignment_id: UUID, cause_id: UUID):
+        """Recover the immutable effect by its original assignment and cause."""
+        statement = select(AuditEvent).where(
+            AuditEvent.event_type == LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED.value,
+            AuditEvent.event_payload["references"]["assignment_id"].as_string() == str(assignment_id),
+            AuditEvent.event_payload["references"]["authority_invalidation_event_id"].as_string() == str(cause_id),
+        ).execution_options(populate_existing=True)
+        return (await self._session.execute(statement)).scalar_one_or_none()
 
     async def _persist(self, event: AuditEvent) -> AuditEvent:
         """Flush one event without taking transaction ownership."""

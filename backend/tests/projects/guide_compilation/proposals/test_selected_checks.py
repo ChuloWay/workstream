@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import select, text
 
 from app.interfaces.project_agents import ProjectGuideCompilationResult
+from app.core.identifiers import new_record_id
 from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue
 from app.modules.projects.api.guide_proposals import GuideProposalApproval, GuideProposalError
 from app.modules.projects.guide_compilation.models import ProjectGuideProposalApproval
@@ -54,7 +55,7 @@ async def test_approval_reconciles_selection_with_real_compiled_configuration(
     target = SimpleNamespace(
         project_id=material.project_id, guide_id=material.guide_id,
         guide_version=material.guide_version, source_snapshot_id=material.source_snapshot_id,
-        source_snapshot_hash=material.source_snapshot_hash, artifact_policy_id=uuid4(),
+        source_snapshot_hash=material.source_snapshot_hash, artifact_policy_id=new_record_id(),
         digest="sha256:" + "a" * 64,
         pre_catalogue_manifest_hash=compilation_context.pre_submission_capabilities.manifest_sha256,
     )
@@ -63,7 +64,7 @@ async def test_approval_reconciles_selection_with_real_compiled_configuration(
         setup=object(), policy=SimpleNamespace(policy_body=policy_body(None, outcome.submission_artifact_policy)),
     ))
     command = SimpleNamespace(target=target, acknowledged_warning_hashes=())
-    args = (None, locked, command, uuid4(), None,
+    args = (None, locked, command, new_record_id(), None,
             compilation_context.pre_submission_capabilities,
             compilation_context.post_submission_capabilities,
             build_pre_submission_checker_catalogue())

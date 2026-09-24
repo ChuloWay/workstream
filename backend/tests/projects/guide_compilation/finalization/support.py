@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
+from app.core.identifiers import new_record_id
+
 from app.modules.authorization.api import (
     AuthorizationDenied,
     FINALIZATION_ACTION,
@@ -17,6 +19,7 @@ from app.modules.authorization.api import (
     artifact_policy_projection_identity,
     guide_sufficiency_projection_identity,
     setup_finalization_authority_digest,
+    setup_finalization_preparation_identity,
 )
 from app.modules.projects.api import ProjectGuideSetupFinalizationCommand
 from app.modules.projects.guide_compilation.contracts import accepted_compilation_result
@@ -126,7 +129,13 @@ def projected_view(empty, lineage, outcome, actor, link):
         ("guide_sufficiency", guide_sufficiency_projection_identity),
         ("submission_artifact_policy", artifact_policy_projection_identity),
     ):
-        identity = factory(attempt_id=attempt, actor_profile_id=actor, identity_link_id=link)
+        identity = factory(
+            operation_id=new_record_id(),
+            correlation_id=new_record_id(),
+            output_id=new_record_id(),
+            actor_profile_id=actor,
+            identity_link_id=link,
+        )
         operations.append(
             SimpleNamespace(
                 **lineage,
@@ -238,6 +247,10 @@ class Repository:
         self.calls = []
         self.failure = None
         self.after_lock = None
+        self.finalization_identity = (new_record_id(), new_record_id())
+
+    def new_finalization_identity(self):
+        return self.finalization_identity
 
     async def finalization_attempt_id(self, command):
         self.calls.append("lookup")
@@ -325,7 +338,19 @@ class Authorization:
     def __init__(self, session, repository):
         self.session = session
         self.repository = repository
-        self.expected = compose_facts(repository.view, require_source_shape(repository.view))
+        finalization_id, operation_id = repository.finalization_identity
+        _, correlation_id = setup_finalization_preparation_identity(
+            UUID(repository.view.setup.id),
+            repository.view.setup.setup_generation,
+            repository.view.compilation.id,
+        )
+        self.expected = compose_facts(
+            repository.view,
+            require_source_shape(repository.view),
+            finalization_id=finalization_id,
+            operation_id=operation_id,
+            correlation_id=correlation_id,
+        )
         self.actor, self.link, self.decision = uuid4(), uuid4(), uuid4()
         self.events = []
         self.handles = []
@@ -337,7 +362,9 @@ class Authorization:
     async def prepare_setup_finalization(self, locator):
         if (
             locator.project_id != self.expected.project_id
-            or locator.operation_id != self.expected.operation_id
+            or locator.setup_run_id != self.expected.setup_run_id
+            or locator.setup_generation != self.expected.setup_generation
+            or locator.compilation_id != self.expected.compilation_id
         ):
             raise AuthorizationDenied("wrong locator")
         self.events.append("prepare")

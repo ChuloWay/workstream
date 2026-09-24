@@ -1,6 +1,6 @@
 """Exact ACTORS owner-port selectors, ordering and returned-row validation."""
 
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -72,7 +72,7 @@ async def test_actor_authorization_lock_rejects_one_identity_substitution(row, f
     original = resolved_actor()
     service, repository = controlled_service(original)
     if field in {"id", "actor_profile_id"}:
-        value = str(uuid4())
+        value = str(new_record_id())
     setattr(getattr(repository, row), field, value)
 
     with pytest.raises(RuntimeError, match="identity changed"):

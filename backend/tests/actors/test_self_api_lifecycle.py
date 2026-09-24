@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 from httpx import AsyncClient
 import pytest
@@ -202,7 +202,7 @@ async def test_revocation_wins_synchronized_actor_update_recheck(
     created = await actor_client.get("/api/v1/actors/me", headers=auth_headers())
     actor_profile_id = created.json()["actor_profile_id"]
     lock_attempted = asyncio.Event()
-    waiter_name = f"actor-revocation-{uuid4().hex}"
+    waiter_name = f"actor-revocation-{new_record_id().hex}"
     waiter_pids, hook_failures = [], []
     original_lock = ActorService.lock_actor_self_for_authorization
 

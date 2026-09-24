@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.hashing import canonical_json_hash
+from app.core.identifiers import new_record_id
 from app.adapters.projects.contribution_validation import GuideContributionPolicyValidation
 from app.modules.contributions.api.validation import ContributionPolicyValidationPurpose
 from app.modules.projects.api.guide_activation import (
@@ -27,12 +28,12 @@ from tests.projects.guide_compilation.proposals.contract_support import HASH, ta
 def command_values():
     proposal = GuideProposalTarget(**target_values())
     upstream = GuideProposalApprovalReceipt(
-        operation_id=uuid4(),
+        operation_id=new_record_id(),
         target_digest=proposal.digest,
         artifact_policy_id=proposal.artifact_policy_id,
-        effective_policy_id=uuid4(),
+        effective_policy_id=new_record_id(),
         effective_policy_hash=HASH,
-        pre_submit_policy_id=uuid4(),
+        pre_submit_policy_id=new_record_id(),
         pre_submit_bundle_hash=HASH,
         effective_pre_submit_plan_hash=HASH,
         acknowledged_warning_hashes=(),
@@ -41,8 +42,8 @@ def command_values():
         proposal=proposal,
         upstream=upstream,
         upstream_output_digest=canonical_json_hash(upstream.model_dump(mode="json")),
-        policy_id=uuid4(),
-        projection_operation_id=uuid4(),
+        policy_id=new_record_id(),
+        projection_operation_id=new_record_id(),
         policy_hash=HASH,
     )
     return dict(
@@ -97,7 +98,7 @@ def test_cannot_supersede_self_but_can_name_retained_null_generation():
 def receipt_values():
     command = GuideActivationCommand(**command_values())
     return dict(
-        operation_id=uuid4(),
+        operation_id=new_record_id(),
         command=command,
         activation_generation=2,
         effective_at=datetime.now(UTC),

@@ -17,6 +17,7 @@ else:
 
 FORMAT = "workstream-identifier-inventory-1"
 SEMANTIC_KEYS = {
+    "actor_profile_migration_state": ("seeded schema-state singleton, not a record sequence", ("id",)),
     "api_rate_control_counters": ("rate-limit scope and digest", ("control_scope", "key_digest")),
     "artifact_admission_scopes": ("artifact quota scope", ("scope_type", "scope_id")),
     "artifact_put_attempt_charges": ("attempt-to-charge association", ("attempt_id", "charge_id")),
@@ -194,6 +195,8 @@ def parse_orm_models(app_root: Path, report_root: Path | None = None) -> dict[st
                     if column["storage_type"] == "inferred" and owner
                     for target_column in [_columns(owner).get(target.rpartition(".")[2])]
                     if target_column and target_column["storage_kind"] != "other"
+                    and (target_column["storage_type"] != "inferred"
+                         or target_column.get("storage_inferred_from_foreign_key"))
                 }
                 if len(kinds) == 1 and column["storage_kind"] != next(iter(kinds)):
                     column["storage_kind"] = next(iter(kinds))
@@ -380,8 +383,6 @@ def scan_generation_sites(roots: Iterable[Path], report_root: Path) -> list[dict
 
 
 def _key(table: dict[str, Any], orm_present: bool) -> dict[str, str]:
-    if not orm_present:
-        return {"classification": "unresolved", "reason": "schema table has no ORM owner"}
     if exception := SEMANTIC_KEYS.get(table["name"]):
         reason, expected = exception
         return (
@@ -389,6 +390,8 @@ def _key(table: dict[str, Any], orm_present: bool) -> dict[str, str]:
             if tuple(table["primary_key"]) == expected
             else {"classification": "unresolved", "reason": "semantic key shape changed"}
         )
+    if not orm_present:
+        return {"classification": "unresolved", "reason": "schema table has no ORM owner"}
     if len(table["primary_key"]) == 1 and table["primary_key"][0] in {
         "id",
         "event_id",
@@ -436,6 +439,16 @@ def build_inventory(backend_root: Path) -> dict[str, Any]:
             entry["candidates"].append("switch generation to shared UUIDv7 helper")
         if key["classification"] == "unresolved":
             unresolved.append({"kind": "table_key", "table": name, "reason": key["reason"]})
+        if owner and not ddl:
+            unresolved.append({
+                "kind": "missing_schema_table", "table": name,
+                "reason": "ORM table is absent from the schema inventory",
+            })
+        if owner and ddl and owner["primary_key"] != ddl["primary_key"]:
+            unresolved.append({
+                "kind": "primary_key_shape_mismatch", "table": name,
+                "reason": "ORM and schema primary keys differ",
+            })
         if owner and ddl and owner["primary_key"] == ddl["primary_key"]:
             for column_name in owner["primary_key"]:
                 left, right = _columns(owner).get(column_name), _columns(ddl).get(column_name)
@@ -467,6 +480,7 @@ def build_inventory(backend_root: Path) -> dict[str, Any]:
         if column["storage_kind"] == "string" and _IDENTIFIER.match(column["name"])
         for target in column.get("foreign_keys", [])
         if target.rpartition(".")[0] in table_names and _IDENTIFIER.match(target.rpartition(".")[2])
+        if target.rpartition(".")[0] not in SEMANTIC_KEYS
     ]
     generation = scan_generation_sites(
         (backend_root / "app", backend_root / "scripts"), backend_root

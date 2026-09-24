@@ -4,7 +4,7 @@
 - Intent: every Workstream-owned generated record identity uses UUIDv7 and native
   PostgreSQL UUID storage; references use the same type. Recreate disposable
   development data rather than preserve earlier development identities.
-- Current change: [planning record](WS-DB-002-PLAN.md).
+- Current change: [combined implementation record](WS-DB-002-PLAN.md).
 
 ## Problem and human direction
 
@@ -12,7 +12,8 @@ Workstream is unreleased v0.1. Its record identities currently mix UUIDv4,
 deterministic UUIDv5, native UUID columns and UUID strings. Standardize the first
 version rather than add compatibility implementations. The human explicitly
 does not require preservation of existing development rows for this change.
-Planning is authorized; implementation and destructive execution have not begun.
+Implementation is authorized in the same PR as this plan. Destructive execution
+still requires identifying exact owned disposable targets.
 
 UUIDv7 improves time locality of generated keys; native UUID avoids text storage
 overhead. Neither guarantees faster whole-product queries or shorter CI. Measure
@@ -45,9 +46,12 @@ generators, fixed service identities, JSON references and object-key constructio
 
 1. Every generated surrogate record key is UUIDv7, including event, receipt,
    attempt and operation keys. No retained v4/v5 record-ID generation path.
-2. Store UUID identities and their relational references as PostgreSQL `uuid`,
-   represented internally as Python `UUID`; serialize canonical strings at JSON,
-   HTTP, log and object-storage boundaries. No string/UUID dual domain model.
+2. Store UUID identities and their relational references as PostgreSQL `uuid`.
+   Keep established owner contracts consistent: Python UUID families use
+   `Uuid()`; canonical-string families use `Uuid(as_uuid=False)`, which also
+   stores native PostgreSQL UUID. Convert only at existing typed owner/API
+   boundaries. No fallback columns, compatibility aliases or dual-form inputs.
+   This avoids an unrelated whole-product Python representation rewrite.
 3. Preserve meaningful natural/composite keys: currency codes, namespace names,
    rate-limit digest/scope, singleton control key, and delivery generation.
    UUID components of composite keys still use native UUID. These are not
@@ -101,6 +105,17 @@ and assignment tuple, not a newly generated event ID. The outbox owner must
 recover the first stored event ID on retries. Deterministic Celery/provider
 request tokens are distinct from stored operation/event keys.
 
+Contribution-policy transition custody currently uses the caller's operation
+token as its primary key. Give that row a generated v7 `id`; retain `operation_id`
+as a unique native UUID request key and preserve its existing references and
+guards. This separates row identity from caller-controlled idempotency without
+requiring callers to generate UUIDv7 tokens.
+
+Both CI collectors must stabilize fixture-generated v7 values during collection
+only, then restore the real generator and imported aliases before test execution,
+including failed collection. Keep external UUIDv4-token and invalid-record-ID
+tests; do not mechanically change those into positive v7 fixtures.
+
 ## Fresh-schema cutover and reset
 
 There is no old-row conversion or preservation deliverable. Build one fresh
@@ -128,11 +143,11 @@ ask for the exact target. No global Docker prune or shared-volume deletion.
 Operational recovery is a clean database with matching code/schema, not mixed
 old/new writers or reconstruction of discarded development rows.
 
-## Proposed implementation boundaries
+## Implementation sequence within one PR
 
-These are sequencing guidance, not authorization or pre-created implementation
-contracts. Each implementation PR receives its exact allowed-file contract when
-started. All boundaries must be complete before claiming uniform identity.
+The human explicitly requests one PR containing planning and implementation.
+These are internal execution stages, not separate PRs or merge gates.
+Both must be complete before claiming uniform identity.
 
 ### 01 — Complete identity inventory and shared generation foundation
 
@@ -150,6 +165,14 @@ Allowed: inventoried model/owner/adapter/port/schema writers and affected caller
 baseline and SQL guards; bootstrap, drills and tests; identifier enforcement;
 AGENTS.md/CONTRIBUTING.md/README.md and current specifications/roadmap. Reconcile
 README's named baseline and broad volume-reset examples with scoped reset ownership.
+Include `docker-compose.yml`, `docker/backend/Dockerfile.dev`,
+`docker/postgres/init/`, `.github/workflows/backend.yml`,
+`.github/workflows/mcp.yml` and shared lane/database tooling in the impact review.
+Local API/worker commands, hosted PostgreSQL setup, schema fingerprints, test
+database templates, reset fixtures, API/MCP drills and dependency installation
+must all use the same new baseline and pinned generator. Do not change container
+versions merely for UUID generation or auto-delete an existing volume at startup.
+Keep all tests, lanes, coverage floors and required checks blocking.
 Switch all record writers and UUID references together, replace deterministic
 row-ID replay with owner-local reservation, install the new baseline, enable
 enforcement and prove a clean deployment. No temporary v4/v5 record-ID fallback,
@@ -157,20 +180,20 @@ retained-ID bridge, weakened guards, lifecycle changes or changed API exposure.
 
 This is broad critical work (L0), not a small mechanical PR. Use the completed
 dependency inventory to judge reviewability before implementing. If it requires
-splitting, propose dependency-closed owner boundaries first; each must leave main
-functional without compatibility code. Do not silently multiply planning PRs or
-merge a half-converted schema. Schema-connected edits must land together.
+smaller review slices, use internal commits and owned review assignments within
+this PR. Do not multiply planning PRs or merge a half-converted schema.
+Schema-connected edits must land together.
 
 ## Verification and acceptance
 
-Proposed test files below are future implementation obligations, not existing
-passing evidence. Add their real nodes to the existing lane catalogue; keep full
+The files below define implementation proof obligations, not blanket passing
+evidence. Register their real nodes in the existing lane catalogue; keep full
 hosted tests, coverage floors and real PostgreSQL. Avoid a new parallel CI system.
 
 | Required proof | Test or existing owner |
 |---|---|
-| RFC layout, canonical round trip, v7 variant/version, concurrent process generation, clock behavior without claiming global ordering | proposed `backend/tests/test_identifiers.py`; compare valid v7 with forced-v4 generator defect |
-| Every surrogate PK native UUID/v7-constrained; FK components match; semantic exceptions exact; no omitted model/migration table | proposed `backend/tests/test_identifier_schema.py`; add a text/v4 test table and require inventory failure |
+| RFC layout, canonical round trip, v7 variant/version, concurrent process generation, clock behavior without claiming global ordering | `backend/tests/test_identifiers.py`; compare valid v7 with forced-v4 generator defect |
+| Every surrogate PK native UUID/v7-constrained; FK components match; semantic exceptions exact; no omitted model/migration table | `backend/tests/test_identifier_schema.py`; add a text/v4 test table and require inventory failure; prove both ORM representations round-trip canonically and join through native UUID without SQL casts |
 | Direct SQL cannot insert a v4/v5 surrogate ID; external idempotency v4 remains valid | same schema tests with valid-control rows satisfying all unrelated guards, then change only the record ID |
 | Fresh baseline works; previous revision/nonempty DB refused; model/schema/SQL-guard parity and reference data correct | extend `backend/tests/test_alembic.py`, `backend/tests/test_database_reset.py` and schema-manifest tests |
 | Retry recovers one v7 row/event, racing writers do not duplicate effects, rollback leaves no orphan, revoked/foreign identity denied | existing owner suites for TASK receipts, guide finalization/projections, post-policy, pre-submit and outbox; add paired duplicate-key/different-payload and independent-session races |
@@ -205,7 +228,7 @@ operating/reset guidance. Use focused assignments, not nine automatic reviewers.
 
 Human direction already settled: v7 for all generated records, native UUID,
 no development-data preservation, no backward-compatibility layer. No additional
-product policy decision is needed. Actual reset target ownership and a selected
-dependency remain implementation prerequisites; neither blocks preparing this plan.
+product policy decision is needed. The implementation pins `uuid6==2025.0.1`;
+every reset must still verify exact target ownership before deletion.
 UUID performance does not justify weakening authorization, retry atomicity or
 content custody. Timestamp disclosure is an explicit identifier trade-off.

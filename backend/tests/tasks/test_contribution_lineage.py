@@ -2,7 +2,8 @@
 
 from app.core.config import get_settings
 
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import select, text
@@ -66,7 +67,7 @@ async def test_assignment_insert_rejects_same_project_wrong_stamp_direct_sql(tas
             "submitter_contribution_policy_version_id) VALUES(:id,:task,:project,:actor,:actor,'active',:policy)"
         )
         params = dict(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             task=task["id"],
             project=project["id"],
             actor=actor,
@@ -95,7 +96,7 @@ async def test_non_draft_insert_cannot_invent_initial_stamp(task_client):
                         "INSERT INTO workstream_tasks SELECT (jsonb_populate_record(NULL::workstream_tasks, "
                         "to_jsonb(t) || jsonb_build_object('id',CAST(:id AS text)))).* FROM workstream_tasks t WHERE id=:task"
                     ),
-                    {"id": str(uuid4()), "task": task["id"]},
+                    {"id": str(new_record_id()), "task": task["id"]},
                 )
 
 
@@ -195,7 +196,7 @@ async def test_submission_sql_requires_exact_initial_assignment_and_freezes_its_
             select(TaskAssignment).where(TaskAssignment.task_id == task.id)
         )
         original = build_submission(
-            submission_id=str(uuid4()),
+            submission_id=str(new_record_id()),
             task=task,
             contributor_id=assignment.contributor_id,
             task_assignment_id=assignment.id,
@@ -214,7 +215,7 @@ async def test_submission_sql_requires_exact_initial_assignment_and_freezes_its_
         for field, value in (
             ("contribution_policy_version_id", str(other.contribution_policy_version_id)),
             ("task_assignment_id", None),
-            ("task_assignment_id", str(uuid4())),
+            ("task_assignment_id", str(new_record_id())),
             ("contribution_policy_version_id", None),
         ):
             with pytest.raises(
@@ -227,11 +228,11 @@ async def test_submission_sql_requires_exact_initial_assignment_and_freezes_its_
                             "to_jsonb(s) || jsonb_build_object('id',CAST(:id AS text),'version',2,"
                             f"'{field}',CAST(:value AS text)))).* FROM submissions s WHERE id=:original"
                         ),
-                        dict(id=str(uuid4()), value=value, original=original.id),
+                        dict(id=str(new_record_id()), value=value, original=original.id),
                     )
         for field, value in (
             ("contribution_policy_version_id", other.contribution_policy_version_id),
-            ("task_assignment_id", str(uuid4())),
+            ("task_assignment_id", str(new_record_id())),
             ("contributor_id", task.created_by),
         ):
             with pytest.raises(DBAPIError, match="submission contribution identity is immutable"):
@@ -261,7 +262,7 @@ async def test_assignment_insert_rejects_foreign_project_tuples_direct_sql(task_
             "INSERT INTO task_assignments(id,task_id,project_id,contributor_id,assigned_by,status,"
             "submitter_contribution_policy_version_id) VALUES(:id,:task,:project,:actor,:actor,'active',:policy)"
         )
-        params = dict(id=str(uuid4()), task=local.id, project=local.project_id,
+        params = dict(id=str(new_record_id()), task=local.id, project=local.project_id,
                       actor=local.created_by, policy=local.locked_contribution_policy_version_id)
         # Isolate each selector, then also reject an internally valid foreign
         # tuple. A policy mismatch alone cannot prove project binding.

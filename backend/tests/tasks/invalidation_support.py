@@ -2,7 +2,8 @@
 
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import select
 
@@ -55,7 +56,7 @@ class TracedFeatureAuthority:
 
 
 async def provision_reconciler(sessions):
-    actor_id, link_id = uuid4(), uuid4()
+    actor_id, link_id = new_record_id(), new_record_id()
     async with sessions() as session, session.begin():
         session.add(ActorProfile(
             id=str(actor_id), actor_kind="service", status="active",
@@ -95,7 +96,7 @@ async def setup_assignment(client, monkeypatch, *, started=False, artifact_setti
     sessions = db_session.get_session_factory()
     h = Harness(sessions, UUID(project["id"]))
     h.options = DeliveryOptions(lease_seconds=300, handler_timeout_seconds=240)
-    actor_id = uuid4()
+    actor_id = new_record_id()
     async with sessions() as session, session.begin():
         session.add(
             ActorProfile(
@@ -110,7 +111,7 @@ async def setup_assignment(client, monkeypatch, *, started=False, artifact_setti
         await session.flush()
         session.add(
             ActorIdentityLink(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 actor_profile_id=str(actor_id),
                 issuer="workstream.internal",
                 subject=ServiceIdentity.OUTBOX_DISPATCHER.value,
@@ -211,20 +212,22 @@ async def invoked(s, *, target=None):
         authority_invalidation_event_id=s.invalidation_id,
     )
     value = OutboxAppendInput(
-        event_id=uuid4(),
         event_type=ASSIGNMENT_INVALIDATION_EVENT,
         event_version=1,
         aggregate_type="task_assignment",
         aggregate_id=target.assignment_id,
         project_id=target.project_id,
-        correlation_id=str(uuid4()),
+        correlation_id=str(new_record_id()),
         causation_event_id=target.authority_invalidation_event_id,
-        idempotency_key=str(uuid4()),
+        idempotency_key=(
+            f"assignment-invalidation:{target.authority_invalidation_event_id}:"
+            f"{target.assignment_id}"
+        ),
         payload=target.model_dump(mode="json"),
     )
     async with s.sessions() as session, session.begin():
-        await OutboxService(session).append(value)
-    claim = await s.h.delivery.claim(value.event_id, target.project_id, "assignment-test")
+        result = await OutboxService(session).append(value)
+    claim = await s.h.delivery.claim(result.event_id, target.project_id, "assignment-test")
     assert claim is not None
     envelope = await s.h.delivery._begin_invocation(claim)
     assert envelope is not None
@@ -303,7 +306,7 @@ async def prepare_submission(s, settings):
             task_id=UUID(s.task["id"]),
             assignment_id=UUID(s.assignment["id"]),
             predecessor_submission_id=None,
-            idempotency_key=uuid4(),
+            idempotency_key=new_record_id(),
             summary="Completed the required project work and included evidence.",
             contributor_attestation=(
                 complete_submission_payload()["worker_attestation"]
