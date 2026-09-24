@@ -1050,9 +1050,11 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
         audience=flow_audience,
         secret=flow_secret,
     )
+    # Retained task-read wrappers still require this claim; manager mutations
+    # require the separate exact project grant issued below.
     project_reader_token = issue_flow_token(
         f"real-api-project-reader-{run_id}",
-        [],
+        ["project_manager"],
         issuer=flow_issuer,
         audience=flow_audience,
         secret=flow_secret,
