@@ -88,6 +88,8 @@ action/permission audit evidence pairs; no new tables, retained-row rewrites, ba
 - Additive Alembic 0002 action evidence constraint after the UUIDv7 baseline,
   migration admission/schema fingerprint and affected migration/inventory tests.
 - Focused AUTH/TASK/API/migration tests, real API drill, lane test inventory.
+- Existing submission-policy completion predicate assertions exposed by main
+  reconciliation; preserve exact predicate/value proof without product changes.
 - Current README, task/AUTH specifications, operating manuals, roadmap and
   initiative navigation. Local sheet exports only if present.
 
@@ -268,3 +270,9 @@ the guard-removal control, upgrade evidence preservation and repeated-head
 no-op proof. Queue record fixtures use the canonical UUIDv7 generator; caller
 idempotency tokens keep their transport semantics. Shared ownership, structural
 inventories and lane coverage preserve both changes.
+
+The aggregate's isolated submission-policy proof exposed SQLAlchemy compiler
+formatting drift under its resolved dependency version. Its completion test now
+compares an independently enumerated predicate expression and exact bound values,
+preserving missing/extra/changed predicate detection without comparing cast
+formatting. No product logic, dependency range or CI gate changes.
