@@ -209,7 +209,7 @@ async def test_installed_mcp_preserves_profile_and_lifecycle_parity() -> None:
             from starlette.requests import Request
             from starlette.responses import Response
 
-            proxy_app = Starlette()
+
             proxy_in_flight = 0
             proxy_max_in_flight = 0
             proxy_barrier = asyncio.Barrier(2)
@@ -379,6 +379,20 @@ async def test_installed_mcp_preserves_profile_and_lifecycle_parity() -> None:
                 assert context["project_id"] == project.json()["id"]
                 assert context["admin_roles"] == ["project_manager"]
                 assert context["project_roles"] == []
+                assert context["effective_action_ids"] == [
+                    "project.contributor_candidate.list",
+                    "project.guide_sufficiency_report.list",
+                    "project.guide_sufficiency_report.read",
+                    "project.read",
+                    "project_role_grant.issue",
+                    "project_role_grant.list",
+                    "project_role_grant.read",
+                    "project_role_grant.revoke",
+                    "project.setup_run.read",
+                    "project.submission_artifact_policy.list",
+                    "project.submission_artifact_policy.read",
+                ]
+                assert "task.claim" not in context["effective_action_ids"]
 
                 concealed, failed = await _call(
                     mcp_url,
