@@ -91,6 +91,8 @@ action/permission audit evidence pairs; no new tables, retained-row rewrites, ba
 - Existing submission-policy completion predicates and guide request-custody
   database assertions exposed by main reconciliation; preserve exact predicate,
   value and rejection/rollback proof without product changes.
+- Outbox committed-invocation fixture ordering exposed by ORM autoflush;
+  retain custody guards and all visibility/substitution assertions.
 - Current README, task/AUTH specifications, operating manuals, roadmap and
   initiative navigation. Local sheet exports only if present.
 
@@ -282,3 +284,8 @@ The request-custody direct-SQL mutation test inspects PostgreSQL's native messag
 detail and SQLSTATE through asyncpg, avoiding ORM error-string formatting. Each
 rejection rolls back before checking the retained receipt count; the UPDATE,
 DELETE and TRUNCATE cases and exact target-table proof remain required.
+
+The outbox committed-invocation test obtains PostgreSQL time before mutating
+the attempt, matching the production operation. Query autoflush must not write
+a partially constructed transition. Committed visibility, forged-reference
+rejection and database custody enforcement remain unchanged.
