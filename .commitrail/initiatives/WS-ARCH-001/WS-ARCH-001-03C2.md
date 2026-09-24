@@ -37,16 +37,18 @@ activation guard. No producer may scan retained invalidation rows for backfill.
   and exact composition call sites in `authorization/router.py`.
 - `backend/app/adapters/auth/__init__.py`, a cohesive AUTH publication adapter,
   `adapters/tasks/__init__.py`, and `adapters/outbox/__init__.py`.
-- `backend/app/modules/tasks/api/assignment_invalidation.py`, a cohesive TASK
-  nonlocking projection module and owner composition; no lifecycle expansion.
-- `backend/app/modules/outbox/delivery.py` plus a narrow owner committed-invocation
-  reader if needed to reuse existing observation without circular registration.
+- `backend/app/modules/tasks/api/assignment_invalidation.py`, `backend/app/modules/tasks/repository.py` as the nonlocking SQL owner,
+  and owner composition; no lifecycle expansion.
+- `backend/app/modules/outbox/delivery.py` with `CommittedInvocationReader` reusing existing repository observation
+  without circular registration.
 - `backend/app/workers/celery_app.py`, `workers/outbox.py`, a focused delivery
   topology guard, existing config/environment documentation only if required.
 - Focused tests under `backend/tests/tasks/`, `tests/authorization/`,
   `tests/outbox/`, `tests/projects/guide_compilation/finalization/pg_authorization.py`,
   existing Celery configuration tests and affected exact inventories in
   `test_authorization.py`, `test_behavior_ownership.py`, `test_ci_lane_catalogue.py`.
+- `.github/workflows/backend.yml`: provision Redis for the real broker proof,
+  without changing lane selection, test gates or coverage thresholds.
 - Exact ownership registration, lane inventory, import/debt/assertion metadata
   only where real moved/added owners require it; do not raise limits.
 - This record, current ARCH plan/overview/map/03C contract, affected AUTH/CON/POL
@@ -75,9 +77,12 @@ reconciliation before code, preserving retained data.
    success event and newly staged invalidation event. Publish before completing
    the receipt, in the same caller session/root transaction. Any append failure
    propagates and rolls back state, audit, events and idempotency completion.
-   Translate projection/append exceptions to one sanitized AUTH publication
-   unavailable error mapped by the existing router database-call boundary;
-   preserve its service-unavailable response without reflecting payloads.
+   Define AUTH-owned `AuthorityInvalidationPublicationUnavailable`. Normalize
+   expected projection validation, SQL and OUTBOX exceptions into it, never
+   cancellation. Explicitly catch it in all three originating route paths
+   (actor lifecycle, identity-link lifecycle and project-role revoke), roll back,
+   then return the existing sanitized retryable service-unavailable response.
+   The existing SQLAlchemy-only database wrapper does not supply this mapping.
    Exact-id conflicts are rollback failures, never partial success.
 2. **Explicit composition.** Three originating lifecycle/project-role services
    require the publication port in their constructor. Existing AUTH adapter
@@ -86,7 +91,9 @@ reconciliation before code, preserving retained data.
    recording/raising ports for their declared unit boundary. No missing-port
    fallback. AUTH facts do not import TASK or OUTBOX implementation types.
 3. **Exact target capture under AUTH serialization.** TASK exposes nonlocking,
-   project/actor-scoped immutable assignment targets with stable UUID keyset
+   project/actor-scoped immutable request/page facts.
+   `TaskRepository.read_assignment_invalidation_targets_page` owns the fixed
+   scalar SQL query, with stable UUID keyset
    pagination, at most 100 rows per query. Select exact active assignment,
    `claimed`/`in_progress` task, current assignee and no retained Submission,
    with assigned_at no later than the newly recorded database cause timestamp.
@@ -107,8 +114,9 @@ reconciliation before code, preserving retained data.
 5. **First immutable registry entry.** Register only
    `TaskAssignmentAuthorityInvalidationRequested` version 1 using the existing
    transactional TASK handler, real 03C1 feature authorization and existing AUDIT
-   receipt/cause adapters. Extract/reuse the existing OUTBOX independent-session
-   committed observer to avoid mutable registry construction, fake proxies or
+   receipt/cause adapters. Use `CommittedInvocationReader` in existing `outbox/delivery.py`, delegating
+   `DeliveryRepository.observe` in an independent session. Existing delivery
+   observation delegates the same reader to avoid mutable registry construction, fake proxies or
    an unnecessary second delivery engine. The handler acknowledges after commit.
    Dispatch authority does not supply feature authority. Missing/revoked service
    authority fails closed; infrastructure/evidence uncertainty remains UNKNOWN.
@@ -174,7 +182,29 @@ real policy locks and service grants. Named future test modules:
 `tests/tasks/test_assignment_invalidation_targets.py`,
 `tests/outbox/test_assignment_invalidation_delivery.py`,
 `tests/outbox/test_delivery_topology.py`. Extend existing handler/lifecycle/race
-and worker tests for affected callers; list new nodes in canonical lanes.
+and worker tests for affected callers; list new modules in canonical lanes.
+
+The hosted lane provisions a pinned Redis service and supplies an explicit test
+broker URL. Local evidence provisions an owned disposable Redis instance. Each
+real-broker test uses a unique transport key prefix, bounded process cleanup and
+namespace cleanup; never flush a shared Redis database. Missing broker setup is
+a failure, not a skip. Existing Python Redis/Celery dependencies suffice.
+
+Named future proof nodes (implementation evidence, not current results):
+
+| Module | Test functions and discriminating controls |
+| --- | --- |
+| authorization/test_assignment_invalidation_publication.py | `test_supported_causes_publish_exact_targets` (four causes), `test_unsupported_causes_publish_nothing` (reviewer/admin/reactivation), `test_actor_fanout_publishes_every_page` (>100 rows), `test_later_append_failure_rolls_back_authority_and_receipt` (observe eligible target and earlier append; assert sanitized 503), `test_replay_does_not_publish_or_backfill` (retained unrelated cause), `test_publication_identity_is_deterministic` (exact envelope/payload). Removing publication must fail the supported positive. |
+| tasks/test_assignment_invalidation_targets.py | `test_target_projection_exact_membership` (each independently excluded released assignment, wrong assignee/state/project/actor, retained submission and future timestamp, alongside eligible control), `test_target_projection_is_nonlocking` (independent row lock). Probe each removed predicate where a persisted fixture can reach that boundary; otherwise inspect compiled SQL alongside the enforced database constraint and state why an impossible fixture is not forged. |
+| authorization/task_authority/test_lifecycle_races.py | `test_claim_committed_before_loss_is_published`, `test_loss_before_claim_denies_without_task_lock_cycle`; real independent AUTH sessions, bounded barriers and exact committed event set. Adding target row locking must fail the second ordering. |
+| outbox/test_assignment_invalidation_delivery.py | `test_production_delivery_releases_exact_assignment`, `test_duplicate_and_delayed_delivery_preserve_successor`, `test_missing_feature_authority_preserves_assignment`, `test_real_broker_prefork_delivers_committed_invalidation`; use production composition and real feature authority. |
+| outbox/test_delivery_topology.py | `test_delivery_queue_requires_prefork`, `test_delivery_queue_rejects_eager`, `test_other_queue_allows_solo`, `test_delivery_entry_rejects_unvalidated_execution` (direct/eager/dynamic queue override before SQL), `test_delivery_routes_to_dedicated_queue`. |
+| outbox/test_worker_postgresql.py | Replace obsolete `test_empty_production_registry_does_not_claim_feature_work` with `test_production_registry_claims_only_registered_invalidation`; preserve unrelated-event unclaimed control, registry malformed/duplicate negatives, crash-before-invoke recovery, committed UNKNOWN no-reinvoke and actual prefork hard-timeout proof. |
+
+Update current empty-registry claims in README, AUTH operating documentation,
+ARCH plan, AUTH overview and roadmap. Preserve historical 03B9/03C1/OUTBOX02
+records as historical evidence.
+
 Run focused regressions, Ruff, ownership/import/AUTH structural gates, Markdown
 links/stale wording/Commitrail checks, required internal reviewers and hosted CI.
 All new/changed subsystem coverage must remain >=90 percent. Future proof listed
