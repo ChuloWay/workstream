@@ -146,7 +146,7 @@
     },
     {
       "capability": "unassigned_legacy_auth",
-      "content_sha256": "ea25e01dd2dc7a6a0306b058989aafe8bdfe1c25170cebd679164aa17ad45aec",
+      "content_sha256": "a6d6ea873b37be766e5455a54bf141522351b0938a48d3efbd9534879358904d",
       "end_line": 12300,
       "hard_limit": 1200,
       "kind": "test_file",
@@ -386,7 +386,7 @@
     },
     {
       "capability": "unassigned_legacy_auth",
-      "content_sha256": "df1df6ec2ba6aa55445e21cfcf4e4e3ad9664c9504313484a495b6a6df1e9047",
+      "content_sha256": "ad3bf3a1dc508d62dc17916347068edd664860ecf8a219a1c772f080db7051b0",
       "end_line": 2732,
       "hard_limit": 120,
       "kind": "test_function",
@@ -506,7 +506,7 @@
     },
     {
       "capability": "unassigned_legacy_auth",
-      "content_sha256": "cf7f0f09ac93a917c74fd66c0048a289f0a437ca89757f834c70afca273588b3",
+      "content_sha256": "e993334feed3fff68a1ae4e40eb26b3a2be54095b45ae2a433ccaa3173756ec5",
       "end_line": 1341,
       "hard_limit": 120,
       "kind": "test_function",
@@ -518,7 +518,7 @@
     },
     {
       "capability": "unassigned_legacy_auth",
-      "content_sha256": "476216a59f491d16722359e393776b80ea7781150254520a14c82c6f4453bc89",
+      "content_sha256": "ae550d91aaf0e170c253f5f52413c164195b53778856366859b1da0b473230d1",
       "end_line": 1598,
       "hard_limit": 120,
       "kind": "test_function",

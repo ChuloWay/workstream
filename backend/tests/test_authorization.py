@@ -1240,7 +1240,7 @@ async def test_project_role_mutation_routes_conceal_denials_and_preserve_self_gu
     grant_id_value = grant_id
     monkeypatch.setattr(
         authorization_router,
-        "ProjectRoleGrantMutationService",
+        "project_role_mutation_service",
         MutationService,
     )
     issue_payload = ProjectRoleGrantIssueBody(
@@ -1485,7 +1485,7 @@ async def test_project_role_mutation_routes_enforce_project_lifecycle_without_di
     resolved = SimpleNamespace(profile=SimpleNamespace(id=str(caller_id)))
     monkeypatch.setattr(
         authorization_router,
-        "ProjectRoleGrantMutationService",
+        "project_role_mutation_service",
         MutationService,
     )
     issue_payload = ProjectRoleGrantIssueBody(
@@ -2706,7 +2706,7 @@ async def test_identity_link_lifecycle_route_preserves_outcome_transaction_contr
     monkeypatch.setattr(authorization_router, "ActorService", RouteActorService)
     monkeypatch.setattr(
         authorization_router,
-        "IdentityLinkLifecycleService",
+        "identity_link_lifecycle_service",
         RouteLifecycleService,
     )
 
