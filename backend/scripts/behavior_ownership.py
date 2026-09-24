@@ -76,6 +76,13 @@ AUTH_BOUNDARY_FOUNDATION_TARGETS = frozenset(
 MODULE_BOUNDARY_FOUNDATION_TARGETS = frozenset(
     {"backend/scripts/module_boundaries.py"}
 )
+ARCH_03C2_TARGETS = frozenset({
+    "backend/app/adapters/auth/assignment_invalidation_publication.py",
+    "backend/app/modules/authorization/api/assignment_invalidation.py",
+    "backend/app/workers/outbox_topology.py",
+})
+ARCH_03C2_REMOVED_TARGETS = frozenset({"backend/app/modules/outbox/schemas.py"})
+
 ARCH_03C1_TARGETS = frozenset({
     "backend/app/modules/authorization/domain/assignment_invalidation.py",
     "backend/app/modules/authorization/assignment_invalidation_authorization.py",
@@ -602,7 +609,7 @@ def _validate_additive_partition_transition(
     ]
     if (
         trusted_targets != sorted(trusted_targets)
-        or removed - (OUTBOX_IDENTITY_REMOVED_TARGETS | V01_BASELINE_REMOVED_TARGETS | POL_03B_REMOVED_TARGETS | POL_04B_REMOVED_TARGETS | POL_05A_REMOVED_TARGETS | ARCH_03A_GUIDE_CONTEXT_REMOVED_TARGETS)
+        or removed - (ARCH_03C2_REMOVED_TARGETS | OUTBOX_IDENTITY_REMOVED_TARGETS | V01_BASELINE_REMOVED_TARGETS | POL_03B_REMOVED_TARGETS | POL_04B_REMOVED_TARGETS | POL_05A_REMOVED_TARGETS | ARCH_03A_GUIDE_CONTEXT_REMOVED_TARGETS)
         or [current_by_target[item["target"]] for item in retained_trusted]
         != retained_trusted
     ):
@@ -613,6 +620,7 @@ def _validate_additive_partition_transition(
         | CON_02B_DELIVERY_TARGETS
         | AUTH_OUTBOX_02_TARGETS
         | ARCH_03C1_TARGETS
+        | ARCH_03C2_TARGETS
         | ARCH_03B9_TARGETS
         | CI_LANE_CATALOGUE_TARGETS
         | MODULE_BOUNDARY_FOUNDATION_TARGETS

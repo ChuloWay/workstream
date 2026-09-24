@@ -895,7 +895,8 @@ The shared outbox is generic infrastructure:
 - CON-02B supplies hidden claim/invoke/finalize, retained per-generation delivery
   receipts, bounded safe retry/dead-letter, exact replay, an explicit handler
   registry and project-scoped drain observations. AUTH-OUTBOX-02 activates exact
-  dispatcher authority and audit bindings, with an empty production feature registry.
+  dispatcher authority and audit bindings. ARCH-03C2 registers exact assignment
+  invalidation with separate feature authority and enforced prefork topology.
   Manual requeue, cancellation and archival controls need separate authority.
 - CON-02C owns the shared lifecycle audit participant.
 

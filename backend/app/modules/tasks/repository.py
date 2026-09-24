@@ -30,6 +30,10 @@ from app.modules.tasks.api import (
     TaskSubmissionContextRequest,
     TaskSubmissionContextUnavailable,
 )
+from app.modules.tasks.api.assignment_invalidation import (
+    AssignmentInvalidationTarget, AssignmentInvalidationTargetsRequest,
+    AssignmentInvalidationTargetsPage,
+)
 from app.modules.tasks.models import (
     AuditEvent,
     EvidenceItem,
@@ -70,6 +74,37 @@ class TaskRepository:
         """
         self._session = session
         self._audit_repository = AuditRepository(session)
+
+    async def read_assignment_invalidation_targets_page(
+        self, request: AssignmentInvalidationTargetsRequest,
+    ) -> AssignmentInvalidationTargetsPage:
+        """Nonlocking fixed projection; AUTH owns serialization and the root transaction."""
+        request = AssignmentInvalidationTargetsRequest.model_validate(request.model_dump())
+        assignment, task = TaskAssignment, WorkstreamTask
+        statement = select(
+            assignment.id, assignment.task_id, assignment.project_id, assignment.contributor_id,
+        ).join(task, and_(task.id == assignment.task_id, task.project_id == assignment.project_id)).where(
+            assignment.contributor_id == str(request.contributor_id),
+            assignment.status == "active", assignment.released_at.is_(None),
+            assignment.assigned_at <= request.invalidated_at,
+            task.status.in_(("claimed", "in_progress")), task.assigned_to == assignment.contributor_id,
+            assignment.submitter_contribution_policy_version_id == task.locked_contribution_policy_version_id,
+            ~select(Submission.id).where(Submission.task_id == task.id).exists(),
+        )
+        if request.project_id is not None:
+            statement = statement.where(assignment.project_id == str(request.project_id))
+        if request.after is not None:
+            statement = statement.where(assignment.id > str(request.after))
+        with self._session.no_autoflush:
+            rows = (await self._session.execute(statement.order_by(assignment.id).limit(101))).all()
+        return AssignmentInvalidationTargetsPage(
+            items=tuple(AssignmentInvalidationTarget(
+                project_id=UUID(row.project_id), task_id=UUID(row.task_id), assignment_id=UUID(row.id),
+                contributor_id=UUID(row.contributor_id),
+                authority_invalidation_event_id=request.invalidation_event_id,
+            ) for row in rows[:100]),
+            next_after=UUID(rows[99].id) if len(rows) > 100 else None,
+        )
 
     async def read_ready_tasks(self, request: TaskQueueRequest) -> ReadyTaskPage:
         """Read only eligible project rows before keyset pagination.

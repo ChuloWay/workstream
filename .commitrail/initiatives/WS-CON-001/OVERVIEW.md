@@ -9,8 +9,8 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   immutable ContributionRecords and optional
   project-policy-driven compensation awards without coupling lifecycle truth to
   an economic provider.
-- Next usable boundary: ARCH-03C2 atomic producer wiring and first handler
-  registration, then public task activation. ARCH-03C1 supplies exact fixed-service
+- Next usable boundary: bounded public task activation. ARCH-03C2 supplies
+  atomic publication and registered assignment delivery with enforced prefork. ARCH-03C1 supplies exact fixed-service
   reconciliation authority and decision-bound release receipts. ARCH-03B9 supplies the
   hidden exact-assignment operation and transaction fence. AUTH-OUTBOX-02 delivers
   shared live dispatcher authority, phase audit custody and Celery recovery after
@@ -51,7 +51,7 @@ the hidden policy behavior.
    CP08 delivers lineage fields and existing Task/Assignment/Submission writers together.
    ARCH-03B8 hidden task audit evidence and ARCH-03B9 hidden assignment
    invalidation are complete; ARCH-03C1 supplies real feature authority and
-   exact decision receipts. ARCH-03C2 retains producer wiring and registration.
+   exact decision receipts. ARCH-03C2 supplies atomic producer wiring and registration.
    CP09 removes the replaced legacy
    economic path only after all consumers are replaced, including CHECKERS and
    public Submission cutover; it does not block canonical `allow_review`.
@@ -91,12 +91,13 @@ handler invocation; hold no row lock across handler/provider I/O.
 Prove independent-session lease expiry, stale-worker fencing, crash before and
 after invoke/finalize, redelivery, exact replay and non-false-zero drain observation.
 Dispatcher identity cannot execute any feature action. The exact type/version
-registry has no production entries here; each future feature integration must
+registry installs exact assignment invalidation through ARCH-03C2; each later feature integration must
 prove its own AUTH boundary before installing its handler. Unknown invocation
 effects stop for reconciliation; no unconditional handler-entry guarantee is made.
 Manual reopening, cancellation and archival controls need their own authorized
 operational boundary. AUTH-OUTBOX-02 delivers production worker registration with
-an empty feature registry; actual worker/SQL proof does not claim live broker transport. Focused
+the shared mechanics; ARCH-03C2 adds atomic originating publication and a
+real Redis/prefork assignment-delivery proof. Focused
 architecture/security/QA and affected CI/docs reviewers inspect real PostgreSQL
 proofs and unchanged hosted coverage. The original detailed dispatcher record
 remains in the archive; its old directory paths and relative sequencing do

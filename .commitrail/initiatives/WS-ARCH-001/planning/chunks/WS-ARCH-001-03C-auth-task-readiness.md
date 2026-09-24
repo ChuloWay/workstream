@@ -8,7 +8,7 @@ task/claim/assignment actions below become usable only through the owner
 public APIs and one integrated readiness proof.
 
 Execution sequence: 03C1 real fixed-service assignment authority and exact
-decision receipts; 03C2 originating atomic producer fan-out plus first handler
+decision receipts; completed 03C2 originating atomic producer fan-out plus first handler
 registration with enforced prefork topology; then bounded public task activation.
 03C1 does not publish or dispatch retained invalidations. Combining the first
 producer with handler registration keeps newly emitted events drainable.
@@ -71,7 +71,7 @@ AUTH invalidation event and the TASK-owned 03B handler manifest; no human,
 dispatcher or unrelated service receives it. The [03B9 hidden operation](../../WS-ARCH-001-03B9.md) supplies exact cause
 validation, assignment release, replay and a same-transaction OUTBOX fence.
 Shared dispatch authority is delivered by AUTH-OUTBOX-02. 03C1 supplies exact feature AUTH and decision-bound receipt custody. Production
-reconciliation still requires 03C2 producer wiring and first registration. Originating authority changes
+reconciliation now has 03C2 atomic producer wiring and registration. Originating authority changes
 stage exact per-assignment events atomically through bounded actor/project
 fan-out. Publish only from the originating mutation transaction; never backfill
 or dispatch retained invalidation rows. Pre-repair transaction-start timestamps

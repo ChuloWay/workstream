@@ -381,11 +381,13 @@ closed work. The handler acknowledges only after its transaction commits.
 Malformed targets/causes and denied authority reject; uncertain effects remain
 shared OUTBOX `UNKNOWN`, without automatic reinvocation.
 
-ARCH-03C2 must publish bounded actor-wide/project fan-out atomically with the AUTH
-mutation. It must not backfill or dispatch retained invalidation rows: their
+ARCH-03C2 publishes complete actor-wide/project fan-out in pages of 100,
+atomically with the AUTH mutation. It never backfills or dispatches retained
+invalidation rows: their
 transaction-start timestamps do not establish mutation chronology. Capture exact assignment IDs through a nonlocking TASK projection
 while authority locks serialize claim. Producers must not acquire TASK locks
-after AUTH locks. First production registration must also enforce the required
-prefork worker/routing topology. Hidden feature-authority tests now use real
-fixed-service PREP and PostgreSQL; they do not prove production event publication
-or live broker delivery.
+after AUTH locks. The registered handler uses dedicated `workstream.outbox`
+routing with enforced non-eager prefork execution. Real PostgreSQL tests prove
+originating publication, rollback and both claim/loss orderings; a real Redis
+and prefork drill exercises production delivery. This does not activate public
+queue APIs, timed contributor leases or voluntary skip.

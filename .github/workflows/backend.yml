@@ -92,6 +92,15 @@ jobs:
           - task_lifecycle_b
 
     services:
+      redis:
+        image: redis:7-alpine@sha256:520775a41a63e77e06c73e35d2fd9cc15921a609516818796b4ecbb813078bc7
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
       postgres:
         image: public.ecr.aws/docker/library/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
         env:
@@ -192,6 +201,7 @@ jobs:
         env:
           COVERAGE_FILE: .coverage
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+          WORKSTREAM_TEST_BROKER_URL: redis://localhost:6380/0
           WORKSTREAM_TEST_ADMIN_DATABASE_URL: postgresql+asyncpg://workstream:workstream@localhost:5433/postgres
           WORKSTREAM_TEST_MINIO_ENDPOINT: http://127.0.0.1:9000
         shell: bash
@@ -238,6 +248,15 @@ jobs:
     timeout-minutes: 30
 
     services:
+      redis:
+        image: redis:7-alpine@sha256:520775a41a63e77e06c73e35d2fd9cc15921a609516818796b4ecbb813078bc7
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
       postgres:
         image: public.ecr.aws/docker/library/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
         env:
@@ -349,6 +368,7 @@ jobs:
       - name: API contract real API e2e
         working-directory: backend
         env:
+          WORKSTREAM_TEST_BROKER_URL: redis://localhost:6380/0
           WORKSTREAM_TEST_ADMIN_DATABASE_URL: postgresql+asyncpg://workstream:workstream@localhost:5433/postgres
           WORKSTREAM_TEST_MINIO_ENDPOINT: http://127.0.0.1:9000
         run: >-

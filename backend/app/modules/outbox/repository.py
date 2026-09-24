@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.outbox.models import OutboxEvent
-from app.modules.outbox.schemas import OutboxAppendInput
+from app.modules.outbox.api import OutboxAppendInput
 
 
 @dataclass(frozen=True, slots=True)

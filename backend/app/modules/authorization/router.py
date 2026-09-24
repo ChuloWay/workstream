@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from app.adapters.auth import actor_lifecycle_service, identity_link_lifecycle_service, project_role_mutation_service
+from app.modules.authorization.api.assignment_invalidation import AuthorityInvalidationPublicationUnavailable
+
 import asyncio
 from collections.abc import Awaitable
 from typing import Annotated, Literal, TypeVar
@@ -60,7 +63,6 @@ from app.modules.authorization.project_role_schemas import (
 )
 from app.modules.authorization.project_role_service import (
     ProjectRoleGrantConflict,
-    ProjectRoleGrantMutationService,
     project_role_issue_lock_key,
 )
 from app.modules.authorization.repository import AdminAuthorizationRepository
@@ -72,10 +74,8 @@ from app.modules.authorization.lifecycle_schemas import (
 from app.modules.authorization.lifecycle_service import (
     ActorLifecycleConflict,
     ActorLifecycleRequest,
-    ActorLifecycleService,
     IdentityLinkLifecycleConflict,
     IdentityLinkLifecycleRequest,
-    IdentityLinkLifecycleService,
 )
 from app.modules.authorization.runtime import (
     ActorAdminRoleGrantHistoryResourceContext,
@@ -297,7 +297,7 @@ async def _database_call(session: AsyncSession, operation: Awaitable[T]) -> T:
     except asyncio.CancelledError:
         await session.rollback()
         raise
-    except SQLAlchemyError as exc:
+    except (SQLAlchemyError, AuthorityInvalidationPublicationUnavailable) as exc:
         await session.rollback()
         raise service_unavailable_error() from exc
 
@@ -316,7 +316,7 @@ async def _mutate_actor_lifecycle(
 ) -> ActorLifecycleMutationResponse:
     canonical = _lifecycle_request(actor_profile_id, payload.reason, operation)
     caller_id = UUID(resolved.profile.id)
-    service = ActorLifecycleService(session)
+    service = actor_lifecycle_service(session)
     reservation = await _database_call(
         session,
         service.reserve(
@@ -389,7 +389,7 @@ async def _mutate_actor_lifecycle(
             "last_access_administrator": "Final Access Administrator cannot be disabled",
         }
         raise _domain_error(409, exc.code, messages[exc.code]) from exc
-    except SQLAlchemyError as exc:
+    except (SQLAlchemyError, AuthorityInvalidationPublicationUnavailable) as exc:
         await session.rollback()
         raise service_unavailable_error() from exc
 
@@ -408,7 +408,7 @@ async def _mutate_identity_link_lifecycle(
 ) -> IdentityLinkLifecycleMutationResponse:
     canonical = _identity_link_lifecycle_request(identity_link_id, payload.reason, operation)
     caller_id = UUID(resolved.profile.id)
-    service = IdentityLinkLifecycleService(session)
+    service = identity_link_lifecycle_service(session)
     reservation = await _database_call(
         session,
         service.reserve(
@@ -482,7 +482,7 @@ async def _mutate_identity_link_lifecycle(
             "last_access_administrator": "Final Access Administrator cannot be disabled",
         }
         raise _domain_error(409, exc.code, messages[exc.code]) from exc
-    except SQLAlchemyError as exc:
+    except (SQLAlchemyError, AuthorityInvalidationPublicationUnavailable) as exc:
         await session.rollback()
         raise service_unavailable_error() from exc
 
@@ -1239,15 +1239,14 @@ async def issue_project_role_grant(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> ProjectRoleGrantMutationResponse:
     canonical = ProjectRoleGrantIssueRequest(
-        operation=AuthorityOperation.PROJECT_ROLE_GRANT_ISSUE,
-        project_id=project_id,
+        operation=AuthorityOperation.PROJECT_ROLE_GRANT_ISSUE, project_id=project_id,
         target_actor_id=payload.target_actor_profile_id,
         role=payload.role,
         qualification=payload.qualification,
         reason_digest=derive_reason_digest(payload.reason),
     )
     actor_id = UUID(resolved.profile.id)
-    service = ProjectRoleGrantMutationService(session)
+    service = project_role_mutation_service(session)
     reservation = await _database_call(
         session,
         service.reserve(key=idempotency_key, actor_profile_id=actor_id, request=canonical),
@@ -1424,12 +1423,11 @@ async def revoke_project_role_grant(
 ) -> ProjectRoleGrantMutationResponse:
     canonical = ProjectRoleGrantRevokeRequest(
         operation=AuthorityOperation.PROJECT_ROLE_GRANT_REVOKE,
-        project_id=project_id,
-        grant_id=grant_id,
+        project_id=project_id, grant_id=grant_id,
         reason_digest=derive_reason_digest(payload.reason),
     )
     actor_id = UUID(resolved.profile.id)
-    service = ProjectRoleGrantMutationService(session)
+    service = project_role_mutation_service(session)
     reservation = await _database_call(
         session,
         service.reserve(key=idempotency_key, actor_profile_id=actor_id, request=canonical),

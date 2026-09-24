@@ -311,8 +311,11 @@ Independent initiatives and branches may proceed concurrently. Start with
 The shared outbox dispatcher uses the fixed service identity and phase-specific
 AUTH/PREP decisions for claim, invocation and finalization. AUTH-OUTBOX-02 binds
 those decisions to immutable delivery receipts and supplies Celery delivery and
-bounded recovery scans. The production handler registry is empty: assignment
-invalidation and checker routing need their own authorized feature handlers.
+bounded recovery scans. ARCH-03C2 registers exact assignment invalidation,
+with atomic publication from supported authority mutations and separate fixed
+feature authority. Checker routing still needs its own authorized handler.
+Delivery consumes `workstream.outbox` only under a validated non-eager prefork
+worker; other queues can use their appropriate execution pool.
 
 ## Developer Quickstart
 
@@ -591,10 +594,10 @@ management requirements through one historical translator. Its hidden contributo
 read reuses exact assignment visibility after locking TASK; the retained requirements
 route keeps its current authority wrapper. ARCH-03B8 supplies bounded internal Audit Authority task evidence;
 ARCH-03B9 supplies hidden exact-assignment invalidation with committed cause
-verification and a same-transaction delivery fence. Its production handler is
-unregistered. ARCH-03C1 supplies real fixed-service authority and exact decision
-receipts; atomic AUTH event wiring/registration remain ARCH-03C2, before public
-task cutover. Canonical checker materialization follows in
+verification and a same-transaction delivery fence. ARCH-03C1 supplies real
+fixed-service authority and exact decision receipts; ARCH-03C2 supplies atomic
+AUTH event publication and production handler registration. Public task cutover
+remains pending. Canonical checker materialization follows in
 ARCH-04B/04C.
 
 ## v0.1 Success Standard

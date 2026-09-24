@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.hashing import canonical_json_hash
 from app.modules.outbox.models import OutboxEvent
 from app.modules.outbox.repository import OutboxRepository
-from app.modules.outbox.schemas import (
+from app.modules.outbox.api import (
     OutboxAppendDisposition,
     OutboxAppendInput,
     OutboxAppendResult,

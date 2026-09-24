@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from app.core.hashing import canonical_json_hash
 
@@ -18,7 +18,7 @@ class AssignmentInvalidationUnavailable(RuntimeError):
 
 
 class AssignmentInvalidationTarget(BaseModel):
-    """Original assignment identity captured by the future atomic AUTH producer."""
+    """Original assignment identity captured by the atomic AUTH producer."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
     project_id: UUID
@@ -100,3 +100,28 @@ class AssignmentInvalidationAuditPort(Protocol):
         ...
 
     async def record_release(self, evidence: AssignmentInvalidationEvidence) -> None: ...
+
+
+class AssignmentInvalidationTargetsRequest(BaseModel):
+    """Fixed bounded keyset projection under originating AUTH serialization."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    contributor_id: UUID
+    project_id: UUID | None
+    invalidation_event_id: UUID
+    invalidated_at: AwareDatetime
+    after: UUID | None = None
+
+
+class AssignmentInvalidationTargetsPage(BaseModel):
+    """Detached exact original assignments and the next stable position."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    items: tuple[AssignmentInvalidationTarget, ...]
+    next_after: UUID | None
+
+
+class AssignmentInvalidationTargetsPort(Protocol):
+    async def read_assignment_invalidation_targets_page(
+        self, request: AssignmentInvalidationTargetsRequest,
+    ) -> AssignmentInvalidationTargetsPage: ...

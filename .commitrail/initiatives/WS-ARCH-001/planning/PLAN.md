@@ -39,7 +39,7 @@ checker-remediation boundary before public Submission cutover.
 | [ARCH-03B8](../WS-ARCH-001-03B8.md) | ARCH-03B7 | Complete: bounded hidden task audit evidence with atomic scope and exact transition references |
 | [ARCH-03B9](../WS-ARCH-001-03B9.md) | ARCH-03B8, CON-02B and AUTH-OUTBOX-02 | Complete: hidden exact-assignment invalidation with committed cause and delivery custody |
 | [ARCH-03C1](../WS-ARCH-001-03C1.md) | ARCH-03B9, AUTH-OUTBOX-02 | Complete: exact reconciler authority and decision-bound release receipts |
-| ARCH-03C2 | ARCH-03C1 | Planned next: atomic originating producer publication and first handler registration with enforced prefork topology |
+| [ARCH-03C2](../WS-ARCH-001-03C2.md) | ARCH-03C1 | Complete: atomic originating publication and registered assignment delivery with enforced prefork topology |
 | ARCH-03C public cutover | ARCH-03C2 and hidden TASK owner contracts | Planned: exact public task/assignment authority and integrated readiness proof |
 | CP09 (later cleanup coordination) | All legacy consumers replaced, including CHECKER and public 02I path | Physical economic deletion; not on the allow_review critical path |
 | ARCH-04B | ARCH-04A, POL-07, ARCH-03C, merged ARCH-02H | ART exact stored Submission materialization |
@@ -73,7 +73,7 @@ through 03B8 are complete: detached metadata, queues, detail, work context,
 locked context, requirements and bounded audit evidence. ARCH-03B9 completes
 hidden exact-assignment invalidation on the delivered shared dispatcher.
 ARCH-03C1 completes exact reconciler authority and decision-bound receipts.
-ARCH-03C2 next owns originating-transaction-only per-assignment producer events
+ARCH-03C2 supplies originating-transaction-only per-assignment producer events
 and first handler registration with enforced prefork topology; it must never
 backfill or dispatch retained invalidation rows. Public TASK activation remains
 separately bounded under ARCH-03C. Subsequent
@@ -94,7 +94,8 @@ The shared module supplies append/flush and idempotency, and CON-02B supplies
 hidden claim/invoke/finalize, custody and recovery. AUTH-OUTBOX-01 has supplied
 dispatcher metadata and typed authority; AUTH-OUTBOX-02 has activated
 that exact manifest with real phase audit custody and bounded prefork workers.
-The production registry remains empty; each feature requires its own authority. None depends on ContributionRecord, fulfillment
+The production registry contains only assignment invalidation; each later feature
+requires its own authority. None depends on ContributionRecord, fulfillment
 or REV implementation. TASK must not implement an alternative outbox worker.
 Registration and activation are distinct product-authority changes, not
 extra planning/administrator approval ceremonies.

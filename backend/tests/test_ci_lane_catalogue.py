@@ -179,6 +179,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/tasks/test_submission_requirements.py",
             "tests/tasks/test_audit_evidence.py",
             "tests/tasks/test_assignment_invalidation.py",
+            "tests/tasks/test_assignment_invalidation_targets.py",
             "tests/tasks/test_assignment_invalidation_authority.py",
             "tests/tasks/test_assignment_invalidation_causes.py",
             "tests/tasks/test_assignment_invalidation_races.py",

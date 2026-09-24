@@ -21,16 +21,17 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Public post-policy composition: POL-06B delivered using existing AUTH-12G.
 - Completed activation boundary: AUTH-12H exact-project manager authority for
   CP07 complete-guide activation/binding, with live-authority replay.
-- Next usable boundary: ARCH-03C2 atomic producer wiring and first handler
-  registration, then public task activation. ARCH-03C1 supplies exact fixed-service
+- Next usable boundary: bounded public task activation.
+  [ARCH-03C2](../WS-ARCH-001/WS-ARCH-001-03C2.md) supplies atomic publication and
+  registered assignment delivery with enforced prefork topology. ARCH-03C1 supplies exact fixed-service
   reconciliation authority and decision-bound release receipts. ARCH-03B9 supplies the
   hidden exact-assignment operation and transaction fence. AUTH-OUTBOX-02 delivers
   shared live dispatcher authority, phase audit custody and Celery recovery after
   CON-02B delivery mechanics. This follows
   completed ARCH-03B8 hidden task audit evidence and ARCH-03B7 requirements projections and ARCH-03B6 locked-context projections and ARCH-03B5 current work context and ARCH-03B4 hidden contributor/management task detail, ARCH-03B3 hidden management/operational queues and ARCH-03B2 contributor-ready queue facts, ARCH-03B1 detached metadata and CP08 lineage
   and minimal writers and ARCH-03A internal guide context. POL-07B internal phase composition is delivered.
-  The dispatcher is active only for shared mechanics; its production feature
-  registry remains empty. Feature handlers require separate exact authority.
+  The dispatcher registers only exact assignment invalidation. Future checker
+  routing still requires its separate exact authority and handler.
 - Governing source: `docs/spec_authorization_service.md`, authorization code,
   migrations, and tests.
 - Preserve: Flow token verification only, no Workstream login/session system,

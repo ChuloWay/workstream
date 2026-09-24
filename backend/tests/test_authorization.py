@@ -2,6 +2,8 @@
 # pyright: reportIndexIssue=false, reportOptionalMemberAccess=false
 # pyright: reportOptionalSubscript=false, reportRedeclaration=false
 from __future__ import annotations
+
+from app.adapters.auth import assignment_invalidation_publication, actor_lifecycle_service, identity_link_lifecycle_service, project_role_mutation_service
 from app.modules.authorization.domain.post_policy import post_policy_resource
 from tests.authorization.post_policy.support import post_facts
 
@@ -98,7 +100,6 @@ from app.modules.authorization.lifecycle_service import (
     ActorLifecycleConflict,
     ActorLifecycleService,
     IdentityLinkLifecycleConflict,
-    IdentityLinkLifecycleService,
 )
 from app.modules.authorization.models import (
     AdminRoleGrant,
@@ -7219,7 +7220,7 @@ async def test_actor_lifecycle_service_rejects_crossed_reason_and_missing_target
         reason_digest=derive_reason_digest(reason),
     )
     decision = _actor_lifecycle_decision(request, existing=False)
-    service = ActorLifecycleService(object())  # type: ignore[arg-type]
+    service = ActorLifecycleService(object(), publication=assignment_invalidation_publication(object()))  # type: ignore[arg-type]
     claim = AuthorityClaimHandle(
         record_id=uuid4(),
         idempotency_key=uuid4(),
@@ -7313,7 +7314,7 @@ async def test_actor_lifecycle_service_applies_success_and_guards_conflicts() ->
     )
     repository = Repository(profile)
     mutation = Mutation()
-    service = ActorLifecycleService(session)  # type: ignore[arg-type]
+    service = actor_lifecycle_service(session)  # type: ignore[arg-type]
     service._repository = repository  # type: ignore[assignment]
     service._mutation = mutation  # type: ignore[assignment]
     audit = Audit()
@@ -7337,8 +7338,7 @@ async def test_actor_lifecycle_service_applies_success_and_guards_conflicts() ->
         claim=claim,
         request=request,
         decision=decision,
-        actor_profile_id=caller,
-        reason=reason,
+        actor_profile_id=caller, reason=reason,
     )
     assert response.resource_id == target
     assert session.flushed == 1
@@ -7454,7 +7454,7 @@ async def test_identity_link_lifecycle_service_applies_success_and_guards_confli
     profile = SimpleNamespace(id=str(target_actor), actor_kind="human", status="active")
     repository = Repository(link, profile)
     mutation = Mutation()
-    service = IdentityLinkLifecycleService(session)  # type: ignore[arg-type]
+    service = identity_link_lifecycle_service(session)  # type: ignore[arg-type]
     service._repository = repository  # type: ignore[assignment]
     service._mutation = mutation  # type: ignore[assignment]
     audit = Audit()
@@ -7478,8 +7478,7 @@ async def test_identity_link_lifecycle_service_applies_success_and_guards_confli
         claim=claim,
         request=request,
         decision=decision,
-        actor_profile_id=caller,
-        reason=reason,
+        actor_profile_id=caller, reason=reason,
     )
     assert response == IdentityLinkLifecycleMutationResponse(
         resource_type="actor_identity_link",
@@ -9978,6 +9977,7 @@ def _success(
         actor_ref=claim.actor_ref,
         request_id=request_id or uuid4(),
         correlation_id=correlation_id or uuid4(),
+        target_actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE, target_actor_ref=str(request.actor_profile_id),
         permission_id="actor.profile.suspend",
         resource_type="actor_profile",
         resource_id=str(request.actor_profile_id),
@@ -10119,11 +10119,11 @@ def _operation_success(
         }
         after_facts = before_facts | {"status": "revoked", "effective": False}
     elif isinstance(request, ActorProfileSuspendRequest):
-        before_facts, after_facts = {"status": "active"}, {"status": "suspended"}
+        target_actor, before_facts, after_facts = request.actor_profile_id, {"status": "active"}, {"status": "suspended"}
     elif isinstance(request, ActorProfileReactivateRequest):
-        before_facts, after_facts = {"status": "suspended"}, {"status": "active"}
+        target_actor, before_facts, after_facts = request.actor_profile_id, {"status": "suspended"}, {"status": "active"}
     elif isinstance(request, ActorProfileDeactivateRequest):
-        before_facts, after_facts = {"status": "active"}, {"status": "deactivated"}
+        target_actor, before_facts, after_facts = request.actor_profile_id, {"status": "active"}, {"status": "deactivated"}
     elif isinstance(request, ActorIdentityLinkRevokeRequest):
         if identity_link_target is None:
             raise AssertionError("identity-link revoke proof requires its owning actor")
@@ -10141,8 +10141,7 @@ def _operation_success(
         event_type=event,
         entity_type=response.resource_type.value,
         entity_id=str(response.resource_id),
-        actor_ref_kind=claim.actor_ref_kind,
-        actor_ref=claim.actor_ref,
+        actor_ref_kind=claim.actor_ref_kind, actor_ref=claim.actor_ref,
         request_id=uuid4(),
         correlation_id=uuid4(),
         target_actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE if target_actor else None,
@@ -10177,14 +10176,12 @@ async def _complete(service, claim, request):
     response = AuthorityResponseReference(
         resource_type=AuthorityResourceType.ACTOR_PROFILE,
         resource_id=request.actor_profile_id,
-        version=1,
-        http_status=200,
+        version=1, http_status=200,
     )
     result = await service.complete(
-        claim=claim,
-        request=request.model_dump(),
-        response=response,
-        success=success,
+        publication=assignment_invalidation_publication(service._repository._session),
+        claim=claim, request=request.model_dump(),
+        response=response, success=success,
         invalidation=AuthorityInvalidationContext(
             event_id=uuid4(),
             request_id=success.request_id,
@@ -10243,6 +10240,7 @@ async def test_committed_record_rejects_additional_success_and_invalidation(
         extra_success = _success(claim, request)
         with pytest.raises(IntegrityError, match="committed authority idempotency is closed"):
             await service.complete(
+                publication=assignment_invalidation_publication(service._repository._session),
                 claim=claim,
                 request=request.model_dump(),
                 response=completed.response,
@@ -10310,6 +10308,7 @@ async def test_completion_rejects_resource_and_project_not_bound_to_request(
         wrong_success = _success(claim, wrong_request)
         with pytest.raises(TypeError, match="invalid authority completion input"):
             await service.complete(
+                publication=assignment_invalidation_publication(service._repository._session),
                 claim=claim,
                 request=request.model_dump(),
                 response=AuthorityResponseReference(
@@ -10366,7 +10365,7 @@ async def test_completion_rejects_resource_and_project_not_bound_to_request(
         )
         with pytest.raises(TypeError, match="invalid authority completion input"):
             await service.complete(
-                claim=claim,
+                publication=None, claim=claim,
                 request=project_request.model_dump(),
                 response=response,
                 success=(qualification, issued),
@@ -11254,9 +11253,8 @@ async def test_project_role_and_all_operation_mappings_commit_one_linked_pair(
                 ),
             )
             completed = await service.complete(
-                claim=claim,
-                request=request.model_dump(),
-                response=response,
+                publication=assignment_invalidation_publication(session) if request.operation in {AuthorityOperation.ACTOR_PROFILE_SUSPEND, AuthorityOperation.ACTOR_PROFILE_DEACTIVATE, AuthorityOperation.ACTOR_IDENTITY_LINK_REVOKE, AuthorityOperation.PROJECT_ROLE_GRANT_REVOKE} else None,
+                claim=claim, request=request.model_dump(), response=response,
                 success=success_input,
                 invalidation=invalidation,
             )
@@ -11403,6 +11401,7 @@ async def test_project_role_issue_shared_completion_writes_ordered_zero_invalida
     service._repository = repository  # type: ignore[assignment]
 
     result = await service.complete(
+        publication=None,
         claim=claim,
         request=request.model_dump(),
         response=response,
@@ -11718,8 +11717,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
             actor_status=ActorStatus.ACTIVE,
             identity_link_id=caller_link_id,
             identity_link_status=IdentityLinkStatus.ACTIVE,
-            request_id=uuid4(),
-            correlation_id=uuid4(),
+            request_id=uuid4(), correlation_id=uuid4(),
         )
         repository = AdminAuthorizationRepository(session)
         authorization = AuthorizationService(session, context, admin_repository=repository)
@@ -11735,7 +11733,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
         )
         issue_key = uuid4()
         await session.begin()
-        issue_reservation = await ProjectRoleGrantMutationService(session).reserve(
+        issue_reservation = await project_role_mutation_service(session).reserve(
             key=issue_key,
             actor_profile_id=caller_id,
             request=canonical_issue,
@@ -11774,7 +11772,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
         )
         assert decision.allowed is True
         assert decision.matched_grant_id == manager_grant_id
-        issue_service = ProjectRoleGrantMutationService(session)
+        issue_service = project_role_mutation_service(session)
         for substituted in (
             decision.model_copy(update={"action_id": ActionId.PROJECT_ROLE_GRANT_REVOKE}),
             decision.model_copy(update={"permission_id": PermissionId.PROJECT_READ}),
@@ -11824,7 +11822,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
             reason_digest=derive_reason_digest(revoke_reason),
         )
         revoke_key = uuid4()
-        revoke_reservation = await ProjectRoleGrantMutationService(session).reserve(
+        revoke_reservation = await project_role_mutation_service(session).reserve(
             key=revoke_key,
             actor_profile_id=caller_id,
             request=canonical_revoke,
@@ -11863,7 +11861,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
             revoke_input,
             revoke_resource,
         )
-        revoke_service = ProjectRoleGrantMutationService(session)
+        revoke_service = project_role_mutation_service(session)
         for substituted_decision, substituted_resource in (
             (
                 revoke_decision.model_copy(update={"action_id": ActionId.PROJECT_ROLE_GRANT_ISSUE}),
@@ -12175,7 +12173,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
             scope,
         )
         await waiter.begin()
-        await ProjectRoleGrantMutationService(waiter).reserve(
+        await project_role_mutation_service(waiter).reserve(
             key=waiting_key,
             actor_profile_id=caller_id,
             request=canonical,
@@ -12217,7 +12215,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
         with pytest.raises(asyncio.CancelledError):
             await wait_task
         await locker.rollback()
-        retry_reservation = await ProjectRoleGrantMutationService(waiter).reserve(
+        retry_reservation = await project_role_mutation_service(waiter).reserve(
             key=waiting_key,
             actor_profile_id=caller_id,
             request=canonical,
@@ -12266,7 +12264,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
             retry_input,
             retry_resource,
         )
-        retried = await ProjectRoleGrantMutationService(waiter).complete_issue(
+        retried = await project_role_mutation_service(waiter).complete_issue(
             claim=retry_reservation.claim,
             request=canonical,
             decision=retry_decision,

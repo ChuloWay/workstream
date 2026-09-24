@@ -1,7 +1,7 @@
 # WS-ARCH-001-03C2 — Atomic assignment-invalidation publication and delivery
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: supported originating authority changes atomically
   publish exact assignment targets and the first production handler delivers
   their existing authorized release through the shared OUTBOX owner.
@@ -39,6 +39,13 @@ activation guard. No producer may scan retained invalidation rows for backfill.
   `adapters/tasks/__init__.py`, and `adapters/outbox/__init__.py`.
 - `backend/app/modules/tasks/api/assignment_invalidation.py`, `backend/app/modules/tasks/repository.py` as the nonlocking SQL owner,
   and owner composition; no lifecycle expansion.
+- `backend/app/modules/outbox/api.py`, `schemas.py` removal, `__init__.py`,
+  `service.py`, `repository.py` and exact affected contract imports/tests: move
+  existing append values/validation into the canonical API, remove unused root
+  exports, and supply `OutboxAppendPort` via the existing OUTBOX adapter. The
+  package-root facade was not a public boundary under the dependency guard;
+  source review confirmed no existing public append port. No new implementation,
+  private-edge exception or compatibility export is introduced.
 - `backend/app/modules/outbox/delivery.py` with `CommittedInvocationReader` reusing existing repository observation
   without circular registration.
 - `backend/app/workers/celery_app.py`, `workers/outbox.py`, a focused delivery
@@ -53,7 +60,8 @@ activation guard. No producer may scan retained invalidation rows for backfill.
   only where real moved/added owners require it; do not raise limits.
 - This record, current ARCH plan/overview/map/03C contract, affected AUTH/CON/POL
   overviews/index, README, roadmap, TASK/AUTH operational specifications and
-  worker deployment examples. Update ignored roadmap exports together if present.
+  worker deployment examples and current shared OUTBOX specifications. Update
+  ignored roadmap exports together if present.
 
 ### Not allowed
 
@@ -125,7 +133,7 @@ reconciliation before code, preserving retained data.
    not enable eager execution; reject invalid topology at startup. Other queues,
    including guide-only solo workers, remain supported. Guard delivery entry
    before SQL against eager/direct execution or an unvalidated consumer. Route
-   overrides/dynamic queue addition cannot bypass that guard. Preserve the real
+   overrides/dynamic queue addition cannot bypass that guard. Reject disabled or extended per-message hard limits. Preserve the real
    300-second hard process limit and UNKNOWN no-reinvoke semantics. Periodic
    existing OUTBOX recovery scans publish selectors to this queue after commit.
 7. **No historical event manufacture.** Only the currently executing authorized
@@ -179,6 +187,7 @@ PostgreSQL configuration and exact per-run metadata; use real Redis/broker and
 prefork for the new production-delivery proof. Existing shared fixtures supply
 real policy locks and service grants. Named future test modules:
 `tests/authorization/test_assignment_invalidation_publication.py`,
+`tests/authorization/test_assignment_invalidation_publication_races.py`,
 `tests/tasks/test_assignment_invalidation_targets.py`,
 `tests/outbox/test_assignment_invalidation_delivery.py`,
 `tests/outbox/test_delivery_topology.py`. Extend existing handler/lifecycle/race
@@ -190,14 +199,14 @@ real-broker test uses a unique transport key prefix, bounded process cleanup and
 namespace cleanup; never flush a shared Redis database. Missing broker setup is
 a failure, not a skip. Existing Python Redis/Celery dependencies suffice.
 
-Named future proof nodes (implementation evidence, not current results):
+Proof map (runtime results and exact reviewed head are recorded in the PR):
 
 | Module | Test functions and discriminating controls |
 | --- | --- |
-| authorization/test_assignment_invalidation_publication.py | `test_supported_causes_publish_exact_targets` (four causes), `test_unsupported_causes_publish_nothing` (reviewer/admin/reactivation), `test_actor_fanout_publishes_every_page` (>100 rows), `test_later_append_failure_rolls_back_authority_and_receipt` (observe eligible target and earlier append; assert sanitized 503), `test_replay_does_not_publish_or_backfill` (retained unrelated cause), `test_publication_identity_is_deterministic` (exact envelope/payload). Removing publication must fail the supported positive. |
-| tasks/test_assignment_invalidation_targets.py | `test_target_projection_exact_membership` (each independently excluded released assignment, wrong assignee/state/project/actor, retained submission and future timestamp, alongside eligible control), `test_target_projection_is_nonlocking` (independent row lock). Probe each removed predicate where a persisted fixture can reach that boundary; otherwise inspect compiled SQL alongside the enforced database constraint and state why an impossible fixture is not forged. |
-| authorization/task_authority/test_lifecycle_races.py | `test_claim_committed_before_loss_is_published`, `test_loss_before_claim_denies_without_task_lock_cycle`; real independent AUTH sessions, bounded barriers and exact committed event set. Adding target row locking must fail the second ordering. |
-| outbox/test_assignment_invalidation_delivery.py | `test_production_delivery_releases_exact_assignment`, `test_duplicate_and_delayed_delivery_preserve_successor`, `test_missing_feature_authority_preserves_assignment`, `test_real_broker_prefork_delivers_committed_invalidation`; use production composition and real feature authority. |
+| authorization/test_assignment_invalidation_publication.py | `test_supported_causes_publish_exact_targets` (four causes), `test_reactivation_publishes_nothing`, `test_reviewer_revoke_does_not_publish_submitter_assignments` and existing admin operation-map tests, `test_actor_fanout_publishes_every_page` (>100 rows; success and later-page failure with observed earlier append, full rollback and sanitized 503), `test_publication_failure_is_sanitized_and_same_key_can_retry` (grant/link paths), `test_replay_does_not_publish_or_backfill` (retained unrelated cause), `test_supported_causes_publish_exact_targets` also checks deterministic envelope/payload identity; `test_project_revoke_is_scoped_and_actor_loss_spans_projects` checks exact fan-out scope. Removing publication must fail the supported positive. |
+| tasks/test_assignment_invalidation_targets.py | `test_target_projection_exact_membership`, `test_target_projection_independent_state_predicates` and `test_target_projection_excludes_retained_submission` (independently excluded released assignment, wrong assignee/state/project/actor, retained submission and future timestamp, alongside eligible controls), `test_target_projection_is_nonlocking` (independent row lock). Probe each removed predicate where a persisted fixture can reach that boundary; otherwise inspect compiled SQL alongside the enforced database constraint and state why an impossible fixture is not forged. |
+| authorization/test_assignment_invalidation_publication_races.py | `test_claim_and_loss_publish_only_committed_original_assignments` (both orderings); real independent AUTH sessions, bounded barriers and exact committed event set. Adding target row locking must fail the second ordering. |
+| outbox/test_assignment_invalidation_delivery.py | `test_production_delivery_releases_exact_assignment`, existing hidden duplicate/delayed-successor tests and production duplicate assertion, `test_missing_feature_authority_preserves_assignment`, `test_real_broker_prefork_delivers_committed_invalidation`; use production composition and real feature authority. |
 | outbox/test_delivery_topology.py | `test_delivery_queue_requires_prefork`, `test_delivery_queue_rejects_eager`, `test_other_queue_allows_solo`, `test_delivery_entry_rejects_unvalidated_execution` (direct/eager/dynamic queue override before SQL), `test_delivery_routes_to_dedicated_queue`. |
 | outbox/test_worker_postgresql.py | Replace obsolete `test_empty_production_registry_does_not_claim_feature_work` with `test_production_registry_claims_only_registered_invalidation`; preserve unrelated-event unclaimed control, registry malformed/duplicate negatives, crash-before-invoke recovery, committed UNKNOWN no-reinvoke and actual prefork hard-timeout proof. |
 
@@ -216,6 +225,13 @@ Pre-plan source review ruled out router-only publication, mutable/fake registry
 observers and globally banning solo workers. It also found no enforced task cap;
 complete atomic paged fan-out therefore explicitly accepts linear transaction
 work rather than pretending to bound total cardinality.
+
+Plan review closed the SQL-owner, error-mapping and proof-environment findings.
+Implementation dependency checking then identified the unused OUTBOX root facade
+as private: existing append contracts/validation moved into `outbox/api.py`, the
+old schemas module/root exports were removed, and existing append service is
+composed through `OutboxAppendPort`. Architecture source review confirmed this
+minimal repair without a new private edge or dependency-guard exception.
 
 ## Reconciliation
 

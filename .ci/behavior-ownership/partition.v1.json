@@ -17,6 +17,10 @@
       "target": "backend/app/adapters/auth/adapter_bindings.py"
     },
     {
+      "group": "shared",
+      "target": "backend/app/adapters/auth/assignment_invalidation_publication.py"
+    },
+    {
       "group": "lifecycle",
       "target": "backend/app/adapters/auth/contribution_policies.py"
     },
@@ -367,6 +371,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/api/adapter_bindings.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/assignment_invalidation.py"
     },
     {
       "group": "auth",
@@ -846,10 +854,6 @@
     },
     {
       "group": "shared",
-      "target": "backend/app/modules/outbox/schemas.py"
-    },
-    {
-      "group": "shared",
       "target": "backend/app/modules/outbox/service.py"
     },
     {
@@ -1298,6 +1302,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/workers/outbox_topology.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/workers/post_policy.py"
     },
     {
@@ -1393,7 +1401,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "a7de24623061a3d144c8bf44d8a904826412e088cec4c17355d6f88eb541d92b",
+  "authority_digest": "3e849ccb61da7234c75b8ebe9a6892c81199bfbe6f754491b90014a2e40b2890",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
