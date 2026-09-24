@@ -73,6 +73,7 @@ _REQUEST_CONSTRAINTS = frozenset(
         "pk_project_guide_compilation_request_operations",
         "uq_compilation_request_actor_request",
         "uq_compilation_request_actor_key",
+        "uq_compilation_request_setup_trigger",
         "uq_compilation_request_attempt",
         "uq_compilation_request_authorization_event",
     }

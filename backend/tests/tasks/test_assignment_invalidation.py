@@ -16,6 +16,7 @@ from app.modules.tasks.api.assignment_invalidation import (
     PreparedAssignmentInvalidation,
 )
 from app.modules.tasks.models import TaskAssignment, WorkstreamTask, Submission
+from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.service import TaskService
 from tests.submission_fixtures import seed_finalized_submission_for_checker_test
 from tests.test_tasks import (
@@ -266,6 +267,14 @@ async def test_existing_submission_and_revision_history_are_never_released(
     task_client, monkeypatch
 ):
     s = await setup_assignment(task_client, monkeypatch, started=True)
+    await revoke(s, "suspend")
+    target, envelope = await invoked(s)
+    restored = await s.client.post(
+        f"/api/v1/actors/{s.grant['actor_profile_id']}/reactivate",
+        headers=auth_headers(),
+        json={"reason": "Allow submission before pending invalidation delivery"},
+    )
+    assert restored.status_code == 200, restored.text
 
     async def hold_dispatch(*args, **kwargs):
         pass
@@ -275,8 +284,17 @@ async def test_existing_submission_and_revision_history_are_never_released(
     submission_id = await seed_finalized_submission_for_checker_test(
         s.task["id"], complete_submission_payload()
     )
-    await revoke(s)
-    _, envelope = await invoked(s)
+    await revoke(s, "suspend")
+    assert s.invalidation_id != target.authority_invalidation_event_id
+    history_checks = []
+    has_submission = TaskRepository.has_submission
+
+    async def observe_history(owner, task_id):
+        retained = await has_submission(owner, task_id)
+        history_checks.append((task_id, retained))
+        return retained
+
+    monkeypatch.setattr(TaskRepository, "has_submission", observe_history)
     for state in (
         "submitted",
         "evaluation_pending",
@@ -313,6 +331,7 @@ async def test_existing_submission_and_revision_history_are_never_released(
                 )
                 == submission_before
             )
+    assert history_checks == [(target.task_id, True)]
     assert s.trace == []
 
 

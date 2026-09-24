@@ -886,7 +886,7 @@ async def test_stored_authority_variants_deny_review_replay_and_correction(clean
             role, scope = {"audit": ("audit_authority", "project"), "operator": ("operator", "system"),
                            "system_manager": ("project_manager", "system"), "foreign_project": ("project_manager", "project")}[authority_change]
             if authority_change == "foreign_project":
-                project = uuid4()
+                project = new_record_id()
                 async with factory() as session, session.begin():
                     await seed_historical_project(session, project_id=str(project), name="Foreign guide owner", slug=f"foreign-{project}")
             _, denied_grant = await seed_review_actor(factory, project, actor=actor, role=role, scope=scope)

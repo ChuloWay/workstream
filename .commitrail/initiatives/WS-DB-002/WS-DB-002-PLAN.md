@@ -77,6 +77,15 @@ types and a manual-policy PREP identity mismatch. Repairs retain exact prepared
 resource binding: allocate the actual record IDs before preparation, and recover
 an already committed same-key winner under the existing project lock with fresh
 authorization. Projection finalization also checks its exact correlation selector.
+Compilation request recovery follows the same distinction: the setup generation
+and trigger identify the persisted winner, while its generated operation ID is
+recovered before validating all caller, request, origin and lineage facts with
+fresh authority. The natural-owner uniqueness constraint participates in race
+classification; recovery never treats an arbitrary newly generated loser ID as
+the committed identity. PostgreSQL digest, exact replay, duplicate classification
+and current-authority recovery probes cover this boundary. Negative fixture
+repairs must reach their intended guard through valid queue and publication
+custody, rather than fail early on UUID representation or missing setup state.
 The real MinIO source build and startup passed; that infrastructure result does
 not certify the still-required full backend regression and coverage run.
 The retained registered-actor dependency now uses the resolved canonical profile

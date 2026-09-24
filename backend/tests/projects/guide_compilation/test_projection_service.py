@@ -86,7 +86,9 @@ class _MalformedAuthorization(_ProjectionAuthorization):
                 original = capability.identity
 
                 def malformed_identity(**values):
-                    return replace(original(**values), output_id=uuid4())
+                    identity = original(**values)
+                    object.__setattr__(identity, "output_id", uuid4())
+                    return identity
 
                 capability.identity = malformed_identity
             else:

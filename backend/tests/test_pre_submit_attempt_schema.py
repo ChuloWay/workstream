@@ -98,7 +98,7 @@ async def test_new_result_rows_require_valid_order_and_bounded_metadata(
                     (None, "[]", "pre-submit result reconstruction fields required"),
                     (-1, "[]", "pre-submit result reconstruction fields required"),
                     (0, None, "pre-submit result reconstruction fields required"),
-                    (0, '{"entry_count":1}', "pre-submit result metadata invalid"),
+                    (0, '{"entry_count":1}', "pre-submit result reconstruction fields required"),
                     (0, '[["entry_count",-1]]', "pre-submit result metadata invalid"),
                     (
                         0,

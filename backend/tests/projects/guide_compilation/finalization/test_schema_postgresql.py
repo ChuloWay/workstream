@@ -1,7 +1,5 @@
 """Migration/schema parity and immutable generation fork prevention."""
 
-from uuid import uuid4
-
 import pytest
 from sqlalchemy import text
 from sqlalchemy.dialects import postgresql
@@ -66,6 +64,21 @@ async def test_distinct_operations_cannot_finalize_one_setup_generation(clean_po
         ]
         with pytest.raises(DBAPIError, match="uq_finalization_setup_generation"):
             async with factory() as session, session.begin():
+                # Isolate this unique constraint from earlier independent guards.
+                # The rejected insert rolls back these transactional DDL changes.
+                await session.execute(
+                    text(
+                        "alter table project_guide_setup_finalizations "
+                        "disable trigger finalization_insert_guard"
+                    )
+                )
+                await session.execute(
+                    text(
+                        "alter table project_guide_setup_finalizations "
+                        "drop constraint uq_finalization_compilation, "
+                        "drop constraint uq_finalization_decision"
+                    )
+                )
                 await session.execute(
                     text(
                         "insert into project_guide_setup_finalizations (" + ",".join(columns) + ") "
@@ -75,7 +88,7 @@ async def test_distinct_operations_cannot_finalize_one_setup_generation(clean_po
                     ),
                     {
                         "new_id": new_record_id(),
-                        "operation": uuid4(),
+                        "operation": new_record_id(),
                         "setup": str(command.setup_run_id),
                     },
                 )

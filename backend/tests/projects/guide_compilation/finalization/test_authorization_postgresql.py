@@ -55,7 +55,7 @@ async def test_concrete_finalization_is_atomic(clean_postgres_database, classifi
             assert event["correlation_id"] == authority.facts.correlation_id
             assert event["resource_type"] == "project_guide_setup_finalization"
             assert event["resource_id"] == str(result.finalization_id)
-            assert event["project_id"] == str(command.project_id)
+            assert event["project_id"] == command.project_id
             assert event["denial_code"] is None
             assert event["after_facts"] == {
                 "allowed": True,
@@ -65,13 +65,11 @@ async def test_concrete_finalization_is_atomic(clean_postgres_database, classifi
             }
         setup, receipt, count = await stored_state(factory, command)
         assert count == 1
-        assert receipt["authorization_decision_event_id"] == str(
-            authority.receipt.decision_event_id
-        )
-        assert receipt["actor_profile_id"] == str(values["actor"])
-        assert receipt["identity_link_id"] == str(values["link"])
+        assert receipt["authorization_decision_event_id"] == authority.receipt.decision_event_id
+        assert receipt["actor_profile_id"] == values["actor"]
+        assert receipt["identity_link_id"] == values["link"]
         assert setup["status"] == result.setup_outcome
-        assert setup["output_sufficiency_report_id"] == str(authority.facts.sufficiency_report_id)
+        assert setup["output_sufficiency_report_id"] == authority.facts.sufficiency_report_id
         with pytest.raises(PreparedAuthorizationInvalid):
             await authority.handle.consume_new(authority.facts)
 

@@ -27,7 +27,9 @@ async def test_complete_activation_and_live_replay(clean_postgres_database):
             actor.actor_profile_id, command.idempotency_key
         )
         assert operation.activation_authority_json["resource_context_digest"] == operation.resource_context_digest
-        assert operation.activation_authority_json["authorization_decision_event_id"] == event.id
+        assert operation.activation_authority_json["authorization_decision_event_id"] == str(
+            event.id
+        )
         async with factory() as session:
             guide = await session.get(ProjectGuide, str(command.target.proposal.guide_id))
             assert guide.status == "active"

@@ -5,6 +5,7 @@ from tests.projects.guide_compilation.helpers import runtime_configuration
 from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 from dataclasses import asdict
 from datetime import UTC, datetime
+from unittest.mock import patch
 from uuid import uuid4
 
 from sqlalchemy import text
@@ -37,6 +38,8 @@ from app.modules.projects.api import (
 )
 from app.modules.projects.guide_compilation.projections import GuideCompilationProjectionService
 from app.modules.projects.guide_compilation.service import GuideCompilationService
+from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
+from app.modules.projects.setup_queue import dispatch_project_guide_compilation_after_commit
 from ..helpers import (
     context,
     identity,
@@ -120,6 +123,7 @@ async def compilation_and_projections(
     requested = requested or await request_compilation(
         factory, values, compilation_context, predecessor_id
     )
+    await admit_compilation_delivery(factory, compilation_context)
     supplied_outcome = outcome is not None
     outcome = outcome or result()
     if classification != "draft_ready" and not supplied_outcome:
@@ -172,3 +176,26 @@ async def compilation_and_projections(
         setup_generation=compilation_context.setup_generation,
         compilation_id=receipt.compilation_id,
     )
+
+
+async def admit_compilation_delivery(factory, compilation_context):
+    """Commit the canonical queue transition without contacting a test broker."""
+    material = compilation_context.material
+    task_id = project_guide_compilation_task_id(
+        str(compilation_context.setup_run_id), compilation_context.setup_generation
+    )
+    with patch(
+        "app.modules.projects.setup_queue.enqueue_project_guide_compilation",
+        return_value=task_id,
+    ):
+        async with factory() as session:
+            dispatched = await dispatch_project_guide_compilation_after_commit(
+                session,
+                project_id=str(material.project_id),
+                guide_id=str(material.guide_id),
+                source_snapshot_id=str(material.source_snapshot_id),
+                setup_run_id=str(compilation_context.setup_run_id),
+                setup_generation=compilation_context.setup_generation,
+                claimed_task_id=task_id,
+            )
+    assert dispatched == task_id

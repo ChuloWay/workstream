@@ -483,9 +483,9 @@ async def test_receipt_actor_identity_link_must_belong_to_actor(clean_postgres_d
             await session.execute(
                 text(
                     "insert into actor_identity_links(id,actor_profile_id,issuer,subject,subject_kind,status,linked_by,last_verified_at) "
-                    "values(:link,:actor,'https://identity.flowresearch.tech',:actor,'human','active','test',transaction_timestamp())"
+                    "values(:link,:actor,'https://identity.flowresearch.tech',:subject,'human','active','test',transaction_timestamp())"
                 ),
-                {"link": link, "actor": actor},
+                {"link": link, "actor": actor, "subject": actor},
             )
         before = await stored_state(factory, command)
         with pytest.raises(DBAPIError, match="finalization authority mismatch"):

@@ -443,8 +443,19 @@ class GuideCompilationService:
         self._require_fresh_session()
         async with self._session.begin():
             repository = GuideCompilationRepository(self._session)
+            natural = await repository.request_operation_for_setup(
+                facts.setup_run_id,
+                facts.setup_generation,
+                origin.trigger,
+                lock=False,
+            )
+            if natural is None:
+                raise GuideCompilationIntegrityError(
+                    "concurrent request left no durable natural owner"
+                )
+            exact_facts = replace(facts, operation_id=natural.operation_id)
             operation = await repository.matching_request_operation(
-                actor=actor, facts=facts, origin=origin, lock=False
+                actor=actor, facts=exact_facts, origin=origin, lock=False
             )
             if operation is None:
                 raise GuideCompilationIntegrityError(
@@ -452,7 +463,7 @@ class GuideCompilationService:
                 )
             await self._authorization.validate_request_replay(
                 actor=actor,
-                facts=facts,
+                facts=exact_facts,
                 origin=origin,
             )
             return await _request_receipt(repository, operation)
