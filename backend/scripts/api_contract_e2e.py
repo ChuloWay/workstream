@@ -2153,9 +2153,9 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             for event in audit_events
         }
         assert audit_transitions == {
-            ("task_created", None, "draft"),
-            ("task_status_changed", "draft", "screening"),
-            ("task_status_changed", "screening", "ready"),
+            ("TaskCreated", None, "draft"),
+            ("TaskScreened", "draft", "screening"),
+            ("TaskReleased", "screening", "ready"),
             ("TaskClaimed", "ready", "claimed"),
             ("TaskStarted", "claimed", "in_progress"),
         }
