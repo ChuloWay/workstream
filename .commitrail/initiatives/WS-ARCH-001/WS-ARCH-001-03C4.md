@@ -1,11 +1,13 @@
 # ARCH-03C4 — Exact-authorized public task queues
 
 - Initiative: WS-ARCH-001
-- Disposition: Planned
+- Durable disposition: Complete
+- Intended merge outcome: three public project task queues use exact live grants,
+  bounded signed pagination and atomic authorization evidence.
 - Risk: L1 (authorization, public read exposure)
 - Base: current main after merged ARCH-03C3 (#436).
 
-## Intent and current-source reconciliation
+## Intent
 
 Let a contributor discover ready tasks in one authorized project, a manager
 inspect that project's task planning queue, and a system Operator inspect its
@@ -21,7 +23,7 @@ public queue route currently exists. The earlier API drill also establishes
 that retained task-detail/locked-context/audit reads still require old role and
 creator checks; those distinct read cutovers remain the next bounded work.
 
-## Bounded outcome
+## Bounded change
 
 | Public GET route | Action | Exact authority |
 |---|---|---|
@@ -97,7 +99,7 @@ activation, Submission/checker/review exposure, task-detail/read cutover,
 leases/skip, frontend, model calls, private guide documents, secrets or `.env`.
 Do not relax dependency guards, coverage, lane selection or retained assertions.
 
-## Acceptance and proof
+## Acceptance criteria
 
 1. Signed HTTP requests with real stored grants distinguish submitter, manager
    and system Operator access. Independently reject absent/foreign/revoked grants,
@@ -134,7 +136,7 @@ Do not relax dependency guards, coverage, lane selection or retained assertions.
 ## Named verification targets
 
 All paths below are new focused modules except the explicitly retained test.
-They describe required future proof, not executed results.
+These targets define the required proof for the merged boundary.
 
 - `backend/tests/authorization/task_queues/test_authority.py`:
   `test_queue_authority_matrix` (signed requests, each of the three actions,
@@ -182,7 +184,7 @@ assertions, request-shape precedence, and incomplete selected-column proof.
 The repaired contract requires exact audit action pairs and named positive/
 negative controls; implementation and runtime evidence remain outstanding.
 
-## Verification and reviewers
+## Risk and review routing
 
 Lead runs Ruff, module/AUTH boundary and test-structure checks, changed Markdown
 links, stale-wording scans, Commitrail, focused isolated PostgreSQL tests and
@@ -218,3 +220,22 @@ test, issuing a distinct actor and grant per case; no authority cases are omitte
 The diff is larger than the L1 guideline because three related queue projections
 share one authority/cursor boundary and require migration, matrix, transaction,
 concurrency and SQL-privacy proof. It introduces no additional product workflow.
+
+## Evidence
+
+The focused signed-HTTP matrix covers each audience and role, lifecycle and
+revocation. Public pages prove exact project membership, tied ordering and live
+claim removal. SQL observations check all selected columns; injecting an extra
+private column makes the privacy assertion fail. Transaction tests bind separate
+page evidence and preserve rollback. Real PostgreSQL races serialize grant
+revocation and guide activation. A deliberate project-before-grant lock makes
+the lock-order proof fail. Actual migration tests preserve retained audit rows
+and reject wrong action/permission pairs; removing the constraint invalidates
+the rejection proof. Existing project-read tests protect the extracted evaluator.
+The complete real HTTP drill adds all three queues before claim/start.
+
+Ruff, module/AUTH boundaries, the structural-debt guard, Markdown links and
+Commitrail remain mandatory. Full hosted tests and coverage, exact-head internal
+review and external-check freshness are reported in the PR, not this navigation
+record. The local drill uses isolated PostgreSQL, Redis and MinIO; it does not
+exercise real model inference or production deployment.

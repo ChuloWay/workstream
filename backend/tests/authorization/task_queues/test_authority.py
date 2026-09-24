@@ -149,7 +149,7 @@ async def test_queue_rejects_inactive_identity(admin_access, kind, transition):
 @pytest.mark.parametrize("kind", PATHS)
 async def test_queue_conceals_service_actor_before_product_read(signed_access, kind):
     from tests.authentication.support import issue_asymmetric_token
-    token = issue_asymmetric_token(signed_access.private_key, claims={
+    token = issue_asymmetric_token(signed_access.private_key, scope="workstream:service", claims={
         "sub": "unprovisioned-queue-service", "subject_kind": "service", "roles": ["operator", "project_manager"],
     })
     response = await signed_access.client.get(PATHS[kind].format(project=uuid4()), headers={"Authorization": f"Bearer {token}"})
