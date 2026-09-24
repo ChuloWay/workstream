@@ -989,12 +989,13 @@ privacy-bounded denial event, and then translates the conflict.
 
 A replay reference is internal only. Active administrative routes load the
 canonical resource and evaluate current authority again before responding;
-later route owners must preserve the same rule. There is no production assignment-invalidation consumer registered. ARCH-03B9
+later route owners must preserve the same rule. ARCH-03C2 registers production
+assignment invalidation. ARCH-03B9
 supplies the hidden exact-assignment handler; ARCH-03C1 supplies its sole fixed
 service `workstream.task.assignment_reconciler` and permission
 `task.assignment.authority_reconcile`. No human or dispatcher inherits it.
-ARCH-03C2 must atomically publish assignment-specific events from AUTH mutations
-and register the handler with enforced prefork routing. Provisioning the service
+ARCH-03C2 atomically publishes assignment-specific events from supported
+originating AUTH mutations and registers the handler with enforced prefork routing. Provisioning the service
 alone does not dispatch events. Release receipts retain the real decision and
 resource digest; later service revocation does not invalidate historical receipts.
 An audit invalidation row alone is not a dispatched reconciliation.
@@ -1288,7 +1289,8 @@ closes SQL before publishing event/project selectors. Failed publication is
 rediscovered; expired claims are recovered even if their handler was removed.
 Each delivery phase uses fresh AUTH/PREP and retains its exact decision reference.
 Unknown invoked effects remain terminal for reconciliation. The production
-handler registry is empty until feature-specific authority and handlers land.
+registry contains only `TaskAssignmentAuthorityInvalidationRequested` version 1,
+with its separate exact feature authority. Unregistered event types stay unclaimed.
 Celery worker retries cover infrastructure failure with at most three retries and a
 30-second exponential delay; they never authorize repeating an invocation.
 
@@ -1301,7 +1303,28 @@ records UNKNOWN without calling the handler again. Ordinary Celery worker-loss
 redelivery remains fenced by the same durable invocation custody.
 
 Eager execution and solo/thread/greenlet pools do not provide this process
-containment. Before registering the first production feature handler, its Celery worker
-and routing composition must enforce prefork execution. The shared app's other
-jobs and guide-only solo drill do not establish delivery containment. The
-production OUTBOX handler registry remains empty.
+containment. Delivery is routed to `workstream.outbox`; startup rejects a consumer
+of that queue unless it uses prefork and disables eager execution. Delivery entry
+also rejects direct, eager or unvalidated consumers, including a queue added to
+an unvalidated Celery process after startup. Guide-only solo processes must select their
+other queues explicitly.
+
+Run the dedicated consumer with:
+
+```sh
+celery -A app.workers.celery_app worker --pool=prefork -Q workstream.outbox
+```
+
+Keep a Celery process consuming `celery` for the recovery scan and run the existing
+Celery beat schedule. Provision both dispatcher and assignment-reconciler service
+identities through their authorized workflow. Missing/revoked feature authority
+leaves TASK unchanged; a dispatcher grant never supplies feature authority.
+
+Supported Submitter grant revoke, actor suspend/deactivate and identity-link
+revoke append every affected pre-submission assignment in the same transaction
+as the authority state, audit pair and replay receipt. Projection/append failure
+rolls everything back and returns a sanitized retryable 503. Actor-wide projection
+reads pages of 100 without TASK locks; all pages commit together, so total work
+and held AUTH lock time grow with affected assignments. There is no truncation or
+historical invalidation backfill. Timed contributor expiry and voluntary skip
+remain deferred; this handler releases work for supported authority loss only.

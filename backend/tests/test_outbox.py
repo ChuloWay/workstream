@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import (  # type: ignore[import-not-found]
     create_async_engine,
 )
 
-from app.modules.outbox.schemas import (
+from app.modules.outbox.api import (
     OutboxAppendDisposition,
     OutboxAppendInput,
     OutboxIdempotencyConflict,

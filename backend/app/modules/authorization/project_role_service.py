@@ -41,6 +41,7 @@ from app.modules.authorization.schemas import (
     ProjectRole,
     derive_reason_digest,
 )
+from app.modules.authorization.api.assignment_invalidation import AuthorityInvalidationPublicationPort
 from app.modules.authorization.service import AuthorityMutationService
 
 
@@ -88,8 +89,9 @@ def _response(grant: ProjectRoleGrant) -> ProjectRoleGrantMutationResponse:
 
 
 class ProjectRoleGrantMutationService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, *, publication: AuthorityInvalidationPublicationPort) -> None:
         self._session = session
+        self._publication = publication
         self.repository = AdminAuthorizationRepository(session)
         self._mutation = AuthorityMutationService(session)
         self._audit = AuditService(session)
@@ -233,9 +235,8 @@ class ProjectRoleGrantMutationService:
             idempotency_reference=claim.record_id,
         )
         await self._mutation.complete(
-            claim=claim,
-            request=request.model_dump(),
-            response=AuthorityResponseReference(
+            publication=None, claim=claim,
+            request=request.model_dump(), response=AuthorityResponseReference(
                 resource_type=AuthorityResourceType.PROJECT_ROLE_GRANT,
                 resource_id=grant.id,
                 version=1,
@@ -301,6 +302,7 @@ class ProjectRoleGrantMutationService:
         await self._session.flush()
         await self._session.refresh(grant)
         await self._mutation.complete(
+            publication=self._publication if grant.role == "submitter" else None,
             claim=claim,
             request=request.model_dump(),
             response=AuthorityResponseReference(

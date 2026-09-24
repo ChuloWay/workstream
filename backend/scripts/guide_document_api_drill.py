@@ -144,7 +144,7 @@ async def scenario(drill, issuer, env):
     await drill.call("waiting_setup", "GET", setup_route, path=setup_path, token=manager,
         values={"id": guide["setup"]["id"], "status": "awaiting_documents", "documents_ready_at": None})
     worker = subprocess.Popen([sys.executable, "-m", "celery", "-A", "app.workers.celery_app",
-        "worker", "--pool=solo", "--concurrency=1", "--without-gossip", "--without-mingle",
+        "worker", "--pool=solo", "-Q", "celery", "--concurrency=1", "--without-gossip", "--without-mingle",
         "--without-heartbeat", "--loglevel=WARNING"], cwd=api.ROOT, env=env,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:

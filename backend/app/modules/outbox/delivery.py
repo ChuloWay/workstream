@@ -448,17 +448,28 @@ class OutboxDelivery:
         return await self.finalize(claim, FinalizationCause.EXPIRED)
 
     async def observe_invocation(self, envelope: OutboxEventEnvelope) -> CommittedInvocationObservation | None:
-        """Independent committed snapshot, no feature authority or reservation."""
-        try:
-            async with self._sessions() as session:
-                return await DeliveryRepository(session).observe(envelope)
-        except SQLAlchemyError:
-            raise DeliveryPersistenceError("outbox_observation_failed") from None
+        """Use the same independent committed reader supplied to feature handlers."""
+        return await CommittedInvocationReader(self._sessions).observe_invocation(envelope)
 
     async def drain(self, project_id: UUID) -> DrainObservation:
         """Observe one exact project without row locks or fabricated empty results."""
         try:
             async with self._sessions() as session:
                 return await DeliveryRepository(session).drain(project_id, self._registry.keys)
+        except SQLAlchemyError:
+            raise DeliveryPersistenceError("outbox_observation_failed") from None
+
+
+class CommittedInvocationReader:
+    """Independent observation without constructing a second delivery engine."""
+
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
+        self._sessions = session_factory
+
+    async def observe_invocation(self, envelope: OutboxEventEnvelope) -> CommittedInvocationObservation | None:
+        """Independent committed snapshot, no feature authority or reservation."""
+        try:
+            async with self._sessions() as session:
+                return await DeliveryRepository(session).observe(envelope)
         except SQLAlchemyError:
             raise DeliveryPersistenceError("outbox_observation_failed") from None

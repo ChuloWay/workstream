@@ -165,6 +165,7 @@ class AdminRoleGrantService:
             http_status=201,
         )
         await self._mutation.complete(
+            publication=None,
             claim=claim,
             request=request.model_dump(),
             response=response,
@@ -237,6 +238,7 @@ class AdminRoleGrantService:
             http_status=200,
         )
         await self._mutation.complete(
+            publication=None,
             claim=claim,
             request=request.model_dump(),
             response=response,

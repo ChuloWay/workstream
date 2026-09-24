@@ -1,5 +1,6 @@
 """Authorization application adapters and same-owner composition."""
 
+from app.adapters.auth.assignment_invalidation_publication import assignment_invalidation_publication
 from app.modules.projects.api.guide_activation import GuideActivationAuthorizationPort
 from contextlib import asynccontextmanager
 from uuid import UUID, uuid5
@@ -87,6 +88,7 @@ def contribution_policy_authorization(
 
 
 __all__ = (
+    "assignment_invalidation_publication",
     "task_authorization",
     "guide_compilation_request_authority",
     "guide_compilation_execution_authority",
@@ -202,3 +204,21 @@ def assignment_invalidation_authorization(session: AsyncSession):
     from app.modules.authorization.assignment_invalidation_authorization import AssignmentInvalidationAuthorizationAdapter
 
     return AssignmentInvalidationAuthorizationAdapter(session)
+
+
+def actor_lifecycle_service(session: AsyncSession):
+    """Compose lifecycle evidence and exact assignment publication together."""
+    from app.modules.authorization.lifecycle_service import ActorLifecycleService
+    return ActorLifecycleService(session, publication=assignment_invalidation_publication(session))
+
+
+def identity_link_lifecycle_service(session: AsyncSession):
+    """Compose link loss with the same required transaction participant."""
+    from app.modules.authorization.lifecycle_service import IdentityLinkLifecycleService
+    return IdentityLinkLifecycleService(session, publication=assignment_invalidation_publication(session))
+
+
+def project_role_mutation_service(session: AsyncSession):
+    """Compose grant mutations; only Submitter loss publishes assignment targets."""
+    from app.modules.authorization.project_role_service import ProjectRoleGrantMutationService
+    return ProjectRoleGrantMutationService(session, publication=assignment_invalidation_publication(session))

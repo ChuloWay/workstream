@@ -14,6 +14,9 @@ from app.modules.audit.schemas import (
     AuthorityEventType,
 )
 from app.modules.audit.service import AuditService
+from app.modules.authorization.api.assignment_invalidation import (
+    AuthorityInvalidationPublication, AuthorityInvalidationPublicationPort,
+)
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.repository import AuthorityIdempotencyRepository
 from app.modules.authorization.schemas import (
@@ -177,6 +180,7 @@ class AuthorityMutationService:
         response: AuthorityResponseReference,
         success: AuthorityAuditEventInput | tuple[AuthorityAuditEventInput, ...],
         invalidation: AuthorityInvalidationContext | None,
+        publication: AuthorityInvalidationPublicationPort | None,
     ) -> AuthorityCompletionResult:
         """Flush one mapped success/invalidation pair, then complete its claim."""
         mutation = parse_authority_request(request)
@@ -218,97 +222,33 @@ class AuthorityMutationService:
         )
         if not valid:
             raise TypeError("invalid authority completion input")
+        publishes = isinstance(mutation, (
+            ActorProfileSuspendRequest, ActorProfileDeactivateRequest, ActorIdentityLinkRevokeRequest,
+        )) or (isinstance(mutation, ProjectRoleGrantRevokeRequest)
+               and invalidation is not None and invalidation.project_role is not None
+               and invalidation.project_role.value == "submitter")
+        if publishes != (publication is not None):
+            raise TypeError("authority completion requires exact publication composition")
         stored_success = None
         for success_event in successes:
             stored_success = await self._audit.add_authority_event(success_event)
         if stored_success is None:
             raise TypeError("invalid authority completion input")
-        admin_mutation = isinstance(
-            mutation,
-            (AdminRoleGrantIssueRequest, AdminRoleGrantRevokeRequest),
-        )
-        identity_link_mutation = isinstance(
-            mutation,
-            (ActorIdentityLinkRevokeRequest, ActorIdentityLinkReactivateRequest),
-        )
-        invalidation_target_kind = spec.resource_type.value
-        invalidation_target_ref = primary.resource_id
-        invalidation_resource_type = primary.resource_type
-        invalidation_resource_id = primary.resource_id
-        invalidation_target_actor_kind = None
-        invalidation_target_actor_ref = None
-        before_facts = {"effective": True}
-        after_facts = {"effective": False}
-        if admin_mutation or identity_link_mutation:
-            if primary.target_actor_ref is None:
-                raise TypeError("projected authority success requires target actor")
-            invalidation_target_kind = AuthorityResourceType.ACTOR_PROFILE.value
-            invalidation_target_ref = primary.target_actor_ref
-            invalidation_resource_type = AuthorityResourceType.ACTOR_PROFILE.value
-            invalidation_resource_id = primary.target_actor_ref
-            if isinstance(
-                mutation,
-                (AdminRoleGrantIssueRequest, ActorIdentityLinkReactivateRequest),
-            ):
-                before_facts = {"effective": False}
-                after_facts = {"effective": True}
-        elif isinstance(mutation, ActorProfileReactivateRequest):
-            before_facts = {"effective": False}
-            after_facts = {"effective": True}
-        if isinstance(mutation, ProjectRoleGrantRevokeRequest):
-            if (
-                invalidation is None
-                or invalidation.project_role is None
-                or invalidation.future_obligation is None
-                or primary.target_actor_ref_kind is None
-                or primary.target_actor_ref is None
-            ):
-                raise TypeError("project-role revoke requires invalidation projection")
-            invalidation_target_actor_kind = primary.target_actor_ref_kind
-            invalidation_target_actor_ref = primary.target_actor_ref
-            projection = {
-                "role": invalidation.project_role.value,
-                "scope_type": "project",
-                "scope_id": str(mutation.project_id),
-                "future_obligation": invalidation.future_obligation,
-            }
-            before_facts = {"effective": True, **projection}
-            after_facts = {"effective": False, **projection}
         if invalidation is not None:
-            invalidation_input = AuthorityAuditEventInput(
-                event_id=invalidation.event_id,
-                event_type=AuthorityEventType.AUTHORITY_INVALIDATION_REQUESTED,
-                entity_type="authority_invalidation",
-                entity_id=str(invalidation.event_id),
-                actor_ref_kind=claim.actor_ref_kind,
-                actor_ref=claim.actor_ref,
-                request_id=invalidation.request_id,
-                correlation_id=invalidation.correlation_id,
-                permission_id=spec.permission,
-                project_id=primary.project_id,
-                target_actor_ref_kind=invalidation_target_actor_kind,
-                target_actor_ref=invalidation_target_actor_ref,
-                resource_type=invalidation_resource_type,
-                resource_id=invalidation_resource_id,
-                target_ref_kind=(
-                    invalidation.target_ref_kind.value
-                    if invalidation.target_ref_kind is not None
-                    else None
-                ),
-                target_ref_id=(
-                    str(invalidation.target_ref_id)
-                    if invalidation.target_ref_id is not None
-                    else None
-                ),
-                reason="authority_state_changed",
-                idempotency_reference=claim.record_id,
-                invalidation_cause_event_id=UUID(stored_success.id),
-                invalidation_target_kind=invalidation_target_kind,
-                invalidation_target_ref=invalidation_target_ref,
-                before_facts=before_facts,
-                after_facts=after_facts,
+            invalidation_input = _invalidation_input(
+                mutation, primary, spec, claim, UUID(stored_success.id), invalidation,
             )
-            await self._audit.add_authority_event(invalidation_input)
+            stored_invalidation = await self._audit.add_authority_event(invalidation_input)
+            if publication is not None:
+                await publication.publish(AuthorityInvalidationPublication(
+                    cause_event_id=primary.event_id,
+                    cause_event_type=primary.event_type.value,
+                    invalidation_event_id=invalidation.event_id,
+                    contributor_id=UUID(primary.target_actor_ref),
+                    project_id=UUID(primary.project_id) if primary.project_id else None,
+                    correlation_id=str(primary.correlation_id),
+                    invalidated_at=stored_invalidation.created_at,
+                ))
         await self._repository.complete(claim, response)
         return AuthorityCompletionResult(
             response=response,
@@ -421,7 +361,9 @@ def _request_matches_success(
         request,
         (ActorProfileSuspendRequest, ActorProfileReactivateRequest, ActorProfileDeactivateRequest),
     ):
-        return resource_id == request.actor_profile_id and success.project_id is None
+        return (resource_id == request.actor_profile_id and success.project_id is None
+                and success.target_actor_ref_kind == ActorReferenceKind.ACTOR_PROFILE
+                and success.target_actor_ref == str(request.actor_profile_id))
     if isinstance(request, (ActorIdentityLinkRevokeRequest, ActorIdentityLinkReactivateRequest)):
         return (
             resource_id == request.identity_link_id
@@ -430,3 +372,91 @@ def _request_matches_success(
             and success.target_actor_ref is not None
         )
     return False
+
+
+def _invalidation_input(mutation, primary, spec, claim, stored_success_id, invalidation):
+    """Build the existing closed audit projection before optional assignment publication."""
+    admin_mutation = isinstance(
+        mutation,
+        (AdminRoleGrantIssueRequest, AdminRoleGrantRevokeRequest),
+    )
+    identity_link_mutation = isinstance(
+        mutation,
+        (ActorIdentityLinkRevokeRequest, ActorIdentityLinkReactivateRequest),
+    )
+    invalidation_target_kind = spec.resource_type.value
+    invalidation_target_ref = primary.resource_id
+    invalidation_resource_type = primary.resource_type
+    invalidation_resource_id = primary.resource_id
+    invalidation_target_actor_kind = None
+    invalidation_target_actor_ref = None
+    before_facts = {"effective": True}
+    after_facts = {"effective": False}
+    if admin_mutation or identity_link_mutation:
+        if primary.target_actor_ref is None:
+            raise TypeError("projected authority success requires target actor")
+        invalidation_target_kind = AuthorityResourceType.ACTOR_PROFILE.value
+        invalidation_target_ref = primary.target_actor_ref
+        invalidation_resource_type = AuthorityResourceType.ACTOR_PROFILE.value
+        invalidation_resource_id = primary.target_actor_ref
+        if isinstance(
+            mutation,
+            (AdminRoleGrantIssueRequest, ActorIdentityLinkReactivateRequest),
+        ):
+            before_facts = {"effective": False}
+            after_facts = {"effective": True}
+    elif isinstance(mutation, ActorProfileReactivateRequest):
+        before_facts = {"effective": False}
+        after_facts = {"effective": True}
+    if isinstance(mutation, ProjectRoleGrantRevokeRequest):
+        if (
+            invalidation is None
+            or invalidation.project_role is None
+            or invalidation.future_obligation is None
+            or primary.target_actor_ref_kind is None
+            or primary.target_actor_ref is None
+        ):
+            raise TypeError("project-role revoke requires invalidation projection")
+        invalidation_target_actor_kind = primary.target_actor_ref_kind
+        invalidation_target_actor_ref = primary.target_actor_ref
+        projection = {
+            "role": invalidation.project_role.value,
+            "scope_type": "project",
+            "scope_id": str(mutation.project_id),
+            "future_obligation": invalidation.future_obligation,
+        }
+        before_facts = {"effective": True, **projection}
+        after_facts = {"effective": False, **projection}
+    return AuthorityAuditEventInput(
+        event_id=invalidation.event_id,
+        event_type=AuthorityEventType.AUTHORITY_INVALIDATION_REQUESTED,
+        entity_type="authority_invalidation",
+        entity_id=str(invalidation.event_id),
+        actor_ref_kind=claim.actor_ref_kind,
+        actor_ref=claim.actor_ref,
+        request_id=invalidation.request_id,
+        correlation_id=invalidation.correlation_id,
+        permission_id=spec.permission,
+        project_id=primary.project_id,
+        target_actor_ref_kind=invalidation_target_actor_kind,
+        target_actor_ref=invalidation_target_actor_ref,
+        resource_type=invalidation_resource_type,
+        resource_id=invalidation_resource_id,
+        target_ref_kind=(
+            invalidation.target_ref_kind.value
+            if invalidation.target_ref_kind is not None
+            else None
+        ),
+        target_ref_id=(
+            str(invalidation.target_ref_id)
+            if invalidation.target_ref_id is not None
+            else None
+        ),
+        reason="authority_state_changed",
+        idempotency_reference=claim.record_id,
+        invalidation_cause_event_id=stored_success_id,
+        invalidation_target_kind=invalidation_target_kind,
+        invalidation_target_ref=invalidation_target_ref,
+        before_facts=before_facts,
+        after_facts=after_facts,
+    )

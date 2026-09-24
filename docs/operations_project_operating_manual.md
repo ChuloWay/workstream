@@ -208,7 +208,7 @@ is internal; the existing submission-requirements route retains its role/creator
 visibility wrapper pending ARCH-03C. ARCH-03B8 supplies bounded internal Audit
 Authority task evidence. ARCH-03B9 supplies hidden exact-assignment invalidation,
 AUTH-OUTBOX-02 supplies shared delivery, and ARCH-03C1 supplies exact reconciler
-authority and decision-bound receipts. ARCH-03C2 still owns atomic producer
+authority and decision-bound receipts. ARCH-03C2 delivers atomic producer
 publication and first handler registration with enforced prefork topology; public
 task authority/cutover remains separately bounded under ARCH-03C.
 

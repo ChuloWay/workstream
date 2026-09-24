@@ -42,6 +42,7 @@ from app.modules.authorization.schemas import (
     AuthorityResponseReference,
     derive_reason_digest,
 )
+from app.modules.authorization.api.assignment_invalidation import AuthorityInvalidationPublicationPort
 from app.modules.authorization.service import AuthorityMutationService
 
 ActorLifecycleRequest = (
@@ -118,8 +119,9 @@ _LINK_EVENT = {
 class ActorLifecycleService:
     """Stage one profile transition and its exact evidence in the caller transaction."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, *, publication: AuthorityInvalidationPublicationPort) -> None:
         self._session = session
+        self._publication = publication
         self._repository = AdminAuthorizationRepository(session)
         self._mutation = AuthorityMutationService(session)
         self._audit = AuditService(session)
@@ -171,6 +173,7 @@ class ActorLifecycleService:
             http_status=200,
         )
         await self._mutation.complete(
+            publication=(None if isinstance(request, (ActorProfileReactivateRequest, ActorIdentityLinkReactivateRequest)) else self._publication),
             claim=claim,
             request=request.model_dump(),
             response=response,
@@ -331,8 +334,9 @@ class ActorLifecycleService:
 class IdentityLinkLifecycleService:
     """Stage one identity-link transition and exact evidence in one transaction."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, *, publication: AuthorityInvalidationPublicationPort) -> None:
         self._session = session
+        self._publication = publication
         self._repository = AdminAuthorizationRepository(session)
         self._mutation = AuthorityMutationService(session)
         self._audit = AuditService(session)
@@ -386,6 +390,7 @@ class IdentityLinkLifecycleService:
             http_status=200,
         )
         await self._mutation.complete(
+            publication=(None if isinstance(request, (ActorProfileReactivateRequest, ActorIdentityLinkReactivateRequest)) else self._publication),
             claim=claim,
             request=request.model_dump(),
             response=response,

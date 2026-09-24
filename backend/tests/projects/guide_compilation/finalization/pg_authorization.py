@@ -1,5 +1,7 @@
 """Real finalization AUTH and production lifecycle composition in caller transactions."""
 
+from app.adapters.auth import assignment_invalidation_publication
+
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -92,7 +94,7 @@ async def revoke(session, admin, values, kind):
             resource_id=values["link"],
             transition="revoke",
         )
-        lifecycle = IdentityLinkLifecycleService(session)
+        lifecycle = IdentityLinkLifecycleService(session, publication=assignment_invalidation_publication(session))
     else:
         deactivate = kind == "deactivate"
         request = (ActorProfileDeactivateRequest if deactivate else ActorProfileSuspendRequest)(
@@ -108,7 +110,7 @@ async def revoke(session, admin, values, kind):
             resource_id=values["actor"],
             transition="deactivate" if deactivate else "suspend",
         )
-        lifecycle = ActorLifecycleService(session)
+        lifecycle = ActorLifecycleService(session, publication=assignment_invalidation_publication(session))
     context = HumanAuthorizationContext(
         actor_profile_id=actor,
         identity_link_id=link,

@@ -30,7 +30,7 @@ from app.modules.outbox.api import HandlerOutcome
 
 
 class TransactionalAssignmentInvalidationHandler:
-    """Hidden typed handler; no production registry entry or implicit authority."""
+    """Exact registered handler; commits before acknowledgement, with explicit authority."""
 
     def __init__(self, session_factory, *, observer, authorization_factory):
         self._sessions = session_factory
@@ -162,3 +162,8 @@ class TransactionalSubmissionCreationCommand:
                 authorization=self._authorization,
                 admissions=_ArtifactAdmissionAdapter(self._admissions),
             ).create(request)
+
+
+def assignment_invalidation_targets(session: AsyncSession):
+    """Compose the TASK-owned nonlocking exact-target projection."""
+    return TaskRepository(session)

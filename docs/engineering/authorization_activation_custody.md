@@ -86,7 +86,8 @@ AUTH-OUTBOX-01 registered the dispatcher; AUTH-OUTBOX-02 activates only its shar
 delivery mechanics with exact phase audit custody. ARCH-03C1 separately registers
 the assignment reconciler and its exact feature authority. The current registry
 has seventeen identities, sixteen action-bearing identities and twenty-five
-memberships. Producer publication and first handler registration remain ARCH-03C2.
+memberships. ARCH-03C2 completes atomic producer publication and the sole
+assignment-invalidation handler registration with enforced prefork delivery.
 CP01A registered four initially unavailable adapter-binding actions and CP01B
 registered five initially unavailable ContributionPolicy actions; neither
 changes fixed-service identity or matrix membership. CP01C corrects only the

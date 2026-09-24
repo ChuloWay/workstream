@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from celery import Celery
+from kombu import Queue
+from app.workers.outbox_topology import OUTBOX_DELIVERY_TASK, OUTBOX_QUEUE
 from celery.signals import worker_process_init, worker_process_shutdown, worker_shutdown
 
 from app.adapters.artifacts import require_artifact_runtime_eligible
@@ -67,6 +69,8 @@ def create_celery_app() -> Celery:
         ],
     )
     celery_app.conf.update(
+        task_queues=(Queue("celery"), Queue(OUTBOX_QUEUE)),
+        task_routes={OUTBOX_DELIVERY_TASK: {"queue": OUTBOX_QUEUE}},
         accept_content=["json"],
         result_serializer="json",
         task_always_eager=settings.celery_task_always_eager,

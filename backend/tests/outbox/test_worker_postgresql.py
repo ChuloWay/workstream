@@ -20,6 +20,8 @@ def worker(delivery_harness, monkeypatch):
     get_settings.cache_clear()
     from app.workers import outbox as worker
 
+    # Shared SQL/timeout proofs isolate topology, covered by the real broker drill.
+    monkeypatch.setattr(worker, "require_outbox_worker", lambda _task: None)
     monkeypatch.setattr(worker, "get_database_url", lambda: h.factory.kw["bind"].url)
     monkeypatch.setattr(
         worker,
@@ -184,12 +186,13 @@ async def test_worker_scan_continues_after_failed_publication(worker, monkeypatc
     assert attempts == [(str(cursor), str(selectors[0].project_id)), (str(cursor),)]
 
 
-async def test_empty_production_registry_does_not_claim_feature_work(delivery_harness):
+async def test_production_registry_claims_only_registered_invalidation(delivery_harness):
     from app.adapters.outbox import production_outbox_delivery
 
     h = delivery_harness
     event = await h.append()
     production = production_outbox_delivery(h.factory)
+    assert production._registry.keys == (("TaskAssignmentAuthorityInvalidationRequested", 1),)
     assert (await production.candidates()).items == ()
     assert await production.deliver(event.event_id, h.project, "worker") is None
     async with h.factory() as session:
@@ -206,6 +209,7 @@ async def test_prefork_bounds_cancellation_resistant_worker(
     from threading import Event
 
     from billiard.einfo import ExceptionWithTraceback
+    from billiard.connection import wait
     from celery.concurrency.prefork import TaskPool
     from celery.exceptions import TimeLimitExceeded
     from celery.worker.request import Request
@@ -257,8 +261,9 @@ async def test_prefork_bounds_cancellation_resistant_worker(
         assert isinstance(timed_out.value.exc, TimeLimitExceeded)
         assert acked.wait(3), "hard timeout must acknowledge without retrying the handler"
         assert rejected == []
-        child.join(timeout=5)
-        assert not child.is_alive(), "hard timeout must terminate the stuck worker process"
+        # The pool owns waitpid/reaping. A competing join can observe stale
+        # returncode metadata; the owned child sentinel proves actual exit.
+        assert wait([child.sentinel], timeout=5), "hard timeout must terminate the stuck worker process"
         duplicate_id = str(uuid4())
         duplicate = Request(Message(
             headers={"id": duplicate_id, "task": task.name},

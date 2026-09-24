@@ -1018,8 +1018,10 @@ component invalidation. That fact describes the profile only: a revoked link,
 missing grant, or unadmitted fixed service can still make the actor ineffective.
 
 Assignment reconciliation preserves immutable work history. A revoked actor's
-ordinary claimed/in-progress assignment may be released by the owning later
-chunk. A `needs_revision` task retains a durable revision obligation and cannot
+ordinary claimed/in-progress assignment without a retained Submission is
+published atomically by ARCH-03C2 and released through the registered handler
+with ARCH-03C1's exact feature authority. A `needs_revision` task retains a
+durable revision obligation and cannot
 be returned as ordinary ready work.
 
 Project-role invalidation is exact-role-specific. Submitter revocation alone can

@@ -12,7 +12,7 @@ from app.db import session as db_session
 from app.modules.actors.api import ServiceIdentity
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.outbox.api import DeliveryOptions
-from app.modules.outbox.schemas import OutboxAppendInput
+from app.modules.outbox.api import OutboxAppendInput
 from app.modules.outbox.service import OutboxService
 from app.modules.outbox.registry import HandlerRegistry
 from app.modules.tasks.api.assignment_invalidation import (

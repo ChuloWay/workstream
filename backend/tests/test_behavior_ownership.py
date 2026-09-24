@@ -2035,3 +2035,23 @@ def test_assignment_authority_partition_additions_are_exact():
         ownership._validate_additive_partition_transition(
             _partition(sorted([retained, *targets, "backend/app/modules/authorization/another_reconciler.py"])), trusted,
         )
+
+
+def test_assignment_publication_partition_changes_are_exact():
+    targets = {
+        "backend/app/adapters/auth/assignment_invalidation_publication.py",
+        "backend/app/modules/authorization/api/assignment_invalidation.py",
+        "backend/app/workers/outbox_topology.py",
+    }
+    removed = "backend/app/modules/outbox/schemas.py"
+    retained = "backend/app/modules/outbox/api.py"
+    assert ownership.ARCH_03C2_TARGETS == targets
+    assert ownership.ARCH_03C2_REMOVED_TARGETS == {removed}
+    trusted = _partition(sorted([retained, removed]))
+    ownership._validate_additive_partition_transition(_partition(sorted([retained, *targets])), trusted)
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted([retained, *targets, "backend/app/workers/extra_dispatcher.py"])), trusted,
+        )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(_partition(sorted(targets)), trusted)

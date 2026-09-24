@@ -11,8 +11,8 @@ assignment transaction, not a second claim implementation. CP08 completes the co
 The [03B2 child](../../WS-ARCH-001-03B2.md) supplies hidden contributor-ready
 queue facts and pagination, without live AUTH or HTTP exposure. The [03B8 child](../../WS-ARCH-001-03B8.md) completes hidden task audit evidence.
 [03B9](../../WS-ARCH-001-03B9.md) completes hidden exact-assignment invalidation;
-03C1 completes its real feature authority. 03C2 retains atomic producer wiring
-and first registration, followed by bounded public activation. The
+03C1 completes its real feature authority. 03C2 supplies atomic publication
+and registered delivery; bounded public activation remains. The
 [03B3 child](../../WS-ARCH-001-03B3.md) delivers hidden all-state management
 and status-only operational queue facts.
 The [03B4 child](../../WS-ARCH-001-03B4.md) delivers hidden contributor and
@@ -100,8 +100,8 @@ test-delta impact.
    are complete. Existing public audit/recovery readers remain required until
    their explicit 03C authority replacement.
 3. [03B9](../../WS-ARCH-001-03B9.md) hidden assignment invalidation is complete.
-   03C1 exact feature AUTH is complete. Next is ARCH-03C2 atomic producer
-   publication and first registration, followed by bounded public activation.
+   03C1 exact feature AUTH and ARCH-03C2 atomic producer publication/first
+   registration are complete. Bounded public activation remains next.
    No parallel worker or fabricated claim value substitutes for those dependencies.
 
 ## Merge state

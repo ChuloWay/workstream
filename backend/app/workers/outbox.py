@@ -9,6 +9,7 @@ from app.adapters.outbox import production_outbox_delivery
 from app.db.session import get_database_url
 from app.workers.async_runner import run_async_task
 from app.workers.celery_app import celery_app
+from app.workers.outbox_topology import require_outbox_worker, OUTBOX_HARD_LIMIT_SECONDS
 
 logger = get_task_logger(__name__)
 
@@ -25,10 +26,11 @@ def _uuid(value):
 
 @celery_app.task(
     name="workstream.outbox.deliver_event", bind=True, acks_late=True,
-    reject_on_worker_lost=True, acks_on_failure_or_timeout=True, time_limit=300,
+    reject_on_worker_lost=True, acks_on_failure_or_timeout=True, time_limit=OUTBOX_HARD_LIMIT_SECONDS,
 )
 def deliver_event(self, event_id, project_id):
     """Run under prefork: its hard limit also bounds async shutdown after UNKNOWN."""
+    require_outbox_worker(self)
     try:
         event, project, task = _uuid(event_id), _uuid(project_id), _uuid(self.request.id)
     except (TypeError, ValueError):

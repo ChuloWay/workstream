@@ -155,6 +155,7 @@ class ServiceActorProvisioningService:
             http_status=201,
         )
         await self._mutation.complete(
+            publication=None,
             claim=claim,
             request=request.model_dump(),
             response=response,
