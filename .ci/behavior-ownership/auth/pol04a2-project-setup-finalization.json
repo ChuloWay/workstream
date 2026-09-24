@@ -15,7 +15,7 @@
     "app.modules.authorization.api.project_setup_finalization.setup_finalization_authority_digest",
     "app.modules.authorization.api.project_setup_finalization.setup_finalization_fact_values",
     "app.modules.authorization.api.project_setup_finalization.setup_finalization_facts_digest",
-    "app.modules.authorization.api.project_setup_finalization.setup_finalization_identity"
+    "app.modules.authorization.api.project_setup_finalization.setup_finalization_preparation_identity"
   ],
   "group": "auth",
   "schema": "workstream.behavior-ownership.v1",

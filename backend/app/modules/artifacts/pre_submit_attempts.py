@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 from dataclasses import asdict, dataclass, replace
-from uuid import UUID
+from uuid import UUID, uuid4
 from app.core.identifiers import new_record_id
 
 from sqlalchemy import select, update
@@ -195,7 +195,7 @@ class PreSubmitAttemptStore:
         body = logical_request(context, plan, packet)
         digest = canonical_json_hash(body)
         attempt_id = new_record_id()
-        nonce = new_record_id()
+        nonce = uuid4()
         inserted = await self._session.scalar(
             insert(PreSubmitExecutionAttempt)
             .values(

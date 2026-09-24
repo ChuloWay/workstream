@@ -406,13 +406,13 @@ async def _prepare_contributor_race(
     """Construct one race's prerequisites without performing the competing writes."""
     project = await create_active_project(task_client)
     subject = f"race-{operation}-{transition}-{ordering}"
-    contributor_id = actor_id(subject)
     if operation == "claim":
         task = await create_ready_task(task_client, project["id"])
         await admit_and_grant_project_submitter(task_client, monkeypatch, project["id"], subject)
     else:
         assert operation == "submission_authority"
         task = await create_started_task(task_client, project["id"], monkeypatch, subject)
+    contributor_id = await actor_id(subject)
     async with db_session.get_session_factory()() as session:
         identity_link_id = await session.scalar(
             select(ActorIdentityLink.id).where(ActorIdentityLink.actor_profile_id == contributor_id)

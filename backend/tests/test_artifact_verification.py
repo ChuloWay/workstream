@@ -67,6 +67,28 @@ async def test_production_authority_denies_prepare_and_consume() -> None:
 
 
 @pytest.mark.asyncio
+async def test_guide_continuation_query_supports_native_uuid_postgresql(
+    isolated_database_env, monkeypatch,
+) -> None:
+    """Execute the actual query: PostgreSQL 16 does not provide min(uuid)."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    engine = create_async_engine(isolated_database_env)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    monkeypatch.setattr(internal_worker_adapter, "get_session_factory", lambda: factory)
+    published = []
+
+    async def publish(identifier):
+        published.append(identifier)
+
+    try:
+        assert await internal_worker_adapter.scan_guide_setup_continuations(publish) == 0
+        assert published == []
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_guide_continuation_scan_uses_its_own_bound_and_direct_callback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -564,13 +564,6 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                 preparation_request=preparation_request,
             )
             assert first.pass_capability is not None, first.failure_audit
-            namespace = ArtifactStorageNamespaceSpec(
-                backend="local",
-                adapter="local",
-                provider_profile="test",
-                namespace_descriptor={"test": "submission-bundle"},
-                namespace_fingerprint=canonical_json_hash({"test": "submission-bundle"}),
-            )
             admission_settings = Settings(_env_file=None,
                 **artifact_admission_limit_settings(1024 * 1024),
                 environment="test",

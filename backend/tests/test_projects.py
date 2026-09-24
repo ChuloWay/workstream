@@ -24,7 +24,12 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from fastapi import HTTPException
 from sqlalchemy.schema import CreateIndex
 
-from project_create_fixtures import guide_example_columns, guide_snapshot_columns, seed_guide_snapshot_rows
+from project_create_fixtures import (
+    guide_example_columns,
+    guide_snapshot_columns,
+    seed_fixture_actor,
+    seed_guide_snapshot_rows,
+)
 
 from app.core.config import get_settings
 from app.core.hashing import canonical_json_hash
@@ -990,40 +995,19 @@ async def test_project_role_grant_repository_filters_and_uses_strict_keyset(
     project_database_env: str,
 ) -> None:
     project_id = new_record_id()
-    actor_id = new_record_id()
-    grantor_id = new_record_id()
     admin_grant_id = new_record_id()
     granted_at = datetime(2026, 7, 22, tzinfo=UTC)
     grant_ids = sorted((new_record_id(), new_record_id(), new_record_id()), key=str)
     async with db_session.get_session_factory()() as session:
-        session.add_all(
-            [
-                ActorProfile(
-                    id=str(profile_id),
-                    actor_kind="human",
-                    status="active",
-                    provisioning_method="automatic_first_access",
-                    created_by=str(profile_id),
-                )
-                for profile_id in (actor_id, grantor_id)
-            ]
+        actor, _ = await seed_fixture_actor(
+            session, issuer="https://identity.test", subject_prefix="project-role-read",
+            self_attributed=True, verified_at=granted_at,
         )
-        session.add_all(
-            [
-                ActorIdentityLink(
-                    id=str(new_record_id()),
-                    actor_profile_id=str(profile_id),
-                    issuer="https://identity.test",
-                    subject=f"project-role-read-{profile_id}",
-                    subject_kind="human",
-                    status="active",
-                    linked_by=str(profile_id),
-                    last_verified_at=granted_at,
-                )
-                for profile_id in (actor_id, grantor_id)
-            ]
+        grantor, _ = await seed_fixture_actor(
+            session, issuer="https://identity.test", subject_prefix="project-role-read",
+            self_attributed=True, verified_at=granted_at,
         )
-        await session.flush()
+        actor_id, grantor_id = UUID(actor.id), UUID(grantor.id)
         session.add(
             AdminRoleGrant(
                 id=admin_grant_id,

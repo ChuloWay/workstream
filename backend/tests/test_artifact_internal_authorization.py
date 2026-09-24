@@ -122,6 +122,17 @@ def _facts() -> ArtifactPutAttemptAuthorityFacts:
     )
 
 
+def _internal_authority(session, service_identity: ServiceIdentity):
+    """Build one authority whose request and correlation share an operation trace."""
+    request_id = new_record_id()
+    return PreparedArtifactInternalAuthority(
+        session,
+        service_identity=service_identity,
+        request_id=request_id,
+        correlation_id=request_id,
+    )
+
+
 @pytest.mark.asyncio
 async def test_adapter_normalizes_malformed_resource_selector_to_denial() -> None:
     authority = PreparedArtifactInternalAuthority(
@@ -662,13 +673,7 @@ async def test_put_claim_and_terminal_injected_failures_roll_back_both_sides(
                 admission = await _admit_guide(
                     session, settings, namespace, actor_context, guide_item_id, source
                 )
-                request_id = new_record_id()
-                authority = PreparedArtifactInternalAuthority(
-                    session,
-                    service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-                    request_id=request_id,
-                    correlation_id=request_id,
-                )
+                authority = _internal_authority(session, ServiceIdentity.ARTIFACT_PUT_RESOLVER)
                 orchestrator = ArtifactStorageOrchestrator(
                     session, store, namespace, settings, authority
                 )
@@ -696,13 +701,8 @@ async def test_put_claim_and_terminal_injected_failures_roll_back_both_sides(
                 ) is None
                 await session.rollback()
 
-                retry_request_id = new_record_id()
-                retry_authority = PreparedArtifactInternalAuthority(
-                    session,
-                    service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-                    request_id=retry_request_id,
-                    correlation_id=retry_request_id,
-                )
+                retry_authority = _internal_authority(
+                    session, ServiceIdentity.ARTIFACT_PUT_RESOLVER)
                 retry = ArtifactStorageOrchestrator(
                     session, store, namespace, settings, retry_authority
                 )
@@ -744,18 +744,12 @@ async def test_put_claim_and_terminal_injected_failures_roll_back_both_sides(
                     {"id": str(admission.attempt_id)},
                 )
                 await session.commit()
-                final_request_id = new_record_id()
                 final = ArtifactStorageOrchestrator(
                     session,
                     store,
                     namespace,
                     settings,
-                    PreparedArtifactInternalAuthority(
-                        session,
-                        service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-                        request_id=final_request_id,
-                        correlation_id=final_request_id,
-                    ),
+                    _internal_authority(session, ServiceIdentity.ARTIFACT_PUT_RESOLVER),
                 )
                 assert await final.resolve_put_attempt(admission.attempt_id) == "document_stored"
                 attempt = await session.get(ArtifactPutAttempt, str(admission.attempt_id))
@@ -914,19 +908,13 @@ async def test_verification_claim_and_terminal_failures_roll_back_both_sides(
             async with minted_source(tmp_path / "atomic-verify", b"verified") as source:
                 _, _, _, admission = await _admit_checker_output(
                     session, settings, namespace, source)
-                put_request_id = new_record_id()
                 assert (
                     await ArtifactStorageOrchestrator(
                         session,
                         store,
                         namespace,
                         settings,
-                        PreparedArtifactInternalAuthority(
-                            session,
-                            service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-                            request_id=put_request_id,
-                            correlation_id=put_request_id,
-                        ),
+                        _internal_authority(session, ServiceIdentity.ARTIFACT_PUT_RESOLVER),
                     ).execute_committed_put(
                         attempt_id=admission.attempt_id,
                         source=source,
@@ -938,18 +926,12 @@ async def test_verification_claim_and_terminal_failures_roll_back_both_sides(
             assert job is not None
             job_id = UUID(job.id)
             await session.rollback()
-            claim_request_id = new_record_id()
             claim = ArtifactStorageOrchestrator(
                 session,
                 store,
                 namespace,
                 settings,
-                PreparedArtifactInternalAuthority(
-                    session,
-                    service_identity=ServiceIdentity.ARTIFACT_VERIFIER,
-                    request_id=claim_request_id,
-                    correlation_id=claim_request_id,
-                ),
+                _internal_authority(session, ServiceIdentity.ARTIFACT_VERIFIER),
             )
             original_claim = claim._repo.claim_verification_job
 
@@ -972,18 +954,12 @@ async def test_verification_claim_and_terminal_failures_roll_back_both_sides(
             ) is None
             await session.rollback()
 
-            terminal_request_id = new_record_id()
             terminal = ArtifactStorageOrchestrator(
                 session,
                 store,
                 namespace,
                 settings,
-                PreparedArtifactInternalAuthority(
-                    session,
-                    service_identity=ServiceIdentity.ARTIFACT_VERIFIER,
-                    request_id=terminal_request_id,
-                    correlation_id=terminal_request_id,
-                ),
+                _internal_authority(session, ServiceIdentity.ARTIFACT_VERIFIER),
             )
             original_receipt = terminal._repo.add_verification_receipt
 
@@ -1021,19 +997,13 @@ async def test_verification_claim_and_terminal_failures_roll_back_both_sides(
                 {"id": str(job_id)},
             )
             await session.commit()
-            final_request_id = new_record_id()
             assert (
                 await ArtifactStorageOrchestrator(
                     session,
                     store,
                     namespace,
                     settings,
-                    PreparedArtifactInternalAuthority(
-                        session,
-                        service_identity=ServiceIdentity.ARTIFACT_VERIFIER,
-                        request_id=final_request_id,
-                        correlation_id=final_request_id,
-                    ),
+                    _internal_authority(session, ServiceIdentity.ARTIFACT_VERIFIER),
                 ).verify_object(job_id)
                 == "verified"
             )
@@ -1142,13 +1112,7 @@ async def test_post_provider_revocation_commits_denial_but_no_terminal_artifact_
                 admission = await _admit_guide(
                     session, settings, namespace, actor_context, guide_item_id, source
                 )
-                request_id = new_record_id()
-                authority = PreparedArtifactInternalAuthority(
-                    session,
-                    service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-                    request_id=request_id,
-                    correlation_id=request_id,
-                )
+                authority = _internal_authority(session, ServiceIdentity.ARTIFACT_PUT_RESOLVER)
                 orchestrator = ArtifactStorageOrchestrator(
                     session,
                     SuspendAfterPut(),

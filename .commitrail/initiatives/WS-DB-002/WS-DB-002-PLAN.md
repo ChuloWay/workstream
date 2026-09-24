@@ -62,6 +62,11 @@ PostgreSQL tests reject substituted projection correlation and UUID4 finalizatio
 and activation operations. Natural compilation recovery also rejects changed
 request, idempotency-key and actor facts instead of trusting a stored winner.
 Public grant issue/revoke replay checks pass. Final frozen review remains required.
+The retained registered-actor dependency now uses the resolved canonical profile
+ID instead of deriving a second identity; its focused regression and PostgreSQL
+review-queue reservation pass. Outbox exact replay, concurrent commit/rollback
+and changed-payload conflict probes pass. Fresh-schema manifest/function-body
+verification and artifact recovery lineage pass against the isolated database.
 
 Reproducible focused checks from `backend/`:
 
@@ -99,3 +104,11 @@ These small local observations support index locality, not an end-to-end speed
 claim: UUID7 generation cost was higher, lookup timings were noisy, and no
 distributed/concurrent production workload was measured. UUID7 does not replace
 business timestamps, lifecycle generations or explicit ordering rules.
+
+A separate representation comparison reused the same 10,000 UUID4 values and
+payloads, excluding generation time. Across two alternating-order trials,
+VARCHAR(36) inserts averaged 5.9087s and native UUID inserts 4.4234s; primary-key
+indexes were 671,744 and 409,600 bytes respectively. Exact round trips,
+uniqueness, duplicate rejection and indexed lookups passed in both representations.
+This isolates storage representation from UUID version and carries the same
+local-workload limitations above.

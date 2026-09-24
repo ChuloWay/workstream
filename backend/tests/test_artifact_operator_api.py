@@ -119,6 +119,19 @@ class _ProjectRecoveryAuthority(_AllowRecoveryAuthority):
         return await super().authorize(facts=facts, **values)
 
 
+def _retry_payload(project_id: str, task_id: str, submission_id: str | None,
+                   reason: str, idempotency_key: str, source_job_version: int) -> dict:
+    """Build the shared operator retry contract for success and denial probes."""
+    payload = {
+        "project_id": project_id, "task_id": task_id, "reason": reason,
+        "client_idempotency_key": idempotency_key,
+        "expected_source_job_cas_version": source_job_version,
+    }
+    if submission_id is not None:
+        payload["submission_id"] = submission_id
+    return payload
+
+
 @pytest.mark.asyncio
 async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
     recovery_database_env: str,  # noqa: F811
@@ -303,14 +316,8 @@ async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
                 )
                 denied_before_create = await client.post(
                     f"/api/v1/operator/artifacts/verification-jobs/{source_job_id}/retry",
-                    json={
-                        "project_id": project_id,
-                        "task_id": task_id,
-                        "submission_id": submission_id,
-                        "reason": "authority race",
-                        "client_idempotency_key": "authority-race",
-                        "expected_source_job_cas_version": source_job_cas_version,
-                    },
+                    json=_retry_payload(project_id, task_id, submission_id, "authority race",
+                                        "authority-race", source_job_cas_version),
                 )
                 assert denied_before_create.status_code == 404
                 app.dependency_overrides[get_artifact_recovery_authority] = _AllowRecoveryAuthority
@@ -323,38 +330,22 @@ async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
                     )
                     unavailable = await client.post(
                         f"/api/v1/operator/artifacts/verification-jobs/{source_job_id}/retry",
-                        json={
-                            "project_id": project_id,
-                            "task_id": task_id,
-                            "submission_id": submission_id,
-                            "reason": "identity race",
-                            "client_idempotency_key": str(unavailable_context.actor_status),
-                            "expected_source_job_cas_version": source_job_cas_version,
-                        },
+                        json=_retry_payload(
+                            project_id, task_id, submission_id, "identity race",
+                            str(unavailable_context.actor_status), source_job_cas_version),
                     )
                     assert unavailable.status_code == 404
                 app.dependency_overrides[get_artifact_authorization_context] = context_override
                 stale_source = await client.post(
                     f"/api/v1/operator/artifacts/verification-jobs/{source_job_id}/retry",
-                    json={
-                        "project_id": project_id,
-                        "task_id": task_id,
-                        "submission_id": submission_id,
-                        "reason": "stale source fence",
-                        "client_idempotency_key": "stale-source",
-                        "expected_source_job_cas_version": source_job_cas_version + 1,
-                    },
+                    json=_retry_payload(project_id, task_id, submission_id, "stale source fence",
+                                        "stale-source", source_job_cas_version + 1),
                 )
                 assert stale_source.status_code == 409
 
-                retry_payload = {
-                        "project_id": project_id,
-                        "task_id": task_id,
-                        "submission_id": submission_id,
-                        "reason": "provider remained unavailable",
-                        "client_idempotency_key": "operator-http-retry",
-                        "expected_source_job_cas_version": source_job_cas_version,
-                }
+                retry_payload = _retry_payload(
+                    project_id, task_id, submission_id, "provider remained unavailable",
+                    "operator-http-retry", source_job_cas_version)
                 retry = await client.post(
                     f"/api/v1/operator/artifacts/verification-jobs/{source_job_id}/retry",
                     json=retry_payload,
@@ -371,26 +362,14 @@ async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
                 assert replay.json()["recovery_attempt_id"] == recovery_id
                 altered = await client.post(
                     f"/api/v1/operator/artifacts/verification-jobs/{source_job_id}/retry",
-                    json={
-                        "project_id": project_id,
-                        "task_id": task_id,
-                        "submission_id": submission_id,
-                        "reason": "altered replay",
-                        "client_idempotency_key": "operator-http-retry",
-                        "expected_source_job_cas_version": source_job_cas_version,
-                    },
+                    json=_retry_payload(project_id, task_id, submission_id, "altered replay",
+                                        "operator-http-retry", source_job_cas_version),
                 )
                 assert altered.status_code == 409
                 ineligible = await client.post(
                     f"/api/v1/operator/artifacts/verification-jobs/{retry_job_id}/retry",
-                    json={
-                        "project_id": project_id,
-                        "task_id": task_id,
-                        "submission_id": submission_id,
-                        "reason": "pending retry is ineligible",
-                        "client_idempotency_key": "ineligible-retry",
-                        "expected_source_job_cas_version": 0,
-                    },
+                    json=_retry_payload(project_id, task_id, submission_id,
+                                        "pending retry is ineligible", "ineligible-retry", 0),
                 )
                 assert ineligible.status_code == 422
 
@@ -499,24 +478,13 @@ async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
                 )
                 cross_project_retry = await client.post(
                     f"/api/v1/operator/artifacts/verification-jobs/{source_job_id}/retry",
-                    json={
-                        "project_id": project_id,
-                        "task_id": task_id,
-                        "submission_id": submission_id,
-                        "reason": "cross-project probe",
-                        "client_idempotency_key": "cross-project-probe",
-                        "expected_source_job_cas_version": source_job_cas_version,
-                    },
+                    json=_retry_payload(project_id, task_id, submission_id, "cross-project probe",
+                                        "cross-project-probe", source_job_cas_version),
                 )
                 denied_retry = await client.post(
                     f"/api/v1/operator/artifacts/verification-jobs/{uuid4()}/retry",
-                    json={
-                        "project_id": project_id,
-                        "task_id": task_id,
-                        "reason": "probe",
-                        "client_idempotency_key": "denied-probe",
-                        "expected_source_job_cas_version": 0,
-                    },
+                    json=_retry_payload(
+                        project_id, task_id, None, "probe", "denied-probe", 0),
                 )
                 assert cross_project_retry.status_code == denied_retry.status_code == 404
                 assert cross_project_retry.json()["detail"] == denied_retry.json()["detail"]

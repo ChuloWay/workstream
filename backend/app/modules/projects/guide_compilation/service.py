@@ -169,138 +169,161 @@ class GuideCompilationService:
         try:
             async with self._session.begin():
                 repository = GuideCompilationRepository(self._session)
-                existing = (
-                    await repository.matching_request_operation(
-                        actor=actor, facts=facts, origin=origin, lock=True
-                    )
-                    if facts.operation_id.version == 7
-                    else None
-                )
+                existing = await self._existing_request(repository, actor, facts, origin)
                 if existing is not None:
                     await self._authorization.validate_request_replay(
-                        actor=actor,
-                        facts=facts,
-                        origin=origin,
+                        actor=actor, facts=facts, origin=origin
                     )
                     return await _request_receipt(repository, existing)
                 handle = await self._authorization.prepare_request(
-                    actor=actor,
-                    facts=facts,
-                    origin=origin,
+                    actor=actor, facts=facts, origin=origin
                 )
-                correction_setup = None
                 prepared_facts = facts
-                if origin.trigger == "automatic_source_ready":
-                    if self._request_inputs is None:
-                        raise GuideCompilationIntegrityError(
-                            "automatic compilation inputs unavailable"
-                        )
-                    resolved = await self._request_inputs.resolve(
-                        self._session,
-                        facts.setup_run_id,
-                        operation_id=new_compilation_request_operation_id(),
-                        lock=True,
-                    )
-                    natural = await repository.request_operation_for_setup(
-                        facts.setup_run_id,
-                        facts.setup_generation,
-                        origin.trigger,
-                        lock=True,
-                    )
-                    if natural is not None:
-                        exact_facts = replace(
-                            prepared_facts,
-                            operation_id=natural.operation_id,
-                        )
-                        matched = await repository.matching_request_operation(
-                            actor=actor,
-                            facts=exact_facts,
-                            origin=origin,
-                            lock=True,
-                        )
-                        if matched is None:
-                            raise GuideCompilationIntegrityError(
-                                "compilation request custody is missing"
-                            )
-                        await self._authorization.validate_request_replay(
-                            actor=actor, facts=exact_facts, origin=origin
-                        )
-                        return await _request_receipt(repository, matched)
-                    facts = resolved[0]
-                    if (
-                        resolved[1:] != (identity, origin)
-                        or facts.request_id != prepared_facts.request_id
-                        or facts.idempotency_key != prepared_facts.idempotency_key
-                    ):
-                        raise GuideCompilationIntegrityError(
-                            "automatic compilation request input mismatch"
-                        )
-                else:
-                    from .correction_request import admit_correction_request
-
-                    correction_setup, exact_facts, natural = await admit_correction_request(
-                        self._session,
-                        self._request_inputs,
-                        actor=actor,
-                        facts=prepared_facts,
-                        identity=identity,
-                        operation_id=new_compilation_request_operation_id(),
-                    )
-                    if natural is not None:
-                        exact_facts = replace(
-                            prepared_facts,
-                            operation_id=natural.operation_id,
-                        )
-                        matched = await repository.matching_request_operation(
-                            actor=actor,
-                            facts=exact_facts,
-                            origin=origin,
-                            lock=True,
-                        )
-                        if matched is None:
-                            raise GuideCompilationIntegrityError(
-                                "compilation request custody is missing"
-                            )
-                        await self._authorization.validate_request_replay(
-                            actor=actor, facts=exact_facts, origin=origin
-                        )
-                        return await _request_receipt(repository, matched)
-                    if exact_facts is None:
-                        raise GuideCompilationIntegrityError(
-                            "correction compilation request input mismatch"
-                        )
-                    facts = exact_facts
-                if (
-                    runtime_configuration is None
-                    or runtime_configuration.instruction_version != identity.instruction_version
-                ):
-                    raise GuideCompilationIntegrityError("compilation instruction version mismatch")
-                outcome, attempt = await repository.reserve_attempt(identity, runtime_configuration)
-                if outcome == "mismatch":
-                    raise GuideCompilationIntegrityError("compilation attempt identity mismatch")
-                if outcome == "existing":
-                    raise GuideCompilationConcurrencyError(
-                        "existing attempt has no authorized request custody"
-                    )
-                event_id = await self._authorization.consume_request(
-                    handle=handle, actor=actor, prepared_facts=prepared_facts,
-                    facts=facts, origin=origin,
+                facts, correction_setup, replay = await self._admit_request(
+                    repository, actor, prepared_facts, identity, origin
                 )
-                operation = await repository.insert_request_operation(
+                if replay is not None:
+                    return replay
+                receipt = await self._persist_request(
+                    repository=repository,
+                    handle=handle,
                     actor=actor,
+                    prepared_facts=prepared_facts,
                     facts=facts,
+                    identity=identity,
                     origin=origin,
-                    attempt=attempt,
-                    authorization_decision_event_id=event_id,
+                    runtime_configuration=runtime_configuration,
+                    correction_setup=correction_setup,
                 )
-                if correction_setup is not None:
-                    correction_setup.status = "dispatch_pending"
-                    correction_setup.current_step = "dispatch"
-                    await self._session.flush()
-                receipt = await _request_receipt(repository, operation)
             return receipt
         except GuideCompilationConcurrencyError:
             return await self._recover_request(actor=actor, facts=facts, origin=origin)
+
+    async def _existing_request(self, repository, actor, facts, origin):
+        """Lock a direct operation replay only when the caller supplied its UUIDv7 ID."""
+        if facts.operation_id.version != 7:
+            return None
+        return await repository.matching_request_operation(
+            actor=actor, facts=facts, origin=origin, lock=True
+        )
+
+    async def _admit_request(self, repository, actor, prepared_facts, identity, origin):
+        """Resolve owner-locked inputs or return one exact natural replay receipt."""
+        if origin.trigger == "automatic_source_ready":
+            return await self._admit_automatic_request(
+                repository, actor, prepared_facts, identity, origin
+            )
+        from .correction_request import admit_correction_request
+
+        setup, facts, natural = await admit_correction_request(
+            self._session,
+            self._request_inputs,
+            actor=actor,
+            facts=prepared_facts,
+            identity=identity,
+            operation_id=new_compilation_request_operation_id(),
+        )
+        if natural is not None:
+            receipt = await self._natural_request_replay(
+                repository, actor, prepared_facts, origin, natural
+            )
+            return prepared_facts, None, receipt
+        if facts is None:
+            raise GuideCompilationIntegrityError("correction compilation request input mismatch")
+        return facts, setup, None
+
+    async def _admit_automatic_request(
+        self, repository, actor, prepared_facts, identity, origin
+    ):
+        """Resolve automatic inputs under the setup lock without losing caller selectors."""
+        if self._request_inputs is None:
+            raise GuideCompilationIntegrityError("automatic compilation inputs unavailable")
+        resolved = await self._request_inputs.resolve(
+            self._session,
+            prepared_facts.setup_run_id,
+            operation_id=new_compilation_request_operation_id(),
+            lock=True,
+        )
+        natural = await repository.request_operation_for_setup(
+            prepared_facts.setup_run_id,
+            prepared_facts.setup_generation,
+            origin.trigger,
+            lock=True,
+        )
+        if natural is not None:
+            receipt = await self._natural_request_replay(
+                repository, actor, prepared_facts, origin, natural
+            )
+            return prepared_facts, None, receipt
+        facts = resolved[0]
+        if (
+            resolved[1:] != (identity, origin)
+            or facts.request_id != prepared_facts.request_id
+            or facts.idempotency_key != prepared_facts.idempotency_key
+        ):
+            raise GuideCompilationIntegrityError("automatic compilation request input mismatch")
+        return facts, None, None
+
+    async def _natural_request_replay(
+        self, repository, actor, prepared_facts, origin, natural
+    ) -> CompilationRequestReceipt:
+        """Require exact current caller selectors before returning a natural owner row."""
+        exact_facts = replace(prepared_facts, operation_id=natural.operation_id)
+        matched = await repository.matching_request_operation(
+            actor=actor, facts=exact_facts, origin=origin, lock=True
+        )
+        if matched is None:
+            raise GuideCompilationIntegrityError("compilation request custody is missing")
+        await self._authorization.validate_request_replay(
+            actor=actor, facts=exact_facts, origin=origin
+        )
+        return await _request_receipt(repository, matched)
+
+    async def _persist_request(
+        self,
+        *,
+        repository,
+        handle,
+        actor,
+        prepared_facts,
+        facts,
+        identity,
+        origin,
+        runtime_configuration,
+        correction_setup,
+    ) -> CompilationRequestReceipt:
+        """Reserve the attempt, consume exact authority, and persist one request operation."""
+        if (
+            runtime_configuration is None
+            or runtime_configuration.instruction_version != identity.instruction_version
+        ):
+            raise GuideCompilationIntegrityError("compilation instruction version mismatch")
+        outcome, attempt = await repository.reserve_attempt(identity, runtime_configuration)
+        if outcome == "mismatch":
+            raise GuideCompilationIntegrityError("compilation attempt identity mismatch")
+        if outcome == "existing":
+            raise GuideCompilationConcurrencyError(
+                "existing attempt has no authorized request custody"
+            )
+        event_id = await self._authorization.consume_request(
+            handle=handle,
+            actor=actor,
+            prepared_facts=prepared_facts,
+            facts=facts,
+            origin=origin,
+        )
+        operation = await repository.insert_request_operation(
+            actor=actor,
+            facts=facts,
+            origin=origin,
+            attempt=attempt,
+            authorization_decision_event_id=event_id,
+        )
+        if correction_setup is not None:
+            correction_setup.status = "dispatch_pending"
+            correction_setup.current_step = "dispatch"
+            await self._session.flush()
+        return await _request_receipt(repository, operation)
 
     async def fence_dispatch(
         self,

@@ -6,7 +6,7 @@ import base64
 import binascii
 from datetime import datetime
 import json
-from uuid import UUID
+from uuid import UUID, uuid4
 from app.core.identifiers import new_record_id
 
 from sqlalchemy.sql import func
@@ -483,8 +483,8 @@ class AdminRoleGrantService:
                 entity_id=str(grant.id),
                 actor_ref_kind=ActorReferenceKind.SYSTEM_PRINCIPAL,
                 actor_ref=BOOTSTRAP_PRINCIPAL,
-                request_id=new_record_id(),
-                correlation_id=new_record_id(),
+                request_id=uuid4(),
+                correlation_id=uuid4(),
                 target_actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
                 target_actor_ref=str(actor_profile_id),
                 resource_type="admin_role_grant",
@@ -513,8 +513,8 @@ class AdminRoleGrantService:
                 entity_id=str(grant_id),
                 actor_ref_kind=ActorReferenceKind.SYSTEM_PRINCIPAL,
                 actor_ref=BOOTSTRAP_PRINCIPAL,
-                request_id=new_record_id(),
-                correlation_id=new_record_id(),
+                request_id=uuid4(),
+                correlation_id=uuid4(),
                 target_actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
                 target_actor_ref=str(actor_profile_id),
                 resource_type="admin_role_grant",

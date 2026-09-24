@@ -41,7 +41,7 @@ class OutboxEvent(Base):
             name="aggregate_type",
         ),
         CheckConstraint(
-            "project_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'",
+            "project_id::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'",
             name="project_id",
         ),
         CheckConstraint(

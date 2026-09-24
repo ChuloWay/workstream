@@ -1414,6 +1414,10 @@ class AuthorizationService:
              target_ref_kind, target_ref_id) = exact_project_target
             if target_project_id is not None:
                 audit_project_id = target_project_id
+        default_resource_id = str(decision.resource_id) if audit_resource_type else None
+        audit_resource_id = audit_resource_id or default_resource_id
+        target_ref_kind = target_ref_kind or audit_resource_type
+        target_ref_id = target_ref_id or default_resource_id
         after_facts: dict[str, object] = {"allowed": decision.allowed}
         if decision.resource_type in CONTEXT_DIGEST_RESOURCE_TYPES or decision.action_id in CONTEXT_DIGEST_ACTIONS:
             after_facts["resource_context_digest"] = decision.resource_context_digest
@@ -1445,15 +1449,9 @@ class AuthorizationService:
                     action_id=decision.action_id,
                     project_id=audit_project_id,
                     resource_type=audit_resource_type,
-                    resource_id=(
-                        audit_resource_id
-                        or (str(decision.resource_id) if audit_resource_type else None)
-                    ),
-                    target_ref_kind=target_ref_kind or audit_resource_type,
-                    target_ref_id=(
-                        target_ref_id
-                        or (str(decision.resource_id) if audit_resource_type else None)
-                    ),
+                    resource_id=audit_resource_id,
+                    target_ref_kind=target_ref_kind,
+                    target_ref_id=target_ref_id,
                     reason="authorization_evaluation",
                     denial_code=stored_denial,
                     after_facts=after_facts,

@@ -3,6 +3,7 @@ from __future__ import annotations
 from tests.authentication.support import (
     production_verifier_settings,
     issue_asymmetric_token,
+    issue_human_token_matrix,
     jwks_transport,
 )
 from tests.authentication.fixtures import (
@@ -21,7 +22,6 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 from uuid import UUID
-from app.core.identifiers import new_record_id
 
 import pytest  # type: ignore[import-not-found]
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -41,6 +41,7 @@ from app.adapters.auth.flow import (
     FlowAuthVerifier,
 )
 from app.core.config import Settings, get_settings
+from app.core.identifiers import new_record_id
 from app.core.permissions import PermissionDenied, require_any_role
 from app.db import session as db_session
 from app.interfaces.auth import AuthVerificationUnavailableError
@@ -83,6 +84,24 @@ def _application_paths(app) -> set[str]:
         if route_contexts is not None:
             paths.update(context.path for context in route_contexts())
     return paths
+
+
+def _production_auth_app(
+    database_url: str,
+    signing_material: tuple[rsa.RSAPrivateKey, dict[str, Any]],
+    *,
+    admin_mutation_rate_limit: int | None = None,
+) -> tuple[rsa.RSAPrivateKey, Settings, Any]:
+    """Build the production-verifier app shared by PostgreSQL auth scenarios."""
+    private_key, jwk = signing_material
+    settings = production_verifier_settings(database_url=database_url)
+    if admin_mutation_rate_limit is not None:
+        settings = settings.model_copy(
+            update={"api_admin_mutation_rate_limit": admin_mutation_rate_limit}
+        )
+    app = create_app(settings)
+    app.state.auth_verifier = FlowAuthVerifier(settings, jwks_transport=jwks_transport(jwk))
+    return private_key, settings, app
 
 
 def test_retired_submitter_eligibility_bridge_has_no_runtime_consumers() -> None:
@@ -149,8 +168,6 @@ def current_task_name() -> str:
     if task is None:
         raise AssertionError("an asyncio task is required")
     return task.get_name()
-
-
 
 
 def test_legacy_compatibility_dependency_has_fixed_consumer_allowlist() -> None:
@@ -373,11 +390,8 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Prove fixed service binding, replay, conflicts, rollback, and pre-admission denial."""
-    private_key, jwk = rsa_signing_material
-    settings = production_verifier_settings(database_url=auth_database_env)
-    verifier = FlowAuthVerifier(settings, jwks_transport=jwks_transport(jwk))
-    app = create_app(settings)
-    app.state.auth_verifier = verifier
+    private_key, settings, app = _production_auth_app(auth_database_env, rsa_signing_material)
+    verifier = app.state.auth_verifier
     admin_token = issue_asymmetric_token(
         private_key,
         claims={
@@ -704,9 +718,7 @@ async def test_controlled_service_actor_provisioning_includes_project_setup_and_
         assert service_subject not in invalid_header.text
         assert reason not in invalid_header.text
 
-        for path, expected_code in (
-            ("/api/v1/actors/me", "permission_not_granted"),
-        ):
+        for path, expected_code in (("/api/v1/actors/me", "permission_not_granted"),):
             service_denial = await client.get(path, headers=service_headers)
             assert service_denial.status_code == 403
             assert service_denial.json()["error"]["code"] == expected_code
@@ -1020,21 +1032,13 @@ async def test_service_actor_provisioning_failure_and_authority_races_are_atomic
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Bound evidence failures and crossed authority changes without partial state."""
-    private_key, jwk = rsa_signing_material
-    settings = production_verifier_settings(database_url=auth_database_env)
-    verifier = FlowAuthVerifier(settings, jwks_transport=jwks_transport(jwk))
-    app = create_app(settings)
-    app.state.auth_verifier = verifier
-    first_token = issue_asymmetric_token(
+    private_key, settings, app = _production_auth_app(auth_database_env, rsa_signing_material)
+    _, headers = issue_human_token_matrix(
         private_key,
-        claims={"sub": "auth09b-race-admin-one", "jti": "auth09b-race-admin-one-token"},
+        prefix="auth09b-race-admin",
+        names=("one", "two"),
     )
-    second_token = issue_asymmetric_token(
-        private_key,
-        claims={"sub": "auth09b-race-admin-two", "jti": "auth09b-race-admin-two-token"},
-    )
-    first_headers = {"Authorization": f"Bearer {first_token}"}
-    second_headers = {"Authorization": f"Bearer {second_token}"}
+    first_headers, second_headers = headers["one"], headers["two"]
 
     async def snapshot(actor_id: UUID) -> tuple[int, int, int, int, datetime, datetime]:
         async with db_session.get_session_factory()() as session:
@@ -1471,7 +1475,7 @@ async def test_permission_policy_allows_required_role() -> None:
                 dev_auth_roles="contributor,reviewer",
             )
         ).verify("local-token")
-    ).legacy_actor()
+    ).legacy_actor(actor_id=str(new_record_id()))
 
     require_any_role(actor, {"reviewer"})
 
@@ -1488,7 +1492,7 @@ async def test_permission_policy_rejects_missing_role() -> None:
                 dev_auth_roles="contributor",
             )
         ).verify("local-token")
-    ).legacy_actor()
+    ).legacy_actor(actor_id=str(new_record_id()))
 
     with pytest.raises(PermissionDenied, match="actor lacks required role"):
         require_any_role(actor, {"finance"})
@@ -1500,22 +1504,13 @@ async def test_actor_profile_lifecycle_real_postgres_matrix(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Prove profile state, replay, reusable conflicts, concealment, and privacy."""
-    private_key, jwk = rsa_signing_material
-    settings = production_verifier_settings(database_url=auth_database_env)
-    app = create_app(settings)
-    app.state.auth_verifier = FlowAuthVerifier(settings, jwks_transport=jwks_transport(jwk))
-    tokens = {
-        name: issue_asymmetric_token(
-            private_key,
-            claims={
-                "sub": f"auth09d-a-{name}",
-                "jti": f"auth09d-a-{name}-token",
-                "email": f"private-{name}@example.test",
-            },
-        )
-        for name in ("admin", "target", "ordinary", "replay_target", "failure_target")
-    }
-    headers = {name: {"Authorization": f"Bearer {token}"} for name, token in tokens.items()}
+    private_key, settings, app = _production_auth_app(auth_database_env, rsa_signing_material)
+    tokens, headers = issue_human_token_matrix(
+        private_key,
+        prefix="auth09d-a",
+        names=("admin", "target", "ordinary", "replay_target", "failure_target"),
+        email_prefix="private-",
+    )
 
     async def profile_state(actor_id: UUID) -> tuple:
         async with db_session.get_session_factory()() as session:
@@ -1984,25 +1979,18 @@ async def test_actor_identity_link_lifecycle_real_postgres_matrix(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Prove link state, atomic failure, replay, owner, grant, and privacy behavior."""
-    private_key, jwk = rsa_signing_material
-    settings = production_verifier_settings(database_url=auth_database_env).model_copy(
-        update={"api_admin_mutation_rate_limit": 1_000}
+    private_key, settings, app = _production_auth_app(
+        auth_database_env,
+        rsa_signing_material,
+        admin_mutation_rate_limit=1_000,
     )
-    app = create_app(settings)
-    app.state.auth_verifier = FlowAuthVerifier(settings, jwks_transport=jwks_transport(jwk))
     names = ("admin", "target", "ordinary", "failure")
-    tokens = {
-        name: issue_asymmetric_token(
-            private_key,
-            claims={
-                "sub": f"auth09d-b-{name}",
-                "jti": f"auth09d-b-{name}-token",
-                "email": f"private-auth09d-b-{name}@example.test",
-            },
-        )
-        for name in names
-    }
-    headers = {name: {"Authorization": f"Bearer {token}"} for name, token in tokens.items()}
+    tokens, headers = issue_human_token_matrix(
+        private_key,
+        prefix="auth09d-b",
+        names=names,
+        email_prefix="private-auth09d-b-",
+    )
 
     async def actor_link_state(actor_id: UUID) -> tuple:
         async with db_session.get_session_factory()() as session:
@@ -2521,24 +2509,13 @@ async def test_actor_profile_lifecycle_real_postgres_concurrency(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Serialize exact replay and competing transitions without timing sleeps."""
-    private_key, jwk = rsa_signing_material
-    settings = production_verifier_settings(database_url=auth_database_env)
-    app = create_app(settings)
-    app.state.auth_verifier = FlowAuthVerifier(settings, jwks_transport=jwks_transport(jwk))
-    admin_headers = {
-        "Authorization": "Bearer "
-        + issue_asymmetric_token(
-            private_key,
-            claims={"sub": "auth09d-a-race-admin", "jti": "auth09d-a-race-admin-token"},
-        )
-    }
-    target_headers = {
-        "Authorization": "Bearer "
-        + issue_asymmetric_token(
-            private_key,
-            claims={"sub": "auth09d-a-race-target", "jti": "auth09d-a-race-target-token"},
-        )
-    }
+    private_key, settings, app = _production_auth_app(auth_database_env, rsa_signing_material)
+    _, headers = issue_human_token_matrix(
+        private_key,
+        prefix="auth09d-a-race",
+        names=("admin", "target"),
+    )
+    admin_headers, target_headers = headers["admin"], headers["target"]
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -2659,7 +2636,9 @@ async def test_actor_profile_lifecycle_real_postgres_concurrency(
 
         ordered_requests = partial(
             ordered_control_requests,
-            client=client, monkeypatch=monkeypatch, database_url=auth_database_env,
+            client=client,
+            monkeypatch=monkeypatch,
+            database_url=auth_database_env,
         )
 
         def lifecycle_request(
@@ -2963,12 +2942,11 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Prove link and mixed-authority races with observed PostgreSQL blockers."""
-    private_key, jwk = rsa_signing_material
-    settings = production_verifier_settings(database_url=auth_database_env).model_copy(
-        update={"api_admin_mutation_rate_limit": 1_000}
+    private_key, settings, app = _production_auth_app(
+        auth_database_env,
+        rsa_signing_material,
+        admin_mutation_rate_limit=1_000,
     )
-    app = create_app(settings)
-    app.state.auth_verifier = FlowAuthVerifier(settings, jwks_transport=jwks_transport(jwk))
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -2977,14 +2955,12 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
         actors: dict[str, tuple[UUID, UUID, dict[str, str]]] = {}
 
         async def create_actor(name: str) -> tuple[UUID, UUID, dict[str, str]]:
-            token = issue_asymmetric_token(
+            _, issued_headers = issue_human_token_matrix(
                 private_key,
-                claims={
-                    "sub": f"auth09d-b-race-{name}",
-                    "jti": f"auth09d-b-race-{name}-token",
-                },
+                prefix="auth09d-b-race",
+                names=(name,),
             )
-            actor_headers = {"Authorization": f"Bearer {token}"}
+            actor_headers = issued_headers[name]
             response = await client.get("/api/v1/actors/me", headers=actor_headers)
             assert response.status_code == 200, response.text
             actor_id = UUID(response.json()["actor_profile_id"])
@@ -3302,7 +3278,9 @@ async def test_actor_identity_link_lifecycle_real_postgres_concurrency(
 
         ordered_requests = partial(
             ordered_control_requests,
-            client=client, monkeypatch=monkeypatch, database_url=auth_database_env,
+            client=client,
+            monkeypatch=monkeypatch,
+            database_url=auth_database_env,
         )
 
         def link_request(

@@ -181,7 +181,7 @@ async def scan_artifact_pending_work(
 
 async def scan_guide_setup_continuations(publish_continuation: Callable[[str], Awaitable[None]]) -> int:
     """Recover complete committed document sets, without scanning verification jobs."""
-    from sqlalchemy import func
+    from sqlalchemy import String, cast, func
     from sqlalchemy.orm import aliased
     from app.modules.artifacts.models import ArtifactPutAttempt
     from app.modules.projects.models import (
@@ -214,7 +214,9 @@ async def scan_guide_setup_continuations(publish_continuation: Callable[[str], A
     ).exists()
     async with get_session_factory()() as session:
         ids = list(await session.scalars(
-            select(func.min(ArtifactPutAttempt.id))
+            # PostgreSQL 16 has UUID ordering but no min(uuid) aggregate.
+            # This representative is published as a canonical string, as before.
+            select(func.min(cast(ArtifactPutAttempt.id, String)))
             .join(GuideSourceSnapshotItem, GuideSourceSnapshotItem.id == ArtifactPutAttempt.guide_source_item_id)
             .join(ProjectSetupRun, ProjectSetupRun.source_snapshot_id == GuideSourceSnapshotItem.source_snapshot_id)
             .join(GuideSourceSnapshot, GuideSourceSnapshot.id == ProjectSetupRun.source_snapshot_id)

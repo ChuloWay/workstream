@@ -9,13 +9,40 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.identifiers import new_record_id
+from app.db import models  # noqa: F401 - compile the complete registered graph
+from app.db.base import Base
 from app.modules.actors.models import ActorProfile
+
+
+async def test_native_uuid_metadata_checks_compile_in_postgresql(
+    isolated_database_env: str,
+) -> None:
+    """The ORM must compile too; a corrected SQL baseline cannot hide raw text operators."""
+    engine = create_async_engine(isolated_database_env)
+    try:
+        async with engine.connect() as connection:
+            transaction = await connection.begin()
+            try:
+                await connection.execute(text("create schema uuid_metadata_check"))
+                translated = await connection.execution_options(
+                    schema_translate_map={None: "uuid_metadata_check"},
+                )
+                await translated.run_sync(Base.metadata.create_all)
+            finally:
+                # All schema objects are owned by this isolated test transaction.
+                await transaction.rollback()
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.parametrize(
     "invalid_identity",
-    [uuid4, lambda: uuid5(NAMESPACE_URL, "workstream:invalid-row-id")],
-    ids=["uuid4", "uuid5"],
+    [
+        uuid4,
+        lambda: uuid5(NAMESPACE_URL, "workstream:invalid-row-id"),
+        lambda: UUID(int=new_record_id().int & ~(3 << 62)),
+    ],
+    ids=["uuid4", "uuid5", "non_rfc_variant"],
 )
 async def test_native_uuid_round_trip_and_direct_sql_version_guard(
     isolated_database_env: str,
@@ -31,7 +58,7 @@ async def test_native_uuid_round_trip_and_direct_sql_version_guard(
     )
     try:
         async with sessions() as session, session.begin():
-            # V4/V5 are valid UUIDs: failure must be the version guard,
+            # These are parseable UUIDs: failure must be the version/variant guard,
             # not parsing, missing fields, or an unrelated business constraint.
             with pytest.raises(IntegrityError, match="ck_actor_profiles_id_uuid7"):
                 async with session.begin_nested():

@@ -239,6 +239,33 @@ async def _seed_human_actor(
     await session.flush()
 
 
+def _add_checker_output_actor(
+    session, actor_id: UUID, link_id: UUID, *, subject: str
+) -> None:
+    """Stage one exact checker-output service principal."""
+    session.add_all(
+        (
+            ActorProfile(
+                id=str(actor_id),
+                actor_kind="service",
+                status="active",
+                provisioning_method="manual_service_provisioning",
+                service_identity=ServiceIdentity.ARTIFACT_CHECKER_OUTPUT.value,
+                created_by="test",
+            ),
+            ActorIdentityLink(
+                id=str(link_id),
+                actor_profile_id=str(actor_id),
+                issuer="https://issuer.example.test",
+                subject=subject,
+                subject_kind="service",
+                status="active",
+                linked_by="test",
+            ),
+        )
+    )
+
+
 async def _seed_guide(
     session,
     *,
@@ -329,7 +356,6 @@ async def _seed_checker_output_relationships(session, namespace, *, policy_bundl
     contributor_link_id = str(new_record_id())
     checker_run_id = str(new_record_id())
     guide_version = "v1"
-    now = datetime.now(UTC)
     existing_post = await session.scalar(select(PostSubmitCheckerPolicy).where(
         PostSubmitCheckerPolicy.effective_policy_id == effective_policy_id,
     ))
@@ -341,30 +367,13 @@ async def _seed_checker_output_relationships(session, namespace, *, policy_bundl
     assert guide is not None and guide.status == "active" and guide.activation_operation_id is not None
     review_policy_id, review_hash = guide.selected_review_policy_id, guide.selected_review_policy_hash
     revision_policy_id, revision_hash = guide.selected_revision_policy_id, guide.selected_revision_policy_hash
-    session.add(
-        ActorProfile(
-            id=contributor_id,
-            actor_kind="human",
-            status="active",
-            provisioning_method="automatic_first_access",
-            service_identity=None,
-            created_by="test",
-        )
+    await _seed_human_actor(
+        session,
+        _context(
+            actor_profile_id=UUID(contributor_id),
+            identity_link_id=UUID(contributor_link_id),
+        ),
     )
-    await session.flush()
-    session.add(
-        ActorIdentityLink(
-            id=contributor_link_id,
-            actor_profile_id=contributor_id,
-            issuer="https://issuer.example.test",
-            subject=f"human-{contributor_id}",
-            subject_kind="human",
-            status="active",
-            linked_by="test",
-            last_verified_at=now,
-        )
-    )
-    await session.flush()
     from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
     from app.modules.tasks.submission_composition import build_submission
 
@@ -431,6 +440,33 @@ def _guide_operation(item_id: str) -> str:
     return canonical_json_hash({"request_type": "guide", "guide_source_item_id": item_id})
 
 
+def _guide_admission_request(
+    item_id: str,
+    source,
+    *,
+    lineage=None,
+    project_id: UUID | None = None,
+    request_digest: str = "sha256:" + "a" * 64,
+) -> GuideArtifactAdmissionRequest:
+    """Build a guide request from its canonical lineage when one is required."""
+    lineage_values = (
+        {}
+        if lineage is None
+        else {
+            "project_id": project_id or UUID(lineage.project_id),
+            "guide_id": UUID(lineage.guide_id),
+            "guide_source_snapshot_id": UUID(lineage.guide_source_snapshot_id),
+        }
+    )
+    return GuideArtifactAdmissionRequest(
+        **lineage_values,
+        guide_source_item_id=UUID(item_id),
+        source=source,
+        operation_identity=_guide_operation(item_id),
+        request_digest=request_digest,
+    )
+
+
 class _AllowGuidePreparedAuthorization:
     """Stand in for the issuer-local PREP consumer in lower-level ART tests."""
 
@@ -481,12 +517,8 @@ async def _admit_checker_output(session, settings, namespace, source, *, policy_
     )).one_or_none()
     if existing is None:
         actor_id, link_id = new_record_id(), new_record_id()
-        session.add(ActorProfile(id=str(actor_id), actor_kind="service", status="active",
-            provisioning_method="manual_service_provisioning",
-            service_identity=ServiceIdentity.ARTIFACT_CHECKER_OUTPUT.value, created_by="test"))
-        session.add(ActorIdentityLink(id=str(link_id), actor_profile_id=str(actor_id),
-            issuer="https://issuer.example.test", subject=f"checker-output-{actor_id}",
-            subject_kind="service", status="active", linked_by="test"))
+        _add_checker_output_actor(
+            session, actor_id, link_id, subject=f"checker-output-{actor_id}")
     else:
         actor_id, link_id = (UUID(value) for value in existing)
     context = _context(actor_profile_id=actor_id, identity_link_id=link_id, actor_kind=ActorKind.SERVICE)
@@ -1952,12 +1984,7 @@ async def test_guide_admission_derives_three_scopes_without_provider_evidence(
                         settings,
                         namespace,
                     ).admit(
-                        GuideArtifactAdmissionRequest(
-                            guide_source_item_id=UUID(item_id),
-                            source=source,
-                            operation_identity=_guide_operation(item_id),
-                            request_digest="sha256:" + "a" * 64,
-                        ),
+                        _guide_admission_request(item_id, source),
                         guide_prepared_authorization=denied,  # type: ignore[arg-type]
                         prepared_authorization=denied.handle,
                     )
@@ -1970,15 +1997,8 @@ async def test_guide_admission_derives_three_scopes_without_provider_evidence(
                     match="canonical lineage",
                 ):
                     await ArtifactAdmissionService(session, settings, namespace).admit(
-                        GuideArtifactAdmissionRequest(
-                            project_id=new_record_id(),
-                            guide_id=UUID(lineage.guide_id),
-                            guide_source_snapshot_id=UUID(lineage.guide_source_snapshot_id),
-                            guide_source_item_id=UUID(item_id),
-                            source=source,
-                            operation_identity=_guide_operation(item_id),
-                            request_digest="sha256:" + "a" * 64,
-                        ),
+                        _guide_admission_request(
+                            item_id, source, lineage=lineage, project_id=new_record_id()),
                         guide_prepared_authorization=mismatched,  # type: ignore[arg-type]
                         prepared_authorization=mismatched.handle,
                     )
@@ -1992,15 +2012,7 @@ async def test_guide_admission_derives_three_scopes_without_provider_evidence(
                         settings,
                         namespace,
                     ).admit(
-                        GuideArtifactAdmissionRequest(
-                            project_id=UUID(lineage.project_id),
-                            guide_id=UUID(lineage.guide_id),
-                            guide_source_snapshot_id=UUID(lineage.guide_source_snapshot_id),
-                            guide_source_item_id=UUID(item_id),
-                            source=source,
-                            operation_identity=_guide_operation(item_id),
-                            request_digest="sha256:" + "a" * 64,
-                        ),
+                        _guide_admission_request(item_id, source, lineage=lineage),
                         guide_prepared_authorization=prepared,  # type: ignore[arg-type]
                         prepared_authorization=prepared.handle,
                         existing_transaction=True,
@@ -2022,12 +2034,7 @@ async def test_guide_admission_derives_three_scopes_without_provider_evidence(
                         settings,
                         namespace,
                     ).admit(
-                        GuideArtifactAdmissionRequest(
-                            guide_source_item_id=UUID(item_id),
-                            source=wrong_source,
-                            operation_identity=_guide_operation(item_id),
-                            request_digest="sha256:" + "a" * 64,
-                        ),
+                        _guide_admission_request(item_id, wrong_source),
                         guide_prepared_authorization=wrong_prepared,  # type: ignore[arg-type]
                         prepared_authorization=wrong_prepared.handle,
                     )
@@ -2243,13 +2250,8 @@ async def test_guide_admission_consumes_real_project_manager_prep_atomically(
                         idempotency_key=idempotency_key,
                     )
                     result = await ArtifactAdmissionService(session, settings, namespace).admit(
-                        GuideArtifactAdmissionRequest(
-                            project_id=UUID(project_id),
-                            guide_id=UUID(lineage.guide_id),
-                            guide_source_snapshot_id=UUID(lineage.guide_source_snapshot_id),
-                            guide_source_item_id=UUID(item_id),
-                            source=source,
-                            operation_identity=_guide_operation(item_id),
+                        _guide_admission_request(
+                            item_id, source, lineage=lineage,
                             request_digest=guide_ingest_prepared_request_digest(
                                 project_id=UUID(project_id),
                                 guide_id=UUID(lineage.guide_id),
@@ -2424,27 +2426,8 @@ async def test_checker_output_requires_exact_active_fixed_service_identity(
     try:
         async with factory() as session:
             project_id, task_id, checker_run_id = await _seed_checker_output_relationships(session, namespace)
-            session.add(
-                ActorProfile(
-                    id=str(actor_id),
-                    actor_kind="service",
-                    status="active",
-                    provisioning_method="manual_service_provisioning",
-                    service_identity=ServiceIdentity.ARTIFACT_CHECKER_OUTPUT.value,
-                    created_by="test",
-                )
-            )
-            session.add(
-                ActorIdentityLink(
-                    id=str(link_id),
-                    actor_profile_id=str(actor_id),
-                    issuer="https://issuer.example.test",
-                    subject="checker-output-service",
-                    subject_kind="service",
-                    status="active",
-                    linked_by="test",
-                )
-            )
+            _add_checker_output_actor(
+                session, actor_id, link_id, subject="checker-output-service")
             await session.commit()
             canonical_task = await session.get(WorkstreamTask, task_id)
             assert canonical_task is not None

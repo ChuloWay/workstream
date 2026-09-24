@@ -448,9 +448,11 @@ The UUIDv7 schema uses the distinct, Compose-project-scoped
 `workstream_postgres_uuid7_data` volume. Starting it does not convert or erase the
 old development volume. Once you have verified that the old volume is disposable
 and has no remaining consumers, it can be removed separately by its exact name.
-Recreate this environment's Redis container with a fresh anonymous volume before
-restarting Celery workers: queued jobs from the discarded database must not run against
-the new one. Use a fresh private artifact bucket/namespace for the new database;
+Compose also uses a fresh `workstream_redis_uuid7_data` volume so jobs from the
+discarded database are not reused. For subsequent database resets, reset only
+that environment's owned queue volume before restarting Celery workers; external
+Redis configurations require their own verified private queue reset. Use a fresh
+private artifact bucket/namespace for the new database;
 do not delete retained/shared S3 or MinIO objects as part of a database reset.
 
 ### Backing Services And Artifact Storage

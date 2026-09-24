@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -51,7 +52,11 @@ from app.modules.authorization.runtime import (
 )
 from app.modules.authorization.catalogue import ActionId, PermissionId
 from app.modules.tasks.models import AuditEvent
-from tests.artifact_store_helpers import artifact_admission_limit_settings, minted_source
+from tests.artifact_store_helpers import (
+    artifact_admission_limit_settings,
+    artifact_preparation_limits,
+    minted_source,
+)
 from tests.test_artifact_admission import _admit_checker_output
 
 
@@ -171,7 +176,16 @@ async def _exhausted_job(session, settings, tmp_path, context):
     )
     from projects.unified_policy_fixtures import create_standalone_unified_policy
     policy_bundle = await create_standalone_unified_policy(async_sessionmaker(session.bind, expire_on_commit=False), namespace)
-    async with minted_source(tmp_path / "checker-output", b"recover checker output") as source:
+    # This proves recovery lineage, not preparation deadlines. Its sealed source
+    # must survive database setup and admission on a resource-constrained host.
+    limits = replace(
+        artifact_preparation_limits(),
+        total_deadline_seconds=180,
+        reservation_ttl_seconds=240,
+    )
+    async with minted_source(
+        tmp_path / "checker-output", b"recover checker output", limits=limits,
+    ) as source:
         project_id, task_id, checker_run_id, admission = await _admit_checker_output(
             session, settings, namespace, source, policy_bundle=policy_bundle)
         await _seed_recovery_actor(session, context)

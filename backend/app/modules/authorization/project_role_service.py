@@ -178,6 +178,22 @@ class ProjectRoleGrantMutationService:
             or not _issue_decision_matches(decision, request, resource)
         ):
             raise TypeError("project-role issue requires exact matched authority")
+        snapshot, grant = await self._create_issue_records(
+            request, decision, actor_profile_id, reason
+        )
+        await self._complete_issue_mutation(
+            claim, request, decision, actor_profile_id, snapshot, grant
+        )
+        return _response(grant)
+
+    async def _create_issue_records(
+        self,
+        request: ProjectRoleGrantIssueRequest,
+        decision: AuthorizationDecision,
+        actor_profile_id: UUID,
+        reason: str,
+    ) -> tuple[ProjectRoleQualificationSnapshot, ProjectRoleGrant]:
+        """Persist the exact qualification snapshot and active project-role grant."""
         duplicate = await self.repository.find_active_project_role(
             project_id=request.project_id,
             actor_profile_id=request.target_actor_id,
@@ -223,6 +239,18 @@ class ProjectRoleGrantMutationService:
             ):
                 raise ProjectRoleGrantConflict("project_role_grant_exists", None) from exc
             raise
+        return snapshot, grant
+
+    async def _complete_issue_mutation(
+        self,
+        claim: AuthorityClaimHandle,
+        request: ProjectRoleGrantIssueRequest,
+        decision: AuthorizationDecision,
+        actor_profile_id: UUID,
+        snapshot: ProjectRoleQualificationSnapshot,
+        grant: ProjectRoleGrant,
+    ) -> None:
+        """Complete issue replay custody with both immutable success events."""
         common = dict(
             actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
             actor_ref=str(actor_profile_id),
@@ -273,7 +301,6 @@ class ProjectRoleGrantMutationService:
             ),
             invalidation=None,
         )
-        return _response(grant)
 
     async def complete_revoke(
         self,

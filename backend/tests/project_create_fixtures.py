@@ -263,6 +263,42 @@ async def insert_historical_project(
             )
 
 
+async def seed_fixture_actor(
+    session: AsyncSession,
+    *,
+    issuer: str,
+    subject_prefix: str,
+    self_attributed: bool = False,
+    verified_at: datetime | None = None,
+) -> tuple[ActorProfile, ActorIdentityLink]:
+    """Persist one active fixture actor and its exact identity link."""
+    actor_id = str(new_record_id())
+    attribution = actor_id if self_attributed else "test"
+    profile = ActorProfile(
+        id=actor_id,
+        actor_kind="human",
+        status="active",
+        provisioning_method="automatic_first_access",
+        service_identity=None,
+        created_by=attribution,
+    )
+    session.add(profile)
+    await session.flush()
+    link = ActorIdentityLink(
+        id=str(new_record_id()),
+        actor_profile_id=actor_id,
+        issuer=issuer,
+        subject=f"{subject_prefix}-{actor_id}",
+        subject_kind="human",
+        status="active",
+        linked_by=attribution,
+        last_verified_at=verified_at or datetime.now(UTC),
+    )
+    session.add(link)
+    await session.flush()
+    return profile, link
+
+
 async def seed_authorized_project(
     session: AsyncSession,
     *,
@@ -271,32 +307,13 @@ async def seed_authorized_project(
     slug: str,
     status: str = "draft",
 ) -> None:
-    """Stage current project-create custody for tests of the 0044 boundary itself."""
+    """Stage current project-create custody for the canonical project-create boundary."""
     project_uuid = UUID(project_id)
-    actor_id = str(new_record_id())
-    link = ActorIdentityLink(
-        id=str(new_record_id()),
-        actor_profile_id=actor_id,
+    _, link = await seed_fixture_actor(
+        session,
         issuer="https://project-fixture.test",
-        subject=f"project-fixture-{actor_id}",
-        subject_kind="human",
-        status="active",
-        linked_by="test",
-        last_verified_at=datetime.now(UTC),
+        subject_prefix="project-fixture",
     )
-    session.add(
-        ActorProfile(
-            id=actor_id,
-            actor_kind="human",
-            status="active",
-            provisioning_method="automatic_first_access",
-            service_identity=None,
-            created_by="test",
-        )
-    )
-    await session.flush()
-    session.add(link)
-    await session.flush()
     link, grant = await grant_system_project_manager(
         session,
         issuer=link.issuer,
@@ -380,29 +397,11 @@ async def ensure_fixture_bootstrap(session):
         else None
     )
     if bootstrap is None:
-        bootstrap_actor = ActorProfile(
-            id=str(new_record_id()),
-            actor_kind="human",
-            status="active",
-            provisioning_method="automatic_first_access",
-            service_identity=None,
-            created_by="test",
+        bootstrap_actor, _ = await seed_fixture_actor(
+            session,
+            issuer="https://project-fixture-bootstrap.test",
+            subject_prefix="project-fixture-bootstrap",
         )
-        session.add(bootstrap_actor)
-        await session.flush()
-        session.add(
-            ActorIdentityLink(
-                id=str(new_record_id()),
-                actor_profile_id=bootstrap_actor.id,
-                issuer="https://project-fixture-bootstrap.test",
-                subject=f"project-fixture-bootstrap-{bootstrap_actor.id}",
-                subject_kind="human",
-                status="active",
-                linked_by="test",
-                last_verified_at=datetime.now(UTC),
-            )
-        )
-        await session.flush()
         bootstrap = AdminRoleGrant(
             id=new_record_id(),
             target_actor_profile_id=bootstrap_actor.id,

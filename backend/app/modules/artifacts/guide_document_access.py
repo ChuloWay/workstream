@@ -9,8 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from io import BytesIO
 from hashlib import sha256
 from time import monotonic
-from uuid import UUID
-from app.core.identifiers import new_record_id
+from uuid import UUID, uuid4
 
 
 from app.modules.projects.api.guide_documents import (
@@ -93,7 +92,7 @@ class ScopedGuideDocumentGrant:
                 )
                 authority = self._authority(session)
                 try:
-                    permission = await authority.prepare(facts=facts, idempotency_key=new_record_id())
+                    permission = await authority.prepare(facts=facts, idempotency_key=uuid4())
                     await authority.consume(prepared_authorization=permission, facts=facts)
                     self._require_live(handle)
                     async with asyncio.timeout(max(0, self._deadline - monotonic())):
