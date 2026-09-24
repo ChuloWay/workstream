@@ -9,7 +9,7 @@
 ## Intent
 
 Finish the missing link after 03C1: revoking Submitter authority, suspending or
- deactivating an actor, or revoking an identity link must durably schedule release
+deactivating an actor, or revoking an identity link must durably schedule release
 of that actor's affected pre-submission assignments. A delayed delivery cannot
 select a newer assignment. Reuse existing TASK/AUTH/AUDIT/OUTBOX transactions,
 receipts and retry semantics. Timed contributor leases and voluntary skip are
@@ -75,6 +75,10 @@ reconciliation before code, preserving retained data.
    success event and newly staged invalidation event. Publish before completing
    the receipt, in the same caller session/root transaction. Any append failure
    propagates and rolls back state, audit, events and idempotency completion.
+   Translate projection/append exceptions to one sanitized AUTH publication
+   unavailable error mapped by the existing router database-call boundary;
+   preserve its service-unavailable response without reflecting payloads.
+   Exact-id conflicts are rollback failures, never partial success.
 2. **Explicit composition.** Three originating lifecycle/project-role services
    require the publication port in their constructor. Existing AUTH adapter
    factories supply the real session-bound implementation. Unrelated mutation
