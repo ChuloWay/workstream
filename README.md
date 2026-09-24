@@ -416,7 +416,7 @@ cd backend
 uv sync --locked --extra dev --extra agents
 uv run --env-file .env uvicorn app.main:app --reload
 # In another terminal, from backend/:
-uv run --env-file .env celery -A app.workers.celery_app worker --pool=prefork --beat --loglevel=info
+uv run --env-file .env celery -A app.workers.celery_app worker --pool=prefork -Q celery --beat --loglevel=info
 ```
 
 The model key must be in the process environment; `--env-file` supplies it without

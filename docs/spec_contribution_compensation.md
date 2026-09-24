@@ -953,9 +953,10 @@ disjoint; invoked overlaps claimed, unsupported overlaps nonterminal states, and
 unresolved unknown invocation remains visible after dead-letter. Counts must not
 be summed as readiness. Database failure is an error, never zero work. Lifecycle
 release still requires the consuming owner's fence and feature obligation evidence.
-AUTH-OUTBOX-02 installs shared Celery delivery and recovery tasks. No concrete
-feature handler or public dispatch route is installed; task-function tests do not
-claim live broker transport proof.
+AUTH-OUTBOX-02 supplies shared Celery delivery and recovery tasks. ARCH-03C2
+registers the exact assignment-invalidation handler and proves its delivery
+through real Redis transport and a prefork Celery process. Future feature
+handlers require separate activation; public dispatch routes remain absent.
 
 REV stages the audit and outbox rows for the Review decision after the reviewer
 operation and the applicable branch/submitter operation. Those rows share the

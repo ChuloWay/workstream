@@ -49,7 +49,8 @@ activation guard. No producer may scan retained invalidation rows for backfill.
 - `backend/app/modules/outbox/delivery.py` with `CommittedInvocationReader` reusing existing repository observation
   without circular registration.
 - `backend/app/workers/celery_app.py`, `workers/outbox.py`, a focused delivery
-  topology guard, existing config/environment documentation only if required.
+  topology guard, `backend/scripts/guide_document_api_drill.py` exact general-queue
+  consumer selection, existing config/environment documentation only if required.
 - Focused tests under `backend/tests/tasks/`, `tests/authorization/`,
   `tests/outbox/`, `tests/projects/guide_compilation/finalization/pg_authorization.py`,
   existing Celery configuration tests and affected exact inventories in
