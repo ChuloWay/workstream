@@ -1739,7 +1739,7 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             201,
             idempotency_key=str(uuid4()),
         )
-        await request_json(client, "GET", f"/api/v1/tasks/{task['id']}", manager_token)
+        await request_json(client, "GET", f"/api/v1/tasks/{task['id']}", project_reader_token)
         screened = await request_json(
             client,
             "POST",
@@ -2079,7 +2079,7 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             client,
             "GET",
             f"/api/v1/tasks/{task['id']}/locked-context",
-            manager_token,
+            project_reader_token,
         )
         ensure(
             locked_context["locked_guide_source_snapshot_hash"].startswith("sha256:"),
@@ -2148,7 +2148,7 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
         )
         ensure(submissions == [], "claim/start unexpectedly created a Submission")
         audit_events = await request_json(
-            client, "GET", f"/api/v1/tasks/{task['id']}/audit-events", manager_token,
+            client, "GET", f"/api/v1/tasks/{task['id']}/audit-events", project_reader_token,
         )
         audit_transitions = {
             (event["event_type"], event["from_status"], event["to_status"])
