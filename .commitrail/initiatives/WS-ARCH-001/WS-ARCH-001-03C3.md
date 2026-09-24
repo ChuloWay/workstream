@@ -43,7 +43,10 @@ so they cannot honestly represent pre-assignment manager work unchanged.
   in `api/deps/authorization.py`, shared AUDIT lifecycle schemas/service/repository,
   and TASK `api/audit_evidence.py` for exact manager transition facts and the
   existing hidden fixed-field audit projection; preserve other consumers.
-- One additive Alembic revision after `0029_assignment_authority`: widen only the
+- Alembic `env.py` current-head admission and retained migration callers
+  (`tests/test_alembic.py`, existing OUTBOX migration tests and dispatch-identity
+  migration tests, including assignment reconciliation): retain predecessor graph/downgrade/data assertions and use the
+  canonical current-head oracle. One additive Alembic revision after `0029_assignment_authority`: widen only the
   closed TASK command variants and corresponding AUDIT event guards; preserve
   every retained row and existing assignment command constraint. Require a deferred
   `task_command_receipts.task_id -> workstream_tasks.id` FK, permitting reservation
@@ -55,13 +58,18 @@ so they cannot honestly represent pre-assignment manager work unchanged.
 - Focused `tests/authorization/task_authority/` manager tests and migration tests;
   affected existing TASK/ART fixture callers (`test_tasks.py`,
   `tasks/lineage_fixtures.py`) and every traced caller of these three HTTP mutations.
+  Existing ready/management queue pagination fixtures use absent cursor positions
+  rather than deleting receipt-bound tasks; preserve missing-anchor and tenant
+  isolation proofs without weakening retained custody.
   Include `backend/scripts/api_contract_e2e.py`: supply keys on its four existing
   manager/denied-worker task mutations. Test `auth_headers` already supplies keys.
   Update real grant arrangements; replace obsolete role-only
   tests while retaining guide/lineage/validation/rollback assertions.
+- Existing exact AUTH action, OpenAPI route/action and AUDIT event inventory
+  tests: add the three manager cases without dropping retained entries.
 - Exact behavior ownership, lane inventory and structural-debt metadata, without
   raising limits or changing CI selection/thresholds; current ARCH parent/overview/
-  map/index, README, TASK/AUTH operating/spec docs and affected roadmap claims.
+  map/index, README, TASK/AUTH operating/spec docs (including `docs/spec_authorization_service.md`) and affected roadmap claims.
 
 ### Not allowed
 
@@ -126,7 +134,14 @@ methods, retained-data deletion or workflow/coverage weakening. No live model ca
    Extend the existing hidden AUDIT projection and TASK evidence DTO to recognize
    these exact manager events with decision but no assignment; keep its fixed
    privacy-bounded fields. Null prior state is an event-specific creation exception,
-   not a persisted task state. Reject extra payload keys, invalid source types,
+   not a persisted task state. AUTH returns an immutable decision result with the
+   exact pre-write context serialized from its validated model. Manager audit
+   carries that bounded snapshot and digest. SQL recomputes the canonical digest,
+   binds exact decision/task/project/actor/status/reason, and joins the existing
+   pending receipt namespace to task/key/request digest. No new ledger or receipt
+   columns are needed. Creation source_type must equal the stored task; every
+   event target must equal current task state. Hidden read projections omit the
+   private authority snapshot. Reject extra payload keys, invalid source types,
    wrong references and malformed manager events without weakening generic event
    projection or assignment pairing. Use event-specific schema/SQL rules; preserve historical
    events and existing assignment-event rejection controls.
@@ -184,7 +199,10 @@ A removed-FK mutation proves missing-task rejection depends on that guard; a
 removed audit validator proves omitted lineage rejection depends on validation.
 An actual Alembic lock-removal mutation fails the blocked-writer proof. Direct SQL
 accepts valid manager audit lineage and rejects missing, substituted or extra facts.
-Exact-head execution receipts and hosted full-suite results belong in the PR
+A same-project two-task decision substitution probe exposed missing exact AUTH
+resource binding in the first guard. The repaired design above adds positive and
+negative SQL cases for all three manager events and a remove-only decision
+comparison mutation. Exact-head execution receipts and hosted full-suite results belong in the PR
 trust bundle, not this durable navigation record.
 
 ## Reconciliation

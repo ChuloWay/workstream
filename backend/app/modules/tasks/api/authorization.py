@@ -35,6 +35,15 @@ class TaskAuthorityFacts:
     replay_command_id: UUID | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class TaskAuthorityDecision:
+    """Exact consumed AUTH evidence, including immutable pre-write context JSON."""
+    decision_id: UUID
+    identity_link_id: UUID
+    resource_context_digest: str
+    resource_context_json: str
+
+
 class TaskAuthorityDenied(RuntimeError):
     """The exact task operation has no current canonical authority."""
 
@@ -44,6 +53,6 @@ class TaskAuthorizationPort(Protocol):
 
     async def prepare(self, facts: TaskAuthorityFacts) -> object: ...
 
-    async def consume(self, handle: object, facts: TaskAuthorityFacts) -> UUID: ...
+    async def consume(self, handle: object, facts: TaskAuthorityFacts) -> TaskAuthorityDecision: ...
 
     def close(self, handle: object) -> None: ...

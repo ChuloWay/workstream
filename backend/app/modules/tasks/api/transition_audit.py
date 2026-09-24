@@ -6,7 +6,7 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 from uuid import UUID
 
-from app.modules.tasks.api.authorization import TaskAuthorityOperation
+from app.modules.tasks.api.authorization import TaskAuthorityDecision, TaskAuthorityOperation
 
 
 class TaskPolicyLineage(BaseModel):
@@ -46,6 +46,7 @@ class TaskTransitionFacts:
     reason: str | None
     source_type: Literal["manual", "markdown_import", "csv_import"] | None = None
     locked_lineage: TaskPolicyLineage | None = None
+    authority: TaskAuthorityDecision | None = None
 
 
 class TaskTransitionAuditPort(Protocol):

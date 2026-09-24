@@ -50,7 +50,7 @@ async def test_create_draft_without_guide(task_client):
         assert task.title == payload["title"] and task.created_by == receipt.actor_profile_id
         assert receipt.assignment_id is None and receipt.contributor_id is None
         assert event.event_type == "TaskCreated"
-        assert event.event_payload == {
+        assert {key: value for key, value in event.event_payload.items() if key not in {'manager_authority_facts', 'authorization_resource_digest'}} == {
             "source_type": payload["source_type"],
             "references": {
                 "project_id": task.project_id,

@@ -54,15 +54,28 @@ def lineage():
     }
 
 
-def manager_event():
+def manager_event(event_type=Event.TASK_SCREENED):
     fields = event_fields()
     fields.update(
-        event_type=Event.TASK_SCREENED,
+        event_type=event_type,
         from_status="draft",
         to_status="screening",
         locked_lineage=lineage(),
     )
+    if event_type is Event.TASK_CREATED:
+        fields.update(from_status=None, to_status='draft', source_type='manual', locked_lineage=None)
+    elif event_type is Event.TASK_RELEASED:
+        fields.update(from_status='screening', to_status='ready', task_reason='Manager release')
     fields["references"].pop("assignment_id")
+    from app.core.hashing import canonical_json_hash
+    facts = dict(resource_type='task_authority', resource_id=str(fields['entity_id']),
+        scope_project_id=str(fields['references']['project_id']), actor_profile_id=str(fields['actor_id']),
+        identity_link_id=str(uuid4()), task_status=fields['from_status'] or 'draft', assigned_to=None, assignment_id=None,
+        assignment_contributor_id=None, locked_context_hash='sha256:'+'a'*64, reason=fields.get('task_reason'),
+        idempotency_key=str(uuid4()), replay_assignment_id=None, request_digest='sha256:'+'b'*64,
+        replay_command_id=None)
+    fields['manager_authority_facts'] = facts
+    fields['authorization_resource_digest'] = canonical_json_hash({'resource_context': {k:v for k,v in facts.items() if v is not None}})
     return fields
 
 

@@ -113,6 +113,40 @@ def _task_policy_lineage(value: Mapping[str, object]) -> dict[str, object]:
     return json.loads(encoded)
 
 
+def _manager_authority_facts(event: LifecycleAuditEventInput) -> dict[str, object]:
+    """Validate AUDIT's bounded serialized copy of the consumed pre-write facts."""
+    from app.core.hashing import canonical_json_hash
+
+    facts = dict(event.manager_authority_facts or {})
+    required = {'resource_type', 'resource_id', 'scope_project_id', 'actor_profile_id',
+                'identity_link_id', 'task_status', 'assigned_to', 'assignment_id',
+                'assignment_contributor_id', 'locked_context_hash', 'reason',
+                'idempotency_key', 'replay_assignment_id', 'request_digest', 'replay_command_id'}
+    if set(facts) != required or len(json.dumps(facts).encode()) > 4096:
+        raise ValueError('invalid bounded manager authority facts')
+    for key in ('resource_id', 'scope_project_id', 'actor_profile_id', 'identity_link_id', 'idempotency_key'):
+        value = facts[key]
+        if not isinstance(value, str) or str(UUID(value)) != value:
+            raise ValueError('invalid manager authority identity')
+    for key in ('locked_context_hash', 'request_digest'):
+        if not isinstance(facts[key], str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', facts[key]):
+            raise ValueError('invalid manager authority digest')
+    if (facts['resource_type'] != 'task_authority'
+            or facts['resource_id'] != str(event.entity_id)
+            or facts['scope_project_id'] != str(event.references.get(LifecycleAuditReferenceKind.PROJECT))
+            or facts['actor_profile_id'] != str(event.actor_id)
+            or facts['task_status'] != (event.from_status or 'draft')
+            or any(facts[key] is not None for key in ('assigned_to', 'assignment_id',
+                   'assignment_contributor_id', 'replay_assignment_id', 'replay_command_id'))
+            or (facts['reason'] is not None and not isinstance(facts['reason'], str))
+            or (facts['reason'] if facts['reason'] and facts['reason'].strip() else None) != event.task_reason):
+        raise ValueError('manager authority does not match event')
+    digest = canonical_json_hash({'resource_context': {key: value for key, value in facts.items() if value is not None}})
+    if digest != event.authorization_resource_digest:
+        raise ValueError('manager authority digest mismatch')
+    return json.loads(json.dumps(facts))
+
+
 class LifecycleAuditEntityType(StrEnum):
     """Closed product-fact namespaces admitted by the shared participant."""
 
@@ -313,6 +347,7 @@ class LifecycleAuditEventInput(BaseModel):
     from_status: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,29}$")] | None = None
     to_status: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,29}$")] | None = None
     references: dict[LifecycleAuditReferenceKind, UUID] = Field(default_factory=dict)
+    manager_authority_facts: dict[str, object] | None = None
     assignment_invalidation_facts: dict[str, object] | None = None
     authorization_resource_digest: Annotated[str, Field(pattern=r"^sha256:[0-9a-f]{64}$")] | None = None
 
@@ -339,7 +374,12 @@ class LifecycleAuditEventInput(BaseModel):
     @model_validator(mode="after")
     def validate_lifecycle_shape(self) -> Self:
         """Keep state transitions distinct from immutable fact creation."""
-        if (self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED) != (self.authorization_resource_digest is not None):
+        manager = self.event_type in {LifecycleAuditEventType.TASK_CREATED, LifecycleAuditEventType.TASK_SCREENED, LifecycleAuditEventType.TASK_RELEASED}
+        if manager != (self.manager_authority_facts is not None):
+            raise ValueError("manager event requires exact authority facts")
+        if manager:
+            self.manager_authority_facts = _manager_authority_facts(self)
+        if (manager or self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED) != (self.authorization_resource_digest is not None):
             raise ValueError("release requires its exact authorization digest")
         if (self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED) != (self.assignment_invalidation_facts is not None):
             raise ValueError("assignment facts restricted to release")

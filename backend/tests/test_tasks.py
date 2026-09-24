@@ -2316,7 +2316,7 @@ async def test_stored_role_metadata_does_not_authorize_task_creation(
     )
 
     assert response.status_code == 403
-    assert "actor lacks required role" in response.json()["detail"]
+    assert response.json()["detail"] == "Task authority denied"
 
 
 

@@ -1,10 +1,9 @@
 """AUTH-owned adapter for exact prepared task operations."""
 
-from uuid import UUID
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.tasks.api import TaskAuthorityDenied, TaskAuthorityFacts
+from app.modules.tasks.api.authorization import TaskAuthorityDecision
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.domain.task_authority import TaskAuthorityResourceContext
 from app.modules.authorization.kernel import AuthorizationService
@@ -90,7 +89,7 @@ class PreparedTaskAuthorization:
             service.close()
             raise
 
-    async def consume(self, handle: object, facts: TaskAuthorityFacts) -> UUID:
+    async def consume(self, handle: object, facts: TaskAuthorityFacts) -> TaskAuthorityDecision:
         if not isinstance(handle, _TaskPrepared):
             raise TaskAuthorityDenied("task authority denied")
         try:
@@ -100,7 +99,10 @@ class PreparedTaskAuthorization:
                 handle.caller_input,
                 self._resource(facts),
             )
-            return decision.decision_id
+            return TaskAuthorityDecision(
+                decision.decision_id, self._context.identity_link_id,
+                decision.resource_context_digest, self._resource(facts).model_dump_json(),
+            )
         except (
             AuthorizationDenied,
             PreparedAuthorizationHandleInvalid,

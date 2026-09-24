@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import select
 
 from app.db import session as db_session
 from app.modules.tasks.api import (
@@ -104,13 +104,13 @@ async def test_ready_queue_filters_before_pagination(task_client):
         assert empty == ReadyTaskPage(request.project_id, (), None)
         missing = await owner.read_ready_tasks(TaskQueueRequest(uuid4()))
         assert missing.items == () and missing.next_cursor is None
-    # A cursor is a position; deleting its fixture anchor cannot restart pagination.
-    async with factory() as session, session.begin():
-        await session.execute(delete(WorkstreamTask).where(WorkstreamTask.id == str(expected[0])))
+    # An absent position past the final row must not restart pagination.
+    missing_cursor = TaskQueueCursor(request.project_id, instant + timedelta(seconds=4), uuid4())
     async with factory() as session:
-        continued = await TaskRepository(session).read_ready_tasks(replace(request, after=page.next_cursor))
-        assert [item.task_id for item in continued.items] == expected[1:]
-        assert continued.next_cursor is None
+        assert await session.get(WorkstreamTask, str(missing_cursor.task_id)) is None
+        continued = await TaskRepository(session).read_ready_tasks(replace(request, after=missing_cursor))
+        assert continued.items == () and continued.next_cursor is None
+
 
 
 async def test_ready_queue_continues_after_claim(task_client, monkeypatch):

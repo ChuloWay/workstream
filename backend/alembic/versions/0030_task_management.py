@@ -82,10 +82,11 @@ def downgrade():
 
 _MANAGER_AUDIT_GUARD = r"""
 create function guard_task_management_audit() returns trigger language plpgsql as $$
-declare refs jsonb; payload jsonb; decision audit_events%rowtype; expected_action text;
+declare refs jsonb; payload jsonb; decision audit_events%rowtype; expected_action text; facts jsonb; digest text;
 begin
   if new.event_type not in ('TaskCreated','TaskScreened','TaskReleased') then return new; end if;
   payload := new.event_payload::jsonb; refs := payload->'references';
+  facts := payload->'manager_authority_facts'; digest := payload->>'authorization_resource_digest';
   expected_action := case new.event_type when 'TaskCreated' then 'project.task.create'
     when 'TaskScreened' then 'project.task.screen' else 'project.task.release' end;
   select * into decision from audit_events where id=refs->>'authorization_decision_id';
@@ -98,17 +99,40 @@ begin
     and decision.action_id=expected_action and decision.permission_id='project.task.manage'
     and decision.actor_id=new.actor_id and decision.project_id=refs->>'project_id'
     and decision.resource_type='project' and decision.resource_id=refs->>'project_id'
-    and exists(select 1 from workstream_tasks t where t.id=new.entity_id and t.project_id=refs->>'project_id')
+    and exists(select 1 from workstream_tasks t where t.id=new.entity_id
+      and t.project_id=refs->>'project_id' and t.status=new.to_status
+      and (new.event_type<>'TaskCreated' or t.source_type=payload->>'source_type'))
+    and facts=jsonb_build_object('resource_type','task_authority','resource_id',new.entity_id,
+      'scope_project_id',refs->>'project_id','actor_profile_id',new.actor_id,
+      'identity_link_id',facts->'identity_link_id','task_status',coalesce(new.from_status,'draft'),
+      'assigned_to',null,'assignment_id',null,'assignment_contributor_id',null,
+      'locked_context_hash',facts->'locked_context_hash','reason',facts->'reason',
+      'idempotency_key',facts->'idempotency_key','replay_assignment_id',null,
+      'request_digest',facts->'request_digest','replay_command_id',null)
+    and octet_length(convert_to(project_guide_projection_canonical_json(facts),'UTF8'))<=4096
+    and (facts->>'identity_link_id') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    and (facts->>'locked_context_hash') ~ '^sha256:[0-9a-f]{64}$'
+    and exists(select 1 from actor_identity_links l where l.id=facts->>'identity_link_id' and l.actor_profile_id=new.actor_id)
+    and (new.reason is not distinct from case when new.event_type='TaskCreated' then null
+      when nullif(btrim(facts->>'reason'),'') is null then 'lifecycle_state_changed' else facts->>'reason' end)
+    and (new.event_type<>'TaskCreated' or facts->'reason'='null'::jsonb)
+    and exists(select 1 from task_command_receipts r where r.actor_profile_id=new.actor_id
+      and r.action_id=expected_action and r.idempotency_key::text=facts->>'idempotency_key'
+      and r.task_id=new.entity_id and r.request_digest=facts->>'request_digest' and r.status='pending')
+    and digest='sha256:' || encode(sha256(convert_to(project_guide_projection_canonical_json(
+      jsonb_build_object('resource_context',jsonb_strip_nulls(facts))), 'UTF8')), 'hex')
+    and decision.after_facts::jsonb=jsonb_build_object('allowed',true,'resource_context_digest',digest)
     and ((new.event_type='TaskCreated' and new.from_status is null and new.to_status='draft'
-          and payload=jsonb_build_object('references',refs,'source_type',payload->'source_type')
+          and payload=jsonb_build_object('references',refs,'source_type',payload->'source_type',
+            'manager_authority_facts',facts,'authorization_resource_digest',digest)
           and payload->>'source_type' in ('manual','markdown_import','csv_import'))
          or (new.event_type in ('TaskScreened','TaskReleased')
              and ((new.event_type='TaskScreened' and new.from_status='draft' and new.to_status='screening')
                or (new.event_type='TaskReleased' and new.from_status='screening' and new.to_status='ready'
                    and btrim(new.reason)<>''))
              and exists(select 1 from workstream_tasks t where t.id=new.entity_id and
-              (payload - 'references') = jsonb_build_object('locked_guide_version', to_jsonb(t)->'locked_guide_version', 'locked_guide_source_snapshot_id', to_jsonb(t)->'locked_guide_source_snapshot_id', 'locked_guide_source_snapshot_hash', to_jsonb(t)->'locked_guide_source_snapshot_hash', 'locked_effective_project_submission_artifact_policy_id', to_jsonb(t)->'locked_effective_project_submission_artifact_policy_id', 'locked_effective_project_submission_artifact_policy_hash', to_jsonb(t)->'locked_effective_project_submission_artifact_policy_hash', 'locked_pre_submit_checker_policy_id', to_jsonb(t)->'locked_pre_submit_checker_policy_id', 'locked_pre_submit_checker_bundle_hash', to_jsonb(t)->'locked_pre_submit_checker_bundle_hash', 'locked_post_submit_checker_policy_id', to_jsonb(t)->'locked_post_submit_checker_policy_id', 'locked_post_submit_checker_policy_version', to_jsonb(t)->'locked_post_submit_checker_policy_version', 'locked_post_submit_checker_policy_hash', to_jsonb(t)->'locked_post_submit_checker_policy_hash', 'locked_review_policy_id', to_jsonb(t)->'locked_review_policy_id', 'locked_review_policy_generation', to_jsonb(t)->'locked_review_policy_generation', 'locked_review_policy_hash', to_jsonb(t)->'locked_review_policy_hash', 'locked_revision_policy_id', to_jsonb(t)->'locked_revision_policy_id', 'locked_revision_policy_generation', to_jsonb(t)->'locked_revision_policy_generation', 'locked_revision_policy_hash', to_jsonb(t)->'locked_revision_policy_hash', 'locked_contribution_policy_version_id', to_jsonb(t)->'locked_contribution_policy_version_id'))
-             and (payload - 'references') = jsonb_build_object('locked_guide_version', payload->'locked_guide_version', 'locked_guide_source_snapshot_id', payload->'locked_guide_source_snapshot_id', 'locked_guide_source_snapshot_hash', payload->'locked_guide_source_snapshot_hash', 'locked_effective_project_submission_artifact_policy_id', payload->'locked_effective_project_submission_artifact_policy_id', 'locked_effective_project_submission_artifact_policy_hash', payload->'locked_effective_project_submission_artifact_policy_hash', 'locked_pre_submit_checker_policy_id', payload->'locked_pre_submit_checker_policy_id', 'locked_pre_submit_checker_bundle_hash', payload->'locked_pre_submit_checker_bundle_hash', 'locked_post_submit_checker_policy_id', payload->'locked_post_submit_checker_policy_id', 'locked_post_submit_checker_policy_version', payload->'locked_post_submit_checker_policy_version', 'locked_post_submit_checker_policy_hash', payload->'locked_post_submit_checker_policy_hash', 'locked_review_policy_id', payload->'locked_review_policy_id', 'locked_review_policy_generation', payload->'locked_review_policy_generation', 'locked_review_policy_hash', payload->'locked_review_policy_hash', 'locked_revision_policy_id', payload->'locked_revision_policy_id', 'locked_revision_policy_generation', payload->'locked_revision_policy_generation', 'locked_revision_policy_hash', payload->'locked_revision_policy_hash', 'locked_contribution_policy_version_id', payload->'locked_contribution_policy_version_id')
+              (payload - array['references','manager_authority_facts','authorization_resource_digest']) = jsonb_build_object('locked_guide_version', to_jsonb(t)->'locked_guide_version', 'locked_guide_source_snapshot_id', to_jsonb(t)->'locked_guide_source_snapshot_id', 'locked_guide_source_snapshot_hash', to_jsonb(t)->'locked_guide_source_snapshot_hash', 'locked_effective_project_submission_artifact_policy_id', to_jsonb(t)->'locked_effective_project_submission_artifact_policy_id', 'locked_effective_project_submission_artifact_policy_hash', to_jsonb(t)->'locked_effective_project_submission_artifact_policy_hash', 'locked_pre_submit_checker_policy_id', to_jsonb(t)->'locked_pre_submit_checker_policy_id', 'locked_pre_submit_checker_bundle_hash', to_jsonb(t)->'locked_pre_submit_checker_bundle_hash', 'locked_post_submit_checker_policy_id', to_jsonb(t)->'locked_post_submit_checker_policy_id', 'locked_post_submit_checker_policy_version', to_jsonb(t)->'locked_post_submit_checker_policy_version', 'locked_post_submit_checker_policy_hash', to_jsonb(t)->'locked_post_submit_checker_policy_hash', 'locked_review_policy_id', to_jsonb(t)->'locked_review_policy_id', 'locked_review_policy_generation', to_jsonb(t)->'locked_review_policy_generation', 'locked_review_policy_hash', to_jsonb(t)->'locked_review_policy_hash', 'locked_revision_policy_id', to_jsonb(t)->'locked_revision_policy_id', 'locked_revision_policy_generation', to_jsonb(t)->'locked_revision_policy_generation', 'locked_revision_policy_hash', to_jsonb(t)->'locked_revision_policy_hash', 'locked_contribution_policy_version_id', to_jsonb(t)->'locked_contribution_policy_version_id'))
+             and (payload - array['references','manager_authority_facts','authorization_resource_digest']) = jsonb_build_object('locked_guide_version', payload->'locked_guide_version', 'locked_guide_source_snapshot_id', payload->'locked_guide_source_snapshot_id', 'locked_guide_source_snapshot_hash', payload->'locked_guide_source_snapshot_hash', 'locked_effective_project_submission_artifact_policy_id', payload->'locked_effective_project_submission_artifact_policy_id', 'locked_effective_project_submission_artifact_policy_hash', payload->'locked_effective_project_submission_artifact_policy_hash', 'locked_pre_submit_checker_policy_id', payload->'locked_pre_submit_checker_policy_id', 'locked_pre_submit_checker_bundle_hash', payload->'locked_pre_submit_checker_bundle_hash', 'locked_post_submit_checker_policy_id', payload->'locked_post_submit_checker_policy_id', 'locked_post_submit_checker_policy_version', payload->'locked_post_submit_checker_policy_version', 'locked_post_submit_checker_policy_hash', payload->'locked_post_submit_checker_policy_hash', 'locked_review_policy_id', payload->'locked_review_policy_id', 'locked_review_policy_generation', payload->'locked_review_policy_generation', 'locked_review_policy_hash', payload->'locked_review_policy_hash', 'locked_revision_policy_id', payload->'locked_revision_policy_id', 'locked_revision_policy_generation', payload->'locked_revision_policy_generation', 'locked_revision_policy_hash', payload->'locked_revision_policy_hash', 'locked_contribution_policy_version_id', payload->'locked_contribution_policy_version_id')
              and jsonb_typeof(payload->'locked_guide_version')='string' and btrim((payload->>'locked_guide_version'))<>''
              and (payload->>'locked_guide_source_snapshot_id') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
              and (payload->>'locked_guide_source_snapshot_hash') ~ '^sha256:[0-9a-f]{64}$'

@@ -21,7 +21,7 @@ initiative evidence/status. Not allowed: TASK lifecycle ownership, private
 PROJECT/TASK imports, ART/checker/review activation, generic task permission,
 role-only fallback or public Submission cutover.
 
-## Proposed exact surface/action manifest
+## Exact surface/action manifest
 
 The bounded [project-grant repair](../../../../changes/task-project-grant-authorization.md)
 owns the active `task.claim`, `task.start`, `task.work_context.read`,
@@ -32,7 +32,7 @@ queue/detail/requirements/locked-context/evidence rows are proposed registration
 not claims of usable actions. Invalidation publication and handler registration
 are delivered separately by 03C2.
 
-| Surface | Proposed action | Permission / principal |
+| Surface | Action | Permission / principal |
 |---|---|---|
 | Create project task | `project.task.create` | `project.task.manage`; covered Project Manager |
 | Screen task / acquire full context lock | `project.task.screen` | `project.task.manage`; covered Project Manager |

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.hashing import canonical_json_hash
 from app.db.errors import integrity_constraint_name
 from app.modules.tasks.api.authorization import (
+    TaskAuthorityDecision,
     TaskAuthorityFacts,
     TaskAuthorityOperation,
     TaskAuthorizationPort,
@@ -95,7 +96,7 @@ class AuthorizedTaskCommands:
         idempotency_key: UUID | None = None,
         receipt: TaskCommandReceipt | None = None,
         request_digest: str | None = None,
-    ) -> tuple[WorkstreamTask, TaskAssignment | None, UUID]:
+    ) -> tuple[WorkstreamTask, TaskAssignment | None, TaskAuthorityDecision]:
         # Match submission creation: TASK/assignment locks precede AUTH locks.
         task = await self._repo.get_task(str(task_id), for_update=True)
         if task is None or (project_id is not None and task.project_id != str(project_id)):
@@ -192,11 +193,12 @@ class AuthorizedTaskCommands:
 
     async def _record_management(
         self, task: WorkstreamTask, operation: TaskAuthorityOperation,
-        decision_id: UUID, before: str | None, reason: str | None,
+        decision_id: TaskAuthorityDecision, before: str | None, reason: str | None,
     ) -> None:
         await self._audit.record(TaskTransitionFacts(
             operation=operation, project_id=UUID(task.project_id), task_id=UUID(task.id),
-            assignment_id=None, actor_profile_id=self._actor_id, authorization_decision_id=decision_id,
+            assignment_id=None, actor_profile_id=self._actor_id, authorization_decision_id=decision_id.decision_id,
+            authority=decision_id,
             from_status=before, to_status=task.status, reason=reason,
             source_type=task.source_type if operation is TaskAuthorityOperation.CREATE else None,
             locked_lineage=TaskPolicyLineage.model_validate_json(json.dumps({
@@ -245,7 +247,7 @@ class AuthorizedTaskCommands:
                     )
                 )
                 task.assigned_to = str(self._actor_id)
-                await self._transition(task, assignment, "claimed", decision_id, reason)
+                await self._transition(task, assignment, "claimed", decision_id.decision_id, reason)
                 await self._session.flush()
                 await self._session.refresh(task)
                 response = TaskWithAssignmentResponse(
@@ -296,7 +298,7 @@ class AuthorizedTaskCommands:
                 task,
                 assignment,
                 "in_progress",
-                decision_id,
+                decision_id.decision_id,
                 reason,
                 operator_override=operator_override,
             )

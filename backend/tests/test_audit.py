@@ -1203,6 +1203,9 @@ def _lifecycle_input(**overrides) -> LifecycleAuditEventInput:
 def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
     event_groups = {
         LifecycleAuditEntityType.TASK: {
+            LifecycleAuditEventType.TASK_CREATED,
+            LifecycleAuditEventType.TASK_SCREENED,
+            LifecycleAuditEventType.TASK_RELEASED,
             LifecycleAuditEventType.TASK_CLAIMED,
             LifecycleAuditEventType.TASK_STARTED,
             LifecycleAuditEventType.TASK_START_OVERRIDDEN,
@@ -1268,6 +1271,11 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
     }
     for entity_type, event_types in event_groups.items():
         for event_type in event_types:
+            if event_type in {LifecycleAuditEventType.TASK_CREATED, LifecycleAuditEventType.TASK_SCREENED, LifecycleAuditEventType.TASK_RELEASED}:
+                from tests.authorization.task_authority.test_management_contracts import manager_event
+                value = LifecycleAuditEventInput(**manager_event(event_type))
+                assert value.event_type is event_type and value.entity_type is entity_type
+                continue
             entity_id = uuid4()
             references = {
                 LifecycleAuditReferenceKind.PROJECT: uuid4(),
