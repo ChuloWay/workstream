@@ -19,8 +19,16 @@ def worker(*, queues=(topology.OUTBOX_QUEUE,), pool=TaskPool, eager=False):
 
 
 @pytest.fixture(autouse=True)
-def reset_marker(monkeypatch):
+def restore_process_state(monkeypatch):
+    from celery._state import _set_task_join_will_block, task_join_will_block
+
+    original_join_guard = task_join_will_block()
     monkeypatch.setattr(topology, "_validated_parent", None)
+    try:
+        yield
+    finally:
+        # Actual Worker construction changes this process-global Celery flag.
+        _set_task_join_will_block(original_join_guard)
 
 
 @pytest.mark.parametrize("pool", ["solo", SoloPool, "threads"])
