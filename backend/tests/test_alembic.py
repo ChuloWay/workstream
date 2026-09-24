@@ -536,12 +536,16 @@ def test_root_upgrade_refuses_nonempty_unstamped_schema_before_product_ddl(
     assert ("r", "projects") not in snapshot["objects"]
 
 
+@pytest.mark.parametrize("revision,message", [
+    (BASELINE_REVISION, "0001_uuid7_v01 cannot be downgraded; recreate the database"),
+    (HEAD_REVISION, "Workstream v0.1 migrations cannot be downgraded; recreate the database"),
+])
 def test_downgrade_refuses_without_mutation(
     isolated_database_env: str,
     migration_lock,
+    revision: str,
+    message: str,
 ) -> None:
-    revision = BASELINE_REVISION
-    message = "0001_uuid7_v01 cannot be downgraded; recreate the database"
     config = _alembic_config()
     with migration_lock():
         asyncio.run(_execute(isolated_database_env, "drop schema public cascade; create schema public"))
