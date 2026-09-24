@@ -9,6 +9,7 @@ from dataclasses import replace
 import json
 from uuid import UUID, uuid4
 
+import asyncpg
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
@@ -288,23 +289,24 @@ async def test_request_operation_rejects_every_change(
 ) -> None:
     """Every mutation is rejected and leaves the request receipt intact."""
     await _create_request(clean_postgres_database)
-    engine = create_async_engine(clean_postgres_database)
+    connection = await asyncpg.connect(clean_postgres_database.replace("+asyncpg", ""))
     try:
-        async with engine.begin() as connection:
-            with pytest.raises(DBAPIError) as error:
-                await connection.execute(text(statement))
-            message = str(error.value.orig)
-            assert expected_error in message
-            if statement.startswith("truncate"):
-                assert getattr(error.value.orig, "sqlstate", None) == "0A000"
-                assert "project_guide_compilation_request_operations" in message
-        async with engine.connect() as connection:
-            count = await connection.scalar(
-                text("select count(*) from project_guide_compilation_request_operations")
-            )
+        with pytest.raises(asyncpg.PostgresError) as error:
+            async with connection.transaction():
+                await connection.execute(statement)
+        assert expected_error in error.value.message
+        if statement.startswith("truncate"):
+            assert error.value.sqlstate == "0A000"
+            assert error.value.detail is not None
+            assert "project_guide_compilation_request_operations" in error.value.detail
+        else:
+            assert error.value.sqlstate == "55000"
+        count = await connection.fetchval(
+            "select count(*) from project_guide_compilation_request_operations"
+        )
         assert count == 1
     finally:
-        await engine.dispose()
+        await connection.close()
 
 
 @pytest.mark.asyncio

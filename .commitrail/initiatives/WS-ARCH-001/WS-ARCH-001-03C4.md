@@ -88,8 +88,9 @@ action/permission audit evidence pairs; no new tables, retained-row rewrites, ba
 - Additive Alembic 0002 action evidence constraint after the UUIDv7 baseline,
   migration admission/schema fingerprint and affected migration/inventory tests.
 - Focused AUTH/TASK/API/migration tests, real API drill, lane test inventory.
-- Existing submission-policy completion predicate assertions exposed by main
-  reconciliation; preserve exact predicate/value proof without product changes.
+- Existing submission-policy completion predicates and guide request-custody
+  database assertions exposed by main reconciliation; preserve exact predicate,
+  value and rejection/rollback proof without product changes.
 - Current README, task/AUTH specifications, operating manuals, roadmap and
   initiative navigation. Local sheet exports only if present.
 
@@ -276,3 +277,8 @@ formatting drift under its resolved dependency version. Its completion test now
 compares an independently enumerated predicate expression and exact bound values,
 preserving missing/extra/changed predicate detection without comparing cast
 formatting. No product logic, dependency range or CI gate changes.
+
+The request-custody direct-SQL mutation test inspects PostgreSQL's native message,
+detail and SQLSTATE through asyncpg, avoiding ORM error-string formatting. Each
+rejection rolls back before checking the retained receipt count; the UPDATE,
+DELETE and TRUNCATE cases and exact target-table proof remain required.
