@@ -101,7 +101,7 @@ methods, retained-data deletion or workflow/coverage weakening. No live model ca
    assignment operations. Use closed event-specific schema/SQL rules rather than
    relaxing all transition evidence. Preserve immutable historical events.
 
-## Acceptance criteria and proof
+## Acceptance criteria
 
 | Observable boundary | Named future proof and reachable arrangement |
 |---|---|
