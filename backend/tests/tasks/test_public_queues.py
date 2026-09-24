@@ -1,7 +1,8 @@
 """Public queue selection, query-bound continuations and selected-column privacy."""
 
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import event, select
@@ -156,5 +157,5 @@ async def test_cursor_binds_query_and_rechecks_authority(task_client, monkeypatc
 @pytest.mark.parametrize("kind", PATHS)
 @pytest.mark.parametrize("params", [{"limit": 0}, {"limit": 101}, {"limit": "bad"}, {"cursor": "x" * 513}])
 async def test_queue_rejects_invalid_request_shape(task_client, kind, params):
-    response = await task_client.get(PATHS[kind].format(project=uuid4()), params=params, headers=auth_headers())
+    response = await task_client.get(PATHS[kind].format(project=new_record_id()), params=params, headers=auth_headers())
     assert response.status_code == 422, response.text

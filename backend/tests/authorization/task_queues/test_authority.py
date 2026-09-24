@@ -1,6 +1,7 @@
 """Signed HTTP authority matrices and concealed project queue access."""
 
 from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import select, update
@@ -56,7 +57,7 @@ async def test_queue_conceals_absent_and_unauthorized_projects(admin_access, kin
     from tests.authorization.admin_access.support import create_project
     project = await create_project("Concealed")
     replies = []
-    for target in (project, uuid4()):
+    for target in (project, new_record_id()):
         response = await admin_access.signed.client.get(
             PATHS[kind].format(project=target), headers=admin_access.target.headers,
         )
@@ -97,7 +98,7 @@ async def test_queue_revalidates_grant(admin_access, kind, monkeypatch):
     from app.modules.authorization.task_queue_read import TaskQueueReadAuthorization
     cursor = TaskQueueReadAuthorization(None, get_settings().pagination_cursor_hmac_secret).encode(
         TaskQueueReadRequest(ACTIONS[kind], project, 50, None),
-        TaskQueuePosition(datetime.now(UTC), uuid4()),
+        TaskQueuePosition(datetime.now(UTC), new_record_id()),
     )
     assert (await client.get(path, params={"cursor": cursor}, headers=actor.headers)).status_code == 200
     if kind == "ready":
@@ -159,7 +160,7 @@ async def test_queue_conceals_service_actor_before_product_read(signed_access, k
     token = issue_asymmetric_token(signed_access.private_key, scope="workstream:service", claims={
         "sub": "unprovisioned-queue-service", "subject_kind": "service", "roles": ["operator", "project_manager"],
     })
-    response = await signed_access.client.get(PATHS[kind].format(project=uuid4()), headers={"Authorization": f"Bearer {token}"})
+    response = await signed_access.client.get(PATHS[kind].format(project=new_record_id()), headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 404, response.text
     from app.modules.actors.models import ActorIdentityLink
     async with db_session.get_session_factory()() as session:
@@ -170,6 +171,6 @@ async def test_queue_conceals_service_actor_before_product_read(signed_access, k
 
 @pytest.mark.parametrize("kind,role", [("management", "system_manager"), ("operational", "operator")])
 async def test_granted_queue_reader_conceals_missing_project(admin_access, kind, role):
-    await grant_queue_role(admin_access, uuid4(), role)
-    response = await admin_access.signed.client.get(PATHS[kind].format(project=uuid4()), headers=admin_access.target.headers)
+    await grant_queue_role(admin_access, new_record_id(), role)
+    response = await admin_access.signed.client.get(PATHS[kind].format(project=new_record_id()), headers=admin_access.target.headers)
     assert response.status_code == 404, response.text

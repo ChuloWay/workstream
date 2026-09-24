@@ -7,17 +7,8 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import (
-    CheckConstraint,
-    DateTime,
-    ForeignKey,
-    ForeignKeyConstraint,
-    Index,
-    Integer,
-    Numeric,
-    String,
-    UniqueConstraint,
-    Uuid,
-    text,
+    CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint,
+    Index, Integer, Numeric, String, UniqueConstraint, Uuid, text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,6 +18,7 @@ from app.db.base import Base
 class ContributionPolicy(Base):
     __tablename__ = "contribution_policies"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint("id", "project_id", name="uq_contribution_policy_ownership"),
         ForeignKeyConstraint(
             ["current_published_version_id", "id", "project_id"],
@@ -100,6 +92,7 @@ class ContributionPolicy(Base):
 class ContributionPolicyVersion(Base):
     __tablename__ = "contribution_policy_versions"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["contribution_policy_id", "project_id"],
             ["contribution_policies.id", "contribution_policies.project_id"],
@@ -182,6 +175,7 @@ class ContributionPolicyVersion(Base):
 class ContributionRule(Base):
     __tablename__ = "contribution_rules"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["contribution_policy_version_id", "project_id"],
             ["contribution_policy_versions.id", "contribution_policy_versions.project_id"],
@@ -285,6 +279,7 @@ class ContributionAwardDefinition(Base):
 
     __tablename__ = "contribution_award_definitions"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             [
                 "contribution_rule_id",
@@ -361,6 +356,8 @@ class ContributionAwardDefinition(Base):
 class ContributionPolicyTransitionCustody(Base):
     __tablename__ = "contribution_policy_transition_custody"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        UniqueConstraint("operation_id", name="uq_contribution_policy_custody_operation"),
         ForeignKeyConstraint(
             ["contribution_policy_id", "project_id"],
             ["contribution_policies.id", "contribution_policies.project_id"],
@@ -388,7 +385,8 @@ class ContributionPolicyTransitionCustody(Base):
         CheckConstraint("event_type in ('published','retired')", name="event_type"),
     )
 
-    operation_id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    operation_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
     request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
     event_type: Mapped[str] = mapped_column(String(24), nullable=False)
     actor_profile_id: Mapped[str] = mapped_column(
@@ -412,6 +410,7 @@ class ContributionPolicyLifecycleEvent(Base):
 
     __tablename__ = "contribution_policy_lifecycle_events"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["contribution_policy_id", "project_id"],
             ["contribution_policies.id", "contribution_policies.project_id"],

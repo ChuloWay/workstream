@@ -175,6 +175,7 @@ class ProjectGuideCompilationAuthorizationAdapter:
         *,
         handle: PreparedAuthorizationHandle,
         actor: ActorIdentityFacts,
+        prepared_facts: ProjectGuideCompilationRequestFacts,
         facts: ProjectGuideCompilationRequestFacts,
         origin: ProjectGuideCompilationRequestOrigin,
     ) -> UUID:
@@ -184,7 +185,7 @@ class ProjectGuideCompilationAuthorizationAdapter:
             self._prepared.consume(
                 handle,
                 _request_action(origin),
-                _input(resource, facts.idempotency_key),
+                _input(_request_context(prepared_facts, origin), prepared_facts.idempotency_key),
                 resource,
             )
         )

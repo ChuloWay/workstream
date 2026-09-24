@@ -1,12 +1,14 @@
 """Bind worker admission to the existing immutable request's trigger."""
 
+from uuid import uuid5
+
 from sqlalchemy import select
 
 from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDeliveryError
 
-from .correction_request import correction_request_operation_id
+from .correction_request import correction_request_selector
 from .models import ProjectGuideCompilationRequestOperation, ProjectGuideProposalCorrection
-from .request_inputs import automatic_operation_id
+from .request_inputs import automatic_request_selector
 
 
 async def manual_delivery_attempt(session, setup, attempt):
@@ -35,8 +37,12 @@ async def manual_delivery_attempt(session, setup, attempt):
     )) or attempt.setup_run_id != setup.id:
         raise ProjectGuideCompilationDeliveryError()
     if operation.request_trigger == "automatic_source_ready":
-        if correction is not None or operation.operation_id != automatic_operation_id(
-            attempt.setup_run_id, attempt.setup_generation
+        selector = automatic_request_selector(attempt.setup_run_id, attempt.setup_generation)
+        if (
+            correction is not None
+            or operation.operation_id.version != 7
+            or operation.request_id != uuid5(selector, "request")
+            or operation.idempotency_key != uuid5(selector, "idempotency")
         ):
             raise ProjectGuideCompilationDeliveryError()
         return None
@@ -47,7 +53,11 @@ async def manual_delivery_attempt(session, setup, attempt):
         or correction.guide_id != setup.guide_id
         or correction.successor_setup_generation != setup.setup_generation
         or correction.target_json["source_snapshot_id"] != setup.source_snapshot_id
-        or operation.operation_id != correction_request_operation_id(correction.operation_id)
+        or operation.operation_id.version != 7
+        or operation.request_id
+        != uuid5(correction_request_selector(correction.operation_id), "request")
+        or operation.idempotency_key
+        != uuid5(correction_request_selector(correction.operation_id), "idempotency")
         or operation.expected_predecessor_compilation_id != correction.compilation_id
         or operation.source_mutation_operation_id is not None
         or operation.source_authorization_decision_event_id is not None

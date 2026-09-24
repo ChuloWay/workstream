@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.adapters.auth import (
     artifact_policy_projection_authorization,
     guide_sufficiency_projection_authorization,
 )
+from app.core.identifiers import new_record_id
 
 from app.adapters.artifacts import (
     guide_document_manifest_port,
@@ -53,15 +55,40 @@ class _PreparedProjection:
     def __init__(
         self,
         session: AsyncSession,
-        identity,
+        actor_profile_id: UUID,
+        identity_link_id: UUID,
         component: str,
         *,
         resource_type_override: str | None = None,
     ) -> None:
         self._session = session
-        self.identity = identity
+        self._actor_profile_id = actor_profile_id
+        self._identity_link_id = identity_link_id
+        self._identity = None
         self._component = component
         self._resource_type_override = resource_type_override
+
+    def identity(self, *, operation_id: UUID, correlation_id: UUID, output_id: UUID):
+        factory = (
+            guide_sufficiency_projection_identity
+            if self._component == "guide_sufficiency"
+            else artifact_policy_projection_identity
+        )
+        supplied = factory(
+            operation_id=operation_id,
+            correlation_id=correlation_id,
+            output_id=output_id,
+            actor_profile_id=self._actor_profile_id,
+            identity_link_id=self._identity_link_id,
+        )
+        if self._identity is not None:
+            assert supplied == self._identity
+        self._identity = supplied
+        return supplied
+
+    def _bound_identity(self):
+        assert self._identity is not None
+        return self._identity
 
     async def consume_new(
         self, facts: GuideSufficiencyProjectionFacts | ArtifactPolicyProjectionFacts
@@ -76,13 +103,14 @@ class _PreparedProjection:
             action = "project.submission_artifact_policy.derive"
             permission = "project.effective_policy.manage"
             resource_type = "project_submission_artifact_policy_projection"
+        identity = self._bound_identity()
         resource_digest = projection_authority_digest(
             component=self._component,
-            identity=self.identity,
+            identity=identity,
             project_id=facts.project_id,
             facts_digest=facts_digest,
         )
-        event_id = uuid4()
+        event_id = new_record_id()
         await self._session.execute(
             text(
                 "insert into audit_events(id,entity_type,entity_id,event_type,actor_id,"
@@ -99,22 +127,22 @@ class _PreparedProjection:
             ),
             {
                 "id": str(event_id),
-                "actor": str(self.identity.actor_profile_id),
-                "request_id": str(self.identity.operation_id),
-                "correlation_id": str(self.identity.correlation_id),
+                "actor": str(identity.actor_profile_id),
+                "request_id": str(identity.operation_id),
+                "correlation_id": str(identity.correlation_id),
                 "permission": permission,
                 "action": action,
                 "project_id": str(facts.project_id),
                 "resource_type": self._resource_type_override or resource_type,
-                "resource_id": str(self.identity.operation_id),
+                "resource_id": str(identity.operation_id),
                 "resource_digest": resource_digest,
             },
         )
         return ProjectGuideProjectionAuthorityReceipt(
             decision_event_id=event_id,
-            actor_profile_id=self.identity.actor_profile_id,
-            identity_link_id=self.identity.identity_link_id,
-            service_identity=self.identity.service_identity,
+            actor_profile_id=identity.actor_profile_id,
+            identity_link_id=identity.identity_link_id,
+            service_identity=identity.service_identity,
             resource_context_digest=resource_digest,
         )
 
@@ -123,6 +151,7 @@ class _PreparedProjection:
         facts: GuideSufficiencyProjectionFacts | ArtifactPolicyProjectionFacts,
         stored_decision_id: UUID,
     ) -> None:
+        identity = self._bound_identity()
         count = await self._session.scalar(
             text(
                 "select count(*) from audit_events where id=:id and actor_id=:actor "
@@ -130,7 +159,7 @@ class _PreparedProjection:
             ),
             {
                 "id": str(stored_decision_id),
-                "actor": str(self.identity.actor_profile_id),
+                "actor": str(identity.actor_profile_id),
                 "project": str(facts.project_id),
             },
         )
@@ -154,11 +183,8 @@ class _ProjectionAuthorization:
     async def prepare_sufficiency_projection(self, locator):
         yield _PreparedProjection(
             self._session,
-            guide_sufficiency_projection_identity(
-                attempt_id=locator.attempt_id,
-                actor_profile_id=self._values["actor"],
-                identity_link_id=self._values["link"],
-            ),
+            self._values["actor"],
+            self._values["link"],
             "guide_sufficiency",
             resource_type_override=self._resource_type_override,
         )
@@ -167,11 +193,8 @@ class _ProjectionAuthorization:
     async def prepare_artifact_policy_projection(self, locator):
         yield _PreparedProjection(
             self._session,
-            artifact_policy_projection_identity(
-                attempt_id=locator.attempt_id,
-                actor_profile_id=self._values["actor"],
-                identity_link_id=self._values["link"],
-            ),
+            self._values["actor"],
+            self._values["link"],
             "submission_artifact_policy",
             resource_type_override=self._resource_type_override,
         )
@@ -217,6 +240,95 @@ async def _project_both(database_url: str, values: dict[str, UUID]):
             policy,
             policy_replay,
         )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_direct_projection_insert_binds_audit_correlation_to_row(
+    clean_postgres_database: str,
+) -> None:
+    """Changing only row correlation must invalidate otherwise exact authority custody."""
+    values = await seed_database(clean_postgres_database)
+    attempt_id, _ = await _persist_compilation(clean_postgres_database, values)
+    engine = create_async_engine(clean_postgres_database)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    service = GuideCompilationProjectionService(
+        factory,
+        material_factory=guide_document_manifest_port,
+        sufficiency_authorization_factory=guide_sufficiency_projection_authorization,
+        policy_authorization_factory=artifact_policy_projection_authorization,
+    )
+    try:
+        await service.project_guide_sufficiency(
+            ProjectGuideProjectionCommand(attempt_id=attempt_id)
+        )
+        async with factory() as session:
+            transaction = await session.begin()
+            try:
+                await session.execute(
+                    text(
+                        "create temporary table saved_projection_operation on commit drop as "
+                        "select * from project_guide_component_projection_operations "
+                        "where component='guide_sufficiency'"
+                    )
+                )
+                await session.execute(
+                    text(
+                        "alter table project_guide_component_projection_operations "
+                        "disable trigger projection_operation_change_guard"
+                    )
+                )
+                await session.execute(
+                    text(
+                        "delete from project_guide_component_projection_operations "
+                        "where component='guide_sufficiency'"
+                    )
+                )
+                await session.execute(
+                    text(
+                        "alter table project_guide_component_projection_operations "
+                        "enable trigger projection_operation_change_guard"
+                    )
+                )
+                # Positive control: the exact retained row still satisfies every guard.
+                await session.execute(
+                    text(
+                        "insert into project_guide_component_projection_operations "
+                        "select * from saved_projection_operation"
+                    )
+                )
+                await session.execute(
+                    text(
+                        "alter table project_guide_component_projection_operations "
+                        "disable trigger projection_operation_change_guard"
+                    )
+                )
+                await session.execute(
+                    text("delete from project_guide_component_projection_operations")
+                )
+                await session.execute(
+                    text(
+                        "alter table project_guide_component_projection_operations "
+                        "enable trigger projection_operation_change_guard"
+                    )
+                )
+                await session.execute(
+                    text("update saved_projection_operation set correlation_id=:correlation"),
+                    {"correlation": new_record_id()},
+                )
+                with pytest.raises(
+                    SQLAlchemyError, match="projection authority custody is invalid"
+                ):
+                    async with session.begin_nested():
+                        await session.execute(
+                            text(
+                                "insert into project_guide_component_projection_operations "
+                                "select * from saved_projection_operation"
+                            )
+                        )
+            finally:
+                await transaction.rollback()
     finally:
         await engine.dispose()
 
@@ -293,8 +405,8 @@ async def test_projects_both_components_once_and_replays_without_new_effects(
                 .one()
             )
             expected_usage = {
-                "source_item_id": str(SOURCE_ITEM_ID),
-                "document_version_id": str(DOCUMENT_VERSION_ID),
+                "source_item_id": SOURCE_ITEM_ID,
+                "document_version_id": DOCUMENT_VERSION_ID,
                 "manifest_sha256": context(values).material.sha256,
                 "sha256": SOURCE_SHA256,
             }

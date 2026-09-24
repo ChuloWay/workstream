@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import UTC, datetime
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 from pydantic import ValidationError
 import pytest
@@ -37,9 +37,9 @@ def compensation_database_env(
 
 
 async def _seed_binding_facts() -> tuple[str, str, str]:
-    project_id = str(uuid4())
-    adapter_actor_id = str(uuid4())
-    creator_id = str(uuid4())
+    project_id = str(new_record_id())
+    adapter_actor_id = str(new_record_id())
+    creator_id = str(new_record_id())
     now = datetime.now(UTC)
     async with db_session.get_session_factory()() as session:
         session.add_all(
@@ -65,7 +65,7 @@ async def _seed_binding_facts() -> tuple[str, str, str]:
         session.add_all(
             [
                 ActorIdentityLink(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     actor_profile_id=creator_id,
                     issuer="https://compensation.test",
                     subject=f"creator-{creator_id}",
@@ -75,7 +75,7 @@ async def _seed_binding_facts() -> tuple[str, str, str]:
                     last_verified_at=now,
                 ),
                 ActorIdentityLink(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     actor_profile_id=adapter_actor_id,
                     issuer="https://compensation.test",
                     subject=f"adapter-{adapter_actor_id}",
@@ -104,7 +104,7 @@ def _binding_input(
     route_key: str = "adapter.primary",
 ) -> ProjectCompensationAdapterBindingInput:
     return ProjectCompensationAdapterBindingInput(
-        id=uuid4(),
+        id=new_record_id(),
         project_id=project_id,
         instrument_type=CompensationInstrumentType.MONEY,
         adapter_actor_id=adapter_actor_id,
@@ -157,11 +157,11 @@ def test_binding_model_is_registered_without_secret_or_provider_columns() -> Non
 )
 def test_binding_input_rejects_noncanonical_route_keys(route_key: str) -> None:
     with pytest.raises(ValidationError):
-        _binding_input(str(uuid4()), str(uuid4()), str(uuid4()), route_key=route_key)
+        _binding_input(str(new_record_id()), str(new_record_id()), str(new_record_id()), route_key=route_key)
 
 
 def test_binding_input_rejects_secret_or_provider_fields() -> None:
-    values = _binding_input(str(uuid4()), str(uuid4()), str(uuid4())).model_dump()
+    values = _binding_input(str(new_record_id()), str(new_record_id()), str(new_record_id())).model_dump()
     for field in ("credential", "token", "endpoint", "provider_reference"):
         with pytest.raises(ValidationError):
             ProjectCompensationAdapterBindingInput.model_validate(values | {field: "secret"})

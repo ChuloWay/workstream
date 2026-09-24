@@ -3,7 +3,8 @@
 import asyncio
 
 from collections.abc import Awaitable, Callable
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import func, select
@@ -81,19 +82,19 @@ async def test_create_suspend_resume_persists_contiguous_immutable_history(
         order = _trace_binding_order(service, authorization, monkeypatch)
         created = await _mutate_and_replay(session, service.create,
             AdapterBindingCreateRequest(
-                operation_id=uuid4(), actor_profile_id=actor_id, project_id=project_id,
+                operation_id=new_record_id(), actor_profile_id=actor_id, project_id=project_id,
                 instrument_type="money", adapter_actor_id=adapter_id, route_key="adapter.primary",
             ), order, ["project", "actor"],
         )
         suspended = await _mutate_and_replay(session, service.suspend,
             AdapterBindingSuspendRequest(
-                operation_id=uuid4(), actor_profile_id=actor_id, project_id=project_id,
+                operation_id=new_record_id(), actor_profile_id=actor_id, project_id=project_id,
                 adapter_binding_id=created.adapter_binding_id, expected_lifecycle_version=1,
             ), order, ["binding"],
         )
         resumed = await _mutate_and_replay(session, service.resume,
             AdapterBindingResumeRequest(
-                operation_id=uuid4(), actor_profile_id=actor_id, project_id=project_id,
+                operation_id=new_record_id(), actor_profile_id=actor_id, project_id=project_id,
                 adapter_binding_id=created.adapter_binding_id, expected_lifecycle_version=2,
             ), order, ["project", "actor", "binding"],
         )
@@ -135,7 +136,7 @@ async def test_exact_duplicate_recovers_without_second_mutation_authorization(
     project_id, adapter_id, actor_id = await binding_seed()
     authorization = _Authorization()
     request = AdapterBindingCreateRequest(
-        operation_id=uuid4(), actor_profile_id=actor_id, project_id=project_id,
+        operation_id=new_record_id(), actor_profile_id=actor_id, project_id=project_id,
         instrument_type="money", adapter_actor_id=adapter_id, route_key="adapter.primary",
     )
     async with db_session.get_session_factory()() as session:
@@ -161,7 +162,7 @@ async def test_close_failure_prevents_product_state_and_event(
             async with session.begin():
                 await service.create(
                     AdapterBindingCreateRequest(
-                        operation_id=uuid4(), actor_profile_id=actor_id,
+                        operation_id=new_record_id(), actor_profile_id=actor_id,
                         project_id=project_id, instrument_type="money",
                         adapter_actor_id=adapter_id, route_key="adapter.primary",
                     )
@@ -186,7 +187,7 @@ async def test_owner_denial_precedes_actor_lookup_and_exact_mutation_authorizati
             async with session.begin():
                 await service.create(
                     AdapterBindingCreateRequest(
-                        operation_id=uuid4(), actor_profile_id=actor_id,
+                        operation_id=new_record_id(), actor_profile_id=actor_id,
                         project_id=project_id, instrument_type="money",
                         adapter_actor_id=adapter_id, route_key="adapter.primary",
                     )
@@ -202,7 +203,7 @@ async def test_defensively_rejects_tampered_request_before_authorization(
 ) -> None:
     project_id, adapter_id, actor_id = await binding_seed()
     request = AdapterBindingCreateRequest(
-        operation_id=uuid4(), actor_profile_id=actor_id, project_id=project_id,
+        operation_id=new_record_id(), actor_profile_id=actor_id, project_id=project_id,
         instrument_type="money", adapter_actor_id=adapter_id, route_key="adapter.primary",
     )
     object.__setattr__(request, "instrument_type", "credits")
@@ -226,7 +227,7 @@ async def test_prepared_fake_rejects_copy_replay_and_transaction_replacement(
         async with session.begin():
             await service.create(
                 AdapterBindingCreateRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id,
+                    operation_id=new_record_id(), actor_profile_id=actor_id,
                     project_id=project_id, instrument_type="money",
                     adapter_actor_id=adapter_id, route_key="adapter.primary",
                 )
@@ -263,7 +264,7 @@ async def test_production_default_denies_before_product_state(
             async with session.begin():
                 await service.create(
                     AdapterBindingCreateRequest(
-                        operation_id=uuid4(), actor_profile_id=actor_id,
+                        operation_id=new_record_id(), actor_profile_id=actor_id,
                         project_id=project_id, instrument_type="money",
                         adapter_actor_id=adapter_id, route_key="adapter.primary",
                     )
@@ -280,7 +281,7 @@ async def test_concurrent_duplicate_waits_then_recovers_one_effect(
 ) -> None:
     project_id, adapter_id, actor_id = await binding_seed()
     request = AdapterBindingCreateRequest(
-        operation_id=uuid4(), actor_profile_id=actor_id, project_id=project_id,
+        operation_id=new_record_id(), actor_profile_id=actor_id, project_id=project_id,
         instrument_type="money", adapter_actor_id=adapter_id, route_key="adapter.primary",
     )
     winner_auth = _BlockingAuthorization()
@@ -332,9 +333,9 @@ async def test_concurrent_distinct_creates_allow_one_active_binding(
             except AdapterBindingConflict:
                 return "conflict"
 
-    winner = asyncio.create_task(run(uuid4(), "adapter.first", winner_auth))
+    winner = asyncio.create_task(run(new_record_id(), "adapter.first", winner_auth))
     await winner_auth.entered.wait()
-    loser = asyncio.create_task(run(uuid4(), "adapter.second", loser_auth))
+    loser = asyncio.create_task(run(new_record_id(), "adapter.second", loser_auth))
     await asyncio.sleep(0.05)
     assert not loser.done()
     winner_auth.release.set()
@@ -356,7 +357,7 @@ async def test_database_rejects_missing_event_and_mismatched_attribution(
     binding_seed: BindingSeed,
 ) -> None:
     project_id, adapter_id, actor_id = await binding_seed()
-    binding_id = uuid4()
+    binding_id = new_record_id()
     async with db_session.get_session_factory()() as session:
         with pytest.raises(DBAPIError, match="transition requires lifecycle event"):
             async with session.begin():
@@ -369,7 +370,7 @@ async def test_database_rejects_missing_event_and_mismatched_attribution(
                     )
                 )
 
-    binding_id = uuid4()
+    binding_id = new_record_id()
     async with db_session.get_session_factory()() as session:
         with pytest.raises(DBAPIError, match="attribution mismatch"):
             async with session.begin():
@@ -384,7 +385,7 @@ async def test_database_rejects_missing_event_and_mismatched_attribution(
                 await session.flush()
                 session.add(
                     CompensationAdapterBindingLifecycleEvent(
-                        id=uuid4(), operation_id=uuid4(),
+                        id=new_record_id(), operation_id=new_record_id(),
                         request_digest="sha256:" + "0" * 64,
                         project_id=str(project_id), adapter_binding_id=binding_id,
                         event_type="created", actor_profile_id=str(adapter_id),
@@ -407,14 +408,14 @@ async def test_absent_and_unauthorized_reads_are_equally_concealed(
         async with session.begin():
             created = await service.create(
                 AdapterBindingCreateRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id,
+                    operation_id=new_record_id(), actor_profile_id=actor_id,
                     project_id=project_id, instrument_type="money",
                     adapter_actor_id=adapter_id, route_key="adapter.primary",
                 )
             )
         absent_request = AdapterBindingReadRequest(
             actor_profile_id=actor_id, project_id=project_id,
-            adapter_binding_id=uuid4(),
+            adapter_binding_id=new_record_id(),
         )
         with pytest.raises(AdapterBindingConflict) as absent:
             await service.read(absent_request)
@@ -436,7 +437,7 @@ async def test_tampered_read_selector_denies_before_read_authorization(
 ) -> None:
     project_id, _, actor_id = await binding_seed()
     request = AdapterBindingReadRequest(
-        actor_profile_id=actor_id, project_id=project_id, adapter_binding_id=uuid4()
+        actor_profile_id=actor_id, project_id=project_id, adapter_binding_id=new_record_id()
     )
     object.__setattr__(request, "adapter_binding_id", "bad")
     authorization = _Authorization()
@@ -460,7 +461,7 @@ async def test_concurrent_transition_allows_one_version_advance(
         async with session.begin():
             created = await service.create(
                 AdapterBindingCreateRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id,
+                    operation_id=new_record_id(), actor_profile_id=actor_id,
                     project_id=project_id, instrument_type="money",
                     adapter_actor_id=adapter_id, route_key="adapter.primary",
                 )
@@ -469,7 +470,7 @@ async def test_concurrent_transition_allows_one_version_advance(
             async with session.begin():
                 await service.suspend(
                     AdapterBindingSuspendRequest(
-                        operation_id=uuid4(), actor_profile_id=actor_id,
+                        operation_id=new_record_id(), actor_profile_id=actor_id,
                         project_id=project_id, adapter_binding_id=created.adapter_binding_id,
                         expected_lifecycle_version=1,
                     )
@@ -496,7 +497,7 @@ async def test_concurrent_transition_allows_one_version_advance(
             except AdapterBindingConflict:
                 return "conflict"
 
-    assert sorted(await asyncio.gather(attempt(uuid4()), attempt(uuid4()))) == [
+    assert sorted(await asyncio.gather(attempt(new_record_id()), attempt(new_record_id()))) == [
         "advanced", "conflict"
     ]
     async with db_session.get_session_factory()() as session:

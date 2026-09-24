@@ -1,6 +1,7 @@
 """Controlled owner facts; no future database rows, authorization, or worker fixtures."""
 
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from app.core.hashing import canonical_json_hash
 from app.modules.checkers.api import (
@@ -49,7 +50,7 @@ def request(*, snapshot=None, project_id=PROJECT):
     fields = {}
     for name in ExpectedPostSubmitContext.model_fields:
         if name.endswith("_id"):
-            fields[name] = uuid4()
+            fields[name] = new_record_id()
         elif "version" in name:
             fields[name] = "v1"
         elif name.endswith("generation"):
@@ -76,15 +77,15 @@ def request(*, snapshot=None, project_id=PROJECT):
         observed_context=ObservedPostSubmitContext(**expected.model_dump()),
     )
     return make_post_submit_request(
-        evaluation_request_id=uuid4(),
+        evaluation_request_id=new_record_id(),
         evaluation_generation=1,
         project_id=project_id,
-        task_id=uuid4(),
-        assignment_id=uuid4(),
-        submission_id=uuid4(),
+        task_id=new_record_id(),
+        assignment_id=new_record_id(),
+        submission_id=new_record_id(),
         submission_version=1,
-        content_id=uuid4(),
-        binding_id=uuid4(),
+        content_id=new_record_id(),
+        binding_id=new_record_id(),
         content_sha256=HASH,
         byte_count=10,
         expected_context=expected,

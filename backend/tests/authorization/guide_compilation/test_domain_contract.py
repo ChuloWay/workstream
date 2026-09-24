@@ -1,11 +1,12 @@
 """Focused domain proof for compilation resource and PREP guards."""
 
 from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
+from app.core.identifiers import new_record_id
 
 from app.modules.authorization.catalogue import (
     ActionId,
@@ -108,6 +109,32 @@ def test_prepared_parser_round_trips_exact_request_and_rejects_bad_uuid() -> Non
         parse_prepared_compilation(
             ActionId.PROJECT_GUIDE_COMPILATION_REQUEST,
             {**resource.model_dump(mode="json"), "guide_id": "invalid"},
+        )
+
+
+def test_prepared_request_allows_only_owner_minted_row_id_for_exact_selector() -> None:
+    for prepared_facts in (_request(), replace(_request(), operation_id=uuid4())):
+        prepared_resource = _request_context(
+            prepared_facts, ProjectGuideCompilationRequestOrigin(trigger="project_manager")
+        )
+        binding = parse_prepared_compilation(
+            ActionId.PROJECT_GUIDE_COMPILATION_REQUEST,
+            prepared_resource.model_dump(mode="json"),
+        )
+        exact_resource = _request_context(
+            replace(prepared_facts, operation_id=new_record_id()),
+            ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
+        )
+        assert prepared_compilation_matches(
+            binding["guide_compilation_context"],
+            binding["guide_compilation_resource_digest"],
+            exact_resource,
+        )
+        different_operation = exact_resource.model_copy(update={"request_id": uuid4()})
+        assert not prepared_compilation_matches(
+            binding["guide_compilation_context"],
+            binding["guide_compilation_resource_digest"],
+            different_operation,
         )
 
 

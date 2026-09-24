@@ -36,7 +36,7 @@ from .finalization_payloads import (
 )
 from .models import ProjectGuideCompilation, ProjectGuideSetupFinalization
 from .repository import GuideCompilationRepository
-from .models import ProjectGuideProposalApproval
+from .models import ProjectGuideProposalApproval, ProjectGuideProposalCorrection
 
 
 @dataclass(frozen=True)
@@ -92,7 +92,13 @@ class GuideProposalRepository:
         )
         if finalization is None:
             raise GuideProposalError("proposal_unavailable")
-        facts = compose_facts(view, finalization.source_state_digest)
+        facts = compose_facts(
+            view,
+            finalization.source_state_digest,
+            finalization_id=finalization.id,
+            operation_id=finalization.operation_id,
+            correlation_id=finalization.correlation_id,
+        )
         require_replay(view, finalization, facts)
         accepted = AcceptedCompilationResult(
             canonical_result=view.compilation.canonical_result,
@@ -159,6 +165,19 @@ class GuideProposalRepository:
                 .with_for_update()
             )
         ).one_or_none()
+
+    async def correction_for_actor_key(
+        self, actor_profile_id: UUID, idempotency_key: UUID
+    ) -> ProjectGuideProposalCorrection | None:
+        """Lock the enforced human correction replay namespace."""
+        return await self.session.scalar(
+            select(ProjectGuideProposalCorrection)
+            .where(
+                ProjectGuideProposalCorrection.actor_profile_id == str(actor_profile_id),
+                ProjectGuideProposalCorrection.idempotency_key == idempotency_key,
+            )
+            .with_for_update()
+        )
 
     async def package(self, locked: LockedGuideProposal) -> GuideProposalReviewPackage:
         """Project safe content and page labels without exposing document handles."""

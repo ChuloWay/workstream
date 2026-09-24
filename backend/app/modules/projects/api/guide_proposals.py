@@ -148,6 +148,21 @@ class GuideProposalApprovalReceipt(BaseModel):
     effective_pre_submit_plan_hash: Digest
     acknowledged_warning_hashes: tuple[Digest, ...] = Field(max_length=200)
 
+    @model_validator(mode="after")
+    def require_record_ids(self):
+        """Persisted approval outputs use only Workstream UUIDv7 identities."""
+        if any(
+            value.version != 7
+            for value in (
+                self.operation_id,
+                self.artifact_policy_id,
+                self.effective_policy_id,
+                self.pre_submit_policy_id,
+            )
+        ):
+            raise ValueError("proposal approval record identities must be UUIDv7")
+        return self
+
 
 class GuideProposalCorrectionReceipt(BaseModel):
     """One successor allocated for an exact known predecessor."""
@@ -159,6 +174,13 @@ class GuideProposalCorrectionReceipt(BaseModel):
     successor_setup_generation: Annotated[int, Field(strict=True, gt=0)]
     feedback_hash: Digest
     status: Literal["correction_requested"] = "correction_requested"
+
+    @model_validator(mode="after")
+    def require_record_ids(self):
+        """Persisted correction and successor identities are Workstream UUIDv7."""
+        if self.operation_id.version != 7 or self.successor_setup_run_id.version != 7:
+            raise ValueError("proposal correction record identities must be UUIDv7")
+        return self
 
 
 class GuideProposalError(RuntimeError):

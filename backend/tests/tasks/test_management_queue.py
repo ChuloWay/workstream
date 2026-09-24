@@ -4,7 +4,8 @@ import asyncio
 from dataclasses import FrozenInstanceError, asdict, replace
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import select
@@ -30,12 +31,12 @@ READS = ("read_management_tasks", "read_operational_tasks")
 async def test_management_queue_rejects_non_request(method):
     session = MagicMock()
     with pytest.raises(ValueError, match="request is invalid"):
-        await getattr(TaskRepository(session), method)({"project_id": str(uuid4())})
+        await getattr(TaskRepository(session), method)({"project_id": str(new_record_id())})
     session.execute.assert_not_called()
 
 
 def test_management_queue_contract_validation():
-    now, project, task = datetime.now(UTC), uuid4(), uuid4()
+    now, project, task = datetime.now(UTC), new_record_id(), new_record_id()
     management = ManagementTaskSummary(task, project, "Task", None, None, (), None, "draft", None, now, now)
     operational = OperationalTaskSummary(task, project, "draft", now, now)
     for item in (management, operational):
@@ -56,12 +57,12 @@ def test_management_queue_contract_validation():
         cursor = TaskQueueCursor(project, now, task)
         page = page_type(project, (item,), cursor)
         assert page.next_cursor == cursor
-        for change in ({"project_id": "bad"}, {"project_id": uuid4()}, {"items": []},
+        for change in ({"project_id": "bad"}, {"project_id": new_record_id()}, {"items": []},
                        {"items": (wrong_item,)}, {"items": (item,) * 101}):
             with pytest.raises(ValueError, match="page is invalid"):
                 replace(page, **change)
         for change in ({"items": ()}, {"next_cursor": {}},
-                       {"next_cursor": replace(cursor, task_id=uuid4())}):
+                       {"next_cursor": replace(cursor, task_id=new_record_id())}):
             with pytest.raises(ValueError, match="continuation differs"):
                 replace(page, **change)
 
@@ -108,10 +109,10 @@ async def test_management_queue_pagination(task_client, monkeypatch, method):
         assert seen == expected
         end = await read(replace(request, after=TaskQueueCursor(request.project_id, now + timedelta(seconds=2), expected[-1])))
         assert end.items == () and end.next_cursor is None
-        missing = await read(TaskQueueRequest(uuid4()))
+        missing = await read(TaskQueueRequest(new_record_id()))
         assert missing.items == () and missing.next_cursor is None
     # A cursor is a position, not a foreign key to a retained task.
-    missing_cursor = replace(first_cursor, task_id=uuid4(), created_at=first_cursor.created_at + timedelta(microseconds=1))
+    missing_cursor = replace(first_cursor, task_id=new_record_id(), created_at=first_cursor.created_at + timedelta(microseconds=1))
     async with factory() as session:
         assert await session.get(WorkstreamTask, str(missing_cursor.task_id)) is None
         continued = await getattr(TaskRepository(session), method)(replace(request, after=missing_cursor))
@@ -189,7 +190,7 @@ async def test_management_queue_transaction(task_client, method):
     task = await create_ready_task(task_client, project["id"])
     factory, request = db_session.get_session_factory(), TaskQueueRequest(UUID(project["id"]))
     async with factory() as session:
-        pending = WorkstreamTask(id=str(uuid4()), project_id=project["id"])
+        pending = WorkstreamTask(id=str(new_record_id()), project_id=project["id"])
         session.add(pending)
         assert len((await getattr(TaskRepository(session), method)(request)).items) == 1
         assert pending in session.new and session.in_transaction()

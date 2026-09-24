@@ -1,7 +1,8 @@
 """PostgreSQL concurrency proof for one open policy draft per project."""
 
 import asyncio
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import func, select
@@ -38,7 +39,7 @@ async def _run_distinct_create_race() -> tuple[int, int, int]:
                     )
                     await service.create_draft(
                         ContributionPolicyCreateDraftRequest(
-                            operation_id=uuid4(),
+                            operation_id=new_record_id(),
                             actor_profile_id=actor_id,
                             project_id=project_id,
                             name="Concurrent policy",

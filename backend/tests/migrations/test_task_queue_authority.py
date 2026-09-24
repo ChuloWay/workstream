@@ -1,13 +1,13 @@
 """Exact queue audit pairs and retained evidence under the real forward migration."""
 
 import asyncio
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import asyncpg
 from alembic import command
 import pytest
 
-from tests.migrations.test_outbox_dispatch_identity import config
+from tests.migration_fixtures import _config as config
 
 pytestmark = pytest.mark.postgres_schema_contract
 CONSTRAINT = "ck_audit_events_authorization_action_evidence"
@@ -19,7 +19,7 @@ PAIRS = (
 
 
 async def insert(connection, action, permission, *, allowed=True):
-    identity, project = str(uuid4()), str(uuid4())
+    identity, project = str(new_record_id()), str(new_record_id())
     await connection.execute(
         """insert into audit_events(
         id,entity_type,entity_id,event_type,actor_id,actor_roles,claim_snapshot,
@@ -31,15 +31,22 @@ async def insert(connection, action, permission, *, allowed=True):
         json_build_object('allowed',$9::boolean,'resource_context_digest','sha256:'||repeat('a',64)),
         $10,'project',$8,$11)""",
         identity, "SensitiveAuthorizationAllowed" if allowed else "SensitiveAuthorizationDenied",
-        str(uuid4()), str(uuid4()), str(uuid4()), permission, action, project, allowed,
-        str(uuid4()) if allowed else None, None if allowed else "permission_not_granted",
+        str(new_record_id()), str(new_record_id()), str(new_record_id()), permission, action, project, allowed,
+        str(new_record_id()) if allowed else None, None if allowed else "permission_not_granted",
     )
     return await connection.fetchval("select to_jsonb(a)::text from audit_events a where id=$1", identity)
 
 
-def test_upgrade_preserves_authorization_evidence(isolated_database_env, migration_lock, migration_schema_at):
+def test_upgrade_preserves_authorization_evidence(isolated_database_env, migration_lock):
     with migration_lock():
-        migration_schema_at("0030_task_management")
+        async def reset():
+            connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+            try:
+                await connection.execute("drop schema public cascade; create schema public")
+            finally:
+                await connection.close()
+        asyncio.run(reset())
+        command.upgrade(config(), "0001_uuid7_v01")
         async def seed():
             connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
             try:
@@ -47,7 +54,7 @@ def test_upgrade_preserves_authorization_evidence(isolated_database_env, migrati
             finally:
                 await connection.close()
         before = asyncio.run(seed())
-        command.upgrade(config(), "0031_task_queue_authority")
+        command.upgrade(config(), "0002_task_queue_authority")
         async def read():
             connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
             try:
@@ -60,9 +67,8 @@ def test_upgrade_preserves_authorization_evidence(isolated_database_env, migrati
 
 
 @pytest.mark.parametrize("remove_guard", [False, True])
-def test_queue_audit_permission_pairs_are_closed(isolated_database_env, migration_lock, migration_schema_at, remove_guard):
+def test_queue_audit_permission_pairs_are_closed(isolated_database_env, migration_lock, remove_guard):
     with migration_lock():
-        migration_schema_at("head")
         async def probe():
             connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
             try:

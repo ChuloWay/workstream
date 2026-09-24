@@ -6,6 +6,7 @@ from uuid import uuid4
 from sqlalchemy import text
 
 from app.core.hashing import canonical_json_hash
+from app.core.identifiers import new_record_id
 from app.modules.authorization.api import AuthorizationDenied
 from app.modules.authorization.repository import AdminAuthorizationRepository
 from app.modules.projects.api.guide_activation import (
@@ -66,7 +67,7 @@ class ActivationHandle(PreparedGuideActivation):
 
     async def consume_new(self, facts):
         self.check(facts)
-        decision = uuid4()
+        decision = new_record_id()
         await self.port.session.execute(
             text(
                 "INSERT INTO audit_events(id,entity_type,entity_id,event_type,actor_id,actor_roles,claim_snapshot,"
@@ -76,7 +77,7 @@ class ActivationHandle(PreparedGuideActivation):
                 "'local_authority',false,'{}'::json,'authority',1,'actor_profile',:request,:operation,"
                 "'project.guide.manage','project.guide.activate','authorization_evaluation',:project,"
                 "'project_guide_activation',:guide,"
-                "jsonb_build_object('allowed',true,'resource_context_digest',cast(:digest as text))::json,:grant,'project',:project)"
+                "jsonb_build_object('allowed',true,'resource_context_digest',cast(:digest as text))::json,:grant,'project',:target_project)"
             ),
             dict(
                 id=str(decision),
@@ -84,6 +85,7 @@ class ActivationHandle(PreparedGuideActivation):
                 request=self.locator.request_id,
                 operation=self.locator.operation_id,
                 project=str(self.locator.project_id),
+                target_project=str(self.locator.project_id),
                 guide=str(self.locator.guide_id),
                 digest=facts.digest,
                 grant=str(self.port.grant),
@@ -114,10 +116,10 @@ class ActivationHandle(PreparedGuideActivation):
             .mappings()
             .one()
         )
-        assert row["actor_id"] == str(self.locator.actor_profile_id)
+        assert str(row["actor_id"]) == str(self.locator.actor_profile_id)
         assert row["action_id"] == "project.guide.activate"
-        assert row["project_id"] == str(self.locator.project_id)
-        assert row["resource_id"] == str(self.locator.guide_id)
+        assert str(row["project_id"]) == str(self.locator.project_id)
+        assert str(row["resource_id"]) == str(self.locator.guide_id)
         assert row["after_facts"] == dict(allowed=True, resource_context_digest=facts.digest)
 
 

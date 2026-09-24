@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -49,7 +50,7 @@ class GuideMutationRepository:
     ) -> tuple[str, GuideMutationIdempotencyRecord]:
         """Claim or lock one actor/action replay namespace."""
         values = {
-            "id": uuid4(),
+            "id": new_record_id(),
             "actor_profile_id": actor_profile_id,
             "identity_link_id": identity_link_id,
             "action_id": action_id,

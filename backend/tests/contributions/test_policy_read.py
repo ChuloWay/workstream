@@ -1,7 +1,7 @@
 """Authorized immutable ContributionPolicy reads."""
 
 from decimal import Decimal
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -23,7 +23,7 @@ from tests.contributions.policy_test_support import service_fixture
 
 async def _read_version_view(*, with_graph: bool = False) -> ContributionPolicyView:
     fixture = service_fixture()
-    policy_id, version_id = uuid4(), uuid4()
+    policy_id, version_id = new_record_id(), new_record_id()
     policy = ContributionPolicy(
         id=policy_id,
         project_id=str(fixture.project_id),
@@ -42,14 +42,14 @@ async def _read_version_view(*, with_graph: bool = False) -> ContributionPolicyV
     )
     if with_graph:
         rule = ContributionRule(
-            id=uuid4(),
+            id=new_record_id(),
             contribution_policy_version_id=version_id,
             project_id=str(fixture.project_id),
             contribution_type="accepted_submission",
             compensation_mode="compensated",
         )
         definition = ContributionAwardDefinition(
-            id=uuid4(),
+            id=new_record_id(),
             contribution_rule_id=rule.id,
             contribution_policy_version_id=version_id,
             project_id=str(fixture.project_id),
@@ -57,7 +57,7 @@ async def _read_version_view(*, with_graph: bool = False) -> ContributionPolicyV
             instrument_type="money",
             unit_code="USD",
             quantity=Decimal("1.00"),
-            adapter_binding_id=uuid4(),
+            adapter_binding_id=new_record_id(),
         )
         rule.award_definitions = [definition]
         version.rules = [rule]
@@ -81,7 +81,7 @@ async def test_read_conceals_missing_policy() -> None:
     request = ContributionPolicyReadRequest(
         actor_profile_id=fixture.actor_id,
         project_id=fixture.project_id,
-        contribution_policy_id=uuid4(),
+        contribution_policy_id=new_record_id(),
     )
     with pytest.raises(ContributionPolicyConflict, match="not_found"):
         await fixture.service.read(request)
@@ -105,7 +105,7 @@ async def test_read_denies_without_composed_authority() -> None:
             ContributionPolicyReadRequest(
                 actor_profile_id=fixture.actor_id,
                 project_id=fixture.project_id,
-                contribution_policy_id=uuid4(),
+                contribution_policy_id=new_record_id(),
             )
         )
 

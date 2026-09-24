@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from typing import Protocol
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
@@ -76,14 +76,6 @@ class AssignmentInvalidationAuthorizationPort(Protocol):
     def prepare_assignment_invalidation(
         self, facts: AssignmentInvalidationAuthorityFacts,
     ) -> AbstractAsyncContextManager[PreparedAssignmentInvalidation]: ...
-
-
-def assignment_invalidation_evidence_id(target: AssignmentInvalidationTarget) -> UUID:
-    """One immutable effect identity across transport events and generations."""
-    return uuid5(
-        NAMESPACE_URL,
-        f"workstream:assignment-authority-revoked:{target.authority_invalidation_event_id}:{target.assignment_id}",
-    )
 
 
 @dataclass(frozen=True, slots=True)

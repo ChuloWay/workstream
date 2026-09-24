@@ -102,6 +102,8 @@ class GuideActivationReceipt(ActivationValue):
             or self.effective_at.tzinfo is None
         ):
             raise ValueError("activation receipt binding mismatch")
+        if self.operation_id.version != 7:
+            raise ValueError("activation operation identity must be UUIDv7")
         return self
 
 

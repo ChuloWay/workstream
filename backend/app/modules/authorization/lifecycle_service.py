@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -178,7 +179,7 @@ class ActorLifecycleService:
             request=request.model_dump(),
             response=response,
             success=AuthorityAuditEventInput(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 event_type=_EVENT[request.operation],
                 entity_type="actor_profile",
                 entity_id=str(request.actor_profile_id),
@@ -200,7 +201,7 @@ class ActorLifecycleService:
                 after_facts={"status": profile.status},
             ),
             invalidation=AuthorityInvalidationContext(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 request_id=decision.request_id,
                 correlation_id=decision.correlation_id,
             ),
@@ -227,7 +228,7 @@ class ActorLifecycleService:
             actor_ref=str(actor_profile_id),
             request=request.model_dump(),
             context=AuthorityMismatchContext(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 request_id=decision.request_id,
                 correlation_id=decision.correlation_id,
                 matched_grant_id=None,
@@ -245,7 +246,7 @@ class ActorLifecycleService:
         """Write one clean post-allow lifecycle denial without consuming the key."""
         if not _decision_matches(decision, request, existing=False):
             raise TypeError("actor lifecycle conflict requires exact authority")
-        event_id = uuid4()
+        event_id = new_record_id()
         await self._audit.add_authority_event(
             AuthorityAuditEventInput(
                 event_id=event_id,
@@ -395,7 +396,7 @@ class IdentityLinkLifecycleService:
             request=request.model_dump(),
             response=response,
             success=AuthorityAuditEventInput(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 event_type=_LINK_EVENT[request.operation],
                 entity_type="actor_identity_link",
                 entity_id=str(request.identity_link_id),
@@ -417,7 +418,7 @@ class IdentityLinkLifecycleService:
                 after_facts={"status": link.status},
             ),
             invalidation=AuthorityInvalidationContext(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 request_id=decision.request_id,
                 correlation_id=decision.correlation_id,
             ),
@@ -444,7 +445,7 @@ class IdentityLinkLifecycleService:
             actor_ref=str(actor_profile_id),
             request=request.model_dump(),
             context=AuthorityMismatchContext(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 request_id=decision.request_id,
                 correlation_id=decision.correlation_id,
                 matched_grant_id=None,
@@ -463,7 +464,7 @@ class IdentityLinkLifecycleService:
         """Write one clean post-allow link denial without consuming the key."""
         if not _identity_link_decision_matches(decision, request, existing=False):
             raise TypeError("identity link lifecycle conflict requires exact authority")
-        event_id = uuid4()
+        event_id = new_record_id()
         await self._audit.add_authority_event(
             AuthorityAuditEventInput(
                 event_id=event_id,

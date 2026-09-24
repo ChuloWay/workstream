@@ -18,6 +18,10 @@ import tempfile
 from typing import Any
 import uuid
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.record_id_collection import RecordIdCollection  # noqa: E402
 
 SCHEMA_VERSION = 1
 LANE_COUNT = 8
@@ -38,6 +42,7 @@ _UUID_ORIGINAL: Any = None
 _UUID_CALLSITE_COUNTS: dict[tuple[str, int], int] = {}
 _UUID_ROOT: Path | None = None
 _UUID_HEAD: str | None = None
+_RECORD_IDS = RecordIdCollection()
 
 
 class EvidenceError(RuntimeError):
@@ -80,6 +85,7 @@ def pytest_sessionstart(session: Any) -> None:
     _UUID_ORIGINAL = uuid.uuid4
     _UUID_CALLSITE_COUNTS.clear()
     uuid.uuid4 = _deterministic_uuid4
+    _RECORD_IDS.start(_UUID_ROOT, head)
 
 
 def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
@@ -113,6 +119,7 @@ def pytest_collection_finish(session: Any) -> None:
 def _restore_uuid4() -> None:
     """Restore uuid4 and repository aliases captured during collection."""
     global _UUID_ROOT, _UUID_HEAD, _UUID_ORIGINAL
+    _RECORD_IDS.restore()
     original = _UUID_ORIGINAL
     root = _UUID_ROOT
     if original is None:

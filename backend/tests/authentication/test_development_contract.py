@@ -39,8 +39,15 @@ async def test_actor_id_uses_subject_and_issuer_not_email(changed_field) -> None
     assert second.dev_auth_token is not None
     first_result = await first_verifier.verify(first.dev_auth_token)
     second_result = await second_verifier.verify(second.dev_auth_token)
-    first_actor = first_result.legacy_actor()
-    second_actor = second_result.legacy_actor()
+    first_actor = first_result.legacy_actor(
+        actor_id=actor_id_from_flow_identity("same-issuer", "same-subject")
+    )
+    second_actor = second_result.legacy_actor(
+        actor_id=actor_id_from_flow_identity(
+            "other-issuer" if changed_field == "issuer" else "same-issuer",
+            "other-subject" if changed_field == "subject" else "same-subject",
+        )
+    )
 
     assert first_verifier.canonical_issuer() == first_result.token.issuer == "same-issuer"
     assert (

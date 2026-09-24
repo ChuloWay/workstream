@@ -56,6 +56,7 @@ from .project_guide_projections import (
     guide_sufficiency_projection_facts_digest,
     guide_sufficiency_projection_identity,
     projection_authority_digest,
+    projection_preparation_identity,
 )
 
 from .project_setup_finalization import (
@@ -71,7 +72,7 @@ from .project_setup_finalization import (
     setup_finalization_authority_digest,
     setup_finalization_fact_values,
     setup_finalization_facts_digest,
-    setup_finalization_identity,
+    setup_finalization_preparation_identity,
 )
 
 __all__ = (
@@ -88,7 +89,7 @@ __all__ = (
     "setup_finalization_authority_digest",
     "setup_finalization_fact_values",
     "setup_finalization_facts_digest",
-    "setup_finalization_identity",
+    "setup_finalization_preparation_identity",
 
     "ActionId",
     "AdapterBindingCreateFacts",
@@ -137,6 +138,7 @@ __all__ = (
     "guide_sufficiency_projection_facts_digest",
     "guide_sufficiency_projection_identity",
     "projection_authority_digest",
+    "projection_preparation_identity",
     "project_guide_compilation_execute_resource_digest",
     "project_guide_compilation_facts_digest",
     "project_guide_compilation_request_authority_digest",

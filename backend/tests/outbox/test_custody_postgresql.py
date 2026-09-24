@@ -1,6 +1,7 @@
 """Database guards reject independently valid but inconsistent delivery facts."""
 
 from datetime import datetime
+from uuid import UUID
 
 import pytest
 from sqlalchemy import select, text
@@ -259,7 +260,7 @@ async def test_sql_claim_lease_is_bounded(delivery_harness):
         with pytest.raises(DBAPIError, match="ck_outbox_delivery_attempts_lease"):
             async with session.begin():
                 decision = await phase_decision(session, OutboxDispatchFacts(
-                    phase=OutboxDispatchPhase.CLAIM, event_id=event.event_id, project_id=h.project,
+                    phase=OutboxDispatchPhase.CLAIM, event_id=UUID(str(event.event_id)), project_id=h.project,
                     payload_digest=canonical_json_hash(event.payload), claim_generation=1,
                     claim_owner="bounded", claimed_at=now, claim_expires_at=now+timedelta(seconds=3601),
                 ))

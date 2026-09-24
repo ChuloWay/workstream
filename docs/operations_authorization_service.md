@@ -216,7 +216,7 @@ The v0.1 baseline and runtime fixed-service registry are the only current
 service-identity installation paths. The former pre-v0.1 mapping utility and
 revision-specific mapping procedure are historical and have been removed.
 Existing development databases are not upgraded or mapped forward: recreate
-the database and install `0001_v01_baseline`. Operators must never infer a
+the database and install `0001_uuid7_v01`. Operators must never infer a
 service identity from subject syntax, email, display name, token role, or
 adapter provenance.
 
@@ -243,7 +243,7 @@ or correct a demonstrably wrong attribution through a separately reviewed data
 repair. Do not map by email or display name, select a latest profile, convert a
 service identity, fabricate an ActorProfile, or edit immutable audit history.
 Pre-v0.1 transition preflights are historical only. Current deployments install
-the canonical contributor shape from `0001_v01_baseline`.
+the canonical contributor shape from `0001_uuid7_v01`.
 
 The reusable primitive is
 `public.require_human_actor_profile_reference()`. Exact triggers
@@ -254,7 +254,8 @@ human lineage. Exact foreign keys
 indexes `ix_task_assignments_contributor_id` and
 `ix_submissions_contributor_id` preserve lookup behavior.
 
-Both columns are non-null `varchar(36)` foreign keys. PostgreSQL
+Both columns are non-null native PostgreSQL `uuid` foreign keys; their Python
+owners expose canonical UUID strings. PostgreSQL
 rejects a missing profile with SQLSTATE `23503` and a service profile with
 `23514`. Suspended and deactivated human profiles remain valid historical
 references. The v0.1 baseline has no downgrade path.
@@ -457,7 +458,7 @@ forward migration.
 Rollback across the removed pre-v0.1 revision graph is unsupported. Production
 recovery must move forward through a reviewed corrective migration that
 preserves actor and authorization evidence. Non-production databases may be
-recreated from `0001_v01_baseline`. Never rewrite the Alembic stamp, delete
+recreated from `0001_uuid7_v01`. Never rewrite the Alembic stamp, delete
 authority evidence, or restore the retired identity-storage shape.
 
 ## Staged Rollout

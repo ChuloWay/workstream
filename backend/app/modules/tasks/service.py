@@ -8,7 +8,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import ValidationError
@@ -1336,7 +1337,7 @@ class TaskService:
             payload.update(event_payload)
         await self._repo.add_audit_event(
             AuditEvent(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 entity_type="task",
                 entity_id=task.id,
                 event_type=event_type,

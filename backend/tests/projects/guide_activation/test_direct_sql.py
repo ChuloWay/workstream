@@ -6,9 +6,56 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
+from app.core.identifiers import new_record_id
 from app.modules.projects.guide_activation.custody import load_guide_activation
 from app.modules.projects.models import ProjectGuide
 from .pg_support import activation_case, activation_service
+
+
+async def test_activation_operation_rejects_uuid4_at_sql_boundary(clean_postgres_database):
+    """The valid activation row fails only when its generated operation becomes UUIDv4."""
+    async with activation_case(clean_postgres_database) as (
+        factory,
+        command,
+        actor,
+        grant,
+        _,
+        _,
+    ):
+        async with factory() as session, session.begin():
+            receipt = await activation_service(session, actor, command, grant).activate(
+                command, actor=actor, request_id=uuid4()
+            )
+        async with factory() as session:
+            transaction = await session.begin()
+            try:
+                await session.execute(
+                    text(
+                        "create temporary table saved_activation_operation on commit drop as "
+                        "select * from guide_mutation_idempotency_records "
+                        "where operation_id=:operation"
+                    ),
+                    {"operation": receipt.operation_id},
+                )
+                await session.execute(
+                    text("update saved_activation_operation set operation_id=:operation"),
+                    {"operation": uuid4()},
+                )
+                await session.execute(
+                    text(
+                        "alter table guide_mutation_idempotency_records "
+                        "disable trigger guide_mutation_idempotency_guard"
+                    )
+                )
+                with pytest.raises(DBAPIError, match="operation_id_uuid7"):
+                    await session.execute(
+                        text(
+                            "insert into guide_mutation_idempotency_records "
+                            "select * from saved_activation_operation"
+                        )
+                    )
+            finally:
+                await transaction.rollback()
 
 
 async def test_active_guide_cannot_be_superseded_without_exact_successor(clean_postgres_database):
@@ -146,7 +193,7 @@ async def test_activation_audit_preserves_closed_resource_and_privacy_bounds(
 ):
     from sqlalchemy import select
     from app.modules.tasks.models import AuditEvent
-    from tests.authorization.contribution_policies.test_migration import clone_decision
+    from tests.authorization.contribution_policies.audit_schema_support import clone_decision
 
     async with activation_case(clean_postgres_database) as (factory, command, actor, grant, _, _):
         async with factory() as session, session.begin():
@@ -187,7 +234,7 @@ async def test_database_rejects_active_insert_and_copied_activation_audit(clean_
                         "SELECT :new,project_id,'forged-active','active',created_by,task_examples,task_examples_hash "
                         "FROM project_guides WHERE id=:guide"
                     ),
-                    dict(new=str(uuid4()), guide=str(command.target.proposal.guide_id)),
+                    dict(new=str(new_record_id()), guide=str(command.target.proposal.guide_id)),
                 )
             await session.rollback()
         async with factory() as session, session.begin():
@@ -209,8 +256,8 @@ async def test_database_rejects_active_insert_and_copied_activation_audit(clean_
                         "FROM guide_mutation_idempotency_records r WHERE operation_id=:original"
                     ),
                     dict(
-                        id=str(uuid4()),
-                        operation=str(uuid4()),
+                        id=str(new_record_id()),
+                        operation=str(new_record_id()),
                         key=str(uuid4()),
                         original=receipt.operation_id,
                     ),

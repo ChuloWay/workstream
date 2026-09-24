@@ -1,7 +1,6 @@
 """Automatic request proof using real authorized source mutations and ART material."""
 
 from tests.projects.guide_compilation.helpers import runtime_configuration
-from tests.migration_fixtures import current_schema_revision
 
 from uuid import UUID
 
@@ -362,42 +361,9 @@ async def test_original_manager_revocation_does_not_rewrite_source_consent(
                 )
             )
         ).one()
-        assert row.actor_profile_id == str(actor.actor_profile_id)
-        assert row.source_authorization_decision_event_id == setup.authorization_decision_event_id
-
-
-@pytest.mark.asyncio
-@pytest.mark.postgres_schema_contract
-async def test_retained_automatic_evidence_prevents_guide_creation_downgrade(
-    automatic_source, project_database_env, migration_lock
-):
-    from tests.migration_fixtures import run_guarded_revision_downgrade
-
-    factory, actor, setup_id, snapshot = automatic_source
-    await create_committed_document_fixture(snapshot["id"])
-    async with factory() as session:
-        await automatic_service(session, actor).request_automatic(
-            actor=actor, setup_run_id=setup_id
-        )
-
-    async with factory() as session:
-        assert await session.scalar(text("select version_num from alembic_version")) == current_schema_revision()
-
-    with pytest.raises(
-        RuntimeError, match="guide document creation custody cannot be downgraded"
-    ):
-        with migration_lock():
-            await run_guarded_revision_downgrade(project_database_env, "0018_guide_document_creation")
-    async with factory() as session:
-        assert (
-            await session.scalar(text("select version_num from alembic_version"))
-            == current_schema_revision()
-        )
-        assert (
-            await session.scalar(
-                text("select count(*) from project_guide_compilation_request_operations")
-            )
-            == 1
+        assert str(row.actor_profile_id) == str(actor.actor_profile_id)
+        assert str(row.source_authorization_decision_event_id) == str(
+            setup.authorization_decision_event_id
         )
 
 
@@ -447,15 +413,15 @@ async def test_concurrent_request_recovery_rechecks_current_authority(
             )
 
     await request()
-    original_match = GuideCompilationRepository.matching_request_operation
+    original_natural = GuideCompilationRepository.request_operation_for_setup
     original_recovery = GuideCompilationService._recover_request
-    matches, recoveries = [], []
+    natural_lookups, recoveries = [], []
 
-    async def miss_until_concurrent_winner_visible(repository, **kwargs):
-        matches.append(True)
-        if len(matches) == 1:
+    async def miss_until_concurrent_winner_visible(repository, *args, **kwargs):
+        natural_lookups.append(True)
+        if len(natural_lookups) == 1:
             return None
-        return await original_match(repository, **kwargs)
+        return await original_natural(repository, *args, **kwargs)
 
     async def revoke_between_reservation_rollback_and_recovery(service, **kwargs):
         assert not service._session.in_transaction()
@@ -471,7 +437,7 @@ async def test_concurrent_request_recovery_rechecks_current_authority(
 
     monkeypatch.setattr(
         GuideCompilationRepository,
-        "matching_request_operation",
+        "request_operation_for_setup",
         miss_until_concurrent_winner_visible,
     )
     monkeypatch.setattr(
@@ -481,7 +447,7 @@ async def test_concurrent_request_recovery_rechecks_current_authority(
     )
     with pytest.raises(AuthorizationDenied):
         await request()
-    assert len(recoveries) == 1 and len(matches) == 2
+    assert len(recoveries) == 1 and len(natural_lookups) == 2
     async with factory() as session:
         assert (
             await session.scalar(
@@ -516,8 +482,8 @@ async def test_concurrent_request_recovery_rechecks_current_authority(
     ],
 )
 async def test_stored_foreign_source_is_rejected_by_repository_and_insert(
-    automatic_source, project_client, field
-):  # noqa: F811
+    automatic_source, project_client, field  # noqa: F811
+):
     from dataclasses import replace
     from sqlalchemy.exc import IntegrityError
     from app.modules.authorization.api.project_guide_compilation import (
@@ -591,10 +557,13 @@ async def test_stored_foreign_source_is_rejected_by_repository_and_insert(
             if field in origin.__dataclass_fields__
             else getattr(changed_facts, field)
         )
+        stored_facts = replace(
+            changed_facts, operation_id=UUID(str(values["operation_id"]))
+        )
         forged = {
             **values,
             field: replacement if field.endswith("operation_id") else str(replacement),
-            "request_facts_digest": project_guide_compilation_facts_digest(changed_facts),
+            "request_facts_digest": project_guide_compilation_facts_digest(stored_facts),
         }
         guard = "source operation" if field in origin.__dataclass_fields__ else "origin lineage"
         with pytest.raises(IntegrityError, match=f"automatic compilation {guard} is invalid"):

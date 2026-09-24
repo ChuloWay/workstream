@@ -7,6 +7,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from sqlalchemy import select
 
 from app.core.hashing import canonical_json_hash
+from app.core.identifiers import new_record_id
 from app.interfaces.project_agents import validate_project_guide_compilation_result
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.authorization.api.guide_proposal_review import (
@@ -45,6 +46,14 @@ from .request_inputs import CompilationRequestInputs
 APPROVAL_ACTION = "project.submission_artifact_policy.approve"
 
 
+def approval_authorization_selector(actor_profile_id: UUID, idempotency_key: UUID) -> UUID:
+    """Stable non-row selector used only to prepare approval authority."""
+    return uuid5(
+        NAMESPACE_URL,
+        f"workstream.guide-proposal-approval:{actor_profile_id}:{idempotency_key}",
+    )
+
+
 async def approve_proposal(
     session,
     authorization,
@@ -59,9 +68,8 @@ async def approve_proposal(
 ) -> GuideProposalApprovalReceipt:
     """Compile and persist in the caller transaction after exact authority closes."""
     target = command.target
-    operation_id = uuid5(
-        NAMESPACE_URL,
-        f"workstream.guide-proposal-approval:{actor.actor_profile_id}:{command.idempotency_key}",
+    selector_id = approval_authorization_selector(
+        actor.actor_profile_id, command.idempotency_key
     )
     locator = GuideProposalAuthorizationLocator(
         project_id=target.project_id,
@@ -70,7 +78,7 @@ async def approve_proposal(
         actor_profile_id=actor.actor_profile_id,
         identity_link_id=actor.identity_link_id,
         action_id=APPROVAL_ACTION,
-        operation_id=operation_id,
+        operation_id=selector_id,
         request_id=request_id,
     )
     repository = GuideProposalRepository(session)
@@ -79,44 +87,30 @@ async def approve_proposal(
     async with authorization.prepare_proposal_operation(locator) as prepared:
         if not isinstance(prepared, PreparedGuideProposalOperation):
             raise GuideProposalError("authority_unavailable")
-        locked = await repository.lock(
-            GuideProposalSelection(
-                project_id=target.project_id,
-                guide_id=target.guide_id,
-                compilation_id=target.compilation_id,
-            )
+        locked, package, existing = await _lock_approval_selection(
+            session,
+            repository,
+            replay_repository,
+            command,
+            actor,
         )
-        if locked.target != target:
-            raise GuideProposalError("proposal_stale")
-        package = await repository.package(locked)
-        existing = await session.get(ProjectGuideProposalApproval, operation_id)
         if existing is not None:
             return await _replay_approval(
                 existing, target, request_digest, actor, package, locator, command, prepared
             )
-        if not locked.current:
-            raise GuideProposalError("proposal_stale")
-        require_catalogues(target, pre_capabilities, post_capabilities)
-        if (
-            locked.result.status == "guide_blocked"
-            or locked.view.policy is None
-            or command.acknowledged_warning_hashes != package.warning_hashes
-        ):
-            raise GuideProposalError("approval_blocked")
-        if (
-            locked.view.policy.lifecycle_status != "draft"
-            or package.current_approval_operation_id
-            != command.expected_previous_approval_operation_id
-            or package.current_approval_output_digest
-            != command.expected_previous_approval_output_digest
-        ):
-            raise GuideProposalError("proposal_stale")
-        previous = await _previous_outputs(session, command.expected_previous_approval_operation_id)
+        previous = await _validate_new_approval(
+            session,
+            locked,
+            package,
+            command,
+            pre_capabilities,
+            post_capabilities,
+        )
         outputs = await _compile_approval(
             session,
             locked,
             command,
-            operation_id,
+            new_record_id(),
             material,
             pre_capabilities,
             post_capabilities,
@@ -137,6 +131,70 @@ async def approve_proposal(
         outputs,
         facts,
         authority,
+    )
+
+
+async def _lock_approval_selection(
+    session,
+    repository,
+    replay_repository,
+    command,
+    actor,
+):
+    """Lock exact proposal lineage and classify its human replay namespace."""
+    target = command.target
+    locked = await repository.lock(
+        GuideProposalSelection(
+            project_id=target.project_id,
+            guide_id=target.guide_id,
+            compilation_id=target.compilation_id,
+        )
+    )
+    if locked.target != target:
+        raise GuideProposalError("proposal_stale")
+    package = await repository.package(locked)
+    reservation = await replay_repository.find_human_namespace(
+        actor_profile_id=str(actor.actor_profile_id),
+        idempotency_key=command.idempotency_key,
+    )
+    existing = (
+        await session.get(ProjectGuideProposalApproval, reservation.operation_id)
+        if reservation is not None
+        else None
+    )
+    if reservation is not None and existing is None:
+        raise GuideProposalError("operation_conflict")
+    return locked, package, existing
+
+
+async def _validate_new_approval(
+    session,
+    locked,
+    package,
+    command,
+    pre_capabilities,
+    post_capabilities,
+):
+    """Validate current proposal and predecessor facts before compiling outputs."""
+    if not locked.current:
+        raise GuideProposalError("proposal_stale")
+    require_catalogues(command.target, pre_capabilities, post_capabilities)
+    if (
+        locked.result.status == "guide_blocked"
+        or locked.view.policy is None
+        or command.acknowledged_warning_hashes != package.warning_hashes
+    ):
+        raise GuideProposalError("approval_blocked")
+    if (
+        locked.view.policy.lifecycle_status != "draft"
+        or package.current_approval_operation_id
+        != command.expected_previous_approval_operation_id
+        or package.current_approval_output_digest
+        != command.expected_previous_approval_output_digest
+    ):
+        raise GuideProposalError("proposal_stale")
+    return await _previous_outputs(
+        session, command.expected_previous_approval_operation_id
     )
 
 
@@ -176,10 +234,7 @@ async def _compile_approval(
     compiled = planner.compile_policy_bundle(
         effective_policy=effective_body, effective_policy_hash=effective_hash,
     )
-    effective_id, pre_id = (
-        uuid5(operation_id, "effective-policy"),
-        uuid5(operation_id, "pre-policy"),
-    )
+    effective_id, pre_id = new_record_id(), new_record_id()
     version = target.guide_version
     plan = planner.compile_effective_plan(
         lineage=EffectivePreSubmissionPlanLineage(

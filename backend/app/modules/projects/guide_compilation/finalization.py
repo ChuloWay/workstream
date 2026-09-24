@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+
 from app.modules.authorization.api import (
     AuthorizationDenied,
     AuthorizationUnavailable,
@@ -15,7 +16,7 @@ from app.modules.authorization.api import (
     PreparedSetupFinalization,
     ProjectSetupFinalizationLocator,
     SetupFinalizationAuthorizationPort,
-    setup_finalization_identity,
+    setup_finalization_preparation_identity,
 )
 from app.modules.projects.api import (
     ProjectGuideSetupFinalizationCommand,
@@ -90,12 +91,12 @@ class GuideCompilationFinalizationService:
 
     async def _finalize(self, command) -> ProjectGuideSetupFinalizationReceipt:
         """Close PREP before touching product state, including every replay path."""
-        finalization_id, operation_id, correlation_id = setup_finalization_identity(
-            command.setup_run_id, command.setup_generation, command.compilation_id
-        )
         attempt_id = await self._repository.finalization_attempt_id(command)
         locator = ProjectSetupFinalizationLocator(
-            project_id=command.project_id, operation_id=operation_id, correlation_id=correlation_id
+            project_id=command.project_id,
+            setup_run_id=command.setup_run_id,
+            setup_generation=command.setup_generation,
+            compilation_id=command.compilation_id,
         )
         replay = None
         async with self._authorization.prepare_setup_finalization(locator) as capability:
@@ -103,17 +104,19 @@ class GuideCompilationFinalizationService:
                 raise ProjectGuideSetupFinalizationError("service_authority_denied")
             view = await self._repository.lock_finalization(command, attempt_id)
             # Always re-query after acquiring setup serialization, including initial misses.
-            rows = await self._repository.finalization_receipts(command, operation_id)
+            rows = await self._repository.finalization_receipts(command)
             require_lineage(view, command)
             if rows:
-                if (
-                    len(rows) != 1
-                    or rows[0].id != finalization_id
-                    or rows[0].operation_id != operation_id
-                ):
+                if len(rows) != 1:
                     deny()
                 replay = rows[0]
-                facts = compose_facts(view, replay.source_state_digest)
+                facts = compose_facts(
+                    view,
+                    replay.source_state_digest,
+                    finalization_id=replay.id,
+                    operation_id=replay.operation_id,
+                    correlation_id=replay.correlation_id,
+                )
                 require_replay(view, replay, facts)
                 from uuid import UUID
 
@@ -121,7 +124,19 @@ class GuideCompilationFinalizationService:
                     facts, UUID(replay.authorization_decision_event_id)
                 )
             else:
-                facts = compose_facts(view, require_source_shape(view))
+                finalization_id, operation_id = self._repository.new_finalization_identity()
+                _, correlation_id = setup_finalization_preparation_identity(
+                    command.setup_run_id,
+                    command.setup_generation,
+                    command.compilation_id,
+                )
+                facts = compose_facts(
+                    view,
+                    require_source_shape(view),
+                    finalization_id=finalization_id,
+                    operation_id=operation_id,
+                    correlation_id=correlation_id,
+                )
                 authority = await capability.consume_new(facts)
                 require_authority(authority, facts)
         # __aexit__ (including a failing close) has completed before any product mutation.

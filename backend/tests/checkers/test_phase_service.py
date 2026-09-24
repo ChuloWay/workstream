@@ -3,7 +3,7 @@
 import inspect
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 from pydantic import ValidationError
@@ -78,7 +78,7 @@ async def test_post_phase_validates_exact_delegated_result(damage):
     source = request()
     changes = {}
     if damage == "request":
-        changes["request_id"] = uuid4()
+        changes["request_id"] = new_record_id()
     elif damage == "digest":
         changes["request_digest"] = OTHER_HASH
     elif damage == "generation":
@@ -99,7 +99,7 @@ async def test_post_phase_validates_exact_delegated_result(damage):
 @pytest.mark.asyncio
 async def test_invalid_post_request_never_reaches_executor():
     executor = SimpleNamespace(evaluate_post_submission=AsyncMock())
-    source = request().model_copy(update={"project_id": uuid4()})
+    source = request().model_copy(update={"project_id": new_record_id()})
     with pytest.raises(ValidationError, match="project mismatch"):
         await phases(post=executor).evaluate_post_submission(source)
     executor.evaluate_post_submission.assert_not_awaited()

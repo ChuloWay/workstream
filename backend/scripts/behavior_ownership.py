@@ -442,6 +442,9 @@ V01_BASELINE_REMOVED_TARGETS = frozenset(
 )
 V01_BASELINE_ADDED_TARGETS = frozenset(
     {
+        "backend/app/core/identifiers.py",
+        "backend/scripts/identifier_inventory.py",
+        "backend/scripts/record_id_collection.py",
         "backend/scripts/schema_baseline_manifest.py",
         "backend/scripts/schema_baseline_sql.py",
     }

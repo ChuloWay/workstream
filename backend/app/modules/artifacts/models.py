@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from sqlalchemy import Uuid
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -26,8 +27,8 @@ from app.db.base import Base
 
 
 SHA256_CHECK = "{column} ~ '^sha256:[0-9a-f]{{64}}$'"
-UUID_CHECK = (
-    "{column} ~ '^[0-9a-f]{{8}}-[0-9a-f]{{4}}-[1-5][0-9a-f]{{3}}-"
+ACTOR_UUID7_CHECK = (
+    "{column} ~ '^[0-9a-f]{{8}}-[0-9a-f]{{4}}-7[0-9a-f]{{3}}-"
     "[89ab][0-9a-f]{{3}}-[0-9a-f]{{12}}$'"
 )
 
@@ -37,12 +38,13 @@ class ArtifactContent(Base):
 
     __tablename__ = "artifact_contents"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint("sha256", "byte_count", name="uq_artifact_content_digest_size"),
         CheckConstraint(SHA256_CHECK.format(column="sha256"), name="sha256_shape"),
         CheckConstraint("byte_count >= 0", name="byte_count_nonnegative"),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     sha256: Mapped[str] = mapped_column(String(71), nullable=False, index=True)
     byte_count: Mapped[int] = mapped_column(Integer, nullable=False)
     media_type: Mapped[str | None] = mapped_column(String(200))
@@ -55,6 +57,7 @@ class PreSubmitExecutionAttempt(Base):
 
     __tablename__ = "pre_submit_execution_attempts"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint("actor_profile_id", "idempotency_key", name="uq_pre_submit_attempt_key"),
         UniqueConstraint("evidence_set_id", name="uq_pre_submit_attempt_evidence"),
         ForeignKeyConstraint(
@@ -76,16 +79,16 @@ class PreSubmitExecutionAttempt(Base):
                         name="ck_pre_submit_attempt_digest"),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    idempotency_key: Mapped[str] = mapped_column(String(36), nullable=False)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     actor_profile_id: Mapped[str] = mapped_column(
         ForeignKey("actor_profiles.id", ondelete="RESTRICT"), nullable=False,
     )
-    identity_link_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    task_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    assignment_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    prepared_generation_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    claim_nonce: Mapped[str] = mapped_column(String(36), nullable=False)
+    identity_link_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    task_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    assignment_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    prepared_generation_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    claim_nonce: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     request_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -100,6 +103,7 @@ class PreSubmitEvidenceSet(Base):
 
     __tablename__ = "pre_submit_evidence_sets"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["identity_link_id", "actor_profile_id"],
             ["actor_identity_links.id", "actor_identity_links.actor_profile_id"],
@@ -228,7 +232,7 @@ class PreSubmitEvidenceSet(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     attempt_id: Mapped[str | None] = mapped_column(
         ForeignKey("pre_submit_execution_attempts.id", ondelete="RESTRICT"), unique=True,
     )
@@ -254,10 +258,10 @@ class PreSubmitEvidenceSet(Base):
         ForeignKey("submissions.id", ondelete="RESTRICT")
     )
     predecessor_submission_version: Mapped[int | None] = mapped_column(Integer)
-    prepared_generation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    prepared_generation_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     archive_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     archive_byte_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    semantic_manifest_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    semantic_manifest_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     semantic_manifest_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     guide_id: Mapped[str] = mapped_column(
         ForeignKey("project_guides.id", ondelete="RESTRICT"), nullable=False
@@ -295,6 +299,7 @@ class PreSubmitEvidenceResult(Base):
 
     __tablename__ = "pre_submit_evidence_results"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint("evidence_set_id", "result_order", name="uq_pre_submit_result_order"),
         UniqueConstraint(
             "evidence_set_id",
@@ -345,7 +350,7 @@ class PreSubmitEvidenceResult(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     evidence_set_id: Mapped[str] = mapped_column(
         ForeignKey("pre_submit_evidence_sets.id", ondelete="RESTRICT"), nullable=False, index=True
     )
@@ -375,6 +380,7 @@ class ArtifactBinding(Base):
 
     __tablename__ = "artifact_bindings"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint(
             "project_id",
             "resource_type",
@@ -392,7 +398,7 @@ class ArtifactBinding(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     content_id: Mapped[str] = mapped_column(
         ForeignKey("artifact_contents.id", ondelete="RESTRICT"), nullable=False, index=True
     )
@@ -416,6 +422,7 @@ class GuideSourceArtifactBinding(Base):
 
     __tablename__ = "guide_source_artifact_bindings"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["source_snapshot_id", "project_id", "guide_id"],
             [
@@ -483,17 +490,17 @@ class GuideSourceArtifactBinding(Base):
         CheckConstraint("logical_role = 'guide_source_original'", name="ck_guide_bindings_role"),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    guide_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    source_snapshot_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    source_item_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    project_setup_run_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    project_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
+    guide_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
+    source_snapshot_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
+    source_item_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
+    project_setup_run_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
     setup_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
     content_id: Mapped[str] = mapped_column(
         ForeignKey("artifact_contents.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-    verified_replica_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    verified_replica_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
     logical_role: Mapped[str] = mapped_column(String(100), nullable=False)
     supersedes_binding_id: Mapped[str | None] = mapped_column(
         ForeignKey("guide_source_artifact_bindings.id", ondelete="RESTRICT"), index=True
@@ -507,6 +514,7 @@ class GuideSourceFormatClassification(Base):
 
     __tablename__ = "guide_source_format_classifications"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["binding_id", "content_id", "verified_replica_id", "setup_generation"],
             [
@@ -539,10 +547,10 @@ class GuideSourceFormatClassification(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    binding_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    content_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    verified_replica_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    binding_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
+    content_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
+    verified_replica_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
     setup_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     byte_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -560,6 +568,7 @@ class GuideSourceArtifactIncident(Base):
 
     __tablename__ = "guide_source_artifact_incidents"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["binding_id", "content_id", "verified_replica_id", "setup_generation"],
             [
@@ -584,10 +593,10 @@ class GuideSourceArtifactIncident(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    binding_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    content_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    verified_replica_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    binding_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
+    content_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
+    verified_replica_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
     setup_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
     code: Mapped[str] = mapped_column(String(40), nullable=False)
     observed_sha256: Mapped[str | None] = mapped_column(String(71))
@@ -601,6 +610,7 @@ class GuideSourceExtractionAttempt(Base):
 
     __tablename__ = "guide_source_extraction_attempts"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["binding_id", "content_id", "setup_generation"],
             [
@@ -643,10 +653,10 @@ class GuideSourceExtractionAttempt(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    binding_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    content_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    classification_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    binding_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
+    content_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
+    classification_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     setup_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
     detected_format: Mapped[str] = mapped_column(String(40), nullable=False)
     extractor_name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -689,9 +699,9 @@ class GuideSourceExtractionRetryBudget(Base):
         ),
     )
 
-    binding_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    content_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    classification_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    binding_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    content_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    classification_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     setup_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
     policy_version: Mapped[str] = mapped_column(String(80), nullable=False)
     claimed_slots: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -706,6 +716,7 @@ class GuideSourceExtractedContent(Base):
 
     __tablename__ = "guide_source_extracted_contents"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint(
             "content_id",
             "detected_format",
@@ -731,7 +742,7 @@ class GuideSourceExtractedContent(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     content_id: Mapped[str] = mapped_column(
         ForeignKey("artifact_contents.id", ondelete="RESTRICT"), nullable=False, index=True
     )
@@ -753,6 +764,7 @@ class GuideSourceExtractionUsage(Base):
 
     __tablename__ = "guide_source_extraction_usages"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             [
                 "binding_id",
@@ -810,14 +822,14 @@ class GuideSourceExtractionUsage(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    extracted_content_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    extraction_attempt_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    extracted_content_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
+    extraction_attempt_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     attempt_status: Mapped[str] = mapped_column(String(40), nullable=False)
-    binding_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    content_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    source_item_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    project_setup_run_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    binding_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
+    content_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
+    source_item_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
+    project_setup_run_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
     setup_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -885,6 +897,7 @@ class ArtifactAdmissionCharge(Base):
 
     __tablename__ = "artifact_admission_charges"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["scope_type", "scope_id"],
             ["artifact_admission_scopes.scope_type", "artifact_admission_scopes.scope_id"],
@@ -923,7 +936,7 @@ class ArtifactAdmissionCharge(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     scope_type: Mapped[str] = mapped_column(String(20), nullable=False)
     scope_id: Mapped[str] = mapped_column(String(120), nullable=False)
     sha256: Mapped[str] = mapped_column(String(71), nullable=False)
@@ -949,6 +962,7 @@ class ArtifactPutAttempt(Base):
 
     __tablename__ = "artifact_put_attempts"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["storage_namespace_id", "namespace_fingerprint"],
             ["artifact_storage_namespaces.id", "artifact_storage_namespaces.namespace_fingerprint"],
@@ -967,13 +981,13 @@ class ArtifactPutAttempt(Base):
         CheckConstraint(
             "((producer_request_type = 'guide' "
             "and producer_type = 'actor_profile' and "
-            + UUID_CHECK.format(column="producer_ref")
+            + ACTOR_UUID7_CHECK.format(column="producer_ref")
             + ") or (producer_request_type = 'checker_output' "
             "and producer_type = 'service_identity' "
             "and producer_ref = 'workstream.artifact.checker_output') or "
             "(producer_request_type = 'submission_bundle' "
             "and producer_type = 'actor_profile' and "
-            + UUID_CHECK.format(column="producer_ref")
+            + ACTOR_UUID7_CHECK.format(column="producer_ref")
             + "))",
             name="producer_identity",
         ),
@@ -1044,7 +1058,7 @@ class ArtifactPutAttempt(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     producer_request_type: Mapped[str] = mapped_column(String(30), nullable=False)
     producer_type: Mapped[str] = mapped_column(String(30), nullable=False)
     producer_ref: Mapped[str] = mapped_column(String(120), nullable=False)
@@ -1071,7 +1085,7 @@ class ArtifactPutAttempt(Base):
     request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="prepared", index=True)
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
-    executor_id: Mapped[str | None] = mapped_column(String(36))
+    executor_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     execution_generation: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     execution_mode: Mapped[str | None] = mapped_column(String(20))
@@ -1100,6 +1114,7 @@ class SubmissionBundleDurableIntent(Base):
 
     __tablename__ = "submission_bundle_durable_intents"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint(
             "pre_submit_evidence_set_id",
             name="uq_submission_bundle_intent_evidence",
@@ -1110,7 +1125,7 @@ class SubmissionBundleDurableIntent(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     pre_submit_evidence_set_id: Mapped[str] = mapped_column(
         ForeignKey("pre_submit_evidence_sets.id", ondelete="RESTRICT"),
         nullable=False,
@@ -1131,6 +1146,7 @@ class SubmissionBundleAdmission(Base):
 
     __tablename__ = "submission_bundle_admissions"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint("durable_intent_id", name="uq_submission_bundle_admission_intent"),
         UniqueConstraint(
             "pre_submit_evidence_set_id", name="uq_submission_bundle_admission_evidence"
@@ -1177,7 +1193,7 @@ class SubmissionBundleAdmission(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     durable_intent_id: Mapped[str] = mapped_column(
         ForeignKey("submission_bundle_durable_intents.id", ondelete="RESTRICT"), nullable=False
     )
@@ -1222,7 +1238,7 @@ class SubmissionBundleAdmission(Base):
     )
     predecessor_submission_version: Mapped[int | None] = mapped_column(Integer)
     locked_policy_context_hash: Mapped[str] = mapped_column(String(71), nullable=False)
-    semantic_manifest_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    semantic_manifest_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     semantic_manifest_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     archive_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     archive_byte_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -1259,6 +1275,7 @@ class ArtifactReplica(Base):
 
     __tablename__ = "artifact_replicas"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint(
             "storage_namespace_id",
             "provider_object_ref",
@@ -1282,7 +1299,7 @@ class ArtifactReplica(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     content_id: Mapped[str] = mapped_column(
         ForeignKey("artifact_contents.id", ondelete="RESTRICT"), nullable=False, index=True
     )
@@ -1310,6 +1327,7 @@ class ArtifactOperationReceipt(Base):
 
     __tablename__ = "artifact_operation_receipts"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint("put_attempt_id", name="uq_artifact_receipt_put_attempt"),
         CheckConstraint(SHA256_CHECK.format(column="request_digest"), name="request_digest_shape"),
         CheckConstraint("operation = 'put'", name="operation"),
@@ -1329,7 +1347,7 @@ class ArtifactOperationReceipt(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     contract_version: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     put_attempt_id: Mapped[str] = mapped_column(
         ForeignKey("artifact_put_attempts.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -1363,6 +1381,7 @@ class ArtifactPutObservationReceipt(Base):
 
     __tablename__ = "artifact_put_observation_receipts"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint(
             "put_attempt_id", "execution_generation", name="uq_artifact_put_observation_fence"
         ),
@@ -1387,7 +1406,7 @@ class ArtifactPutObservationReceipt(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     put_attempt_id: Mapped[str] = mapped_column(
         ForeignKey("artifact_put_attempts.id", ondelete="RESTRICT"), nullable=False, index=True
     )
@@ -1405,6 +1424,7 @@ class ArtifactVerificationJob(Base):
 
     __tablename__ = "artifact_verification_jobs"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint("parent_verification_job_id", name="uq_artifact_verification_parent"),
         CheckConstraint(
             "status in ('pending', 'running', 'verified', 'missing', "
@@ -1423,7 +1443,7 @@ class ArtifactVerificationJob(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     originating_put_attempt_id: Mapped[str] = mapped_column(
         ForeignKey("artifact_put_attempts.id", ondelete="RESTRICT"), nullable=False, index=True
     )
@@ -1437,7 +1457,7 @@ class ArtifactVerificationJob(Base):
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     maximum_attempts: Mapped[int] = mapped_column(Integer, nullable=False)
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
-    executor_id: Mapped[str | None] = mapped_column(String(36))
+    executor_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     execution_generation: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     cas_version: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
@@ -1462,6 +1482,7 @@ class ArtifactRecoveryAttempt(Base):
 
     __tablename__ = "artifact_recovery_attempts"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint(
             "requester_actor_profile_id",
             "source_verification_job_id",
@@ -1495,15 +1516,15 @@ class ArtifactRecoveryAttempt(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     requester_actor_profile_id: Mapped[str] = mapped_column(
         ForeignKey("actor_profiles.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     requester_identity_link_id: Mapped[str] = mapped_column(
         ForeignKey("actor_identity_links.id", ondelete="RESTRICT"), nullable=False
     )
-    authorization_request_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    authorization_correlation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    authorization_request_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    authorization_correlation_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     project_id: Mapped[str] = mapped_column(
         ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False, index=True
     )
@@ -1547,6 +1568,7 @@ class ArtifactVerificationReceipt(Base):
 
     __tablename__ = "artifact_verification_receipts"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint(
             "verification_job_id", "execution_generation", name="uq_artifact_verification_fence"
         ),
@@ -1568,7 +1590,7 @@ class ArtifactVerificationReceipt(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     verification_job_id: Mapped[str] = mapped_column(
         ForeignKey("artifact_verification_jobs.id", ondelete="RESTRICT"), nullable=False, index=True
     )

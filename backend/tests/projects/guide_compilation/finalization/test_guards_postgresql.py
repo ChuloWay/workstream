@@ -8,6 +8,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.core.identifiers import new_record_id
 from app.modules.projects.guide_compilation.finalization_payloads import (
     compose_facts,
     new_row,
@@ -22,23 +23,93 @@ from .pg_prerequisites import compilation_and_projections
 from .pg_support import DatabaseAuthorization, database_case, finalize, stored_state
 
 
+async def test_finalization_operation_rejects_uuid4_at_sql_boundary(
+    clean_postgres_database,
+):
+    """The exact finalization row fails only when its generated operation becomes UUIDv4."""
+    async with database_case(clean_postgres_database) as (values, factory, command):
+        await finalize(factory, values, command)
+        async with factory() as session:
+            transaction = await session.begin()
+            try:
+                await session.execute(
+                    text(
+                        "create temporary table saved_finalization on commit drop as "
+                        "select * from project_guide_setup_finalizations "
+                        "where setup_run_id=:setup"
+                    ),
+                    {"setup": command.setup_run_id},
+                )
+                await session.execute(
+                    text(
+                        "alter table project_guide_setup_finalizations "
+                        "disable trigger finalization_change_guard"
+                    )
+                )
+                await session.execute(
+                    text(
+                        "delete from project_guide_setup_finalizations "
+                        "where setup_run_id=:setup"
+                    ),
+                    {"setup": command.setup_run_id},
+                )
+                await session.execute(
+                    text(
+                        "alter table project_guide_setup_finalizations "
+                        "enable trigger finalization_change_guard"
+                    )
+                )
+                await session.execute(
+                    text("update saved_finalization set operation_id=:operation"),
+                    {"operation": uuid4()},
+                )
+                await session.execute(
+                    text(
+                        "alter table project_guide_setup_finalizations "
+                        "disable trigger finalization_insert_guard"
+                    )
+                )
+                with pytest.raises(DBAPIError, match="operation_id_uuid7"):
+                    await session.execute(
+                        text(
+                            "insert into project_guide_setup_finalizations "
+                            "select * from saved_finalization"
+                        )
+                    )
+            finally:
+                await transaction.rollback()
+
+
 async def pending_receipt(session, values, command):
     """Produce valid authority/receipt inputs without running finalization persistence."""
     from app.modules.authorization.api import (
         ProjectSetupFinalizationLocator,
-        setup_finalization_identity,
     )
 
     repo = GuideCompilationRepository(session)
     attempt = await repo.finalization_attempt_id(command)
     view = await repo.lock_finalization(command, attempt)
-    facts = compose_facts(view, require_source_shape(view))
-    authority = DatabaseAuthorization(session, values)
-    _, operation, correlation = setup_finalization_identity(
+    finalization_id, operation_id = repo.new_finalization_identity()
+    from app.modules.authorization.api import setup_finalization_preparation_identity
+
+    _, correlation_id = setup_finalization_preparation_identity(
         command.setup_run_id, command.setup_generation, command.compilation_id
     )
+    facts = compose_facts(
+        view,
+        require_source_shape(view),
+        finalization_id=finalization_id,
+        operation_id=operation_id,
+        correlation_id=correlation_id,
+    )
+    authority = DatabaseAuthorization(session, values)
     async with authority.prepare_setup_finalization(
-        ProjectSetupFinalizationLocator(project_id=command.project_id, operation_id=operation, correlation_id=correlation)
+        ProjectSetupFinalizationLocator(
+            project_id=command.project_id,
+            setup_run_id=command.setup_run_id,
+            setup_generation=command.setup_generation,
+            compilation_id=command.compilation_id,
+        )
     ) as handle:
         receipt = await handle.consume_new(facts)
     return new_row(facts, receipt), view.setup
@@ -75,7 +146,7 @@ async def assert_deferred_missing_receipt(session, command, row):
             {"id": str(command.setup_run_id)},
         )
     ).one()
-    assert tuple(stored[:3]) == (
+    assert (stored[0], *(str(value) if value is not None else None for value in stored[1:3])) == (
         row.setup_outcome, row.sufficiency_report_id, row.artifact_policy_id
     )
     assert stored.finished_at == await session.scalar(text("select transaction_timestamp()"))
@@ -355,14 +426,14 @@ async def test_receipt_rejects_existing_foreign_compilation_and_projection_owner
     clean_postgres_database, field
 ):
     async with database_case(clean_postgres_database) as (values, factory, first):
-        next_context = await second_generation(factory, values)
+        next_context, requested = await second_generation(factory, values, first)
         next_values = values | {key: uuid4() for key in ("operation", "request", "key")}
         current = await compilation_and_projections(
             clean_postgres_database,
             factory,
             next_values,
             compilation_context=next_context,
-            predecessor_id=first.compilation_id,
+            requested=requested,
         )
         before = await stored_state(factory, current)
         with pytest.raises(
@@ -400,7 +471,7 @@ async def test_receipt_rejects_existing_foreign_compilation_and_projection_owner
 
 async def test_receipt_actor_identity_link_must_belong_to_actor(clean_postgres_database):
     async with database_case(clean_postgres_database) as (values, factory, command):
-        actor, link = str(uuid4()), str(uuid4())
+        actor, link = str(new_record_id()), str(new_record_id())
         async with factory() as session, session.begin():
             await session.execute(
                 text(
@@ -412,9 +483,9 @@ async def test_receipt_actor_identity_link_must_belong_to_actor(clean_postgres_d
             await session.execute(
                 text(
                     "insert into actor_identity_links(id,actor_profile_id,issuer,subject,subject_kind,status,linked_by,last_verified_at) "
-                    "values(:link,:actor,'https://identity.flowresearch.tech',:actor,'human','active','test',transaction_timestamp())"
+                    "values(:link,:actor,'https://identity.flowresearch.tech',:subject,'human','active','test',transaction_timestamp())"
                 ),
-                {"link": link, "actor": actor},
+                {"link": link, "actor": actor, "subject": actor},
             )
         before = await stored_state(factory, command)
         with pytest.raises(DBAPIError, match="finalization authority mismatch"):

@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -40,12 +40,12 @@ def test_canonical_instrument_enum_is_public_and_closed() -> None:
         "project_points",
     }
     with pytest.raises(ValueError):
-        CompensationInstrumentType(str(uuid4()))
+        CompensationInstrumentType(str(new_record_id()))
 
 
 @pytest.mark.asyncio
 async def test_compensation_policy_binding_lookup_retains_transaction_fence() -> None:
-    project_id, binding_id = uuid4(), uuid4()
+    project_id, binding_id = new_record_id(), new_record_id()
     session = _Session(
         SimpleNamespace(
             id=binding_id,
@@ -68,11 +68,11 @@ async def test_compensation_policy_binding_lookup_retains_transaction_fence() ->
 
 @pytest.mark.asyncio
 async def test_compensation_policy_binding_lookup_rejects_inactive_binding() -> None:
-    session = _Session(SimpleNamespace(id=uuid4(), status="suspended"))
+    session = _Session(SimpleNamespace(id=new_record_id(), status="suspended"))
     with pytest.raises(PolicyAdapterBindingUnavailable):
         await PolicyAdapterBindingLookup(session).lock_policy_adapter_binding(  # type: ignore[arg-type]
-            project_id=uuid4(),
-            adapter_binding_id=uuid4(),
+            project_id=new_record_id(),
+            adapter_binding_id=new_record_id(),
             instrument_type=CompensationInstrumentType.MONEY,
         )
 
@@ -82,15 +82,15 @@ async def test_compensation_policy_binding_lookup_conceals_cross_project_binding
     session = _Session(None)
     with pytest.raises(PolicyAdapterBindingUnavailable):
         await PolicyAdapterBindingLookup(session).lock_policy_adapter_binding(  # type: ignore[arg-type]
-            project_id=uuid4(),
-            adapter_binding_id=uuid4(),
+            project_id=new_record_id(),
+            adapter_binding_id=new_record_id(),
             instrument_type=CompensationInstrumentType.PROJECT_POINTS,
         )
 
 
 @pytest.mark.asyncio
 async def test_projects_policy_eligibility_port_retains_transaction_fence() -> None:
-    project_id = uuid4()
+    project_id = new_record_id()
     session = _Session(SimpleNamespace(status="active"))
     facts = await ProjectContributionPolicyEligibility(  # type: ignore[arg-type]
         session

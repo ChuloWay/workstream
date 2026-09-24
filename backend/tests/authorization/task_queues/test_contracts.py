@@ -3,7 +3,7 @@
 from dataclasses import replace
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 from pydantic import SecretStr, ValidationError
@@ -22,7 +22,7 @@ SECRET = SecretStr("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=")
     {"limit": 101}, {"presented_cursor": 1}, {"presented_cursor": "a" * 513},
 ])
 def test_queue_request_is_closed(change):
-    request = TaskQueueReadRequest("task.queue.read", uuid4(), 1, None)
+    request = TaskQueueReadRequest("task.queue.read", new_record_id(), 1, None)
     with pytest.raises(ValueError, match="invalid task queue request"):
         replace(request, **change)
 
@@ -30,28 +30,28 @@ def test_queue_request_is_closed(change):
 @pytest.mark.parametrize("change", [{"task_id": "bad"}, {"created_at": "bad"}, {"created_at": datetime(2026, 1, 1)}])
 def test_queue_position_requires_exact_types(change):
     with pytest.raises(ValueError, match="invalid task queue position"):
-        replace(TaskQueuePosition(datetime.now(UTC), uuid4()), **change)
+        replace(TaskQueuePosition(datetime.now(UTC), new_record_id()), **change)
 
 
 def test_queue_resource_requires_exact_project():
-    project = uuid4()
+    project = new_record_id()
     args = dict(resource_id=project, scope_project_id=project, request_digest="sha256:" + "a" * 64)
     assert QueueReadResourceContext(**args).resource_id == project
     with pytest.raises(ValidationError, match="queue project scope differs"):
-        QueueReadResourceContext(**(args | {"scope_project_id": uuid4()}))
+        QueueReadResourceContext(**(args | {"scope_project_id": new_record_id()}))
 
 
 async def test_queue_adapter_reuses_cursor_and_binds_presented_page():
     kernel = AsyncMock()
     adapter = TaskQueueReadAuthorization(kernel, SECRET)
-    request = TaskQueueReadRequest("task.queue.read", uuid4(), 1, None)
+    request = TaskQueueReadRequest("task.queue.read", new_record_id(), 1, None)
     assert await adapter.authorize_and_decode(request) is None
     first_digest = kernel.require.call_args.args[1].request_digest
-    position = TaskQueuePosition(datetime.now(UTC), uuid4())
+    position = TaskQueuePosition(datetime.now(UTC), new_record_id())
     cursor = adapter.encode(request, position)
     assert await adapter.authorize_and_decode(replace(request, presented_cursor=cursor)) == position
     assert kernel.require.call_args.args[1].request_digest != first_digest
-    for changed in (replace(request, limit=2), replace(request, project_id=uuid4()),
+    for changed in (replace(request, limit=2), replace(request, project_id=new_record_id()),
                     replace(request, action="project.task.queue.read")):
         with pytest.raises(TaskQueueCursorInvalid):
             await adapter.authorize_and_decode(replace(changed, presented_cursor=cursor))
@@ -69,7 +69,7 @@ async def test_queue_domain_rejects_wrong_resource_and_unavailable_action():
 
     repository = AsyncMock()
     action = SimpleNamespace(availability=ActionAvailability.PLANNED)
-    project = uuid4()
+    project = new_record_id()
     valid = QueueReadResourceContext(resource_id=project, scope_project_id=project, request_digest="sha256:" + "a" * 64)
     for resource, expected in (({}, AuthorizationDenialCode.RESOURCE_GUARD_DENIED),
                                (valid, AuthorizationDenialCode.ACTION_UNAVAILABLE)):

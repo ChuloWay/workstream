@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol, cast
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -189,7 +190,7 @@ class SubmissionAdmissionConsumptionService:
         )
 
         binding = ArtifactBinding(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             content_id=admission.artifact_content_id,
             project_id=admission.project_id,
             resource_type="submission",

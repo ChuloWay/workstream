@@ -1,7 +1,5 @@
 """Map newly staged AUTH loss into exact same-transaction OUTBOX targets."""
 
-from uuid import uuid5
-
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -37,13 +35,13 @@ class AssignmentInvalidationPublication:
                     )
                 )
                 for target in page.items:
-                    event_id = uuid5(facts.invalidation_event_id, f"assignment:{target.assignment_id}")
                     await self._outbox.append(OutboxAppendInput(
-                        event_id=event_id, event_type=ASSIGNMENT_INVALIDATION_EVENT, event_version=1,
+                        event_type=ASSIGNMENT_INVALIDATION_EVENT, event_version=1,
                         aggregate_type="task_assignment", aggregate_id=target.assignment_id,
                         project_id=target.project_id, correlation_id=facts.correlation_id,
                         causation_event_id=facts.invalidation_event_id,
-                        idempotency_key=f"assignment-invalidation:{event_id}",
+                        idempotency_key=(f"assignment-invalidation:{facts.invalidation_event_id}:"
+                                         f"{target.assignment_id}"),
                         payload=target.model_dump(mode="json"),
                     ))
                 if page.next_after is None:

@@ -77,8 +77,8 @@ async def test_reservation_rejects_changed_request(conflict_case):
 
 
 async def test_reservation_returns_claimed_row(monkeypatch):
-    row = SimpleNamespace(id=UUID(int=30))
-    monkeypatch.setattr(module, "uuid4", lambda: UUID(int=30))
+    row = SimpleNamespace(id=module.new_record_id())
+    monkeypatch.setattr(module, "new_record_id", lambda: row.id)
     session = SimpleNamespace(
         scalar=AsyncMock(return_value=row.id), get=AsyncMock(return_value=row)
     )

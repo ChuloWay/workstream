@@ -23,7 +23,7 @@ from scripts.run_isolated_tests import LOOPBACK, NAME_RE, ROLE_RE
 DDL_LOCK_DIRECTORY = Path("/tmp")
 # Match the PostgreSQL 16 engine used by Backend CI. Catalog identity rendering
 # differs across major versions; regenerate only after comparing actual objects.
-EXPECTED_PUBLIC_SCHEMA_SHA256 = "e2d1ca6b30a132e82636cdd18bbf004b3885ec1deac05e2275c294cd83268b10"
+EXPECTED_PUBLIC_SCHEMA_SHA256 = "f0830daa8600d38ec2e6fc85664681e6ca25f34bc535296a17a40961b9f06152"
 PROTECTED_TEST_TABLES = (
     "actor_profile_migration_state",
     "alembic_version",
@@ -344,24 +344,6 @@ async def _drop_test_database_schema(database_url: str) -> None:
     finally:
         await connection.close()
 
-
-
-@pytest.fixture
-def migration_schema_at(request, isolated_database_env):
-    """Build an older schema only in the runner-owned migration-test database.
-
-    Call under migration_lock, like Alembic commands in schema-contract tests.
-    Forward-only custody migrations must not gain destructive downgrades merely
-    to arrange a test. The surrounding schema-contract fixture restores head.
-    """
-    if request.node.get_closest_marker("postgres_schema_contract") is None:
-        raise RuntimeError("historical schema setup requires postgres_schema_contract")
-
-    def build(revision: str) -> None:
-        asyncio.run(_drop_test_database_schema(isolated_database_env))
-        command.upgrade(_alembic_config(), revision)
-
-    return build
 
 
 def _rebuild_test_database_schema(database_url: str) -> None:

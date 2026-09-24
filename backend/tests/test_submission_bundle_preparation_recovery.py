@@ -3,7 +3,7 @@
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, call
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -62,12 +62,12 @@ async def test_hidden_preparation_maps_context_custody_and_authority_distinctly(
 
     with pytest.raises(HTTPException) as failure:
         await prepare_submission_bundle(
-            task_id=str(uuid4()),
+            task_id=str(new_record_id()),
             request=request,
             actor=_actor(),
             command=command,
-            assignment_id=str(uuid4()),
-            idempotency_key=str(uuid4()),
+            assignment_id=str(new_record_id()),
+            idempotency_key=str(new_record_id()),
             summary="summary",
             contributor_attestation="attestation",
         )
@@ -110,15 +110,15 @@ def _preparation_replay_runtime(prepare_bytes, evidence_id, *, eligible):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("outcome", ("completed", "blocked", "unresolved", "no_continuation", "corrupt_evidence"))
 async def test_hidden_preparation_replays_persisted_checked_custody(monkeypatch, outcome) -> None:
-    actor_id, task_id, assignment_id = uuid4(), uuid4(), uuid4()
-    evidence_id = uuid4()
+    actor_id, task_id, assignment_id = new_record_id(), new_record_id(), new_record_id()
+    evidence_id = new_record_id()
     expected = SubmissionBundlePreparationResult(
-        put_attempt_id=uuid4(),
-        admission_id=uuid4(),
+        put_attempt_id=new_record_id(),
+        admission_id=new_record_id(),
         submission_bundle_preparation_status="ready",
         replayed=True,
     )
-    locked = SimpleNamespace(effective_policy_id=uuid4(), pre_submit_policy_id=uuid4())
+    locked = SimpleNamespace(effective_policy_id=new_record_id(), pre_submit_policy_id=new_record_id())
     prepared = SimpleNamespace(
         commitment=object(),
         inspect=AsyncMock(return_value=object()),
@@ -149,7 +149,7 @@ async def test_hidden_preparation_replays_persisted_checked_custody(monkeypatch,
         "evaluate_submission_change",
         Mock(return_value=object()),
     )
-    project_id = uuid4()
+    project_id = new_record_id()
     authority = SimpleNamespace(
         preflight=AsyncMock(), revalidate=AsyncMock(side_effect=revalidate), close=Mock()
     )
@@ -176,15 +176,15 @@ async def test_hidden_preparation_replays_persisted_checked_custody(monkeypatch,
     request = SubmissionBundlePreparationRequest(
             actor=ActorIdentityFacts(
                 actor_profile_id=actor_id,
-                identity_link_id=uuid4(),
+                identity_link_id=new_record_id(),
                 actor_kind=ActorKind.HUMAN,
             ),
-            request_id=uuid4(),
-            correlation_id=uuid4(),
+            request_id=new_record_id(),
+            correlation_id=new_record_id(),
             task_id=task_id,
             assignment_id=assignment_id,
             predecessor_submission_id=None,
-            idempotency_key=uuid4(),
+            idempotency_key=new_record_id(),
             summary="summary",
             contributor_attestation="attestation",
             media_type="application/zip",

@@ -72,3 +72,28 @@ class PostPolicyRepository:
         return await self.session.scalar(select(PostPolicyOperation).where(
             PostPolicyOperation.operation_id == operation_id,
         ).with_for_update())
+
+    async def derive_operation(self, upstream_operation_id: UUID):
+        """Lock derivation custody by its natural upstream approval key."""
+        return await self.session.scalar(
+            select(PostPolicyOperation)
+            .where(
+                PostPolicyOperation.kind == "derive",
+                PostPolicyOperation.upstream_approval_operation_id == upstream_operation_id,
+            )
+            .with_for_update()
+        )
+
+    async def human_operation(
+        self, actor_profile_id: UUID, kind: str, idempotency_key: UUID
+    ):
+        """Lock human decision custody by the enforced actor/kind/key tuple."""
+        return await self.session.scalar(
+            select(PostPolicyOperation)
+            .where(
+                PostPolicyOperation.actor_profile_id == str(actor_profile_id),
+                PostPolicyOperation.kind == kind,
+                PostPolicyOperation.idempotency_key == idempotency_key,
+            )
+            .with_for_update()
+        )

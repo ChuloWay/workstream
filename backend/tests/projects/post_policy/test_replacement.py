@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
+from app.core.identifiers import new_record_id
 from app.core.hashing import canonical_json_hash
 from app.modules.projects.api.guide_proposals import GuideProposalApproval, GuideProposalSelection
 from app.modules.projects.api.post_policy import PostPolicyApproval, PostPolicyCorrection, PostPolicyDerive
@@ -64,8 +65,8 @@ async def test_corrected_generation_replaces_policy_and_retains_original_receipt
                 'SELECT id,lifecycle_status,approval_operation_id,supersession_operation_id FROM checker_policies ORDER BY lifecycle_status'
             ))).all()
             assert rows == [
-                (str(second.target.policy_id), 'compiled', None, None),
-                (str(first.target.policy_id), 'superseded', approved.operation_id,
+                (second.target.policy_id, 'compiled', None, None),
+                (first.target.policy_id, 'superseded', approved.operation_id,
                  correction.operation_id if origin == 'post_policy' else second.operation_id)]
         await operate(factory, actor, command.project_id, grant, 'request_correction',
             PostPolicyCorrection(target=second.target, idempotency_key=uuid4(), reason='Reconsider the next evaluation requirements'))
@@ -79,7 +80,7 @@ async def test_corrected_generation_replaces_policy_and_retains_original_receipt
                         "INSERT INTO checker_policies SELECT (jsonb_populate_record(NULL::checker_policies, "
                         "to_jsonb(source)||jsonb_build_object('id',cast(:id as text)))).* "
                         "FROM checker_policies source WHERE id=:source"),
-                        dict(id=str(uuid4()), source=str(policy.target.policy_id)))
+                        dict(id=str(new_record_id()), source=str(policy.target.policy_id)))
 
 
 async def test_fresh_predecessor_decisions_reject_after_successor_upstream_approval(clean_postgres_database):

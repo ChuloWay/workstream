@@ -6,7 +6,8 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, replace
 import json
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -317,7 +318,7 @@ class SubmissionBundleAdmissionPublisher:
         assert receipt is not None
         now = await self._session.scalar(select(func.now()))
         admission = SubmissionBundleAdmission(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             durable_intent_id=intent.id,
             pre_submit_evidence_set_id=evidence.id,
             put_attempt_id=attempt.id,

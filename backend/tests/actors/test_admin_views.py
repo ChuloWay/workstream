@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import cast
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 from pydantic import ValidationError
 import pytest
@@ -27,7 +27,7 @@ from app.modules.actors.api import ServiceIdentity
 def admin_response_fields():
     now = datetime.now(UTC)
     return {
-        "actor_profile_id": uuid4(),
+        "actor_profile_id": new_record_id(),
         "status": "active",
         "display_name": None,
         "created_at": now,
@@ -75,7 +75,7 @@ def test_actor_admin_response_rejects_mismatched_service_identity_pair(
 @pytest.fixture
 def admin_read_case():
     now = datetime.now(UTC)
-    actor_id, link_id = uuid4(), uuid4()
+    actor_id, link_id = new_record_id(), new_record_id()
     profile = ActorProfile(
         id=str(actor_id),
         actor_kind="service",
@@ -84,7 +84,7 @@ def admin_read_case():
         service_identity=ServiceIdentity.ARTIFACT_VERIFIER.value,
         display_name=None,
         contact_email="must-not-escape@example.test",
-        created_by=str(uuid4()),
+        created_by=str(new_record_id()),
         created_at=now,
         updated_at=now,
         last_seen_at=None,
@@ -96,7 +96,7 @@ def admin_read_case():
         subject="private-subject",
         subject_kind="service",
         status="active",
-        linked_by=str(uuid4()),
+        linked_by=str(new_record_id()),
         linked_at=now,
         last_verified_at=None,
     )

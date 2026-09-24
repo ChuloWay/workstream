@@ -1,4 +1,4 @@
-"""Public principal/key rejection and schema validation before mutation."""
+"""Public principal/key rejection and schema validation."""
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -15,11 +15,10 @@ from app.modules.projects.schemas import (
     SubmissionArtifactPolicyCreate,
     SubmissionArtifactPolicyUpdate,
 )
-from projects.client_fixtures import (
-    clear_project_settings_cache_after_test as clear_project_settings_cache_after_test,
-)
 from projects.submission_policy_mutations import rows
-from projects.submission_policy_fixtures import project_submission_artifact_policy_body
+from projects.submission_policy_fixtures import (
+    project_submission_artifact_policy_body,
+)
 
 
 def request(command):

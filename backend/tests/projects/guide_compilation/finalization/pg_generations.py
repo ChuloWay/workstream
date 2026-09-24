@@ -1,67 +1,73 @@
-"""A second real setup/material generation for cross-generation custody probes."""
+"""Create a second setup generation through the real correction workflow."""
 
-from datetime import timedelta
+from uuid import UUID, uuid4
 
-from sqlalchemy import null, select, text
+from sqlalchemy import text
 
+from app.adapters.artifacts import guide_document_manifest_port
+from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.projects.api.guide_documents import GuideDocumentManifestRequest
-from app.adapters.artifacts import (
-    guide_document_manifest_port,
-)
-from app.modules.projects.repository import ProjectRepository
-from app.modules.projects.models import ProjectSetupRun
-from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
+from app.modules.projects.api.guide_proposals import GuideProposalCorrection
+from app.modules.projects.guide_compilation.proposal_service import GuideProposalService
+
 from ..helpers import context
+from ..proposals.pg_support import ProposalAuthority, read_package, request_corrected_attempt
+from .pg_support import finalize
 
 
-async def clone_row(session, model, source_id, **changes):
-    """Copy a real parent row while naming each new immutable lineage edge."""
-    source = await session.get(model, str(source_id))
-    assert source is not None
-    values = {column.key: getattr(source, column.key) for column in model.__table__.columns}
-    values.update(changes)
-    row = model(**values)
-    session.add(row)
-    await session.flush()
-    return row
-
-
-async def second_generation(factory, values):
-    """Rebind committed originals to a separate setup generation and opaque grant."""
-    async with factory() as session, session.begin():
-        await session.execute(text("alter table project_setup_runs disable trigger user"))
-        setup_id = str(values["setup_2"])
-        source = await session.get(ProjectSetupRun, str(values["setup_1"]))
-        created = source.created_at + timedelta(microseconds=1)
-        await clone_row(
-            session,
-            ProjectSetupRun,
-            values["setup_1"],
-            id=setup_id,
-            setup_generation=2,
-            created_at=created,
-            updated_at=created,
-            # ORM JSON None becomes JSON null; a pristine setup requires SQL NULL.
-            post_submit_derivation_summary=null(),
-            celery_task_id=project_guide_compilation_task_id(setup_id, 2),
-        )
-        await session.execute(text("alter table project_setup_runs enable trigger user"))
-        latest = await ProjectRepository(session).lock_latest_project_setup_run(
-            str(values["project"]), str(values["guide"]), "v1"
-        )
-        assert latest.id == setup_id and latest.setup_generation == 2
-        assert await session.scalar(
-            select(ProjectSetupRun.post_submit_derivation_summary.is_(None)).where(
-                ProjectSetupRun.id == setup_id
+async def second_generation(factory, values, first):
+    """Admit generation two only through finalized-proposal correction custody."""
+    await finalize(factory, values, first)
+    async with factory() as session:
+        row = (
+            (
+                await session.execute(
+                    text(
+                        "SELECT a.id,l.id AS link,g.id AS grant FROM actor_profiles a "
+                        "JOIN actor_identity_links l ON l.actor_profile_id=a.id "
+                        "JOIN admin_role_grants g ON g.target_actor_profile_id=a.id "
+                        "WHERE g.role='project_manager' AND g.scope_project_id=:project "
+                        "AND g.status='active'"
+                    ),
+                    {"project": str(first.project_id)},
+                )
             )
+            .mappings()
+            .one()
         )
+    actor = ActorIdentityFacts(
+        UUID(str(row["id"])), UUID(str(row["link"])), ActorKind.HUMAN
+    )
+    package = await read_package(factory, first, actor, row["grant"])
+    async with factory() as session, session.begin():
+        correction = await GuideProposalService(
+            session,
+            ProposalAuthority(session, actor, first.project_id, row["grant"]),
+        ).request_correction(
+            GuideProposalCorrection(
+                target=package.target,
+                idempotency_key=uuid4(),
+                reason="Exercise exact successor-generation custody.",
+            ),
+            actor=actor,
+            request_id=uuid4(),
+        )
+    requested = await request_corrected_attempt(factory, actor, correction)
+    async with factory() as session:
         material = await guide_document_manifest_port(session).load(
             GuideDocumentManifestRequest(
-                project_id=values["project"],
-                guide_id=values["guide"],
+                project_id=first.project_id,
+                guide_id=first.guide_id,
                 guide_source_snapshot_id=values["snapshot"],
-                project_setup_run_id=values["setup_2"],
-                setup_generation=2,
+                project_setup_run_id=correction.successor_setup_run_id,
+                setup_generation=correction.successor_setup_generation,
             )
         )
-    return context(values, generation=2).model_copy(update={"material": material})
+    compilation_context = context(values, generation=2).model_copy(
+        update={
+            "setup_run_id": correction.successor_setup_run_id,
+            "setup_generation": correction.successor_setup_generation,
+            "material": material,
+        }
+    )
+    return compilation_context, requested

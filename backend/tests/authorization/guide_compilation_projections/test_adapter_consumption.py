@@ -39,7 +39,7 @@ from app.modules.authorization.domain.guide_compilation_projections import (
 )
 from app.modules.authorization import guide_compilation_projections as adapters
 
-from .support import DIGEST, custody, policy_facts, sufficiency_facts
+from .support import DIGEST, bind_identity, custody, policy_facts, sufficiency_facts
 
 
 def _install_custody(monkeypatch: pytest.MonkeyPatch):
@@ -88,12 +88,13 @@ async def test_projection_consume_returns_exact_receipt(
     facts = sufficiency_facts(locator.project_id, locator.attempt_id)
     adapter = GuideSufficiencyProjectionAuthorization(session)  # type: ignore[arg-type]
     async with adapter.prepare_sufficiency_projection(locator) as prepared:
+        identity = bind_identity(prepared, facts)
         receipt = await prepared.consume_new(facts)
         assert receipt.actor_profile_id == owned.actor_profile_id
         assert receipt.identity_link_id == owned.identity_link_id
         assert receipt.resource_context_digest == projection_authority_digest(
             component="guide_sufficiency",
-            identity=prepared.identity,
+            identity=identity,
             project_id=locator.project_id,
             facts_digest=guide_sufficiency_projection_facts_digest(facts),
         )
@@ -109,8 +110,8 @@ async def test_projection_allowed_evidence_has_exact_resource_custody(
     facts = sufficiency_facts(locator.project_id, locator.attempt_id)
     adapter = GuideSufficiencyProjectionAuthorization(session)  # type: ignore[arg-type]
     async with adapter.prepare_sufficiency_projection(locator) as prepared:
+        identity = bind_identity(prepared, facts)
         receipt = await prepared.consume_new(facts)
-        identity = prepared.identity
     event = evidence.events[0]
     assert event.event_id == receipt.decision_event_id
     assert event.resource_type == "project_guide_sufficiency_projection"
@@ -131,6 +132,7 @@ async def test_projection_consumption_is_single_use(
     facts = sufficiency_facts(locator.project_id, locator.attempt_id)
     adapter = GuideSufficiencyProjectionAuthorization(session)  # type: ignore[arg-type]
     async with adapter.prepare_sufficiency_projection(locator) as prepared:
+        bind_identity(prepared, facts)
         await prepared.consume_new(facts)
         with pytest.raises(PreparedAuthorizationInvalid):
             await prepared.consume_new(facts)
@@ -146,6 +148,7 @@ async def test_projection_closed_copied_and_reconstructed_handles_deny(
     facts = sufficiency_facts(locator.project_id, locator.attempt_id)
     adapter = GuideSufficiencyProjectionAuthorization(session)  # type: ignore[arg-type]
     async with adapter.prepare_sufficiency_projection(locator) as prepared:
+        bind_identity(prepared, facts)
         with pytest.raises(Exception, match="cannot be copied"):
             copy(prepared)
         with pytest.raises(Exception, match="cannot be copied"):
@@ -205,10 +208,12 @@ async def test_legacy_preparation_cannot_consume_projection_resource(
     )
     projection_adapter = GuideSufficiencyProjectionAuthorization(session)  # type: ignore[arg-type]
     async with projection_adapter.prepare_sufficiency_projection(locator) as projection:
+        facts = sufficiency_facts(locator.project_id, locator.attempt_id)
+        identity = bind_identity(projection, facts)
         projection_resource = projection_resource_context(
             "guide_sufficiency",
-            projection.identity,
-            sufficiency_facts(locator.project_id, locator.attempt_id),
+            identity,
+            facts,
         )
         with pytest.raises(PreparedAuthorizationHandleInvalid):
             await _owned.service.consume(
@@ -252,8 +257,10 @@ async def test_projection_locator_mismatch_denies_before_consumption(
     locator = ProjectGuideProjectionLocator(project_id=uuid4(), attempt_id=uuid4())
     adapter = GuideSufficiencyProjectionAuthorization(session)  # type: ignore[arg-type]
     async with adapter.prepare_sufficiency_projection(locator) as prepared:
+        facts = sufficiency_facts(uuid4(), locator.attempt_id)
+        bind_identity(prepared, facts)
         with pytest.raises(PreparedAuthorizationInvalid):
-            await prepared.consume_new(sufficiency_facts(uuid4(), locator.attempt_id))
+            await prepared.consume_new(facts)
     assert evidence.events == []
 
 
@@ -279,6 +286,7 @@ async def test_projection_consume_conceals_internal_failures(
     facts = sufficiency_facts(locator.project_id, locator.attempt_id)
     adapter = GuideSufficiencyProjectionAuthorization(session)  # type: ignore[arg-type]
     async with adapter.prepare_sufficiency_projection(locator) as prepared:
+        bind_identity(prepared, facts)
 
         async def fail(*_args, **_kwargs):
             raise failure
@@ -310,6 +318,7 @@ async def test_projection_replay_conceals_internal_failures(
     facts = sufficiency_facts(locator.project_id, locator.attempt_id)
     adapter = GuideSufficiencyProjectionAuthorization(session)  # type: ignore[arg-type]
     async with adapter.prepare_sufficiency_projection(locator) as prepared:
+        bind_identity(prepared, facts)
 
         async def fail(*_args, **_kwargs):
             raise failure
@@ -364,6 +373,7 @@ async def test_cross_component_facts_are_concealed_without_evidence(
     wrong_facts = policy_facts(locator.project_id, locator.attempt_id)
     adapter = GuideSufficiencyProjectionAuthorization(session)  # type: ignore[arg-type]
     async with adapter.prepare_sufficiency_projection(locator) as prepared:
+        bind_identity(prepared, wrong_facts)
         with pytest.raises(PreparedAuthorizationInvalid):
             if operation == "consume":
                 await prepared.consume_new(wrong_facts)  # type: ignore[arg-type]
@@ -415,9 +425,11 @@ async def test_wrong_deterministic_output_denies_before_evidence(
 ) -> None:
     _owned, session, evidence = _install_custody(monkeypatch)
     locator = ProjectGuideProjectionLocator(project_id=uuid4(), attempt_id=uuid4())
-    facts = replace(sufficiency_facts(locator.project_id, locator.attempt_id), report_id=uuid4())
+    original = sufficiency_facts(locator.project_id, locator.attempt_id)
+    facts = replace(original, report_id=uuid4())
     adapter = GuideSufficiencyProjectionAuthorization(session)  # type: ignore[arg-type]
     async with adapter.prepare_sufficiency_projection(locator) as prepared:
+        bind_identity(prepared, original)
         with pytest.raises(PreparedAuthorizationInvalid):
             await prepared.consume_new(facts)
     assert evidence.events == []
@@ -446,6 +458,7 @@ async def test_projection_handle_cannot_cross_root_transaction(
     facts = sufficiency_facts(locator.project_id, locator.attempt_id)
     adapter = GuideSufficiencyProjectionAuthorization(session)  # type: ignore[arg-type]
     async with adapter.prepare_sufficiency_projection(locator) as prepared:
+        bind_identity(prepared, facts)
         session.root = SimpleNamespace(is_active=True)
         with pytest.raises(PreparedAuthorizationInvalid):
             await prepared.consume_new(facts)
@@ -482,6 +495,7 @@ async def test_projection_consume_denial_still_closes_once(
     facts = sufficiency_facts(locator.project_id, locator.attempt_id)
     adapter = GuideSufficiencyProjectionAuthorization(session)  # type: ignore[arg-type]
     async with adapter.prepare_sufficiency_projection(locator) as prepared:
+        bind_identity(prepared, facts)
         owned.service.consume = deny  # type: ignore[method-assign]
         with pytest.raises(AuthorizationDenied):
             await prepared.consume_new(facts)

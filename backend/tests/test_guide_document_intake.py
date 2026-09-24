@@ -8,6 +8,7 @@ import pytest
 
 from sqlalchemy import select
 
+from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from app.modules.projects.models import (
     GuideMutationIdempotencyRecord,
@@ -813,7 +814,7 @@ async def test_upload_rechecks_authority_before_body(project_client, remaining_s
         grant = grants[0]
         if remaining_scope:
             session.add(AdminRoleGrant(
-                id=uuid4(), target_actor_profile_id=grant.target_actor_profile_id,
+                id=new_record_id(), target_actor_profile_id=grant.target_actor_profile_id,
                 role="project_manager", scope_type="project", scope_project_id=second["id"],
                 status="active", version=1,
                 granted_by_actor_profile_id=grant.granted_by_actor_profile_id,

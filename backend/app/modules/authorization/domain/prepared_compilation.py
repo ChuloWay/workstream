@@ -65,7 +65,36 @@ def prepared_compilation_matches(
     digest: str | None,
     resource: CompilationResourceContext,
 ) -> bool:
-    """Require exact final facts and digest equality."""
+    """Require exact facts, allowing one owner-minted request row identity."""
+    if isinstance(resource, ProjectGuideCompilationRequestResourceContext):
+        if context is None or digest is None:
+            return False
+        if context == resource.model_dump(mode="json"):
+            return digest == authorization_resource_digest(resource)
+        prepared_value = dict(context)
+        for field in _UUID_FIELDS:
+            if field in prepared_value and prepared_value[field] is not None:
+                prepared_value[field] = UUID(str(prepared_value[field]))
+        prepared_context = ProjectGuideCompilationRequestResourceContext.model_validate(
+            prepared_value
+        )
+        if digest != authorization_resource_digest(prepared_context):
+            return False
+        prepared = dict(context)
+        final = resource.model_dump(mode="json")
+        prepared_operation = UUID(str(prepared.pop("operation_id")))
+        prepared_resource = UUID(str(prepared.pop("resource_id")))
+        prepared.pop("request_facts_digest")
+        final_operation = UUID(str(final.pop("operation_id")))
+        final_resource = UUID(str(final.pop("resource_id")))
+        final.pop("request_facts_digest")
+        return (
+            prepared_operation == prepared_resource
+            and prepared_operation.version in {4, 5}
+            and final_operation == final_resource
+            and final_operation.version == 7
+            and prepared == final
+        )
     return context == resource.model_dump(mode="json") and (
         digest == authorization_resource_digest(resource)
     )

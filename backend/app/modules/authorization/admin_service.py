@@ -7,6 +7,7 @@ import binascii
 from datetime import datetime
 import json
 from uuid import UUID, uuid4
+from app.core.identifiers import new_record_id
 
 from sqlalchemy.sql import func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -143,7 +144,7 @@ class AdminRoleGrantService:
             raise TypeError("grant issuance requires exact matched authority")
         grant = await self._repository.add_grant(
             AdminRoleGrant(
-                id=uuid4(),
+                id=new_record_id(),
                 target_actor_profile_id=str(request.target_actor_id),
                 role=request.role.value,
                 scope_type=request.scope_type.value,
@@ -170,7 +171,7 @@ class AdminRoleGrantService:
             request=request.model_dump(),
             response=response,
             success=AuthorityAuditEventInput(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 event_type=AuthorityEventType.ADMIN_ROLE_GRANT_ISSUED,
                 entity_type="admin_role_grant",
                 entity_id=str(grant.id),
@@ -192,7 +193,7 @@ class AdminRoleGrantService:
                 after_facts=_grant_facts(grant),
             ),
             invalidation=AuthorityInvalidationContext(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 request_id=decision.request_id,
                 correlation_id=decision.correlation_id,
             ),
@@ -243,7 +244,7 @@ class AdminRoleGrantService:
             request=request.model_dump(),
             response=response,
             success=AuthorityAuditEventInput(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 event_type=AuthorityEventType.ADMIN_ROLE_GRANT_REVOKED,
                 entity_type="admin_role_grant",
                 entity_id=str(grant.id),
@@ -266,7 +267,7 @@ class AdminRoleGrantService:
                 after_facts=_grant_facts(grant),
             ),
             invalidation=AuthorityInvalidationContext(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 request_id=decision.request_id,
                 correlation_id=decision.correlation_id,
             ),
@@ -327,7 +328,7 @@ class AdminRoleGrantService:
             actor_ref=str(actor_profile_id),
             request=request.model_dump(),
             context=AuthorityMismatchContext(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 request_id=decision.request_id,
                 correlation_id=decision.correlation_id,
                 matched_grant_id=decision.matched_grant_id,
@@ -347,7 +348,7 @@ class AdminRoleGrantService:
             raise TypeError("grant issue conflict requires exact matched authority")
         await self._audit.add_authority_event(
             AuthorityAuditEventInput(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 event_type=AuthorityEventType.ADMIN_ROLE_GRANT_ISSUE_DENIED,
                 entity_type="admin_role_grant",
                 entity_id=str(grant_id),
@@ -381,7 +382,7 @@ class AdminRoleGrantService:
             raise TypeError("final administrator denial requires exact matched authority")
         await self._audit.add_authority_event(
             AuthorityAuditEventInput(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 event_type=AuthorityEventType.LAST_ACCESS_ADMIN_OPERATION_DENIED,
                 entity_type="admin_role_grant",
                 entity_id=str(grant_id),
@@ -456,7 +457,7 @@ class AdminRoleGrantService:
             raise BootstrapTargetIneligible("bootstrap target is not eligible")
         grant = await self._repository.add_grant(
             AdminRoleGrant(
-                id=uuid4(),
+                id=new_record_id(),
                 target_actor_profile_id=str(actor_profile_id),
                 role=AdminRole.ACCESS_ADMINISTRATOR.value,
                 scope_type=AdminScope.SYSTEM.value,
@@ -473,7 +474,7 @@ class AdminRoleGrantService:
         control.bootstrap_grant_id = grant.id
         control.version = 1
         control.updated_at = func.clock_timestamp()
-        event_id = uuid4()
+        event_id = new_record_id()
         await self._audit.add_authority_event(
             AuthorityAuditEventInput(
                 event_id=event_id,
@@ -506,7 +507,7 @@ class AdminRoleGrantService:
         """Record one bounded later/losing bootstrap conflict."""
         await self._audit.add_authority_event(
             AuthorityAuditEventInput(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 event_type=AuthorityEventType.ADMIN_ROLE_GRANT_ISSUE_DENIED,
                 entity_type="admin_role_grant",
                 entity_id=str(grant_id),

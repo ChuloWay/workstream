@@ -2,7 +2,8 @@
 
 from copy import deepcopy
 import json
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from httpx import AsyncClient
 from pydantic import ValidationError
@@ -76,7 +77,7 @@ async def test_project_text_nul_rejected_without_state_and_same_key_recovers(
     project_client: AsyncClient, operation: str, field: str,
 ) -> None:
     route, method, status = "/api/v1/projects", "POST", 201
-    payload = {"name": "Unicode 名 project", "slug": "nul-" + uuid4().hex,
+    payload = {"name": "Unicode 名 project", "slug": "nul-" + new_record_id().hex,
                "description": "Valid é description"}
     if operation != "project":
         project = await create_project(project_client)
@@ -127,7 +128,7 @@ def maximum_qualification() -> dict:
                             "unavailable_reason": None},
         "reputation_snapshot": {"availability": "available", "reference_ids": references[:],
                                 "unavailable_reason": None},
-        "prior_project_work_refs": [str(uuid4()) for _ in range(20)],
+        "prior_project_work_refs": [str(new_record_id()) for _ in range(20)],
         "external_expertise_refs": references[:],
     }
 
@@ -174,12 +175,12 @@ async def test_context_nul_rejected_preserving_id_lookup_and_concealment(
     slug = await project_client.get(route, headers=auth_headers(), params={"project_id": project["slug"]})
     assert slug.status_code == 404, slug.text
     assert slug.json()["error"]["code"] == "project_authorization_resource_not_found"
-    missing = await project_client.get(route, headers=auth_headers(), params={"project_id": str(uuid4())})
+    missing = await project_client.get(route, headers=auth_headers(), params={"project_id": str(new_record_id())})
     assert missing.status_code == 404, missing.text
     assert missing.json()["error"]["code"] == "project_authorization_resource_not_found"
     try:
         with monkeypatch.context() as scoped:
-            scoped.setenv("WORKSTREAM_DEV_AUTH_SUBJECT", f"ungranted-selector-{uuid4()}")
+            scoped.setenv("WORKSTREAM_DEV_AUTH_SUBJECT", f"ungranted-selector-{new_record_id()}")
             scoped.setenv("WORKSTREAM_DEV_AUTH_ROLES", "contributor")
             get_settings.cache_clear()
             admitted = await project_client.get("/api/v1/actors/me", headers=auth_headers())
@@ -193,11 +194,11 @@ async def test_context_nul_rejected_preserving_id_lookup_and_concealment(
 
 
 def maximum_role_request(role: str):
-    body = ProjectRoleGrantIssueBody(target_actor_profile_id=uuid4(), role=role,
+    body = ProjectRoleGrantIssueBody(target_actor_profile_id=new_record_id(), role=role,
         qualification=maximum_qualification(), reason="Maximum qualification regression")
     return authority_schemas.ProjectRoleGrantIssueRequest(
         operation=authority_schemas.AuthorityOperation.PROJECT_ROLE_GRANT_ISSUE,
-        project_id=uuid4(), target_actor_id=body.target_actor_profile_id, role=body.role,
+        project_id=new_record_id(), target_actor_id=body.target_actor_profile_id, role=body.role,
         qualification=body.qualification, reason_digest=authority_schemas.derive_reason_digest(body.reason))
 
 
@@ -255,7 +256,7 @@ def test_qualification_expansion_preserves_closed_nonretaining_admission() -> No
 def test_authority_envelope_bound_is_operation_specific(monkeypatch: pytest.MonkeyPatch, project_role: bool) -> None:
     request = maximum_role_request("submitter") if project_role else authority_schemas.ActorProfileSuspendRequest(
         operation=authority_schemas.AuthorityOperation.ACTOR_PROFILE_SUSPEND,
-        actor_profile_id=uuid4(), reason_digest=authority_schemas.derive_reason_digest("Bound proof"))
+        actor_profile_id=new_record_id(), reason_digest=authority_schemas.derive_reason_digest("Bound proof"))
     limit = 9 * 1024 if project_role else 2048
     # Artificial serialization sizes exercise the guard itself; the real maximum
     # request test above separately proves the public schema's actual encoding.
@@ -274,7 +275,7 @@ async def test_maximum_qualification_grant_persists_replays_and_conflicts_withou
     project_client: AsyncClient, monkeypatch: pytest.MonkeyPatch, role: str,
 ) -> None:
     project = await create_project(project_client, name="Maximum qualification")
-    monkeypatch.setenv("WORKSTREAM_DEV_AUTH_SUBJECT", f"qualification-target-{uuid4()}")
+    monkeypatch.setenv("WORKSTREAM_DEV_AUTH_SUBJECT", f"qualification-target-{new_record_id()}")
     monkeypatch.setenv("WORKSTREAM_DEV_AUTH_ROLES", "contributor")
     get_settings.cache_clear()
     target = await project_client.get("/api/v1/actors/me", headers=auth_headers())
@@ -287,7 +288,7 @@ async def test_maximum_qualification_grant_persists_replays_and_conflicts_withou
     payload = dict(target_actor_profile_id=actor_id, role=role, qualification=qualification,
                    reason="Maximum qualification regression")
     route = f"/api/v1/projects/{project['id']}/role-grants"
-    headers = auth_headers() | {"Idempotency-Key": str(uuid4())}
+    headers = auth_headers() | {"Idempotency-Key": str(new_record_id())}
     issued = await project_client.post(route, headers=headers, json=payload)
     assert issued.status_code == 201, issued.text
     replay = await project_client.post(route, headers=headers, json=payload)
@@ -313,7 +314,7 @@ async def test_maximum_qualification_grant_persists_replays_and_conflicts_withou
             assert getattr(snapshot, field) == expected
         assert await session.scalar(select(func.count()).select_from(ProjectRoleGrant)) == 1
         assert await session.scalar(select(func.count()).select_from(ProjectRoleQualificationSnapshot)) == 1
-    monkeypatch.setenv("WORKSTREAM_DEV_AUTH_SUBJECT", f"qualification-ungranted-{uuid4()}")
+    monkeypatch.setenv("WORKSTREAM_DEV_AUTH_SUBJECT", f"qualification-ungranted-{new_record_id()}")
     monkeypatch.setenv("WORKSTREAM_DEV_AUTH_ROLES", "contributor")
     get_settings.cache_clear()
     third_actor = await project_client.get("/api/v1/actors/me", headers=auth_headers())
@@ -391,10 +392,10 @@ async def test_project_overflow_has_no_state_and_same_key_recovers(
     field: str,
     limit: int,
 ) -> None:
-    key = uuid4()
+    key = new_record_id()
     payload = {
         "name": "Overflow candidate",
-        "slug": f"overflow-{uuid4()}",
+        "slug": f"overflow-{new_record_id()}",
     }
     payload[field] = "x" * (limit + 1)
     rejected = await project_client.post(
@@ -417,7 +418,7 @@ async def test_project_overflow_has_no_state_and_same_key_recovers(
 
     recovered_payload = {
         "name": "Recovered project",
-        "slug": f"recovered-{uuid4()}",
+        "slug": f"recovered-{new_record_id()}",
     }
     recovered = await project_client.post(
         "/api/v1/projects",
@@ -432,7 +433,7 @@ async def test_guide_version_overflow_has_no_state_and_same_key_recovers(
     project_client: AsyncClient,
 ) -> None:
     project = await create_project(project_client, name="Guide version recovery")
-    key = uuid4()
+    key = new_record_id()
     rejected = await project_client.post(
         f"/api/v1/projects/{project['id']}/guides",
         headers=auth_headers() | {"Idempotency-Key": str(key)},
@@ -478,7 +479,7 @@ async def test_guide_content_null_has_no_state_then_recovery_and_omission_succee
     }
     guide = await create_guide(project_client, project["id"], seed_payload)
     path = f"/api/v1/projects/{project['id']}/guides/{guide['id']}"
-    key = uuid4()
+    key = new_record_id()
     async with db_session.get_session_factory()() as session:
         seeded = await session.get(ProjectGuide, guide["id"])
         assert seeded is not None
@@ -542,7 +543,7 @@ async def test_unsupported_adjudicator_role_is_rejected_without_grant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project = await create_project(project_client, name="Unsupported role")
-    target_subject = f"role-target-{uuid4()}"
+    target_subject = f"role-target-{new_record_id()}"
     monkeypatch.setenv("WORKSTREAM_DEV_AUTH_SUBJECT", target_subject)
     monkeypatch.setenv("WORKSTREAM_DEV_AUTH_ROLES", "contributor")
     get_settings.cache_clear()
@@ -553,7 +554,7 @@ async def test_unsupported_adjudicator_role_is_rejected_without_grant(
     monkeypatch.setenv("WORKSTREAM_DEV_AUTH_SUBJECT", "project-manager-subject")
     monkeypatch.setenv("WORKSTREAM_DEV_AUTH_ROLES", "project_manager")
     get_settings.cache_clear()
-    key = uuid4()
+    key = new_record_id()
     payload = {
         "target_actor_profile_id": target_actor_id,
         "role": "adjudicator",
@@ -619,7 +620,7 @@ async def test_unsupported_adjudicator_role_is_rejected_without_grant(
 
 def test_adjudicator_invalidation_audit_facts_are_rejected() -> None:
     """Unsupported role facts cannot enter the typed authority audit contract."""
-    project_id, event_id = uuid4(), uuid4()
+    project_id, event_id = new_record_id(), new_record_id()
     projection = {
         "role": "reviewer", "scope_type": "project", "scope_id": str(project_id),
         "future_obligation": "rev_reviewer_obligation",
@@ -630,20 +631,20 @@ def test_adjudicator_invalidation_audit_facts_are_rejected() -> None:
         entity_type="authority_invalidation",
         entity_id=str(event_id),
         actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
-        actor_ref=str(uuid4()),
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        actor_ref=str(new_record_id()),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
         permission_id=PermissionId.PROJECT_ROLE_GRANT_MANAGE,
         project_id=str(project_id),
         resource_type="actor_profile",
-        resource_id=str(uuid4()),
+        resource_id=str(new_record_id()),
         target_ref_kind="project_role_grant",
-        target_ref_id=str(uuid4()),
+        target_ref_id=str(new_record_id()),
         reason="authority_state_changed",
-        idempotency_reference=uuid4(),
-        invalidation_cause_event_id=uuid4(),
+        idempotency_reference=new_record_id(),
+        invalidation_cause_event_id=new_record_id(),
         invalidation_target_kind="actor_profile",
-        invalidation_target_ref=str(uuid4()),
+        invalidation_target_ref=str(new_record_id()),
         before_facts={"effective": True, **projection},
         after_facts={"effective": False, **projection},
     )

@@ -1,6 +1,7 @@
 """Database custody for immutable policy lifecycle events."""
 
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import delete, text, update
@@ -92,8 +93,8 @@ async def test_event_rejects_invalid_transition_shape(
         assert source is not None
         session.add(
             ContributionPolicyLifecycleEvent(
-                id=uuid4(),
-                operation_id=uuid4(),
+                id=new_record_id(),
+                operation_id=new_record_id(),
                 request_digest="sha256:" + "1" * 64,
                 event_type="published",
                 actor_profile_id=source.actor_profile_id,
@@ -124,7 +125,7 @@ async def test_event_rejects_duplicate_operation_id(
         assert source is not None
         session.add(
             ContributionPolicyLifecycleEvent(
-                id=uuid4(),
+                id=new_record_id(),
                 operation_id=source.operation_id,
                 request_digest=source.request_digest,
                 event_type=source.event_type,
@@ -156,8 +157,8 @@ async def test_event_rejects_null_prior_policy_status(
         assert source is not None
         session.add(
             ContributionPolicyLifecycleEvent(
-                id=uuid4(),
-                operation_id=uuid4(),
+                id=new_record_id(),
+                operation_id=new_record_id(),
                 request_digest="sha256:" + "2" * 64,
                 event_type="draft_updated",
                 actor_profile_id=source.actor_profile_id,
@@ -224,8 +225,8 @@ async def test_event_rejects_cross_project_policy_version_ownership(
         assert source is not None
         session.add(
             ContributionPolicyLifecycleEvent(
-                id=uuid4(),
-                operation_id=uuid4(),
+                id=new_record_id(),
+                operation_id=new_record_id(),
                 request_digest="sha256:" + "4" * 64,
                 event_type=source.event_type,
                 actor_profile_id=source.actor_profile_id,

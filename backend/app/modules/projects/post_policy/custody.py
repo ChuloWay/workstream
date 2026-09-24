@@ -10,7 +10,12 @@ from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPol
 from app.modules.authorization.api import ActorKind
 from app.modules.authorization.api.post_policy import PostPolicyAuthorityReceipt
 from app.modules.projects.api.guide_proposals import GuideProposalError
-from app.modules.projects.api.post_policy import PostPolicyReceipt, PostPolicyTarget
+from app.modules.projects.api.post_policy import (
+    PostPolicyReceipt,
+    PostPolicyTarget,
+    post_policy_derive_authorization_selector,
+    post_policy_human_authorization_selector,
+)
 from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
 from app.modules.projects.post_submit_policy import parse_locked_post_submit_checker_policy_body
 
@@ -36,6 +41,13 @@ def operation_receipt(operation: PostPolicyOperation) -> PostPolicyReceipt:
     action = "project.post_submit_checker_policy." + {
         "derive": "derive", "approve": "approve", "correction": "correction.request",
     }[operation.kind]
+    selector_id = (
+        post_policy_derive_authorization_selector(operation.upstream_approval_operation_id)
+        if operation.kind == "derive"
+        else post_policy_human_authorization_selector(
+            UUID(operation.actor_profile_id), operation.idempotency_key, operation.kind
+        )
+    )
     if (
         receipt.operation_id != operation.operation_id or receipt.kind != operation.kind
         or target.model_dump(mode="json") != operation.target_json
@@ -54,7 +66,7 @@ def operation_receipt(operation: PostPolicyOperation) -> PostPolicyReceipt:
                 project_id=operation.project_id, guide_id=operation.guide_id,
                 compilation_id=str(operation.compilation_id),
                 actor_profile_id=operation.actor_profile_id, identity_link_id=operation.identity_link_id,
-                action_id=action, operation_id=str(operation.operation_id),
+                action_id=action, operation_id=str(selector_id),
             ),
             "policy_id": operation.policy_id,
             "finalization_id": str(target.proposal.finalization_id),

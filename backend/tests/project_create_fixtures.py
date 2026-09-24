@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
+from app.core.identifiers import new_record_id
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.core.hashing import canonical_json_hash
 from app.modules.audit.schemas import (
@@ -195,7 +196,7 @@ async def grant_system_project_manager(
     )
     if grant is None:
         grant = AdminRoleGrant(
-            id=uuid4(),
+            id=new_record_id(),
             target_actor_profile_id=link.actor_profile_id,
             role="project_manager",
             scope_type="system",
@@ -248,18 +249,54 @@ async def insert_historical_project(
         await connection.execute(
             text("alter table projects disable trigger project_creation_custody")
         )
-    try:
+    await connection.execute(
+        text(
+            "insert into projects (id, name, slug, status) values (:id, :name, :slug, :status)"
+        ),
+        {"id": project_id, "name": name, "slug": slug, "status": status},
+    )
+    # On SQL failure the caller must roll back, restoring transactional trigger
+    # state. Another statement in the aborted transaction would mask the cause.
+    if has_cutover:
         await connection.execute(
-            text(
-                "insert into projects (id, name, slug, status) values (:id, :name, :slug, :status)"
-            ),
-            {"id": project_id, "name": name, "slug": slug, "status": status},
+            text("alter table projects enable trigger project_creation_custody")
         )
-    finally:
-        if has_cutover:
-            await connection.execute(
-                text("alter table projects enable trigger project_creation_custody")
-            )
+
+
+async def seed_fixture_actor(
+    session: AsyncSession,
+    *,
+    issuer: str,
+    subject_prefix: str,
+    self_attributed: bool = False,
+    verified_at: datetime | None = None,
+) -> tuple[ActorProfile, ActorIdentityLink]:
+    """Persist one active fixture actor and its exact identity link."""
+    actor_id = str(new_record_id())
+    attribution = actor_id if self_attributed else "test"
+    profile = ActorProfile(
+        id=actor_id,
+        actor_kind="human",
+        status="active",
+        provisioning_method="automatic_first_access",
+        service_identity=None,
+        created_by=attribution,
+    )
+    session.add(profile)
+    await session.flush()
+    link = ActorIdentityLink(
+        id=str(new_record_id()),
+        actor_profile_id=actor_id,
+        issuer=issuer,
+        subject=f"{subject_prefix}-{actor_id}",
+        subject_kind="human",
+        status="active",
+        linked_by=attribution,
+        last_verified_at=verified_at or datetime.now(UTC),
+    )
+    session.add(link)
+    await session.flush()
+    return profile, link
 
 
 async def seed_authorized_project(
@@ -270,39 +307,20 @@ async def seed_authorized_project(
     slug: str,
     status: str = "draft",
 ) -> None:
-    """Stage current project-create custody for tests of the 0044 boundary itself."""
+    """Stage current project-create custody for the canonical project-create boundary."""
     project_uuid = UUID(project_id)
-    actor_id = str(uuid4())
-    link = ActorIdentityLink(
-        id=str(uuid4()),
-        actor_profile_id=actor_id,
+    _, link = await seed_fixture_actor(
+        session,
         issuer="https://project-fixture.test",
-        subject=f"project-fixture-{actor_id}",
-        subject_kind="human",
-        status="active",
-        linked_by="test",
-        last_verified_at=datetime.now(UTC),
+        subject_prefix="project-fixture",
     )
-    session.add(
-        ActorProfile(
-            id=actor_id,
-            actor_kind="human",
-            status="active",
-            provisioning_method="automatic_first_access",
-            service_identity=None,
-            created_by="test",
-        )
-    )
-    await session.flush()
-    session.add(link)
-    await session.flush()
     link, grant = await grant_system_project_manager(
         session,
         issuer=link.issuer,
         subject=link.subject,
     )
-    operation_id = uuid4()
-    decision_id = uuid4()
+    operation_id = new_record_id()
+    decision_id = new_record_id()
     resource = ProjectCreateResourceContext(
         resource_type="project_create",
         resource_id=operation_id,
@@ -334,7 +352,7 @@ async def seed_authorized_project(
         )
     )
     reservation = ProjectCreateIdempotencyRecord(
-        id=uuid4(),
+        id=new_record_id(),
         actor_profile_id=link.actor_profile_id,
         identity_link_id=link.id,
         action_id=ActionId.PROJECT_CREATE.value,
@@ -379,31 +397,13 @@ async def ensure_fixture_bootstrap(session):
         else None
     )
     if bootstrap is None:
-        bootstrap_actor = ActorProfile(
-            id=str(uuid4()),
-            actor_kind="human",
-            status="active",
-            provisioning_method="automatic_first_access",
-            service_identity=None,
-            created_by="test",
+        bootstrap_actor, _ = await seed_fixture_actor(
+            session,
+            issuer="https://project-fixture-bootstrap.test",
+            subject_prefix="project-fixture-bootstrap",
         )
-        session.add(bootstrap_actor)
-        await session.flush()
-        session.add(
-            ActorIdentityLink(
-                id=str(uuid4()),
-                actor_profile_id=bootstrap_actor.id,
-                issuer="https://project-fixture-bootstrap.test",
-                subject=f"project-fixture-bootstrap-{bootstrap_actor.id}",
-                subject_kind="human",
-                status="active",
-                linked_by="test",
-                last_verified_at=datetime.now(UTC),
-            )
-        )
-        await session.flush()
         bootstrap = AdminRoleGrant(
-            id=uuid4(),
+            id=new_record_id(),
             target_actor_profile_id=bootstrap_actor.id,
             role="access_administrator",
             scope_type="system",
@@ -431,7 +431,7 @@ async def grant_fixture_admin_role(session, actor_id, *, role="project_manager",
     if existing is not None:
         return existing
     bootstrap = await ensure_fixture_bootstrap(session)
-    grant = AdminRoleGrant(id=uuid4(), target_actor_profile_id=str(actor_id), role=role,
+    grant = AdminRoleGrant(id=new_record_id(), target_actor_profile_id=str(actor_id), role=role,
                            scope_type=scope, scope_project_id=str(project_id) if project_id is not None else None,
                            status="active", version=1, granted_by_actor_profile_id=bootstrap.target_actor_profile_id,
                            granted_by_admin_role_grant_id=bootstrap.id, grant_reason="downstream authority fixture")

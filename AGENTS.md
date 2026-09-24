@@ -106,6 +106,14 @@ definition or ownership boundary of Workstream.
 - Execution is async-first; do not document synchronous-first checkers or jobs.
 - FastAPI background tasks are acceptable for simple local v0.1 jobs; use Celery or equivalent durable workers when retries, scheduling, isolation, or distributed execution are needed.
 - Postgres is the record database.
+- Generate Workstream-owned surrogate record IDs with
+  `app.core.identifiers.new_record_id()` (UUIDv7) and store their keys/references
+  as native PostgreSQL UUID. Preserve owner-local string versus Python UUID
+  representations at existing typed boundaries. Natural/composite keys,
+  external identity subjects, caller request/idempotency tokens and content
+  hashes retain their semantics. Recover stored record IDs through the owner's
+  exact replay key; never derive row IDs from those tokens. UUID timestamps
+  confer neither authority nor business/commit order.
 - Local filesystem storage is acceptable only behind the provider-neutral
   `ArtifactStore`; AWS S3 is the v0.1 hosted provider and MinIO proves its
   protocol locally and in CI.

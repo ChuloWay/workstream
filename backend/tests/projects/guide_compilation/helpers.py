@@ -45,17 +45,18 @@ from app.modules.checkers.api.post_submit_catalogue import current_post_submit_c
 from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
 
 from app.core.hashing import canonical_json_hash
+from app.core.identifiers import new_record_id
 from app.modules.projects.api.task_examples import task_examples_hash, validate_task_examples
 
 TASK_EXAMPLES = validate_task_examples([{"content": "Review a claim using the project guide."}])
 TASK_EXAMPLE_MANIFEST = {"task_examples_hash": task_examples_hash(TASK_EXAMPLES), "task_examples_count": len(TASK_EXAMPLES)}
 SHA256 = canonical_json_hash(TASK_EXAMPLE_MANIFEST)
-SOURCE_ITEM_ID = UUID("11111111-1111-1111-1111-111111111111")
-DOCUMENT_VERSION_ID = UUID("22222222-2222-2222-2222-222222222222")
-PUT_ATTEMPT_ID = UUID("33333333-3333-3333-3333-333333333333")
-CONTENT_ID = UUID("44444444-4444-4444-4444-444444444444")
-RECEIPT_ID = UUID("55555555-5555-5555-5555-555555555555")
-REPLICA_ID = UUID("88888888-8888-8888-8888-888888888888")
+SOURCE_ITEM_ID = new_record_id()
+DOCUMENT_VERSION_ID = new_record_id()
+PUT_ATTEMPT_ID = new_record_id()
+CONTENT_ID = new_record_id()
+RECEIPT_ID = new_record_id()
+REPLICA_ID = new_record_id()
 # Metadata-only fixture; live document reader tests use complete PDF originals.
 SOURCE_BYTES = b"%PDF-1.7\nGuide fixture\n%%EOF"
 SOURCE_SHA256 = "sha256:" + hashlib.sha256(SOURCE_BYTES).hexdigest()
@@ -63,24 +64,21 @@ SOURCE_SHA256 = "sha256:" + hashlib.sha256(SOURCE_BYTES).hexdigest()
 
 def ids() -> dict[str, UUID]:
     """Return complete unrelated identifiers for one test scenario."""
-    return {
-        name: uuid4()
-        for name in (
-            "actor",
-            "link",
-            "wrong_link",
-            "project",
-            "guide",
-            "snapshot",
-            "setup_1",
-            "setup_2",
-            "setup_3",
-            "operation",
-            "request",
-            "key",
-            "audit",
-        )
-    }
+    record_names = (
+        "actor",
+        "link",
+        "wrong_link",
+        "project",
+        "guide",
+        "snapshot",
+        "setup_1",
+        "setup_2",
+        "setup_3",
+        "audit",
+    )
+    values = {name: new_record_id() for name in record_names}
+    values.update(operation=uuid4(), request=uuid4(), key=uuid4())
+    return values
 
 
 def runtime_configuration():
@@ -399,7 +397,7 @@ async def insert_authorization_evidence(
     permission_id: str = "project.guide_compilation.execute",
 ) -> UUID:
     """Insert exact future execute evidence for one hidden persistence test."""
-    event_id = uuid4()
+    event_id = new_record_id()
     sql_values = {name: str(value) for name, value in values.items()} | {
         "audit": str(event_id),
         "action": action_id,

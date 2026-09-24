@@ -15,7 +15,8 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
 import zipfile
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import func, select, text
@@ -115,7 +116,7 @@ class _AllowOperatorAuthority:
         return ArtifactOperatorAuthorizationEvidence(
             action_id=facts.action_id,
             permission_id=ACTION_BY_ID[facts.action_id].permission_id.value,
-            decision_id=uuid4(),
+            decision_id=new_record_id(),
         )
 
 
@@ -181,16 +182,16 @@ def _plan(catalogue, *, policy=None):
     policy = _effective_policy() if policy is None else policy
     policy_hash = canonical_json_hash(policy)
     compiled = compile_effective_project_submission_artifact_policy(policy, policy_hash)
-    snapshot_id = uuid4()
+    snapshot_id = new_record_id()
     lineage = EffectivePreSubmissionPlanLineage(
-        project_id=uuid4(),
-        guide_id=uuid4(),
+        project_id=new_record_id(),
+        guide_id=new_record_id(),
         guide_version="v0.1",
         source_snapshot_id=snapshot_id,
         source_snapshot_hash=guide_snapshot_columns(str(snapshot_id))["bundle_hash"],
-        effective_policy_id=uuid4(),
+        effective_policy_id=new_record_id(),
         effective_policy_hash=policy_hash,
-        pre_submit_policy_id=uuid4(),
+        pre_submit_policy_id=new_record_id(),
         pre_submit_policy_bundle_hash=compiled.compiled_bundle_hash,
     )
     return compile_effective_pre_submission_execution_plan(
@@ -279,8 +280,8 @@ async def _request(
     )
     request = PreparedBundleMaterializationRequest(
         prepared_authorization=_handle(),
-        task_id=uuid4(),
-        assignment_id=uuid4(),
+        task_id=new_record_id(),
+        assignment_id=new_record_id(),
         submission_artifact_policy_id=plan.lineage.effective_policy_id,
         checker_policy_id=plan.lineage.pre_submit_policy_id,
         predecessor_submission_version=None,
@@ -349,13 +350,13 @@ async def test_authority_preparation_denies_before_zip_inspection(
 
     with pytest.raises(ArtifactAuthorityDeniedError):
         await service.prepare_authorization(
-            task_id=uuid4(),
-            assignment_id=uuid4(),
+            task_id=new_record_id(),
+            assignment_id=new_record_id(),
             submission_artifact_policy_id=plan.lineage.effective_policy_id,
             checker_policy_id=plan.lineage.pre_submit_policy_id,
             prepared_artifact=prepared,
             effective_plan=plan,
-            idempotency_key=uuid4(),
+            idempotency_key=new_record_id(),
         )
 
     assert list((tmp_path / "scratch" / "workspaces").iterdir()) == []
@@ -425,7 +426,7 @@ async def test_two_stage_authority_uses_one_handle_and_exact_final_facts(
         checker_policy_id=request.checker_policy_id,
         prepared_artifact=request.prepared_artifact,
         effective_plan=request.effective_plan,
-        idempotency_key=uuid4(),
+        idempotency_key=new_record_id(),
     )
 
     result = await materialize_member_fixture(service,
@@ -459,8 +460,8 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
     request = replace(request, packet=replace(request.packet, contributor_attestation=(
         request.packet.contributor_attestation + " " + " ".join(policy_params.pop("attestation_terms"))
     )))
-    actor_id = uuid4()
-    identity_link_id = uuid4()
+    actor_id = new_record_id()
+    identity_link_id = new_record_id()
     lineage = request.effective_plan.lineage
     blocked_prepared = replay_prepared = drift_prepared = denied_prepared = None
     original_prepared_closed = False
@@ -478,7 +479,7 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
     try:
         async with engine.begin() as connection:
             params = {
-                "actor": str(actor_id),
+                "actor": str(actor_id), "subject": str(actor_id),
                 "link": str(identity_link_id),
                 "project": str(lineage.project_id),
                 "guide": str(lineage.guide_id),
@@ -505,7 +506,7 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                     "insert into actor_identity_links "
                     "(id,actor_profile_id,issuer,subject,subject_kind,status,linked_by,"
                     "last_verified_at) values "
-                    "(:link,:actor,'flow-test',:actor,'human','active','test',now())"
+                    "(:link,:actor,'flow-test',:subject,'human','active','test',now())"
                 ),
                 params,
             )
@@ -549,7 +550,7 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                 )
                 result = await execute_evidence_workflow(workflow,
                     fresh_request,
-                    preparation_request=replace(preparation_request, idempotency_key=uuid4()),
+                    preparation_request=replace(preparation_request, idempotency_key=new_record_id()),
                 )
                 assert result.pass_capability is not None
                 return prepared, result
@@ -563,13 +564,6 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                 preparation_request=preparation_request,
             )
             assert first.pass_capability is not None, first.failure_audit
-            namespace = ArtifactStorageNamespaceSpec(
-                backend="local",
-                adapter="local",
-                provider_profile="test",
-                namespace_descriptor={"test": "submission-bundle"},
-                namespace_fingerprint=canonical_json_hash({"test": "submission-bundle"}),
-            )
             admission_settings = Settings(_env_file=None,
                 **artifact_admission_limit_settings(1024 * 1024),
                 environment="test",
@@ -700,14 +694,14 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                 )
                 assert attempt is not None
                 content = ArtifactContent(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     sha256=attempt.sha256,
                     byte_count=attempt.byte_count,
                     media_type=attempt.media_type,
                     normalized_display_name=None,
                 )
                 replica = ArtifactReplica(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     content_id=content.id,
                     storage_namespace_id=attempt.storage_namespace_id,
                     namespace_fingerprint=attempt.namespace_fingerprint,
@@ -721,7 +715,7 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                 session.add_all((content, replica))
                 await session.flush()
                 put_receipt = ArtifactOperationReceipt(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     put_attempt_id=attempt.id,
                     guide_source_item_id=None,
                     checker_run_id=None,
@@ -738,7 +732,7 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                     details=[],
                 )
                 job = ArtifactVerificationJob(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     originating_put_attempt_id=attempt.id,
                     replica_id=replica.id,
                     status="verified",
@@ -750,7 +744,7 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                 attempt.replica_id = replica.id
                 attempt.receipt_id = put_receipt.id
                 verification_receipt = ArtifactVerificationReceipt(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     verification_job_id=job.id,
                     execution_generation=1,
                     outcome="verified",
@@ -894,7 +888,7 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
             blocked = await execute_evidence_workflow(workflow,
                 blocked_request,
                 preparation_request=replace(
-                    preparation_request, idempotency_key=uuid4(),
+                    preparation_request, idempotency_key=new_record_id(),
                     contributor_attestation=blocked_request.packet.contributor_attestation,
                     summary=blocked_request.packet.summary,
                 ),
@@ -971,7 +965,7 @@ async def test_materializer_rejects_policy_lineage_mismatch_before_authority(
         match="pre_submission_materialization_context_invalid",
     ):
         await materialize_member_fixture(service,
-            replace(request, submission_artifact_policy_id=uuid4())
+            replace(request, submission_artifact_policy_id=new_record_id())
         )
 
     assert authority.facts is None

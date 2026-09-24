@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
+from app.core.identifiers import new_record_id
 from app.modules.projects.api.guide_documents import GuideDocumentUnavailable
 from app.adapters.projects import project_guide_document_scope_port
 from app.adapters.artifacts import guide_document_manifest_port
@@ -185,7 +186,7 @@ async def _observed_upload(sessions, document, *, defect=None):
         put.execution_generation = 1
         if defect != "missing_receipt":
             session.add(ArtifactPutObservationReceipt(
-                id=str(uuid4()), put_attempt_id=put.id,
+                id=str(new_record_id()), put_attempt_id=put.id,
                 execution_generation=2 if defect == "wrong_generation" else 1,
                 outcome="observed_confirmed", expected_sha256=put.sha256,
                 expected_byte_count=put.byte_count,

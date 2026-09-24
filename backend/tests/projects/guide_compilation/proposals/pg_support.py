@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
+from app.core.identifiers import new_record_id
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind, AuthorizationDenied
 from app.modules.authorization.api.guide_proposal_review import (
     GuideProposalAuthorityReceipt,
@@ -52,8 +53,10 @@ class PreparedProposal(PreparedGuideProposalOperation):
             if approval
             else "project_guide_compilation_correction"
         )
-        resource = facts.artifact_policy_id if approval else facts.locator.operation_id
-        decision = uuid4()
+        resource = self.port.resource_override or (
+            facts.artifact_policy_id if approval else facts.locator.operation_id
+        )
+        decision = new_record_id()
         await self.port.session.execute(
             text(
                 "INSERT INTO audit_events(id,entity_type,entity_id,event_type,actor_id,actor_roles,claim_snapshot,"
@@ -63,7 +66,7 @@ class PreparedProposal(PreparedGuideProposalOperation):
                 ":actor,'[]'::json,'{}'::json,'local_authority',false,'{}'::json,'authority',1,'actor_profile',"
                 ":request,:operation,:permission,:action,'authorization_evaluation',:project,:kind,:resource,"
                 "jsonb_build_object('allowed',true,'resource_context_digest',cast(:digest as text))::json,"
-                ":grant,'project',:project)"
+                ":grant,'project',:target_project)"
             ),
             dict(
                 id=str(decision),
@@ -73,6 +76,7 @@ class PreparedProposal(PreparedGuideProposalOperation):
                 permission=permission,
                 action=facts.locator.action_id,
                 project=str(self.port.project_id),
+                target_project=str(self.port.project_id),
                 kind=kind,
                 resource=str(resource),
                 digest=facts.digest,
@@ -108,17 +112,21 @@ class PreparedProposal(PreparedGuideProposalOperation):
         if (
             row["actor_id"] != str(self.port.actor.actor_profile_id)
             or row["action_id"] != facts.locator.action_id
-            or row["project_id"] != str(self.port.project_id)
+            or str(row["project_id"]) != str(self.port.project_id)
             or row["after_facts"] != {"allowed": True, "resource_context_digest": facts.digest}
         ):
             raise AuthorizationDenied("retained proposal evidence mismatch")
 
 
 class ProposalAuthority:
-    def __init__(self, session, actor, project_id, grant_id, *, on_consume=None, close_error=False):
+    def __init__(
+        self, session, actor, project_id, grant_id, *, on_consume=None, close_error=False,
+        resource_override=None,
+    ):
         self.session, self.actor = session, actor
         self.project_id, self.grant_id = project_id, grant_id
         self.on_consume, self.close_error = on_consume, close_error
+        self.resource_override = resource_override
         self.consumed = 0
         self.last_facts = None
 
@@ -178,8 +186,12 @@ async def proposal_case(url, *, classification="draft_ready", guide_version="v1"
                 .mappings()
                 .one()
             )
-        actor = ActorIdentityFacts(UUID(row["id"]), UUID(row["link"]), ActorKind.HUMAN)
-        yield values, factory, command, actor, row["grant"]
+        actor = ActorIdentityFacts(
+            UUID(str(row["id"])),
+            UUID(str(row["link"])),
+            ActorKind.HUMAN,
+        )
+        yield values, factory, command, actor, UUID(str(row["grant"]))
 
 
 async def read_package(factory, command, actor, grant_id):
@@ -303,7 +315,9 @@ async def finalize_corrected_attempt(factory, values, actor, correction):
     assert runtime.calls == 1
     from app.modules.projects.guide_compilation.models import ProjectGuideSetupFinalization
     async with factory() as session:
-        finalization = await session.get(ProjectGuideSetupFinalization, UUID(receipt["finalization_id"]))
+        finalization = await session.get(
+            ProjectGuideSetupFinalization, UUID(str(receipt["finalization_id"]))
+        )
         compilation_id = finalization.compilation_id
     return ProjectGuideSetupFinalizationCommand(
         project_id=values["project"], guide_id=values["guide"],
@@ -321,7 +335,7 @@ async def seed_review_actor(factory, project_id, *, actor=None, role="project_ma
 
     async with factory() as session, session.begin():
         if actor is None:
-            actor = ActorIdentityFacts(uuid4(), uuid4(), ActorKind.HUMAN)
+            actor = ActorIdentityFacts(new_record_id(), new_record_id(), ActorKind.HUMAN)
             session.add(ActorProfile(id=str(actor.actor_profile_id), actor_kind="human", status="active",
                                     provisioning_method="automatic_first_access", created_by="proposal-fixture"))
             await session.flush()

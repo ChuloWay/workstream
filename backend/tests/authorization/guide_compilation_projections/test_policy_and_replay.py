@@ -23,7 +23,7 @@ from app.modules.authorization.guide_compilation_projections import (
 from app.modules.authorization.catalogue import ActionAvailability, ActionId
 from app.modules.authorization.runtime import ActorStatus, IdentityLinkStatus
 
-from .support import custody, policy_facts
+from .support import bind_identity, custody, policy_facts
 
 
 @pytest.mark.asyncio
@@ -44,8 +44,8 @@ async def test_artifact_policy_projection_uses_only_its_existing_action(
     adapter = ArtifactPolicyProjectionAuthorization(session)  # type: ignore[arg-type]
     async with adapter.prepare_artifact_policy_projection(locator) as prepared:
         facts = policy_facts(locator.project_id, locator.attempt_id)
+        identity = bind_identity(prepared, facts)
         receipt = await prepared.consume_new(facts)
-        identity = prepared.identity
     event = evidence.events[0]
     assert event.action_id.value == "project.submission_artifact_policy.derive"
     assert event.permission_id.value == "project.effective_policy.manage"
@@ -176,9 +176,11 @@ async def test_policy_projection_rejects_wrong_deterministic_output(
 
     monkeypatch.setattr(adapters, "fixed_service_prepared_authorization", fixed)
     locator = ProjectGuideProjectionLocator(project_id=uuid4(), attempt_id=uuid4())
-    facts = replace(policy_facts(locator.project_id, locator.attempt_id), policy_id=uuid4())
+    original = policy_facts(locator.project_id, locator.attempt_id)
+    facts = replace(original, policy_id=uuid4())
     adapter = ArtifactPolicyProjectionAuthorization(session)  # type: ignore[arg-type]
     async with adapter.prepare_artifact_policy_projection(locator) as prepared:
+        bind_identity(prepared, original)
         with pytest.raises(PreparedAuthorizationInvalid):
             await prepared.consume_new(facts)
     assert evidence.events == []

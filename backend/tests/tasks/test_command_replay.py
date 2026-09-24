@@ -13,6 +13,7 @@ from sqlalchemy.orm.attributes import set_committed_value
 from app.adapters.audit import task_transition_audit
 from app.adapters.tasks import task_service
 from app.core.config import get_settings
+from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.authorization.task_authorization import PreparedTaskAuthorization
@@ -230,6 +231,7 @@ async def test_receipt_sql_shape_and_assignment_ownership(task_client, monkeypat
     assert claimed.status_code == 200, claimed.text
     assignment_id = claimed.json()["assignment"]["id"]
     values = {
+        "receipt_id": new_record_id(), "idempotency_key": new_record_id(),
         "actor": grant["actor_profile_id"], "task": first["id"], "assignment": assignment_id,
         "contributor": grant["actor_profile_id"], "status": "committed", "action": "task.claim",
         "digest": "sha256:" + "0" * 64,
@@ -237,7 +239,7 @@ async def test_receipt_sql_shape_and_assignment_ownership(task_client, monkeypat
     statement = text("""insert into task_command_receipts
         (id, actor_profile_id, action_id, idempotency_key, request_digest, task_id,
          status, assignment_id, contributor_id, locked_context_hash, response, committed_at)
-        values (gen_random_uuid(), :actor, :action, gen_random_uuid(), :digest, :task,
+        values (:receipt_id, :actor, :action, :idempotency_key, :digest, :task,
                 :status, :assignment, :contributor, :digest, '{}'::jsonb, now())""")
     for changes, constraint in (
         ({"task": second["id"]}, "fk_task_command_assignment"),
@@ -260,8 +262,13 @@ async def test_receipt_sql_shape_and_assignment_ownership(task_client, monkeypat
         assert tuple(constraint) == (True, True)
         await session.execute(text("""insert into task_command_receipts
             (id, actor_profile_id, action_id, idempotency_key, request_digest, task_id, status)
-            values(gen_random_uuid(), :actor, 'task.claim', gen_random_uuid(), :digest, :task, 'pending')"""),
-            {**values, "actor": str(uuid4())})
+            values(:receipt_id, :actor, 'task.claim', :idempotency_key, :digest, :task, 'pending')"""),
+            {
+                **values,
+                "receipt_id": new_record_id(),
+                "idempotency_key": new_record_id(),
+                "actor": str(uuid4()),
+            })
         with pytest.raises(IntegrityError, match="actor_profile_id"):
             await session.commit()
         await session.rollback()
@@ -341,7 +348,7 @@ async def test_task_key_validated_before_provisioning(task_client, monkeypatch, 
         assert await session.scalar(select(func.count()).select_from(ActorProfile)) == before
 
 
-async def test_committed_receipt_is_immutable_through_sql(task_client, task_database_env, monkeypatch):
+async def test_committed_receipt_is_immutable_through_sql(task_client, monkeypatch):
     _, task, _ = await _setup(task_client, monkeypatch)
     response = await task_client.post(f"/api/v1/tasks/{task['id']}/claim", headers=auth_headers())
     assert response.status_code == 200, response.text
@@ -359,8 +366,4 @@ async def test_committed_receipt_is_immutable_through_sql(task_client, task_data
             await session.rollback()
     async with db_session.get_session_factory()() as session, session.begin():
         assert (await session.execute(text("update task_command_receipts set id=id"))).rowcount == 4
-    assert await _counts(task["id"]) == (1, 1, 1)
-    from tests.migration_fixtures import run_guarded_revision_downgrade
-    with pytest.raises(RuntimeError, match="task command history prevents downgrade"):
-        await run_guarded_revision_downgrade(task_database_env, "0025_task_command_replay")
     assert await _counts(task["id"]) == (1, 1, 1)

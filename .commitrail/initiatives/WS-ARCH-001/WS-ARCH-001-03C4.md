@@ -72,8 +72,8 @@ existing AUTH adapter root and request dependency compose it. TASK-owned routes
 use their existing repository projections and response schemas directly, keeping
 private AUTH imports out of delivery code. TASK queue ports retain their typed
 timestamp/UUID cursor. No second evaluator, codec or query implementation.
-The migration only extends exact action/permission audit evidence pairs; no new
-tables, retained-row rewrites, backfill or data deletion.
+The migration extends the fresh UUIDv7 baseline with the three exact
+action/permission audit evidence pairs; no new tables, retained-row rewrites, backfill or data deletion.
 
 ## Allowed scope
 
@@ -85,8 +85,8 @@ tables, retained-row rewrites, backfill or data deletion.
 - TASK queue API docstrings, response schemas and existing adapter factories;
   queue SQL only if a concrete regression requires correction.
 - TASK queue composition route and registration through its existing router.
-- Additive Alembic 0031 action evidence constraint, migration admission/schema
-  fingerprint and affected migration-head/inventory tests.
+- Additive Alembic 0002 action evidence constraint after the UUIDv7 baseline,
+  migration admission/schema fingerprint and affected migration/inventory tests.
 - Focused AUTH/TASK/API/migration tests, real API drill, lane test inventory.
 - Current README, task/AUTH specifications, operating manuals, roadmap and
   initiative navigation. Local sheet exports only if present.
@@ -257,3 +257,14 @@ Commitrail remain mandatory. Full hosted tests and coverage, exact-head internal
 review and external-check freshness are reported in the PR, not this navigation
 record. The local drill uses isolated PostgreSQL, Redis and MinIO; it does not
 exercise real model inference or production deployment.
+
+## Main reconciliation
+
+The merged UUIDv7 cutover (#439) replaces the former migration graph. Following
+its Alembic contract, the queue migration is now 0002 after 0001_uuid7_v01;
+the baseline SQL and manifests remain unchanged and the superseded 0031 path
+is removed. Tests retain exact allowed/denied permission-pair rejection,
+the guard-removal control, upgrade evidence preservation and repeated-head
+no-op proof. Queue record fixtures use the canonical UUIDv7 generator; caller
+idempotency tokens keep their transport semantics. Shared ownership, structural
+inventories and lane coverage preserve both changes.

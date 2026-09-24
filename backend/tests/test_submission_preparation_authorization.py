@@ -1,7 +1,8 @@
 """Focused prepared-capability proofs for contributor bundle preparation."""
 
 from types import SimpleNamespace
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -63,7 +64,7 @@ def _final_values(request_values):
         "pre_submit_policy_id",
         "semantic_manifest_id",
     ):
-        values[field] = str(uuid4())
+        values[field] = str(new_record_id())
     return {**request_values, **values}
 
 
@@ -94,7 +95,7 @@ def _resource(values):
 @pytest.mark.asyncio
 async def test_submission_preparation_binds_exact_facts_and_rejects_replay() -> None:
     context, session = _runtime_context(), _PreparedTestSession()
-    project_id, task_id, assignment_id = uuid4(), uuid4(), uuid4()
+    project_id, task_id, assignment_id = new_record_id(), new_record_id(), new_record_id()
 
     class Facts:
         async def lock_request_actor(self, identity_link_id, actor_profile_id):
@@ -114,13 +115,13 @@ async def test_submission_preparation_binds_exact_facts_and_rejects_replay() -> 
                 "role": "submitter",
                 "for_update": True,
             }
-            return SimpleNamespace(id=uuid4(), status="active")
+            return SimpleNamespace(id=new_record_id(), status="active")
 
     facts = Facts()
     authorization, evidence = _runtime_service(context, session=session, admin_repository=facts)
     prepared = PreparedAuthorizationService(session, context, authorization, facts)
     values = _request_values(context, project_id, task_id, assignment_id)
-    caller = PreparedAuthorizationInput(idempotency_key=uuid4(), request_value=values)
+    caller = PreparedAuthorizationInput(idempotency_key=new_record_id(), request_value=values)
     scope = PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.PROJECT, project_id=project_id)
     await prepared.preflight(
         ActionId.ARTIFACT_SUBMISSION_BUNDLE_PREPARE,
