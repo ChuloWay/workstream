@@ -289,3 +289,10 @@ The outbox committed-invocation test obtains PostgreSQL time before mutating
 the attempt, matching the production operation. Query autoflush must not write
 a partially constructed transition. Committed visibility, forged-reference
 rejection and database custody enforcement remain unchanged.
+
+The signed queue authority matrix compares the recorded grant ID with the exact
+grant issued for each permitted role, including project- and system-scoped
+Project Managers. Denied cases require no matched grant. A substituted-ID probe
+must fail that equality assertion. The canonical TASK specification describes
+all three public routes and distinguishes authorized composition from nonlocking
+owner reads; remaining Submission exposure stays separate.

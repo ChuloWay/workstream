@@ -23,6 +23,7 @@ async def test_queue_authority_matrix(admin_access, kind):
 
 async def assert_queue_authority(access, project, kind, role):
     actor = access.target
+    grant_id = None
     if role == "access_administrator":
         actor = access.admin
     elif role == "token_only":
@@ -31,7 +32,7 @@ async def assert_queue_authority(access, project, kind, role):
         other = await project_fixture("Foreign")
         await grant_queue_role(access, other, "submitter" if kind == "ready" else "project_manager")
     else:
-        await grant_queue_role(access, project, role)
+        grant_id = await grant_queue_role(access, project, role)
     response = await access.signed.client.get(PATHS[kind].format(project=project), headers=actor.headers)
     allowed = role in {
         "ready": {"submitter"}, "management": {"project_manager", "system_manager"},
@@ -49,7 +50,11 @@ async def assert_queue_authority(access, project, kind, role):
         assert decision.project_id == decision.resource_id == str(project)
         assert decision.after_facts["allowed"] is allowed
         assert decision.after_facts["resource_context_digest"].startswith("sha256:")
-        assert (decision.matched_grant_id is not None) is allowed
+        if allowed:
+            assert grant_id is not None
+            assert decision.matched_grant_id == grant_id
+        else:
+            assert decision.matched_grant_id is None
 
 
 @pytest.mark.parametrize("kind", PATHS)
