@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -26,14 +26,14 @@ def recovered_event(fixture: SimpleNamespace, request: object) -> SimpleNamespac
     )
     event_type = "draft_updated" if action.endswith("update_draft") else "draft_created"
     return SimpleNamespace(
-        id=uuid4(),
+        id=new_record_id(),
         operation_id=request.operation_id,
         request_digest=policy_request_digest(action, request),
         event_type=event_type,
         actor_profile_id=str(fixture.actor_id),
         project_id=str(fixture.project_id),
-        contribution_policy_id=getattr(request, "contribution_policy_id", uuid4()),
-        contribution_policy_version_id=getattr(request, "contribution_policy_version_id", uuid4()),
+        contribution_policy_id=getattr(request, "contribution_policy_id", new_record_id()),
+        contribution_policy_version_id=getattr(request, "contribution_policy_version_id", new_record_id()),
         version_number=1,
         prior_current_version_id=None,
         prior_current_version_number=None,
@@ -47,11 +47,11 @@ def recovered_event(fixture: SimpleNamespace, request: object) -> SimpleNamespac
 
 def update_request(fixture: SimpleNamespace) -> ContributionPolicyUpdateDraftRequest:
     return ContributionPolicyUpdateDraftRequest(
-        operation_id=uuid4(),
+        operation_id=new_record_id(),
         actor_profile_id=fixture.actor_id,
         project_id=fixture.project_id,
-        contribution_policy_id=uuid4(),
-        contribution_policy_version_id=uuid4(),
+        contribution_policy_id=new_record_id(),
+        contribution_policy_version_id=new_record_id(),
         rules=complete_rules(),
     )
 

@@ -58,7 +58,6 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/projects/guide_activation/test_contracts.py",
             "tests/projects/guide_activation/test_custody.py",
             "tests/projects/guide_activation/test_direct_sql.py",
-            "tests/projects/guide_activation/test_migration.py",
             "tests/projects/guide_activation/test_postgresql.py",
             "tests/projects/guide_activation/test_rejections.py",
             "tests/projects/guide_activation/test_successor.py",
@@ -73,7 +72,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/projects/guide_compilation/finalization/test_contracts.py",
             "tests/projects/guide_compilation/finalization/test_guards_postgresql.py",
             "tests/projects/guide_compilation/finalization/test_lineage.py",
-            "tests/projects/guide_compilation/finalization/test_migration_postgresql.py",
+            "tests/projects/guide_compilation/finalization/test_schema_postgresql.py",
             "tests/projects/guide_compilation/finalization/test_postgresql.py",
             "tests/projects/guide_compilation/finalization/test_replay.py",
             "tests/projects/guide_compilation/finalization/test_service.py",
@@ -83,7 +82,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     'tests/projects/guide_compilation/proposals/test_selected_checks.py',
     'tests/projects/guide_compilation/proposals/test_authority_contract.py',
     'tests/projects/guide_compilation/proposals/test_contracts.py',
-    'tests/projects/guide_compilation/proposals/test_migration.py',
+    'tests/projects/guide_compilation/proposals/test_audit_schema.py',
     'tests/projects/guide_compilation/proposals/test_inventory.py',
     'tests/projects/guide_compilation/proposals/test_postgresql.py',
     'tests/projects/guide_compilation/proposals/test_public_api.py',
@@ -99,7 +98,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     'tests/projects/post_policy/test_direct_sql.py',
     'tests/projects/post_policy/test_guards.py',
     'tests/projects/post_policy/test_inventory.py',
-    'tests/projects/post_policy/test_migration.py',
+    'tests/projects/post_policy/test_schema.py',
     'tests/projects/post_policy/test_postgresql.py',
     'tests/projects/post_policy/test_replacement.py',
 
@@ -122,14 +121,13 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/projects/guide_compilation/test_hidden_orchestrator_postgresql.py",
             "tests/projects/guide_compilation/test_live_cutover_postgresql.py",
             "tests/projects/guide_compilation/test_live_worker.py",
-            "tests/projects/guide_compilation/test_runtime_configuration_migration.py",
+            "tests/projects/guide_compilation/test_runtime_configuration_schema.py",
             "tests/projects/guide_compilation/test_runtime_configuration_postgresql.py",
-            "tests/projects/guide_compilation/test_migration_authorized_persistence.py",
-            "tests/projects/guide_compilation/test_migration_contract.py",
+            "tests/projects/guide_compilation/test_schema_contract.py",
             "tests/projects/guide_compilation/test_public_authorization.py",
             "tests/projects/guide_compilation/test_projection_call_graph.py",
             "tests/projects/guide_compilation/test_projection_contracts.py",
-            "tests/projects/guide_compilation/test_projection_migration.py",
+            "tests/projects/guide_compilation/test_projection_schema.py",
             "tests/projects/guide_compilation/test_projection_policy.py",
             "tests/projects/guide_compilation/test_projection_postgresql.py",
             "tests/projects/guide_compilation/test_projection_authorization_postgresql.py",
@@ -160,6 +158,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/projects/submission_policy_mutations/test_replay.py",
             "tests/projects/submission_policy_mutations/test_repository.py",
             "tests/projects/submission_policy_mutations/test_public_routes.py",
+            "tests/projects/submission_policy_mutations/test_public_routes_postgresql.py",
             "tests/projects/test_retired_submission_derivation_route.py",
             "tests/test_api_drill_repairs.py",
             "tests/test_projects.py",
@@ -205,7 +204,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/test_pre_submit_attempt_lock_order.py",
             "tests/test_pre_submit_role_issue_lock_order.py",
             "tests/test_pre_submit_related_lock_order.py",
-            "tests/test_pre_submit_attempt_migration.py",
+            "tests/test_pre_submit_attempt_schema.py",
             "tests/test_effective_pre_submit_execution.py",
             "tests/test_project_guide_compilation_contracts.py",
             "tests/test_review_lease_persistence.py",
@@ -235,9 +234,6 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     assert {
         "tests/test_alembic.py",
         "tests/test_database_reset.py",
-        "tests/tasks/test_contribution_lineage_migration.py",
-        "tests/outbox/test_migration.py",
-        "tests/outbox/test_authority_migration.py",
         runner.ADMIN_RUNNER_MODULE,
     } == modules_by_lane["schema_contracts"]
     assert {
@@ -541,6 +537,17 @@ def test_workflow_lane_inventory_matches_catalogue() -> None:
     assert "name: backend-semantic-lane-evidence-${{ steps.identity.outputs.tree_sha }}-attempt-${{ github.run_attempt }}" in source
 
 
+def test_record_identifier_foundation_has_blocking_coverage_floor() -> None:
+    source = (runner.ROOT.parent / ".github/workflows/backend.yml").read_text()
+    step = source.split("      - name: Record identifier foundation coverage\n", 1)[1].split("      - name:", 1)[0]
+    assert "continue-on-error" not in step
+    assert "if:" not in step
+    assert shlex.split(step.split("        run: ", 1)[1]) == [
+        "coverage", "report", "--include=app/core/identifiers.py",
+        "--precision=2", "--fail-under=90",
+    ]
+
+
 def test_project_read_coverage_gate_selects_relocated_proof() -> None:
     """The dedicated gate must run all read proof at its current locations."""
     source = (runner.ROOT.parent / ".github/workflows/backend.yml").read_text()
@@ -607,6 +614,11 @@ def test_submission_policy_coverage_selects_controlled_port_family() -> None:
         "--include=${source}", "--precision=2", "--fail-under=90", "done",
     ]
     assert set(modules) <= set(catalogue.PROJECT_MODULES)
+    database_module = (
+        "tests/projects/submission_policy_mutations/test_public_routes_postgresql.py"
+    )
+    assert database_module not in shlex.split(command.replace("\\\n", " "))
+    assert database_module in catalogue.PROJECT_MODULES
     assert "tests/test_projects.py" in catalogue.PROJECT_MODULES
 
 

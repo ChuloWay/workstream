@@ -40,7 +40,6 @@ def activation_custody(record, *, request_id: UUID):
         or str(facts.locator.guide_id) != record.resource_id
         or str(facts.locator.actor_profile_id) != record.actor_profile_id
         or str(facts.locator.identity_link_id) != record.identity_link_id
-        or facts.locator.operation_id != receipt.operation_id
         or facts.locator.project_id != receipt.command.target.proposal.project_id
         or facts.locator.guide_id != receipt.command.target.proposal.guide_id
     ):

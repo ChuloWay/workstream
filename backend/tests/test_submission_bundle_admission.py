@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 from starlette.requests import Request
@@ -67,8 +67,8 @@ from app.modules.artifacts.submission_admission import validate_submission_packe
 
 def _actor() -> ActorIdentityFacts:
     return ActorIdentityFacts(
-        actor_profile_id=uuid4(),
-        identity_link_id=uuid4(),
+        actor_profile_id=new_record_id(),
+        identity_link_id=new_record_id(),
         actor_kind=ActorKind.HUMAN,
     )
 
@@ -78,12 +78,12 @@ def _preparation_request(
 ):
     return SubmissionBundlePreparationRequest(
         actor=_actor(),
-        request_id=uuid4(),
-        correlation_id=uuid4(),
-        task_id=uuid4(),
-        assignment_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
+        task_id=new_record_id(),
+        assignment_id=new_record_id(),
         predecessor_submission_id=None,
-        idempotency_key=uuid4(),
+        idempotency_key=new_record_id(),
         summary=summary,
         contributor_attestation="attestation",
         media_type=media_type,
@@ -116,7 +116,7 @@ async def test_explicit_deny_preparation_authority_denies() -> None:
     with pytest.raises(ArtifactAuthorityDeniedError):
         await authority.lock_actor(request=request)
     with pytest.raises(ArtifactAuthorityDeniedError):
-        await authority.revalidate(request=request, project_id=uuid4())
+        await authority.revalidate(request=request, project_id=new_record_id())
     with pytest.raises(ArtifactAuthorityDeniedError):
         authority.transaction()
     with pytest.raises(ArtifactAuthorityDeniedError):
@@ -222,8 +222,8 @@ def test_artifact_adapter_builds_configured_local_bootstrap(tmp_path) -> None:
 def test_artifact_adapter_composes_submission_command_from_owner_ports(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    request_id = uuid4()
-    correlation_id = uuid4()
+    request_id = new_record_id()
+    correlation_id = new_record_id()
     request = Request(
         {
             "type": "http",
@@ -279,7 +279,7 @@ def test_submission_bundle_preparation_route_is_hidden() -> None:
         if getattr(route, "name", None) == "prepare_submission_bundle"
     )
     assert route.include_in_schema is False
-    mounted = app.url_path_for("prepare_submission_bundle", task_id=str(uuid4()))
+    mounted = app.url_path_for("prepare_submission_bundle", task_id=str(new_record_id()))
     assert str(mounted).startswith("/api/v1/tasks/")
     assert str(mounted).endswith("/submission-bundle-preparations")
     assert route.methods == {"POST"}
@@ -420,11 +420,11 @@ async def test_authority_denial_preserves_task_actor_project_grant_order(denied_
 async def test_existing_durable_preparation_projects_current_admission_state(
     admission_status, expected_status,
 ) -> None:
-    attempt_id = uuid4()
-    admission_id = uuid4()
+    attempt_id = new_record_id()
+    admission_id = new_record_id()
     row_result = SimpleNamespace(
         one_or_none=lambda: (
-            SimpleNamespace(id=str(uuid4())),
+            SimpleNamespace(id=str(new_record_id())),
             SimpleNamespace(id=str(attempt_id), status="object_confirmed"),
             SimpleNamespace(id=str(admission_id), status=admission_status),
         )
@@ -438,7 +438,7 @@ async def test_existing_durable_preparation_projects_current_admission_state(
         runtime_factory=Mock(),
     )
 
-    result = await command._existing_durable_result(uuid4())
+    result = await command._existing_durable_result(new_record_id())
 
     assert result == SubmissionBundlePreparationResult(
         put_attempt_id=attempt_id,
@@ -473,8 +473,8 @@ def test_durable_put_result_projects_every_closed_preparation_status(
     durable_status: str,
 ) -> None:
     durable = SubmissionBundleDurablePutResult(
-        put_attempt_id=uuid4(),
-        pre_submit_evidence_set_id=uuid4(),
+        put_attempt_id=new_record_id(),
+        pre_submit_evidence_set_id=new_record_id(),
         operation_identity=_sha("9"),
         admission_id=None,
         status=durable_status,
@@ -518,12 +518,12 @@ def _capability(prepared, evidence_set_id):
 async def test_verified_submission_lineage_publishes_one_ready_admission(
     observed_confirmation: bool,
 ) -> None:
-    attempt_id = str(uuid4())
-    replica_id = str(uuid4())
-    content_id = str(uuid4())
-    job_id = str(uuid4())
-    receipt_id = str(uuid4())
-    evidence_id = str(uuid4())
+    attempt_id = str(new_record_id())
+    replica_id = str(new_record_id())
+    content_id = str(new_record_id())
+    job_id = str(new_record_id())
+    receipt_id = str(new_record_id())
+    evidence_id = str(new_record_id())
     digest = _sha("1")
     evidence = SimpleNamespace(
         id=evidence_id,
@@ -531,23 +531,23 @@ async def test_verified_submission_lineage_publishes_one_ready_admission(
         eligible=True,
         archive_sha256=digest,
         archive_byte_count=25,
-        actor_profile_id=str(uuid4()),
-        identity_link_id=str(uuid4()),
-        project_id=str(uuid4()),
-        task_id=str(uuid4()),
-        assignment_id=str(uuid4()),
+        actor_profile_id=str(new_record_id()),
+        identity_link_id=str(new_record_id()),
+        project_id=str(new_record_id()),
+        task_id=str(new_record_id()),
+        assignment_id=str(new_record_id()),
         predecessor_submission_id=None,
         predecessor_submission_version=None,
-        semantic_manifest_id=str(uuid4()),
+        semantic_manifest_id=str(new_record_id()),
         semantic_manifest_sha256=_sha("2"),
-        guide_id=str(uuid4()),
+        guide_id=str(new_record_id()),
         guide_version="1",
-        source_snapshot_id=str(uuid4()),
+        source_snapshot_id=str(new_record_id()),
         source_snapshot_sha256=_sha("3"),
         locked_guide_sha256=_sha("4"),
-        effective_policy_id=str(uuid4()),
+        effective_policy_id=str(new_record_id()),
         locked_artifact_policy_sha256=_sha("5"),
-        pre_submit_policy_id=str(uuid4()),
+        pre_submit_policy_id=str(new_record_id()),
         locked_checker_policy_sha256=_sha("6"),
         effective_plan_sha256=_sha("7"),
         locked_policy_context_hash=_sha("8"),
@@ -562,7 +562,7 @@ async def test_verified_submission_lineage_publishes_one_ready_admission(
         byte_count=25,
         media_type="application/zip",
         replica_id=replica_id,
-        receipt_id=None if observed_confirmation else str(uuid4()),
+        receipt_id=None if observed_confirmation else str(new_record_id()),
     )
     job = SimpleNamespace(
         id=job_id,
@@ -570,7 +570,7 @@ async def test_verified_submission_lineage_publishes_one_ready_admission(
         replica_id=replica_id,
         execution_generation=2,
     )
-    intent = SimpleNamespace(id=str(uuid4()), pre_submit_evidence_set_id=evidence_id)
+    intent = SimpleNamespace(id=str(new_record_id()), pre_submit_evidence_set_id=evidence_id)
     replica = SimpleNamespace(
         id=replica_id,
         content_id=content_id,
@@ -587,7 +587,7 @@ async def test_verified_submission_lineage_publishes_one_ready_admission(
         observed_sha256=digest,
         observed_byte_count=25,
     )
-    put_receipt = SimpleNamespace(id=str(uuid4()) if observed_confirmation else attempt.receipt_id)
+    put_receipt = SimpleNamespace(id=str(new_record_id()) if observed_confirmation else attempt.receipt_id)
     now = datetime.now(UTC)
     session = SimpleNamespace(
         scalar=AsyncMock(
@@ -629,12 +629,12 @@ async def test_verified_submission_lineage_publishes_one_ready_admission(
 @pytest.mark.asyncio
 async def test_observed_confirmed_write_receipt_is_supported() -> None:
     attempt = SimpleNamespace(
-        id=str(uuid4()),
+        id=str(new_record_id()),
         receipt_id=None,
         sha256=_sha("1"),
         byte_count=25,
     )
-    observation = SimpleNamespace(id=str(uuid4()))
+    observation = SimpleNamespace(id=str(new_record_id()))
     session = SimpleNamespace(scalar=AsyncMock(return_value=observation))
 
     operation_id, observation_id = await SubmissionBundleAdmissionPublisher(
@@ -647,7 +647,7 @@ async def test_observed_confirmed_write_receipt_is_supported() -> None:
 
 @pytest.mark.asyncio
 async def test_retained_guide_verification_cannot_publish_submission_admission() -> None:
-    job = SimpleNamespace(id=str(uuid4()), originating_put_attempt_id=str(uuid4()))
+    job = SimpleNamespace(id=str(new_record_id()), originating_put_attempt_id=str(new_record_id()))
     attempt = SimpleNamespace(id=job.originating_put_attempt_id, producer_request_type="guide")
     session = SimpleNamespace(
         scalar=AsyncMock(side_effect=[job, attempt]),
@@ -656,7 +656,7 @@ async def test_retained_guide_verification_cannot_publish_submission_admission()
 
     result = await SubmissionBundleAdmissionPublisher(session).publish_verified(
         verification_job_id=job.id,
-        verification_receipt_id=str(uuid4()),
+        verification_receipt_id=str(new_record_id()),
     )
 
     assert result is None
@@ -667,34 +667,34 @@ async def test_retained_guide_verification_cannot_publish_submission_admission()
 async def test_unverified_or_mismatched_lineage_is_not_publishable() -> None:
     digest = _sha("1")
     evidence = SimpleNamespace(
-        id=str(uuid4()),
+        id=str(new_record_id()),
         terminal_status="failed",
         eligible=False,
         archive_sha256=digest,
         archive_byte_count=25,
-        actor_profile_id=str(uuid4()),
-        project_id=str(uuid4()),
-        task_id=str(uuid4()),
+        actor_profile_id=str(new_record_id()),
+        project_id=str(new_record_id()),
+        task_id=str(new_record_id()),
     )
     attempt = SimpleNamespace(
-        id=str(uuid4()),
+        id=str(new_record_id()),
         sha256=digest,
         byte_count=25,
         producer_ref=evidence.actor_profile_id,
         project_id=evidence.project_id,
         task_id=evidence.task_id,
         media_type="application/zip",
-        replica_id=str(uuid4()),
+        replica_id=str(new_record_id()),
     )
     job = SimpleNamespace(
-        id=str(uuid4()),
+        id=str(new_record_id()),
         originating_put_attempt_id=attempt.id,
         replica_id=attempt.replica_id,
         execution_generation=1,
     )
     replica = SimpleNamespace(
         id=attempt.replica_id,
-        content_id=str(uuid4()),
+        content_id=str(new_record_id()),
         verification_state="verified",
         availability_state="available",
         integrity_state="valid",
@@ -711,7 +711,7 @@ async def test_unverified_or_mismatched_lineage_is_not_publishable() -> None:
     assert not SubmissionBundleAdmissionPublisher._matches_verified_lineage(
         evidence, attempt, job, replica, content, receipt
     )
-    intent = SimpleNamespace(id=str(uuid4()), pre_submit_evidence_set_id=evidence.id)
+    intent = SimpleNamespace(id=str(new_record_id()), pre_submit_evidence_set_id=evidence.id)
     session = SimpleNamespace(
         scalar=AsyncMock(
             side_effect=[job, attempt, intent, None, evidence, replica, receipt, content]
@@ -726,7 +726,7 @@ async def test_unverified_or_mismatched_lineage_is_not_publishable() -> None:
     ):
         await SubmissionBundleAdmissionPublisher(session).publish_verified(
             verification_job_id=job.id,
-            verification_receipt_id=str(uuid4()),
+            verification_receipt_id=str(new_record_id()),
         )
     session.add.assert_not_called()
     session.flush.assert_not_awaited()
@@ -735,7 +735,7 @@ async def test_unverified_or_mismatched_lineage_is_not_publishable() -> None:
 @pytest.mark.asyncio
 async def test_durable_put_admits_in_transaction_then_publishes(tmp_path) -> None:
     manager, prepared = await _prepared(tmp_path)
-    evidence_set_id = uuid4()
+    evidence_set_id = new_record_id()
     state = {"transaction": True}
     transaction = SimpleNamespace(is_active=True)
     session = SimpleNamespace(
@@ -746,11 +746,11 @@ async def test_durable_put_admits_in_transaction_then_publishes(tmp_path) -> Non
         begin=_transaction,
     )
     admission_result = ArtifactAdmissionResult(
-        attempt_id=uuid4(),
+        attempt_id=new_record_id(),
         status="prepared",
         operation_identity=_sha("3"),
         request_digest=_sha("4"),
-        charge_ids=(uuid4(),),
+        charge_ids=(new_record_id(),),
         replayed=False,
     )
 
@@ -805,8 +805,8 @@ async def test_durable_put_admits_in_transaction_then_publishes(tmp_path) -> Non
 def test_pass_capability_rejects_direct_construction() -> None:
     with pytest.raises(TypeError, match="can only be created by pre-submit evidence"):
         PreSubmitPassCapability(
-            evidence_set_id=uuid4(),
-            prepared_generation_id=uuid4(),
+            evidence_set_id=new_record_id(),
+            prepared_generation_id=new_record_id(),
             predecessor_submission_id=None,
             effective_plan_sha256=_sha("7"),
             archive_sha256=_sha("1"),
@@ -820,8 +820,8 @@ def test_pass_capability_rejects_unregistered_service_owner() -> None:
         PreSubmitPassCapability._from_evidence_service(
             owner=object.__new__(PreSubmitEvidenceService),
             binding=object(),
-            evidence_set_id=uuid4(),
-            prepared_generation_id=uuid4(),
+            evidence_set_id=new_record_id(),
+            prepared_generation_id=new_record_id(),
             predecessor_submission_id=None,
             effective_plan_sha256=_sha("7"),
             archive_sha256=_sha("1"),
@@ -837,7 +837,7 @@ def test_submission_custody_rejects_direct_construction() -> None:
 
 def test_submission_request_rejects_evidence_without_live_custody() -> None:
     request = SubmissionBundleArtifactAdmissionRequest(
-        pre_submit_evidence_set_id=uuid4(),
+        pre_submit_evidence_set_id=new_record_id(),
         custody=object(),
         replay_durable_intent_id=None,
     )
@@ -847,25 +847,25 @@ def test_submission_request_rejects_evidence_without_live_custody() -> None:
 
 def test_replay_lineage_includes_policy_catalogue_and_manifest_identity() -> None:
     values = {
-        "actor_profile_id": str(uuid4()),
-        "identity_link_id": str(uuid4()),
-        "project_id": str(uuid4()),
-        "task_id": str(uuid4()),
-        "assignment_id": str(uuid4()),
+        "actor_profile_id": str(new_record_id()),
+        "identity_link_id": str(new_record_id()),
+        "project_id": str(new_record_id()),
+        "task_id": str(new_record_id()),
+        "assignment_id": str(new_record_id()),
         "predecessor_submission_id": None,
         "predecessor_submission_version": None,
         "archive_sha256": _sha("1"),
         "archive_byte_count": 10,
-        "semantic_manifest_id": str(uuid4()),
+        "semantic_manifest_id": str(new_record_id()),
         "semantic_manifest_sha256": _sha("2"),
-        "guide_id": str(uuid4()),
+        "guide_id": str(new_record_id()),
         "guide_version": "1",
-        "source_snapshot_id": str(uuid4()),
+        "source_snapshot_id": str(new_record_id()),
         "source_snapshot_sha256": _sha("3"),
         "locked_guide_sha256": _sha("4"),
-        "effective_policy_id": str(uuid4()),
+        "effective_policy_id": str(new_record_id()),
         "locked_artifact_policy_sha256": _sha("5"),
-        "pre_submit_policy_id": str(uuid4()),
+        "pre_submit_policy_id": str(new_record_id()),
         "locked_checker_policy_sha256": _sha("6"),
         "effective_plan_sha256": _sha("7"),
         "catalogue_id": "workstream.default",
@@ -879,10 +879,10 @@ def test_replay_lineage_includes_policy_catalogue_and_manifest_identity() -> Non
     }
     original = SimpleNamespace(**values)
     for field, changed in {
-        "semantic_manifest_id": str(uuid4()),
+        "semantic_manifest_id": str(new_record_id()),
         "locked_guide_sha256": _sha("a"),
-        "effective_policy_id": str(uuid4()),
-        "pre_submit_policy_id": str(uuid4()),
+        "effective_policy_id": str(new_record_id()),
+        "pre_submit_policy_id": str(new_record_id()),
         "catalogue_id": "other.catalogue",
         "catalogue_version": "2",
         "catalogue_manifest_sha256": _sha("b"),
@@ -896,7 +896,7 @@ def test_replay_lineage_includes_policy_catalogue_and_manifest_identity() -> Non
 @pytest.mark.asyncio
 async def test_concurrent_pass_capability_consumption_has_one_winner(tmp_path) -> None:
     manager, prepared = await _prepared(tmp_path)
-    capability = _capability(prepared, uuid4())
+    capability = _capability(prepared, new_record_id())
 
     def consume() -> bool:
         try:
@@ -926,15 +926,15 @@ async def test_concurrent_pass_capability_consumption_has_one_winner(tmp_path) -
 @pytest.mark.asyncio
 async def test_fresh_checked_custody_resumes_existing_committed_intent(tmp_path) -> None:
     manager, prepared = await _prepared(tmp_path)
-    evidence_set_id = uuid4()
-    replay_intent_id = uuid4()
+    evidence_set_id = new_record_id()
+    replay_intent_id = new_record_id()
     state = {"transaction": True}
     admission_result = ArtifactAdmissionResult(
-        attempt_id=uuid4(),
+        attempt_id=new_record_id(),
         status="absent_replay_required",
         operation_identity=_sha("3"),
         request_digest=_sha("4"),
-        charge_ids=(uuid4(),),
+        charge_ids=(new_record_id(),),
         replayed=True,
     )
 
@@ -1001,13 +1001,13 @@ async def test_object_confirmed_replay_does_not_reclaim_provider_work(tmp_path) 
     try:
         result = await service.publish_after_commit(
             prepared,
-            uuid4(),
+            new_record_id(),
             ArtifactAdmissionResult(
-                attempt_id=uuid4(),
+                attempt_id=new_record_id(),
                 status="object_confirmed",
                 operation_identity=_sha("3"),
                 request_digest=_sha("4"),
-                charge_ids=(uuid4(),),
+                charge_ids=(new_record_id(),),
                 replayed=True,
             ),
         )
@@ -1022,7 +1022,7 @@ async def test_object_confirmed_replay_does_not_reclaim_provider_work(tmp_path) 
 @pytest.mark.asyncio
 async def test_durable_put_rejects_capability_replay_before_admission(tmp_path) -> None:
     manager, prepared = await _prepared(tmp_path)
-    capability = _capability(prepared, uuid4())
+    capability = _capability(prepared, new_record_id())
     capability.consume(
         prepared_generation_id=prepared.generation_id,
         predecessor_submission_id=None,

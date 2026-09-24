@@ -11,6 +11,8 @@ from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.identifiers import new_record_id
+
 from app.core.hashing import canonical_json_hash
 
 from app.modules.projects.api.guide_documents import GuideDocumentManifestPort, GuideDocumentManifestRequest, GuideDocumentUnavailable
@@ -30,6 +32,7 @@ from app.modules.authorization.api import (
     ProjectGuideProjectionAuthorityReceipt,
     ProjectGuideProjectionIdentity,
     ProjectGuideProjectionLocator,
+    projection_preparation_identity,
     artifact_policy_projection_facts_digest,
     guide_sufficiency_projection_facts_digest,
     projection_authority_digest,
@@ -312,7 +315,15 @@ class GuideCompilationProjectionService:
     ) -> ProjectGuideProjectionReceipt:
         """Create or validate the exact sufficiency output and custody row."""
         locked = await self._lock_common(session, seed)
-        identity = capability.identity
+        operation = await _projection_operation(session, seed, "guide_sufficiency")
+        _, prepared_correlation_id = projection_preparation_identity(
+            attempt_id=seed.attempt_id, component="guide_sufficiency"
+        )
+        identity = capability.identity(
+            operation_id=operation.operation_id if operation else new_record_id(),
+            correlation_id=operation.correlation_id if operation else prepared_correlation_id,
+            output_id=operation.output_id if operation else new_record_id(),
+        )
         _require_projection_identity(identity, seed, "guide_sufficiency")
         assert seed.report_payload is not None
         output = _report_output(seed, locked, identity, seed.report_payload)
@@ -323,7 +334,6 @@ class GuideCompilationProjectionService:
             }
         )
         facts = _sufficiency_facts(seed, locked, identity, output_digest)
-        operation = await _projection_operation(session, identity.operation_id)
         if operation is not None:
             report = await ProjectRepository(session).lock_guide_sufficiency_report(
                 str(identity.output_id),
@@ -365,7 +375,17 @@ class GuideCompilationProjectionService:
     ) -> ProjectGuideProjectionReceipt:
         """Create or validate the exact policy output and custody row."""
         locked = await self._lock_common(session, seed)
-        identity = capability.identity
+        operation = await _projection_operation(
+            session, seed, "submission_artifact_policy"
+        )
+        _, prepared_correlation_id = projection_preparation_identity(
+            attempt_id=seed.attempt_id, component="submission_artifact_policy"
+        )
+        identity = capability.identity(
+            operation_id=operation.operation_id if operation else new_record_id(),
+            correlation_id=operation.correlation_id if operation else prepared_correlation_id,
+            output_id=operation.output_id if operation else new_record_id(),
+        )
         _require_projection_identity(identity, seed, "submission_artifact_policy")
         prior = await _required_sufficiency_operation(session, seed, locked)
         report = await ProjectRepository(session).lock_guide_sufficiency_report(
@@ -385,7 +405,6 @@ class GuideCompilationProjectionService:
             }
         )
         facts = _policy_facts(seed, locked, identity, prior, output_digest)
-        operation = await _projection_operation(session, identity.operation_id)
         if operation is not None:
             policy = await ProjectRepository(session).lock_submission_artifact_policy(
                 str(identity.output_id)
@@ -635,14 +654,20 @@ def _new_operation(
 
 
 async def _projection_operation(
-    session: AsyncSession, operation_id: UUID
+    session: AsyncSession,
+    seed: _ProjectionSeed,
+    component: Literal["guide_sufficiency", "submission_artifact_policy"],
 ) -> ProjectGuideComponentProjectionOperation | None:
-    """Lock an existing operation for replay validation."""
+    """Lock natural component custody after the attempt owner lock."""
     from sqlalchemy import select
 
     return await session.scalar(
         select(ProjectGuideComponentProjectionOperation)
-        .where(ProjectGuideComponentProjectionOperation.operation_id == operation_id)
+        .where(
+            ProjectGuideComponentProjectionOperation.setup_run_id == str(seed.setup_run_id),
+            ProjectGuideComponentProjectionOperation.setup_generation == seed.setup_generation,
+            ProjectGuideComponentProjectionOperation.component == component,
+        )
         .with_for_update()
     )
 
@@ -790,26 +815,8 @@ def _require_projection_identity(
     seed: _ProjectionSeed,
     component: Literal["guide_sufficiency", "submission_artifact_policy"],
 ) -> None:
-    """Reject an AUTH identity that does not match the component domain."""
-    from app.modules.authorization.api import (
-        artifact_policy_projection_identity,
-        guide_sufficiency_projection_identity,
-    )
-
-    expected = (
-        guide_sufficiency_projection_identity(
-            attempt_id=seed.attempt_id,
-            actor_profile_id=identity.actor_profile_id,
-            identity_link_id=identity.identity_link_id,
-        )
-        if component == "guide_sufficiency"
-        else artifact_policy_projection_identity(
-            attempt_id=seed.attempt_id,
-            actor_profile_id=identity.actor_profile_id,
-            identity_link_id=identity.identity_link_id,
-        )
-    )
-    if identity != expected:
+    """Reject malformed owner-selected identities before AUTH consumption."""
+    if any(value.version != 7 for value in (identity.operation_id, identity.output_id)):
         raise ProjectGuideProjectionError("service_authority_denied")
 
 

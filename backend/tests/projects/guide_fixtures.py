@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from httpx import AsyncClient
 from sqlalchemy import select
 
+from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from app.modules.authorization.models import AdminRoleGrant
 from app.modules.projects.models import PaymentPolicy
@@ -53,7 +54,7 @@ async def add_project_manager_admin_grant(project_id: str) -> UUID:
     actor_id, _, grantor_id = await ensure_access_administrator_bootstrap()
     async with db_session.get_session_factory()() as session:
         grant = AdminRoleGrant(
-            id=uuid4(),
+            id=new_record_id(),
             target_actor_profile_id=actor_id,
             role="project_manager",
             scope_type="project",
@@ -160,7 +161,7 @@ async def create_guide(client: AsyncClient, project_id: str, payload: dict) -> d
             )
             session.add(
                 PaymentPolicy(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     project_id=project_id,
                     guide_version=guide["version"],
                     **values,

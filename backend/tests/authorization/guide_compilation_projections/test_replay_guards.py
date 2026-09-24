@@ -23,12 +23,14 @@ from .replay_support import ReplayCase
 async def test_projection_replay_rejects_listed_prepared_custody_mismatch(monkeypatch, mismatch):
     case = ReplayCase(monkeypatch)
     async with case.prepare() as original:
+        case.bind(original)
         receipt = await original.consume_new(case.facts)
     async with case.prepare() as replay:
+        identity = case.bind(replay)
         service = case.services[1]
         action = ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN
         caller_input = replay._input
-        resource = projection_resource_context("guide_sufficiency", replay.identity, case.facts)
+        resource = projection_resource_context("guide_sufficiency", identity, case.facts)
         if mismatch == "action":
             action = ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE
         elif mismatch == "binding":
@@ -57,10 +59,12 @@ async def test_projection_replay_rejects_project_setup_resource_guard(monkeypatc
     case = ReplayCase(monkeypatch)
     monkeypatch.setattr(replay_module, "project_setup_resource_matches", lambda *_a: False)
     async with case.prepare() as original:
+        case.bind(original)
         receipt = await original.consume_new(case.facts)
     async with case.prepare() as replay:
+        identity = case.bind(replay)
         service = case.services[1]
-        resource = projection_resource_context("guide_sufficiency", replay.identity, case.facts)
+        resource = projection_resource_context("guide_sufficiency", identity, case.facts)
         with pytest.raises(PreparedAuthorizationUnsupported):
             await service.validate_replay(
                 replay._handle,

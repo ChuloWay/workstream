@@ -5,11 +5,13 @@ from dataclasses import replace
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
+from app.core.identifiers import new_record_id
+
 from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization import project_setup_finalization as adapters
 from app.modules.authorization.api import (
     ProjectSetupFinalizationLocator,
-    setup_finalization_identity,
+    setup_finalization_preparation_identity,
 )
 from app.modules.authorization.domain.project_setup_finalization import (
     finalization_resource_context,
@@ -59,8 +61,9 @@ FIELDS = (
 def locator_for(facts):
     return ProjectSetupFinalizationLocator(
         project_id=facts.project_id,
-        operation_id=facts.operation_id,
-        correlation_id=facts.correlation_id,
+        setup_run_id=facts.setup_run_id,
+        setup_generation=facts.setup_generation,
+        compilation_id=facts.compilation_id,
     )
 
 
@@ -69,7 +72,7 @@ def alternate(facts, field):
     value = getattr(facts, field)
     changes = {field: uuid4() if isinstance(value, UUID) else DIGEST}
     if field in {"finalization_id", "operation_id", "correlation_id"}:
-        changes = {"compilation_id": uuid4()}
+        changes[field] = new_record_id()
     elif field == "setup_generation":
         changes[field] = value + 1
     elif field == "component_hashes":
@@ -87,12 +90,7 @@ def alternate(facts, field):
     elif isinstance(value, str) and not field.endswith(("hash", "digest")):
         changes[field] = value + "-changed"
     result = replace(facts, **changes)
-    receipt, operation, correlation = setup_finalization_identity(
-        result.setup_run_id, result.setup_generation, result.compilation_id
-    )
-    return replace(
-        result, finalization_id=receipt, operation_id=operation, correlation_id=correlation
-    )
+    return result
 
 
 class Case:
@@ -100,9 +98,14 @@ class Case:
 
     def __init__(self, monkeypatch, classification="draft_ready", **custody_options):
         self.facts = scenario(classification).auth.expected
+        request_id, correlation_id = setup_finalization_preparation_identity(
+            self.facts.setup_run_id,
+            self.facts.setup_generation,
+            self.facts.compilation_id,
+        )
         self.first, self.session, self.evidence = custody(
-            request_id=self.facts.operation_id,
-            correlation_id=self.facts.correlation_id,
+            request_id=request_id,
+            correlation_id=correlation_id,
             **custody_options,
         )
         self.services = []

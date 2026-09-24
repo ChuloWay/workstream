@@ -42,7 +42,6 @@ class ProjectGuideActivationResourceContext(BaseModel):
             or self.scope_project_id != facts.locator.project_id
             or facts.locator.guide_id != target.guide_id
             or facts.locator.project_id != target.project_id
-            or facts.locator.operation_id != facts.receipt.operation_id
         ):
             raise ValueError("activation resource identity mismatch")
         return self

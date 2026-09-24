@@ -100,6 +100,28 @@ def issue_asymmetric_token(
     return jwt.encode(payload, private_key, algorithm=algorithm, headers={"kid": kid, "typ": "JWT"})
 
 
+def issue_human_token_matrix(
+    private_key: rsa.RSAPrivateKey,
+    *,
+    prefix: str,
+    names: tuple[str, ...],
+    email_prefix: str | None = None,
+) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
+    """Issue related human tokens and bearer headers for auth matrix tests."""
+    tokens = {
+        name: issue_asymmetric_token(
+            private_key,
+            claims={
+                "sub": f"{prefix}-{name}",
+                "jti": f"{prefix}-{name}-token",
+                **({"email": f"{email_prefix}{name}@example.test"} if email_prefix else {}),
+            },
+        )
+        for name in names
+    }
+    return tokens, {name: {"Authorization": f"Bearer {token}"} for name, token in tokens.items()}
+
+
 def jwks_transport(jwk: dict[str, Any], requests: list[Request] | None = None) -> MockTransport:
     def handler(request: Request) -> Response:
         if requests is not None:

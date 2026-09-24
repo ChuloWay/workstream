@@ -68,9 +68,12 @@ def _execution_service(
 
 
 def _preflight(
-    values: dict[str, UUID], attempt_id: UUID
+    values: dict[str, UUID], attempt_id: UUID, operation_id: UUID
 ) -> ProjectGuideCompilationExecutePreflightFacts:
-    complete = persistence_facts(values, attempt_id, identity(context(values)))
+    complete = replace(
+        persistence_facts(values, attempt_id, identity(context(values))),
+        operation_id=operation_id,
+    )
     names = ProjectGuideCompilationExecutePreflightFacts.__dataclass_fields__
     return ProjectGuideCompilationExecutePreflightFacts(
         **{name: asdict(complete)[name] for name in names}
@@ -96,7 +99,7 @@ async def test_authorized_execution_fences_accepts_and_persists_atomically(
                 identity=identity(context(values)),
                 runtime_configuration=runtime_configuration(),
             )
-        facts = _preflight(values, requested.attempt_id)
+        facts = _preflight(values, requested.attempt_id, requested.operation_id)
         async with factory() as session:
             fenced = await _execution_service(session, service).fence_dispatch(
                 actor=service, facts=facts
@@ -162,7 +165,7 @@ async def test_invalid_provider_result_becomes_one_bounded_terminal_outcome(
                 identity=identity(context(values)),
                 runtime_configuration=runtime_configuration(),
             )
-        facts = _preflight(values, requested.attempt_id)
+        facts = _preflight(values, requested.attempt_id, requested.operation_id)
         async with factory() as session:
             await _execution_service(session, service).fence_dispatch(actor=service, facts=facts)
         async with factory() as session:
@@ -222,7 +225,7 @@ async def test_execution_rejects_nonfresh_session_and_durable_fact_drift(
                 identity=identity(context(values)),
                 runtime_configuration=runtime_configuration(),
             )
-        facts = _preflight(values, requested.attempt_id)
+        facts = _preflight(values, requested.attempt_id, requested.operation_id)
         async with factory() as session, session.begin():
             with pytest.raises(GuideCompilationIntegrityError, match="fresh root"):
                 await _execution_service(session, service).fence_dispatch(
@@ -293,7 +296,7 @@ async def test_execution_rejects_stale_setup_lineage_before_authority_or_transit
                     text("update project_setup_runs set status=:status where id=:setup"),
                     {"status": stale_change, "setup": str(values["setup_1"])},
                 )
-        facts = _preflight(values, requested.attempt_id)
+        facts = _preflight(values, requested.attempt_id, requested.operation_id)
         async with factory() as session:
             with pytest.raises(GuideCompilationIntegrityError, match=expected_message):
                 await _execution_service(session, service).fence_dispatch(
@@ -335,7 +338,7 @@ async def test_execution_rechecks_setup_lineage_for_outcome_and_persistence(
                 identity=identity(context(values)),
                 runtime_configuration=runtime_configuration(),
             )
-        facts = _preflight(values, requested.attempt_id)
+        facts = _preflight(values, requested.attempt_id, requested.operation_id)
         async with factory() as session:
             await _execution_service(session, service).fence_dispatch(actor=service, facts=facts)
         await record_attempt_document_access(factory, requested.attempt_id, context(values))

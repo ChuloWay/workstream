@@ -1,7 +1,8 @@
 """Actual Celery task functions with real OUTBOX custody and fixed-service AUTH."""
 
 import json
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import select, text
@@ -40,7 +41,7 @@ def worker(delivery_harness, monkeypatch):
 def deliver(worker, event, project):
     return worker.deliver_event.apply(
         args=(str(event), str(project)),
-        task_id=str(uuid4()),
+        task_id=str(new_record_id()),
         throw=True,
     ).get()
 
@@ -107,10 +108,10 @@ async def test_worker_scan_closes_sql_before_publication_and_retries_missing_hin
 
     monkeypatch.setattr(worker, "_candidates", candidates)
     monkeypatch.setattr(worker.deliver_event, "apply_async", publish)
-    result = worker.scan_pending.apply(task_id=str(uuid4()), throw=True).get()
+    result = worker.scan_pending.apply(task_id=str(new_record_id()), throw=True).get()
     assert result == {"selected": 3, "published": 2}
     assert {e.event_id for e in events} == {UUID(args[0]) for args in published}
-    assert worker.scan_pending.apply(task_id=str(uuid4()), throw=True).get() == {
+    assert worker.scan_pending.apply(task_id=str(new_record_id()), throw=True).get() == {
         "selected": 3,
         "published": 3,
     }
@@ -124,9 +125,9 @@ async def test_worker_scan_closes_sql_before_publication_and_retries_missing_hin
 @pytest.mark.parametrize(
     "args,task_id",
     [
-        (("bad", "bad"), str(uuid4())),
-        ((str(uuid4()), str(uuid4())), "not-a-task-uuid"),
-        ((None, str(uuid4())), str(uuid4())),
+        (("bad", "bad"), str(new_record_id())),
+        ((str(new_record_id()), str(new_record_id())), "not-a-task-uuid"),
+        ((None, str(new_record_id())), str(new_record_id())),
     ],
 )
 async def test_worker_rejects_transport_before_sql(worker, monkeypatch, args, task_id):
@@ -151,20 +152,20 @@ async def test_worker_infrastructure_failure_has_bounded_sanitized_retry(
 
     monkeypatch.setattr(worker, "_deliver" if failure == "delivery" else "_candidates", failed)
     task = worker.deliver_event if failure == "delivery" else worker.scan_pending
-    args = (str(uuid4()), str(uuid4())) if failure == "delivery" else ()
+    args = (str(new_record_id()), str(new_record_id())) if failure == "delivery" else ()
     with pytest.raises(Retry) as raised:
-        task.apply(args=args, task_id=str(uuid4()), throw=True)
+        task.apply(args=args, task_id=str(new_record_id()), throw=True)
     assert raised.value.when == 30
     assert "private" not in str(raised.value)
     with pytest.raises(RuntimeError, match="outbox .* unavailable") as exhausted:
-        task.apply(args=args, task_id=str(uuid4()), retries=3, throw=True)
+        task.apply(args=args, task_id=str(new_record_id()), retries=3, throw=True)
     assert "private" not in str(exhausted.value)
 
 
 async def test_worker_scan_continues_after_failed_publication(worker, monkeypatch):
     from app.modules.outbox.api import DeliveryCandidate, DeliveryCandidatePage
 
-    selectors = (DeliveryCandidate(event_id=uuid4(), project_id=uuid4()),)
+    selectors = (DeliveryCandidate(event_id=new_record_id(), project_id=new_record_id()),)
     cursor = selectors[-1].event_id
 
     async def page(after):
@@ -179,7 +180,7 @@ async def test_worker_scan_continues_after_failed_publication(worker, monkeypatc
     monkeypatch.setattr(worker, "_candidates", page)
     monkeypatch.setattr(worker.deliver_event, "apply_async", publish)
     monkeypatch.setattr(worker.scan_pending, "apply_async", publish)
-    assert worker.scan_pending.apply(task_id=str(uuid4()), throw=True).get() == {
+    assert worker.scan_pending.apply(task_id=str(new_record_id()), throw=True).get() == {
         "selected": 1,
         "published": 0,
     }
@@ -246,7 +247,7 @@ async def test_prefork_bounds_cancellation_resistant_worker(
     pool.start()
     child = pool._pool._pool[0]
     try:
-        task_id = str(uuid4())
+        task_id = str(new_record_id())
         message = Message(
             headers={"id": task_id, "task": task.name},
             properties={"correlation_id": task_id},
@@ -264,7 +265,7 @@ async def test_prefork_bounds_cancellation_resistant_worker(
         # The pool owns waitpid/reaping. A competing join can observe stale
         # returncode metadata; the owned child sentinel proves actual exit.
         assert wait([child.sentinel], timeout=5), "hard timeout must terminate the stuck worker process"
-        duplicate_id = str(uuid4())
+        duplicate_id = str(new_record_id())
         duplicate = Request(Message(
             headers={"id": duplicate_id, "task": task.name},
             properties={"correlation_id": duplicate_id}, body=message.body,

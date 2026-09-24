@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import insert, select
 
+from app.core.identifiers import new_record_id
 from app.modules.projects.guide_compilation.models import ProjectGuideRuntimeAllocation
 from app.modules.projects.guide_compilation.repository import GuideCompilationRepository
 from app.modules.projects.guide_compilation.runtime_resources import (
@@ -109,7 +110,7 @@ async def test_pending_cleanup_waits_for_latest_allocation_full_run_budget(grant
     config = runtime_configuration()
     custody = SqlAlchemyGuideRuntimeCustody(grant._sessions, grant._attempt_id, context.material, config.runtime_key)
     old = datetime.now(timezone.utc)-timedelta(seconds=config.timeout_seconds+config.cleanup_timeout_seconds+60)
-    identifier = uuid4()
+    identifier = new_record_id()
     async with grant._sessions() as session, session.begin():
         await session.execute(insert(ProjectGuideRuntimeAllocation).values(id=identifier,
             attempt_id=grant._attempt_id, manifest_sha256=context.material.sha256,

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from app.core.hashing import canonical_json_hash
 from app.modules.projects.api.task_examples import task_examples_hash, validate_task_examples
@@ -188,7 +189,7 @@ class GuideMutationService:
         action = ActionId.PROJECT_GUIDE_CREATE
         examples = validate_task_examples(payload.task_examples)
         examples_hash = task_examples_hash(examples)
-        guide_id, operation_id = uuid4(), uuid4()
+        guide_id, operation_id = new_record_id(), new_record_id()
         caller, digest = self._input(
             action,
             "POST /api/v1/projects/{project_id}/guides",
@@ -202,7 +203,7 @@ class GuideMutationService:
         existing = await self._replay_creation(resolved, prepared, key, project_id, payload, digest)
         if existing is not None:
             return existing
-        snapshot_id, source_operation_id = uuid4(), uuid4()
+        snapshot_id, source_operation_id = new_record_id(), new_record_id()
         manifest, sanitized = build_guide_source_snapshot_manifest(
             payload, snapshot_id=str(snapshot_id), generation=1,
             task_examples=examples, expected_task_examples_hash=examples_hash,
@@ -434,7 +435,7 @@ class GuideMutationService:
         await self._repo.add_guide_source_snapshot(snapshot, items)
         setup_generation = await self._repo.next_project_setup_generation(guide.id)
         setup_run = ProjectSetupRun(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             project_id=guide.project_id,
             guide_id=guide.id,
             guide_version=guide.version,
@@ -472,7 +473,7 @@ class GuideMutationService:
         payload: ProjectGuideUpdate,
     ) -> GuideMutationOutcome:
         action = ActionId.PROJECT_GUIDE_UPDATE
-        operation_id = uuid4()
+        operation_id = new_record_id()
         caller, digest = self._input(
             action,
             "PATCH /api/v1/projects/{project_id}/guides/{guide_id}",

@@ -13,7 +13,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, call
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest  # type: ignore[import-not-found]
 from alembic.config import Config
@@ -31,7 +32,6 @@ from tests.projects.policy_read_faults import corrupt_locked_policy_reads
 from auth_concurrency_support import wait_for_named_database_lock
 from tests.submission_fixtures import seed_finalized_submission_for_checker_test
 
-from app.adapters.auth.dev import actor_id_from_external_identity
 from app.core.config import get_settings
 from app.core.hashing import canonical_json_hash
 from app.core.permissions import PermissionDenied
@@ -85,24 +85,24 @@ from app.schemas.auth import ActorContext
 def _locked_task_context_references() -> TaskLockedProjectContextReferences:
     """Build complete immutable locked references for focused unit tests."""
     return TaskLockedProjectContextReferences(locked_contribution_policy_version_id=UUID(int=100),
-        project_id=uuid4(),
+        project_id=new_record_id(),
         guide_version="v1",
-        source_snapshot_id=uuid4(),
+        source_snapshot_id=new_record_id(),
         source_snapshot_hash="sha256:" + "1" * 64,
-        effective_policy_id=uuid4(),
+        effective_policy_id=new_record_id(),
         effective_policy_hash="sha256:" + "2" * 64,
-        pre_submit_policy_id=uuid4(),
+        pre_submit_policy_id=new_record_id(),
         pre_submit_policy_bundle_hash="sha256:" + "3" * 64,
     )
 
 
 def test_task_submission_context_public_facts_are_immutable_and_consistent() -> None:
     """Reject mutation, invalid failures, and inconsistent lifecycle facts."""
-    predecessor = SubmissionPredecessorFacts(submission_id=uuid4(), version=2)
+    predecessor = SubmissionPredecessorFacts(submission_id=new_record_id(), version=2)
     facts = TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
-        task_id=uuid4(),
-        assignment_id=uuid4(),
-        contributor_id=uuid4(),
+        task_id=new_record_id(),
+        assignment_id=new_record_id(),
+        contributor_id=new_record_id(),
         status="needs_revision",
         kind="revision",
         predecessor=predecessor,
@@ -117,23 +117,23 @@ def test_task_submission_context_public_facts_are_immutable_and_consistent() -> 
     with pytest.raises(FrozenInstanceError):
         facts.status = "in_progress"  # type: ignore[misc]
     with pytest.raises(ValueError, match="version is invalid"):
-        SubmissionPredecessorFacts(submission_id=uuid4(), version=0)
+        SubmissionPredecessorFacts(submission_id=new_record_id(), version=0)
     with pytest.raises(ValueError, match="reference is empty"):
         TaskLockedProjectContextReferences(locked_contribution_policy_version_id=UUID(int=100),
-            project_id=uuid4(),
+            project_id=new_record_id(),
             guide_version=" ",
-            source_snapshot_id=uuid4(),
+            source_snapshot_id=new_record_id(),
             source_snapshot_hash="sha256:" + "1" * 64,
-            effective_policy_id=uuid4(),
+            effective_policy_id=new_record_id(),
             effective_policy_hash="sha256:" + "2" * 64,
-            pre_submit_policy_id=uuid4(),
+            pre_submit_policy_id=new_record_id(),
             pre_submit_policy_bundle_hash="sha256:" + "3" * 64,
         )
     with pytest.raises(ValueError, match="predecessor is inconsistent"):
         TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
-            task_id=uuid4(),
-            assignment_id=uuid4(),
-            contributor_id=uuid4(),
+            task_id=new_record_id(),
+            assignment_id=new_record_id(),
+            contributor_id=new_record_id(),
             status="in_progress",
             kind="initial",
             predecessor=predecessor,
@@ -141,9 +141,9 @@ def test_task_submission_context_public_facts_are_immutable_and_consistent() -> 
         )
     with pytest.raises(ValueError, match="predecessor is inconsistent"):
         TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
-            task_id=uuid4(),
-            assignment_id=uuid4(),
-            contributor_id=uuid4(),
+            task_id=new_record_id(),
+            assignment_id=new_record_id(),
+            contributor_id=new_record_id(),
             status="needs_revision",
             kind="initial",
             predecessor=None,
@@ -154,10 +154,10 @@ def test_task_submission_context_public_facts_are_immutable_and_consistent() -> 
 @pytest.mark.asyncio
 async def test_task_repository_locks_initial_and_revision_submission_context() -> None:
     """Project exact initial and revision facts through the owner-local port."""
-    contributor_id = uuid4()
-    task_id = uuid4()
-    assignment_id = uuid4()
-    predecessor_id = uuid4()
+    contributor_id = new_record_id()
+    task_id = new_record_id()
+    assignment_id = new_record_id()
+    predecessor_id = new_record_id()
     references = _locked_task_context_references()
     task = MagicMock(
         project_id=str(references.project_id),
@@ -252,9 +252,9 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
 @pytest.mark.asyncio
 async def test_task_repository_rejects_stale_submission_predecessor() -> None:
     """Reject a predecessor selector that is no longer the latest Submission."""
-    task_id = uuid4()
-    contributor_id = uuid4()
-    assignment_id = uuid4()
+    task_id = new_record_id()
+    contributor_id = new_record_id()
+    assignment_id = new_record_id()
     task = MagicMock(assigned_to=str(contributor_id), status="in_progress",
                      project_id="same-project", locked_contribution_policy_version_id=UUID(int=100))
     assignment = MagicMock(
@@ -266,7 +266,7 @@ async def test_task_repository_rejects_stale_submission_predecessor() -> None:
     repository = TaskRepository(session)
     repository.get_task = AsyncMock(return_value=task)
     repository.get_latest_submission_for_task = AsyncMock(
-        return_value=MagicMock(id=str(uuid4()), version=1, contributor_id=str(contributor_id))
+        return_value=MagicMock(id=str(new_record_id()), version=1, contributor_id=str(contributor_id))
     )
 
     with pytest.raises(
@@ -278,7 +278,7 @@ async def test_task_repository_rejects_stale_submission_predecessor() -> None:
                 task_id=task_id,
                 assignment_id=assignment_id,
                 contributor_id=contributor_id,
-                predecessor_submission_id=uuid4(),
+                predecessor_submission_id=new_record_id(),
             )
         )
 
@@ -289,10 +289,10 @@ async def test_task_repository_rejects_invalid_revision_lineage(
     cross_contributor: bool,
 ) -> None:
     """Reject crossed lifecycle state and cross-contributor predecessors."""
-    task_id = uuid4()
-    contributor_id = uuid4()
-    assignment_id = uuid4()
-    predecessor_id = uuid4()
+    task_id = new_record_id()
+    contributor_id = new_record_id()
+    assignment_id = new_record_id()
+    predecessor_id = new_record_id()
     task = MagicMock(assigned_to=str(contributor_id), status="in_progress")
     assignment = MagicMock(
         task_id=str(task_id), contributor_id=str(contributor_id), status="active"
@@ -300,7 +300,7 @@ async def test_task_repository_rejects_invalid_revision_lineage(
     predecessor = MagicMock(
         id=str(predecessor_id),
         version=1,
-        contributor_id=str(uuid4()) if cross_contributor else str(contributor_id),
+        contributor_id=str(new_record_id()) if cross_contributor else str(contributor_id),
     )
     session = MagicMock()
     session.scalar = AsyncMock(return_value=assignment)
@@ -346,7 +346,7 @@ async def test_task_repository_delegates_audit_persistence() -> None:
 def task_service_actor(*roles: str) -> ActorContext:
     """Build a verified actor for direct task-service behavior tests."""
     return ActorContext(
-        actor_id=actor_id("task-service-actor"),
+        actor_id=str(new_record_id()),
         external_subject="task-service-actor",
         external_issuer="flow-test",
         roles=roles,
@@ -690,7 +690,7 @@ def alembic_config() -> Config:
 def auth_headers(token: str = "task-token") -> dict[str, str]:
     return {
         "Authorization": f"Bearer {token}",
-        "Idempotency-Key": str(uuid4()),
+        "Idempotency-Key": str(new_record_id()),
     }
 
 
@@ -728,8 +728,19 @@ def set_dev_actor(
     get_settings.cache_clear()
 
 
-def actor_id(subject: str, issuer: str = "flow-test") -> str:
-    return actor_id_from_external_identity(issuer, subject)
+async def actor_id(subject: str, issuer: str = "flow-test") -> str:
+    """Look up the canonical actor registered for one external identity."""
+    async with db_session.get_session_factory()() as session:
+        registered_actor_id = await session.scalar(
+            select(ActorIdentityLink.actor_profile_id).where(
+                ActorIdentityLink.issuer == issuer,
+                ActorIdentityLink.subject == subject,
+            )
+        )
+    assert registered_actor_id is not None, (
+        f"actor is not registered for issuer={issuer!r}, subject={subject!r}"
+    )
+    return str(registered_actor_id)
 
 
 
@@ -896,7 +907,7 @@ def complete_submission_payload(package_hash: str = "sha256:package-v1") -> dict
 async def create_active_project(client: AsyncClient, *, slug: str = "task-queue-project") -> dict:
     project_response = await client.post(
         "/api/v1/projects",
-        headers=auth_headers() | {"Idempotency-Key": str(uuid4())},
+        headers=auth_headers() | {"Idempotency-Key": str(new_record_id())},
         json={
             "name": "Task Queue Project",
             "slug": slug,
@@ -1012,10 +1023,12 @@ async def admit_and_grant_project_submitter(
     return {"actor_profile_id": actor_profile_id, "grant_id": response.json()["id"]}
 
 
-def expected_worker_requester_provenance(subject: str = "worker-one") -> dict[str, str]:
+async def expected_worker_requester_provenance(
+    subject: str = "worker-one",
+) -> dict[str, str]:
     """Return the queue-safe requester provenance for a seeded worker actor."""
     return {
-        "requester_actor_id": actor_id(subject),
+        "requester_actor_id": await actor_id(subject),
         "requester_external_subject": subject,
         "requester_external_issuer": "flow-test",
         "requester_auth_source": "dev_mock",
@@ -1029,8 +1042,16 @@ def hold_pre_review_enqueue(*, checker_run_id: str, requester_provenance: dict) 
 
 async def seed_task_test_actor(subject: str, *, stored_role: str = "worker") -> str:
     """Seed identity facts for row/read tests; never seed eligibility or a grant."""
-    worker_actor_id = actor_id(subject)
     async with db_session.get_session_factory()() as session:
+        existing_actor_id = await session.scalar(
+            select(ActorIdentityLink.actor_profile_id).where(
+                ActorIdentityLink.issuer == "flow-test",
+                ActorIdentityLink.subject == subject,
+            )
+        )
+        if existing_actor_id is not None:
+            return str(existing_actor_id)
+        worker_actor_id = str(new_record_id())
         session.add_all(
             [
                 ActorProfile(
@@ -1041,7 +1062,7 @@ async def seed_task_test_actor(subject: str, *, stored_role: str = "worker") -> 
                     created_by=worker_actor_id,
                 ),
                 ActorIdentityLink(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     actor_profile_id=worker_actor_id,
                     issuer="flow-test",
                     subject=subject,
@@ -1066,6 +1087,30 @@ async def seed_task_test_actor(subject: str, *, stored_role: str = "worker") -> 
         )
         await session.commit()
     return worker_actor_id
+
+
+async def test_seed_task_test_actor_reuses_canonical_external_identity(
+    task_client: AsyncClient,
+) -> None:
+    """Seed one UUIDv7 actor and reuse it for repeated identity setup."""
+    first_actor_id = await seed_task_test_actor("task-seed-idempotency")
+    second_actor_id = await seed_task_test_actor("task-seed-idempotency")
+
+    assert second_actor_id == first_actor_id
+    assert UUID(first_actor_id).version == 7
+    async with db_session.get_session_factory()() as session:
+        profile = await session.get(ActorProfile, first_actor_id)
+        identity_link_count = await session.scalar(
+            select(func.count())
+            .select_from(ActorIdentityLink)
+            .where(
+                ActorIdentityLink.issuer == "flow-test",
+                ActorIdentityLink.subject == "task-seed-idempotency",
+            )
+        )
+    assert profile is not None
+    assert profile.provisioning_method == "automatic_first_access"
+    assert identity_link_count == 1
 
 
 async def _submission_context_request_for_started_task(
@@ -1103,7 +1148,7 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
     project = await create_active_project(task_client)
     subject = "worker-submission-context"
     task = await create_started_task(task_client, project["id"], monkeypatch, subject)
-    contributor_id = actor_id(subject)
+    contributor_id = await actor_id(subject)
     initial_request = await _submission_context_request_for_started_task(task["id"], contributor_id)
 
     async with db_session.get_session_factory()() as session:
@@ -1170,7 +1215,7 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
         task_id=revision_request.task_id,
         assignment_id=revision_request.assignment_id,
         contributor_id=revision_request.contributor_id,
-        predecessor_submission_id=uuid4(),
+        predecessor_submission_id=new_record_id(),
     )
     async with db_session.get_session_factory()() as session:
         with pytest.raises(
@@ -1195,7 +1240,7 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
 
     replacement_subject = "worker-submission-context-replacement"
     replacement_contributor_id = await seed_task_test_actor(replacement_subject)
-    replacement_assignment_id = str(uuid4())
+    replacement_assignment_id = str(new_record_id())
     async with db_session.get_session_factory()() as session:
         await session.execute(
             update(TaskAssignment)
@@ -1242,8 +1287,10 @@ async def test_task_repository_postgresql_submission_context_lock_serializes_rac
     project = await create_active_project(task_client)
     subject = "worker-submission-context-race"
     task = await create_started_task(task_client, project["id"], monkeypatch, subject)
-    request = await _submission_context_request_for_started_task(task["id"], actor_id(subject))
-    contender_name = f"task-context-{uuid4()}"
+    request = await _submission_context_request_for_started_task(
+        task["id"], await actor_id(subject)
+    )
+    contender_name = f"task-context-{new_record_id()}"
 
     holder = db_session.get_session_factory()()
     contender = db_session.get_session_factory()()
@@ -1449,7 +1496,7 @@ async def test_task_router_service_errors_use_canonical_request_context(
         raise TaskServiceError("bounded task failure")
 
     cases = [
-        ("create_task", "POST", f"/api/v1/projects/{uuid4()}/tasks", complete_task_payload()),
+        ("create_task", "POST", f"/api/v1/projects/{new_record_id()}/tasks", complete_task_payload()),
         ("get_task", "GET", "/api/v1/tasks/task-id", None),
         (
             "get_task_submission_requirements",
@@ -1458,8 +1505,8 @@ async def test_task_router_service_errors_use_canonical_request_context(
             None,
         ),
         ("get_task_locked_context", "GET", "/api/v1/tasks/task-id/locked-context", None),
-        ("screen", "POST", f"/api/v1/tasks/{uuid4()}/screen", None),
-        ("release", "POST", f"/api/v1/tasks/{uuid4()}/release", None),
+        ("screen", "POST", f"/api/v1/tasks/{new_record_id()}/screen", None),
+        ("release", "POST", f"/api/v1/tasks/{new_record_id()}/release", None),
         ("list_task_submissions", "GET", "/api/v1/tasks/task-id/submissions", None),
         ("get_submission", "GET", "/api/v1/submissions/submission-id", None),
         ("finalize_submission", "POST", "/api/v1/submissions/submission-id/finalize", None),
@@ -1575,7 +1622,7 @@ async def test_task_create_and_transitions_reject_client_supplied_policy_context
 async def test_screening_requires_active_guide_context(task_client: AsyncClient) -> None:
     project_response = await task_client.post(
         "/api/v1/projects",
-        headers=auth_headers() | {"Idempotency-Key": str(uuid4())},
+        headers=auth_headers() | {"Idempotency-Key": str(new_record_id())},
         json={"name": "No Guide", "slug": "no-guide"},
     )
     assert project_response.status_code == 201, project_response.text
@@ -2335,8 +2382,9 @@ async def test_registered_claim_route_rejects_identity_spoof_fields(
         task_client, monkeypatch, project["id"], "worker-claim-overpost",
     )
 
+    malicious_actor_id = str(new_record_id())
     spoofed_fields = {
-        "actor_id": actor_id("malicious"),
+        "actor_id": malicious_actor_id,
         "external_subject": "spoofed-subject",
         "external_issuer": "spoofed-issuer",
         "roles": ["admin"],
@@ -2357,7 +2405,7 @@ async def test_registered_claim_route_rejects_identity_spoof_fields(
         assert profile.actor_kind == "human" and profile.status == "active"
         assert profile.display_name != "Spoofed Name"
         assert profile.contact_email != "spoofed@example.test"
-        assert await session.get(ActorProfile, actor_id("malicious")) is None
+        assert await session.get(ActorProfile, malicious_actor_id) is None
         assert await session.scalar(select(TaskAssignment).where(
             TaskAssignment.task_id == ready_task["id"],
         )) is None
@@ -2440,7 +2488,7 @@ async def test_retained_packet_reads_preserve_locked_lineage_and_redact_audit(
 ) -> None:
     project = await create_active_project(task_client)
     started_task = await create_started_task(task_client, project["id"], monkeypatch)
-    worker_actor_id = actor_id("worker-one")
+    worker_actor_id = await actor_id("worker-one")
 
     submission_id = await seed_finalized_submission_for_checker_test(
         started_task["id"], complete_submission_payload(),
@@ -2768,10 +2816,10 @@ async def test_database_rejects_submission_without_post_submit_policy_context(
         assert task is not None
         assignment = await session.scalar(select(TaskAssignment).where(TaskAssignment.task_id == task.id))
         submission = Submission(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             task_id=task.id,
             task_assignment_id=assignment.id,
-            contributor_id=actor_id("worker-one"),
+            contributor_id=await actor_id("worker-one"),
             version=1,
             status="submitted",
             summary="Bypass submission without post-submit policy provenance.",
@@ -2826,7 +2874,7 @@ async def test_database_rejects_checker_run_without_post_submit_policy_context(
         assert task is not None
         assert submission is not None
         checker_run = db_models.CheckerRun(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             task_id=task.id,
             submission_id=submission.id,
             submission_version=submission.version,
@@ -3291,7 +3339,7 @@ async def test_finalization_repair_is_authorized_attributed_and_idempotent(
     # POST is not a submission-creation path. TASK's context owner must still
     # reject a revision before the task enters needs_revision.
     premature_revision = await _submission_context_request_for_started_task(
-        started_task["id"], actor_id("worker-one"),
+        started_task["id"], await actor_id("worker-one"),
         predecessor_submission_id=submission_id,
     )
     async with db_session.get_session_factory()() as session:
@@ -3352,7 +3400,7 @@ async def test_finalization_repair_is_authorized_attributed_and_idempotent(
     assert audit.status_code == 200, audit.text
     audit_events = {event["event_type"]: event for event in audit.json()}
     finalized_event = audit_events["submission_finalized"]
-    assert finalized_event["actor_id"] == actor_id("worker-one")
+    assert finalized_event["actor_id"] == await actor_id("worker-one")
     assert finalized_event["external_subject"] == "worker-one"
     assert finalized_event["external_issuer"] == "flow-test"
     assert finalized_event["auth_source"] == "dev_mock"
@@ -3366,7 +3414,7 @@ async def test_finalization_repair_is_authorized_attributed_and_idempotent(
         assert event["external_subject"] == "workstream-system:pre-review-gate"
         assert event["external_issuer"] == "workstream"
         assert event["auth_source"] == "workstream_system"
-        assert event["event_payload"]["requester_actor_id"] == actor_id("worker-one")
+        assert event["event_payload"]["requester_actor_id"] == await actor_id("worker-one")
         assert event["event_payload"]["requester_external_subject"] == "worker-one"
         assert event["event_payload"]["requester_external_issuer"] == "flow-test"
         assert event["event_payload"]["requester_auth_source"] == "dev_mock"
@@ -3421,11 +3469,12 @@ async def test_finalize_repairs_locked_submission_with_missing_pre_review_gate(
     project = await create_active_project(task_client)
     started_task = await create_started_task(task_client, project["id"], monkeypatch)
     original_enqueue = task_service_module.enqueue_pre_review_gate
+    expected_requester_provenance = await expected_worker_requester_provenance()
     enqueue_calls: list[str] = []
 
     def fail_enqueue(*, checker_run_id: str, requester_provenance: dict) -> str:
         enqueue_calls.append(checker_run_id)
-        assert requester_provenance == expected_worker_requester_provenance()
+        assert requester_provenance == expected_requester_provenance
         raise PreReviewGateQueueError("simulated broker outage")
 
     monkeypatch.setattr(task_service_module, "enqueue_pre_review_gate", fail_enqueue)
@@ -3487,7 +3536,10 @@ async def test_finalize_repairs_locked_submission_with_missing_pre_review_gate(
     assert len(dispatch_failed_events) == 1
     assert dispatch_failed_events[0].event_payload["checker_run_id"] == failed_claim.id
     assert dispatch_failed_events[0].actor_id == "workstream-system:pre-review-gate"
-    assert dispatch_failed_events[0].event_payload["requester_actor_id"] == actor_id("worker-one")
+    assert (
+        dispatch_failed_events[0].event_payload["requester_actor_id"]
+        == await actor_id("worker-one")
+    )
 
     monkeypatch.setattr(task_service_module, "enqueue_pre_review_gate", original_enqueue)
     worker_repair = await task_client.post(
@@ -3524,7 +3576,7 @@ async def test_finalize_repairs_locked_submission_with_missing_pre_review_gate(
     assert persisted_repaired_run is not None
     assert persisted_repaired_run.failure_code is None
     assert repair_event is not None
-    assert repair_event.actor_id == actor_id("project-manager-subject")
+    assert repair_event.actor_id == await actor_id("project-manager-subject")
     assert repair_event.event_payload["checker_run_id"] == failed_claim.id
     assert repair_event.event_payload["previous_status"] == "failed"
     assert repair_event.event_payload["previous_failure_code"] == "pre_review_gate_enqueue_failed"
@@ -3866,7 +3918,10 @@ async def test_eager_pre_review_gate_failure_after_submission_is_repairable(
     assert dispatch_failed_event is not None
     assert dispatch_failed_event.actor_id == "workstream-system:pre-review-gate"
     assert dispatch_failed_event.event_payload["checker_run_id"] == failed_run.id
-    assert dispatch_failed_event.event_payload["requester_actor_id"] == actor_id("worker-one")
+    assert (
+        dispatch_failed_event.event_payload["requester_actor_id"]
+        == await actor_id("worker-one")
+    )
 
     monkeypatch.setattr(
         checker_worker_module.CheckerService,
@@ -3969,7 +4024,7 @@ async def test_finalize_repairs_stale_running_pre_review_gate(
     assert persisted_stale_run.failure_code == "pre_review_gate_running_timed_out"
     assert persisted_stale_run.is_current_for_submission is False
     assert repair_event is not None
-    assert repair_event.actor_id == actor_id("project-manager-subject")
+    assert repair_event.actor_id == await actor_id("project-manager-subject")
     assert repair_event.event_payload["previous_checker_run_id"] == queued_run.id
     assert repair_event.event_payload["checker_run_id"] == repaired_run["id"]
     assert repair_event.event_payload["previous_status"] == "running"
@@ -4089,7 +4144,10 @@ async def test_finalize_redispatches_queued_pre_review_gate_without_duplicate_ru
     assert stored.status_code == 200, stored.text
     assert stored.json()["finalized_at"] is not None
     assert len(enqueue_calls) == 1
-    assert enqueue_calls[0]["requester_provenance"] == expected_worker_requester_provenance()
+    assert (
+        enqueue_calls[0]["requester_provenance"]
+        == await expected_worker_requester_provenance()
+    )
     assert "claim_snapshot" not in enqueue_calls[0]["requester_provenance"]
     assert "roles" not in enqueue_calls[0]["requester_provenance"]
 
@@ -4227,7 +4285,7 @@ async def test_manual_checker_run_cannot_bypass_failed_automatic_gate(
     with pytest.raises(CheckerExecutionBlocked):
         cast(Any, run_pre_review_gate).run(
             queued_run.id,
-            expected_worker_requester_provenance(),
+            await expected_worker_requester_provenance(),
         )
 
     set_dev_actor(monkeypatch, roles="project_manager", subject="project-manager-subject")
@@ -4291,7 +4349,7 @@ async def test_queued_gate_policy_error_is_failed_and_repairable(
         await corrupt_locked_policy_reads(fault, started_task["id"], "stale_bundle")
         with pytest.raises(CheckerPolicyInvalid):
             cast(Any, run_pre_review_gate).run(
-                queued_run.id, expected_worker_requester_provenance(),
+                queued_run.id, await expected_worker_requester_provenance(),
             )
 
     async with db_session.get_session_factory()() as session:
@@ -4372,7 +4430,7 @@ async def test_queued_gate_rejects_tampered_requester_provenance(
         cast(Any, run_pre_review_gate).run(
             queued_run.id,
             {
-                "requester_actor_id": actor_id("attacker"),
+                "requester_actor_id": str(new_record_id()),
                 "requester_external_subject": "attacker",
                 "requester_external_issuer": "flow-test",
                 "requester_auth_source": "dev_mock",
@@ -4464,7 +4522,7 @@ async def test_queued_gate_fails_closed_when_lock_audit_is_missing(
     with pytest.raises(CheckerExecutionBlocked):
         cast(Any, run_pre_review_gate).run(
             queued_run.id,
-            expected_worker_requester_provenance(),
+            await expected_worker_requester_provenance(),
         )
 
     async with db_session.get_session_factory()() as session:
@@ -4522,7 +4580,7 @@ async def test_stale_queued_pre_review_gate_skips_before_task_status_check(
     result = cast(Any, run_pre_review_gate).run(
         v1_run.id,
         {
-            **expected_worker_requester_provenance(),
+            **await expected_worker_requester_provenance(),
             "claim_snapshot": {"roles": ["worker"]},
         },
     )
@@ -4618,7 +4676,7 @@ async def test_database_enforces_unique_submission_version(
         assert persisted is not None
         task = await session.get(WorkstreamTask, persisted.task_id)
         session.add(build_submission(
-            submission_id=str(uuid4()), task=task, contributor_id=persisted.contributor_id,
+            submission_id=str(new_record_id()), task=task, contributor_id=persisted.contributor_id,
             task_assignment_id=persisted.task_assignment_id,
             contribution_policy_version_id=persisted.contribution_policy_version_id,
             version=persisted.version, summary="duplicate",
@@ -4705,7 +4763,7 @@ async def test_database_enforces_one_active_assignment_per_task(task_client: Asy
         session.add_all(
             [
                 TaskAssignment(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     task_id=ready_task["id"],
                     project_id=project["id"],
                     submitter_contribution_policy_version_id=UUID(ready_task["locked_contribution_policy_version_id"]),
@@ -4714,7 +4772,7 @@ async def test_database_enforces_one_active_assignment_per_task(task_client: Asy
                     status="active",
                 ),
                 TaskAssignment(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     task_id=ready_task["id"],
                     project_id=project["id"],
                     submitter_contribution_policy_version_id=UUID(ready_task["locked_contribution_policy_version_id"]),
@@ -4740,7 +4798,7 @@ async def test_released_assignment_does_not_block_new_active_assignment(
         session.add_all(
             [
                 TaskAssignment(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     task_id=ready_task["id"],
                     project_id=project["id"],
                     submitter_contribution_policy_version_id=UUID(ready_task["locked_contribution_policy_version_id"]),
@@ -4749,7 +4807,7 @@ async def test_released_assignment_does_not_block_new_active_assignment(
                     status="released",
                 ),
                 TaskAssignment(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     task_id=ready_task["id"],
                     project_id=project["id"],
                     submitter_contribution_policy_version_id=UUID(ready_task["locked_contribution_policy_version_id"]),

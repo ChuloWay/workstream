@@ -6,7 +6,8 @@ from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import delete, func, select, text, update
@@ -128,7 +129,7 @@ async def _prepare_suspended(
         async with session.begin():
             created = await service.create(
                 AdapterBindingCreateRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id,
+                    operation_id=new_record_id(), actor_profile_id=actor_id,
                     project_id=project_id, instrument_type="money",
                     adapter_actor_id=adapter_id, route_key="adapter.primary",
                 )
@@ -136,7 +137,7 @@ async def _prepare_suspended(
         async with session.begin():
             await service.suspend(
                 AdapterBindingSuspendRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id,
+                    operation_id=new_record_id(), actor_profile_id=actor_id,
                     project_id=project_id, adapter_binding_id=created.adapter_binding_id,
                     expected_lifecycle_version=1,
                 )
@@ -145,7 +146,7 @@ async def _prepare_suspended(
 
 
 async def _create_adapter_target(actor_id: UUID) -> UUID:
-    adapter_id = uuid4()
+    adapter_id = new_record_id()
     async with db_session.get_session_factory()() as session:
         async with session.begin():
             session.add(
@@ -159,7 +160,7 @@ async def _create_adapter_target(actor_id: UUID) -> UUID:
             await session.flush()
             session.add(
                 ActorIdentityLink(
-                    id=str(uuid4()), actor_profile_id=str(adapter_id),
+                    id=str(new_record_id()), actor_profile_id=str(adapter_id),
                     issuer="https://compensation.test", subject=f"target-{adapter_id}",
                     subject_kind="service", status="active", linked_by=str(actor_id),
                 )
@@ -197,7 +198,7 @@ async def test_owner_rows_remain_locked_through_protected_mutation(
                 if operation == "create":
                     await service.create(
                         AdapterBindingCreateRequest(
-                            operation_id=uuid4(), actor_profile_id=actor_id,
+                            operation_id=new_record_id(), actor_profile_id=actor_id,
                             project_id=project_id, instrument_type="money",
                             adapter_actor_id=adapter_id, route_key="adapter.primary",
                         )
@@ -206,7 +207,7 @@ async def test_owner_rows_remain_locked_through_protected_mutation(
                     assert binding_id is not None
                     await service.resume(
                         AdapterBindingResumeRequest(
-                            operation_id=uuid4(), actor_profile_id=actor_id,
+                            operation_id=new_record_id(), actor_profile_id=actor_id,
                             project_id=project_id, adapter_binding_id=binding_id,
                             expected_lifecycle_version=2,
                         )
@@ -305,7 +306,7 @@ async def test_committed_owner_ineligibility_denies_before_authorization(
                 if operation == "create":
                     await service.create(
                         AdapterBindingCreateRequest(
-                            operation_id=uuid4(), actor_profile_id=actor_id,
+                            operation_id=new_record_id(), actor_profile_id=actor_id,
                             project_id=project_id, instrument_type="money",
                             adapter_actor_id=adapter_id, route_key="adapter.primary",
                         )
@@ -314,7 +315,7 @@ async def test_committed_owner_ineligibility_denies_before_authorization(
                     assert binding_id is not None
                     await service.resume(
                         AdapterBindingResumeRequest(
-                            operation_id=uuid4(), actor_profile_id=actor_id,
+                            operation_id=new_record_id(), actor_profile_id=actor_id,
                             project_id=project_id, adapter_binding_id=binding_id,
                             expected_lifecycle_version=2,
                         )
@@ -376,7 +377,7 @@ async def test_active_replacement_blocks_resume_of_suspended_binding(
         async with session.begin():
             await service.create(
                 AdapterBindingCreateRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id,
+                    operation_id=new_record_id(), actor_profile_id=actor_id,
                     project_id=project_id, instrument_type="money",
                     adapter_actor_id=adapter_id, route_key="adapter.replacement",
                 )
@@ -385,7 +386,7 @@ async def test_active_replacement_blocks_resume_of_suspended_binding(
             async with session.begin():
                 await service.resume(
                     AdapterBindingResumeRequest(
-                        operation_id=uuid4(), actor_profile_id=actor_id,
+                        operation_id=new_record_id(), actor_profile_id=actor_id,
                         project_id=project_id, adapter_binding_id=suspended_id,
                         expected_lifecycle_version=2,
                     )
@@ -399,7 +400,7 @@ async def test_existing_art_service_identity_cannot_substitute_for_cp03_registra
     binding_seed: BindingSeed,
 ) -> None:
     project_id, _, actor_id = await binding_seed()
-    art_actor_id = uuid4()
+    art_actor_id = new_record_id()
     async with db_session.get_session_factory()() as session:
         async with session.begin():
             session.add(
@@ -413,7 +414,7 @@ async def test_existing_art_service_identity_cannot_substitute_for_cp03_registra
             await session.flush()
             session.add(
                 ActorIdentityLink(
-                    id=str(uuid4()), actor_profile_id=str(art_actor_id),
+                    id=str(new_record_id()), actor_profile_id=str(art_actor_id),
                     issuer="https://compensation.test", subject=f"art-{art_actor_id}",
                     subject_kind="service", status="active", linked_by=str(actor_id),
                 )
@@ -431,7 +432,7 @@ async def test_existing_art_service_identity_cannot_substitute_for_cp03_registra
                     mutation_authorization=authorization, projects=owners, actors=owners,
                 ).create(
                     AdapterBindingCreateRequest(
-                        operation_id=uuid4(), actor_profile_id=actor_id,
+                        operation_id=new_record_id(), actor_profile_id=actor_id,
                         project_id=project_id, instrument_type="money",
                         adapter_actor_id=art_actor_id, route_key="adapter.primary",
                     )
@@ -448,7 +449,7 @@ async def test_unmarked_human_actor_cannot_substitute_for_owner_eligibility(
     authorization = _BlockingAuthorization()
     authorization.release.set()
     async with db_session.get_session_factory()() as session:
-        owners = _OwnerFences(session, _CompensationAdapterEligibilityMarker(uuid4()))
+        owners = _OwnerFences(session, _CompensationAdapterEligibilityMarker(new_record_id()))
         with pytest.raises(AdapterBindingConflict):
             async with session.begin():
                 await AdapterBindingService(
@@ -456,7 +457,7 @@ async def test_unmarked_human_actor_cannot_substitute_for_owner_eligibility(
                     mutation_authorization=authorization, projects=owners, actors=owners,
                 ).create(
                     AdapterBindingCreateRequest(
-                        operation_id=uuid4(), actor_profile_id=actor_id,
+                        operation_id=new_record_id(), actor_profile_id=actor_id,
                         project_id=project_id, instrument_type="money",
                         adapter_actor_id=actor_id, route_key="adapter.primary",
                     )

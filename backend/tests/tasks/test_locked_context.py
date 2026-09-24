@@ -3,7 +3,8 @@
 import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from pydantic import ValidationError
@@ -52,7 +53,7 @@ SUMMARY_FIELDS = {
 
 def test_locked_context_contracts():
     values = {
-        field: (uuid4() if field.endswith("_id") else 1 if field.endswith("_generation")
+        field: (new_record_id() if field.endswith("_id") else 1 if field.endswith("_generation")
                 else "sha256:" + "1" * 64 if field.endswith("_hash") else "guide")
         for field in REFERENCE_FIELDS
     }
@@ -67,11 +68,11 @@ def test_locked_context_contracts():
             bad = " " if field.endswith("_version") else "bad" if field.endswith(("_id", "_hash")) else 0
             with pytest.raises(ValidationError):
                 cls(**{**kwargs, field: bad})
-        for extra in ({"source_ref": "private"}, {"base_amount": 99}, {"actor_id": uuid4()}):
+        for extra in ({"source_ref": "private"}, {"base_amount": 99}, {"actor_id": new_record_id()}):
             with pytest.raises(ValidationError, match="extra_forbidden"):
                 cls(**kwargs, **extra)
         with pytest.raises(ValidationError, match="frozen_instance"):
-            result.task_id = uuid4()
+            result.task_id = new_record_id()
         if cls is not ManagementTaskLockedContext:
             with pytest.raises(ValidationError, match="extra_forbidden"):
                 cls(**values, **{SUMMARY: summary})
@@ -87,8 +88,8 @@ async def test_locked_context_invalid_selectors_before_sql():
     service._repo.lock_project_task = AsyncMock()
     service._load_locked_task_context = AsyncMock()
     for method, _ in READS:
-        for invalid in (None, "bad", str(uuid4()), 1, True):
-            for project, task in ((invalid, uuid4()), (uuid4(), invalid)):
+        for invalid in (None, "bad", str(new_record_id()), 1, True):
+            for project, task in ((invalid, new_record_id()), (new_record_id(), invalid)):
                 with pytest.raises(ValueError, match="selectors are invalid"):
                     await getattr(service, method)(project, task)
     service._repo.lock_project_task.assert_not_awaited()
@@ -119,7 +120,7 @@ async def test_locked_context_exact_scope_and_fields(task_client):
             if cls is ManagementTaskLockedContext:
                 assert body[SUMMARY] == expected_summary
             with patch.object(service, "_load_locked_task_context", wraps=service._load_locked_task_context) as resolve:
-                for project_id, task_id in ((uuid4(), UUID(task["id"])), (UUID(project["id"]), uuid4())):
+                for project_id, task_id in ((new_record_id(), UUID(task["id"])), (UUID(project["id"]), new_record_id())):
                     with pytest.raises(TaskNotFound, match="task not found"):
                         await getattr(service, method)(project_id, task_id)
                 resolve.assert_not_awaited()
@@ -156,7 +157,7 @@ async def test_locked_context_preserves_caller_transaction(task_client):
     task = await create_ready_task(task_client, project["id"])
     factory = db_session.get_session_factory()
     for method, _ in READS:
-        pending_id = str(uuid4())
+        pending_id = str(new_record_id())
         async with factory() as session, session.begin():
             row = await session.get(WorkstreamTask, task["id"])
             original = row.title
@@ -178,7 +179,7 @@ async def test_locked_context_waits_for_task_before_projects(task_client):
     project = await create_active_project(task_client)
     task = await create_ready_task(task_client, project["id"])
     factory = db_session.get_session_factory()
-    name = "locked-context-" + uuid4().hex
+    name = "locked-context-" + new_record_id().hex
     async with factory() as writer, factory() as reader:
         stored = await reader.get(WorkstreamTask, task["id"])
         original_body = stored.locked_post_submit_checker_policy_body.copy()

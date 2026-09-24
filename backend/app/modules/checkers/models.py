@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from sqlalchemy import Uuid
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
@@ -29,6 +30,7 @@ class CheckerRun(Base):
 
     __tablename__ = "checker_runs"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["task_id", "locked_guide_version"],
             ["workstream_tasks.id", "workstream_tasks.locked_guide_version"],
@@ -128,7 +130,7 @@ class CheckerRun(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     task_id: Mapped[str] = mapped_column(
         ForeignKey("workstream_tasks.id"), nullable=False, index=True
     )
@@ -158,17 +160,17 @@ class CheckerRun(Base):
     )
     is_current_for_submission: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     locked_guide_version: Mapped[str] = mapped_column(String(50), nullable=False)
-    locked_post_submit_checker_policy_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    locked_post_submit_checker_policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     locked_post_submit_checker_policy_version: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
     )
     locked_post_submit_checker_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
     locked_post_submit_checker_policy_body: Mapped[dict] = mapped_column(JSON, nullable=False)
-    locked_review_policy_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    locked_review_policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     locked_review_policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
     locked_review_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
-    locked_revision_policy_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    locked_revision_policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     locked_revision_policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
     locked_revision_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
     locked_payment_policy_version: Mapped[str | None] = mapped_column(String(50))
@@ -196,8 +198,9 @@ class CheckerResult(Base):
     """One immutable checker result produced inside a durable checker run."""
 
     __tablename__ = "checker_results"
+    __table_args__ = (CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),)
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     checker_run_id: Mapped[str] = mapped_column(
         ForeignKey("checker_runs.id"),
         nullable=False,

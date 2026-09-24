@@ -13,7 +13,24 @@ from app.modules.contributions.api import (
 )
 from app.modules.contributions.models import ContributionPolicyLifecycleEvent
 from app.modules.contributions.policy_validation import policy_request_digest
+from app.modules.contributions.policy_publication import ContributionPolicyPublicationService
 from tests.contributions.policy_test_support import service_fixture
+
+
+def test_custody_record_identity_does_not_restrict_caller_operation_token():
+    fixture = service_fixture()
+    request = ContributionPolicyPublishRequest(
+        operation_id=uuid4(), actor_profile_id=fixture.actor_id,
+        project_id=fixture.project_id, contribution_policy_id=uuid4(),
+        contribution_policy_version_id=uuid4(),
+    )
+    custody = ContributionPolicyPublicationService._custody(
+        request, policy_request_digest("contribution.policy.publish", request), "published", None,
+    )
+    assert custody.id.version == 7
+    assert custody.id != request.operation_id
+    assert custody.operation_id == request.operation_id
+    assert custody.operation_id.version == 4
 
 
 def _event(request, action: str, event_type: str) -> ContributionPolicyLifecycleEvent:

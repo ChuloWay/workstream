@@ -3,6 +3,8 @@
 from datetime import UTC, datetime
 from uuid import NAMESPACE_URL, UUID, uuid5
 
+from app.core.identifiers import new_record_id
+
 from app.modules.authorization.api import ActorKind
 from app.modules.checkers.api.pre_submit import EffectivePreSubmissionPlanLineage
 from app.modules.projects.api.guide_activation import (
@@ -23,6 +25,14 @@ from app.modules.projects.repository import ProjectRepository
 from app.modules.projects.service import GuideActivationBlocked, ProjectService, ProjectServiceError
 
 from .custody import ACTION, activation_custody, load_guide_activation, require_authority
+
+
+def activation_authorization_selector(actor_profile_id: UUID, idempotency_key: UUID) -> UUID:
+    """Return the stable non-row selector used only for activation PREP."""
+    return uuid5(
+        NAMESPACE_URL,
+        f"workstream.guide.activate:{actor_profile_id}:{idempotency_key}",
+    )
 
 
 class GuideActivationService:
@@ -59,16 +69,15 @@ class GuideActivationService:
             raise GuideProposalError("authority_unavailable")
         command = GuideActivationCommand.model_validate(command.model_dump(mode="json"))
         target = command.target.proposal
-        operation_id = uuid5(
-            NAMESPACE_URL,
-            f"workstream.guide.activate:{actor.actor_profile_id}:{command.idempotency_key}",
+        authorization_selector_id = activation_authorization_selector(
+            actor.actor_profile_id, command.idempotency_key
         )
         locator = GuideActivationLocator(
             project_id=target.project_id,
             guide_id=target.guide_id,
             actor_profile_id=actor.actor_profile_id,
             identity_link_id=actor.identity_link_id,
-            operation_id=operation_id,
+            operation_id=authorization_selector_id,
             request_id=request_id,
         )
         async with GuideProposalService._bounded_errors():
@@ -151,6 +160,7 @@ class GuideActivationService:
                         command.contribution_policy_version_id,
                     )
                 )
+                operation_id = new_record_id()
                 receipt = GuideActivationReceipt(
                     operation_id=operation_id,
                     command=command,

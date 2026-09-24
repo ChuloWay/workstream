@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import replace
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import text
@@ -64,7 +64,7 @@ def _column_sql(column, dialect) -> str:
 @asynccontextmanager
 async def _isolated_binding_schema(database_url: str):
     engine = create_async_engine(database_url)
-    schema = f"binding_{uuid4().hex}"
+    schema = f"binding_{new_record_id().hex}"
     dialect = engine.dialect
     try:
         async with engine.begin() as connection:
@@ -140,9 +140,9 @@ async def _seed(session, schema: str, request) -> None:
     )
     await session.execute(
         SubmissionBundleAdmission.__table__.insert().values(
-            **vars(admission), durable_intent_id=str(uuid4()), put_attempt_id=str(uuid4()),
-            verified_replica_id=str(uuid4()), verification_receipt_id=str(uuid4()),
-            put_operation_receipt_id=str(uuid4()), put_observation_receipt_id=None,
+            **vars(admission), durable_intent_id=str(new_record_id()), put_attempt_id=str(new_record_id()),
+            verified_replica_id=str(new_record_id()), verification_receipt_id=str(new_record_id()),
+            put_operation_receipt_id=str(new_record_id()), put_observation_receipt_id=None,
             ready_at=text("now()"),
         )
     )
@@ -173,13 +173,13 @@ async def test_composed_final_denial_rolls_back_task_and_art_rows(
     task = type("LockedTask", (), {
         "id": str(context.task_id),
         "locked_guide_version": "1",
-        "locked_post_submit_checker_policy_id": str(uuid4()),
+        "locked_post_submit_checker_policy_id": str(new_record_id()),
         "locked_post_submit_checker_policy_version": "1",
         "locked_post_submit_checker_policy_hash": "sha256:" + "4" * 64,
         "locked_post_submit_checker_policy_body": {},
-        "locked_review_policy_id": str(uuid4()), "locked_review_policy_generation": 1,
+        "locked_review_policy_id": str(new_record_id()), "locked_review_policy_generation": 1,
         "locked_review_policy_hash": "sha256:" + "5" * 64,
-        "locked_revision_policy_id": str(uuid4()), "locked_revision_policy_generation": 1,
+        "locked_revision_policy_id": str(new_record_id()), "locked_revision_policy_generation": 1,
         "locked_revision_policy_hash": "sha256:" + "6" * 64,
         "locked_payment_policy_version": "1",
         "locked_guide_source_snapshot_id": str(context.locked_project_context.source_snapshot_id),
@@ -274,8 +274,8 @@ async def test_postgresql_consumption_is_concurrent_and_rollback_safe(
             assert status == "consumed"
             assert binding_count == 1
 
-        first_competing = _request(submission_id=uuid4())
-        competing = replace(first_competing, admission_id=uuid4())
+        first_competing = _request(submission_id=new_record_id())
+        competing = replace(first_competing, admission_id=new_record_id())
         async with factory.begin() as seed:
             await _seed(seed, schema, first_competing)
             await _seed(seed, schema, competing)
@@ -356,7 +356,7 @@ def _wire_hidden_authority(monkeypatch: pytest.MonkeyPatch):
     art_request = _request()
     context = art_request.task_context
     request_id, correlation_id, human_link_id, service_actor_id, service_link_id = (
-        uuid4() for _ in range(5)
+        new_record_id() for _ in range(5)
     )
     human = HumanAuthorizationContext(
         actor_profile_id=context.contributor_id,
@@ -379,13 +379,13 @@ def _wire_hidden_authority(monkeypatch: pytest.MonkeyPatch):
     )
     task = type("LockedTask", (), {
         "id": str(context.task_id), "locked_guide_version": "1",
-        "locked_post_submit_checker_policy_id": str(uuid4()),
+        "locked_post_submit_checker_policy_id": str(new_record_id()),
         "locked_post_submit_checker_policy_version": "1",
         "locked_post_submit_checker_policy_hash": "sha256:" + "4" * 64,
         "locked_post_submit_checker_policy_body": {},
-        "locked_review_policy_id": str(uuid4()), "locked_review_policy_generation": 1,
+        "locked_review_policy_id": str(new_record_id()), "locked_review_policy_generation": 1,
         "locked_review_policy_hash": "sha256:" + "5" * 64,
-        "locked_revision_policy_id": str(uuid4()), "locked_revision_policy_generation": 1,
+        "locked_revision_policy_id": str(new_record_id()), "locked_revision_policy_generation": 1,
         "locked_revision_policy_hash": "sha256:" + "6" * 64,
         "locked_payment_policy_version": "1",
         "locked_guide_source_snapshot_id": str(context.locked_project_context.source_snapshot_id),
@@ -413,7 +413,7 @@ def _wire_hidden_authority(monkeypatch: pytest.MonkeyPatch):
             })(),
         )
     async def find_role(_self, **_kwargs):
-        return type("Grant", (), {"id": uuid4(), "status": "active", "scope_project_id": None})()
+        return type("Grant", (), {"id": new_record_id(), "status": "active", "scope_project_id": None})()
     async def fixed_context(*_args, **_kwargs): return service
 
     monkeypatch.setattr(TaskRepository, "lock_submission_context", lock_context)
@@ -503,7 +503,7 @@ async def test_revoked_binding_service_rolls_back_the_hidden_command(
     )
     async with _isolated_binding_schema(isolated_database_env) as (schema, factory):
         denied_art_request = replace(
-            art_request, admission_id=uuid4(), submission_id=uuid4()
+            art_request, admission_id=new_record_id(), submission_id=new_record_id()
         )
         async with factory.begin() as seed:
             await _seed(seed, schema, denied_art_request)

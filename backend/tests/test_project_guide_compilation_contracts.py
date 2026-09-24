@@ -9,9 +9,10 @@ from app.modules.checkers.catalogue import project_guide_pre_submission_capabili
 
 from tests.projects.guide_compilation.helpers import runtime_configuration
 
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from app.core.hashing import canonical_json_hash
+from app.core.identifiers import new_record_id
 
 import pytest
 from pydantic import ValidationError
@@ -135,19 +136,20 @@ def test_task_requirements_response_carries_valid_locked_archive_limit(limit, fi
     else:
         response = task_service(None, settings=get_settings())._contributor_submission_requirements_response(task, context)
         assert response.model_dump(mode="json")[field] == limit
-SOURCE_ITEM_ID = UUID("11111111-1111-1111-1111-111111111111")
-DOCUMENT_VERSION_ID = UUID("22222222-2222-2222-2222-222222222222")
+SOURCE_ITEM_ID = new_record_id()
+DOCUMENT_VERSION_ID = new_record_id()
 
 
 def _context() -> ProjectGuideCompilationContext:
-    setup_id = uuid4()
+    setup_id = new_record_id()
     material = GuideDocumentManifest(
-        project_id=uuid4(), guide_id=uuid4(), guide_version="v1",
-        source_snapshot_id=uuid4(), source_snapshot_hash=SHA256,
+        project_id=new_record_id(), guide_id=new_record_id(), guide_version="v1",
+        source_snapshot_id=new_record_id(), source_snapshot_hash=SHA256,
         setup_run_id=setup_id, setup_generation=1,
         documents=(GuideDocumentVersion(
             source_item_id=SOURCE_ITEM_ID, ingest_id=DOCUMENT_VERSION_ID, item_order=0,
-            put_attempt_id=uuid4(), content_id=uuid4(), replica_id=uuid4(),
+            put_attempt_id=new_record_id(), content_id=new_record_id(),
+            replica_id=new_record_id(),
             storage_namespace_id="primary", namespace_fingerprint=SHA256,
             sha256=SHA256, byte_count=100, media_type="application/pdf",
         ),),

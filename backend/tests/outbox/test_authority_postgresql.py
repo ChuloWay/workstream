@@ -2,7 +2,8 @@
 
 from dataclasses import replace
 from datetime import timedelta
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import select, text
@@ -169,7 +170,7 @@ async def test_prepared_dispatch_binds_all_facts(delivery_harness, field):
     facts = phase_facts(claim, OutboxDispatchPhase.FINALIZE, "sha256:" + "a" * 64)
     value = getattr(facts, field)
     changed = (
-        uuid4()
+        new_record_id()
         if isinstance(value, UUID)
         else value + timedelta(microseconds=1)
         if field in {"claimed_at", "claim_expires_at"}
@@ -185,8 +186,8 @@ async def test_prepared_dispatch_binds_all_facts(delivery_harness, field):
     async with h.factory() as session, session.begin():
         async with outbox_dispatch_authorization(session).prepare_outbox_dispatch(
             facts=facts,
-            request_id=uuid4(),
-            correlation_id=uuid4(),
+            request_id=new_record_id(),
+            correlation_id=new_record_id(),
         ) as prepared:
             with pytest.raises(PreparedAuthorizationInvalid):
                 await prepared.consume(replace(facts, **substitutions))
@@ -234,8 +235,8 @@ async def test_prepared_dispatch_cannot_cross_root_transaction(delivery_harness)
         await session.begin()
         async with outbox_dispatch_authorization(session).prepare_outbox_dispatch(
             facts=facts,
-            request_id=uuid4(),
-            correlation_id=uuid4(),
+            request_id=new_record_id(),
+            correlation_id=new_record_id(),
         ) as prepared:
             await session.commit()
             await session.begin()
@@ -345,11 +346,11 @@ async def test_prepared_dispatch_cannot_move_to_another_session(delivery_harness
     facts = phase_facts(claim, OutboxDispatchPhase.INVOKE)
     async with h.factory() as first, first.begin(), h.factory() as second, second.begin():
         async with outbox_dispatch_authorization(first).prepare_outbox_dispatch(
-            facts=facts, request_id=uuid4(), correlation_id=uuid4(),
+            facts=facts, request_id=new_record_id(), correlation_id=new_record_id(),
         ) as prepared:
             async with fixed_service_prepared_authorization(second,
                 service_identity=ServiceIdentity.OUTBOX_DISPATCHER,
-                request_id=uuid4(), correlation_id=uuid4(),
+                request_id=new_record_id(), correlation_id=new_record_id(),
             ) as other:
                 with pytest.raises(PreparedAuthorizationHandleInvalid):
                     await other.service.consume(prepared._handle, ActionId.OUTBOX_DISPATCH,
@@ -360,7 +361,7 @@ async def test_prepared_dispatch_cannot_move_to_another_session(delivery_harness
 async def test_fixed_service_identity_cannot_be_relabelled(outbox_factory):
     factory, project = outbox_factory
     h = Harness(factory, project)
-    foreign_id = str(uuid4())
+    foreign_id = str(new_record_id())
 
     async def provision(identity, actor_id):
         async with factory() as session, session.begin():
@@ -371,8 +372,8 @@ async def test_fixed_service_identity_cannot_be_relabelled(outbox_factory):
             ))
             await session.flush()
             session.add(ActorIdentityLink(
-                id=str(uuid4()), actor_profile_id=actor_id,
-                issuer="configured-provider", subject=str(uuid4()),
+                id=str(new_record_id()), actor_profile_id=actor_id,
+                issuer="configured-provider", subject=str(new_record_id()),
                 subject_kind="service", status="active", linked_by=actor_id,
             ))
 
@@ -394,7 +395,7 @@ async def test_fixed_service_identity_cannot_be_relabelled(outbox_factory):
     with pytest.raises(DeliveryUnavailable):
         await h.delivery.claim(event.event_id, project, "foreign-principal")
 
-    await provision(ServiceIdentity.OUTBOX_DISPATCHER, str(uuid4()))
+    await provision(ServiceIdentity.OUTBOX_DISPATCHER, str(new_record_id()))
     claim = await h.delivery.claim(event.event_id, project, "provisioned-dispatcher")
     assert claim is not None
     assert claim.event_id == event.event_id

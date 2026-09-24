@@ -4,7 +4,8 @@ import asyncio
 from dataclasses import FrozenInstanceError, asdict, replace
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import event as sql_events, select
@@ -39,7 +40,7 @@ def request(project, task, **kwargs):
 
 async def store_event(session, task_id, *, when=NOW, event_type="fixture_event", entity_type="task", payload=None, typed_source=False):
     value = AuditEvent(
-        id=str(uuid4()), entity_type=entity_type, entity_id=task_id, event_type=event_type,
+        id=str(new_record_id()), entity_type=entity_type, entity_id=task_id, event_type=event_type,
         actor_id="recorded-actor", external_subject="private-subject", external_issuer="private-issuer",
         actor_roles=["private-role"], claim_snapshot={"secret": "private-claim"},
         auth_source=LIFECYCLE_AUTH_SOURCE if typed_source else "flow_jwt", reason="private-reason", event_payload=payload or {"private": "private-payload"},
@@ -70,7 +71,7 @@ async def read_once(session, value):
 
 
 def test_task_evidence_contracts():
-    project, task, event = uuid4(), uuid4(), uuid4()
+    project, task, event = new_record_id(), new_record_id(), new_record_id()
     cursor = TaskEvidenceCursor(project, task, NOW, event)
     req = AuditTaskEvidenceRequest(project, task, after=cursor)
     item = AuditTaskEvidence(event, "event", None, None, "actor", NOW, None, None)
@@ -79,17 +80,17 @@ def test_task_evidence_contracts():
     for value, changes in (
         (cursor, ({"project_id": "bad"}, {"task_id": "bad"}, {"event_id": "bad"}, {"created_at": datetime.now()})),
         (req, ({"project_id": "bad"}, {"task_id": "bad"}, *({"limit": v} for v in [0, 101, True, 1.5, "1"]),
-               {"after": {}}, {"after": replace(cursor, project_id=uuid4())}, {"after": replace(cursor, task_id=uuid4())})),
-        (item, (*({field: []} for field in FIELDS), {"created_at": datetime.now()}, {"assignment_id": uuid4()})),
+               {"after": {}}, {"after": replace(cursor, project_id=new_record_id())}, {"after": replace(cursor, task_id=new_record_id())})),
+        (item, (*({field: []} for field in FIELDS), {"created_at": datetime.now()}, {"assignment_id": new_record_id()})),
         (page, ({"project_id": "bad"}, {"task_id": "bad"}, {"items": []}, {"items": ({},)}, {"items": (item,) * 101},
-                {"items": ()}, {"next_cursor": {}}, {"next_cursor": replace(cursor, event_id=uuid4())})),
+                {"items": ()}, {"next_cursor": {}}, {"next_cursor": replace(cursor, event_id=new_record_id())})),
     ):
         for change in changes:
             with pytest.raises(ValueError):
                 replace(value, **change)
         with pytest.raises(FrozenInstanceError):
             setattr(value, next(iter(asdict(value))), "mutated")
-    assert replace(item, assignment_id=uuid4(), authorization_decision_id=uuid4()).assignment_id
+    assert replace(item, assignment_id=new_record_id(), authorization_decision_id=new_record_id()).assignment_id
     assert AuditTaskEvidencePage(project, task, (), None).items == ()
 
 
@@ -120,8 +121,8 @@ async def test_task_evidence_project_scope(task_client):
             page = await read_once(session, request(project, task))
             assert page.project_id == UUID(project["id"]) and page.task_id == UUID(task["id"])
             assert page.items and page.items[0].event_type == "TaskCreated"
-        for value in (request(project, outsider), AuditTaskEvidenceRequest(uuid4(), UUID(tasks["draft"]["id"])),
-                      AuditTaskEvidenceRequest(UUID(project["id"]), uuid4())):
+        for value in (request(project, outsider), AuditTaskEvidenceRequest(new_record_id(), UUID(tasks["draft"]["id"])),
+                      AuditTaskEvidenceRequest(UUID(project["id"]), new_record_id())):
             assert await read_once(session, value) is None
 
 
@@ -155,7 +156,7 @@ async def test_task_evidence_pagination(task_client):
                 await store_event(session, decoy["id"], when=NOW - timedelta(seconds=1))
             await store_event(session, task["id"], entity_type="review", when=NOW - timedelta(seconds=1))
             expected.append(UUID((await store_event(session, task["id"])).id))
-    cursor = TaskEvidenceCursor(UUID(project["id"]), UUID(task["id"]), NOW - timedelta(seconds=2), uuid4())
+    cursor = TaskEvidenceCursor(UUID(project["id"]), UUID(task["id"]), NOW - timedelta(seconds=2), new_record_id())
     value = request(project, task, limit=1, after=cursor)
     async with factory() as session:
         assert len(list(await session.scalars(select(AuditEvent.id).where(AuditEvent.entity_id == task["id"])))) == 7
@@ -171,7 +172,7 @@ async def test_task_evidence_pagination(task_client):
         assert exhausted.items == () and exhausted.next_cursor is None
         empty_task = await session.get(WorkstreamTask, sibling["id"])
         # New task fixture has no audit writer call; no retained evidence is deleted.
-        empty = WorkstreamTask(id=str(uuid4()), project_id=project["id"], title="empty", description="empty",
+        empty = WorkstreamTask(id=str(new_record_id()), project_id=project["id"], title="empty", description="empty",
                               source_type=empty_task.source_type, status="draft", created_by=empty_task.created_by)
         session.add(empty)
         await session.flush()
@@ -181,14 +182,14 @@ async def test_task_evidence_pagination(task_client):
 async def test_task_evidence_transition_references(task_client):
     project = await create_active_project(task_client)
     task = await create_draft_task(task_client, project["id"])
-    value = request(project, task, after=TaskEvidenceCursor(UUID(project["id"]), UUID(task["id"]), NOW - timedelta(seconds=1), uuid4()))
-    refs = {"project_id": value.project_id, "task_id": value.task_id, "assignment_id": uuid4(), "authorization_decision_id": uuid4()}
+    value = request(project, task, after=TaskEvidenceCursor(UUID(project["id"]), UUID(task["id"]), NOW - timedelta(seconds=1), new_record_id()))
+    refs = {"project_id": value.project_id, "task_id": value.task_id, "assignment_id": new_record_id(), "authorization_decision_id": new_record_id()}
     factory = db_session.get_session_factory()
     for event_type in ("TaskClaimed", "TaskStarted", "TaskStartOverridden"):
         async with factory() as session:
             event = await LifecycleAuditParticipant(session).add_event(LifecycleAuditEventInput(
-                event_id=uuid4(), entity_type=LifecycleAuditEntityType.TASK, entity_id=value.task_id, event_type=LifecycleAuditEventType(event_type),
-                actor_id=uuid4(), from_status="ready" if event_type == "TaskClaimed" else "claimed",
+                event_id=new_record_id(), entity_type=LifecycleAuditEntityType.TASK, entity_id=value.task_id, event_type=LifecycleAuditEventType(event_type),
+                actor_id=new_record_id(), from_status="ready" if event_type == "TaskClaimed" else "claimed",
                 to_status="claimed" if event_type == "TaskClaimed" else "in_progress",
                 task_reason="reasoned override" if event_type == "TaskStartOverridden" else None,
                 reason=LifecycleAuditReason.STATE_CHANGED,
@@ -199,7 +200,7 @@ async def test_task_evidence_transition_references(task_client):
             assert (item.assignment_id, item.authorization_decision_id) == (refs["assignment_id"], refs["authorization_decision_id"])
             await session.rollback()
         for field in refs:
-            for bad in (None, "private-malformed", *((str(uuid4()),) if field in {"project_id", "task_id"} else ())):
+            for bad in (None, "private-malformed", *((str(new_record_id()),) if field in {"project_id", "task_id"} else ())):
                 broken = {key: str(val) for key, val in refs.items()}
                 if bad is None:
                     broken.pop(field)
@@ -218,7 +219,7 @@ async def test_task_evidence_source_provenance(task_client):
     task = await create_draft_task(task_client, project["id"])
     value = request(project, task)
     refs = {"project_id": project["id"], "task_id": task["id"],
-            "assignment_id": str(uuid4()), "authorization_decision_id": str(uuid4())}
+            "assignment_id": str(new_record_id()), "authorization_decision_id": str(new_record_id())}
     factory = db_session.get_session_factory()
     for event_type in ("TaskClaimed", "TaskStarted", "TaskStartOverridden"):
         async with factory() as session:
@@ -270,7 +271,7 @@ async def test_task_evidence_caller_transaction(task_client):
         await session.flush()
         event = await store_event(session, task["id"])
         event_id = UUID(event.id)
-        invalid = WorkstreamTask(id=str(uuid4()))
+        invalid = WorkstreamTask(id=str(new_record_id()))
         session.add(invalid)
         page = await read_once(session, request(project, task))
         assert event_id in {item.event_id for item in page.items}

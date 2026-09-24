@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import and_, case, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
@@ -180,7 +181,7 @@ class ArtifactRepository:
                 raise GuideSourceIngestConflict("guide source ingest conflicts with prepared bytes")
             return existing
         ingest = GuideSourceArtifactIngest(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             source_item_id=str(guide_source_item_id),
             actor_profile_id=str(actor_profile_id),
             sha256=sha256,

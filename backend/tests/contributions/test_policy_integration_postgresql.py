@@ -1,7 +1,8 @@
 """Real PostgreSQL proof for hidden ContributionPolicy behavior."""
 
 from collections.abc import Iterator
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import func, select, text
@@ -142,7 +143,7 @@ async def _exercise_policy() -> tuple[
             )
             created = await service.create_draft(
                 ContributionPolicyCreateDraftRequest(
-                    operation_id=uuid4(),
+                    operation_id=new_record_id(),
                     actor_profile_id=actor_id,
                     project_id=project_id,
                     name="Integrated policy",
@@ -150,7 +151,7 @@ async def _exercise_policy() -> tuple[
             )
             updated = await service.update_draft(
                 ContributionPolicyUpdateDraftRequest(
-                    operation_id=uuid4(),
+                    operation_id=new_record_id(),
                     actor_profile_id=actor_id,
                     project_id=project_id,
                     contribution_policy_id=created.contribution_policy_id,
@@ -177,7 +178,7 @@ async def _exercise_policy() -> tuple[
             )
             published = await service.publish(
                 ContributionPolicyPublishRequest(
-                    operation_id=uuid4(),
+                    operation_id=new_record_id(),
                     actor_profile_id=actor_id,
                     project_id=project_id,
                     contribution_policy_id=created.contribution_policy_id,
@@ -199,7 +200,7 @@ async def _exercise_policy() -> tuple[
 
 async def _seed_project_only() -> str:
     """Create one foreign project without duplicating global service identity."""
-    project_id = str(uuid4())
+    project_id = str(new_record_id())
     async with db_session.get_session_factory()() as session:
         async with session.begin():
             await insert_historical_project(
@@ -248,7 +249,7 @@ async def test_real_repository_conceals_foreign_project_policy(
             )
             created = await service.create_draft(
                 ContributionPolicyCreateDraftRequest(
-                    operation_id=uuid4(),
+                    operation_id=new_record_id(),
                     actor_profile_id=actor_id,
                     project_id=UUID(owner_project),
                     name="Owner project policy",
@@ -283,7 +284,7 @@ async def test_real_service_terminally_retires_current_version(
             )
             retired = await service.retire(
                 ContributionPolicyRetireRequest(
-                    operation_id=uuid4(),
+                    operation_id=new_record_id(),
                     actor_profile_id=created.actor_profile_id,
                     project_id=project_id,
                     contribution_policy_id=created.contribution_policy_id,
@@ -324,7 +325,7 @@ async def test_late_database_failure_rolls_back_product_and_authorization_effect
             async with session.begin():
                 created = await service.create_draft(
                     ContributionPolicyCreateDraftRequest(
-                        operation_id=uuid4(),
+                        operation_id=new_record_id(),
                         actor_profile_id=actor_id,
                         project_id=project_id,
                         name="Rolled back policy",
@@ -332,7 +333,7 @@ async def test_late_database_failure_rolls_back_product_and_authorization_effect
                 )
                 await service.update_draft(
                     ContributionPolicyUpdateDraftRequest(
-                        operation_id=uuid4(),
+                        operation_id=new_record_id(),
                         actor_profile_id=actor_id,
                         project_id=project_id,
                         contribution_policy_id=created.contribution_policy_id,
@@ -382,7 +383,7 @@ async def test_late_publication_failure_rolls_back_custody_state_and_authorizati
     del policy_database_env
     project, creator, _, money_binding, _ = await _seed_project()
     actor_id, project_id = UUID(creator), UUID(project)
-    operation_id = uuid4()
+    operation_id = new_record_id()
     async with (
         db_session.get_engine().connect() as connection,
         AsyncSession(bind=connection, expire_on_commit=False) as session,
@@ -405,7 +406,7 @@ async def test_late_publication_failure_rolls_back_custody_state_and_authorizati
         async with session.begin():
             created = await service.create_draft(
                 ContributionPolicyCreateDraftRequest(
-                    operation_id=uuid4(),
+                    operation_id=new_record_id(),
                     actor_profile_id=actor_id,
                     project_id=project_id,
                     name="Publication rollback policy",
@@ -413,7 +414,7 @@ async def test_late_publication_failure_rolls_back_custody_state_and_authorizati
             )
             await service.update_draft(
                 ContributionPolicyUpdateDraftRequest(
-                    operation_id=uuid4(),
+                    operation_id=new_record_id(),
                     actor_profile_id=actor_id,
                     project_id=project_id,
                     contribution_policy_id=created.contribution_policy_id,

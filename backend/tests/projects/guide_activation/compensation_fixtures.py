@@ -3,6 +3,7 @@
 from uuid import uuid4
 
 from app.adapters.auth import compensation_adapter_binding_authorization
+from app.core.identifiers import new_record_id
 from app.modules.actors.api import ServiceIdentity
 from app.modules.actors.models import ActorProfile, ActorIdentityLink
 from app.modules.actors.compensation_adapter import CompensationAdapterActorEligibility
@@ -13,7 +14,7 @@ from app.modules.projects.compensation_binding import ProjectCompensationBinding
 
 
 async def create_binding(factory, world):
-    adapter = uuid4()
+    adapter = new_record_id()
     async with factory() as session, session.begin():
         session.add(
             ActorProfile(
@@ -28,7 +29,7 @@ async def create_binding(factory, world):
         await session.flush()
         session.add(
             ActorIdentityLink(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 actor_profile_id=str(adapter),
                 issuer="workstream-internal",
                 subject="activation-compensation-adapter",

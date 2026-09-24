@@ -39,9 +39,6 @@ class ProjectGuideProjectionPrepareContext(BaseModel):
     resource_type: ProjectionResourceType
     project_id: UUID
     attempt_id: UUID
-    operation_id: UUID
-    correlation_id: UUID
-    output_id: UUID
     actor_profile_id: UUID
     identity_link_id: UUID
     service_identity: Literal["workstream.project.setup"]
@@ -118,7 +115,8 @@ def projection_action(component: ProjectionComponent) -> ActionId:
 def projection_prepare_context(
     component: ProjectionComponent,
     locator: ProjectGuideProjectionLocator,
-    identity: ProjectGuideProjectionIdentity,
+    actor_profile_id: UUID,
+    identity_link_id: UUID,
 ) -> ProjectGuideProjectionPrepareContext:
     """Build the exact preparation binding for one locator and fixed identity."""
     return ProjectGuideProjectionPrepareContext(
@@ -130,12 +128,9 @@ def projection_prepare_context(
         ),
         project_id=locator.project_id,
         attempt_id=locator.attempt_id,
-        operation_id=identity.operation_id,
-        correlation_id=identity.correlation_id,
-        output_id=identity.output_id,
-        actor_profile_id=identity.actor_profile_id,
-        identity_link_id=identity.identity_link_id,
-        service_identity=identity.service_identity,
+        actor_profile_id=actor_profile_id,
+        identity_link_id=identity_link_id,
+        service_identity="workstream.project.setup",
     )
 
 
@@ -202,17 +197,14 @@ def projection_prepare_matches(
     resource: ProjectGuideProjectionResourceContext,
 ) -> bool:
     """Require final resource identity to match every prepared locator fact."""
-    return prepared == ProjectGuideProjectionPrepareContext(
-        component=resource.component,
-        resource_type=resource.resource_type,
-        project_id=resource.scope_project_id,
-        attempt_id=UUID(str(resource.projection_facts["attempt_id"])),
-        operation_id=resource.operation_id,
-        correlation_id=resource.correlation_id,
-        output_id=resource.output_id,
-        actor_profile_id=resource.actor_profile_id,
-        identity_link_id=resource.identity_link_id,
-        service_identity=resource.service_identity,
+    return prepared == projection_prepare_context(
+        resource.component,
+        ProjectGuideProjectionLocator(
+            project_id=resource.scope_project_id,
+            attempt_id=UUID(str(resource.projection_facts["attempt_id"])),
+        ),
+        resource.actor_profile_id,
+        resource.identity_link_id,
     ).model_dump(mode="json")
 
 

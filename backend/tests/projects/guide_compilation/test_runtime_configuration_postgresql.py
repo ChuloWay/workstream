@@ -1,13 +1,12 @@
 """Independent SQL enforcement of attempt-bound execution configuration."""
 
-from uuid import uuid4
-
 import pytest
 from sqlalchemy import insert, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.hashing import canonical_json_hash
+from app.core.identifiers import new_record_id
 from app.modules.projects.guide_compilation.models import ProjectGuideCompilationAttempt
 from .helpers import context, identity, runtime_configuration, seed_database
 
@@ -16,7 +15,7 @@ def _row(values, configuration):
     attempt_identity = identity(context(values))
     return {
         **attempt_identity.model_dump(mode="json"),
-        "id": uuid4(),
+        "id": new_record_id(),
         "provider_idempotency_key": attempt_identity.provider_idempotency_key(),
         "status": "compilation_reserved",
         "runtime_configuration": configuration,

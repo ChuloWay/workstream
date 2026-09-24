@@ -2,7 +2,8 @@
 
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import select
 
@@ -13,6 +14,7 @@ from app.modules.actors.api import ServiceIdentity
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.outbox.api import DeliveryOptions
 from app.modules.outbox.api import OutboxAppendInput
+from app.modules.outbox.models import OutboxEvent
 from app.modules.outbox.service import OutboxService
 from app.modules.outbox.registry import HandlerRegistry
 from app.modules.tasks.api.assignment_invalidation import (
@@ -55,7 +57,7 @@ class TracedFeatureAuthority:
 
 
 async def provision_reconciler(sessions):
-    actor_id, link_id = uuid4(), uuid4()
+    actor_id, link_id = new_record_id(), new_record_id()
     async with sessions() as session, session.begin():
         session.add(ActorProfile(
             id=str(actor_id), actor_kind="service", status="active",
@@ -95,7 +97,7 @@ async def setup_assignment(client, monkeypatch, *, started=False, artifact_setti
     sessions = db_session.get_session_factory()
     h = Harness(sessions, UUID(project["id"]))
     h.options = DeliveryOptions(lease_seconds=300, handler_timeout_seconds=240)
-    actor_id = uuid4()
+    actor_id = new_record_id()
     async with sessions() as session, session.begin():
         session.add(
             ActorProfile(
@@ -110,7 +112,7 @@ async def setup_assignment(client, monkeypatch, *, started=False, artifact_setti
         await session.flush()
         session.add(
             ActorIdentityLink(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 actor_profile_id=str(actor_id),
                 issuer="workstream.internal",
                 subject=ServiceIdentity.OUTBOX_DISPATCHER.value,
@@ -202,7 +204,7 @@ async def revoke(s, kind="grant"):
     return s.invalidation_id
 
 
-async def invoked(s, *, target=None):
+async def invoked(s, *, target=None, synthetic_transport=False):
     target = target or AssignmentInvalidationTarget(
         project_id=UUID(s.project["id"]),
         task_id=UUID(s.task["id"]),
@@ -210,21 +212,43 @@ async def invoked(s, *, target=None):
         contributor_id=UUID(s.grant["actor_profile_id"]),
         authority_invalidation_event_id=s.invalidation_id,
     )
-    value = OutboxAppendInput(
-        event_id=uuid4(),
-        event_type=ASSIGNMENT_INVALIDATION_EVENT,
-        event_version=1,
-        aggregate_type="task_assignment",
-        aggregate_id=target.assignment_id,
-        project_id=target.project_id,
-        correlation_id=str(uuid4()),
-        causation_event_id=target.authority_invalidation_event_id,
-        idempotency_key=str(uuid4()),
-        payload=target.model_dump(mode="json"),
+    canonical_key = (
+        f"assignment-invalidation:{target.authority_invalidation_event_id}:"
+        f"{target.assignment_id}"
     )
-    async with s.sessions() as session, session.begin():
-        await OutboxService(session).append(value)
-    claim = await s.h.delivery.claim(value.event_id, target.project_id, "assignment-test")
+    payload = target.model_dump(mode="json")
+    if not synthetic_transport:
+        async with s.sessions() as session:
+            published = await session.scalar(
+                select(OutboxEvent).where(OutboxEvent.idempotency_key == canonical_key)
+            )
+        assert published is not None, "canonical assignment invalidation publication is required"
+        assert (
+            published.event_type == ASSIGNMENT_INVALIDATION_EVENT
+            and published.event_version == 1
+            and published.aggregate_type == "task_assignment"
+            and published.aggregate_id == target.assignment_id
+            and published.project_id == str(target.project_id)
+            and published.causation_event_id == target.authority_invalidation_event_id
+            and published.payload == payload
+        ), "canonical assignment invalidation publication does not match target"
+        event_id = published.event_id
+    else:
+        value = OutboxAppendInput(
+            event_type=ASSIGNMENT_INVALIDATION_EVENT,
+            event_version=1,
+            aggregate_type="task_assignment",
+            aggregate_id=target.assignment_id,
+            project_id=target.project_id,
+            correlation_id=str(new_record_id()),
+            causation_event_id=target.authority_invalidation_event_id,
+            idempotency_key=f"assignment-invalidation-fixture:{new_record_id()}",
+            payload=payload,
+        )
+        async with s.sessions() as session, session.begin():
+            result = await OutboxService(session).append(value)
+        event_id = result.event_id
+    claim = await s.h.delivery.claim(event_id, target.project_id, "assignment-test")
     assert claim is not None
     envelope = await s.h.delivery._begin_invocation(claim)
     assert envelope is not None
@@ -303,7 +327,7 @@ async def prepare_submission(s, settings):
             task_id=UUID(s.task["id"]),
             assignment_id=UUID(s.assignment["id"]),
             predecessor_submission_id=None,
-            idempotency_key=uuid4(),
+            idempotency_key=new_record_id(),
             summary="Completed the required project work and included evidence.",
             contributor_attestation=(
                 complete_submission_payload()["worker_attestation"]

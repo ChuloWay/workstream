@@ -1,6 +1,6 @@
 """Identity consistency, complete valid denial control, and absence of owner authority."""
 
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 from pydantic import ValidationError
@@ -29,7 +29,7 @@ def test_request_digest_and_lineage(change, message):
     assert PostSubmissionEvaluationRequest.model_validate_json(source.model_dump_json()) == source
     fields = source.model_dump(exclude={"request_sha256"})
     if change == "project":
-        fields["project_id"] = uuid4()
+        fields["project_id"] = new_record_id()
     elif change == "guide":
         fields["expected_context"].update(guide_version="other", post_policy_version="other")
     elif change == "policy_hash":
@@ -45,7 +45,7 @@ def test_request_digest_and_lineage(change, message):
 
 def test_coherent_foreign_facts_are_not_an_authorization_proof():
     first = request()
-    other = request(project_id=uuid4())
+    other = request(project_id=new_record_id())
     assert first.project_id != other.project_id
     assert PostSubmissionEvaluationRequest.model_validate(other) == other
     assert first.request_sha256 != other.request_sha256
@@ -91,6 +91,6 @@ def test_strict_request_numbers(field, invalid):
 
 async def test_unavailable_port_revalidates_unsafe_constructed_instances():
     source = request()
-    forged = source.model_copy(update={"project_id": uuid4()})
+    forged = source.model_copy(update={"project_id": new_record_id()})
     with pytest.raises(ValidationError, match="project mismatch"):
         await UnavailablePostSubmissionExecution().evaluate_post_submission(forged)

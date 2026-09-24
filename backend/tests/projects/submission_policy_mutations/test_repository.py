@@ -43,7 +43,7 @@ def repo_case():
         return record if operation_id == record.operation_id else None
 
     repository.find_by_operation = AsyncMock(side_effect=find_operation)
-    repository._find_namespace = AsyncMock(
+    repository.find_human_namespace = AsyncMock(
         side_effect=AssertionError("exact operation must not use namespace fallback")
     )
     return SimpleNamespace(session=session, repository=repository, record=record, values=values)
@@ -59,7 +59,7 @@ async def test_reservation_classifies_existing_exact_row(repo_case, status, expe
         case.record.committed_at = rows.NOW
     assert await case.repository.reserve(**case.values) == (expected, case.record)
     case.repository.find_by_operation.assert_awaited_once_with(case.record.operation_id)
-    case.repository._find_namespace.assert_not_awaited()
+    case.repository.find_human_namespace.assert_not_awaited()
     case.session.get.assert_not_awaited()
 
 
@@ -75,7 +75,7 @@ async def test_reservation_rejects_changed_operation_facts(repo_case, field, val
     values = {**repo_case.values, field: value}
     assert await repo_case.repository.reserve(**values) == ("mismatch", repo_case.record)
     repo_case.repository.find_by_operation.assert_awaited_once_with(values["operation_id"])
-    repo_case.repository._find_namespace.assert_not_awaited()
+    repo_case.repository.find_human_namespace.assert_not_awaited()
     repo_case.session.get.assert_not_awaited()
 
 
@@ -109,10 +109,10 @@ async def test_reservation_rejects_different_operation_in_human_namespace(repo_c
         assert actual == selectors
         return case.record
 
-    case.repository._find_namespace.side_effect = find_namespace
+    case.repository.find_human_namespace.side_effect = find_namespace
     lookups = MagicMock()
     lookups.attach_mock(case.repository.find_by_operation, "operation")
-    lookups.attach_mock(case.repository._find_namespace, "namespace")
+    lookups.attach_mock(case.repository.find_human_namespace, "namespace")
     assert await case.repository.reserve(**values) == ("mismatch", case.record)
     assert lookups.mock_calls == [
         call.operation(values["operation_id"]),
@@ -126,7 +126,7 @@ async def test_reservation_insert_binds_exact_values(repo_case):
     case.session.scalar.return_value = rows.OPERATION
     assert await case.repository.reserve(**case.values) == ("claimed", case.record)
     case.repository.find_by_operation.assert_not_awaited()
-    case.repository._find_namespace.assert_not_awaited()
+    case.repository.find_human_namespace.assert_not_awaited()
     case.session.get.assert_awaited_once_with(
         module.SubmissionPolicyMutationIdempotencyRecord, rows.OPERATION
     )
@@ -149,16 +149,33 @@ def predicates(statement):
     return str(compiled), compiled.params
 
 
+UUID_PREDICATE_FIELDS = {
+    "actor_profile_id",
+    "identity_link_id",
+    "idempotency_key",
+    "operation_id",
+    "project_id",
+    "guide_id",
+    "source_snapshot_id",
+    "policy_id",
+    "setup_run_id",
+    "setup_task_id",
+    "correlation_id",
+}
+
+
 def expected_predicate(field, value):
     column = f"submission_policy_mutation_idempotency_records.{field}"
     if value is None:
         return f"{column} IS NULL"
-    return f"{column} = %({field}_1)s" + ("::UUID" if isinstance(value, UUID) else "")
+    return f"{column} = %({field}_1)s" + (
+        "::UUID" if field in UUID_PREDICATE_FIELDS else ""
+    )
 
 
 async def test_namespace_query_binds_exact_human_selectors(repo_case):
     case = repo_case
-    await SubmissionPolicyMutationReplayRepository._find_namespace(
+    await SubmissionPolicyMutationReplayRepository.find_human_namespace(
         case.repository,
         actor_profile_id=str(rows.ACTOR),
         idempotency_key=rows.KEY,

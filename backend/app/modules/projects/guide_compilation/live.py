@@ -33,7 +33,7 @@ from app.modules.projects.repository import ProjectRepository
 from app.modules.projects.models import ProjectSetupRun
 from .source_state import is_compilation_source_setup
 from .diagnostics import compilation_setup_response
-from .request_inputs import CompilationRequestInputs, automatic_operation_id
+from .request_inputs import CompilationRequestInputs, automatic_request_selector
 from .models import (
     ProjectGuideCompilationAttempt,
     ProjectGuideCompilation,
@@ -97,7 +97,9 @@ class LiveGuideCompilationCoordinator:
             else self._configuration()
         )
         if manual_attempt is None:
-            operation_id = automatic_operation_id(delivery.setup_run_id, delivery.setup_generation)
+            operation_id = automatic_request_selector(
+                delivery.setup_run_id, delivery.setup_generation
+            )
             async with self._sessions() as session:
                 async with self._request_authority(session, operation_id) as (authority, actor):
                     request = await GuideCompilationService(

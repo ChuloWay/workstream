@@ -54,8 +54,7 @@ def _validated_input(value: object) -> OutboxAppendInput:
 def _matches(record: OutboxEvent, value: OutboxAppendInput, digest: str) -> bool:
     """Compare every immutable caller fact while ignoring operational metadata."""
     return (
-        record.event_id == value.event_id
-        and record.event_type == value.event_type
+        record.event_type == value.event_type
         and record.event_version == value.event_version
         and record.producer == "workstream"
         and record.aggregate_type == value.aggregate_type

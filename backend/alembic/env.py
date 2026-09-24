@@ -20,33 +20,10 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-_BASELINE_REVISION = "0001_v01_baseline"
-_PREVIOUS_HEAD_REVISION = "0008_guide_compilation_authorized_persistence"
-_PROJECTION_HEAD_REVISION = "0009_guide_compilation_projections"
-_FINALIZATION_HEAD_REVISION = "0010_project_guide_setup_finalization"
-_REVIEW_POLICY_HEAD_REVISION = "0011_review_policy_human_review"
-_POLICY_AUDIT_HEAD_REVISION = "0012_contribution_policy_audit_resource"
-_REQUEST_ORIGIN_HEAD_REVISION = "0013_compilation_request_origin"
-_PROJECT_ROLE_HEAD_REVISION = "0014_project_role_scope"
-_RUNTIME_CONFIGURATION_HEAD_REVISION = "0015_guide_runtime_configuration"
-_GUIDE_DOCUMENT_HEAD_REVISION = "0016_guide_document_runtime"
-_TASK_AUTHORITY_REVISION = "0017_task_project_authority"
-_GUIDE_CREATION_REVISION = "0018_guide_document_creation"
-_PROPOSAL_REVIEW_REVISION = "0019_guide_proposal_review"
-_POST_POLICY_REVISION = "0020_post_submit_policy_custody"
-_PRE_SUBMIT_ATTEMPTS_REVISION = "0021_pre_submit_attempts"
-_BINDING_AUDIT_REVISION = "0022_adapter_binding_audit_resource"
-_GUIDE_ACTIVATION_REVISION = "0023_guide_activation_custody"
-_TASK_LINEAGE_REVISION = "0024_task_policy_lineage"
-_TASK_REPLAY_REVISION = "0025_task_command_replay"
-_OUTBOX_IDENTITY_REVISION = "0026_outbox_dispatch_identity"
-_OUTBOX_CUSTODY_REVISION = "0027_outbox_delivery_custody"
-_OUTBOX_AUTHORITY_REVISION = "0028_outbox_dispatch_authority"
-_ASSIGNMENT_AUTHORITY_REVISION = "0029_assignment_authority"
-_CURRENT_HEAD_REVISION = "0030_task_management"
+_BASELINE_REVISION = "0001_uuid7_v01"
 _RECREATE_GUIDANCE = (
     "Workstream v0.1 requires a fresh database; recreate this database before "
-    "running the 0001_v01_baseline migration"
+    "running the 0001_uuid7_v01 migration"
 )
 
 
@@ -74,33 +51,7 @@ def do_run_migrations(connection: Connection) -> None:
             .scalars()
             .all()
         )
-        if revisions not in (
-            (),
-            (_BASELINE_REVISION,),
-            (_PREVIOUS_HEAD_REVISION,),
-            (_PROJECTION_HEAD_REVISION,),
-            (_FINALIZATION_HEAD_REVISION,),
-            (_REVIEW_POLICY_HEAD_REVISION,),
-            (_POLICY_AUDIT_HEAD_REVISION,),
-            (_REQUEST_ORIGIN_HEAD_REVISION,),
-            (_PROJECT_ROLE_HEAD_REVISION,),
-            (_RUNTIME_CONFIGURATION_HEAD_REVISION,),
-            (_GUIDE_DOCUMENT_HEAD_REVISION,),
-            (_TASK_AUTHORITY_REVISION,),
-            (_GUIDE_CREATION_REVISION,),
-            (_PROPOSAL_REVIEW_REVISION,),
-            (_POST_POLICY_REVISION,),
-            (_PRE_SUBMIT_ATTEMPTS_REVISION,),
-            (_BINDING_AUDIT_REVISION,),
-            (_GUIDE_ACTIVATION_REVISION,),
-            (_TASK_LINEAGE_REVISION,),
-            (_TASK_REPLAY_REVISION,),
-            (_OUTBOX_IDENTITY_REVISION,),
-            (_OUTBOX_CUSTODY_REVISION,),
-            (_OUTBOX_AUTHORITY_REVISION,),
-            (_ASSIGNMENT_AUTHORITY_REVISION,),
-            (_CURRENT_HEAD_REVISION,),
-        ):
+        if revisions not in ((), (_BASELINE_REVISION,)):
             raise RuntimeError(_RECREATE_GUIDANCE)
     # The read-only preflight autobegins a SQLAlchemy transaction. End that
     # transaction before Alembic establishes the migration transaction;

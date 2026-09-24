@@ -1,7 +1,7 @@
 """Resource isolation during complete draft replacement."""
 
 from types import SimpleNamespace
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -85,9 +85,9 @@ async def test_update_rejects_mismatched_adapter_binding_owner_facts(
     async def mismatched(**facts: object) -> LockedPolicyAdapterBindingFacts:
         del facts
         return LockedPolicyAdapterBindingFacts(
-            project_id=uuid4() if mismatch == "project_id" else request.project_id,
+            project_id=new_record_id() if mismatch == "project_id" else request.project_id,
             adapter_binding_id=(
-                uuid4() if mismatch == "binding_id" else definition.adapter_binding_id
+                new_record_id() if mismatch == "binding_id" else definition.adapter_binding_id
             ),
             instrument_type=(
                 CompensationInstrumentType.PROJECT_POINTS
@@ -137,7 +137,7 @@ async def test_update_conceals_cross_project_request_before_authorization() -> N
 
     async def wrong_project(project_id: object) -> object:
         del project_id
-        return SimpleNamespace(project_id=uuid4())
+        return SimpleNamespace(project_id=new_record_id())
 
     fixture.service._projects.lock_contribution_policy_project = wrong_project  # noqa: SLF001
     with pytest.raises(ContributionPolicyConflict):

@@ -53,6 +53,7 @@ class ProjectGuideCompilationAttempt(Base):
 
     __tablename__ = "project_guide_compilation_attempts"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["source_snapshot_id", "source_snapshot_hash"],
             ["guide_source_snapshots.id", "guide_source_snapshots.bundle_hash"],
@@ -157,9 +158,9 @@ class ProjectGuideCompilationAttempt(Base):
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
     guide_id: Mapped[str] = mapped_column(ForeignKey("project_guides.id"), index=True)
     guide_version: Mapped[str] = mapped_column(String(50))
-    source_snapshot_id: Mapped[str] = mapped_column(String(36), index=True)
+    source_snapshot_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), index=True)
     source_snapshot_hash: Mapped[str] = mapped_column(String(71))
-    setup_run_id: Mapped[str] = mapped_column(String(36), index=True)
+    setup_run_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), index=True)
     setup_generation: Mapped[int] = mapped_column(BigInteger)
     canonical_input_hash: Mapped[str] = mapped_column(String(71))
     guide_material_hash: Mapped[str] = mapped_column(String(71))
@@ -197,6 +198,7 @@ class ProjectGuideCompilationRequestOperation(Base):
 
     __tablename__ = "project_guide_compilation_request_operations"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
         CheckConstraint(
             "(request_trigger = 'project_manager' and source_mutation_operation_id is null "
             "and source_authorization_decision_event_id is null) or "
@@ -273,6 +275,12 @@ class ProjectGuideCompilationRequestOperation(Base):
             "idempotency_key",
             name="uq_compilation_request_actor_key",
         ),
+        UniqueConstraint(
+            "setup_run_id",
+            "setup_generation",
+            "request_trigger",
+            name="uq_compilation_request_setup_trigger",
+        ),
         UniqueConstraint("attempt_id", name="uq_compilation_request_attempt"),
         UniqueConstraint(
             "authorization_decision_event_id",
@@ -300,11 +308,11 @@ class ProjectGuideCompilationRequestOperation(Base):
     request_id: Mapped[UUID] = mapped_column(Uuid())
     idempotency_key: Mapped[UUID] = mapped_column(Uuid())
     actor_profile_id: Mapped[str] = mapped_column(ForeignKey("actor_profiles.id"))
-    identity_link_id: Mapped[str] = mapped_column(String(36))
+    identity_link_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"))
     guide_id: Mapped[str] = mapped_column(ForeignKey("project_guides.id"))
-    source_snapshot_id: Mapped[str] = mapped_column(String(36))
-    setup_run_id: Mapped[str] = mapped_column(String(36))
+    source_snapshot_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
+    setup_run_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
     setup_generation: Mapped[int] = mapped_column(BigInteger)
     expected_predecessor_compilation_id: Mapped[UUID | None] = mapped_column(Uuid())
     request_facts_digest: Mapped[str] = mapped_column(String(71))
@@ -318,6 +326,7 @@ class ProjectGuideCompilation(Base):
 
     __tablename__ = "project_guide_compilations"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint("attempt_id", name="uq_project_guide_compilation_attempt"),
         UniqueConstraint("id", "attempt_id", name="uq_project_guide_compilation_id_attempt"),
         UniqueConstraint(
@@ -410,6 +419,7 @@ class ProjectGuideComponentProjectionOperation(Base):
 
     __tablename__ = "project_guide_component_projection_operations"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
         UniqueConstraint(
             "operation_id",
             "compilation_id",
@@ -518,9 +528,9 @@ class ProjectGuideComponentProjectionOperation(Base):
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False)
     guide_id: Mapped[str] = mapped_column(ForeignKey("project_guides.id"), nullable=False)
     guide_version: Mapped[str] = mapped_column(String(50), nullable=False)
-    source_snapshot_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_snapshot_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     source_snapshot_hash: Mapped[str] = mapped_column(String(71), nullable=False)
-    setup_run_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    setup_run_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     setup_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
     celery_task_id: Mapped[str] = mapped_column(String(155), nullable=False)
     source_state_digest: Mapped[str] = mapped_column(String(71), nullable=False)
@@ -549,7 +559,7 @@ class ProjectGuideComponentProjectionOperation(Base):
     facts_digest: Mapped[str] = mapped_column(String(71), nullable=False)
     authority_resource_digest: Mapped[str] = mapped_column(String(71), nullable=False)
     actor_profile_id: Mapped[str] = mapped_column(ForeignKey("actor_profiles.id"), nullable=False)
-    identity_link_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    identity_link_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     service_identity: Mapped[str] = mapped_column(String(160), nullable=False)
     action_id: Mapped[str] = mapped_column(String(160), nullable=False)
     permission_id: Mapped[str] = mapped_column(String(120), nullable=False)
@@ -564,6 +574,8 @@ class ProjectGuideSetupFinalization(Base):
 
     __tablename__ = "project_guide_setup_finalizations"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
         ForeignKeyConstraint(
             ["compilation_id", "attempt_id"],
             ["project_guide_compilations.id", "project_guide_compilations.attempt_id"],
@@ -676,9 +688,9 @@ class ProjectGuideSetupFinalization(Base):
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"))
     guide_id: Mapped[str] = mapped_column(ForeignKey("project_guides.id"))
     guide_version: Mapped[str] = mapped_column(String(50))
-    source_snapshot_id: Mapped[str] = mapped_column(String(36))
+    source_snapshot_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
     source_snapshot_hash: Mapped[str] = mapped_column(String(71))
-    setup_run_id: Mapped[str] = mapped_column(String(36))
+    setup_run_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
     setup_generation: Mapped[int] = mapped_column(BigInteger)
     celery_task_id: Mapped[str] = mapped_column(String(155))
     source_state_digest: Mapped[str] = mapped_column(String(71))
@@ -708,12 +720,12 @@ class ProjectGuideSetupFinalization(Base):
     authority_resource_digest: Mapped[str] = mapped_column(String(71))
     authorization_decision_event_id: Mapped[str] = mapped_column(ForeignKey("audit_events.id"))
     actor_profile_id: Mapped[str] = mapped_column(ForeignKey("actor_profiles.id"))
-    identity_link_id: Mapped[str] = mapped_column(String(36))
+    identity_link_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
     service_identity: Mapped[str] = mapped_column(String(160))
     action_id: Mapped[str] = mapped_column(String(160))
     permission_id: Mapped[str] = mapped_column(String(120))
     scope_type: Mapped[str] = mapped_column(String(16))
-    scope_project_id: Mapped[str] = mapped_column(String(36))
+    scope_project_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.transaction_timestamp()
     )
@@ -724,6 +736,7 @@ class ProjectGuideRuntimeAllocation(Base):
 
     __tablename__ = "project_guide_runtime_allocations"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint(
             "attempt_id",
             "kind",
@@ -792,6 +805,7 @@ class ProjectGuideDocumentAccess(Base):
 
     __tablename__ = "project_guide_document_accesses"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint("attempt_id", "source_item_id", name="uq_guide_document_access"),
     )
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
@@ -814,6 +828,7 @@ class ProjectGuideProposalApproval(Base):
 
     __tablename__ = "project_guide_proposal_approvals"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
         Index(
             "uq_proposal_approval_root_guide",
             "guide_id",
@@ -866,8 +881,8 @@ class ProjectGuideProposalApproval(Base):
         ),
         primary_key=True,
     )
-    project_id: Mapped[str] = mapped_column(String(36))
-    guide_id: Mapped[str] = mapped_column(String(36))
+    project_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
+    guide_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
     compilation_id: Mapped[UUID] = mapped_column(Uuid())
     finalization_id: Mapped[UUID] = mapped_column(
         Uuid(),
@@ -892,7 +907,7 @@ class ProjectGuideProposalApproval(Base):
         ForeignKey("project_guide_proposal_approvals.operation_id"),
     )
     actor_profile_id: Mapped[str] = mapped_column(ForeignKey("actor_profiles.id"))
-    identity_link_id: Mapped[str] = mapped_column(String(36))
+    identity_link_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
     admin_role_grant_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("admin_role_grants.id"))
     authorization_decision_event_id: Mapped[str] = mapped_column(ForeignKey("audit_events.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -903,6 +918,7 @@ class ProjectGuideProposalCorrection(Base):
 
     __tablename__ = "project_guide_proposal_corrections"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
         ForeignKeyConstraint(
             ["compilation_id", "project_id", "guide_id"],
             [
@@ -938,8 +954,8 @@ class ProjectGuideProposalCorrection(Base):
 
     operation_id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
     idempotency_key: Mapped[UUID] = mapped_column(Uuid())
-    project_id: Mapped[str] = mapped_column(String(36))
-    guide_id: Mapped[str] = mapped_column(String(36))
+    project_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
+    guide_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
     compilation_id: Mapped[UUID] = mapped_column(Uuid())
     finalization_id: Mapped[UUID] = mapped_column(
         Uuid(),
@@ -957,7 +973,7 @@ class ProjectGuideProposalCorrection(Base):
     successor_setup_run_id: Mapped[str] = mapped_column(ForeignKey("project_setup_runs.id"))
     successor_setup_generation: Mapped[int] = mapped_column(BigInteger)
     actor_profile_id: Mapped[str] = mapped_column(ForeignKey("actor_profiles.id"))
-    identity_link_id: Mapped[str] = mapped_column(String(36))
+    identity_link_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
     admin_role_grant_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("admin_role_grants.id"))
     authorization_decision_event_id: Mapped[str] = mapped_column(ForeignKey("audit_events.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

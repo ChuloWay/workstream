@@ -1,7 +1,9 @@
 """Canonical, zero-inference post-policy projection and exact manager decisions."""
 
 from datetime import UTC, datetime
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import UUID, uuid5
+
+from app.core.identifiers import new_record_id
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +19,8 @@ from app.modules.projects.api.guide_proposals import GuideProposalApprovalReceip
 from app.modules.projects.api.post_policy import (
     PostPolicyReceipt, PostPolicyReviewPackage, PostPolicySelection, PostPolicyTarget,
     PostPolicyApproval, PostPolicyCorrection, PostPolicyDerive,
+    post_policy_derive_authorization_selector,
+    post_policy_human_authorization_selector,
 )
 from app.modules.projects.guide_compilation.proposal_service import GuideProposalService
 from app.modules.projects.models import PostSubmitCheckerPolicy
@@ -42,13 +46,17 @@ class PostPolicyService:
     async def derive(self, command: PostPolicyDerive, *, actor: ActorIdentityFacts, request_id: UUID) -> PostPolicyReceipt:
         """Project one exact approved result once; no document/runtime dependency exists."""
         self._require_transaction()
-        operation_id = uuid5(command.upstream_approval_operation_id, "post-policy-projection")
-        locator = self._locator(command.selection, actor, request_id, operation_id, "derive")
+        selector_id = post_policy_derive_authorization_selector(
+            command.upstream_approval_operation_id
+        )
+        locator = self._locator(command.selection, actor, request_id, selector_id, "derive")
         async with GuideProposalService._bounded_errors():
             async with self.authorization.prepare_post_policy_operation(locator) as prepared:
                 self._require_prepared(prepared)
                 locked = await self.repository.lock_proposal(command.selection)
-                existing = await self.repository.operation(operation_id)
+                existing = await self.repository.derive_operation(
+                    command.upstream_approval_operation_id
+                )
                 if existing:
                     receipt = operation_receipt(existing)
                     _, _, custody = await self.repository.lock_policy(self._selection(receipt.target))
@@ -69,9 +77,10 @@ class PostPolicyService:
                     old = await load_post_policy_custody(self.session, previous)
                     if old.target.proposal.setup_generation >= locked.target.setup_generation:
                         raise GuideProposalError("proposal_stale")
+                operation_id = new_record_id()
                 target = PostPolicyTarget(
                     proposal=locked.target, upstream=GuideProposalApprovalReceipt.model_validate(upstream.receipt_json),
-                    upstream_output_digest=upstream.output_digest, policy_id=uuid5(operation_id, "policy"),
+                    upstream_output_digest=upstream.output_digest, policy_id=new_record_id(),
                     projection_operation_id=operation_id, policy_hash=compiled.policy_hash,
                     predecessor_policy_id=UUID(previous.id) if previous else None,
                 )
@@ -90,16 +99,18 @@ class PostPolicyService:
     async def approve(self, command: PostPolicyApproval, *, actor: ActorIdentityFacts, request_id: UUID) -> PostPolicyReceipt:
         """Record separate human approval without accepting replacement policy content."""
         self._require_transaction()
-        operation_id = self._human_operation_id(actor, command.idempotency_key, "approve")
+        selector_id = self._human_operation_id(actor, command.idempotency_key, "approve")
         target = command.target
-        locator = self._locator(target.proposal, actor, request_id, operation_id, "approve")
+        locator = self._locator(target.proposal, actor, request_id, selector_id, "approve")
         async with GuideProposalService._bounded_errors():
             async with self.authorization.prepare_post_policy_operation(locator) as prepared:
                 self._require_prepared(prepared)
                 locked, policy, custody = await self.repository.lock_policy(self._selection(target))
                 if custody.target != target:
                     raise GuideProposalError("proposal_stale")
-                existing = await self.repository.operation(operation_id)
+                existing = await self.repository.human_operation(
+                    actor.actor_profile_id, "approve", command.idempotency_key
+                )
                 if existing:
                     return await self._replay(existing, command, actor, locator, prepared)
                 await self.repository.require_current_upstream(locked)
@@ -112,6 +123,7 @@ class PostPolicyService:
                 )
                 if compiled.policy_hash != target.policy_hash:
                     raise GuideProposalError("approval_blocked")
+                operation_id = new_record_id()
                 receipt = PostPolicyReceipt(operation_id=operation_id, kind="approve", target=target)
                 facts = self._facts(locator, command, receipt)
                 authority = await prepared.consume_new(facts)
@@ -175,7 +187,7 @@ class PostPolicyService:
 
     @staticmethod
     def _human_operation_id(actor, key, kind):
-        return uuid5(NAMESPACE_URL, f"workstream.post-policy-{kind}:{actor.actor_profile_id}:{key}")
+        return post_policy_human_authorization_selector(actor.actor_profile_id, key, kind)
 
     @staticmethod
     def _locator(selection, actor, request_id, operation_id, kind):
@@ -259,3 +271,5 @@ class PostPolicyService:
             authorization_decision_event_id=str(authority.authorization_decision_event_id),
         ))
         await self.session.flush()
+    post_policy_derive_authorization_selector,
+    post_policy_human_authorization_selector,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 from types import ModuleType
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -97,7 +97,7 @@ def test_public_identifier_factories_reject_empty_values() -> None:
 
 def test_actor_identity_facts_require_service_identity_only_for_services() -> None:
     """Human and fixed-service identity facts cannot be structurally confused."""
-    profile_id, link_id = uuid4(), uuid4()
+    profile_id, link_id = new_record_id(), new_record_id()
     human = api.ActorIdentityFacts(profile_id, link_id, api.ActorKind.HUMAN)
     blank_human = api.ActorIdentityFacts(profile_id, link_id, api.ActorKind.HUMAN, " ")
     service = api.ActorIdentityFacts(
@@ -120,23 +120,23 @@ def test_actor_identity_facts_require_service_identity_only_for_services() -> No
 def test_resource_facts_copy_and_freeze_caller_values() -> None:
     """A caller cannot mutate resource facts after handing them to AUTH."""
     values = {"generation": 3, "digest": "abc"}
-    facts = api.ResourceFacts(" guide_source ", uuid4(), values)
+    facts = api.ResourceFacts(" guide_source ", new_record_id(), values)
     values["generation"] = 4
     assert facts.resource_type == "guide_source"
     assert dict(facts.values) == {"digest": "abc", "generation": 3}
     with pytest.raises(TypeError):
         facts.values["generation"] = 5  # type: ignore[index]
     with pytest.raises(ValueError, match="resource type"):
-        api.ResourceFacts(" ", uuid4(), {})
+        api.ResourceFacts(" ", new_record_id(), {})
     with pytest.raises(ValueError, match="fact keys"):
-        api.ResourceFacts("guide", uuid4(), {"": "invalid"})
+        api.ResourceFacts("guide", new_record_id(), {"": "invalid"})
 
 
 @pytest.mark.parametrize("value", (["mutable"], {"mutable": True}, {"mutable"}, float("inf")))
 def test_resource_facts_reject_mutable_or_non_finite_values(value: object) -> None:
     """Prepared facts cannot change identity or meaning after validation."""
     with pytest.raises(ValueError, match="deeply immutable and finite"):
-        api.ResourceFacts("guide", uuid4(), {"value": value})  # type: ignore[dict-item]
+        api.ResourceFacts("guide", new_record_id(), {"value": value})  # type: ignore[dict-item]
 
 
 def test_resource_facts_reject_an_empty_string_identifier() -> None:
@@ -156,19 +156,19 @@ def test_decision_denial_code_matches_the_outcome() -> None:
     action = api.action_id("project.read")
     permission = api.permission_id("project.read")
     allowed = api.AuthorizationDecision(
-        uuid4(), action, permission, api.DecisionOutcome.ALLOW
+        new_record_id(), action, permission, api.DecisionOutcome.ALLOW
     )
     denied = api.AuthorizationDecision(
-        uuid4(), action, permission, api.DecisionOutcome.DENY, "missing_grant"
+        new_record_id(), action, permission, api.DecisionOutcome.DENY, "missing_grant"
     )
     assert allowed.denial_code is None
     assert denied.denial_code == "missing_grant"
     with pytest.raises(ValueError, match="must match decision outcome"):
         api.AuthorizationDecision(
-            uuid4(), action, permission, api.DecisionOutcome.ALLOW, "unexpected"
+            new_record_id(), action, permission, api.DecisionOutcome.ALLOW, "unexpected"
         )
     with pytest.raises(ValueError, match="must match decision outcome"):
-        api.AuthorizationDecision(uuid4(), action, permission, api.DecisionOutcome.DENY)
+        api.AuthorizationDecision(new_record_id(), action, permission, api.DecisionOutcome.DENY)
 
 
 @pytest.mark.parametrize(

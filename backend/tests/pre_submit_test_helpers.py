@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 from uuid import UUID, uuid4
+from app.core.identifiers import new_record_id
 
 from app.adapters.checkers import PreSubmitCheckerExecutionAdapter
 from app.modules.artifacts.api import SubmissionBundlePreparationRequest
@@ -26,7 +27,7 @@ from app.modules.artifacts.pre_submit_evidence import PreSubmitEvidencePersisten
 async def materialize_member_fixture(service, request):
     """Isolate existing member/scratch tests from SQL; this is not attempt-custody proof."""
     claim = object.__new__(PreSubmitAttemptClaim)
-    claim.attempt_id, claim._nonce = uuid4(), uuid4()
+    claim.attempt_id, claim._nonce = new_record_id(), uuid4()
     claim.request_digest = "sha256:" + "1" * 64
     claim._request = replace(request, prepared_authorization=None)
     claim._started, claim._execution = False, None
@@ -162,7 +163,7 @@ async def assert_pre_submit_evidence_immutable(connection):
         "delete from pre_submit_evidence_results",
         "truncate pre_submit_evidence_results",
         "insert into pre_submit_evidence_results "
-        "select '00000000-0000-0000-0000-000000000001',"
+        "select '00000000-0000-7000-8000-000000000001',"
         "evidence_set_id,result_order+1000,"
         "schema_version,dispatch_authority,definition_id || '.forged',"
         "definition_version,public_name,source,phase,classification,severity,status,"
@@ -181,7 +182,7 @@ async def assert_pre_submit_evidence_immutable(connection):
                     "insert into pre_submit_evidence_sets select "
                     "(jsonb_populate_record(null::pre_submit_evidence_sets, "
                     "to_jsonb(existing_row) || jsonb_build_object("
-                    "'id','00000000-0000-0000-0000-000000000003',"
+                    "'id','00000000-0000-7000-8000-000000000003',"
                     "'operation_identity','sha256:' || repeat('e',64),"
                     "'attempt_id',null,'attempt_request_digest',null,"
                     "'created_at',transaction_timestamp()))).* "
@@ -191,7 +192,7 @@ async def assert_pre_submit_evidence_immutable(connection):
             await connection.execute(
                 text(
                     "delete from pre_submit_evidence_sets "
-                    "where id='00000000-0000-0000-0000-000000000003'"
+                    "where id='00000000-0000-7000-8000-000000000003'"
                 )
             )
     with pytest.raises(DBAPIError, match="pre_submit_evidence_sets rows are immutable"):
@@ -204,7 +205,7 @@ async def assert_pre_submit_evidence_immutable(connection):
                     "insert into pre_submit_evidence_sets select "
                     "(jsonb_populate_record(null::pre_submit_evidence_sets, "
                     "to_jsonb(existing_row) || jsonb_build_object("
-                    "'id','00000000-0000-0000-0000-000000000002',"
+                    "'id','00000000-0000-7000-8000-000000000002',"
                     "'operation_identity','sha256:' || repeat('f',64),"
                     "'created_at',existing_row.created_at - interval '1 day'))).* "
                     "from pre_submit_evidence_sets existing_row limit 1"

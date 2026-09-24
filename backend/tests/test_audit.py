@@ -7,7 +7,8 @@ from collections.abc import Mapping
 import json
 from types import MappingProxyType
 from typing import cast
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 import warnings
 
 from pydantic import ValidationError
@@ -82,7 +83,7 @@ async def audit_factory(audit_database_env: str):
 
 
 def _authority_input(event_type: AuthorityEventType, **overrides) -> AuthorityAuditEventInput:
-    event_id = overrides.pop("event_id", uuid4())
+    event_id = overrides.pop("event_id", new_record_id())
     defaults = {
         AuthorityEventType.SENSITIVE_AUTHORIZATION_ALLOWED: {
             "entity_type": "authorization_decision",
@@ -107,8 +108,8 @@ def _authority_input(event_type: AuthorityEventType, **overrides) -> AuthorityAu
         "entity_id": str(event_id),
         "actor_ref_kind": ActorReferenceKind.SYSTEM_PRINCIPAL,
         "actor_ref": "workstream:system:bootstrap",
-        "request_id": uuid4(),
-        "correlation_id": uuid4(),
+        "request_id": new_record_id(),
+        "correlation_id": new_record_id(),
         "permission_id": "actor.profile.read_any",
         **defaults,
     }
@@ -119,7 +120,7 @@ def _authority_input(event_type: AuthorityEventType, **overrides) -> AuthorityAu
 
 
 def test_project_create_audit_event_binds_operation_to_future_project() -> None:
-    operation_id, project_id = uuid4(), uuid4()
+    operation_id, project_id = new_record_id(), new_record_id()
     event = _authority_input(
         AuthorityEventType.SENSITIVE_AUTHORIZATION_ALLOWED,
         permission_id="project.create",
@@ -156,7 +157,7 @@ async def test_planned_action_denial_persists_with_bounded_mapping(audit_factory
 
 def _authority_event_matrix() -> list[dict]:
     """Return every closed event with one valid and one fact-invalid shape."""
-    project_id = str(uuid4())
+    project_id = str(new_record_id())
     system_active = {
         "status": "active",
         "role": "access_administrator",
@@ -172,18 +173,18 @@ def _authority_event_matrix() -> list[dict]:
     }
 
     def row(event_type, entity_type, reason, before, after, invalid_after, **extra):
-        event_id = uuid4()
+        event_id = new_record_id()
         return {
             "event_id": event_id,
             "event_type": event_type,
             "entity_type": entity_type,
             "entity_id": str(event_id)
             if entity_type in {"authorization_decision", "authority_invalidation"}
-            else str(uuid4()),
+            else str(new_record_id()),
             "actor_ref_kind": ActorReferenceKind.SYSTEM_PRINCIPAL,
             "actor_ref": "workstream:system:bootstrap",
-            "request_id": uuid4(),
-            "correlation_id": uuid4(),
+            "request_id": new_record_id(),
+            "correlation_id": new_record_id(),
             "reason": reason,
             "before_facts": before,
             "after_facts": after,
@@ -378,7 +379,7 @@ def _authority_event_matrix() -> list[dict]:
             {"effective": True},
             invalidation_cause_event_id=rows[0]["event_id"],
             invalidation_target_kind="actor_profile",
-            invalidation_target_ref=str(uuid4()),
+            invalidation_target_ref=str(new_record_id()),
         )
     )
     return rows
@@ -573,23 +574,23 @@ def test_authority_input_rejects_unbounded_or_inconsistent_evidence() -> None:
     with pytest.raises(ValidationError, match="resource ID requires"):
         _authority_input(
             AuthorityEventType.SENSITIVE_AUTHORIZATION_ALLOWED,
-            resource_id=str(uuid4()),
+            resource_id=str(new_record_id()),
         )
     with pytest.raises(ValidationError, match="invalid denied authorization"):
         _authority_input(
             AuthorityEventType.SENSITIVE_AUTHORIZATION_DENIED,
             denial_code="actor_suspended",
-            idempotency_reference=uuid4(),
+            idempotency_reference=new_record_id(),
         )
     with pytest.raises(ValidationError, match="invalidation evidence"):
         _authority_input(AuthorityEventType.AUTHORITY_INVALIDATION_REQUESTED)
-    target_id = str(uuid4())
+    target_id = str(new_record_id())
     issued = _authority_input(
         AuthorityEventType.AUTHORITY_INVALIDATION_REQUESTED,
         permission_id="admin_role.grant",
         resource_type="actor_profile",
         resource_id=target_id,
-        invalidation_cause_event_id=uuid4(),
+        invalidation_cause_event_id=new_record_id(),
         invalidation_target_kind="actor_profile",
         invalidation_target_ref=target_id,
         before_facts={"effective": False},
@@ -602,11 +603,11 @@ def test_authority_input_rejects_unbounded_or_inconsistent_evidence() -> None:
             permission_id="admin_role.grant",
             resource_type="actor_profile",
             resource_id=target_id,
-            invalidation_cause_event_id=uuid4(),
+            invalidation_cause_event_id=new_record_id(),
             invalidation_target_kind="actor_profile",
             invalidation_target_ref=target_id,
         )
-    event_id = uuid4()
+    event_id = new_record_id()
     with pytest.raises(ValidationError, match="own event"):
         _authority_input(
             AuthorityEventType.AUTHORITY_INVALIDATION_REQUESTED,
@@ -614,20 +615,20 @@ def test_authority_input_rejects_unbounded_or_inconsistent_evidence() -> None:
             permission_id=None,
             invalidation_cause_event_id=event_id,
             invalidation_target_kind="actor_profile",
-            invalidation_target_ref=str(uuid4()),
+            invalidation_target_ref=str(new_record_id()),
         )
 
 
 def test_authority_input_enforces_grant_scope_matrix() -> None:
     """Grant evidence cannot contradict role, project, or replacement scope."""
     source = _authority_input(AuthorityEventType.SENSITIVE_AUTHORIZATION_ALLOWED).model_dump()
-    event_id = uuid4()
-    project_id = str(uuid4())
+    event_id = new_record_id()
+    project_id = str(new_record_id())
     source.update(
         event_id=event_id,
         event_type=AuthorityEventType.ADMIN_ROLE_GRANT_ISSUED,
         entity_type="admin_role_grant",
-        entity_id=str(uuid4()),
+        entity_id=str(new_record_id()),
         permission_id=None,
         reason="authority_assignment",
         project_id=project_id,
@@ -643,7 +644,7 @@ def test_authority_input_enforces_grant_scope_matrix() -> None:
 
     for patch in (
         {"after_facts": source["after_facts"] | {"role": "access_administrator"}},
-        {"after_facts": source["after_facts"] | {"scope_id": str(uuid4())}},
+        {"after_facts": source["after_facts"] | {"scope_id": str(new_record_id())}},
         {"project_id": None},
     ):
         with pytest.raises(ValidationError, match="facts|scope"):
@@ -664,7 +665,7 @@ def test_authority_input_enforces_grant_scope_matrix() -> None:
             "status": "active",
             "role": "reviewer",
             "scope_type": "project",
-            "scope_id": str(uuid4()),
+            "scope_id": str(new_record_id()),
             "effective": True,
         },
     }
@@ -675,7 +676,7 @@ def test_authority_input_enforces_grant_scope_matrix() -> None:
             source
             | {
                 "resource_type": "project",
-                "resource_id": str(uuid4()),
+                "resource_id": str(new_record_id()),
             }
         )
 
@@ -732,7 +733,7 @@ async def test_authority_event_matrix_preserves_shapes_and_requires_idempotency_
                 await session.commit()
 
         for case in cases:
-            event_id = uuid4()
+            event_id = new_record_id()
             candidate = {
                 **{key: value for key, value in case.items() if key != "invalid_patch"},
                 **case["invalid_patch"],
@@ -809,8 +810,8 @@ async def test_authority_service_readmits_mutated_inputs_without_retention(audit
 
 
 async def test_authority_writer_persists_typed_privacy_neutral_events(audit_factory) -> None:
-    future_idempotency = uuid4()
-    project_id = str(uuid4())
+    future_idempotency = new_record_id()
+    project_id = str(new_record_id())
     allowed = _authority_input(
         AuthorityEventType.SENSITIVE_AUTHORIZATION_ALLOWED,
         project_id=project_id,
@@ -826,7 +827,7 @@ async def test_authority_writer_persists_typed_privacy_neutral_events(audit_fact
         permission_id=None,
         invalidation_cause_event_id=allowed.event_id,
         invalidation_target_kind="actor_profile",
-        invalidation_target_ref=str(uuid4()),
+        invalidation_target_ref=str(new_record_id()),
         idempotency_reference=future_idempotency,
     )
 
@@ -876,9 +877,9 @@ async def test_authority_writer_persists_typed_privacy_neutral_events(audit_fact
 
 async def test_legacy_writer_and_reader_remain_compatible(audit_factory) -> None:
     event = AuditEvent(
-        id=str(uuid4()),
+        id=str(new_record_id()),
         entity_type="task",
-        entity_id=str(uuid4()),
+        entity_id=str(new_record_id()),
         event_type="task_created",
         from_status=None,
         to_status="draft",
@@ -914,13 +915,13 @@ async def test_authority_event_rollback_leaves_no_row(audit_factory) -> None:
 
 
 async def test_authority_invalidation_requires_an_existing_authority_cause(audit_factory) -> None:
-    legacy_id = str(uuid4())
+    legacy_id = str(new_record_id())
     invalidation = _authority_input(
         AuthorityEventType.AUTHORITY_INVALIDATION_REQUESTED,
         permission_id=None,
-        invalidation_cause_event_id=uuid4(),
+        invalidation_cause_event_id=new_record_id(),
         invalidation_target_kind="actor_profile",
-        invalidation_target_ref=str(uuid4()),
+        invalidation_target_ref=str(new_record_id()),
     )
     async with audit_factory() as session:
         with pytest.raises(ValueError, match="existing authority event"):
@@ -929,7 +930,7 @@ async def test_authority_invalidation_requires_an_existing_authority_cause(audit
             AuditEvent(
                 id=legacy_id,
                 entity_type="task",
-                entity_id=str(uuid4()),
+                entity_id=str(new_record_id()),
                 event_type="task_created",
                 actor_id="legacy",
                 external_subject="opaque",
@@ -949,9 +950,9 @@ async def test_authority_invalidation_requires_an_existing_authority_cause(audit
 
 async def test_legacy_repository_rejects_unvalidated_authority_rows(audit_factory) -> None:
     raw = AuditEvent(
-        id=str(uuid4()),
+        id=str(new_record_id()),
         entity_type="actor",
-        entity_id=str(uuid4()),
+        entity_id=str(new_record_id()),
         event_type="SensitiveAuthorizationAllowed",
         actor_id="provider@example.com",
         actor_roles=[],
@@ -969,14 +970,14 @@ async def test_legacy_repository_rejects_unvalidated_authority_rows(audit_factor
 
 async def test_database_rejects_malformed_and_mutated_audit_rows(audit_factory) -> None:
     value = _authority_input(AuthorityEventType.SENSITIVE_AUTHORIZATION_ALLOWED)
-    legacy_id = str(uuid4())
+    legacy_id = str(new_record_id())
     async with audit_factory() as session:
         await AuditService(session).add_authority_event(value)
         await AuditRepository(session).add_audit_event(
             AuditEvent(
                 id=legacy_id,
                 entity_type="task",
-                entity_id=str(uuid4()),
+                entity_id=str(new_record_id()),
                 event_type="task_created",
                 actor_id="legacy-actor",
                 external_subject="opaque-subject",
@@ -1018,11 +1019,11 @@ async def test_database_rejects_malformed_and_mutated_audit_rows(audit_factory) 
             )
         ).all()
         observed_rows = {row.id: [row.reason, row.event_domain] for row in rows}
-        assert observed_rows[str(value.event_id)] == [
+        assert observed_rows[value.event_id] == [
             "authorization_evaluation",
             "authority",
         ]
-        assert observed_rows[legacy_id] == [None, "legacy_lifecycle"]
+        assert observed_rows[UUID(legacy_id)] == [None, "legacy_lifecycle"]
         assert len(observed_rows) == 2
 
         with pytest.raises(IntegrityError):
@@ -1034,7 +1035,7 @@ async def test_database_rejects_malformed_and_mutated_audit_rows(audit_factory) 
                     "values (:id, 'actor', :entity_id, 'SensitiveAuthorizationAllowed', "
                     "'legacy', '[]', '{}', 'local_authority', false, '{}', 'authority')"
                 ),
-                {"id": str(uuid4()), "entity_id": str(uuid4())},
+                {"id": str(new_record_id()), "entity_id": str(new_record_id())},
             )
         await session.rollback()
         insert = text(
@@ -1056,13 +1057,14 @@ async def test_database_rejects_malformed_and_mutated_audit_rows(audit_factory) 
             {"permission_id": "secret-bearer-value"},
             {"reason": "secret-bearer-value"},
         ):
-            with pytest.raises(IntegrityError):
+            with pytest.raises(DBAPIError if "id" in patch else IntegrityError,
+                               match="invalid UUID" if "id" in patch else None):
                 values = {
-                    "id": str(uuid4()),
+                    "id": str(new_record_id()),
                     "actor_id": "workstream:system:bootstrap",
                     "actor_kind": "system_principal",
-                    "request_id": str(uuid4()),
-                    "correlation_id": str(uuid4()),
+                    "request_id": str(new_record_id()),
+                    "correlation_id": str(new_record_id()),
                     "entity_type": "authorization_decision",
                     "permission_id": "actor.profile.read_any",
                     "reason": "authorization_evaluation",
@@ -1085,14 +1087,14 @@ async def test_database_rejects_malformed_and_mutated_audit_rows(audit_factory) 
             "'authority', 1, 'system_principal', :request_id, :correlation_id, :project_id, "
             ":resource_type, :resource_id, 'authority_assignment', cast(:facts as json))"
         )
-        project_id = str(uuid4())
+        project_id = str(new_record_id())
 
         def grant_values(facts: str, *, scope_project_id: str | None = project_id) -> dict:
             return {
-                "id": str(uuid4()),
-                "entity_id": str(uuid4()),
-                "request_id": str(uuid4()),
-                "correlation_id": str(uuid4()),
+                "id": str(new_record_id()),
+                "entity_id": str(new_record_id()),
+                "request_id": str(new_record_id()),
+                "correlation_id": str(new_record_id()),
                 "project_id": scope_project_id,
                 "resource_type": "project" if scope_project_id is not None else None,
                 "resource_id": scope_project_id,
@@ -1123,8 +1125,8 @@ async def test_database_rejects_malformed_and_mutated_audit_rows(audit_factory) 
             await session.execute(grant_insert, grant_values(system_facts, scope_project_id=None))
         await session.rollback()
         for values in (
-            grant_values(valid_facts.replace(project_id, str(uuid4()))),
-            grant_values(valid_facts) | {"resource_id": str(uuid4())},
+            grant_values(valid_facts.replace(project_id, str(new_record_id()))),
+            grant_values(valid_facts) | {"resource_id": str(new_record_id())},
             grant_values(valid_facts.replace("project_manager", "access_administrator")),
             grant_values(
                 json.dumps(
@@ -1151,47 +1153,47 @@ async def test_database_rejects_malformed_and_mutated_audit_rows(audit_factory) 
             ":correlation_id, :cause_id, 'actor_profile', :target_ref, "
             "'authority_state_changed', '{\"effective\": true}', '{\"effective\": false}')"
         )
-        for cause_id in (str(uuid4()), legacy_id):
+        for cause_id in (str(new_record_id()), legacy_id):
             with pytest.raises(IntegrityError):
                 await session.execute(
                     invalidation_insert,
                     {
-                        "id": str(uuid4()),
-                        "request_id": str(uuid4()),
-                        "correlation_id": str(uuid4()),
+                        "id": str(new_record_id()),
+                        "request_id": str(new_record_id()),
+                        "correlation_id": str(new_record_id()),
                         "cause_id": cause_id,
-                        "target_ref": str(uuid4()),
+                        "target_ref": str(new_record_id()),
                     },
                 )
             await session.rollback()
-        self_id = str(uuid4())
+        self_id = str(new_record_id())
         with pytest.raises(IntegrityError):
             await session.execute(
                 invalidation_insert,
                 {
                     "id": self_id,
-                    "request_id": str(uuid4()),
-                    "correlation_id": str(uuid4()),
+                    "request_id": str(new_record_id()),
+                    "correlation_id": str(new_record_id()),
                     "cause_id": self_id,
-                    "target_ref": str(uuid4()),
+                    "target_ref": str(new_record_id()),
                 },
             )
         await session.rollback()
 
 
 def _lifecycle_input(**overrides) -> LifecycleAuditEventInput:
-    entity_id = uuid4()
+    entity_id = new_record_id()
     values = {
-        "event_id": uuid4(),
+        "event_id": new_record_id(),
         "entity_type": LifecycleAuditEntityType.REVIEW,
         "entity_id": entity_id,
         "event_type": LifecycleAuditEventType.REVIEW_ACCEPTED,
-        "actor_id": uuid4(),
+        "actor_id": new_record_id(),
         "reason": LifecycleAuditReason.FACT_RECORDED,
         "references": {
-            LifecycleAuditReferenceKind.PROJECT: uuid4(),
+            LifecycleAuditReferenceKind.PROJECT: new_record_id(),
             LifecycleAuditReferenceKind.REVIEW: entity_id,
-            LifecycleAuditReferenceKind.FINAL_ACCEPTANCE: uuid4(),
+            LifecycleAuditReferenceKind.FINAL_ACCEPTANCE: new_record_id(),
         },
     }
     values.update(overrides)
@@ -1276,38 +1278,38 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
                 value = LifecycleAuditEventInput(**manager_event(event_type))
                 assert value.event_type is event_type and value.entity_type is entity_type
                 continue
-            entity_id = uuid4()
+            entity_id = new_record_id()
             references = {
-                LifecycleAuditReferenceKind.PROJECT: uuid4(),
+                LifecycleAuditReferenceKind.PROJECT: new_record_id(),
                 entity_references[entity_type]: entity_id,
             }
             if event_type is LifecycleAuditEventType.REVIEW_ACCEPTED:
-                references[LifecycleAuditReferenceKind.FINAL_ACCEPTANCE] = uuid4()
+                references[LifecycleAuditReferenceKind.FINAL_ACCEPTANCE] = new_record_id()
             elif event_type is LifecycleAuditEventType.REVIEWER_CONTRIBUTION_RECORDED:
                 references.update(
                     {
-                        LifecycleAuditReferenceKind.TASK: uuid4(),
-                        LifecycleAuditReferenceKind.SUBMISSION: uuid4(),
-                        LifecycleAuditReferenceKind.REVIEW: uuid4(),
-                        LifecycleAuditReferenceKind.REVIEW_LEASE: uuid4(),
+                        LifecycleAuditReferenceKind.TASK: new_record_id(),
+                        LifecycleAuditReferenceKind.SUBMISSION: new_record_id(),
+                        LifecycleAuditReferenceKind.REVIEW: new_record_id(),
+                        LifecycleAuditReferenceKind.REVIEW_LEASE: new_record_id(),
                     }
                 )
             elif event_type is LifecycleAuditEventType.SUBMITTER_CONTRIBUTION_RECORDED:
                 references.update(
                     {
-                        LifecycleAuditReferenceKind.TASK: uuid4(),
-                        LifecycleAuditReferenceKind.ASSIGNMENT: uuid4(),
-                        LifecycleAuditReferenceKind.SUBMISSION: uuid4(),
-                        LifecycleAuditReferenceKind.FINAL_ACCEPTANCE: uuid4(),
+                        LifecycleAuditReferenceKind.TASK: new_record_id(),
+                        LifecycleAuditReferenceKind.ASSIGNMENT: new_record_id(),
+                        LifecycleAuditReferenceKind.SUBMISSION: new_record_id(),
+                        LifecycleAuditReferenceKind.FINAL_ACCEPTANCE: new_record_id(),
                     }
                 )
             elif event_type is LifecycleAuditEventType.COMPENSATION_AWARD_CREATED:
-                references[LifecycleAuditReferenceKind.CONTRIBUTION_RECORD] = uuid4()
+                references[LifecycleAuditReferenceKind.CONTRIBUTION_RECORD] = new_record_id()
             transition = {}
             if entity_type is LifecycleAuditEntityType.TASK:
                 references.update({
-                    LifecycleAuditReferenceKind.ASSIGNMENT: uuid4(),
-                    LifecycleAuditReferenceKind.AUTHORIZATION_DECISION: uuid4(),
+                    LifecycleAuditReferenceKind.ASSIGNMENT: new_record_id(),
+                    LifecycleAuditReferenceKind.AUTHORIZATION_DECISION: new_record_id(),
                 })
                 transition = {
                     "reason": LifecycleAuditReason.STATE_CHANGED,
@@ -1316,7 +1318,7 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
                     "task_reason": "Explicit task operation",
                 }
             if event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED:
-                references[LifecycleAuditReferenceKind.AUTHORITY_INVALIDATION] = uuid4()
+                references[LifecycleAuditReferenceKind.AUTHORITY_INVALIDATION] = new_record_id()
                 transition["to_status"] = "ready"
                 from app.modules.tasks.api.assignment_invalidation import (
                     AssignmentInvalidationAuthorityFacts, AssignmentInvalidationTarget,
@@ -1325,9 +1327,9 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
                 facts = AssignmentInvalidationAuthorityFacts(
                     target=AssignmentInvalidationTarget(
                         project_id=references[LifecycleAuditReferenceKind.PROJECT], task_id=entity_id,
-                        assignment_id=references[LifecycleAuditReferenceKind.ASSIGNMENT], contributor_id=uuid4(),
+                        assignment_id=references[LifecycleAuditReferenceKind.ASSIGNMENT], contributor_id=new_record_id(),
                         authority_invalidation_event_id=references[LifecycleAuditReferenceKind.AUTHORITY_INVALIDATION],
-                    ), cause_event_id=uuid4(), delivery_event_id=uuid4(), delivery_generation=1,
+                    ), cause_event_id=new_record_id(), delivery_event_id=new_record_id(), delivery_generation=1,
                     cause_digest="sha256:" + "a" * 64, invocation_digest="sha256:" + "b" * 64,
                     task_status=transition["from_status"], locked_context_hash="sha256:" + "c" * 64,
                 )
@@ -1344,26 +1346,26 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
 
 
 def test_lifecycle_input_requires_acceptance_and_contribution_source_lineage() -> None:
-    review_id = uuid4()
+    review_id = new_record_id()
     with pytest.raises(ValidationError, match="exact canonical references"):
         _lifecycle_input(
             references={
-                LifecycleAuditReferenceKind.PROJECT: uuid4(),
+                LifecycleAuditReferenceKind.PROJECT: new_record_id(),
                 LifecycleAuditReferenceKind.REVIEW: review_id,
             },
             entity_id=review_id,
         )
 
-    contribution_id = uuid4()
+    contribution_id = new_record_id()
     with pytest.raises(ValidationError, match="exact canonical references"):
         _lifecycle_input(
             entity_type=LifecycleAuditEntityType.CONTRIBUTION,
             entity_id=contribution_id,
             event_type=LifecycleAuditEventType.SUBMITTER_CONTRIBUTION_RECORDED,
             references={
-                LifecycleAuditReferenceKind.PROJECT: uuid4(),
+                LifecycleAuditReferenceKind.PROJECT: new_record_id(),
                 LifecycleAuditReferenceKind.CONTRIBUTION_RECORD: contribution_id,
-                LifecycleAuditReferenceKind.FINAL_ACCEPTANCE: uuid4(),
+                LifecycleAuditReferenceKind.FINAL_ACCEPTANCE: new_record_id(),
             },
         )
 
@@ -1430,7 +1432,7 @@ async def test_lifecycle_participant_persists_canonical_rev_con_event_vocabulary
     reason: LifecycleAuditReason,
     states: tuple[str | None, str | None],
 ) -> None:
-    entity_id = uuid4()
+    entity_id = new_record_id()
     value = _lifecycle_input(
         event_type=event_type,
         entity_type=entity_type,
@@ -1439,19 +1441,19 @@ async def test_lifecycle_participant_persists_canonical_rev_con_event_vocabulary
         from_status=states[0],
         to_status=states[1],
         references={
-            LifecycleAuditReferenceKind.PROJECT: uuid4(),
+            LifecycleAuditReferenceKind.PROJECT: new_record_id(),
             entity_reference: entity_id,
             **(
-                {LifecycleAuditReferenceKind.CONTRIBUTION_RECORD: uuid4()}
+                {LifecycleAuditReferenceKind.CONTRIBUTION_RECORD: new_record_id()}
                 if event_type is LifecycleAuditEventType.COMPENSATION_AWARD_CREATED
                 else {}
             ),
             **(
                 {
-                    LifecycleAuditReferenceKind.TASK: uuid4(),
-                    LifecycleAuditReferenceKind.SUBMISSION: uuid4(),
-                    LifecycleAuditReferenceKind.REVIEW: uuid4(),
-                    LifecycleAuditReferenceKind.REVIEW_LEASE: uuid4(),
+                    LifecycleAuditReferenceKind.TASK: new_record_id(),
+                    LifecycleAuditReferenceKind.SUBMISSION: new_record_id(),
+                    LifecycleAuditReferenceKind.REVIEW: new_record_id(),
+                    LifecycleAuditReferenceKind.REVIEW_LEASE: new_record_id(),
                 }
                 if event_type is LifecycleAuditEventType.REVIEWER_CONTRIBUTION_RECORDED
                 else {}
@@ -1529,7 +1531,7 @@ async def test_lifecycle_participant_changed_replay_conflicts_without_payload_le
     async with audit_factory() as session:
         participant = LifecycleAuditParticipant(session)
         changed_references = dict(value.references)
-        changed_references[LifecycleAuditReferenceKind.FINAL_ACCEPTANCE] = uuid4()
+        changed_references[LifecycleAuditReferenceKind.FINAL_ACCEPTANCE] = new_record_id()
         changed = value.model_copy(update={"references": changed_references})
         with pytest.raises(LifecycleAuditConflict, match="identity conflict") as caught:
             await participant.add_event(changed)
@@ -1562,7 +1564,7 @@ async def test_lifecycle_participant_concurrent_changed_replay_conflicts(
 ) -> None:
     value = _lifecycle_input()
     changed_references = dict(value.references)
-    changed_references[LifecycleAuditReferenceKind.FINAL_ACCEPTANCE] = uuid4()
+    changed_references[LifecycleAuditReferenceKind.FINAL_ACCEPTANCE] = new_record_id()
     changed = value.model_copy(update={"references": changed_references})
 
     async def persist(candidate: LifecycleAuditEventInput) -> str:
@@ -1610,11 +1612,11 @@ async def test_lifecycle_participant_boundary_rejects_generic_repository_bypass(
     audit_factory,
 ) -> None:
     raw = AuditEvent(
-        id=str(uuid4()),
+        id=str(new_record_id()),
         entity_type="review",
-        entity_id=str(uuid4()),
+        entity_id=str(new_record_id()),
         event_type="review_state_changed",
-        actor_id=str(uuid4()),
+        actor_id=str(new_record_id()),
         external_subject="workstream:lifecycle-participant",
         external_issuer="workstream:internal",
         actor_roles=[],
@@ -1681,8 +1683,8 @@ async def test_lifecycle_participant_payload_revalidates_forged_input_without_se
         (
             {
                 "references": {
-                    LifecycleAuditReferenceKind.PROJECT: uuid4(),
-                    LifecycleAuditReferenceKind.REVIEW: uuid4(),
+                    LifecycleAuditReferenceKind.PROJECT: new_record_id(),
+                    LifecycleAuditReferenceKind.REVIEW: new_record_id(),
                 }
             },
             "entity reference must match lifecycle entity",
@@ -1696,13 +1698,13 @@ async def test_lifecycle_participant_payload_revalidates_forged_input_without_se
             "lifecycle event requires exact canonical references",
         ),
         (
-            {"references": {LifecycleAuditReferenceKind.PROJECT: uuid4()}},
+            {"references": {LifecycleAuditReferenceKind.PROJECT: new_record_id()}},
             "entity reference must match lifecycle entity",
         ),
         (
             {
                 "references": {
-                    LifecycleAuditReferenceKind.REVIEW: uuid4(),
+                    LifecycleAuditReferenceKind.REVIEW: new_record_id(),
                 }
             },
             "lifecycle audit requires project reference",
@@ -1733,14 +1735,14 @@ def test_assignment_release_snapshot_is_bounded_copied_and_event_specific():
             LifecycleAuditReferenceKind.PROJECT: value.target.project_id,
             LifecycleAuditReferenceKind.TASK: value.target.task_id,
             LifecycleAuditReferenceKind.ASSIGNMENT: value.target.assignment_id,
-            LifecycleAuditReferenceKind.AUTHORIZATION_DECISION: uuid4(),
+            LifecycleAuditReferenceKind.AUTHORIZATION_DECISION: new_record_id(),
             LifecycleAuditReferenceKind.AUTHORITY_INVALIDATION: value.target.authority_invalidation_event_id,
         },
         "authorization_resource_digest": assignment_invalidation_resource_digest(value),
         "assignment_invalidation_facts": snapshot,
     }
     admitted = _lifecycle_input(**options)
-    snapshot["target"]["task_id"] = str(uuid4())
+    snapshot["target"]["task_id"] = str(new_record_id())
     assert admitted.assignment_invalidation_facts == value.model_dump(mode="json")
     for bad in ({"oversized": "x" * 4096}, {"non_json": object()}, {"not_finite": float("nan")}):
         with pytest.raises(ValidationError, match="invalid bounded assignment facts"):

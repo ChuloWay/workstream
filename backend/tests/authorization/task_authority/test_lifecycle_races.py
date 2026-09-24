@@ -406,13 +406,13 @@ async def _prepare_contributor_race(
     """Construct one race's prerequisites without performing the competing writes."""
     project = await create_active_project(task_client)
     subject = f"race-{operation}-{transition}-{ordering}"
-    contributor_id = actor_id(subject)
     if operation == "claim":
         task = await create_ready_task(task_client, project["id"])
         await admit_and_grant_project_submitter(task_client, monkeypatch, project["id"], subject)
     else:
         assert operation == "submission_authority"
         task = await create_started_task(task_client, project["id"], monkeypatch, subject)
+    contributor_id = await actor_id(subject)
     async with db_session.get_session_factory()() as session:
         identity_link_id = await session.scalar(
             select(ActorIdentityLink.id).where(ActorIdentityLink.actor_profile_id == contributor_id)
@@ -631,11 +631,11 @@ async def test_contributor_operation_commits_before_lifecycle_change(
     assert isinstance(observed_after_task_commit, dict)
     if operation == "claim":
         assert task_result.assignment.contributor_id == race.contributor_id
-        assert observed_after_task_commit["task"] == ("claimed", race.contributor_id)
+        assert observed_after_task_commit["task"] == ("claimed", UUID(race.contributor_id))
         assignments = observed_after_task_commit["assignments"]
         assert isinstance(assignments, list)
         assert len(assignments) == 1
-        assert assignments[0][1] == race.contributor_id
+        assert assignments[0][1] == UUID(race.contributor_id)
     else:
         assert isinstance(task_result, AuditEvent)
         assert task_result.event_type == "SensitiveAuthorizationAllowed"

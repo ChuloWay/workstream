@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from uuid import UUID
 from uuid import uuid4
 
 import pytest
@@ -43,7 +44,8 @@ async def test_first_human_access_atomically_creates_profile_link_and_events(
             correlation_id=correlation_id,
         )
 
-    assert resolved.profile.id == actor_id_from_external_identity(ISSUER, token.subject)
+    assert UUID(resolved.profile.id).version == 7
+    assert resolved.profile.id != actor_id_from_external_identity(ISSUER, token.subject)
     assert resolved.profile.actor_kind == "human"
     assert resolved.profile.status == "active"
     assert resolved.profile.provisioning_method == "automatic_first_access"
@@ -67,6 +69,31 @@ async def test_first_human_access_atomically_creates_profile_link_and_events(
         assert event_views(events) == expected_first_access_events(
             resolved.profile.id, resolved.identity_link.id, request_id, correlation_id
         )
+
+
+async def test_distinct_external_identities_receive_distinct_uuid7_profiles(
+    actor_database_env: str,
+) -> None:
+    first = verified_token("shared-subject")
+    different_subject = verified_token("different-subject")
+    different_issuer = first.model_copy(
+        update={
+            "issuer": "https://other.identity.test",
+            "token_id": "token-shared-subject-other-issuer",
+        }
+    )
+    profile_ids = []
+    for token in (first, different_subject, different_issuer):
+        async with db_session.get_session_factory()() as session:
+            resolved = await ActorService(session).resolve_verified_actor(
+                token,
+                request_id=uuid4(),
+                correlation_id=uuid4(),
+            )
+            profile_ids.append(resolved.profile.id)
+
+    assert len(set(profile_ids)) == 3
+    assert all(UUID(profile_id).version == 7 for profile_id in profile_ids)
 
 
 async def test_concurrent_first_access_leaves_one_profile_link_and_event_pair(
@@ -102,6 +129,7 @@ async def test_concurrent_first_access_leaves_one_profile_link_and_event_pair(
     assert race.lookups[race.contender][1].identity_link.id == first.identity_link.id
     assert race.touches == [(race.contender, first.profile.id, first.identity_link.id)]
     assert first.profile.id == second.profile.id
+    assert UUID(first.profile.id).version == 7
     assert first.identity_link.id == second.identity_link.id
     async with db_session.get_session_factory()() as session:
         assert await session.scalar(select(func.count()).select_from(ActorProfile)) == 1
@@ -148,6 +176,7 @@ async def test_repeated_verified_access_reuses_actor(repeated_actor):
         )
 
     assert second.profile.id == first.profile.id
+    assert UUID(first.profile.id).version == 7
     assert second.identity_link.id == first.identity_link.id
     async with db_session.get_session_factory()() as session:
         assert await session.scalar(select(func.count()).select_from(ActorProfile)) == 1
@@ -200,20 +229,7 @@ async def test_first_access_rolls_back_profile_link_and_first_audit_on_second_au
             )
         await session.rollback()
 
-    actor_id = actor_id_from_external_identity(ISSUER, token.subject)
     async with db_session.get_session_factory()() as session:
-        assert await session.get(ActorProfile, actor_id) is None
-        assert (
-            await session.scalar(
-                select(func.count())
-                .select_from(ActorIdentityLink)
-                .where(ActorIdentityLink.actor_profile_id == actor_id)
-            )
-            == 0
-        )
-        assert (
-            await session.scalar(
-                select(func.count()).select_from(AuditEvent).where(AuditEvent.actor_id == actor_id)
-            )
-            == 0
-        )
+        assert await session.scalar(select(func.count()).select_from(ActorProfile)) == 0
+        assert await session.scalar(select(func.count()).select_from(ActorIdentityLink)) == 0
+        assert await session.scalar(select(func.count()).select_from(AuditEvent)) == 0

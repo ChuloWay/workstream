@@ -1,6 +1,6 @@
 """Nonlocking, project-exact single-snapshot observations with no false-zero recovery."""
 
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import text, event as sqlalchemy_event
@@ -13,7 +13,7 @@ from project_create_fixtures import seed_historical_project
 
 async def test_drain_uses_one_snapshot_and_exact_project(delivery_harness):
     h = delivery_harness
-    foreign = uuid4()
+    foreign = new_record_id()
     async with h.factory() as session, session.begin():
         await seed_historical_project(
             session,

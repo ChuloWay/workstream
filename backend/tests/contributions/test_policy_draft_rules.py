@@ -1,7 +1,7 @@
 """Complete ContributionPolicy graph validation."""
 
 from dataclasses import replace
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -58,7 +58,7 @@ def test_update_accepts_one_or_two_unique_compensated_definitions() -> None:
         instrument_type=CompensationInstrumentType.PROJECT_POINTS,
         unit_code="POINT",
         quantity="2",
-        adapter_binding_id=uuid4(),
+        adapter_binding_id=new_record_id(),
     )
     rule = PolicyRuleInput(
         contribution_type="accepted_submission",
@@ -74,7 +74,7 @@ def test_update_rejects_non_positive_quantity(quantity: str) -> None:
         instrument_type=CompensationInstrumentType.MONEY,
         unit_code="USD",
         quantity=quantity,
-        adapter_binding_id=uuid4(),
+        adapter_binding_id=new_record_id(),
     )
     with pytest.raises(ContributionPolicyConflict):
         _validate_definition(item)
@@ -86,7 +86,7 @@ def test_update_rejects_non_canonical_quantity(quantity: str) -> None:
         instrument_type=CompensationInstrumentType.MONEY,
         unit_code="USD",
         quantity=quantity,
-        adapter_binding_id=uuid4(),
+        adapter_binding_id=new_record_id(),
     )
     with pytest.raises(ContributionPolicyConflict):
         _validate_definition(item)
@@ -109,7 +109,7 @@ def test_update_rejects_non_integer_scale_project_points(quantity: str) -> None:
         instrument_type=CompensationInstrumentType.PROJECT_POINTS,
         unit_code="POINT",
         quantity=quantity,
-        adapter_binding_id=uuid4(),
+        adapter_binding_id=new_record_id(),
     )
     with pytest.raises(ContributionPolicyConflict):
         _validate_definition(item)
@@ -156,7 +156,7 @@ def test_update_rejects_noncanonical_instrument_type() -> None:
         instrument_type="money",  # type: ignore[arg-type]
         unit_code="USD",
         quantity="1.00",
-        adapter_binding_id=uuid4(),
+        adapter_binding_id=new_record_id(),
     )
     with pytest.raises(ContributionPolicyConflict):
         _validate_definition(item)

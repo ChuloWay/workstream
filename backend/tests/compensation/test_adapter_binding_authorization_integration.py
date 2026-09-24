@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import func, select
@@ -56,13 +56,13 @@ class _Authorization:
 def _facts() -> AdapterBindingMutationAuthorizationFacts:
     return AdapterBindingMutationAuthorizationFacts(
         action="compensation.adapter_binding.suspend",
-        actor_profile_id=uuid4(),
-        operation_id=uuid4(),
+        actor_profile_id=new_record_id(),
+        operation_id=new_record_id(),
         request_digest="sha256:" + "b" * 64,
-        project_id=uuid4(),
-        adapter_binding_id=uuid4(),
+        project_id=new_record_id(),
+        adapter_binding_id=new_record_id(),
         instrument_type="project_points",
-        adapter_actor_id=uuid4(),
+        adapter_actor_id=new_record_id(),
         route_key="points.primary",
         expected_status="active",
         expected_lifecycle_version=3,
@@ -73,7 +73,7 @@ def _facts() -> AdapterBindingMutationAuthorizationFacts:
 async def test_real_owner_eligibility_does_not_activate_binding_authority(
     compensation_database_env: str,
 ) -> None:
-    project_id, authority_actor_id, adapter_actor_id = uuid4(), uuid4(), uuid4()
+    project_id, authority_actor_id, adapter_actor_id = new_record_id(), new_record_id(), new_record_id()
     async with db_session.get_session_factory()() as session:
         async with session.begin():
             session.add_all(
@@ -99,7 +99,7 @@ async def test_real_owner_eligibility_does_not_activate_binding_authority(
             session.add_all(
                 (
                     ActorIdentityLink(
-                        id=str(uuid4()),
+                        id=str(new_record_id()),
                         actor_profile_id=str(authority_actor_id),
                         issuer="https://compensation.test",
                         subject=f"authority-{authority_actor_id}",
@@ -109,7 +109,7 @@ async def test_real_owner_eligibility_does_not_activate_binding_authority(
                         last_verified_at=datetime.now(UTC),
                     ),
                     ActorIdentityLink(
-                        id=str(uuid4()),
+                        id=str(new_record_id()),
                         actor_profile_id=str(adapter_actor_id),
                         issuer="https://compensation.test",
                         subject=f"adapter-{adapter_actor_id}",
@@ -134,7 +134,7 @@ async def test_real_owner_eligibility_does_not_activate_binding_authority(
                     actors=CompensationAdapterActorEligibility(session),
                 ).create(
                     AdapterBindingCreateRequest(
-                        operation_id=uuid4(),
+                        operation_id=new_record_id(),
                         actor_profile_id=authority_actor_id,
                         project_id=project_id,
                         instrument_type="money",
@@ -154,7 +154,7 @@ async def test_public_adapter_preserves_exact_read_and_mutation_facts() -> None:
     authorization = _Authorization()
     adapter = CompensationAdapterBindingAuthorization(authorization)
     read = AdapterBindingReadRequest(
-        actor_profile_id=uuid4(), project_id=uuid4(), adapter_binding_id=uuid4()
+        actor_profile_id=new_record_id(), project_id=new_record_id(), adapter_binding_id=new_record_id()
     )
     await adapter.authorize_adapter_binding_read(read)
     facts = _facts()
@@ -193,9 +193,9 @@ async def test_public_adapter_conceals_auth_boundary_denial() -> None:
     with pytest.raises(AdapterBindingUnavailable, match="unavailable"):
         await adapter.authorize_adapter_binding_read(
             AdapterBindingReadRequest(
-                actor_profile_id=uuid4(),
-                project_id=uuid4(),
-                adapter_binding_id=uuid4(),
+                actor_profile_id=new_record_id(),
+                project_id=new_record_id(),
+                adapter_binding_id=new_record_id(),
             )
         )
 

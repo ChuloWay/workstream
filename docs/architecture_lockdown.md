@@ -91,6 +91,22 @@ Project guide
 
 ## Locked For v0.1
 
+### Record Identity
+
+Workstream-generated surrogate record keys use the shared UUIDv7 generator and
+native PostgreSQL `uuid` storage, with version/variant constraints on generated
+keys. Relationships use the same native type. Existing typed owner boundaries
+may expose Python UUID values or canonical UUID strings; this does not change
+their PostgreSQL storage.
+
+Meaningful natural/composite keys, Flow subjects, request/idempotency tokens and
+content hashes are not surrogate record IDs. Retrying an operation recovers its
+original stored ID through exact owner-local uniqueness and fresh authorization;
+it does not derive a row ID from a token. IDs are not secrets, authority, expiry
+clocks, or commit-order evidence. Use explicit lifecycle timestamps and existing
+pagination tie-breakers for those purposes. UUIDv7 reveals approximate generation
+time; possession of an ID never substitutes for authorization.
+
 ### Source-Agnostic, Manual First
 
 Workstream is source-agnostic, but v0.1 does not include external source adapters.

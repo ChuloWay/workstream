@@ -39,13 +39,14 @@ async def _create_request(database_url: str) -> tuple[dict[str, UUID], UUID, UUI
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with factory() as session:
-            await _authorized_service(session, actor).authorize_request(
+            receipt = await _authorized_service(session, actor).authorize_request(
                 origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=actor,
                 facts=_request(values),
                 identity=identity(context(values)),
                 runtime_configuration=runtime_configuration(),
             )
+            values["operation"] = receipt.operation_id
     finally:
         await engine.dispose()
     return values, human, link, grant
@@ -292,11 +293,10 @@ async def test_request_operation_rejects_every_change(
         async with engine.begin() as connection:
             with pytest.raises(DBAPIError) as error:
                 await connection.execute(text(statement))
-            message = str(error.value)
+            message = str(error.value.orig)
             assert expected_error in message
             if statement.startswith("truncate"):
                 assert getattr(error.value.orig, "sqlstate", None) == "0A000"
-                assert "project_guide_component_projection_operations" in message
                 assert "project_guide_compilation_request_operations" in message
         async with engine.connect() as connection:
             count = await connection.scalar(
@@ -437,7 +437,7 @@ async def test_duplicate_request_insert_is_classified_as_concurrent_replay(
                         actor=actor,
                         facts=facts,
                         attempt=attempt,
-                        authorization_decision_event_id=UUID(event_id),
+                        authorization_decision_event_id=UUID(str(event_id)),
                     )
     finally:
         await engine.dispose()

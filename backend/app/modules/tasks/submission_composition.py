@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -122,7 +123,7 @@ class TaskSubmissionCreationService:
         if task is None:
             raise RuntimeError("locked task disappeared")
         version = 1 if context.predecessor is None else context.predecessor.version + 1
-        submission_id = uuid4()
+        submission_id = new_record_id()
         final = SubmissionCreationAuthorityFacts(
             task_id=preliminary.task_id,
             assignment_id=preliminary.assignment_id,

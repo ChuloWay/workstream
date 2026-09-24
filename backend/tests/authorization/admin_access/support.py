@@ -11,6 +11,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import session as db_session
+from app.core.identifiers import new_record_id
 from app.modules.authorization.models import (
     AdminRoleGrant,
     AuthorityControl,
@@ -106,7 +107,7 @@ def grant_body(
 
 
 async def create_project(label: str) -> UUID:
-    project_id = uuid4()
+    project_id = new_record_id()
     async with db_session.get_session_factory()() as session:
         await seed_historical_project(
             session, project_id=str(project_id), name=label, slug=f"admin-{project_id}"

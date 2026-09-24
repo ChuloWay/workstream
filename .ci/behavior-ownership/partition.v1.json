@@ -130,6 +130,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/core/identifiers.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/core/permissions.py"
     },
     {
@@ -1358,6 +1362,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/scripts/identifier_inventory.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/scripts/legacy_actor_classification.py"
     },
     {
@@ -1371,6 +1379,10 @@
     {
       "group": "shared",
       "target": "backend/scripts/mutation_policy.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/record_id_collection.py"
     },
     {
       "group": "shared",
@@ -1401,7 +1413,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "3e849ccb61da7234c75b8ebe9a6892c81199bfbe6f754491b90014a2e40b2890",
+  "authority_digest": "d58b156a00d3cf9f61a6161c389d5d21c2c8a4a312d381e8b105a38f4a46e13a",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

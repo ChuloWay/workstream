@@ -5,7 +5,7 @@ from __future__ import annotations
 from tests.projects.guide_compilation.helpers import runtime_configuration
 
 from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -13,6 +13,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.core.identifiers import new_record_id
 from app.modules.authorization.api import (
     ActorIdentityFacts,
     ActorKind as PublicActorKind,
@@ -43,13 +44,13 @@ from .helpers import context, identity, persistence_facts, seed_database
 
 def _request(values: dict[str, UUID]) -> ProjectGuideCompilationRequestFacts:
     attempt_identity = identity(context(values))
-    persist = persistence_facts(values, uuid4(), attempt_identity)
+    persist = persistence_facts(values, new_record_id(), attempt_identity)
     names = ProjectGuideCompilationRequestFacts.__dataclass_fields__
     return ProjectGuideCompilationRequestFacts(**{name: asdict(persist)[name] for name in names})
 
 
 async def _seed_human(database_url: str, values: dict[str, UUID]) -> tuple[UUID, UUID, UUID]:
-    human, link, grant = uuid4(), uuid4(), uuid4()
+    human, link, grant = new_record_id(), new_record_id(), new_record_id()
     engine = create_async_engine(database_url)
     try:
         async with engine.begin() as connection:
@@ -190,6 +191,69 @@ async def test_authorized_request_commits_one_bound_receipt_and_exact_replay(
             ).one()
             await session.rollback()
         assert replay == receipt
+        assert counts == (1, 1, 1)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mismatch", ["request_id", "idempotency_key", "actor"])
+async def test_natural_request_recovery_rejects_a_different_caller_request(
+    clean_postgres_database: str,
+    mismatch: str,
+) -> None:
+    values = await seed_database(clean_postgres_database)
+    human, link, _ = await _seed_human(clean_postgres_database, values)
+    actor = ActorIdentityFacts(human, link, PublicActorKind.HUMAN)
+    facts = _request(values)
+    attempt_identity = identity(context(values))
+    engine = create_async_engine(clean_postgres_database)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with factory() as session:
+            await _authorized_service(session, actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
+                actor=actor,
+                facts=facts,
+                identity=attempt_identity,
+                runtime_configuration=runtime_configuration(),
+            )
+        replay_actor = actor
+        replay_facts = facts
+        if mismatch == "request_id":
+            replay_facts = replace(facts, request_id=uuid4())
+        elif mismatch == "idempotency_key":
+            replay_facts = replace(facts, idempotency_key=uuid4())
+        else:
+            other_human, other_link, _ = await _seed_human(clean_postgres_database, values)
+            replay_actor = ActorIdentityFacts(
+                other_human,
+                other_link,
+                PublicActorKind.HUMAN,
+            )
+        async with factory() as session:
+            with pytest.raises(
+                GuideCompilationIntegrityError,
+                match="compilation request replay mismatch",
+            ):
+                await _authorized_service(session, replay_actor).authorize_request(
+                    origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
+                    actor=replay_actor,
+                    facts=replay_facts,
+                    identity=attempt_identity,
+                    runtime_configuration=runtime_configuration(),
+                )
+        async with factory() as session:
+            counts = (
+                await session.execute(
+                    text(
+                        "select (select count(*) from project_guide_compilation_attempts),"
+                        "(select count(*) from project_guide_compilation_request_operations),"
+                        "(select count(*) from audit_events where action_id="
+                        "'project.guide_compilation.request')"
+                    )
+                )
+            ).one()
         assert counts == (1, 1, 1)
     finally:
         await engine.dispose()

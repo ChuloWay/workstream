@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import and_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -88,10 +89,17 @@ class ProjectRepository:
         Returns:
             Project model when found; otherwise ``None``.
         """
+        try:
+            canonical_project_id = str(UUID(project_id))
+        except (AttributeError, TypeError, ValueError):
+            return None
         if not for_update:
-            return await self._session.get(Project, project_id)
+            return await self._session.get(Project, canonical_project_id)
         return await self._session.scalar(
-            select(Project).where(Project.id == project_id).with_for_update().execution_options(populate_existing=True)
+            select(Project)
+            .where(Project.id == canonical_project_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
 
     async def add_guide(self, guide: ProjectGuide) -> ProjectGuide:

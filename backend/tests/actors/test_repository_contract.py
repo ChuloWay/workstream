@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import hashlib
-from uuid import UUID, uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import UniqueConstraint, event
@@ -32,11 +32,11 @@ def test_candidate_exists_query_is_backed_by_one_link_per_profile_constraint() -
 @pytest.fixture
 async def candidate_rows(actor_database_env):
     created_at = datetime(2026, 7, 22, tzinfo=UTC)
-    caller_id = UUID(int=1)
-    eligible_ids = [UUID(int=value) for value in (5, 6, 7)]
-    inactive_id = UUID(int=2)
-    revoked_id = UUID(int=3)
-    service_id = UUID(int=4)
+    caller_id = new_record_id()
+    eligible_ids = sorted(new_record_id() for _ in range(3))
+    inactive_id = new_record_id()
+    revoked_id = new_record_id()
+    service_id = new_record_id()
     async with db_session.get_session_factory()() as session:
         profiles = [
             ActorProfile(
@@ -68,7 +68,7 @@ async def candidate_rows(actor_database_env):
         session.add_all(
             [
                 ActorIdentityLink(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     actor_profile_id=str(actor_id),
                     issuer=ISSUER,
                     subject=f"candidate-{actor_id}",
@@ -85,7 +85,7 @@ async def candidate_rows(actor_database_env):
         )
         session.add(
             ActorIdentityLink(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 actor_profile_id=str(service_id),
                 issuer=ISSUER,
                 subject=f"candidate-service-{service_id}",

@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
+from app.core.identifiers import new_record_id
 from app.modules.authorization.api import ActorKind, AuthorizationDenied
 from app.modules.authorization.api.post_policy import PreparedPostPolicyOperation, PostPolicyAuthorityReceipt
 
@@ -29,7 +30,7 @@ class PreparedPostPolicy(PreparedPostPolicyOperation):
 
     async def consume_new(self, facts):
         self.check(facts)
-        decision = uuid4()
+        decision = new_record_id()
         derive = self.locator.action_id.endswith('.derive')
         if derive != (self.port.actor.actor_kind is ActorKind.SERVICE):
             raise AuthorizationDenied('wrong post-policy actor kind')
@@ -41,9 +42,10 @@ class PreparedPostPolicy(PreparedPostPolicyOperation):
             "'local_authority',false,'{}'::json,'authority',1,'actor_profile',:request,:operation,"
             "'project.effective_policy.manage',:action,'authorization_evaluation',:project,"
             "'project_post_submit_checker_policy_mutation',:policy,"
-            "jsonb_build_object('allowed',true,'resource_context_digest',cast(:digest as text))::json,:grant,'project',:project)"
+            "jsonb_build_object('allowed',true,'resource_context_digest',cast(:digest as text))::json,:grant,'project',:target_project)"
         ), dict(id=str(decision), actor=str(self.port.actor.actor_profile_id), request=self.locator.request_id,
                 operation=self.locator.operation_id, action=self.locator.action_id, project=str(self.port.project_id),
+                target_project=str(self.port.project_id),
                 policy=str(facts.policy_id), digest=facts.digest, grant=str(self.port.grant) if self.port.grant else None))
         return PostPolicyAuthorityReceipt(
             actor_profile_id=self.port.actor.actor_profile_id, identity_link_id=self.port.actor.identity_link_id,
@@ -59,7 +61,7 @@ class PreparedPostPolicy(PreparedPostPolicyOperation):
             'SELECT actor_id,action_id,project_id,after_facts FROM audit_events WHERE id=:id'
         ), dict(id=str(decision_event_id)))).mappings().one()
         if (row['actor_id'] != str(self.port.actor.actor_profile_id) or row['action_id'] != self.locator.action_id
-                or row['project_id'] != str(self.port.project_id)
+                or row['project_id'] != self.port.project_id
                 or row['after_facts'] != dict(allowed=True, resource_context_digest=facts.digest)):
             raise AuthorizationDenied('post-policy replay evidence mismatch')
 

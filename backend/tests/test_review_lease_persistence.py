@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from httpx import ASGITransport, AsyncClient
 import pytest
@@ -81,7 +82,7 @@ async def review_lease_client(
 
 
 async def _human_actor(session, *, label: str) -> str:
-    actor_id = str(uuid4())
+    actor_id = str(new_record_id())
     session.add(
         ActorProfile(
             id=actor_id,
@@ -94,7 +95,7 @@ async def _human_actor(session, *, label: str) -> str:
     await session.flush()
     session.add(
         ActorIdentityLink(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             actor_profile_id=actor_id,
             issuer="https://review-lease.test",
             subject=f"{label}-{actor_id}",
@@ -108,7 +109,7 @@ async def _human_actor(session, *, label: str) -> str:
 
 
 async def _service_actor(session) -> str:
-    actor_id = str(uuid4())
+    actor_id = str(new_record_id())
     session.add(
         ActorProfile(
             id=actor_id,
@@ -122,7 +123,7 @@ async def _service_actor(session) -> str:
     await session.flush()
     session.add(
         ActorIdentityLink(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             actor_profile_id=actor_id,
             issuer="https://review-lease.test",
             subject=f"service-{actor_id}",
@@ -136,8 +137,8 @@ async def _service_actor(session) -> str:
 
 
 async def _published_reviewer_policy(session, project_id: str, actor_id: str) -> UUID:
-    policy_id = uuid4()
-    version_id = uuid4()
+    policy_id = new_record_id()
+    version_id = new_record_id()
     policy = ContributionPolicy(
         id=policy_id,
         project_id=project_id,
@@ -158,7 +159,7 @@ async def _published_reviewer_policy(session, project_id: str, actor_id: str) ->
     session.add_all(
         [
             ContributionRule(
-                id=uuid4(),
+                id=new_record_id(),
                 contribution_policy_version_id=version_id,
                 project_id=project_id,
                 contribution_type=kind,
@@ -176,7 +177,7 @@ async def _published_reviewer_policy(session, project_id: str, actor_id: str) ->
         mutation_authorization=authorization,
     ).publish(
         ContributionPolicyPublishRequest(
-            operation_id=uuid4(),
+            operation_id=new_record_id(),
             actor_profile_id=actor_uuid,
             project_id=UUID(project_id),
             contribution_policy_id=policy_id,
@@ -187,8 +188,8 @@ async def _published_reviewer_policy(session, project_id: str, actor_id: str) ->
 
 
 async def _draft_reviewer_policy(session, project_id: str, actor_id: str) -> UUID:
-    policy_id = uuid4()
-    version_id = uuid4()
+    policy_id = new_record_id()
+    version_id = new_record_id()
     session.add_all(
         [
             ContributionPolicy(
@@ -220,7 +221,7 @@ def _lease_input(
     generation: int = 1,
 ) -> ReviewLeaseInput:
     return ReviewLeaseInput(
-        id=uuid4(),
+        id=new_record_id(),
         review_queue_entry_id=queue.id,
         project_id=queue.project_id,
         task_id=queue.task_id,
@@ -372,10 +373,10 @@ async def test_queue_lineage_policy_project_and_published_status_are_enforced(
         with pytest.raises(IntegrityError, match="fk_review_lease_queue_lineage"):
             await ReviewQueueRepository(session).add_lease(crossed)
 
-    other_project_key = str(uuid4())
+    other_project_key = str(new_record_id())
     response = await review_lease_client.post(
         "/api/v1/projects",
-        headers=auth_headers() | {"Idempotency-Key": str(uuid4())},
+        headers=auth_headers() | {"Idempotency-Key": str(new_record_id())},
         json={
             "name": "Other lease policy project",
             "slug": f"other-lease-policy-{other_project_key}",

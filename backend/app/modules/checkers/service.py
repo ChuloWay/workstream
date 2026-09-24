@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 import json
 
 from sqlalchemy.exc import IntegrityError
@@ -729,7 +729,7 @@ class CheckerService:
             artifact_manifest_hash = "invalid:artifact_manifest"
 
         checker_run = CheckerRun(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             task_id=submission.task_id,
             submission_id=submission.id,
             submission_version=submission.version,
@@ -1197,7 +1197,7 @@ class CheckerService:
         passed_count = sum(1 for outcome in outcomes if outcome.status == "passed")
         routing_recommendation = self._routing_recommendation_for_outcomes(outcomes)
         checker_run = CheckerRun(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             task_id=submission.task_id,
             submission_id=submission.id,
             submission_version=submission.version,
@@ -1248,7 +1248,7 @@ class CheckerService:
         )
         checker_run.results = [
             CheckerResult(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 checker_run_id=checker_run.id,
                 task_id=submission.task_id,
                 submission_id=submission.id,
@@ -1306,7 +1306,7 @@ class CheckerService:
             return None
         now = datetime.now(UTC)
         replacement = CheckerRun(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             task_id=checker_run.task_id,
             submission_id=checker_run.submission_id,
             submission_version=checker_run.submission_version,
@@ -1496,7 +1496,7 @@ class CheckerService:
         )
         result_rows = [
             CheckerResult(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 checker_run_id=checker_run.id,
                 task_id=checker_run.task_id,
                 submission_id=checker_run.submission_id,
@@ -1731,7 +1731,7 @@ class CheckerService:
             payload.update(event_payload)
         return await self._task_repo.add_audit_event(
             AuditEvent(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 entity_type="task",
                 entity_id=task.id,
                 event_type=event_type,
@@ -1775,7 +1775,7 @@ class CheckerService:
         audit = actor.audit_context()
         return await self._task_repo.add_audit_event(
             AuditEvent(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 entity_type="submission",
                 entity_id=submission.id,
                 event_type="checker_run_triggered",

@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 from datetime import datetime, timezone, timedelta
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import select, text
@@ -46,8 +46,8 @@ async def test_phase_decision_sql_substitutions(delivery_harness, fault):
     facts = OutboxDispatchFacts(**claim.model_dump(), phase=OutboxDispatchPhase.INVOKE)
     changes = {
         "phase": OutboxDispatchPhase.CLAIM,
-        "event_id": uuid4(),
-        "project_id": uuid4(),
+        "event_id": new_record_id(),
+        "project_id": new_record_id(),
         "claim_generation": 2,
         "claim_owner": "different",
         "claimed_at": claim.claimed_at + timedelta(microseconds=1),
@@ -250,7 +250,7 @@ async def test_sql_rejects_forged_phase_principal_or_denial(delivery_harness, fa
     facts = OutboxDispatchFacts(**claim.model_dump(), phase=OutboxDispatchPhase.INVOKE)
     async with h.factory() as session, session.begin():
         original = await phase_decision(session, facts)
-        changes = {"id": str(uuid4())}
+        changes = {"id": str(new_record_id())}
         changes["entity_id"] = changes["id"]
         if fault == "denied":
             audit = await session.get(AuditEvent, original)
@@ -260,7 +260,7 @@ async def test_sql_rejects_forged_phase_principal_or_denial(delivery_harness, fa
                 after_facts={**audit.after_facts, "allowed": False},
             )
         else:
-            foreign = str(uuid4())
+            foreign = str(new_record_id())
             session.add(
                 ActorProfile(
                     id=foreign,
@@ -278,7 +278,7 @@ async def test_sql_rejects_forged_phase_principal_or_denial(delivery_harness, fa
             await session.flush()
             session.add(
                 ActorIdentityLink(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     actor_profile_id=foreign,
                     issuer="flow.test" if fault == "human" else "workstream.internal",
                     subject=foreign if fault == "human" else ServiceIdentity.PROJECT_SETUP.value,

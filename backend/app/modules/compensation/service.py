@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from typing import cast
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -108,7 +109,7 @@ class AdapterBindingService:
         )
         if self._projects is None or self._actors is None:
             raise AdapterBindingUnavailable("compensation_adapter_binding_unavailable")
-        binding_id = uuid4()
+        binding_id = new_record_id()
         try:
             project = await self._projects.lock_compensation_binding_project(
                 request.project_id
@@ -402,7 +403,7 @@ class AdapterBindingService:
         prior_suspension_event_id: UUID | None = None,
     ) -> CompensationAdapterBindingLifecycleEvent:
         return CompensationAdapterBindingLifecycleEvent(
-            id=uuid4(),
+            id=new_record_id(),
             operation_id=operation_id,
             request_digest=request_digest,
             project_id=str(project_id),

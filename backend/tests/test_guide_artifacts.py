@@ -19,6 +19,7 @@ import app.adapters.artifacts as artifact_adapters
 from app.adapters.artifacts import get_guide_artifact_ingest_command
 from app.modules.projects.router import guide_document_upload_command
 from app.core.config import Settings
+from app.core.identifiers import new_record_id
 from app.interfaces.artifact_operations import GuideArtifactIngestRequest
 from app.modules.artifacts.preparation import (
     HARD_MAXIMUM_ARTIFACT_BYTES,
@@ -67,9 +68,9 @@ async def _bytes(*chunks: bytes) -> AsyncIterator[bytes]:
 def _context() -> HumanAuthorizationContext:
     return HumanAuthorizationContext(
         actor_kind=ActorKind.HUMAN,
-        actor_profile_id=uuid4(),
+        actor_profile_id=new_record_id(),
         actor_status=ActorStatus.ACTIVE,
-        identity_link_id=uuid4(),
+        identity_link_id=new_record_id(),
         identity_link_status=IdentityLinkStatus.ACTIVE,
         request_id=uuid4(),
         correlation_id=uuid4(),
@@ -296,11 +297,11 @@ class _PutAttemptRepository:
         return SimpleNamespace(status=self.status)
 
 
-PROJECT_ID = uuid4()
-GUIDE_ID = uuid4()
-SNAPSHOT_ID = uuid4()
-ITEM_ID = uuid4()
-ATTEMPT_ID = uuid4()
+PROJECT_ID = new_record_id()
+GUIDE_ID = new_record_id()
+SNAPSHOT_ID = new_record_id()
+ITEM_ID = new_record_id()
+ATTEMPT_ID = new_record_id()
 DOCUMENT_BYTES = b"%PDF-1.7\nGuide fixture\n%%EOF"
 
 
@@ -439,7 +440,7 @@ async def test_activated_guide_authority_binds_every_final_fact_and_rejects_reus
             self.closed = True
 
     idempotency_key = uuid4()
-    actor_id = uuid4()
+    actor_id = new_record_id()
     request_digest = guide_ingest_prepared_request_digest(
         project_id=PROJECT_ID,
         guide_id=GUIDE_ID,

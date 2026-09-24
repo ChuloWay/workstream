@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 
+from app.core.identifiers import new_record_id
 from app.modules.authorization.api import AuthorizationDenied, setup_finalization_facts_digest
 from app.modules.projects.api import ProjectGuideSetupFinalizationError
 from app.modules.projects.guide_compilation.finalization import GuideCompilationFinalizationService
@@ -103,7 +104,7 @@ async def test_finalization_never_commits_caller_transaction(clean_postgres_data
 @pytest.mark.parametrize("foreign_project", [True, False], ids=["foreign-project", "foreign-guide"])
 async def test_cross_project_finalization_is_concealed(clean_postgres_database, foreign_project):
     async with database_case(clean_postgres_database) as (values, factory, command):
-        project, guide = uuid4(), uuid4()
+        project, guide = new_record_id(), new_record_id()
         async with factory() as session, session.begin():
             await session.execute(text("alter table projects disable trigger user"))
             await session.execute(
@@ -206,14 +207,14 @@ async def test_mixed_generation_projection_set_denies_finalization_without_consu
     clean_postgres_database, component, monkeypatch
 ):
     async with database_case(clean_postgres_database) as (values, factory, first):
-        next_context = await second_generation(factory, values)
+        next_context, requested = await second_generation(factory, values, first)
         next_values = values | {key: uuid4() for key in ("operation", "request", "key")}
         current = await compilation_and_projections(
             clean_postgres_database,
             factory,
             next_values,
             compilation_context=next_context,
-            predecessor_id=first.compilation_id,
+            requested=requested,
         )
         before = await stored_state(factory, current)
         async with factory() as session, session.begin():

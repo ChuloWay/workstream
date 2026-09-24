@@ -1,7 +1,7 @@
 """Fail-closed opaque authorization ordering for policy publication."""
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -16,9 +16,9 @@ from tests.contributions.test_policy_publish import _install_complete_draft, _re
 
 
 def _install_active_policy(fixture):
-    policy_id, version_id = uuid4(), uuid4()
+    policy_id, version_id = new_record_id(), new_record_id()
     request = ContributionPolicyRetireRequest(
-        operation_id=uuid4(),
+        operation_id=new_record_id(),
         actor_profile_id=fixture.actor_id,
         project_id=fixture.project_id,
         contribution_policy_id=policy_id,
@@ -66,7 +66,7 @@ class _FailureAuthorization:
         del prepared, facts
         if self.phase == "consume":
             raise ContributionPolicyUnavailable("contribution_policy_unavailable")
-        return uuid4() if self.phase == "actor" else self.actor
+        return new_record_id() if self.phase == "actor" else self.actor
 
     def close_contribution_policy_mutation(self, prepared) -> None:
         del prepared
@@ -199,7 +199,7 @@ async def test_cross_project_binding_publish_is_concealed_without_effect() -> No
     async def wrong_binding(**kwargs):
         result = await original(**kwargs)
         return type(result)(
-            project_id=uuid4(),
+            project_id=new_record_id(),
             adapter_binding_id=result.adapter_binding_id,
             instrument_type=result.instrument_type,
             binding_lifecycle_version=1,
@@ -255,11 +255,11 @@ async def test_cross_project_policy_retire_is_concealed_without_effect() -> None
     from app.modules.contributions.api import ContributionPolicyRetireRequest
 
     request = ContributionPolicyRetireRequest(
-        operation_id=uuid4(),
+        operation_id=new_record_id(),
         actor_profile_id=fixture.actor_id,
         project_id=fixture.project_id,
-        contribution_policy_id=uuid4(),
-        contribution_policy_version_id=uuid4(),
+        contribution_policy_id=new_record_id(),
+        contribution_policy_version_id=new_record_id(),
     )
     fixture.repository.get_policy.return_value = None
     with pytest.raises(ContributionPolicyConflict, match="not_found"):
@@ -272,9 +272,9 @@ async def test_cross_project_current_version_retire_is_concealed_without_effect(
     fixture = service_fixture()
     from app.modules.contributions.api import ContributionPolicyRetireRequest
 
-    policy_id, version_id = uuid4(), uuid4()
+    policy_id, version_id = new_record_id(), new_record_id()
     request = ContributionPolicyRetireRequest(
-        operation_id=uuid4(),
+        operation_id=new_record_id(),
         actor_profile_id=fixture.actor_id,
         project_id=fixture.project_id,
         contribution_policy_id=policy_id,
@@ -285,7 +285,7 @@ async def test_cross_project_current_version_retire_is_concealed_without_effect(
         project_id=str(fixture.project_id),
         name="Policy",
         status="active",
-        current_published_version_id=uuid4(),
+        current_published_version_id=new_record_id(),
         created_by=str(fixture.actor_id),
     )
     fixture.repository.get_version.return_value = ContributionPolicyVersion(

@@ -1,6 +1,6 @@
 """Phase/result reference identity and closed failure semantics without persistence."""
 
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 from pydantic import ValidationError
@@ -19,9 +19,9 @@ def result(source, **changes):
     fields = dict(
         request_id=source.evaluation_request_id,
         request_digest=source.request_sha256,
-        attempt_id=uuid4(),
+        attempt_id=new_record_id(),
         evaluation_generation=source.evaluation_generation,
-        result_id=uuid4(),
+        result_id=new_record_id(),
         outcome="completed",
         member_results=tuple(
             PostSubmitMemberResult(
@@ -62,7 +62,7 @@ def test_result_is_not_currentness_or_acceptance():
 def test_result_rejects_crossed_request(field):
     source = request()
     value = (
-        OTHER_HASH if field.endswith("digest") else 2 if field.endswith("generation") else uuid4()
+        OTHER_HASH if field.endswith("digest") else 2 if field.endswith("generation") else new_record_id()
     )
     with pytest.raises(ValueError, match="request mismatch"):
         result(source, **{field: value}).validate_request(source)
@@ -141,7 +141,7 @@ def test_result_digest_and_reference_require_exact_identity():
         for key in PostSubmitCurrentResultReference.model_fields
         if key != "schema_version"
     }
-    fields["attempt_id"] = uuid4()
+    fields["attempt_id"] = new_record_id()
     with pytest.raises(ValueError, match="current reference result mismatch"):
         PostSubmitCurrentResultReference(**fields).validate_result(complete)
 

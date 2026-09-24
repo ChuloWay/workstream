@@ -3,7 +3,8 @@
 import json
 from dataclasses import replace
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -121,7 +122,7 @@ class AuthorizedTaskCommands:
         operation = TaskAuthorityOperation.CREATE
         async with self._session.begin():
             receipt, digest, reserved = await self._replay.reserve(
-                self._actor_id, operation, idempotency_key, uuid4(), None,
+                self._actor_id, operation, idempotency_key, new_record_id(), None,
                 request_value={"project_id": str(project_id), "payload": payload.model_dump(mode="json")},
             )
             # A duplicate may address an existing task: keep TASK before AUTH.
@@ -233,7 +234,7 @@ class AuthorizedTaskCommands:
                 await self._contexts._load_locked_task_context(task)
                 assignment = await self._repo.add_assignment(
                     TaskAssignment(
-                        id=str(uuid4()),
+                        id=str(new_record_id()),
                         task_id=task.id,
                         project_id=task.project_id,
                         submitter_contribution_policy_version_id=task.locked_contribution_policy_version_id,
