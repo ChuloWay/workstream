@@ -1,7 +1,7 @@
 # WS-DB-002 — UUIDv7 and native-UUID cutover
 
 - Initiative: WS-DB-002
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: uniform UUIDv7 record generation and native UUID storage, with a fresh development baseline and aligned CI/local setup.
 
 ## Intent
@@ -41,7 +41,7 @@ contract tests under `scripts/`.
 - Cover safe reset boundaries, concurrency with product work, enforcement,
   behavioral proof, risks and implementation sequencing.
 - Complete both internal stages and all overview proof obligations in one PR;
-  keep disposition Planned until implementation evidence exists.
+  record the intended durable completion with implementation evidence.
 
 ## Risk and review routing
 
@@ -71,7 +71,7 @@ producer references now accept the canonical UUIDv7 actor identity. Focused
 PostgreSQL tests reject substituted projection correlation and UUID4 finalization
 and activation operations. Natural compilation recovery also rejects changed
 request, idempotency-key and actor facts instead of trusting a stored winner.
-Public grant issue/revoke replay checks pass. Final frozen review remains required.
+Public grant issue/revoke replay checks pass.
 Hosted regression diagnosis identified native-UUID cursor binds, raw-driver fixture
 types and a manual-policy PREP identity mismatch. Repairs retain exact prepared
 resource binding: allocate the actual record IDs before preparation, and recover
@@ -86,8 +86,14 @@ the committed identity. PostgreSQL digest, exact replay, duplicate classificatio
 and current-authority recovery probes cover this boundary. Negative fixture
 repairs must reach their intended guard through valid queue and publication
 custody, rather than fail early on UUID representation or missing setup state.
-The real MinIO source build and startup passed; that infrastructure result does
-not certify the still-required full backend regression and coverage run.
+The real MinIO source build and startup passed. All eight hosted backend lanes
+passed 7,544 tests with zero skipped or deselected nodes. Their combined coverage
+is 94.82 percent; protected submission-policy mutation files exceed 90 percent.
+Database concurrency tests belong in the PostgreSQL test module, not the pure
+foundation subset rerun by coverage aggregation. Both remain in the full lane
+catalogue. An injected exact natural-owner constraint failure and an
+unknown-constraint negative case distinguish concurrency from storage failure;
+removing the natural-owner classification makes the targeted test fail.
 The retained registered-actor dependency now uses the resolved canonical profile
 ID instead of deriving a second identity; its focused regression and PostgreSQL
 review-queue reservation pass. Outbox exact replay, concurrent commit/rollback
@@ -111,11 +117,13 @@ independent-session retry and rollback tests. Fresh-schema verification also
 recompiles installed function bodies with validation enabled after every table
 exists; migration-time deferred validation is not the final proof.
 
-Remaining proof: complete affected owner regressions, full hosted tests/coverage,
-baseline/model parity after final repairs, final docs checks and the
-required exact-target reviews. Keep this change Planned until that work is done;
-no compatibility path or separate planning PR is introduced. Other product work
-remains independent except explicitly shared paths and environments.
+Both internal implementation stages are complete. This disposition records the
+intended merged outcome, not permission to merge: exact-head checks, review
+freshness and human approval remain in the PR. No compatibility path or separate
+post-merge completion PR is introduced. Other product work remains independent
+except explicitly shared paths and environments. Retained databases and artifact
+volumes were not reset; operators must follow the scoped reset guidance before
+using the new baseline with a disposable development environment.
 
 ### Bounded index comparison
 

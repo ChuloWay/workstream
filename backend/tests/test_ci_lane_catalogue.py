@@ -158,6 +158,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/projects/submission_policy_mutations/test_replay.py",
             "tests/projects/submission_policy_mutations/test_repository.py",
             "tests/projects/submission_policy_mutations/test_public_routes.py",
+            "tests/projects/submission_policy_mutations/test_public_routes_postgresql.py",
             "tests/projects/test_retired_submission_derivation_route.py",
             "tests/test_api_drill_repairs.py",
             "tests/test_projects.py",
@@ -613,6 +614,11 @@ def test_submission_policy_coverage_selects_controlled_port_family() -> None:
         "--include=${source}", "--precision=2", "--fail-under=90", "done",
     ]
     assert set(modules) <= set(catalogue.PROJECT_MODULES)
+    database_module = (
+        "tests/projects/submission_policy_mutations/test_public_routes_postgresql.py"
+    )
+    assert database_module not in shlex.split(command.replace("\\\n", " "))
+    assert database_module in catalogue.PROJECT_MODULES
     assert "tests/test_projects.py" in catalogue.PROJECT_MODULES
 
 

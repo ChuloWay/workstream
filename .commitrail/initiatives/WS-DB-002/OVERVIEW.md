@@ -1,6 +1,6 @@
 # WS-DB-002 — Uniform UUIDv7 record identities
 
-- Disposition: Planned
+- Disposition: Complete
 - Intent: every Workstream-owned generated record identity uses UUIDv7 and native
   PostgreSQL UUID storage; references use the same type. Recreate disposable
   development data rather than preserve earlier development identities.
@@ -8,8 +8,8 @@
 
 ## Problem and human direction
 
-Workstream is unreleased v0.1. Its record identities currently mix UUIDv4,
-deterministic UUIDv5, native UUID columns and UUID strings. Standardize the first
+Workstream is unreleased v0.1. Before this cutover, its record identities mixed
+UUIDv4, deterministic UUIDv5, native UUID columns and UUID strings. Standardize the first
 version rather than add compatibility implementations. The human explicitly
 does not require preservation of existing development rows for this change.
 Implementation is authorized in the same PR as this plan. Destructive execution

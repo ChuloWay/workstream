@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 import re
+from dataclasses import asdict
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
+from app.core.identifiers import new_record_id
+from app.modules.authorization.api import (
+    ProjectGuideCompilationRequestFacts,
+    ProjectGuideCompilationRequestOrigin,
+)
 from app.modules.projects.guide_compilation.contracts import (
     AcceptedCompilationResult,
     accepted_compilation_result,
@@ -16,12 +24,13 @@ from app.modules.projects.guide_compilation.contracts import (
 from app.modules.projects.guide_compilation.models import ProjectGuideCompilationAttempt
 from app.modules.projects.guide_compilation.repository import (
     GuideCompilationConcurrencyError,
+    GuideCompilationRepository,
     GuideCompilationStorageError,
     _persistence_error,
 )
 from app.modules.projects.guide_compilation.validation import TERMINAL_FAILURE_CODES
 
-from .helpers import context, identity, ids, result
+from .helpers import context, identity, ids, persistence_facts, result, service_actor
 
 
 def test_attempt_provider_key_is_deterministic_and_context_bound() -> None:
@@ -95,3 +104,46 @@ def test_database_failures_have_deterministic_domain_classification(
     original.constraint_name = constraint_name  # type: ignore[attr-defined]
     error = IntegrityError("statement", {}, original)
     assert isinstance(_persistence_error(error), expected)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("constraint_name", "expected", "message"),
+    [
+        (
+            "uq_compilation_request_setup_trigger",
+            GuideCompilationConcurrencyError,
+            "request won",
+        ),
+        ("unrelated_request_constraint", GuideCompilationStorageError, "before commit"),
+    ],
+)
+async def test_request_insert_classifies_exact_natural_owner_constraint(
+    constraint_name: str,
+    expected: type[GuideCompilationConcurrencyError | GuideCompilationStorageError],
+    message: str,
+) -> None:
+    """The request insert itself classifies only known replay-owner races."""
+    values = ids()
+    attempt_id = new_record_id()
+    persisted = persistence_facts(values, attempt_id, identity(context(values)))
+    request_fields = ProjectGuideCompilationRequestFacts.__dataclass_fields__
+    facts = ProjectGuideCompilationRequestFacts(
+        **{name: asdict(persisted)[name] for name in request_fields}
+    )
+    original = RuntimeError("injected request insert failure")
+    original.constraint_name = constraint_name  # type: ignore[attr-defined]
+    failure = IntegrityError("insert request", {}, original)
+    session = SimpleNamespace(add=MagicMock(), flush=AsyncMock(side_effect=failure))
+
+    with pytest.raises(expected, match=message) as raised:
+        await GuideCompilationRepository(session).insert_request_operation(
+            actor=service_actor(values),
+            facts=facts,
+            origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
+            attempt=SimpleNamespace(id=attempt_id),
+            authorization_decision_event_id=new_record_id(),
+        )
+
+    assert raised.value.__cause__ is failure
+    session.add.assert_called_once()
