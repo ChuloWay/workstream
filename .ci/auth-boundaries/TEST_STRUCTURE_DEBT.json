@@ -242,7 +242,7 @@
     },
     {
       "capability": "unassigned_legacy_auth",
-      "content_sha256": "3f55179a8c220414e4e98537bcad5c909a0141b3eb4420683f63c5d12bb0b887",
+      "content_sha256": "38568febc9191e71e2414b870ebab7b8ebc53c5815102452cb4f653fd2b2146e",
       "end_line": 2503,
       "hard_limit": 120,
       "kind": "test_function",
