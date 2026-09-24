@@ -82,6 +82,9 @@ Deterministic v5 row identities need semantic replacement, not substitution:
   `projects/submission_policy_mutation_service.py`;
 - `artifacts/pre_submit_attempts.py` and persistent uses in pre-submit evidence;
 - `adapters/auth/assignment_invalidation_publication.py` and other outbox writers.
+- `schemas/auth.py::actor_id_from_external_identity` and ACTORS first-access
+  resolution: `(issuer, subject)` remains the external identity lookup, but the
+  persisted ActorProfile ID becomes v7, not a deterministic external-subject exception.
 
 For each, trace the original deduplication tuple and owner. Reuse its existing
 receipt/operation uniqueness to reserve a v7 identity once, atomically, then
@@ -93,13 +96,18 @@ persisted identity per retry, randomize an authorization selector, or introduce
 a generic cross-module identity registry. Update AUTH fact construction, payload
 digests and SQL validators together. Preserve the established lock order and
 ensure pre-authorization reservation cannot commit an unauthorized product row.
+For assignment-invalidation delivery, the stable deduplication key is the cause
+and assignment tuple, not a newly generated event ID. The outbox owner must
+recover the first stored event ID on retries. Deterministic Celery/provider
+request tokens are distinct from stored operation/event keys.
 
 ## Fresh-schema cutover and reset
 
 There is no old-row conversion or preservation deliverable. Build one fresh
 v0.1 baseline representing the final schema, reference data and required guards;
 replace the superseded active migration graph, not an additional parallel baseline.
-Give the new root a distinct revision so a previously stamped development database
+Give the new root a distinct revision and restrict the migration environment to
+the new active graph so a previously stamped development database
 cannot silently appear current. Existing nonempty or old-revision databases must
 fail with explicit recreation guidance; never stamp them forward automatically.
 
@@ -140,7 +148,8 @@ No data reset, schema mutation, behavior change or claim that rollout is complet
 
 Allowed: inventoried model/owner/adapter/port/schema writers and affected callers;
 baseline and SQL guards; bootstrap, drills and tests; identifier enforcement;
-AGENTS.md/CONTRIBUTING.md and current specifications/roadmap.
+AGENTS.md/CONTRIBUTING.md/README.md and current specifications/roadmap. Reconcile
+README's named baseline and broad volume-reset examples with scoped reset ownership.
 Switch all record writers and UUID references together, replace deterministic
 row-ID replay with owner-local reservation, install the new baseline, enable
 enforcement and prove a clean deployment. No temporary v4/v5 record-ID fallback,
