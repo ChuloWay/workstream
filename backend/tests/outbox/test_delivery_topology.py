@@ -104,3 +104,35 @@ def test_delivery_cannot_disable_or_extend_process_bound(monkeypatch, task_limit
     with pytest.raises(RuntimeError, match="bounded hard time limit"):
         topology.require_outbox_worker(SimpleNamespace(app=configured.app, time_limit=task_limit,
             request=SimpleNamespace(is_eager=False, called_directly=False, timelimit=(message_limit, None))))
+
+
+@pytest.mark.parametrize("pool,eager", [("solo", False), ("threads", False), ("prefork", True)])
+def test_actual_worker_startup_rejects_invalid_delivery_topology(monkeypatch, pool, eager):
+    from app.core.config import get_settings
+    monkeypatch.setenv("WORKSTREAM_CELERY_TASK_ALWAYS_EAGER", "true")
+    get_settings.cache_clear()
+    from app.workers.celery_app import create_celery_app
+    app = create_celery_app()
+    app.conf.task_always_eager = eager
+    try:
+        with pytest.raises(WorkerShutdown):
+            app.Worker(pool=pool, queues=[topology.OUTBOX_QUEUE])
+        assert topology._validated_parent is None
+    finally:
+        app.close()
+        get_settings.cache_clear()
+
+
+def test_actual_other_queue_worker_allows_solo(monkeypatch):
+    from app.core.config import get_settings
+    monkeypatch.setenv("WORKSTREAM_CELERY_TASK_ALWAYS_EAGER", "true")
+    get_settings.cache_clear()
+    from app.workers.celery_app import create_celery_app
+    app = create_celery_app()
+    app.conf.task_always_eager = False
+    try:
+        app.Worker(pool="solo", queues=["celery"])
+        assert topology._validated_parent is None
+    finally:
+        app.close()
+        get_settings.cache_clear()

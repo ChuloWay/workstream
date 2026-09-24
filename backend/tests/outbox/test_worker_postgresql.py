@@ -209,6 +209,7 @@ async def test_prefork_bounds_cancellation_resistant_worker(
     from threading import Event
 
     from billiard.einfo import ExceptionWithTraceback
+    from billiard.connection import wait
     from celery.concurrency.prefork import TaskPool
     from celery.exceptions import TimeLimitExceeded
     from celery.worker.request import Request
@@ -260,8 +261,9 @@ async def test_prefork_bounds_cancellation_resistant_worker(
         assert isinstance(timed_out.value.exc, TimeLimitExceeded)
         assert acked.wait(3), "hard timeout must acknowledge without retrying the handler"
         assert rejected == []
-        child.join(timeout=5)
-        assert not child.is_alive(), "hard timeout must terminate the stuck worker process"
+        # The pool owns waitpid/reaping. A competing join can observe stale
+        # returncode metadata; the owned child sentinel proves actual exit.
+        assert wait([child.sentinel], timeout=5), "hard timeout must terminate the stuck worker process"
         duplicate_id = str(uuid4())
         duplicate = Request(Message(
             headers={"id": duplicate_id, "task": task.name},

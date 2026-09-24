@@ -197,7 +197,7 @@ async def test_project_revoke_is_scoped_and_actor_loss_spans_projects(task_clien
     )
     s = await setup_assignment(task_client, monkeypatch)
     set_dev_actor(monkeypatch, roles="project_manager", subject="project-manager-subject")
-    other_project = await create_active_project(task_client)
+    other_project = await create_active_project(task_client, slug="invalidation-other-project")
     task = await create_ready_task(task_client, other_project["id"])
     grant = await admit_and_grant_project_submitter(task_client, monkeypatch, other_project["id"], "invalidation-submitter")
     assert grant["actor_profile_id"] == s.grant["actor_profile_id"]

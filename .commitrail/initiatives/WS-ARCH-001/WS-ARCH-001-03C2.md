@@ -185,7 +185,7 @@ reconciliation before code, preserving retained data.
 Use existing `backend/scripts/run_isolated_tests.py` with private disposable
 PostgreSQL configuration and exact per-run metadata; use real Redis/broker and
 prefork for the new production-delivery proof. Existing shared fixtures supply
-real policy locks and service grants. Named future test modules:
+real policy locks and service grants. Focused test modules:
 `tests/authorization/test_assignment_invalidation_publication.py`,
 `tests/authorization/test_assignment_invalidation_publication_races.py`,
 `tests/tasks/test_assignment_invalidation_targets.py`,
@@ -207,7 +207,7 @@ Proof map (runtime results and exact reviewed head are recorded in the PR):
 | tasks/test_assignment_invalidation_targets.py | `test_target_projection_exact_membership`, `test_target_projection_independent_state_predicates` and `test_target_projection_excludes_retained_submission` (independently excluded released assignment, wrong assignee/state/project/actor, retained submission and future timestamp, alongside eligible controls), `test_target_projection_is_nonlocking` (independent row lock). Probe each removed predicate where a persisted fixture can reach that boundary; otherwise inspect compiled SQL alongside the enforced database constraint and state why an impossible fixture is not forged. |
 | authorization/test_assignment_invalidation_publication_races.py | `test_claim_and_loss_publish_only_committed_original_assignments` (both orderings); real independent AUTH sessions, bounded barriers and exact committed event set. Adding target row locking must fail the second ordering. |
 | outbox/test_assignment_invalidation_delivery.py | `test_production_delivery_releases_exact_assignment`, existing hidden duplicate/delayed-successor tests and production duplicate assertion, `test_missing_feature_authority_preserves_assignment`, `test_real_broker_prefork_delivers_committed_invalidation`; use production composition and real feature authority. |
-| outbox/test_delivery_topology.py | `test_delivery_queue_requires_prefork`, `test_delivery_queue_rejects_eager`, `test_other_queue_allows_solo`, `test_delivery_entry_rejects_unvalidated_execution` (direct/eager/dynamic queue override before SQL), `test_delivery_routes_to_dedicated_queue`. |
+| outbox/test_delivery_topology.py | `test_delivery_queue_requires_prefork`, `test_delivery_queue_rejects_eager`, `test_other_queue_allows_solo`, `test_delivery_entry_rejects_unvalidated_execution` (direct/eager/dynamic queue override before SQL), `test_delivery_routes_to_dedicated_queue`, actual Worker startup rejection/solo controls, and rejection of disabled/extended message hard limits. |
 | outbox/test_worker_postgresql.py | Replace obsolete `test_empty_production_registry_does_not_claim_feature_work` with `test_production_registry_claims_only_registered_invalidation`; preserve unrelated-event unclaimed control, registry malformed/duplicate negatives, crash-before-invoke recovery, committed UNKNOWN no-reinvoke and actual prefork hard-timeout proof. |
 
 Update current empty-registry claims in README, AUTH operating documentation,
@@ -232,6 +232,9 @@ as private: existing append contracts/validation moved into `outbox/api.py`, the
 old schemas module/root exports were removed, and existing append service is
 composed through `OutboxAppendPort`. Architecture source review confirmed this
 minimal repair without a new private edge or dependency-guard exception.
+The prefork proof observes its owned child exit sentinel; the pool remains the
+sole waitpid/reaping owner. This avoids competing reapers while retaining the
+same termination bound and UNKNOWN/duplicate-delivery assertions.
 
 ## Reconciliation
 
