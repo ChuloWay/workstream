@@ -130,11 +130,18 @@ class WorkstreamGateway:
                         body = await self._bounded_body(response)
                         correlation_id = self._correlation_id(response, request_id)
                         if response.status_code != 200:
-                            return GatewayResult(
-                                failure=self._api_failure(
-                                    response.status_code, body, correlation_id
+                            failure = self._api_failure(response.status_code, body, correlation_id)
+                            # Proxy errors and unexpected successes cannot prove rollback.
+                            if mutation and (
+                                response.status_code < 400 or response.status_code >= 500
+                            ):
+                                failure = SafeFailure(
+                                    "workstream_execution_uncertain",
+                                    status=response.status_code,
+                                    code=failure.code,
+                                    correlation_id=correlation_id,
                                 )
-                            )
+                            return GatewayResult(failure=failure)
                         media_type = (
                             response.headers.get("content-type", "")
                             .split(";", 1)[0]
@@ -158,7 +165,7 @@ class WorkstreamGateway:
                             if not isinstance(payload, dict):
                                 raise ValueError
                             output_validator.validate(payload)
-                        except (json.JSONDecodeError, ValueError, ValidationError):
+                        except (ValueError, RecursionError, ValidationError):
                             return GatewayResult(
                                 failure=SafeFailure(
                                     (
@@ -262,7 +269,7 @@ class WorkstreamGateway:
                 candidate = error.get("code") if isinstance(error, dict) else None
                 if isinstance(candidate, str) and candidate in _PUBLIC_ERROR_CODES:
                     code = candidate
-            except (json.JSONDecodeError, UnicodeDecodeError):
+            except (ValueError, RecursionError):
                 pass
         return SafeFailure(
             "workstream_request_failed",

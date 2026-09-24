@@ -44,7 +44,7 @@ def update_definition() -> Tool:
         annotations=ToolAnnotations(
             title="Update own Workstream profile",
             read_only_hint=False,
-            destructive_hint=False,
+            destructive_hint=True,
             idempotent_hint=False,
             open_world_hint=True,
         ),

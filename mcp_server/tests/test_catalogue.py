@@ -39,6 +39,7 @@ def test_tool_definitions_are_closed_and_use_selected_outputs() -> None:
         for tool in (profile_get, profile_update, context_get)
     )
     assert profile_update.annotations is not None
+    assert profile_update.annotations.destructive_hint is True
     assert profile_update.annotations.idempotent_hint is False
 
 

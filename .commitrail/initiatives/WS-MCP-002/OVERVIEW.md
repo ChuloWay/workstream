@@ -392,8 +392,8 @@ exact-project authorization context, bringing the catalogue to three tools.
 Reconcile each later binding with its public API when that chunk starts; do not
 reopen credential architecture or require all 27 implementations at once.
 
-The following stable IDs replace the four broad headings. Row 01 is complete;
-rows 02–10 remain planned, with proposed ownership under `mcp_server/`, not
+The following stable IDs replace the four broad headings. Rows 01 and 02 are
+implemented; rows 03–10 remain planned, with proposed ownership under `mcp_server/`, not
 claims that later tools exist. Each row is one bounded outcome. Tool names omit
 only the common `workstream_` prefix; all 27 names in section 6 appear exactly
 once. Each row also owns its change record and affected tests/docs, not backend

@@ -71,7 +71,8 @@ payloads in proxy telemetry. Do not expose the container directly as a public
 HTTP service. Browser-origin requests are rejected by this native-client profile.
 
 The adapter disables redirects, environment proxy inheritance and automatic
-retries. A profile-update transport failure is reported as uncertain execution;
+retries. A profile-update transport failure, upstream 5xx response, or unexpected
+success/redirect response is reported as non-retryable uncertain execution;
 the adapter does not retry the unkeyed mutation. Connections may be pooled, but
 caller credentials and results are not shared or cached. Response validation is
 pinned to the three selected public contracts in `contracts/`; upstream drift

@@ -206,11 +206,71 @@ async def test_profile_update_transport_failure_is_uncertain_and_not_retried() -
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("status", [201, 204, 302, 500, 502, 503, 504])
+async def test_profile_update_ambiguous_http_response_preserves_uncertainty(status: int) -> None:
+    applied_updates: list[bytes] = []
+    request_id = "664e1ac5-dd97-4a84-9eef-5cb7a001fb2e"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        # Simulate a committed write whose original response was replaced by a proxy.
+        applied_updates.append(request.content)
+        return httpx.Response(
+            status,
+            content=b"private proxy detail",
+            headers={"content-type": "text/html", "x-request-id": request_id},
+        )
+
+    async with httpx.AsyncClient(
+        base_url="http://api.test", transport=httpx.MockTransport(handler)
+    ) as client:
+        result = await WorkstreamGateway(settings(), client).profile_update(
+            "Bearer opaque", {"contact_email": None}
+        )
+
+    assert applied_updates == [b'{"contact_email":null}']
+    assert result.data is None
+    assert result.failure is not None
+    assert result.failure.error == "workstream_execution_uncertain"
+    assert result.failure.status == status
+    assert result.failure.retryable is False
+    assert result.failure.correlation_id == request_id
+    assert "private" not in str(result.failure.payload())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 409, 412, 422, 429])
+async def test_profile_update_preserves_explicit_api_rejection(status: int) -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(status, json={"error": {"code": "invalid_request"}})
+
+    async with httpx.AsyncClient(
+        base_url="http://api.test", transport=httpx.MockTransport(handler)
+    ) as client:
+        result = await WorkstreamGateway(settings(), client).profile_update(
+            "Bearer opaque", {"display_name": "Victor"}
+        )
+
+    assert len(seen) == 1
+    assert result.failure is not None
+    assert result.failure.error == "workstream_request_failed"
+    assert result.failure.status == status
+    assert result.failure.code == "invalid_request"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "response",
     [
         lambda: httpx.Response(
             200, content=b"not-json", headers={"content-type": "application/json"}
+        ),
+        lambda: httpx.Response(
+            200,
+            content=b"[" * 2000 + b"]" * 2000,
+            headers={"content-type": "application/json"},
         ),
         lambda: httpx.Response(
             200, json=profile_fixture(), headers={"content-type": "text/plain"}
