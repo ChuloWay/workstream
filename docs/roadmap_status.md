@@ -495,11 +495,11 @@ Delivered foundations (not a claim of full public integration)
   ContributionPolicy validation + internal guide activation/binding
   task/assignment/Submission lineage + hidden intake/creation
   shared dispatcher + exact-authorized hidden assignment invalidation
+  ARCH-03C2 invalidation producer + first handler registration
     |
     v
 Remaining integration
-  ARCH-03C2 invalidation producer + first handler registration (Complete)
-  -> bounded ARCH-03C public task authority and wiring
+  bounded ARCH-03C public task authority and wiring
   -> public guide activation + approved-guide intake integration
   -> immutable admitted Submission through the public path
   -> durable current post-submit result + required checks pass
