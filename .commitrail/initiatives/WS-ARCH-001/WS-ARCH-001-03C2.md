@@ -164,7 +164,7 @@ reconciliation before code, preserving retained data.
 - Human review focus: same-transaction completeness, exact original assignment,
   lock ordering, no historical backfill, prefork enforcement and uncertainty.
 
-## Verification
+## Evidence
 
 Use existing `backend/scripts/run_isolated_tests.py` with private disposable
 PostgreSQL configuration and exact per-run metadata; use real Redis/broker and
