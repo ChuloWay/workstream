@@ -3,23 +3,25 @@
 - Disposition: Planned
 - Prepared by: OxVictor
 - Purpose: Contributor implementation guide with confirmed caller-token design
-- Repository baseline reconciled: `27aac3d9a`
+- Repository baseline reconciled: `27aac3d9a070be5d7d6ee8498d57992805a880e1`
 - Pinned API handoff baseline: `6feef39834737eed106773fdaed6003561fd021a`
-- Delivered boundary: [One-tool profile foundation](WS-MCP-002-01.md), merged in PR #418.
-- Next usable boundary: separately bound deployment work or the next verified
-  public-API tool binding; no later tool starts automatically.
+- Delivered foundation: [One-tool profile foundation](WS-MCP-002-01.md), merged in PR #418.
+- Current change: [Own profile editing and project authorization context](WS-MCP-002-02.md).
+- Next usable boundary: WS-MCP-002-03 administrative reads after this change is
+  reviewed and merged; no later tool starts automatically.
 
 ## Current implementation
 
 [`mcp_server/`](../../../mcp_server/README.md) is an independently packaged
-Streamable HTTP adapter with one tool, `workstream_profile_get`, a container,
+Streamable HTTP adapter with three self-service tools: profile read, profile
+update and exact-project authorization context. It includes a container,
 selected response-schema validation and additive CI. Its integration tests
 exercise the installed adapter against the real Workstream API. Workstream
 still owns token verification and authorization. This is delivered packaging,
 not proof of a deployed public gateway, production Flow integration or the
-remaining 26 tools. The initiative remains Planned because that larger scope
-is unfinished. The baseline hashes below describe the original design/proof,
-not the current repository head.
+remaining 24 tools. The initiative remains Planned because that larger scope
+is unfinished. Historical hashes below describe their stated design/proof;
+each implemented binding records its current source baseline separately.
 
 ## 1. What I Understand We Are Building
 

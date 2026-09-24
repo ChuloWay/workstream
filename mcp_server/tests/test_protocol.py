@@ -136,6 +136,37 @@ def test_profile_update_normalizes_text_and_preserves_omission_and_null(
     assert all(request.method == "PATCH" for request in received)
 
 
+def test_new_tools_accept_exact_maximum_input_lengths(
+    adapter: tuple[TestClient, list[Any], dict[str, Any]],
+) -> None:
+    client, received, upstream = adapter
+    display_name = "d" * 200
+    contact_email = "e" * 320
+    project_id = "p" * 100
+
+    profile_response = mcp_call(
+        client,
+        name=PROFILE_UPDATE_TOOL_NAME,
+        arguments={"display_name": display_name, "contact_email": contact_email},
+    )
+    assert profile_response.json()["result"].get("isError", False) is False
+    assert json.loads(received[0].content) == {
+        "display_name": display_name,
+        "contact_email": contact_email,
+    }
+
+    from conftest import authorization_context_fixture
+
+    upstream["json"] = authorization_context_fixture()
+    context_response = mcp_call(
+        client,
+        name=CONTEXT_TOOL_NAME,
+        arguments={"project_id": project_id},
+    )
+    assert context_response.json()["result"].get("isError", False) is False
+    assert received[1].url.params["project_id"] == project_id
+
+
 def test_authorization_context_forwards_caller_and_exact_project(
     adapter: tuple[TestClient, list[Any], dict[str, Any]],
 ) -> None:

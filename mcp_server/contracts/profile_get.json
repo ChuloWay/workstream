@@ -374,7 +374,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "actor.profile.read_self",
-    "backend_git_sha": "855aa646b50d813a7c0bab9c9f8b8d49ee88aa5c",
+    "backend_git_sha": "27aac3d9a070be5d7d6ee8498d57992805a880e1",
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/actors/me"
