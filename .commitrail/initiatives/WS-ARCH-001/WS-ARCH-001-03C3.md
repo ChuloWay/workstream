@@ -48,7 +48,10 @@ so they cannot honestly represent pre-assignment manager work unchanged.
   every retained row and existing assignment command constraint. Require a deferred
   `task_command_receipts.task_id -> workstream_tasks.id` FK, permitting reservation
   before task insertion within one transaction. Preflight every retained task ID;
-  refuse unprovable rows rather than inventing or deleting data.
+  refuse unprovable rows rather than inventing or deleting data. Acquire migration
+  locks before preflight or guard changes (receipts -> tasks -> audit), preventing
+  concurrent old-code inserts across the inspection/installation window. Prove
+  a blocked writer through actual Alembic and a removal-of-lock mutation.
 - Focused `tests/authorization/task_authority/` manager tests and migration tests;
   affected existing TASK/ART fixture callers (`test_tasks.py`,
   `tasks/lineage_fixtures.py`) and every traced caller of these three HTTP mutations.
