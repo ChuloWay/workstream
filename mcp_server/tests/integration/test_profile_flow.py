@@ -384,13 +384,13 @@ async def test_installed_mcp_preserves_profile_and_lifecycle_parity() -> None:
                     "project.guide_sufficiency_report.list",
                     "project.guide_sufficiency_report.read",
                     "project.read",
+                    "project.setup_run.read",
+                    "project.submission_artifact_policy.list",
+                    "project.submission_artifact_policy.read",
                     "project_role_grant.issue",
                     "project_role_grant.list",
                     "project_role_grant.read",
                     "project_role_grant.revoke",
-                    "project.setup_run.read",
-                    "project.submission_artifact_policy.list",
-                    "project.submission_artifact_policy.read",
                 ]
                 assert "task.claim" not in context["effective_action_ids"]
 
