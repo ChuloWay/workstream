@@ -351,7 +351,9 @@ ARCH-03B9 supplies `AssignmentInvalidationOperation` and the transaction-owning
 fixed-service AUTH/PREP implementation for the sole
 `task.assignment.authority_reconcile` action. ARCH-03C2 delivers atomic AUTH
 producer wiring and registers this sole production handler under enforced
-prefork delivery. Bounded public task activation remains separate.
+prefork delivery. ARCH-03C4 separately delivers the three public queues.
+Task-detail, requirements, locked-context and audit read authority remain
+separately bounded.
 
 Each `TaskAssignmentAuthorityInvalidationRequested` event (protocol version 1)
 addresses one original project/task/assignment/contributor and one immutable AUTH
