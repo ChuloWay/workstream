@@ -357,7 +357,6 @@ class OutboxAppendInput(BaseModel):
         strict=True,
     )
 
-    event_id: UUID
     event_type: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9._:-]{0,127}$")
     event_version: int = Field(ge=1, le=32767)
     aggregate_type: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")

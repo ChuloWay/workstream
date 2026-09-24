@@ -1,10 +1,10 @@
 """Rebind forged SQL receipts so ownership probes cannot fail on stale digests."""
 
 import json
-from uuid import uuid4
 
 from sqlalchemy import text
 
+from app.core.identifiers import new_record_id
 from app.modules.tasks.models import AuditEvent
 
 
@@ -25,7 +25,7 @@ async def rebind_forged_evidence(session, row):
 
     row.facts_digest = await digest("project_guide_finalization_digest")
     row.authority_resource_digest = await digest("project_guide_finalization_authority_digest")
-    decision = str(uuid4())
+    decision = str(new_record_id())
     columns = [column.name for column in AuditEvent.__table__.columns]
     overrides = {
         "id": ":decision",

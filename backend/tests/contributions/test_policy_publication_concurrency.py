@@ -1,7 +1,8 @@
 """Real PostgreSQL fence proofs for ContributionPolicy publication."""
 
 import asyncio
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import text
@@ -45,7 +46,7 @@ async def _complete_draft(
         await _add_rule(version, project, contribution_type, mode, binding_id=binding_id)
     return (
         ContributionPolicyPublishRequest(
-            operation_id=uuid4(),
+            operation_id=new_record_id(),
             actor_profile_id=UUID(creator),
             project_id=UUID(project),
             contribution_policy_id=policy,
@@ -164,7 +165,7 @@ async def test_competing_publications_serialize_before_authorization(
             with pytest.raises(DBAPIError):
                 await service.publish(
                     ContributionPolicyPublishRequest(
-                        operation_id=uuid4(),
+                        operation_id=new_record_id(),
                         actor_profile_id=request.actor_profile_id,
                         project_id=request.project_id,
                         contribution_policy_id=request.contribution_policy_id,

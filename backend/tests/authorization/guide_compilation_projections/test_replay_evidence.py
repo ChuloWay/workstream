@@ -43,6 +43,7 @@ async def test_projection_exact_replay_uses_original_decision(
 ):
     case = ReplayCase(monkeypatch, component)
     async with case.prepare() as prepared:
+        identity = case.bind(prepared)
         receipt = await prepared.consume_new(case.facts)
     stored = await case.evidence.get_authority_event(receipt.decision_event_id)
     assert vars(stored) == {
@@ -52,9 +53,9 @@ async def test_projection_exact_replay_uses_original_decision(
         "permission_id": permission,
         "project_id": str(case.locator.project_id),
         "resource_type": resource_type,
-        "resource_id": str(prepared.identity.operation_id),
-        "request_id": str(prepared.identity.operation_id),
-        "correlation_id": str(prepared.identity.correlation_id),
+        "resource_id": str(identity.operation_id),
+        "request_id": str(case.first.service._context.request_id),
+        "correlation_id": str(case.first.service._context.correlation_id),
         "after_facts": {
             "allowed": True,
             "resource_context_digest": receipt.resource_context_digest,
@@ -62,7 +63,7 @@ async def test_projection_exact_replay_uses_original_decision(
     }
     assert (
         projection_resource_digest(
-            projection_resource_context(component, prepared.identity, case.facts)
+            projection_resource_context(component, identity, case.facts)
         )
         == receipt.resource_context_digest
     )
@@ -70,6 +71,7 @@ async def test_projection_exact_replay_uses_original_decision(
     monkeypatch.setattr(case.evidence, "get_authority_event", lookup)
     original_event = case.evidence.events[0]
     async with case.prepare() as replay:
+        case.bind(replay)
         await replay.validate_replay(case.facts, receipt.decision_event_id)
     lookup.assert_awaited_once_with(receipt.decision_event_id)
     assert case.evidence.events == [original_event]
@@ -82,6 +84,7 @@ async def test_projection_replay_rejects_missing_decision_without_new_evidence(m
     lookup = AsyncMock(wraps=case.evidence.get_authority_event)
     monkeypatch.setattr(case.evidence, "get_authority_event", lookup)
     async with case.prepare() as prepared:
+        case.bind(prepared)
         with pytest.raises(AuthorizationDenied, match="^projection authority denied$"):
             await prepared.validate_replay(case.facts, missing)
     lookup.assert_awaited_once_with(missing)
@@ -93,8 +96,10 @@ async def test_projection_replay_rejects_missing_decision_without_new_evidence(m
 async def test_projection_replay_retires_mutation_authority(monkeypatch, mutate_facts):
     case = ReplayCase(monkeypatch)
     async with case.prepare() as prepared:
+        case.bind(prepared)
         receipt = await prepared.consume_new(case.facts)
     async with case.prepare() as replay:
+        case.bind(replay)
         await replay.validate_replay(case.facts, receipt.decision_event_id)
         assert case.services[1]._authorization._sealed_prelocked == set()
         next_facts = replace(case.facts, guide_version="v2") if mutate_facts else case.facts
@@ -139,6 +144,7 @@ async def test_projection_replay_rejects_substituted_existing_decision(
 ):
     case = ReplayCase(monkeypatch)
     async with case.prepare() as original:
+        case.bind(original)
         receipt = await original.consume_new(case.facts)
     original_event = case.evidence.events[0]
     read = case.evidence.get_authority_event
@@ -162,6 +168,7 @@ async def test_projection_replay_rejects_substituted_existing_decision(
     lookup_spy = AsyncMock(side_effect=lookup)
     monkeypatch.setattr(case.evidence, "get_authority_event", lookup_spy)
     async with case.prepare() as replay:
+        case.bind(replay)
         with pytest.raises(AuthorizationDenied, match="^projection authority denied$"):
             await replay.validate_replay(case.facts, receipt.decision_event_id)
         assert case.services[1]._authorization._sealed_prelocked == set()

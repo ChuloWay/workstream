@@ -48,7 +48,9 @@ async def test_fence_is_visible_to_a_fresh_process_before_any_provider_call(
     clean_postgres_database: str,
 ) -> None:
     values, requested = await _requested(clean_postgres_database)
-    service, facts = service_actor(values), _preflight(values, requested.attempt_id)
+    service, facts = service_actor(values), _preflight(
+        values, requested.attempt_id, requested.operation_id
+    )
     engine = create_async_engine(clean_postgres_database)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
@@ -98,7 +100,9 @@ async def test_cancellation_before_fence_commit_leaves_attempt_reserved(
     clean_postgres_database: str,
 ) -> None:
     values, requested = await _requested(clean_postgres_database)
-    service, facts = service_actor(values), _preflight(values, requested.attempt_id)
+    service, facts = service_actor(values), _preflight(
+        values, requested.attempt_id, requested.operation_id
+    )
     engine = create_async_engine(clean_postgres_database)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:

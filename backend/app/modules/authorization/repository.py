@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import and_, case, exists, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
@@ -720,7 +721,7 @@ class AuthorityIdempotencyRepository:
     ) -> AuthorityReservationResult:
         """Claim a new namespace or return its committed replay disposition."""
         values = {
-            "id": uuid4(),
+            "id": new_record_id(),
             "idempotency_key": idempotency_key,
             "actor_ref_kind": actor_ref_kind.value,
             "actor_ref": actor_ref,

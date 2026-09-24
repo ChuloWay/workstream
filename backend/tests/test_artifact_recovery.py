@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest  # type: ignore[import-not-found]
 from sqlalchemy import func, select
@@ -50,7 +52,11 @@ from app.modules.authorization.runtime import (
 )
 from app.modules.authorization.catalogue import ActionId, PermissionId
 from app.modules.tasks.models import AuditEvent
-from tests.artifact_store_helpers import artifact_admission_limit_settings, minted_source
+from tests.artifact_store_helpers import (
+    artifact_admission_limit_settings,
+    artifact_preparation_limits,
+    minted_source,
+)
 from tests.test_artifact_admission import _admit_checker_output
 
 
@@ -81,7 +87,7 @@ class _AllowRecoveryAuthority:
         return ArtifactRecoveryAuthorizationEvidence(
             action_id=ActionId.ARTIFACT_VERIFICATION_JOB_RETRY,
             permission_id=PermissionId.ARTIFACT_VERIFICATION_JOB_RETRY.value,
-            decision_id=uuid4(),
+            decision_id=new_record_id(),
         )
 
 
@@ -119,13 +125,13 @@ def _settings(tmp_path: Path) -> Settings:
 
 def _context() -> HumanAuthorizationContext:
     return HumanAuthorizationContext(
-        actor_profile_id=uuid4(),
+        actor_profile_id=new_record_id(),
         actor_kind=ActorKind.HUMAN,
         actor_status=ActorStatus.ACTIVE,
-        identity_link_id=uuid4(),
+        identity_link_id=new_record_id(),
         identity_link_status=IdentityLinkStatus.ACTIVE,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
 
 
@@ -170,7 +176,16 @@ async def _exhausted_job(session, settings, tmp_path, context):
     )
     from projects.unified_policy_fixtures import create_standalone_unified_policy
     policy_bundle = await create_standalone_unified_policy(async_sessionmaker(session.bind, expire_on_commit=False), namespace)
-    async with minted_source(tmp_path / "checker-output", b"recover checker output") as source:
+    # This proves recovery lineage, not preparation deadlines. Its sealed source
+    # must survive database setup and admission on a resource-constrained host.
+    limits = replace(
+        artifact_preparation_limits(),
+        total_deadline_seconds=180,
+        reservation_ttl_seconds=240,
+    )
+    async with minted_source(
+        tmp_path / "checker-output", b"recover checker output", limits=limits,
+    ) as source:
         project_id, task_id, checker_run_id, admission = await _admit_checker_output(
             session, settings, namespace, source, policy_bundle=policy_bundle)
         await _seed_recovery_actor(session, context)
@@ -693,9 +708,9 @@ async def test_retained_guide_recovery_is_rejected_before_authority(replay_path,
     authority = Mock()
     authority.authorize = AsyncMock(side_effect=AssertionError("obsolete recovery requested authority"))
     service = ArtifactRecoveryService(session, _settings(tmp_path), authority)
-    source_id, put_id = uuid4(), uuid4()
+    source_id, put_id = new_record_id(), new_record_id()
     source = SimpleNamespace(id=str(source_id), originating_put_attempt_id=str(put_id), cas_version=0)
-    existing = SimpleNamespace(project_id=str(uuid4()))
+    existing = SimpleNamespace(project_id=str(new_record_id()))
     repo = Mock()
     repo.lock_recovery_by_source = AsyncMock(return_value=existing if replay_path == "existing" else None)
     if replay_path == "concurrent_winner":
@@ -703,7 +718,7 @@ async def test_retained_guide_recovery_is_rejected_before_authority(replay_path,
     repo.lock_verification_job = AsyncMock(return_value=source)
     repo.lock_put_attempt = AsyncMock(return_value=SimpleNamespace(producer_request_type="guide", task_id=None))
     service._repo = repo
-    request = _request(_context(), str(uuid4()), str(uuid4()), source)
+    request = _request(_context(), str(new_record_id()), str(new_record_id()), source)
     with pytest.raises(ArtifactRecoveryIneligibleError, match="producer does not use verification recovery"):
         await service.retry_verification(request)
     authority.authorize.assert_not_awaited()
@@ -715,12 +730,12 @@ def test_current_recovery_api_requires_task_scope():
     from app.modules.artifacts.router import ArtifactRecoveryCreateRequest
     from pydantic import ValidationError
 
-    payload = dict(project_id=uuid4(), reason="retry", client_idempotency_key="retry-1", expected_source_job_cas_version=0)
+    payload = dict(project_id=new_record_id(), reason="retry", client_idempotency_key="retry-1", expected_source_job_cas_version=0)
     for fields in (payload, payload | {"task_id": None}):
         with pytest.raises(ValidationError) as error:
             ArtifactRecoveryCreateRequest.model_validate(fields)
         assert error.value.errors()[0]["loc"] == ("task_id",)
-    assert ArtifactRecoveryCreateRequest.model_validate(payload | {"task_id": uuid4()}).submission_id is None
+    assert ArtifactRecoveryCreateRequest.model_validate(payload | {"task_id": new_record_id()}).submission_id is None
 
 
 async def test_retained_guide_verification_job_cannot_scan_claim_or_execute(
@@ -753,7 +768,7 @@ async def test_retained_guide_verification_job_cannot_scan_claim_or_execute(
                 put = await session.get(ArtifactPutAttempt, str(admission.attempt_id))
                 # This represents a retained or fabricated row, never a successful
                 # current upload path. Retained rows are not deleted by cleanup.
-                job = ArtifactVerificationJob(id=str(uuid4()), originating_put_attempt_id=put.id,
+                job = ArtifactVerificationJob(id=str(new_record_id()), originating_put_attempt_id=put.id,
                     replica_id=put.replica_id, status="pending", maximum_attempts=1)
                 session.add(job)
                 await session.commit()
@@ -763,7 +778,7 @@ async def test_retained_guide_verification_job_cannot_scan_claim_or_execute(
                 repo = ArtifactRepository(session)
                 async with session.begin():
                     assert str(job_id) not in await repo.list_due_verification_job_ids(cutoff=await repo.database_now(), limit=100)
-                    assert await repo.claim_verification_job(job_id=job_id, executor_id=uuid4(), lease_seconds=30, expected_generation=0) is None
+                    assert await repo.claim_verification_job(job_id=job_id, executor_id=new_record_id(), lease_seconds=30, expected_generation=0) is None
                 from unittest.mock import Mock
                 authority = Mock()
                 authority.prepare = AsyncMock(side_effect=AssertionError("retained guide job requested authority"))

@@ -2,7 +2,8 @@
 
 from contextlib import asynccontextmanager
 import pytest
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 from sqlalchemy import select
 
 from app.adapters.tasks import (
@@ -11,10 +12,11 @@ from app.adapters.tasks import (
 from app.modules.outbox.api import HandlerOutcome
 from app.modules.tasks.api.assignment_invalidation import (
     AssignmentInvalidationAuthority,
+    AssignmentInvalidationTarget,
     PreparedAssignmentInvalidation,
-    assignment_invalidation_evidence_id,
 )
 from app.modules.tasks.models import TaskAssignment, WorkstreamTask, Submission
+from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.service import TaskService
 from tests.submission_fixtures import seed_finalized_submission_for_checker_test
 from tests.test_tasks import (
@@ -56,7 +58,9 @@ async def test_exact_real_cause_releases_only_pre_submit_assignment(
         k: v for k, v in before[1][0].items() if k not in {"status", "released_at"}
     }
     added = [event for event in events if event["id"] not in {old["id"] for old in before[2]}]
-    assert len(added) == 1 and added[0]["id"] == str(assignment_invalidation_evidence_id(target))
+    assert len(added) == 1 and UUID(str(added[0]["id"])).version == 7
+    assert added[0]["event_payload"]["references"]["assignment_id"] == str(target.assignment_id)
+    assert added[0]["event_payload"]["references"]["authority_invalidation_event_id"] == str(target.authority_invalidation_event_id)
     assert added[0]["event_type"] == "TaskAssignmentAuthorityRevoked"
     assert all(event in events for event in before[2])
     claim_event = next(event for event in before[2] if event["event_type"] == "TaskClaimed")
@@ -88,13 +92,42 @@ async def test_exact_real_cause_releases_only_pre_submit_assignment(
     assert len(s.trace) == 3
 
 
+@pytest.mark.parametrize("origin", ["missing", "mismatched"])
+async def test_fixture_requires_exact_canonical_publication_by_default(
+    task_client, monkeypatch, origin
+):
+    s = await setup_assignment(task_client, monkeypatch)
+    await revoke(s)
+    target = AssignmentInvalidationTarget(
+        project_id=UUID(s.project["id"]),
+        task_id=UUID(s.task["id"]),
+        assignment_id=UUID(s.assignment["id"]),
+        contributor_id=UUID(s.grant["actor_profile_id"]),
+        authority_invalidation_event_id=s.invalidation_id,
+    )
+    if origin == "missing":
+        target = target.model_copy(
+            update={"authority_invalidation_event_id": new_record_id()}
+        )
+        message = "canonical assignment invalidation publication is required"
+    else:
+        target = target.model_copy(update={"contributor_id": new_record_id()})
+        message = "canonical assignment invalidation publication does not match target"
+    with pytest.raises(AssertionError, match=message):
+        await invoked(s, target=target)
+
+
 async def test_valid_delivery_cannot_substitute_target_or_cause(task_client, monkeypatch):
     s = await setup_assignment(task_client, monkeypatch)
     await revoke(s)
     target, envelope = await invoked(s)
     before = await snapshot(s)
     for field in ("task_id", "assignment_id", "contributor_id", "authority_invalidation_event_id"):
-        _, crossed = await invoked(s, target=target.model_copy(update={field: uuid4()}))
+        _, crossed = await invoked(
+            s,
+            target=target.model_copy(update={field: new_record_id()}),
+            synthetic_transport=True,
+        )
         assert await s.handler(crossed) is HandlerOutcome.REJECT
         assert await snapshot(s) == before
     for bad in (
@@ -126,10 +159,10 @@ async def test_invalid_authority_results_rollback(task_client, monkeypatch):
     before = await snapshot(s)
     for result in (
         None,
-        AssignmentInvalidationAuthority("not-a-uuid", uuid4(), "sha256:" + "a" * 64),
-        AssignmentInvalidationAuthority(uuid4(), "not-a-uuid", "sha256:" + "a" * 64),
-        AssignmentInvalidationAuthority(uuid4(), uuid4(), None),
-        AssignmentInvalidationAuthority(uuid4(), uuid4(), "not-a-digest"),
+        AssignmentInvalidationAuthority("not-a-uuid", new_record_id(), "sha256:" + "a" * 64),
+        AssignmentInvalidationAuthority(new_record_id(), "not-a-uuid", "sha256:" + "a" * 64),
+        AssignmentInvalidationAuthority(new_record_id(), new_record_id(), None),
+        AssignmentInvalidationAuthority(new_record_id(), new_record_id(), "not-a-digest"),
     ):
 
         class InvalidPrepared(PreparedAssignmentInvalidation):
@@ -200,12 +233,14 @@ async def test_old_delivery_cannot_release_real_replacement_claim(task_client, m
     assert before_restore[1][0]["assigned_at"] <= cause.recorded_at < new_assignment["assigned_at"]
     # A fully committed forged event cannot reuse an old cause for a newer assignment.
     _, retargeted = await invoked(
-        s, target=target.model_copy(update={"assignment_id": UUID(new_assignment["id"])})
+        s,
+        target=target.model_copy(update={"assignment_id": UUID(new_assignment["id"])}),
+        synthetic_transport=True,
     )
     assert await s.handler(retargeted) is HandlerOutcome.REJECT
     assert await snapshot(s) == after
     # A fresh transport event for the same immutable cause still addresses only the old assignment.
-    _, duplicate = await invoked(s, target=target)
+    _, duplicate = await invoked(s, target=target, synthetic_transport=True)
     assert await s.handler(duplicate) is HandlerOutcome.ACKNOWLEDGE
     assert await s.handler(envelope) is HandlerOutcome.ACKNOWLEDGE
     assert await snapshot(s) == after
@@ -232,6 +267,14 @@ async def test_existing_submission_and_revision_history_are_never_released(
     task_client, monkeypatch
 ):
     s = await setup_assignment(task_client, monkeypatch, started=True)
+    await revoke(s, "suspend")
+    target, envelope = await invoked(s)
+    restored = await s.client.post(
+        f"/api/v1/actors/{s.grant['actor_profile_id']}/reactivate",
+        headers=auth_headers(),
+        json={"reason": "Allow submission before pending invalidation delivery"},
+    )
+    assert restored.status_code == 200, restored.text
 
     async def hold_dispatch(*args, **kwargs):
         pass
@@ -241,8 +284,17 @@ async def test_existing_submission_and_revision_history_are_never_released(
     submission_id = await seed_finalized_submission_for_checker_test(
         s.task["id"], complete_submission_payload()
     )
-    await revoke(s)
-    _, envelope = await invoked(s)
+    await revoke(s, "suspend")
+    assert s.invalidation_id != target.authority_invalidation_event_id
+    history_checks = []
+    has_submission = TaskRepository.has_submission
+
+    async def observe_history(owner, task_id):
+        retained = await has_submission(owner, task_id)
+        history_checks.append((task_id, retained))
+        return retained
+
+    monkeypatch.setattr(TaskRepository, "has_submission", observe_history)
     for state in (
         "submitted",
         "evaluation_pending",
@@ -279,6 +331,7 @@ async def test_existing_submission_and_revision_history_are_never_released(
                 )
                 == submission_before
             )
+    assert history_checks == [(target.task_id, True)]
     assert s.trace == []
 
 
@@ -328,19 +381,21 @@ async def test_release_requires_root_transaction_and_exact_prior_receipt(task_cl
     assert await s.handler(envelope) is HandlerOutcome.ACKNOWLEDGE
     before = await snapshot(s)
     async with s.sessions() as session:
-        row = await session.get(AuditEvent, str(assignment_invalidation_evidence_id(target)))
+        row = await AuditRepository(session).assignment_release_event(
+            target.assignment_id, target.authority_invalidation_event_id,
+        )
         original = {column.key: getattr(row, column.key) for column in AuditEvent.__table__.columns}
     for altered in (
         {**original, "event_payload": {"references": {}}},
-        {**original, "entity_id": str(uuid4())},
+        {**original, "entity_id": str(new_record_id())},
     ):
 
-        async def bad_receipt(owner, event_id):
-            assert event_id == assignment_invalidation_evidence_id(target)
+        async def bad_receipt(owner, assignment_id, cause_id):
+            assert (assignment_id, cause_id) == (target.assignment_id, target.authority_invalidation_event_id)
             return SimpleNamespace(**altered)
 
         with monkeypatch.context() as patch:
-            patch.setattr(AuditRepository, "lifecycle_event", bad_receipt)
+            patch.setattr(AuditRepository, "assignment_release_event", bad_receipt)
             assert await s.handler(envelope) is HandlerOutcome.REJECT
         assert await snapshot(s) == before
     async with s.sessions() as session, session.begin():

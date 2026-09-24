@@ -8,7 +8,7 @@ from app.adapters.tasks import task_service
 
 from dataclasses import replace
 import json
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -69,14 +69,14 @@ def _compiled_and_lineage() -> tuple[dict[str, object], EffectivePreSubmissionPl
         _effective_policy(), effective_policy_hash
     )
     lineage = EffectivePreSubmissionPlanLineage(
-        project_id=uuid4(),
-        guide_id=uuid4(),
+        project_id=new_record_id(),
+        guide_id=new_record_id(),
         guide_version="3",
-        source_snapshot_id=uuid4(),
+        source_snapshot_id=new_record_id(),
         source_snapshot_hash="sha256:" + "2" * 64,
-        effective_policy_id=uuid4(),
+        effective_policy_id=new_record_id(),
         effective_policy_hash=effective_policy_hash,
-        pre_submit_policy_id=uuid4(),
+        pre_submit_policy_id=new_record_id(),
         pre_submit_policy_bundle_hash=compiled.compiled_bundle_hash,
     )
     return compiled.compiled_bundle, lineage
@@ -254,7 +254,7 @@ def test_real_zip_enforces_locked_archive_limits(
         packet=SubmissionPacketView(summary="Completed work", contributor_attestation=(
             "No confidential client data, credentials, or copied source material; rights_confirmed."
         )),
-        prepared_generation_id=uuid4(), storage_scheme="s3",
+        prepared_generation_id=new_record_id(), storage_scheme="s3",
     )
     workspace = tmp_path / "private"
     workspace.mkdir(mode=0o700)
@@ -519,7 +519,7 @@ def test_effective_plan_is_deterministic_and_commits_to_lineage_catalogue_and_co
     assert hash(required_file)
     assert first.plan_sha256 == canonical_json_hash(first.as_dict())
 
-    changed_lineage = replace(lineage, project_id=uuid4())
+    changed_lineage = replace(lineage, project_id=new_record_id())
     changed = compile_effective_pre_submission_execution_plan(
         lineage=changed_lineage,
         effective_policy=_effective_policy(),

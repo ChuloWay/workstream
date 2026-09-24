@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -272,7 +273,7 @@ class ProjectPolicyMutationService:
             if kind == "review"
             else ActionId.PROJECT_REVISION_POLICY_UPDATE
         )
-        policy_id, operation_id = uuid4(), uuid4()
+        policy_id, operation_id = new_record_id(), new_record_id()
         semantic_values = semantics.model_dump(mode="json")
         if inherit_review_mode:
             semantic_values.pop("human_review_required")

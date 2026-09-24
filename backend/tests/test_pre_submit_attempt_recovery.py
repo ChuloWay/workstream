@@ -9,7 +9,8 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import func, select, text
@@ -170,10 +171,10 @@ async def _harness(tmp_path: Path, database_url: str) -> _Harness:
             request.packet.contributor_attestation + " " + " ".join(policy.pop("attestation_terms"))
         ),
     ))
-    actor_id, identity_link_id = uuid4(), uuid4()
+    actor_id, identity_link_id = new_record_id(), new_record_id()
     lineage = request.effective_plan.lineage
     params = {
-        "actor": str(actor_id), "link": str(identity_link_id),
+        "actor": str(actor_id), "subject": str(actor_id), "link": str(identity_link_id),
         "project": str(lineage.project_id), "guide": str(lineage.guide_id),
         "snapshot": str(lineage.source_snapshot_id),
         "snapshot_hash": lineage.source_snapshot_hash, **policy,
@@ -192,7 +193,7 @@ async def _harness(tmp_path: Path, database_url: str) -> _Harness:
         await connection.execute(text(
             "insert into actor_identity_links "
             "(id,actor_profile_id,issuer,subject,subject_kind,status,linked_by,last_verified_at) "
-            "values (:link,:actor,'flow-test',:actor,'human','active','test',now())"
+            "values (:link,:actor,'flow-test',:subject,'human','active','test',now())"
         ), params)
         await seed_started_task_for_artifact_test(connection, params)
         await install_submitter_grant(connection, params)
@@ -440,7 +441,7 @@ async def test_attempt_database_guards_reject_rewrite_delete_and_orphan_completi
             ("update pre_submit_execution_attempts set request_digest=:digest where id=:id",
              {"digest": "sha256:" + "0" * 64}),
             ("update pre_submit_execution_attempts set status='completed',evidence_set_id=:evidence "
-             "where id=:id", {"evidence": str(uuid4())}),
+             "where id=:id", {"evidence": str(new_record_id())}),
             ("delete from pre_submit_execution_attempts where id=:id", {}),
         )
         for sql, values in statements:
@@ -475,7 +476,7 @@ async def test_database_rejects_same_resource_different_packet_evidence_completi
         ))
         changed_preparation = replace(
             harness.preparation_request,
-            idempotency_key=uuid4(),
+            idempotency_key=new_record_id(),
             summary=changed_request.packet.summary,
         )
         async with harness.factory() as second_session:
@@ -484,7 +485,7 @@ async def test_database_rejects_same_resource_different_packet_evidence_completi
                 second_workflow, changed_request, changed_preparation,
             )
         assert first_reservation.request_digest != second_reservation.request_digest
-        new_evidence = str(uuid4())
+        new_evidence = str(new_record_id())
         source_evidence = str(first.evidence.evidence_set_id)
         async with harness.factory() as session:
             original_evidence = await session.get(PreSubmitEvidenceSet, source_evidence)
@@ -513,7 +514,7 @@ async def test_database_rejects_same_resource_different_packet_evidence_completi
         )
         result_columns = tuple(column.name for column in PreSubmitEvidenceResult.__table__.columns)
         result_replacements = {
-            "id": "gen_random_uuid()::text",
+            "id": ":new_result",
             "evidence_set_id": ":new_evidence",
             "created_at": "transaction_timestamp()",
         }
@@ -521,7 +522,7 @@ async def test_database_rejects_same_resource_different_packet_evidence_completi
             f"insert into pre_submit_evidence_results ({', '.join(result_columns)}) "
             f"select {', '.join(result_replacements.get(column, column) for column in result_columns)} "
             "from pre_submit_evidence_results where evidence_set_id=:source_evidence "
-            "order by result_order"
+            "and result_order=:result_order"
         )
         with pytest.raises(DBAPIError, match="pre-submit evidence packet mismatch"):
             async with harness.engine.begin() as connection:
@@ -532,11 +533,16 @@ async def test_database_rejects_same_resource_different_packet_evidence_completi
                     "correct_request_digest": second_reservation.request_digest,
                     "source_evidence": source_evidence,
                 })
-                copied = await connection.execute(text(copy_results_sql), {
-                    "new_evidence": new_evidence,
-                    "source_evidence": source_evidence,
-                })
-                assert copied.rowcount == len(first.execution.entries)
+                copied_results = 0
+                for result_order in range(len(first.execution.entries)):
+                    copied = await connection.execute(text(copy_results_sql), {
+                        "new_result": str(new_record_id()),
+                        "new_evidence": new_evidence,
+                        "source_evidence": source_evidence,
+                        "result_order": result_order,
+                    })
+                    copied_results += copied.rowcount
+                assert copied_results == len(first.execution.entries)
                 await connection.execute(text(
                     "update pre_submit_execution_attempts set status='completed',"
                     "evidence_set_id=:evidence where id=:attempt"

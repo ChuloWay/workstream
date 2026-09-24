@@ -5,6 +5,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import text
 
+from app.core.identifiers import new_record_id
 from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
 from tests.projects.guide_compilation.helpers import runtime_configuration
 from tests.projects.guide_compilation.runtime_fixtures import ScriptedGuideRuntime, document_access
@@ -15,7 +16,7 @@ from .public_support import proposal_client, proposal_path
 async def assert_other_actors_cannot_recover(factory, creator, latest_path, endpoint):
     """Neither the revoked creator nor a foreign project's manager can recover this correction."""
     from project_create_fixtures import seed_historical_project
-    foreign_project = str(uuid4())
+    foreign_project = new_record_id()
     async with factory() as session, session.begin():
         await seed_historical_project(session, project_id=foreign_project,
                                       name="Other guide owner", slug=f"foreign-{foreign_project}")
@@ -112,16 +113,17 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
                     "FROM project_guide_compilation_request_operations WHERE expected_predecessor_compilation_id=:id"
                 ), {"id":command.compilation_id})).one()
                 assert row.request_trigger == "project_manager"
-                assert row.actor_profile_id == str(current_actor.actor_profile_id)
+                assert row.actor_profile_id == current_actor.actor_profile_id
                 retained = (await session.execute(text(
                     "SELECT operation_id,actor_profile_id FROM project_guide_proposal_corrections WHERE compilation_id=:id"
                 ), {"id": command.compilation_id})).one()
                 assert str(retained.operation_id) == operation
-                assert retained.actor_profile_id == str(actor.actor_profile_id)
+                assert retained.actor_profile_id == actor.actor_profile_id
             payload = published[-1]
             assert payload == {
                 "project_id": str(command.project_id), "guide_id": str(command.guide_id),
-                "source_snapshot_id": row.source_snapshot_id, "setup_run_id": row.setup_run_id,
+                "source_snapshot_id": str(row.source_snapshot_id),
+                "setup_run_id": str(row.setup_run_id),
                 "setup_generation": row.setup_generation,
                 "task_id": project_guide_compilation_task_id(row.setup_run_id, row.setup_generation),
             }

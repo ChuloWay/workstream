@@ -4,7 +4,8 @@ import asyncio
 from dataclasses import FrozenInstanceError, asdict, replace
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import select
@@ -36,7 +37,7 @@ MANAGEMENT = {"source_type", "source_ref", "source_payload_hash", "import_batch_
 
 def request_for(method, project_id, task_id, contributor_id=None):
     if method == READS[0]:
-        return ContributorTaskDetailRequest(UUID(project_id), UUID(task_id), contributor_id or uuid4())
+        return ContributorTaskDetailRequest(UUID(project_id), UUID(task_id), contributor_id or new_record_id())
     return ManagementTaskDetailRequest(UUID(project_id), UUID(task_id))
 
 
@@ -50,13 +51,13 @@ async def read_once(session, method, request):
 def test_task_detail_contracts():
     assert STATES == {"draft", "screening", "ready", "claimed", "in_progress", "submitted",
                       "evaluation_pending", "review_pending", "needs_revision"}
-    now, project, task, contributor = datetime.now(UTC), uuid4(), uuid4(), uuid4()
+    now, project, task, contributor = datetime.now(UTC), new_record_id(), new_record_id(), new_record_id()
     for request in (ManagementTaskDetailRequest(project, task), ContributorTaskDetailRequest(project, task, contributor)):
         for field in asdict(request):
             with pytest.raises(ValueError, match="request is invalid"):
                 replace(request, **{field: "bad"})
         with pytest.raises(FrozenInstanceError):
-            request.task_id = uuid4()
+            request.task_id = new_record_id()
     values = dict(task_id=task, project_id=project, title="Title", description="Instructions", task_type=None,
                   difficulty=None, skill_tags=("tag",), estimated_time_minutes=None, status="ready",
                   acceptance_criteria=None, rejection_criteria=None, deadline_at=None, created_at=now, updated_at=now)
@@ -83,7 +84,7 @@ def test_task_detail_contracts():
 @pytest.mark.parametrize("method", READS)
 async def test_task_detail_rejects_invalid_request(method):
     session = MagicMock()
-    other = request_for(READS[1] if method == READS[0] else READS[0], str(uuid4()), str(uuid4()))
+    other = request_for(READS[1] if method == READS[0] else READS[0], str(new_record_id()), str(new_record_id()))
     for value in ({}, other):
         with pytest.raises(ValueError, match="request is invalid"):
             await getattr(TaskRepository(session), method)(value)
@@ -100,9 +101,9 @@ async def test_task_detail_scope(task_client, method):
     async with db_session.get_session_factory()() as session:
         assert (await session.get(WorkstreamTask, outsider["id"])).project_id == foreign["id"]
         assert (await session.get(WorkstreamTask, local["id"])).status == "ready"
-        for task_id in (outsider["id"], str(uuid4())):
+        for task_id in (outsider["id"], str(new_record_id())):
             assert await read_once(session, method, request_for(method, project["id"], task_id)) is None
-        assert await read_once(session, method, request_for(method, str(uuid4()), local["id"])) is None
+        assert await read_once(session, method, request_for(method, str(new_record_id()), local["id"])) is None
         visible = await read_once(session, method, request_for(method, project["id"], local["id"]))
         assert visible.task_id == UUID(local["id"]) and visible.project_id == UUID(project["id"])
         result = await read_once(session, method, request_for(method, project["id"], draft["id"]))
@@ -138,7 +139,7 @@ async def test_task_detail_visibility(task_client, monkeypatch):
             row.status, row.assigned_to = status, assignee
             if contributor:
                 session.add(TaskAssignment(
-                    id=str(uuid4()), task_id=row.id, project_id=row.project_id, contributor_id=contributor,
+                    id=str(new_record_id()), task_id=row.id, project_id=row.project_id, contributor_id=contributor,
                     assigned_by=owner, status=assignment_status,
                     submitter_contribution_policy_version_id=row.locked_contribution_policy_version_id,
                 ))
@@ -245,7 +246,7 @@ async def test_task_detail_transaction(task_client, method):
     task = await create_ready_task(task_client, project["id"])
     factory, request = db_session.get_session_factory(), request_for(method, project["id"], task["id"])
     async with factory() as session:
-        pending = WorkstreamTask(id=str(uuid4()), project_id=project["id"])
+        pending = WorkstreamTask(id=str(new_record_id()), project_id=project["id"])
         session.add(pending)
         assert await read_once(session, method, request) is not None and pending in session.new
         await session.rollback()

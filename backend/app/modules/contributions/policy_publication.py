@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
@@ -222,6 +223,7 @@ class ContributionPolicyPublicationService:
     @staticmethod
     def _custody(request, digest, event_type, prior):
         return ContributionPolicyTransitionCustody(
+            id=new_record_id(),
             operation_id=request.operation_id,
             request_digest=digest,
             event_type=event_type,
@@ -250,7 +252,7 @@ class ContributionPolicyPublicationService:
     @staticmethod
     def _event(request, digest, event_type, policy, version, prior, custody):
         return ContributionPolicyLifecycleEvent(
-            id=uuid4(),
+            id=new_record_id(),
             operation_id=request.operation_id,
             publication_custody_operation_id=request.operation_id,
             request_digest=digest,

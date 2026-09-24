@@ -1,7 +1,8 @@
 """Shared audit owner composition for typed product transition ports."""
 
 import json
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +17,7 @@ from app.modules.audit.repository import AuditRepository, LIFECYCLE_AUTH_SOURCE
 from app.modules.tasks.api.assignment_invalidation import (
     AssignmentInvalidationAuditPort, AssignmentInvalidationEvidence,
     AssignmentInvalidationAuthority, AssignmentInvalidationUnavailable,
-    assignment_invalidation_evidence_id, AssignmentInvalidationAuthorityFacts,
+    AssignmentInvalidationAuthorityFacts,
     assignment_invalidation_resource_digest,
 )
 from app.modules.tasks.api import TaskAuthorityOperation, TaskTransitionAuditPort, TaskTransitionFacts
@@ -42,7 +43,7 @@ class _TaskTransitionAudit:
             TaskAuthorityOperation.START_OVERRIDE: LifecycleAuditEventType.TASK_START_OVERRIDDEN,
         }[facts.operation]
         await self._participant.add_event(LifecycleAuditEventInput(
-            event_id=uuid4(), entity_type=LifecycleAuditEntityType.TASK, entity_id=facts.task_id,
+            event_id=new_record_id(), entity_type=LifecycleAuditEntityType.TASK, entity_id=facts.task_id,
             event_type=event_type, from_status=facts.from_status, to_status=facts.to_status,
             actor_id=facts.actor_profile_id, reason=LifecycleAuditReason.STATE_CHANGED,
             task_reason=facts.reason if facts.reason and facts.reason.strip() else None,
@@ -85,7 +86,9 @@ class _AssignmentInvalidationAudit:
         }
 
     async def read_release(self, target):
-        row = await self._repo.lifecycle_event(assignment_invalidation_evidence_id(target))
+        row = await self._repo.assignment_release_event(
+            target.assignment_id, target.authority_invalidation_event_id,
+        )
         if row is None:
             return None
         try:
@@ -132,7 +135,7 @@ class _AssignmentInvalidationAudit:
             raise AssignmentInvalidationUnavailable("assignment reconciliation authority differs")
         target = facts.target
         await self._participant.add_event(LifecycleAuditEventInput(
-            event_id=assignment_invalidation_evidence_id(target),
+            event_id=new_record_id(),
             entity_type=LifecycleAuditEntityType.TASK, entity_id=target.task_id,
             event_type=LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED,
             actor_id=evidence.authority.actor_profile_id,

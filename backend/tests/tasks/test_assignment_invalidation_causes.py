@@ -2,7 +2,8 @@
 
 from copy import deepcopy
 from types import SimpleNamespace
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import select
@@ -27,7 +28,7 @@ async def test_reader_rejects_mixed_and_malformed_real_cause_chain(task_client, 
     reader = committed_authority_invalidation(s.sessions)
     control = await reader.read_invalidation(s.invalidation_id)
     assert control is not None and control.contributor_id == UUID(s.grant["actor_profile_id"])
-    assert await reader.read_invalidation(uuid4()) is None
+    assert await reader.read_invalidation(new_record_id()) is None
     assert await reader.read_invalidation("invalid") is None
     async with s.sessions() as session:
         rows = await AuditRepository(session).invalidation_chain(s.invalidation_id)
@@ -40,22 +41,22 @@ async def test_reader_rejects_mixed_and_malformed_real_cause_chain(task_client, 
         (1, {"auth_source": "other"}),
         (0, {"event_version": 2}),
         (1, {"is_dev_auth": True}),
-        (0, {"invalidation_cause_event_id": str(uuid4())}),
-        (1, {"request_id": str(uuid4())}),
-        (1, {"correlation_id": str(uuid4())}),
+        (0, {"invalidation_cause_event_id": str(new_record_id())}),
+        (1, {"request_id": str(new_record_id())}),
+        (1, {"correlation_id": str(new_record_id())}),
         (0, {"idempotency_reference": None}),
-        (1, {"target_actor_ref": str(uuid4())}),
-        (1, {"target_ref_id": str(uuid4())}),
-        (0, {"resource_id": str(uuid4())}),
-        (0, {"invalidation_target_ref": str(uuid4())}),
+        (1, {"target_actor_ref": str(new_record_id())}),
+        (1, {"target_ref_id": str(new_record_id())}),
+        (0, {"resource_id": str(new_record_id())}),
+        (0, {"invalidation_target_ref": str(new_record_id())}),
         (0, {"after_facts": {**originals[0]["after_facts"], "effective": True}}),
         (1, {"target_actor_ref_kind": None}),
-        (1, {"entity_id": str(uuid4())}),
+        (1, {"entity_id": str(new_record_id())}),
     ]
     if kind == "grant":
         replacements += [
-            (0, {"target_actor_ref": str(uuid4())}),
-            (0, {"target_ref_id": str(uuid4())}),
+            (0, {"target_actor_ref": str(new_record_id())}),
+            (0, {"target_ref_id": str(new_record_id())}),
             (
                 0,
                 {
@@ -144,7 +145,7 @@ async def test_reviewer_revocation_never_releases_submitter_assignment(task_clie
         )
         assert event.after_facts["future_obligation"] == "rev_reviewer_obligation"
         s.invalidation_id = UUID(event.id)
-    _, envelope = await invoked(s)
+    _, envelope = await invoked(s, synthetic_transport=True)
     before = await snapshot(s)
     assert await s.handler(envelope) is HandlerOutcome.REJECT
     assert await snapshot(s) == before
@@ -171,7 +172,7 @@ async def test_reactivation_event_is_not_a_release_cause(task_client, monkeypatc
         )
         assert event.after_facts == {"effective": True}
         s.invalidation_id = UUID(event.id)
-    _, envelope = await invoked(s)
+    _, envelope = await invoked(s, synthetic_transport=True)
     before = await snapshot(s)
     assert await s.handler(envelope) is HandlerOutcome.REJECT
     assert await snapshot(s) == before and s.trace == []
@@ -216,7 +217,7 @@ async def test_committed_cause_cannot_target_another_valid_assignment(
         contributor_id=UUID(grant["actor_profile_id"]),
         authority_invalidation_event_id=s.invalidation_id,
     )
-    _, envelope = await invoked(s, target=target)
+    _, envelope = await invoked(s, target=target, synthetic_transport=True)
     foreign = SimpleNamespace(
         **{**vars(s), "task": task, "assignment": assignment, "project": project}
     )

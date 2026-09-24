@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.actors.api import ServiceIdentity
@@ -71,7 +72,7 @@ async def seed_read_target(access: AdminAccess, kind: str) -> ReadTarget:
                 "https://identity.test",
             ),
         )
-    actor_id = uuid4()
+    actor_id = new_record_id()
     subject = f"private-{kind}-{uuid4()}"
     provenance = str(uuid4())
     reason = "Private lifecycle reason"
@@ -92,7 +93,7 @@ async def seed_read_target(access: AdminAccess, kind: str) -> ReadTarget:
         profile.suspended_at = now
         profile.suspension_reason = reason
     link = ActorIdentityLink(
-        id=str(uuid4()),
+        id=str(new_record_id()),
         actor_profile_id=str(actor_id),
         issuer="https://identity.test",
         subject=subject,

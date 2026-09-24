@@ -8,7 +8,8 @@ from app.modules.authorization.domain.post_policy import PostPolicyResourceConte
 from collections.abc import Awaitable, Callable
 from types import MappingProxyType
 from typing import NoReturn
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1030,7 +1031,7 @@ class AuthorizationService:
             grant_id=matched_grant_id if denial is None else None,
         ) or authorization_resource_digest(resource_context)
         decision = AuthorizationDecision(
-            decision_id=uuid4(),
+            decision_id=new_record_id(),
             action_id=action.action_id if action is not None else None,
             permission_id=action.permission_id if action is not None else None,
             allowed=denial is None,
@@ -1413,6 +1414,10 @@ class AuthorizationService:
              target_ref_kind, target_ref_id) = exact_project_target
             if target_project_id is not None:
                 audit_project_id = target_project_id
+        default_resource_id = str(decision.resource_id) if audit_resource_type else None
+        audit_resource_id = audit_resource_id or default_resource_id
+        target_ref_kind = target_ref_kind or audit_resource_type
+        target_ref_id = target_ref_id or default_resource_id
         after_facts: dict[str, object] = {"allowed": decision.allowed}
         if decision.resource_type in CONTEXT_DIGEST_RESOURCE_TYPES or decision.action_id in CONTEXT_DIGEST_ACTIONS:
             after_facts["resource_context_digest"] = decision.resource_context_digest
@@ -1444,15 +1449,9 @@ class AuthorizationService:
                     action_id=decision.action_id,
                     project_id=audit_project_id,
                     resource_type=audit_resource_type,
-                    resource_id=(
-                        audit_resource_id
-                        or (str(decision.resource_id) if audit_resource_type else None)
-                    ),
-                    target_ref_kind=target_ref_kind or audit_resource_type,
-                    target_ref_id=(
-                        target_ref_id
-                        or (str(decision.resource_id) if audit_resource_type else None)
-                    ),
+                    resource_id=audit_resource_id,
+                    target_ref_kind=target_ref_kind,
+                    target_ref_id=target_ref_id,
                     reason="authorization_evaluation",
                     denial_code=stored_denial,
                     after_facts=after_facts,

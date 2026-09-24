@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import text
 
 from app.adapters.artifacts import guide_document_manifest_port
+from app.core.identifiers import new_record_id
 from app.modules.authorization.api import ActorKind
 from app.modules.authorization.guide_proposal_authorization import GuideProposalAuthorizationAdapter
 from app.modules.authorization.runtime import (
@@ -26,6 +27,10 @@ from app.modules.projects.api.guide_proposals import (
     GuideProposalError,
 )
 from app.modules.projects.guide_compilation.proposal_service import GuideProposalService
+from app.modules.projects.guide_compilation.proposal_approval import (
+    approval_authorization_selector,
+)
+from app.modules.projects.guide_compilation.proposal_correction import correction_locator
 from tests.projects.guide_compilation.proposals.pg_support import (
     proposal_case,
     seed_review_actor,
@@ -144,7 +149,12 @@ async def test_real_proposal_transaction_replay_and_revocation(clean_postgres_da
             for e in after_events
             if e["action_id"] != "project.guide_compilation.review_package.read"
         )
-        assert str(mutation["correlation_id"]) == str(receipt.operation_id)
+        expected_selector = (
+            approval_authorization_selector(actor.actor_profile_id, payload.idempotency_key)
+            if action == "approve"
+            else correction_locator(payload, actor, mutation["request_id"]).operation_id
+        )
+        assert mutation["correlation_id"] == expected_selector
         assert set(mutation["after_facts"]) == {"allowed", "resource_context_digest"}
         await revoke_review_grant(factory, actor, grant)
         with pytest.raises(GuideProposalError, match="authority_unavailable"):
@@ -167,7 +177,7 @@ async def test_real_authority_denial_has_no_product_or_allowed_writes(
         elif authority == "foreign":
             from project_create_fixtures import seed_authorized_project
 
-            other_project = uuid4()
+            other_project = new_record_id()
             async with factory() as session, session.begin():
                 await seed_authorized_project(
                     session,

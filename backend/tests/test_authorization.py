@@ -3,11 +3,19 @@
 # pyright: reportOptionalSubscript=false, reportRedeclaration=false
 from __future__ import annotations
 
-from app.adapters.auth import assignment_invalidation_publication, actor_lifecycle_service, identity_link_lifecycle_service, project_role_mutation_service
+from app.adapters.auth import (
+    assignment_invalidation_publication,
+    actor_lifecycle_service,
+    identity_link_lifecycle_service,
+    project_role_mutation_service,
+)
 from app.modules.authorization.domain.post_policy import post_policy_resource
 from tests.authorization.post_policy.support import post_facts
 
-from tests.authorization.catalogue_fixtures import ART_CUSTODY_EXPECTATIONS, REV_CUSTODY_EXPECTATIONS
+from tests.authorization.catalogue_fixtures import (
+    ART_CUSTODY_EXPECTATIONS,
+    REV_CUSTODY_EXPECTATIONS,
+)
 from tests.authorization.postgresql_support import restore_actor_lifecycle_triggers
 
 from tests.authorization.runtime_support import (
@@ -35,7 +43,7 @@ import pickle
 from pathlib import Path
 from time import monotonic
 from types import SimpleNamespace
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from httpx import ASGITransport, AsyncClient
 import pytest  # type: ignore[import-not-found]
@@ -62,6 +70,7 @@ from app.api.deps.auth import get_auth_verification_result
 from app.core.api_controls import StructuredHTTPException
 from app.core.config import Settings, get_settings
 from app.core.hashing import canonical_json_hash
+from app.core.identifiers import new_record_id
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.projects.repository import ProjectRepository
@@ -254,6 +263,244 @@ from app.modules.authorization.service_actor_service import (
 
 DIGEST = "sha256:" + "a" * 64
 
+OPERATION_SUCCESS_METADATA = {
+    AuthorityOperation.SERVICE_ACTOR_CREATE: (
+        AuthorityEventType.SERVICE_ACTOR_PROVISIONED,
+        "actor.service.provision",
+        "manual_service_provisioning",
+        AuthorityResourceType.ACTOR_PROFILE,
+    ),
+    AuthorityOperation.ADMIN_ROLE_GRANT_ISSUE: (
+        AuthorityEventType.ADMIN_ROLE_GRANT_ISSUED,
+        "admin_role.grant",
+        "authority_assignment",
+        AuthorityResourceType.ADMIN_ROLE_GRANT,
+    ),
+    AuthorityOperation.ADMIN_ROLE_GRANT_REVOKE: (
+        AuthorityEventType.ADMIN_ROLE_GRANT_REVOKED,
+        "admin_role.revoke",
+        "authority_revocation",
+        AuthorityResourceType.ADMIN_ROLE_GRANT,
+    ),
+    AuthorityOperation.PROJECT_ROLE_GRANT_ISSUE: (
+        AuthorityEventType.PROJECT_ROLE_GRANT_ISSUED,
+        "project.role_grant.manage",
+        "authority_assignment",
+        AuthorityResourceType.PROJECT_ROLE_GRANT,
+    ),
+    AuthorityOperation.PROJECT_ROLE_GRANT_REVOKE: (
+        AuthorityEventType.PROJECT_ROLE_GRANT_REVOKED,
+        "project.role_grant.manage",
+        "authority_revocation",
+        AuthorityResourceType.PROJECT_ROLE_GRANT,
+    ),
+    AuthorityOperation.ACTOR_PROFILE_SUSPEND: (
+        AuthorityEventType.ACTOR_PROFILE_SUSPENDED,
+        "actor.profile.suspend",
+        "security_response",
+        AuthorityResourceType.ACTOR_PROFILE,
+    ),
+    AuthorityOperation.ACTOR_PROFILE_REACTIVATE: (
+        AuthorityEventType.ACTOR_PROFILE_REACTIVATED,
+        "actor.profile.reactivate",
+        "administrative_correction",
+        AuthorityResourceType.ACTOR_PROFILE,
+    ),
+    AuthorityOperation.ACTOR_PROFILE_DEACTIVATE: (
+        AuthorityEventType.ACTOR_PROFILE_DEACTIVATED,
+        "actor.profile.deactivate",
+        "security_response",
+        AuthorityResourceType.ACTOR_PROFILE,
+    ),
+    AuthorityOperation.ACTOR_IDENTITY_LINK_REVOKE: (
+        AuthorityEventType.ACTOR_IDENTITY_LINK_REVOKED,
+        "actor.identity_link.revoke",
+        "identity_lifecycle_change",
+        AuthorityResourceType.ACTOR_IDENTITY_LINK,
+    ),
+    AuthorityOperation.ACTOR_IDENTITY_LINK_REACTIVATE: (
+        AuthorityEventType.ACTOR_IDENTITY_LINK_REACTIVATED,
+        "actor.identity_link.reactivate",
+        "identity_lifecycle_change",
+        AuthorityResourceType.ACTOR_IDENTITY_LINK,
+    ),
+}
+
+CREATE_AUTHORITY_OPERATIONS = {
+    AuthorityOperation.SERVICE_ACTOR_CREATE,
+    AuthorityOperation.ADMIN_ROLE_GRANT_ISSUE,
+}
+
+ADMIN_AUTHORITY_OPERATIONS = {
+    AuthorityOperation.ADMIN_ROLE_GRANT_ISSUE,
+    AuthorityOperation.ADMIN_ROLE_GRANT_REVOKE,
+    AuthorityOperation.PROJECT_ROLE_GRANT_ISSUE,
+    AuthorityOperation.PROJECT_ROLE_GRANT_REVOKE,
+}
+
+
+def _actor_rows(
+    profile_id: UUID,
+    link_id: UUID,
+    *,
+    subject: str,
+    now: datetime,
+    actor_kind: str = "human",
+    creator_id: UUID | None = None,
+    service_identity: str | None = None,
+) -> tuple[ActorProfile, ActorIdentityLink]:
+    """Build the persisted actor pair shared by lifecycle test scenarios."""
+    creator_id = creator_id or profile_id
+    return (
+        ActorProfile(
+            id=str(profile_id),
+            actor_kind=actor_kind,
+            status="active",
+            provisioning_method=(
+                "automatic_first_access" if actor_kind == "human" else "manual_service_provisioning"
+            ),
+            service_identity=service_identity,
+            created_by=str(creator_id),
+        ),
+        ActorIdentityLink(
+            id=str(link_id),
+            actor_profile_id=str(profile_id),
+            issuer="https://identity.flowresearch.tech",
+            subject=subject,
+            subject_kind=actor_kind,
+            status="active",
+            linked_by=str(creator_id),
+            last_verified_at=now if actor_kind == "human" else None,
+        ),
+    )
+
+
+def _authority_claim(
+    actor_id: UUID,
+    operation: AuthorityOperation,
+    *,
+    idempotency_key: UUID | None = None,
+    request_digest: str = DIGEST,
+) -> AuthorityClaimHandle:
+    """Build the common actor-profile claim used by mutation service tests."""
+    return AuthorityClaimHandle(
+        record_id=new_record_id(),
+        idempotency_key=idempotency_key or new_record_id(),
+        actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
+        actor_ref=str(actor_id),
+        operation=operation,
+        request_digest=request_digest,
+    )
+
+
+def _project_setup_custody(
+    *,
+    setup_run_id: UUID,
+    project_id: UUID,
+    guide_id: UUID,
+    snapshot_id: UUID,
+    expected_step: str,
+    task_id: UUID | None = None,
+    correlation_id: UUID | None = None,
+) -> ProjectSetupServiceCustodyContext:
+    """Build locked setup-service custody shared by mutation resource tests."""
+    return ProjectSetupServiceCustodyContext(
+        setup_run_id=setup_run_id,
+        scope_project_id=project_id,
+        guide_id=guide_id,
+        source_snapshot_id=snapshot_id,
+        setup_generation=1,
+        expected_step=expected_step,
+        task_id=task_id or new_record_id(),
+        correlation_id=correlation_id or new_record_id(),
+        stale_output_digest=DIGEST,
+    )
+
+
+def _project_setup_custodies(
+    setup_run_id: UUID,
+    project_id: UUID,
+    guide_id: UUID,
+    snapshot_id: UUID,
+) -> dict[str, ProjectSetupServiceCustodyContext]:
+    """Build the closed setup-step custody matrix with one shared lineage."""
+    task_id, correlation_id = new_record_id(), new_record_id()
+    return {
+        step: _project_setup_custody(
+            setup_run_id=setup_run_id,
+            project_id=project_id,
+            guide_id=guide_id,
+            snapshot_id=snapshot_id,
+            expected_step=step,
+            task_id=task_id,
+            correlation_id=correlation_id,
+        )
+        for step in ("guide_sufficiency", "submission_artifact_policy", "post_submit_policy")
+    }
+
+
+def _project_role_route_app(session, resolved, prepared, *, rollback_open_only: bool):
+    """Wire the shared route dependencies for project-role transaction tests."""
+    app = create_app(Settings(environment="test"))
+
+    async def session_dependency():
+        try:
+            yield session
+        finally:
+            if not rollback_open_only or session.in_transaction():
+                await session.rollback()
+
+    async def resolved_dependency():
+        return resolved
+
+    async def prepared_dependency():
+        return prepared
+
+    async def consume_rate() -> None:
+        return None
+
+    app.dependency_overrides[get_db_session] = session_dependency
+    app.dependency_overrides[get_authorization_actor] = resolved_dependency
+    app.dependency_overrides[get_prepared_authorization_service] = prepared_dependency
+    app.dependency_overrides[enforce_admin_mutation_rate_limit] = consume_rate
+    return app
+
+
+class _LifecycleSession:
+    def __init__(self) -> None:
+        self.flushed = 0
+
+    async def flush(self) -> None:
+        self.flushed += 1
+
+
+class _LifecycleMutation:
+    def __init__(self) -> None:
+        self.completed = None
+        self.mismatch = None
+
+    async def complete(self, **kwargs) -> None:
+        self.completed = kwargs
+
+    async def record_mismatch_denial(self, **kwargs) -> None:
+        self.mismatch = kwargs
+
+
+class _LifecycleAudit:
+    def __init__(self) -> None:
+        self.event = None
+
+    async def add_authority_event(self, event) -> None:
+        self.event = event
+
+
+def _admin_read_runtime(context, grant):
+    """Build a runtime service with the same exact persisted admin grant."""
+    return _runtime_service(
+        context,
+        admin_repository=_ProjectReadAuthorityFacts(admin_grant=grant),
+    )
+
 
 def _project_role_qualification() -> dict[str, object]:
     return {
@@ -287,10 +534,9 @@ def test_project_role_issue_advisory_key_contract_is_frozen_and_separated() -> N
     assert integrity_constraint_name(error) == "uq_project_role_grants_active_exact_role"
 
 
-
 def test_project_role_public_reason_and_qualification_contract_is_strict() -> None:
     payload = {
-        "target_actor_profile_id": str(uuid4()),
+        "target_actor_profile_id": str(new_record_id()),
         "role": "submitter",
         "qualification": _project_role_qualification(),
         "reason": "Bounded authority assignment",
@@ -308,18 +554,18 @@ def test_project_role_public_reason_and_qualification_contract_is_strict() -> No
 
 
 def test_project_role_invalidation_projection_is_closed_per_role() -> None:
-    project_id = uuid4()
+    project_id = new_record_id()
     mappings = {
         ProjectRole.SUBMITTER: "auth13_assignment",
         ProjectRole.REVIEWER: "rev_reviewer_obligation",
     }
     for role, obligation in mappings.items():
         context = AuthorityInvalidationContext(
-            event_id=uuid4(),
-            request_id=uuid4(),
-            correlation_id=uuid4(),
+            event_id=new_record_id(),
+            request_id=new_record_id(),
+            correlation_id=new_record_id(),
             target_ref_kind=AuthorityResourceType.PROJECT_ROLE_GRANT,
-            target_ref_id=uuid4(),
+            target_ref_id=new_record_id(),
             project_role=role,
             future_obligation=obligation,
         )
@@ -329,36 +575,36 @@ def test_project_role_invalidation_projection_is_closed_per_role() -> None:
             "scope_id": str(project_id),
             "future_obligation": obligation,
         }
-        event_id = uuid4()
+        event_id = new_record_id()
         event = AuthorityAuditEventInput(
             event_id=event_id,
             event_type=AuthorityEventType.AUTHORITY_INVALIDATION_REQUESTED,
             entity_type="authority_invalidation",
             entity_id=str(event_id),
             actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
-            actor_ref=str(uuid4()),
+            actor_ref=str(new_record_id()),
             request_id=context.request_id,
             correlation_id=context.correlation_id,
             permission_id=PermissionId.PROJECT_ROLE_GRANT_MANAGE,
             project_id=str(project_id),
             resource_type="actor_profile",
-            resource_id=str(uuid4()),
+            resource_id=str(new_record_id()),
             target_ref_kind="project_role_grant",
             target_ref_id=str(context.target_ref_id),
             reason="authority_state_changed",
-            idempotency_reference=uuid4(),
-            invalidation_cause_event_id=uuid4(),
+            idempotency_reference=new_record_id(),
+            invalidation_cause_event_id=new_record_id(),
             invalidation_target_kind="actor_profile",
-            invalidation_target_ref=str(uuid4()),
+            invalidation_target_ref=str(new_record_id()),
             before_facts={"effective": True, **projection},
             after_facts={"effective": False, **projection},
         )
         assert event.after_facts["future_obligation"] == obligation
     with pytest.raises(ValidationError):
         AuthorityInvalidationContext(
-            event_id=uuid4(),
-            request_id=uuid4(),
-            correlation_id=uuid4(),
+            event_id=new_record_id(),
+            request_id=new_record_id(),
+            correlation_id=new_record_id(),
             project_role=ProjectRole.SUBMITTER,
             future_obligation="none",
         )
@@ -396,17 +642,15 @@ def _submission_policy_derive_prepare_inputs() -> tuple[
     PreparedAuthorizationInput, PreparedAuthorityScope
 ]:
     """Build the exact derive input and scope shared by service-matrix tests."""
-    project_id, guide_id, snapshot_id, policy_id, operation_id = (uuid4() for _ in range(5))
-    custody = ProjectSetupServiceCustodyContext(
-        setup_run_id=uuid4(),
-        scope_project_id=project_id,
+    project_id, guide_id, snapshot_id, policy_id, operation_id = (new_record_id() for _ in range(5))
+    custody = _project_setup_custody(
+        setup_run_id=new_record_id(),
+        project_id=project_id,
         guide_id=guide_id,
-        source_snapshot_id=snapshot_id,
-        setup_generation=1,
+        snapshot_id=snapshot_id,
         expected_step="submission_artifact_policy",
-        task_id=uuid4(),
-        correlation_id=uuid4(),
-        stale_output_digest=DIGEST,
+        task_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
     resource = ProjectSubmissionArtifactPolicyMutationResourceContext(
         resource_type="project_submission_artifact_policy_mutation",
@@ -424,14 +668,14 @@ def _submission_policy_derive_prepare_inputs() -> tuple[
         policy_version="1",
         policy_generation=1,
         setup_generation=1,
-        sufficiency_report_id=uuid4(),
+        sufficiency_report_id=new_record_id(),
         sufficiency_status="passed",
         stale_output_digest=DIGEST,
         setup_service_custody=custody,
     )
     return (
         PreparedAuthorizationInput(
-            idempotency_key=uuid4(), request_value=resource.model_dump(mode="json")
+            idempotency_key=new_record_id(), request_value=resource.model_dump(mode="json")
         ),
         PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.PROJECT, project_id=project_id),
     )
@@ -441,7 +685,7 @@ def _submission_policy_human_prepare_inputs(
     action_id: ActionId, project_id: UUID
 ) -> tuple[PreparedAuthorizationInput, PreparedAuthorityScope]:
     """Build exact human submission-policy input for planned-action tests."""
-    guide_id, snapshot_id, policy_id, operation_id = (uuid4() for _ in range(4))
+    guide_id, snapshot_id, policy_id, operation_id = (new_record_id() for _ in range(4))
     target_kind = {
         ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_CREATE: "create",
         ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_UPDATE: "update",
@@ -462,13 +706,13 @@ def _submission_policy_human_prepare_inputs(
         "policy_version": "1",
         "policy_generation": 1,
         "setup_generation": 1,
-        "sufficiency_report_id": uuid4(),
+        "sufficiency_report_id": new_record_id(),
         "sufficiency_status": "passed",
     }
     if target_kind == "update":
         values.update(policy_status="draft", policy_digest=DIGEST)
     if target_kind == "update":
-        successor_policy_id = uuid4()
+        successor_policy_id = new_record_id()
         values.update(
             resource_id=successor_policy_id,
             successor_policy_id=successor_policy_id,
@@ -477,7 +721,7 @@ def _submission_policy_human_prepare_inputs(
     resource = ProjectSubmissionArtifactPolicyMutationResourceContext.model_validate(values)
     return (
         PreparedAuthorizationInput(
-            idempotency_key=uuid4(), request_value=resource.model_dump(mode="json")
+            idempotency_key=new_record_id(), request_value=resource.model_dump(mode="json")
         ),
         PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.PROJECT, project_id=project_id),
     )
@@ -751,10 +995,10 @@ async def test_candidate_service_cursor_uses_last_visible_equal_timestamp_bounda
         SimpleNamespace(),  # type: ignore[arg-type]
         codec,
     )
-    project = SimpleNamespace(id=str(uuid4()), status="active")
+    project = SimpleNamespace(id=str(new_record_id()), status="active")
     first = await service.list_contributor_candidates(
         project=project,
-        caller_actor_profile_id=uuid4(),
+        caller_actor_profile_id=new_record_id(),
         limit=2,
         cursor=None,
     )
@@ -762,7 +1006,7 @@ async def test_candidate_service_cursor_uses_last_visible_equal_timestamp_bounda
     assert first.next_cursor is not None
     second = await service.list_contributor_candidates(
         project=project,
-        caller_actor_profile_id=uuid4(),
+        caller_actor_profile_id=new_record_id(),
         limit=2,
         cursor=first.next_cursor,
     )
@@ -824,7 +1068,12 @@ async def test_authorization_read_rate_failure_precedes_project_lookup(
         base_url="http://testserver",
     ) as client:
         response = await client.get(
-            path.format(project_id=uuid4(), guide_id=uuid4(), report_id=uuid4(), policy_id=uuid4()),
+            path.format(
+                project_id=new_record_id(),
+                guide_id=new_record_id(),
+                report_id=new_record_id(),
+                policy_id=new_record_id(),
+            ),
             headers={"Authorization": "Bearer test"},
         )
 
@@ -866,14 +1115,14 @@ async def test_human_read_admission_conceals_every_nonhuman_kind(
             base_url="http://testserver",
         ) as client:
             for path in (
-                f"/api/v1/projects/{uuid4()}/role-grants",
-                f"/api/v1/projects/{uuid4()}",
-                f"/api/v1/actors/me/authorization-context?project_id={uuid4()}",
-                f"/api/v1/projects/{uuid4()}/guides/{uuid4()}/setup-runs/latest",
-                f"/api/v1/projects/{uuid4()}/guides/{uuid4()}/sufficiency-reports",
-                f"/api/v1/projects/{uuid4()}/guides/{uuid4()}/sufficiency-reports/{uuid4()}",
-                f"/api/v1/projects/{uuid4()}/guides/{uuid4()}/submission-artifact-policies",
-                f"/api/v1/projects/{uuid4()}/guides/{uuid4()}/submission-artifact-policies/{uuid4()}",
+                f"/api/v1/projects/{new_record_id()}/role-grants",
+                f"/api/v1/projects/{new_record_id()}",
+                f"/api/v1/actors/me/authorization-context?project_id={new_record_id()}",
+                f"/api/v1/projects/{new_record_id()}/guides/{new_record_id()}/setup-runs/latest",
+                f"/api/v1/projects/{new_record_id()}/guides/{new_record_id()}/sufficiency-reports",
+                f"/api/v1/projects/{new_record_id()}/guides/{new_record_id()}/sufficiency-reports/{new_record_id()}",
+                f"/api/v1/projects/{new_record_id()}/guides/{new_record_id()}/submission-artifact-policies",
+                f"/api/v1/projects/{new_record_id()}/guides/{new_record_id()}/submission-artifact-policies/{new_record_id()}",
             ):
                 response = await client.get(path)
                 assert response.status_code == 404
@@ -911,13 +1160,13 @@ async def test_diagnostic_authentication_failure_precedes_private_lookup(
     app.dependency_overrides[enforce_authorization_read_rate_limit] = consume_once
     app.dependency_overrides[get_auth_verification_result] = invalid_bearer
     monkeypatch.setattr(ProjectRepository, "get_project", forbidden_project_lookup)
-    project_id, guide_id = uuid4(), uuid4()
+    project_id, guide_id = new_record_id(), new_record_id()
     paths = (
         f"/api/v1/projects/{project_id}/guides/{guide_id}/setup-runs/latest",
         f"/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports",
-        f"/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports/{uuid4()}",
+        f"/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports/{new_record_id()}",
         f"/api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies",
-        f"/api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies/{uuid4()}",
+        f"/api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies/{new_record_id()}",
     )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://testserver"
@@ -934,7 +1183,7 @@ async def test_diagnostic_authentication_failure_precedes_private_lookup(
         (
             lambda project, _grant: f"/api/v1/projects/{project}/role-grants",
             lambda: {
-                "target_actor_profile_id": str(uuid4()),
+                "target_actor_profile_id": str(new_record_id()),
                 "role": "submitter",
                 "qualification": _project_role_qualification(),
                 "reason": "Bounded assignment",
@@ -974,8 +1223,8 @@ async def test_project_role_mutation_rate_failure_precedes_private_work(
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as client:
         response = await client.post(
-            path(uuid4(), uuid4()),
-            headers={"Idempotency-Key": str(uuid4())},
+            path(new_record_id(), new_record_id()),
+            headers={"Idempotency-Key": str(new_record_id())},
             json=payload(),
         )
     assert response.status_code == 503
@@ -989,7 +1238,7 @@ def _project_role_denial_decision(
     denial_code: AuthorizationDenialCode,
 ) -> AuthorizationDecision:
     return AuthorizationDecision(
-        decision_id=uuid4(),
+        decision_id=new_record_id(),
         allowed=False,
         action_id=action_id,
         permission_id=PermissionId.PROJECT_ROLE_GRANT_MANAGE,
@@ -1001,8 +1250,8 @@ def _project_role_denial_decision(
         matched_grant_id=None,
         matched_scope_project_id=None,
         revalidated=False,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
 
 
@@ -1135,7 +1384,12 @@ async def test_project_role_mutation_routes_conceal_denials_and_preserve_self_gu
     expected_code: str,
     message: str,
 ) -> None:
-    project_id, grant_id, caller_id, target_id = uuid4(), uuid4(), uuid4(), uuid4()
+    project_id, grant_id, caller_id, target_id = (
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
+    )
     if hidden_case == "self_target_manager":
         target_id = caller_id
     persisted = {
@@ -1183,7 +1437,7 @@ async def test_project_role_mutation_routes_conceal_denials_and_preserve_self_gu
                 "unauthorized_target_manager",
             }:
                 return None
-            return (SimpleNamespace(id=str(target_id)), SimpleNamespace(id=str(uuid4())))
+            return (SimpleNamespace(id=str(target_id)), SimpleNamespace(id=str(new_record_id())))
 
         async def find_active_project_role(self, **_kwargs):
             return None
@@ -1200,7 +1454,7 @@ async def test_project_role_mutation_routes_conceal_denials_and_preserve_self_gu
                 role="submitter",
                 status="active",
                 version=1,
-                qualification_snapshot_id=uuid4(),
+                qualification_snapshot_id=new_record_id(),
             )
             return grant, SimpleNamespace(id=grant.qualification_snapshot_id)
 
@@ -1248,27 +1502,7 @@ async def test_project_role_mutation_routes_conceal_denials_and_preserve_self_gu
     revoke_payload = ProjectRoleGrantRevokeBody(reason="Bounded removal")
 
     if invocation == "http_route":
-        app = create_app(Settings(environment="test"))
-
-        async def session_dependency():
-            try:
-                yield session
-            finally:
-                await session.rollback()
-
-        async def resolved_dependency():
-            return resolved
-
-        async def prepared_dependency():
-            return prepared
-
-        async def consume_rate() -> None:
-            return None
-
-        app.dependency_overrides[get_db_session] = session_dependency
-        app.dependency_overrides[get_authorization_actor] = resolved_dependency
-        app.dependency_overrides[get_prepared_authorization_service] = prepared_dependency
-        app.dependency_overrides[enforce_admin_mutation_rate_limit] = consume_rate
+        app = _project_role_route_app(session, resolved, prepared, rollback_open_only=False)
         path = (
             f"/api/v1/projects/{project_id}/role-grants"
             if operation == "issue"
@@ -1284,7 +1518,7 @@ async def test_project_role_mutation_routes_conceal_denials_and_preserve_self_gu
         ) as client:
             response = await client.post(
                 path,
-                headers={"Idempotency-Key": str(uuid4())},
+                headers={"Idempotency-Key": str(new_record_id())},
                 json=body,
             )
         error = response.json()["error"]
@@ -1301,7 +1535,7 @@ async def test_project_role_mutation_routes_conceal_denials_and_preserve_self_gu
                 await authorization_router.issue_project_role_grant(
                     project_id=project_id,
                     payload=issue_payload,
-                    idempotency_key=uuid4(),
+                    idempotency_key=new_record_id(),
                     resolved=resolved,  # type: ignore[arg-type]
                     prepared=prepared,  # type: ignore[arg-type]
                     session=session,  # type: ignore[arg-type]
@@ -1311,7 +1545,7 @@ async def test_project_role_mutation_routes_conceal_denials_and_preserve_self_gu
                     project_id=project_id,
                     grant_id=grant_id,
                     payload=revoke_payload,
-                    idempotency_key=uuid4(),
+                    idempotency_key=new_record_id(),
                     resolved=resolved,  # type: ignore[arg-type]
                     prepared=prepared,  # type: ignore[arg-type]
                     session=session,  # type: ignore[arg-type]
@@ -1361,7 +1595,7 @@ async def test_project_role_mutation_routes_enforce_project_lifecycle_without_di
     project_exists: bool,
     expected_status: int,
 ) -> None:
-    project_id, grant_id, caller_id, target_id, snapshot_id = (uuid4() for _ in range(5))
+    project_id, grant_id, caller_id, target_id, snapshot_id = (new_record_id() for _ in range(5))
     staged = {
         "idempotency": 0,
         "qualification_snapshot": 0,
@@ -1401,7 +1635,7 @@ async def test_project_role_mutation_routes_enforce_project_lifecycle_without_di
         async def lock_eligible_human(self, selected_target_id):
             calls["target_lookup"] += 1
             assert selected_target_id == target_id
-            return SimpleNamespace(id=str(target_id)), SimpleNamespace(id=str(uuid4()))
+            return SimpleNamespace(id=str(target_id)), SimpleNamespace(id=str(new_record_id()))
 
         async def find_active_project_role(self, **_kwargs):
             return None
@@ -1493,7 +1727,7 @@ async def test_project_role_mutation_routes_enforce_project_lifecycle_without_di
             return await authorization_router.issue_project_role_grant(
                 project_id=project_id,
                 payload=issue_payload,
-                idempotency_key=uuid4(),
+                idempotency_key=new_record_id(),
                 resolved=resolved,  # type: ignore[arg-type]
                 prepared=prepared,  # type: ignore[arg-type]
                 session=session,  # type: ignore[arg-type]
@@ -1502,35 +1736,14 @@ async def test_project_role_mutation_routes_enforce_project_lifecycle_without_di
             project_id=project_id,
             grant_id=grant_id,
             payload=revoke_payload,
-            idempotency_key=uuid4(),
+            idempotency_key=new_record_id(),
             resolved=resolved,  # type: ignore[arg-type]
             prepared=prepared,  # type: ignore[arg-type]
             session=session,  # type: ignore[arg-type]
         )
 
     if invocation == "http_route":
-        app = create_app(Settings(environment="test"))
-
-        async def session_dependency():
-            try:
-                yield session
-            finally:
-                if session.in_transaction():
-                    await session.rollback()
-
-        async def resolved_dependency():
-            return resolved
-
-        async def prepared_dependency():
-            return prepared
-
-        async def consume_rate() -> None:
-            return None
-
-        app.dependency_overrides[get_db_session] = session_dependency
-        app.dependency_overrides[get_authorization_actor] = resolved_dependency
-        app.dependency_overrides[get_prepared_authorization_service] = prepared_dependency
-        app.dependency_overrides[enforce_admin_mutation_rate_limit] = consume_rate
+        app = _project_role_route_app(session, resolved, prepared, rollback_open_only=True)
         path = (
             f"/api/v1/projects/{project_id}/role-grants"
             if operation == "issue"
@@ -1542,7 +1755,7 @@ async def test_project_role_mutation_routes_enforce_project_lifecycle_without_di
         ) as client:
             response = await client.post(
                 path,
-                headers={"Idempotency-Key": str(uuid4())},
+                headers={"Idempotency-Key": str(new_record_id())},
                 json=payload.model_dump(mode="json"),
             )
         observed_status = response.status_code
@@ -1568,7 +1781,11 @@ async def test_project_role_mutation_routes_enforce_project_lifecycle_without_di
         assert calls["complete"] == 0
         assert session.commit_count == 0
         if not project_exists:
-            assert calls == {"target_lookup": int(operation == "issue"), "consume": 0, "complete": 0}
+            assert calls == {
+                "target_lookup": int(operation == "issue"),
+                "consume": 0,
+                "complete": 0,
+            }
     else:
         expected_body = {
             "id": str(grant_id),
@@ -1588,7 +1805,6 @@ async def test_project_role_mutation_routes_enforce_project_lifecycle_without_di
         assert persisted["audit"] == 2
         assert persisted["qualification_snapshot"] == (operation == "issue")
         assert persisted["invalidation"] == (operation == "revoke")
-
 
 
 ART_ACTIVATION_CUSTODY_EXPECTATIONS = {
@@ -1618,7 +1834,6 @@ ART_ACTIVATION_CUSTODY_EXPECTATIONS = {
 }
 
 
-
 def _admin_resource_context(
     request: AdminRoleGrantIssueRequest | AdminRoleGrantRevokeRequest,
     *,
@@ -1639,32 +1854,49 @@ def _admin_resource_context(
     )
 
 
+def _admin_allowed_decision(
+    request: AdminRoleGrantIssueRequest | AdminRoleGrantRevokeRequest,
+    matched_grant_id: UUID,
+    *,
+    resource_context_digest: str | None = None,
+) -> AuthorizationDecision:
+    """Build an exact allowed admin decision for service mutation fixtures."""
+    issue = isinstance(request, AdminRoleGrantIssueRequest)
+    resource_id = request.target_actor_id if issue else request.grant_id
+    return AuthorizationDecision(
+        decision_id=new_record_id(),
+        action_id=(ActionId.ADMIN_ROLE_GRANT_ISSUE if issue else ActionId.ADMIN_ROLE_GRANT_REVOKE),
+        permission_id=(PermissionId.ADMIN_ROLE_GRANT if issue else PermissionId.ADMIN_ROLE_REVOKE),
+        allowed=True,
+        denial_code=None,
+        resource_type="admin_role_grant_issue" if issue else "admin_role_grant",
+        resource_id=resource_id,
+        resource_context_digest=(
+            resource_context_digest
+            or authorization_resource_digest(_admin_resource_context(request))
+        ),
+        matched_authority_kind=MatchedAuthorityKind.ADMIN_ROLE_GRANT,
+        matched_grant_id=matched_grant_id,
+        matched_scope_project_id=None,
+        revalidated=True,
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
+    )
 
 
 def test_project_mutation_resources_and_prepared_scopes_are_closed() -> None:
     """Bind every planned project mutation to one typed system/project scope."""
-    project_id, guide_id, snapshot_id, report_id = (uuid4() for _ in range(4))
-    review_id, revision_id, submission_policy_id, checker_policy_id = (uuid4() for _ in range(4))
-    setup_run_id, operation_id, requested_project_id = (uuid4() for _ in range(3))
-    setup_task_id, setup_correlation_id = uuid4(), uuid4()
-    setup_custody_by_step = {
-        step: ProjectSetupServiceCustodyContext(
-            setup_run_id=setup_run_id,
-            scope_project_id=project_id,
-            guide_id=guide_id,
-            source_snapshot_id=snapshot_id,
-            setup_generation=1,
-            expected_step=step,
-            task_id=setup_task_id,
-            correlation_id=setup_correlation_id,
-            stale_output_digest=DIGEST,
-        )
-        for step in (
-            "guide_sufficiency",
-            "submission_artifact_policy",
-            "post_submit_policy",
-        )
-    }
+    project_id, guide_id, snapshot_id, report_id = (new_record_id() for _ in range(4))
+    review_id, revision_id, submission_policy_id, checker_policy_id = (
+        new_record_id() for _ in range(4)
+    )
+    setup_run_id, operation_id, requested_project_id = (new_record_id() for _ in range(3))
+    setup_custody_by_step = _project_setup_custodies(
+        setup_run_id,
+        project_id,
+        guide_id,
+        snapshot_id,
+    )
     create_resource = ProjectCreateResourceContext(
         resource_type="project_create",
         resource_id=operation_id,
@@ -1764,7 +1996,7 @@ def test_project_mutation_resources_and_prepared_scopes_are_closed() -> None:
             )
         ),
     }
-    submission_policy_successor_id = uuid4()
+    submission_policy_successor_id = new_record_id()
     submission_resources = {
         action_id: ProjectSubmissionArtifactPolicyMutationResourceContext(
             resource_type="project_submission_artifact_policy_mutation",
@@ -1813,11 +2045,19 @@ def test_project_mutation_resources_and_prepared_scopes_are_closed() -> None:
             ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE,
         )
     }
-    from app.modules.authorization.domain.project_setup_finalization import finalization_resource_context
+    from app.modules.authorization.domain.project_setup_finalization import (
+        finalization_resource_context,
+    )
     from tests.authorization.setup_finalization.support import finalization_facts
-    setup_resource = finalization_resource_context(finalization_facts(project_id), uuid4(), uuid4())
-    from app.modules.authorization.domain.guide_activation import activation_resource as live_activation_resource
+
+    setup_resource = finalization_resource_context(
+        finalization_facts(project_id), new_record_id(), new_record_id()
+    )
+    from app.modules.authorization.domain.guide_activation import (
+        activation_resource as live_activation_resource,
+    )
     from tests.authorization.guide_activation.support import activation_facts
+
     activation_resource = live_activation_resource(activation_facts(project_id))
     resources = {
         ActionId.PROJECT_CREATE: create_resource,
@@ -1890,8 +2130,8 @@ def test_project_mutation_resources_and_prepared_scopes_are_closed() -> None:
     with pytest.raises(ValidationError):
         ProjectGuideMutationResourceContext(
             resource_type="project_guide_mutation",
-            resource_id=uuid4(),
-            operation_id=uuid4(),
+            resource_id=new_record_id(),
+            operation_id=new_record_id(),
             scope_project_id=project_id,
             guide_id=guide_id,
             target_kind="update",
@@ -1923,7 +2163,7 @@ def test_project_mutation_resources_and_prepared_scopes_are_closed() -> None:
             ):
                 context_type.model_validate(human_derive)
         wrong_lineage = service_resource.model_dump()
-        wrong_lineage["setup_service_custody"]["scope_project_id"] = uuid4()
+        wrong_lineage["setup_service_custody"]["scope_project_id"] = new_record_id()
         with pytest.raises(ValidationError, match="setup lineage is inconsistent"):
             context_type.model_validate(wrong_lineage)
         wrong_generation = service_resource.model_dump()
@@ -1941,7 +2181,7 @@ def test_project_mutation_resources_and_prepared_scopes_are_closed() -> None:
         changed_task = service_resource.model_copy(
             update={
                 "setup_service_custody": service_resource.setup_service_custody.model_copy(
-                    update={"task_id": uuid4(), "correlation_id": uuid4()}
+                    update={"task_id": new_record_id(), "correlation_id": new_record_id()}
                 )
             }
         )
@@ -1968,7 +2208,11 @@ def test_obsolete_artifact_upload_authority_is_historical_only() -> None:
         "sheets",
     }
     for path in repository_root.rglob("*"):
-        if not path.is_file() or ignored_parts.intersection(path.parts) or "pre-cutover" in path.parts:
+        if (
+            not path.is_file()
+            or ignored_parts.intersection(path.parts)
+            or "pre-cutover" in path.parts
+        ):
             continue
         try:
             text_value = path.read_text(encoding="utf-8")
@@ -1981,7 +2225,9 @@ def test_obsolete_artifact_upload_authority_is_historical_only() -> None:
 
 def test_fixed_service_action_matrix_and_activation_are_exact_and_immutable() -> None:
     expected = FIXED_SERVICE_ACTION_EXPECTATIONS
-    assert set(SERVICE_ACTIONS_BY_IDENTITY) == SERVICE_IDENTITIES - {ServiceIdentity.COMPENSATION_ADAPTER}
+    assert set(SERVICE_ACTIONS_BY_IDENTITY) == SERVICE_IDENTITIES - {
+        ServiceIdentity.COMPENSATION_ADAPTER
+    }
     assert {
         identity: {action.value for action in actions}
         for identity, actions in SERVICE_ACTIONS_BY_IDENTITY.items()
@@ -1995,7 +2241,9 @@ def test_fixed_service_action_matrix_and_activation_are_exact_and_immutable() ->
         ACTION_BY_ID[action].availability is ActionAvailability.PLANNED
         for action in FUTURE_INTENT_REQUIRED_ACTIONS
     )
-    assert FUTURE_INTENT_REQUIRED_ACTIONS.isdisjoint(set().union(*SERVICE_ACTIONS_BY_IDENTITY.values()))
+    assert FUTURE_INTENT_REQUIRED_ACTIONS.isdisjoint(
+        set().union(*SERVICE_ACTIONS_BY_IDENTITY.values())
+    )
     project_setup_actions = SERVICE_ACTIONS_BY_IDENTITY[ServiceIdentity.PROJECT_SETUP]
     assert {
         action: (
@@ -2005,8 +2253,16 @@ def test_fixed_service_action_matrix_and_activation_are_exact_and_immutable() ->
         )
         for action in project_setup_actions
     } == {
-        ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC: (PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE, ActionOwner.AUTH_12I, ActionAvailability.ACTIVE),
-        ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE: (PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE, ActionOwner.AUTH_12I, ActionAvailability.ACTIVE),
+        ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC: (
+            PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
+            ActionOwner.AUTH_12I,
+            ActionAvailability.ACTIVE,
+        ),
+        ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE: (
+            PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
+            ActionOwner.AUTH_12I,
+            ActionAvailability.ACTIVE,
+        ),
         ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN: (
             PermissionId.PROJECT_GUIDE_MANAGE,
             ActionOwner.AUTH_12E,
@@ -2044,9 +2300,15 @@ def test_submission_artifact_policy_draft_actions_have_exact_child_owners() -> N
     assert derive.owner is ActionOwner.AUTH_12F3
     assert derive.availability is ActionAvailability.ACTIVE
     approval = ACTION_BY_ID[ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_APPROVE]
-    assert (approval.owner, approval.availability) == (ActionOwner.AUTH_12F4, ActionAvailability.ACTIVE)
+    assert (approval.owner, approval.availability) == (
+        ActionOwner.AUTH_12F4,
+        ActionAvailability.ACTIVE,
+    )
     active_internal = {
-        ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE, ActionId.OUTBOX_DISPATCH, ActionId.ARTIFACT_VERIFICATION_EXECUTE, ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
+        ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE,
+        ActionId.OUTBOX_DISPATCH,
+        ActionId.ARTIFACT_VERIFICATION_EXECUTE,
+        ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
         ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE,
         ActionId.ARTIFACT_PENDING_WORK_SCAN,
         ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE,
@@ -2054,7 +2316,8 @@ def test_submission_artifact_policy_draft_actions_have_exact_child_owners() -> N
         ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
         ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC,
         ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
-        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE, ActionId.PROJECT_SETUP_RUN_UPDATE,
+        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE,
+        ActionId.PROJECT_SETUP_RUN_UPDATE,
         ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE,
     }
     assert {
@@ -2322,7 +2585,7 @@ async def test_definition_reads_authorize_touch_and_commit_before_disclosure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     events: list[tuple[str, object]] = []
-    resolved = SimpleNamespace(profile=SimpleNamespace(id=str(uuid4())))
+    resolved = SimpleNamespace(profile=SimpleNamespace(id=str(new_record_id())))
 
     class Session:
         async def commit(self) -> None:
@@ -2403,10 +2666,10 @@ async def test_actor_admin_routes_authorize_before_lookup_touch_and_commit(
     read_method: str,
     self_target: bool,
 ) -> None:
-    target_id = uuid4()
+    target_id = new_record_id()
     resolved = SimpleNamespace(
         profile=SimpleNamespace(
-            id=str(target_id if self_target else uuid4()),
+            id=str(target_id if self_target else new_record_id()),
             updated_at=datetime.now(UTC),
             last_seen_at=datetime.now(UTC),
         ),
@@ -2520,7 +2783,7 @@ async def test_actor_admin_missing_resource_rolls_back_without_touch_or_commit(
 
     with pytest.raises(StructuredHTTPException) as missing:
         await route(
-            uuid4(),
+            new_record_id(),
             SimpleNamespace(),
             Authorization(),
             Session(),
@@ -2603,10 +2866,10 @@ async def test_identity_link_lifecycle_route_preserves_outcome_transaction_contr
     expected_events: list[str],
 ) -> None:
     """Prove route-owned ordering and stable mapping for every lifecycle outcome."""
-    caller_id = uuid4()
-    target_link_id = uuid4()
-    target_actor_id = uuid4()
-    idempotency_key = uuid4()
+    caller_id = new_record_id()
+    target_link_id = new_record_id()
+    target_actor_id = new_record_id()
+    idempotency_key = new_record_id()
     events: list[str] = []
     response_reference = AuthorityResponseReference(
         resource_type=AuthorityResourceType.ACTOR_IDENTITY_LINK,
@@ -2620,13 +2883,10 @@ async def test_identity_link_lifecycle_route_preserves_outcome_transaction_contr
         version=None,
         http_status=200,
     )
-    claim = AuthorityClaimHandle(
-        record_id=uuid4(),
+    claim = _authority_claim(
+        caller_id,
+        AuthorityOperation.ACTOR_IDENTITY_LINK_REVOKE,
         idempotency_key=idempotency_key,
-        actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
-        actor_ref=str(caller_id),
-        operation=AuthorityOperation.ACTOR_IDENTITY_LINK_REVOKE,
-        request_digest=DIGEST,
     )
     reservation = {
         "success": ClaimedReservation(claim=claim),
@@ -2696,7 +2956,9 @@ async def test_identity_link_lifecycle_route_preserves_outcome_transaction_contr
 
     test_session = Session()
     monkeypatch.setattr(authorization_router, "ActorService", RouteActorService)
-    monkeypatch.setattr(authorization_router, "identity_link_lifecycle_service", RouteLifecycleService)
+    monkeypatch.setattr(
+        authorization_router, "identity_link_lifecycle_service", RouteLifecycleService
+    )
 
     call = authorization_router._mutate_identity_link_lifecycle(
         identity_link_id=target_link_id,
@@ -2906,11 +3168,11 @@ async def test_project_mutation_actions_cannot_issue_prepared_handles_while_plan
         authorization,
         facts,  # type: ignore[arg-type]
     )
-    project_id = uuid4()
+    project_id = new_record_id()
     for action_id in PROJECT_MUTATION_RESOURCE_BY_ACTION:
         if ACTION_BY_ID[action_id].availability is ActionAvailability.ACTIVE:
             continue
-        caller_input = PreparedAuthorizationInput(idempotency_key=uuid4(), request_value={})
+        caller_input = PreparedAuthorizationInput(idempotency_key=new_record_id(), request_value={})
         scope = PreparedAuthorityScope(
             kind=PreparedAuthorityScopeKind.PROJECT, project_id=project_id
         )
@@ -2951,7 +3213,7 @@ async def test_submission_artifact_policy_create_update_accepts_only_covered_pm_
     context = _runtime_context()
     assert isinstance(context, HumanAuthorizationContext)
     session = _PreparedTestSession()
-    project_id, grant_id = uuid4(), uuid4()
+    project_id, grant_id = new_record_id(), new_record_id()
     facts = _GuideMutationAuthorityFacts(
         context,
         grant=SimpleNamespace(
@@ -2989,7 +3251,7 @@ async def test_submission_artifact_policy_create_update_missing_pm_grant_denies_
     )
     authorization, evidence = _runtime_service(context, session=session, admin_repository=facts)
     prepared = PreparedAuthorizationService(session, context, authorization, facts)
-    project_id = uuid4()
+    project_id = new_record_id()
     for action_id in (
         ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_CREATE,
         ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_UPDATE,
@@ -3012,14 +3274,14 @@ async def test_submission_artifact_policy_create_update_wrong_project_grant_deni
     context = _runtime_context()
     assert isinstance(context, HumanAuthorizationContext)
     session = _PreparedTestSession()
-    project_id = uuid4()
+    project_id = new_record_id()
     # The repository's exact-scope query must filter this other-project grant.
     facts = _GuideMutationAuthorityFacts(
         context,
         grant=SimpleNamespace(
-            id=uuid4(),
+            id=new_record_id(),
             status="active",
-            scope_project_id=uuid4(),
+            scope_project_id=new_record_id(),
         ),
         permission_id=PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE,
     )
@@ -3090,7 +3352,7 @@ async def test_guide_source_metadata_authority_uses_exact_single_use_project_han
     context = _runtime_context()
     assert isinstance(context, HumanAuthorizationContext)
     session = _PreparedTestSession()
-    project_id, guide_id, resource_id, grant_id = (uuid4() for _ in range(4))
+    project_id, guide_id, resource_id, grant_id = (new_record_id() for _ in range(4))
     facts = _GuideMutationAuthorityFacts(
         context,
         grant=SimpleNamespace(
@@ -3106,17 +3368,20 @@ async def test_guide_source_metadata_authority_uses_exact_single_use_project_han
         authorization,
         facts,  # type: ignore[arg-type]
     )
-    operation_id = uuid4()
+    operation_id = new_record_id()
     target_resource_id = resource_id if resource_type == "snapshot" else guide_id
     caller = PreparedAuthorizationInput(
-        idempotency_key=uuid4(),
+        idempotency_key=new_record_id(),
         request_value={
             "project_id": str(project_id),
             "guide_id": str(guide_id),
             "target_resource_id": str(target_resource_id),
             "operation_id": str(operation_id),
-            **({"request_digest": DIGEST, "task_examples_hash": DIGEST, "task_examples_count": 1}
-               if action_id is ActionId.PROJECT_GUIDE_CREATE else {}),
+            **(
+                {"request_digest": DIGEST, "task_examples_hash": DIGEST, "task_examples_count": 1}
+                if action_id is ActionId.PROJECT_GUIDE_CREATE
+                else {}
+            ),
         },
     )
     scope = PreparedAuthorityScope(
@@ -3149,8 +3414,11 @@ async def test_guide_source_metadata_authority_uses_exact_single_use_project_han
             guide_status="draft" if target_kind == "update" else None,
             guide_version="v1" if target_kind == "update" else None,
             operation_generation=1,
-            **({"request_digest": DIGEST, "task_examples_hash": DIGEST, "task_examples_count": 1}
-               if target_kind == "create" else {}),
+            **(
+                {"request_digest": DIGEST, "task_examples_hash": DIGEST, "task_examples_count": 1}
+                if target_kind == "create"
+                else {}
+            ),
         )
     if action_id is ActionId.PROJECT_GUIDE_CREATE:
         for field, changed in {
@@ -3159,14 +3427,16 @@ async def test_guide_source_metadata_authority_uses_exact_single_use_project_han
             "task_examples_count": 2,
         }.items():
             with pytest.raises(PreparedAuthorizationHandleInvalid):
-                await prepared.consume(handle, action_id, caller, resource.model_copy(update={field: changed}))
+                await prepared.consume(
+                    handle, action_id, caller, resource.model_copy(update={field: changed})
+                )
     if resource_type == "snapshot":
-        wrong_id = uuid4()
+        wrong_id = new_record_id()
         wrong_resource = resource.model_copy(
             update={"resource_id": wrong_id, "source_snapshot_id": wrong_id}
         )
     else:
-        wrong_id = uuid4()
+        wrong_id = new_record_id()
         wrong_resource = resource.model_copy(update={"resource_id": wrong_id, "guide_id": wrong_id})
     with pytest.raises(PreparedAuthorizationHandleInvalid):
         await prepared.consume(handle, action_id, caller, wrong_resource)
@@ -3208,7 +3478,7 @@ async def test_policy_mutation_authority_binds_full_lineage_and_evidence(
     context = _runtime_context()
     assert isinstance(context, HumanAuthorizationContext)
     session = _PreparedTestSession()
-    project_id, guide_id, policy_id, predecessor_id, grant_id = (uuid4() for _ in range(5))
+    project_id, guide_id, policy_id, predecessor_id, grant_id = (new_record_id() for _ in range(5))
     facts = _GuideMutationAuthorityFacts(
         context,
         grant=SimpleNamespace(id=grant_id, status="active", scope_project_id=project_id),
@@ -3221,9 +3491,9 @@ async def test_policy_mutation_authority_binds_full_lineage_and_evidence(
         authorization,
         facts,  # type: ignore[arg-type]
     )
-    operation_id = uuid4()
+    operation_id = new_record_id()
     caller = PreparedAuthorizationInput(
-        idempotency_key=uuid4(),
+        idempotency_key=new_record_id(),
         request_value={
             "project_id": str(project_id),
             "guide_id": str(guide_id),
@@ -3295,15 +3565,15 @@ async def test_guide_metadata_preparation_denies_wrong_scope_missing_grant_and_s
         authorization,
         facts,  # type: ignore[arg-type]
     )
-    project_id = uuid4()
-    guide_id = uuid4()
+    project_id = new_record_id()
+    guide_id = new_record_id()
     caller = PreparedAuthorizationInput(
-        idempotency_key=uuid4(),
+        idempotency_key=new_record_id(),
         request_value={
             "project_id": str(project_id),
             "guide_id": str(guide_id),
             "target_resource_id": str(guide_id),
-            "operation_id": str(uuid4()),
+            "operation_id": str(new_record_id()),
             "request_digest": "sha256:" + "1" * 64,
             "task_examples_hash": "sha256:" + "2" * 64,
             "task_examples_count": 1,
@@ -3353,7 +3623,7 @@ async def test_project_create_prepared_authority_is_system_scoped_and_evidenced(
     context = _runtime_context()
     assert isinstance(context, HumanAuthorizationContext)
     session = _PreparedTestSession()
-    grant_id = uuid4()
+    grant_id = new_record_id()
     facts = _ProjectCreateAuthorityFacts(
         context, grant=SimpleNamespace(id=grant_id, status="active")
     )
@@ -3364,7 +3634,7 @@ async def test_project_create_prepared_authority_is_system_scoped_and_evidenced(
         authorization,
         facts,  # type: ignore[arg-type]
     )
-    operation_id, project_id, key = uuid4(), uuid4(), uuid4()
+    operation_id, project_id, key = new_record_id(), new_record_id(), new_record_id()
     caller_input = PreparedAuthorizationInput(
         idempotency_key=key,
         request_value={
@@ -3415,7 +3685,7 @@ async def test_project_create_prepared_authority_is_system_scoped_and_evidenced(
             caller_input,
             ProjectCreateResourceContext(
                 resource_type="project_create",
-                resource_id=uuid4(),
+                resource_id=new_record_id(),
                 requested_project_id=project_id,
                 operation_generation=1,
             ),
@@ -3435,10 +3705,10 @@ async def test_project_create_preparation_denies_wrong_scope_missing_grant_and_s
         authorization,
         facts,  # type: ignore[arg-type]
     )
-    operation_id = uuid4()
-    project_id = uuid4()
+    operation_id = new_record_id()
+    project_id = new_record_id()
     caller_input = PreparedAuthorizationInput(
-        idempotency_key=uuid4(),
+        idempotency_key=new_record_id(),
         request_value={
             "operation_id": str(operation_id),
             "project_id": str(project_id),
@@ -3457,7 +3727,9 @@ async def test_project_create_preparation_denies_wrong_scope_missing_grant_and_s
         await prepared.prepare(
             ActionId.PROJECT_CREATE,
             caller_input,
-            PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.PROJECT, project_id=uuid4()),
+            PreparedAuthorityScope(
+                kind=PreparedAuthorityScopeKind.PROJECT, project_id=new_record_id()
+            ),
         )
     assert scoped.value.denial_code is AuthorizationDenialCode.SCOPE_NOT_AUTHORIZED
     assert evidence.events == []
@@ -3534,19 +3806,19 @@ class _ContextProjectionAuthorization:
 @pytest.mark.asyncio
 async def test_project_read_kernel_prefers_admin_and_records_project_role_authority() -> None:
     context = _runtime_context()
-    project_id = uuid4()
+    project_id = new_record_id()
     resource = ProjectReadResourceContext(
         resource_type="project",
         resource_id=project_id,
         scope_project_id=project_id,
         project_status="active",
     )
-    admin_grant = SimpleNamespace(id=uuid4())
+    admin_grant = SimpleNamespace(id=new_record_id())
     service, _ = _runtime_service(
         context,
         admin_repository=_ProjectReadAuthorityFacts(
             admin_grant=admin_grant,
-            project_grant=SimpleNamespace(id=uuid4()),
+            project_grant=SimpleNamespace(id=new_record_id()),
         ),
     )
     decision = await service.require(ActionId.PROJECT_READ, resource)
@@ -3555,7 +3827,7 @@ async def test_project_read_kernel_prefers_admin_and_records_project_role_author
     assert decision.matched_scope_project_id == project_id
     assert decision.revalidated is True
 
-    project_grant = SimpleNamespace(id=uuid4())
+    project_grant = SimpleNamespace(id=new_record_id())
     service, _ = _runtime_service(
         context,
         admin_repository=_ProjectReadAuthorityFacts(project_grant=project_grant),
@@ -3579,20 +3851,20 @@ async def test_project_read_kernel_prefers_admin_and_records_project_role_author
 @pytest.mark.asyncio
 async def test_project_diagnostic_read_requires_exact_active_admin_grant_and_child() -> None:
     context = _runtime_context()
-    project_id = uuid4()
-    grant = SimpleNamespace(id=uuid4())
+    project_id = new_record_id()
+    grant = SimpleNamespace(id=new_record_id())
     resource = ProjectDiagnosticReadResourceContext(
         resource_type="project_diagnostic",
-        resource_id=uuid4(),
+        resource_id=new_record_id(),
         scope_project_id=project_id,
-        guide_id=uuid4(),
+        guide_id=new_record_id(),
         guide_version="v1",
         target_kind="sufficiency_report",
         project_exists=True,
         guide_exists=True,
         target_exists=True,
         target_binding_digest=f"sha256:{'b' * 64}",
-        source_snapshot_id=uuid4(),
+        source_snapshot_id=new_record_id(),
         source_snapshot_hash=f"sha256:{'a' * 64}",
     )
     with pytest.raises(ValidationError, match="source_snapshot_hash"):
@@ -3659,8 +3931,8 @@ async def test_project_diagnostic_read_requires_exact_active_admin_grant_and_chi
 @pytest.mark.asyncio
 async def test_project_11c2_reads_require_exact_admin_context_and_role_allowlist() -> None:
     context = _runtime_context()
-    project_id, guide_id, snapshot_id, effective_id = (uuid4() for _ in range(4))
-    grant = SimpleNamespace(id=uuid4())
+    project_id, guide_id, snapshot_id, effective_id = (new_record_id() for _ in range(4))
+    grant = SimpleNamespace(id=new_record_id())
     policy = ProjectPolicyReadResourceContext(
         resource_type="project_policy_read",
         resource_id=effective_id,
@@ -3685,9 +3957,7 @@ async def test_project_11c2_reads_require_exact_admin_context_and_role_allowlist
             **policy.model_dump(exclude={"guide_status"}),
             guide_status="draft",
         )
-    service, policy_evidence = _runtime_service(
-        context, admin_repository=_ProjectReadAuthorityFacts(admin_grant=grant)
-    )
+    service, policy_evidence = _admin_read_runtime(context, grant)
     decision = await service.require(
         ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ, policy
     )
@@ -3699,16 +3969,14 @@ async def test_project_11c2_reads_require_exact_admin_context_and_role_allowlist
 
     checker_policy = policy.model_copy(
         update={
-            "resource_id": uuid4(),
+            "resource_id": new_record_id(),
             "target_kind": "pre_submit_checker_policy",
-            "checker_policy_id": uuid4(),
+            "checker_policy_id": new_record_id(),
             "checker_policy_status": "compiled",
             "checker_bundle_hash": f"sha256:{'e' * 64}",
         }
     )
-    service, checker_evidence = _runtime_service(
-        context, admin_repository=_ProjectReadAuthorityFacts(admin_grant=grant)
-    )
+    service, checker_evidence = _admin_read_runtime(context, grant)
     checker_decision = await service.require(
         ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ, checker_policy
     )
@@ -3727,9 +3995,7 @@ async def test_project_11c2_reads_require_exact_admin_context_and_role_allowlist
             "target_binding_digest": None,
         }
     )
-    service, denied_policy_evidence = _runtime_service(
-        context, admin_repository=_ProjectReadAuthorityFacts(admin_grant=grant)
-    )
+    service, denied_policy_evidence = _admin_read_runtime(context, grant)
     with pytest.raises(AuthorizationDenied) as denied_policy:
         await service.require(
             ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ, missing_policy
@@ -3756,21 +4022,21 @@ async def test_project_11c2_reads_require_exact_admin_context_and_role_allowlist
         target_exists=True,
         source_snapshot_id=snapshot_id,
         source_snapshot_hash=f"sha256:{'a' * 64}",
-        sufficiency_report_id=uuid4(),
+        sufficiency_report_id=new_record_id(),
         sufficiency_report_status="passed",
-        submission_artifact_policy_id=uuid4(),
+        submission_artifact_policy_id=new_record_id(),
         submission_artifact_policy_hash=f"sha256:{'b' * 64}",
         submission_artifact_policy_status="approved",
         effective_policy_id=effective_id,
         effective_policy_hash=f"sha256:{'c' * 64}",
         effective_policy_status="approved",
-        pre_submit_checker_policy_id=uuid4(),
+        pre_submit_checker_policy_id=new_record_id(),
         pre_submit_checker_bundle_hash=f"sha256:{'d' * 64}",
         pre_submit_checker_policy_status="compiled",
-        post_submit_checker_policy_id=uuid4(),
+        post_submit_checker_policy_id=new_record_id(),
         post_submit_checker_policy_status="approved",
-        review_policy_id=uuid4(),
-        revision_policy_id=uuid4(),
+        review_policy_id=new_record_id(),
+        revision_policy_id=new_record_id(),
         policy_binding_digest=f"sha256:{'d' * 64}",
     )
 
@@ -3801,9 +4067,7 @@ async def test_project_11c2_reads_require_exact_admin_context_and_role_allowlist
             "policy_binding_digest": None,
         }
     )
-    service, denied_evidence = _runtime_service(
-        context, admin_repository=_ProjectReadAuthorityFacts(admin_grant=grant)
-    )
+    service, denied_evidence = _admin_read_runtime(context, grant)
     with pytest.raises(AuthorizationDenied) as denied:
         await service.require(ActionId.PROJECT_ACTIVE_GUIDE_READ, missing)
     assert denied.value.decision.denial_code is AuthorizationDenialCode.RESOURCE_NOT_FOUND
@@ -3822,12 +4086,14 @@ async def test_actor_authorization_context_is_self_only_and_revalidated() -> Non
     resource = ActorAuthorizationContextResourceContext(
         resource_type="actor_authorization_context",
         resource_id=context.actor_profile_id,
-        scope_project_id=uuid4(),
+        scope_project_id=new_record_id(),
         project_status="active",
     )
     service, _ = _runtime_service(
         context,
-        admin_repository=_ProjectReadAuthorityFacts(project_grant=SimpleNamespace(id=uuid4())),
+        admin_repository=_ProjectReadAuthorityFacts(
+            project_grant=SimpleNamespace(id=new_record_id())
+        ),
     )
     decision = await service.require(ActionId.ACTOR_AUTHORIZATION_CONTEXT_READ, resource)
     assert decision.matched_authority_kind is MatchedAuthorityKind.PROJECT_ROLE_GRANT
@@ -3843,14 +4109,14 @@ async def test_actor_authorization_context_is_self_only_and_revalidated() -> Non
     with pytest.raises(AuthorizationDenied) as exc_info:
         await service.require(
             ActionId.ACTOR_AUTHORIZATION_CONTEXT_READ,
-            resource.model_copy(update={"resource_id": uuid4()}),
+            resource.model_copy(update={"resource_id": new_record_id()}),
         )
     assert exc_info.value.decision.denial_code is AuthorizationDenialCode.RESOURCE_GUARD_DENIED
 
 
 @pytest.mark.asyncio
 async def test_context_projection_excludes_planned_and_unrelated_actions() -> None:
-    actor_id, project_id = uuid4(), uuid4()
+    actor_id, project_id = new_record_id(), new_record_id()
     authorization = _ContextProjectionAuthorization()
     service = ActorAuthorizationContextReadService(
         authorization,  # type: ignore[arg-type]
@@ -3941,7 +4207,7 @@ class _PreparedActorFacts:
 class _PreparedAdminFacts(_PreparedActorFacts):
     def __init__(self, context: HumanAuthorizationContext) -> None:
         super().__init__(context)
-        self.grant_id = uuid4()
+        self.grant_id = new_record_id()
         self.control_calls = 0
         self.grant_calls = 0
         self.grant_requests: list[tuple[tuple[object, ...], dict[str, object]]] = []
@@ -3962,7 +4228,7 @@ class _PreparedAdminFacts(_PreparedActorFacts):
     async def lock_eligible_human(self, actor_profile_id):
         self.target_calls += 1
         return (
-            SimpleNamespace(id=str(uuid4()), actor_profile_id=str(actor_profile_id)),
+            SimpleNamespace(id=str(new_record_id()), actor_profile_id=str(actor_profile_id)),
             SimpleNamespace(id=str(actor_profile_id)),
         )
 
@@ -3974,7 +4240,7 @@ class _PreparedAdminFacts(_PreparedActorFacts):
         return SimpleNamespace(
             id=grant_id,
             status="active",
-            target_actor_profile_id=str(uuid4()),
+            target_actor_profile_id=str(new_record_id()),
         )
 
     async def lock_actor_lifecycle_target(self, actor_profile_id):
@@ -3989,7 +4255,7 @@ async def test_project_role_reads_use_exact_scope_and_candidate_kernel_guard() -
     context = _runtime_context()
     assert isinstance(context, HumanAuthorizationContext)
     facts = _PreparedAdminFacts(context)
-    project_id = uuid4()
+    project_id = new_record_id()
     service, evidence = _runtime_service(context, admin_repository=facts)
 
     decision = await service.require(
@@ -4009,7 +4275,7 @@ async def test_project_role_reads_use_exact_scope_and_candidate_kernel_guard() -
         ActionId.PROJECT_ROLE_GRANT_READ,
         ProjectRoleGrantReadResourceContext(
             resource_type="project_role_grant",
-            resource_id=uuid4(),
+            resource_id=new_record_id(),
             scope_project_id=project_id,
             project_status="archived",
         ),
@@ -4075,20 +4341,20 @@ def test_project_role_read_denials_share_one_public_concealment(
     denial_code: AuthorizationDenialCode,
 ) -> None:
     decision = AuthorizationDecision(
-        decision_id=uuid4(),
+        decision_id=new_record_id(),
         allowed=False,
         action_id=action_id,
         permission_id=ACTION_BY_ID[action_id].permission_id,
         resource_type="project_role_grant_collection",
-        resource_id=uuid4(),
+        resource_id=new_record_id(),
         resource_context_digest=DIGEST,
         denial_code=denial_code,
         matched_authority_kind=None,
         matched_grant_id=None,
         matched_scope_project_id=None,
         revalidated=False,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
     translated = authorization_http_error(AuthorizationDenied(decision))
     assert translated.status_code == 404
@@ -4109,20 +4375,20 @@ def test_project_role_mutation_denials_share_resource_not_found_concealment(
     denial_code: AuthorizationDenialCode,
 ) -> None:
     decision = AuthorizationDecision(
-        decision_id=uuid4(),
+        decision_id=new_record_id(),
         allowed=False,
         action_id=ActionId.PROJECT_ROLE_GRANT_ISSUE,
         permission_id=PermissionId.PROJECT_ROLE_GRANT_MANAGE,
         resource_type="project_role_grant",
-        resource_id=uuid4(),
+        resource_id=new_record_id(),
         resource_context_digest=DIGEST,
         denial_code=denial_code,
         matched_authority_kind=None,
         matched_grant_id=None,
         matched_scope_project_id=None,
         revalidated=False,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
     translated = authorization_router._project_role_mutation_denial(AuthorizationDenied(decision))
     assert translated.status_code == 404
@@ -4168,7 +4434,7 @@ async def test_prepared_actor_self_handle_is_exact_single_use_and_transaction_bo
         facts,  # type: ignore[arg-type]
     )
     caller_input = PreparedAuthorizationInput(
-        idempotency_key=uuid4(),
+        idempotency_key=new_record_id(),
         request_value={"display_name": "Prepared"},
     )
     scope = PreparedAuthorityScope(
@@ -4238,7 +4504,7 @@ async def test_prepared_binding_mismatch_does_not_consume_valid_handle():
         authorization,
         facts,  # type: ignore[arg-type]
     )
-    idempotency_key = uuid4()
+    idempotency_key = new_record_id()
     original = PreparedAuthorizationInput(idempotency_key=idempotency_key, request_value={"v": 1})
     handle = await prepared.prepare(
         ActionId.ACTOR_PROFILE_UPDATE_SELF,
@@ -4264,7 +4530,7 @@ async def test_prepared_binding_mismatch_does_not_consume_valid_handle():
         await prepared.consume(
             handle,
             ActionId.ACTOR_PROFILE_UPDATE_SELF,
-            PreparedAuthorizationInput(idempotency_key=uuid4(), request_value={"v": 1}),
+            PreparedAuthorizationInput(idempotency_key=new_record_id(), request_value={"v": 1}),
             resource,
         )
     assert evidence.events == []
@@ -4302,7 +4568,7 @@ async def test_prepared_rejects_cross_context_service_session_and_concurrent_con
         facts,  # type: ignore[arg-type]
     )
     other_context = context.model_copy(
-        update={"actor_profile_id": uuid4(), "identity_link_id": uuid4()}
+        update={"actor_profile_id": new_record_id(), "identity_link_id": new_record_id()}
     )
     with pytest.raises(TypeError, match="invalid prepared authorization composition"):
         PreparedAuthorizationService(
@@ -4325,7 +4591,7 @@ async def test_prepared_rejects_cross_context_service_session_and_concurrent_con
         authorization,
         facts,  # type: ignore[arg-type]
     )
-    caller_input = PreparedAuthorizationInput(idempotency_key=uuid4(), request_value={})
+    caller_input = PreparedAuthorizationInput(idempotency_key=new_record_id(), request_value={})
     scope = PreparedAuthorityScope(
         kind=PreparedAuthorityScopeKind.ACTOR_SELF,
         actor_profile_id=context.actor_profile_id,
@@ -4353,7 +4619,7 @@ def test_prepared_handle_rejects_construction_and_serializable_inputs():
         PreparedAuthorizationHandle()
     with pytest.raises(ValidationError):
         PreparedAuthorizationInput(
-            idempotency_key=uuid4(),
+            idempotency_key=new_record_id(),
             request_value={"not_json": object()},  # type: ignore[arg-type]
         )
 
@@ -4373,7 +4639,7 @@ async def test_prepared_handle_rejects_forgery_copy_serialization_and_nested_roo
         facts,  # type: ignore[arg-type]
     )
     caller_input = PreparedAuthorizationInput(
-        idempotency_key=uuid4(), request_value={"display_name": "opaque"}
+        idempotency_key=new_record_id(), request_value={"display_name": "opaque"}
     )
     scope = PreparedAuthorityScope(
         kind=PreparedAuthorityScopeKind.ACTOR_SELF,
@@ -4437,12 +4703,12 @@ async def test_prepared_admin_consume_reuses_exact_locked_grant_without_requery(
         facts,  # type: ignore[arg-type]
     )
     caller_input = PreparedAuthorizationInput(
-        idempotency_key=uuid4(), request_value={"role": "project_manager"}
+        idempotency_key=new_record_id(), request_value={"role": "project_manager"}
     )
     scope = PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.SYSTEM)
     handle = await prepared.prepare(ActionId.ADMIN_ROLE_GRANT_ISSUE, caller_input, scope)
     assert (facts.control_calls, facts.calls, facts.grant_calls) == (1, 1, 1)
-    target_id = uuid4()
+    target_id = new_record_id()
     decision = await prepared.consume(
         handle,
         ActionId.ADMIN_ROLE_GRANT_ISSUE,
@@ -4461,8 +4727,6 @@ async def test_prepared_admin_consume_reuses_exact_locked_grant_without_requery(
     assert len(evidence.events) == 1
 
 
-
-
 @pytest.mark.asyncio
 async def test_prepared_project_scope_rejects_system_and_other_project_without_consuming():
     context = _runtime_context()
@@ -4477,17 +4741,17 @@ async def test_prepared_project_scope_rejects_system_and_other_project_without_c
         authorization,
         facts,  # type: ignore[arg-type]
     )
-    caller_input = PreparedAuthorizationInput(idempotency_key=uuid4(), request_value={})
-    project_id = uuid4()
+    caller_input = PreparedAuthorizationInput(idempotency_key=new_record_id(), request_value={})
+    project_id = new_record_id()
     handle = await prepared.prepare(
         ActionId.ADMIN_ROLE_GRANT_ISSUE,
         caller_input,
         PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.PROJECT, project_id=project_id),
     )
-    for wrong_project in (None, uuid4()):
+    for wrong_project in (None, new_record_id()):
         wrong_resource = AdminRoleGrantIssueResourceContext(
             resource_type="admin_role_grant_issue",
-            resource_id=uuid4(),
+            resource_id=new_record_id(),
             role=AdminRole.PROJECT_MANAGER,
             scope_type=(AdminScope.SYSTEM if wrong_project is None else AdminScope.PROJECT),
             scope_project_id=wrong_project,
@@ -4506,7 +4770,7 @@ async def test_prepared_project_scope_rejects_system_and_other_project_without_c
         caller_input,
         AdminRoleGrantIssueResourceContext(
             resource_type="admin_role_grant_issue",
-            resource_id=uuid4(),
+            resource_id=new_record_id(),
             role=AdminRole.PROJECT_MANAGER,
             scope_type=AdminScope.PROJECT,
             scope_project_id=project_id,
@@ -4521,7 +4785,9 @@ async def test_prepared_project_scope_rejects_system_and_other_project_without_c
     [
         (
             ActionId.ADMIN_ROLE_GRANT_REVOKE,
-            AdminRoleGrantResourceContext(resource_type="admin_role_grant", resource_id=uuid4()),
+            AdminRoleGrantResourceContext(
+                resource_type="admin_role_grant", resource_id=new_record_id()
+            ),
         ),
         (
             ActionId.ACTOR_SERVICE_PROVISION,
@@ -4535,7 +4801,7 @@ async def test_prepared_project_scope_rejects_system_and_other_project_without_c
                 action_id,
                 ActorProfileLifecycleResourceContext(
                     resource_type="actor_profile",
-                    resource_id=uuid4(),
+                    resource_id=new_record_id(),
                     transition=transition,
                 ),
             )
@@ -4550,7 +4816,7 @@ async def test_prepared_project_scope_rejects_system_and_other_project_without_c
                 action_id,
                 ActorIdentityLinkLifecycleResourceContext(
                     resource_type="actor_identity_link",
-                    resource_id=uuid4(),
+                    resource_id=new_record_id(),
                     transition=transition,
                 ),
             )
@@ -4575,7 +4841,7 @@ async def test_prepared_supports_every_remaining_admin_lock_plan(action_id, reso
         facts,  # type: ignore[arg-type]
     )
     caller_input = PreparedAuthorizationInput(
-        idempotency_key=uuid4(), request_value={"action": action_id.value}
+        idempotency_key=new_record_id(), request_value={"action": action_id.value}
     )
     handle = await prepared.prepare(
         action_id,
@@ -4605,7 +4871,7 @@ async def test_prepared_exact_consume_remains_spent_after_cancellation():
         facts,  # type: ignore[arg-type]
     )
     caller_input = PreparedAuthorizationInput(
-        idempotency_key=uuid4(), request_value={"display_name": "cancel"}
+        idempotency_key=new_record_id(), request_value={"display_name": "cancel"}
     )
     handle = await prepared.prepare(
         ActionId.ACTOR_PROFILE_UPDATE_SELF,
@@ -4676,7 +4942,7 @@ async def test_prepared_fixed_service_rejects_generic_scope_before_actor_lock():
     with pytest.raises(PreparedAuthorizationUnsupported) as exc_info:
         await prepared.prepare(
             ActionId.ARTIFACT_VERIFICATION_EXECUTE,
-            PreparedAuthorizationInput(idempotency_key=uuid4(), request_value={}),
+            PreparedAuthorizationInput(idempotency_key=new_record_id(), request_value={}),
             PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.SYSTEM),
         )
     assert exc_info.value.denial_code is AuthorizationDenialCode.RESOURCE_GUARD_DENIED
@@ -4740,26 +5006,36 @@ async def test_prepared_guide_service_authority_is_exact_and_single_use(
         authorization,
         facts,
     )
-    project_id = uuid4()
-    guide_id = uuid4()
-    snapshot_id = uuid4()
-    item_id = uuid4()
-    setup_run_id = uuid4()
-    content_id = uuid4()
-    replica_id = uuid4()
+    project_id = new_record_id()
+    guide_id = new_record_id()
+    snapshot_id = new_record_id()
+    item_id = new_record_id()
+    setup_run_id = new_record_id()
+    content_id = new_record_id()
+    replica_id = new_record_id()
     resource = GuideSourceReadResourceContext(
-        resource_type="guide_source_read", resource_id=item_id,
-        project_id=project_id, guide_id=guide_id,
-        guide_source_snapshot_id=snapshot_id, guide_source_item_id=item_id,
-        project_setup_run_id=setup_run_id, setup_generation=1,
-        compilation_attempt_id=uuid4(), manifest_sha256="sha256:" + "3" * 64,
-        document_version_id=uuid4(), put_attempt_id=uuid4(),
-        content_id=content_id, replica_id=replica_id,
-        storage_namespace_id="guide-source", namespace_fingerprint="sha256:" + "2" * 64,
-        sha256="sha256:" + "1" * 64, byte_count=10, media_type="application/pdf",
+        resource_type="guide_source_read",
+        resource_id=item_id,
+        project_id=project_id,
+        guide_id=guide_id,
+        guide_source_snapshot_id=snapshot_id,
+        guide_source_item_id=item_id,
+        project_setup_run_id=setup_run_id,
+        setup_generation=1,
+        compilation_attempt_id=new_record_id(),
+        manifest_sha256="sha256:" + "3" * 64,
+        document_version_id=new_record_id(),
+        put_attempt_id=new_record_id(),
+        content_id=content_id,
+        replica_id=replica_id,
+        storage_namespace_id="guide-source",
+        namespace_fingerprint="sha256:" + "2" * 64,
+        sha256="sha256:" + "1" * 64,
+        byte_count=10,
+        media_type="application/pdf",
     )
     caller_input = PreparedAuthorizationInput(
-        idempotency_key=uuid4(), request_value=resource.model_dump(mode="json")
+        idempotency_key=new_record_id(), request_value=resource.model_dump(mode="json")
     )
     scope = PreparedAuthorityScope(
         kind=PreparedAuthorityScopeKind.ARTIFACT_INTERNAL,
@@ -4767,7 +5043,7 @@ async def test_prepared_guide_service_authority_is_exact_and_single_use(
         artifact_resource_id=resource.resource_id,
     )
     handle = await prepared.prepare(action_id, caller_input, scope)
-    wrong_resource_id = uuid4()
+    wrong_resource_id = new_record_id()
     selector_update = {"resource_id": wrong_resource_id}
     selector_update["guide_source_item_id"] = wrong_resource_id
     mismatched = resource.model_copy(update=selector_update)
@@ -4823,20 +5099,20 @@ async def test_real_prepared_materializer_binds_preflight_and_final_evidence() -
         authorization,
         repository,
     )
-    generation_id = uuid4()
+    generation_id = new_record_id()
     common = {
         "resource_type": "pre_submit_checker_input",
         "resource_id": generation_id,
-        "task_id": uuid4(),
-        "assignment_id": uuid4(),
-        "project_id": uuid4(),
-        "guide_id": uuid4(),
+        "task_id": new_record_id(),
+        "assignment_id": new_record_id(),
+        "project_id": new_record_id(),
+        "guide_id": new_record_id(),
         "guide_version": "v0.1",
-        "source_snapshot_id": uuid4(),
+        "source_snapshot_id": new_record_id(),
         "source_snapshot_hash": "sha256:" + "1" * 64,
-        "submission_artifact_policy_id": uuid4(),
+        "submission_artifact_policy_id": new_record_id(),
         "submission_artifact_policy_hash": "sha256:" + "2" * 64,
-        "checker_policy_id": uuid4(),
+        "checker_policy_id": new_record_id(),
         "checker_policy_hash": "sha256:" + "3" * 64,
         "prepared_generation_id": generation_id,
         "plan_sha256": "sha256:" + "4" * 64,
@@ -4852,7 +5128,7 @@ async def test_real_prepared_materializer_binds_preflight_and_final_evidence() -
         semantic_manifest_sha256="sha256:" + "7" * 64,
     )
     caller = PreparedAuthorizationInput(
-        idempotency_key=uuid4(),
+        idempotency_key=new_record_id(),
         request_value=preflight.model_dump(mode="json"),
     )
     scope = PreparedAuthorityScope(
@@ -4870,7 +5146,7 @@ async def test_real_prepared_materializer_binds_preflight_and_final_evidence() -
             handle,
             ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE,
             caller,
-            final.model_copy(update={"assignment_id": uuid4()}),
+            final.model_copy(update={"assignment_id": new_record_id()}),
         )
     decision = await prepared.consume(
         handle,
@@ -4935,22 +5211,20 @@ async def test_prepared_sufficiency_run_admits_only_exact_setup_service_custody(
         authorization,
         facts,
     )
-    project_id, guide_id, snapshot_id, setup_run_id = (uuid4() for _ in range(4))
-    custody = ProjectSetupServiceCustodyContext(
+    project_id, guide_id, snapshot_id, setup_run_id = (new_record_id() for _ in range(4))
+    custody = _project_setup_custody(
         setup_run_id=setup_run_id,
-        expected_step="guide_sufficiency",
-        task_id=uuid4(),
-        correlation_id=uuid4(),
-        scope_project_id=project_id,
+        project_id=project_id,
         guide_id=guide_id,
-        source_snapshot_id=snapshot_id,
-        setup_generation=1,
-        stale_output_digest=DIGEST,
+        snapshot_id=snapshot_id,
+        expected_step="guide_sufficiency",
+        task_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
     resource = ProjectGuideSufficiencyMutationResourceContext(
         resource_type="project_guide_sufficiency_mutation",
         resource_id=snapshot_id,
-        operation_id=uuid4(),
+        operation_id=new_record_id(),
         request_digest=DIGEST,
         scope_project_id=project_id,
         guide_id=guide_id,
@@ -4966,7 +5240,9 @@ async def test_prepared_sufficiency_run_admits_only_exact_setup_service_custody(
     request_value = resource.model_dump(mode="json")
     request_value["project_id"] = str(project_id)
     request_value["report_id"] = None
-    caller = PreparedAuthorizationInput(idempotency_key=uuid4(), request_value=request_value)
+    caller = PreparedAuthorizationInput(
+        idempotency_key=new_record_id(), request_value=request_value
+    )
     handle = await prepared.prepare(
         ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
         caller,
@@ -5025,9 +5301,7 @@ async def test_submission_artifact_policy_derive_prepared_service_is_exact_and_s
             )
 
     facts = LockedServiceFacts()
-    authorization, evidence = _runtime_service(
-        context, session=session, admin_repository=facts
-    )
+    authorization, evidence = _runtime_service(context, session=session, admin_repository=facts)
     prepared = PreparedAuthorizationService(
         session,  # type: ignore[arg-type]
         context,
@@ -5088,11 +5362,11 @@ async def test_prepared_sufficiency_missing_grant_commits_bounded_denial() -> No
     facts = _GuideMutationAuthorityFacts(context)
     authorization, evidence = _runtime_service(context, session=session, admin_repository=facts)
     prepared = PreparedAuthorizationService(session, context, authorization, facts)
-    project_id, guide_id, snapshot_id = (uuid4() for _ in range(3))
+    project_id, guide_id, snapshot_id = (new_record_id() for _ in range(3))
     resource = ProjectGuideSufficiencyMutationResourceContext(
         resource_type="project_guide_sufficiency_mutation",
         resource_id=snapshot_id,
-        operation_id=uuid4(),
+        operation_id=new_record_id(),
         request_digest=DIGEST,
         scope_project_id=project_id,
         guide_id=guide_id,
@@ -5106,7 +5380,9 @@ async def test_prepared_sufficiency_missing_grant_commits_bounded_denial() -> No
     )
     request_value = resource.model_dump(mode="json")
     request_value.update({"project_id": str(project_id), "report_id": None})
-    caller = PreparedAuthorizationInput(idempotency_key=uuid4(), request_value=request_value)
+    caller = PreparedAuthorizationInput(
+        idempotency_key=new_record_id(), request_value=request_value
+    )
     scope = PreparedAuthorityScope(
         kind=PreparedAuthorityScopeKind.PROJECT,
         project_id=project_id,
@@ -5166,18 +5442,31 @@ async def test_production_guide_service_adapter_rejects_every_fact_mismatch_and_
     monkeypatch.setattr(artifact_authorization, "PreparedAuthorizationService", FakePrepared)
 
     facts = GuideSourceReadAuthorityFacts(
-        project_id=uuid4(), guide_id=uuid4(), guide_source_snapshot_id=uuid4(),
-        guide_source_item_id=uuid4(), project_setup_run_id=uuid4(), setup_generation=1,
-        compilation_attempt_id=uuid4(), manifest_sha256="sha256:" + "3" * 64,
-        document_version_id=uuid4(), put_attempt_id=uuid4(), content_id=uuid4(), replica_id=uuid4(),
-        storage_namespace_id="guide-source", namespace_fingerprint="sha256:" + "2" * 64,
-        sha256="sha256:" + "1" * 64, byte_count=10, media_type="application/pdf",
+        project_id=new_record_id(),
+        guide_id=new_record_id(),
+        guide_source_snapshot_id=new_record_id(),
+        guide_source_item_id=new_record_id(),
+        project_setup_run_id=new_record_id(),
+        setup_generation=1,
+        compilation_attempt_id=new_record_id(),
+        manifest_sha256="sha256:" + "3" * 64,
+        document_version_id=new_record_id(),
+        put_attempt_id=new_record_id(),
+        content_id=new_record_id(),
+        replica_id=new_record_id(),
+        storage_namespace_id="guide-source",
+        namespace_fingerprint="sha256:" + "2" * 64,
+        sha256="sha256:" + "1" * 64,
+        byte_count=10,
+        media_type="application/pdf",
     )
     authority = PreparedGuideSourceReadAuthorization(
-        session, request_id=uuid4(), correlation_id=uuid4(),
+        session,
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
 
-    handle = await authority.prepare(facts=facts, idempotency_key=uuid4())
+    handle = await authority.prepare(facts=facts, idempotency_key=new_record_id())
     with pytest.raises(ArtifactAuthorityDeniedError, match="invalid"):
         await authority.consume(
             prepared_authorization=object.__new__(PreparedAuthorizationHandle),
@@ -5187,7 +5476,7 @@ async def test_production_guide_service_adapter_rejects_every_fact_mismatch_and_
     for field_name in facts.__dataclass_fields__:
         original = getattr(facts, field_name)
         if isinstance(original, UUID):
-            changed = uuid4()
+            changed = new_record_id()
         elif isinstance(original, int):
             changed = original + 1
         else:
@@ -5244,18 +5533,18 @@ async def test_pre_submit_materializer_adapter_binds_every_fact_and_service(
     )
     monkeypatch.setattr(artifact_authorization, "PreparedAuthorizationService", FakePrepared)
     facts = PreSubmitMaterializationAuthorityFacts(
-        task_id=uuid4(),
-        assignment_id=uuid4(),
-        project_id=uuid4(),
-        guide_id=uuid4(),
+        task_id=new_record_id(),
+        assignment_id=new_record_id(),
+        project_id=new_record_id(),
+        guide_id=new_record_id(),
         guide_version="1",
-        source_snapshot_id=uuid4(),
+        source_snapshot_id=new_record_id(),
         source_snapshot_hash="sha256:" + "1" * 64,
-        submission_artifact_policy_id=uuid4(),
+        submission_artifact_policy_id=new_record_id(),
         submission_artifact_policy_hash="sha256:" + "2" * 64,
-        checker_policy_id=uuid4(),
+        checker_policy_id=new_record_id(),
         checker_policy_hash="sha256:" + "3" * 64,
-        prepared_generation_id=uuid4(),
+        prepared_generation_id=new_record_id(),
         plan_sha256="sha256:" + "4" * 64,
         catalogue_manifest_sha256="sha256:" + "5" * 64,
         archive_sha256="sha256:" + "6" * 64,
@@ -5265,10 +5554,10 @@ async def test_pre_submit_materializer_adapter_binds_every_fact_and_service(
     )
     authority = PreparedPreSubmitMaterializationAuthorization(
         session,  # type: ignore[arg-type]
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
-    handle = await authority.prepare(facts=facts.preparation, idempotency_key=uuid4())
+    handle = await authority.prepare(facts=facts.preparation, idempotency_key=new_record_id())
     prepared_instance = prepared_instances[0]
     prepared_action, caller_input, scope = prepared_instance.prepared_args
     assert prepared_action is ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE
@@ -5285,7 +5574,7 @@ async def test_pre_submit_materializer_adapter_binds_every_fact_and_service(
     for field_name in facts.preparation.__dataclass_fields__:
         original = getattr(facts, field_name)
         changed = (
-            uuid4()
+            new_record_id()
             if isinstance(original, UUID)
             else (original + 1 if isinstance(original, int) else f"changed-{original}")
         )
@@ -5324,7 +5613,7 @@ async def test_fixed_service_context_rejects_mismatched_loaded_identity(
 
         async def get_service_actor(self, _service_identity: str):
             return SimpleNamespace(
-                id=str(uuid4()),
+                id=str(new_record_id()),
                 service_identity=ServiceIdentity.ARTIFACT_GUIDE_READER.value,
             )
 
@@ -5337,8 +5626,8 @@ async def test_fixed_service_context_rejects_mismatched_loaded_identity(
         await authorization_prepared.fixed_service_authorization_context(
             _PreparedTestSession(),  # type: ignore[arg-type]
             ServiceIdentity.ARTIFACT_BINDING,
-            uuid4(),
-            uuid4(),
+            new_record_id(),
+            new_record_id(),
         )
 
 
@@ -5386,11 +5675,11 @@ async def test_prepared_guide_actions_deny_wrong_fixed_service_before_actor_lock
     with pytest.raises(PreparedAuthorizationUnsupported) as exc_info:
         await prepared.prepare(
             action_id,
-            PreparedAuthorizationInput(idempotency_key=uuid4(), request_value={}),
+            PreparedAuthorizationInput(idempotency_key=new_record_id(), request_value={}),
             PreparedAuthorityScope(
                 kind=PreparedAuthorityScopeKind.ARTIFACT_INTERNAL,
                 artifact_resource_type=resource_type,
-                artifact_resource_id=uuid4(),
+                artifact_resource_id=new_record_id(),
             ),
         )
     assert exc_info.value.denial_code is AuthorizationDenialCode.PERMISSION_NOT_GRANTED
@@ -5420,7 +5709,7 @@ async def test_human_authority_cannot_substitute_for_fixed_guide_services(
 
         async def find_effective_grant(self, *_args, **_kwargs):
             self.grant_calls += 1
-            return SimpleNamespace(id=str(uuid4()), status="active")
+            return SimpleNamespace(id=str(new_record_id()), status="active")
 
     repository = NoHumanGrantLookup()
     authorization, evidence = _runtime_service(
@@ -5437,11 +5726,11 @@ async def test_human_authority_cannot_substitute_for_fixed_guide_services(
     with pytest.raises(PreparedAuthorizationUnsupported) as exc_info:
         await prepared.prepare(
             action_id,
-            PreparedAuthorizationInput(idempotency_key=uuid4(), request_value={}),
+            PreparedAuthorizationInput(idempotency_key=new_record_id(), request_value={}),
             PreparedAuthorityScope(
                 kind=PreparedAuthorityScopeKind.ARTIFACT_INTERNAL,
                 artifact_resource_type=resource_type,
-                artifact_resource_id=uuid4(),
+                artifact_resource_id=new_record_id(),
             ),
         )
     assert exc_info.value.denial_code is AuthorizationDenialCode.PERMISSION_NOT_GRANTED
@@ -5502,7 +5791,7 @@ async def test_project_setup_service_matrix_issues_no_handle_for_planned_actions
         authorization,
         facts,  # type: ignore[arg-type]
     )
-    caller_input = PreparedAuthorizationInput(idempotency_key=uuid4(), request_value={})
+    caller_input = PreparedAuthorizationInput(idempotency_key=new_record_id(), request_value={})
     scope = PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.SYSTEM)
     if action_id is ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE:
         caller_input, scope = _submission_policy_derive_prepare_inputs()
@@ -5534,10 +5823,7 @@ async def test_project_setup_service_matrix_wrong_identity_denies_before_availab
 ):
     wrong_identity = ServiceIdentity.COMPENSATION_ADAPTER
     assert wrong_identity is not owning_identity
-    assert (
-        action_id
-        not in SERVICE_ACTIONS_BY_IDENTITY.get(wrong_identity, frozenset())
-    )
+    assert action_id not in SERVICE_ACTIONS_BY_IDENTITY.get(wrong_identity, frozenset())
     context = _runtime_context(
         actor_kind=ActorKind.SERVICE,
         service_identity=wrong_identity,
@@ -5553,7 +5839,7 @@ async def test_project_setup_service_matrix_wrong_identity_denies_before_availab
         facts,
     )
 
-    caller_input = PreparedAuthorizationInput(idempotency_key=uuid4(), request_value={})
+    caller_input = PreparedAuthorizationInput(idempotency_key=new_record_id(), request_value={})
     scope = PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.SYSTEM)
     if action_id is ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE:
         caller_input, scope = _submission_policy_derive_prepare_inputs()
@@ -5573,16 +5859,16 @@ async def test_project_setup_service_matrix_wrong_identity_denies_before_availab
 
 def test_policy_mutation_denial_binding_requires_exact_kind_and_selectors() -> None:
     """A bounded policy denial remains tied to its requested policy kind and selectors."""
-    project_id, guide_id = uuid4(), uuid4()
+    project_id, guide_id = new_record_id(), new_record_id()
     binding = _PreparedAuthorizationBinding(
         action_id=ActionId.PROJECT_REVIEW_POLICY_UPDATE,
         actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
-        actor_ref=uuid4(),
+        actor_ref=new_record_id(),
         scope=PreparedAuthorityScope(
             kind=PreparedAuthorityScopeKind.PROJECT,
             project_id=project_id,
         ),
-        idempotency_key=uuid4(),
+        idempotency_key=new_record_id(),
         request_digest=DIGEST,
         policy_mutation_project_id=project_id,
         policy_mutation_guide_id=guide_id,
@@ -5618,12 +5904,14 @@ async def test_prepared_rejects_unsupported_scope_missing_grant_and_inactive_roo
         authorization,
         facts,  # type: ignore[arg-type]
     )
-    caller_input = PreparedAuthorizationInput(idempotency_key=uuid4(), request_value={})
+    caller_input = PreparedAuthorizationInput(idempotency_key=new_record_id(), request_value={})
     with pytest.raises(PreparedAuthorizationUnsupported):
         await prepared.prepare(
             ActionId.ACTOR_PROFILE_SUSPEND,
             caller_input,
-            PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.PROJECT, project_id=uuid4()),
+            PreparedAuthorityScope(
+                kind=PreparedAuthorityScopeKind.PROJECT, project_id=new_record_id()
+            ),
         )
     with pytest.raises(PreparedAuthorizationUnsupported):
         await prepared.prepare(
@@ -5659,29 +5947,16 @@ async def test_prepared_postgresql_failure_and_cancellation_are_atomic(
     authorization_factory,
 ) -> None:
     """Real caller transactions roll back participant/evidence and spend handles."""
-    profile_id, link_id = uuid4(), uuid4()
+    profile_id, link_id = new_record_id(), new_record_id()
     now = datetime.now(UTC)
     async with authorization_factory() as session:
         session.add_all(
-            [
-                ActorProfile(
-                    id=str(profile_id),
-                    actor_kind="human",
-                    status="active",
-                    provisioning_method="automatic_first_access",
-                    created_by=str(profile_id),
-                ),
-                ActorIdentityLink(
-                    id=str(link_id),
-                    actor_profile_id=str(profile_id),
-                    issuer="https://identity.flowresearch.tech",
-                    subject=f"prepared-failure-{profile_id}",
-                    subject_kind="human",
-                    status="active",
-                    linked_by=str(profile_id),
-                    last_verified_at=now,
-                ),
-            ]
+            _actor_rows(
+                profile_id,
+                link_id,
+                subject=f"prepared-failure-{profile_id}",
+                now=now,
+            )
         )
         await session.commit()
         await session.execute(
@@ -5697,8 +5972,8 @@ async def test_prepared_postgresql_failure_and_cancellation_are_atomic(
             actor_status=ActorStatus.ACTIVE,
             identity_link_id=link_id,
             identity_link_status=IdentityLinkStatus.ACTIVE,
-            request_id=uuid4(),
-            correlation_id=uuid4(),
+            request_id=new_record_id(),
+            correlation_id=new_record_id(),
         )
         repository = AdminAuthorizationRepository(session)
         authorization = AuthorizationService(session, context, admin_repository=repository)
@@ -5754,7 +6029,7 @@ async def test_prepared_postgresql_failure_and_cancellation_are_atomic(
             assert evidence_calls == 0
 
         success_input = PreparedAuthorizationInput(
-            idempotency_key=uuid4(), request_value={"case": "commit"}
+            idempotency_key=new_record_id(), request_value={"case": "commit"}
         )
         await session.begin()
         success_handle = await prepared.prepare(
@@ -5783,7 +6058,7 @@ async def test_prepared_postgresql_failure_and_cancellation_are_atomic(
         await session.commit()
 
         participant_input = PreparedAuthorizationInput(
-            idempotency_key=uuid4(), request_value={"case": "participant"}
+            idempotency_key=new_record_id(), request_value={"case": "participant"}
         )
         await session.begin()
         participant_handle = await prepared.prepare(
@@ -5815,7 +6090,7 @@ async def test_prepared_postgresql_failure_and_cancellation_are_atomic(
         await assert_handle_burned_without_reentry(participant_handle, participant_input)
 
         evidence_input = PreparedAuthorizationInput(
-            idempotency_key=uuid4(), request_value={"case": "evidence"}
+            idempotency_key=new_record_id(), request_value={"case": "evidence"}
         )
         await session.begin()
         evidence_handle = await prepared.prepare(
@@ -5840,7 +6115,7 @@ async def test_prepared_postgresql_failure_and_cancellation_are_atomic(
         await assert_handle_burned_without_reentry(evidence_handle, evidence_input)
 
         cancellation_input = PreparedAuthorizationInput(
-            idempotency_key=uuid4(), request_value={"case": "cancellation"}
+            idempotency_key=new_record_id(), request_value={"case": "cancellation"}
         )
         entered = asyncio.Event()
         blocked = asyncio.Event()
@@ -5871,7 +6146,7 @@ async def test_prepared_postgresql_failure_and_cancellation_are_atomic(
         )
 
         commit_failure_input = PreparedAuthorizationInput(
-            idempotency_key=uuid4(), request_value={"case": "commit_failure"}
+            idempotency_key=new_record_id(), request_value={"case": "commit_failure"}
         )
         await session.begin()
         commit_failure_handle = await prepared.prepare(
@@ -5912,7 +6187,7 @@ async def test_prepared_postgresql_failure_and_cancellation_are_atomic(
         )
 
         timeout_input = PreparedAuthorizationInput(
-            idempotency_key=uuid4(), request_value={"case": "timeout"}
+            idempotency_key=new_record_id(), request_value={"case": "timeout"}
         )
         await session.begin()
         timeout_handle = await prepared.prepare(
@@ -5945,7 +6220,7 @@ async def test_prepared_postgresql_failure_and_cancellation_are_atomic(
 
         async def cancel_after_consume(phase: str):
             phase_input = PreparedAuthorizationInput(
-                idempotency_key=uuid4(), request_value={"case": phase}
+                idempotency_key=new_record_id(), request_value={"case": phase}
             )
             phase_entered = asyncio.Event()
             phase_blocked = asyncio.Event()
@@ -6011,7 +6286,7 @@ async def test_prepared_postgresql_failure_and_cancellation_are_atomic(
         await cancel_after_consume("participant_cancel")
 
         evidence_cancel_input = PreparedAuthorizationInput(
-            idempotency_key=uuid4(), request_value={"case": "evidence_cancel"}
+            idempotency_key=new_record_id(), request_value={"case": "evidence_cancel"}
         )
         evidence_entered = asyncio.Event()
         evidence_blocked = asyncio.Event()
@@ -6063,7 +6338,7 @@ async def test_prepared_postgresql_failure_and_cancellation_are_atomic(
         )
 
         commit_cancel_input = PreparedAuthorizationInput(
-            idempotency_key=uuid4(), request_value={"case": "commit_cancel"}
+            idempotency_key=new_record_id(), request_value={"case": "commit_cancel"}
         )
         commit_entered = asyncio.Event()
         commit_blocked = asyncio.Event()
@@ -6141,7 +6416,7 @@ async def test_prepared_postgresql_failure_and_cancellation_are_atomic(
                     waiter_prepared.prepare(
                         ActionId.ACTOR_PROFILE_UPDATE_SELF,
                         PreparedAuthorizationInput(
-                            idempotency_key=uuid4(), request_value={"case": "lock_wait"}
+                            idempotency_key=new_record_id(), request_value={"case": "lock_wait"}
                         ),
                         scope,
                     )
@@ -6206,29 +6481,16 @@ async def test_prepared_actor_authority_crossed_mutations_complete_in_both_order
     denial_code,
 ) -> None:
     """PostgreSQL proves authority-first waits and mutation-first refreshed denial."""
-    profile_id, link_id = uuid4(), uuid4()
+    profile_id, link_id = new_record_id(), new_record_id()
     now = datetime.now(UTC)
     async with authorization_factory() as seed:
         seed.add_all(
-            [
-                ActorProfile(
-                    id=str(profile_id),
-                    actor_kind="human",
-                    status="active",
-                    provisioning_method="automatic_first_access",
-                    created_by=str(profile_id),
-                ),
-                ActorIdentityLink(
-                    id=str(link_id),
-                    actor_profile_id=str(profile_id),
-                    issuer="https://identity.flowresearch.tech",
-                    subject=f"prepared-race-{profile_id}",
-                    subject_kind="human",
-                    status="active",
-                    linked_by=str(profile_id),
-                    last_verified_at=now,
-                ),
-            ]
+            _actor_rows(
+                profile_id,
+                link_id,
+                subject=f"prepared-race-{profile_id}",
+                now=now,
+            )
         )
         await seed.commit()
 
@@ -6238,11 +6500,11 @@ async def test_prepared_actor_authority_crossed_mutations_complete_in_both_order
         actor_status=ActorStatus.ACTIVE,
         identity_link_id=link_id,
         identity_link_status=IdentityLinkStatus.ACTIVE,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
     caller_input = PreparedAuthorizationInput(
-        idempotency_key=uuid4(), request_value={"display_name": "race"}
+        idempotency_key=new_record_id(), request_value={"display_name": "race"}
     )
     scope = PreparedAuthorityScope(
         kind=PreparedAuthorityScopeKind.ACTOR_SELF,
@@ -6303,7 +6565,7 @@ async def test_prepared_actor_authority_crossed_mutations_complete_in_both_order
         await verify.rollback()
 
     mutation_first_context = context.model_copy(
-        update={"request_id": uuid4(), "correlation_id": uuid4()}
+        update={"request_id": new_record_id(), "correlation_id": new_record_id()}
     )
     async with authorization_factory() as denied_session:
         await denied_session.begin()
@@ -6351,46 +6613,24 @@ async def test_prepared_crosses_real_lifecycle_service_transactions(
     ordering,
 ) -> None:
     """Cross PREP with the existing authorized lifecycle service lock graph."""
-    target_profile_id, target_link_id = uuid4(), uuid4()
-    mutator_profile_id, mutator_link_id = uuid4(), uuid4()
-    target_grant_id, mutator_grant_id = uuid4(), uuid4()
+    target_profile_id, target_link_id = new_record_id(), new_record_id()
+    mutator_profile_id, mutator_link_id = new_record_id(), new_record_id()
+    target_grant_id, mutator_grant_id = new_record_id(), new_record_id()
     now = datetime.now(UTC)
     async with authorization_factory() as seed:
         await seed.execute(text("alter table admin_role_grants disable trigger user"))
         await seed.execute(text("alter table authority_control disable trigger user"))
-        target_profile = ActorProfile(
-            id=str(target_profile_id),
-            actor_kind="human",
-            status="active",
-            provisioning_method="automatic_first_access",
-            created_by=str(target_profile_id),
-        )
-        target_link = ActorIdentityLink(
-            id=str(target_link_id),
-            actor_profile_id=str(target_profile_id),
-            issuer="https://identity.flowresearch.tech",
+        target_profile, target_link = _actor_rows(
+            target_profile_id,
+            target_link_id,
             subject=f"prepared-real-target-{target_profile_id}",
-            subject_kind="human",
-            status="active",
-            linked_by=str(target_profile_id),
-            last_verified_at=now,
+            now=now,
         )
-        mutator_profile = ActorProfile(
-            id=str(mutator_profile_id),
-            actor_kind="human",
-            status="active",
-            provisioning_method="automatic_first_access",
-            created_by=str(mutator_profile_id),
-        )
-        mutator_link = ActorIdentityLink(
-            id=str(mutator_link_id),
-            actor_profile_id=str(mutator_profile_id),
-            issuer="https://identity.flowresearch.tech",
+        mutator_profile, mutator_link = _actor_rows(
+            mutator_profile_id,
+            mutator_link_id,
             subject=f"prepared-real-mutator-{mutator_profile_id}",
-            subject_kind="human",
-            status="active",
-            linked_by=str(mutator_profile_id),
-            last_verified_at=now,
+            now=now,
         )
         seed.add_all([target_profile, target_link, mutator_profile, mutator_link])
         seed.add(
@@ -6439,11 +6679,11 @@ async def test_prepared_crosses_real_lifecycle_service_transactions(
         actor_status=ActorStatus.ACTIVE,
         identity_link_id=target_link_id,
         identity_link_status=IdentityLinkStatus.ACTIVE,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
     caller_input = PreparedAuthorizationInput(
-        idempotency_key=uuid4(), request_value={"service": "artifact_verifier"}
+        idempotency_key=new_record_id(), request_value={"service": "artifact_verifier"}
     )
     prepared_scope = PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.SYSTEM)
     final_resource = ServiceActorProvisionResourceContext(
@@ -6465,8 +6705,8 @@ async def test_prepared_crosses_real_lifecycle_service_transactions(
                 actor_status=ActorStatus.ACTIVE,
                 identity_link_id=mutator_link_id,
                 identity_link_status=IdentityLinkStatus.ACTIVE,
-                request_id=uuid4(),
-                correlation_id=uuid4(),
+                request_id=new_record_id(),
+                correlation_id=new_record_id(),
             )
             authorization = AuthorizationService(mutation_session, mutation_context)
             if pause_after_authority:
@@ -6485,7 +6725,7 @@ async def test_prepared_crosses_real_lifecycle_service_transactions(
                 await authorization_router.revoke_admin_role_grant(
                     grant_id=target_grant_id,
                     payload=AdminRoleGrantRevokeBody(reason=reason),
-                    idempotency_key=uuid4(),
+                    idempotency_key=new_record_id(),
                     resolved=resolved,
                     authorization=authorization,
                     session=mutation_session,
@@ -6494,7 +6734,7 @@ async def test_prepared_crosses_real_lifecycle_service_transactions(
                 await authorization_router._mutate_identity_link_lifecycle(
                     identity_link_id=target_link_id,
                     payload=ActorLifecycleBody(reason=reason),
-                    idempotency_key=uuid4(),
+                    idempotency_key=new_record_id(),
                     resolved=resolved,
                     authorization=authorization,
                     session=mutation_session,
@@ -6516,7 +6756,7 @@ async def test_prepared_crosses_real_lifecycle_service_transactions(
                 await authorization_router._mutate_actor_lifecycle(
                     actor_profile_id=target_profile_id,
                     payload=ActorLifecycleBody(reason=reason),
-                    idempotency_key=uuid4(),
+                    idempotency_key=new_record_id(),
                     resolved=resolved,
                     authorization=authorization,
                     session=mutation_session,
@@ -6687,8 +6927,8 @@ async def test_prepared_postgresql_rejects_duplicate_supported_grant_and_reuses_
     authorization_factory,
 ) -> None:
     """Current uniqueness makes two same-role eligible mutation grants impossible."""
-    profile_id, link_id = uuid4(), uuid4()
-    grant_id, duplicate_id = uuid4(), uuid4()
+    profile_id, link_id = new_record_id(), new_record_id()
+    grant_id, duplicate_id = new_record_id(), new_record_id()
     now = datetime.now(UTC)
     async with authorization_factory() as seed:
         await seed.execute(text("alter table admin_role_grants disable trigger user"))
@@ -6753,8 +6993,8 @@ async def test_prepared_postgresql_rejects_duplicate_supported_grant_and_reuses_
         actor_status=ActorStatus.ACTIVE,
         identity_link_id=link_id,
         identity_link_status=IdentityLinkStatus.ACTIVE,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
     async with authorization_factory() as session:
         await session.begin()
@@ -6762,7 +7002,7 @@ async def test_prepared_postgresql_rejects_duplicate_supported_grant_and_reuses_
         authorization = AuthorizationService(session, context, admin_repository=repository)
         prepared = PreparedAuthorizationService(session, context, authorization, repository)
         caller_input = PreparedAuthorizationInput(
-            idempotency_key=uuid4(), request_value={"case": "sole_grant"}
+            idempotency_key=new_record_id(), request_value={"case": "sole_grant"}
         )
         handle = await prepared.prepare(
             ActionId.ACTOR_SERVICE_PROVISION,
@@ -6802,15 +7042,15 @@ class _AdminPolicyFacts:
 
     def __init__(self, context: AuthorizationContext) -> None:
         self.context = context
-        self.matched: SimpleNamespace | None = SimpleNamespace(id=uuid4())
+        self.matched: SimpleNamespace | None = SimpleNamespace(id=new_record_id())
         self.has_any = False
         self.target_exists = True
         self.project_is_present = True
         self.actor_is_present = True
         self.grant = SimpleNamespace(
-            id=uuid4(),
+            id=new_record_id(),
             status="active",
-            target_actor_profile_id=str(uuid4()),
+            target_actor_profile_id=str(new_record_id()),
         )
         self.request_actor_is_present = True
         self.request_actor_kind = "human"
@@ -6868,7 +7108,7 @@ class _AdminPolicyFacts:
             return None
         return (
             SimpleNamespace(id=str(identity_link_id), status="active"),
-            SimpleNamespace(id=str(uuid4()), actor_kind="human", status="active"),
+            SimpleNamespace(id=str(new_record_id()), actor_kind="human", status="active"),
             None,
         )
 
@@ -6910,7 +7150,7 @@ async def test_admin_kernel_denies_locked_human_kind_drift_without_grant_lookup(
     facts.request_actor_kind = "service"
     resource = ActorProfileAdminReadResourceContext(
         resource_type="actor_profile",
-        resource_id=uuid4(),
+        resource_id=new_record_id(),
         read_kind="profile",
     )
 
@@ -6939,7 +7179,7 @@ async def test_actor_admin_reads_serialize_system_authority_without_control_lock
     read_kind = "profile" if action_id is ActionId.ACTOR_PROFILE_READ else "identity_link"
     resource = resource_type(
         resource_type="actor_profile",
-        resource_id=uuid4(),
+        resource_id=new_record_id(),
         read_kind=read_kind,
     )
 
@@ -6971,7 +7211,7 @@ async def test_actor_admin_reads_serialize_system_authority_without_control_lock
             ActionId.ACTOR_PROFILE_READ,
             ActorIdentityLinkAdminReadResourceContext(
                 resource_type="actor_profile",
-                resource_id=uuid4(),
+                resource_id=new_record_id(),
                 read_kind="identity_link",
             ),
         ),
@@ -6979,7 +7219,7 @@ async def test_actor_admin_reads_serialize_system_authority_without_control_lock
             ActionId.ACTOR_IDENTITY_LINK_READ,
             ActorProfileAdminReadResourceContext(
                 resource_type="actor_profile",
-                resource_id=uuid4(),
+                resource_id=new_record_id(),
                 read_kind="profile",
             ),
         ),
@@ -7015,7 +7255,7 @@ async def test_actor_profile_lifecycle_kernel_locks_control_and_exact_target(
     service, evidence, facts = _admin_runtime_service(_runtime_context())
     resource = ActorProfileLifecycleResourceContext(
         resource_type="actor_profile",
-        resource_id=uuid4(),
+        resource_id=new_record_id(),
         transition=transition,
     )
 
@@ -7040,12 +7280,14 @@ async def test_actor_profile_lifecycle_kernel_guards_self_pairing_and_disclosure
         await service.require(ActionId.ACTOR_PROFILE_SUSPEND, self_resource)
     assert self_denial.value.public_code == "resource_guard_denied"
 
-    crossed = self_resource.model_copy(update={"resource_id": uuid4(), "transition": "deactivate"})
+    crossed = self_resource.model_copy(
+        update={"resource_id": new_record_id(), "transition": "deactivate"}
+    )
     with pytest.raises(AuthorizationDenied) as crossed_denial:
         await service.require(ActionId.ACTOR_PROFILE_SUSPEND, crossed)
     assert crossed_denial.value.public_code == "resource_guard_denied"
 
-    missing = self_resource.model_copy(update={"resource_id": uuid4()})
+    missing = self_resource.model_copy(update={"resource_id": new_record_id()})
     facts.lifecycle_target_is_present = False
     with pytest.raises(AuthorizationDenied) as missing_denial:
         await service.require(ActionId.ACTOR_PROFILE_SUSPEND, missing)
@@ -7071,7 +7313,7 @@ async def test_identity_link_lifecycle_kernel_locks_control_and_exact_target(
     service, evidence, facts = _admin_runtime_service(_runtime_context())
     resource = ActorIdentityLinkLifecycleResourceContext(
         resource_type="actor_identity_link",
-        resource_id=uuid4(),
+        resource_id=new_record_id(),
         transition=transition,
     )
 
@@ -7096,12 +7338,14 @@ async def test_identity_link_lifecycle_kernel_guards_self_pairing_and_disclosure
         await service.require(ActionId.ACTOR_IDENTITY_LINK_REVOKE, self_revoke)
     assert self_denial.value.public_code == "resource_guard_denied"
 
-    crossed = self_revoke.model_copy(update={"resource_id": uuid4(), "transition": "reactivate"})
+    crossed = self_revoke.model_copy(
+        update={"resource_id": new_record_id(), "transition": "reactivate"}
+    )
     with pytest.raises(AuthorizationDenied) as crossed_denial:
         await service.require(ActionId.ACTOR_IDENTITY_LINK_REVOKE, crossed)
     assert crossed_denial.value.public_code == "resource_guard_denied"
 
-    missing = self_revoke.model_copy(update={"resource_id": uuid4()})
+    missing = self_revoke.model_copy(update={"resource_id": new_record_id()})
     facts.link_lifecycle_target_is_present = False
     with pytest.raises(AuthorizationDenied) as missing_denial:
         await service.require(ActionId.ACTOR_IDENTITY_LINK_REVOKE, missing)
@@ -7137,7 +7381,7 @@ def _actor_lifecycle_decision(
         existing_idempotency_record=existing,
     )
     return AuthorizationDecision(
-        decision_id=uuid4(),
+        decision_id=new_record_id(),
         action_id=action,
         permission_id=permission,
         allowed=True,
@@ -7146,11 +7390,11 @@ def _actor_lifecycle_decision(
         resource_id=request.actor_profile_id,
         resource_context_digest=authorization_resource_digest(resource),
         matched_authority_kind=MatchedAuthorityKind.ADMIN_ROLE_GRANT,
-        matched_grant_id=uuid4(),
+        matched_grant_id=new_record_id(),
         matched_scope_project_id=None,
         revalidated=True,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
 
 
@@ -7182,7 +7426,7 @@ def _identity_link_lifecycle_decision(
         existing_idempotency_record=existing,
     )
     return AuthorizationDecision(
-        decision_id=uuid4(),
+        decision_id=new_record_id(),
         action_id=action,
         permission_id=permission,
         allowed=True,
@@ -7191,16 +7435,16 @@ def _identity_link_lifecycle_decision(
         resource_id=request.identity_link_id,
         resource_context_digest=authorization_resource_digest(resource),
         matched_authority_kind=MatchedAuthorityKind.ADMIN_ROLE_GRANT,
-        matched_grant_id=uuid4(),
+        matched_grant_id=new_record_id(),
         matched_scope_project_id=None,
         revalidated=True,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
 
 
 async def test_actor_lifecycle_service_rejects_crossed_reason_and_missing_target() -> None:
-    target, caller = uuid4(), uuid4()
+    target, caller = new_record_id(), new_record_id()
     reason = "Bounded suspension reason"
     request = ActorProfileSuspendRequest(
         operation=AuthorityOperation.ACTOR_PROFILE_SUSPEND,
@@ -7208,15 +7452,10 @@ async def test_actor_lifecycle_service_rejects_crossed_reason_and_missing_target
         reason_digest=derive_reason_digest(reason),
     )
     decision = _actor_lifecycle_decision(request, existing=False)
-    service = ActorLifecycleService(object(), publication=assignment_invalidation_publication(object()))  # type: ignore[arg-type]
-    claim = AuthorityClaimHandle(
-        record_id=uuid4(),
-        idempotency_key=uuid4(),
-        actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
-        actor_ref=str(caller),
-        operation=request.operation,
-        request_digest=DIGEST,
-    )
+    service = ActorLifecycleService(
+        object(), publication=assignment_invalidation_publication(object())
+    )  # type: ignore[arg-type]
+    claim = _authority_claim(caller, request.operation)
 
     with pytest.raises(TypeError, match="exact matched authority"):
         await service.complete(
@@ -7251,14 +7490,8 @@ async def test_actor_lifecycle_service_rejects_crossed_reason_and_missing_target
 
 
 async def test_actor_lifecycle_service_applies_success_and_guards_conflicts() -> None:
-    target, caller = uuid4(), uuid4()
+    target, caller = new_record_id(), new_record_id()
     reason = "Apply exact profile suspension"
-
-    class Session:
-        flushed = 0
-
-        async def flush(self):
-            self.flushed += 1
 
     class Repository:
         def __init__(self, profile):
@@ -7270,23 +7503,7 @@ async def test_actor_lifecycle_service_applies_success_and_guards_conflicts() ->
         async def count_effective_access_administrators(self):
             return 1
 
-    class Mutation:
-        completed = None
-        mismatch = None
-
-        async def complete(self, **kwargs):
-            self.completed = kwargs
-
-        async def record_mismatch_denial(self, **kwargs):
-            self.mismatch = kwargs
-
-    class Audit:
-        event = None
-
-        async def add_authority_event(self, event):
-            self.event = event
-
-    session = Session()
+    session = _LifecycleSession()
     profile = SimpleNamespace(
         actor_kind="human",
         status="active",
@@ -7301,20 +7518,13 @@ async def test_actor_lifecycle_service_applies_success_and_guards_conflicts() ->
         deactivation_reason=None,
     )
     repository = Repository(profile)
-    mutation = Mutation()
+    mutation = _LifecycleMutation()
     service = actor_lifecycle_service(session)  # type: ignore[arg-type]
     service._repository = repository  # type: ignore[assignment]
     service._mutation = mutation  # type: ignore[assignment]
-    audit = Audit()
+    audit = _LifecycleAudit()
     service._audit = audit  # type: ignore[assignment]
-    claim = AuthorityClaimHandle(
-        record_id=uuid4(),
-        idempotency_key=uuid4(),
-        actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
-        actor_ref=str(caller),
-        operation=AuthorityOperation.ACTOR_PROFILE_SUSPEND,
-        request_digest=DIGEST,
-    )
+    claim = _authority_claim(caller, AuthorityOperation.ACTOR_PROFILE_SUSPEND)
     request = ActorProfileSuspendRequest(
         operation=AuthorityOperation.ACTOR_PROFILE_SUSPEND,
         actor_profile_id=target,
@@ -7326,7 +7536,8 @@ async def test_actor_lifecycle_service_applies_success_and_guards_conflicts() ->
         claim=claim,
         request=request,
         decision=decision,
-        actor_profile_id=caller, reason=reason,
+        actor_profile_id=caller,
+        reason=reason,
     )
     assert response.resource_id == target
     assert session.flushed == 1
@@ -7392,14 +7603,8 @@ async def test_actor_lifecycle_service_applies_success_and_guards_conflicts() ->
 
 
 async def test_identity_link_lifecycle_service_applies_success_and_guards_conflicts() -> None:
-    target_link, target_actor, caller = uuid4(), uuid4(), uuid4()
+    target_link, target_actor, caller = new_record_id(), new_record_id(), new_record_id()
     reason = "Revoke exact identity link"
-
-    class Session:
-        flushed = 0
-
-        async def flush(self):
-            self.flushed += 1
 
     class Repository:
         def __init__(self, link, profile):
@@ -7412,23 +7617,7 @@ async def test_identity_link_lifecycle_service_applies_success_and_guards_confli
         async def count_effective_access_administrators(self):
             return 1
 
-    class Mutation:
-        completed = None
-        mismatch = None
-
-        async def complete(self, **kwargs):
-            self.completed = kwargs
-
-        async def record_mismatch_denial(self, **kwargs):
-            self.mismatch = kwargs
-
-    class Audit:
-        event = None
-
-        async def add_authority_event(self, event):
-            self.event = event
-
-    session = Session()
+    session = _LifecycleSession()
     link = SimpleNamespace(
         id=str(target_link),
         status="active",
@@ -7441,20 +7630,13 @@ async def test_identity_link_lifecycle_service_applies_success_and_guards_confli
     )
     profile = SimpleNamespace(id=str(target_actor), actor_kind="human", status="active")
     repository = Repository(link, profile)
-    mutation = Mutation()
+    mutation = _LifecycleMutation()
     service = identity_link_lifecycle_service(session)  # type: ignore[arg-type]
     service._repository = repository  # type: ignore[assignment]
     service._mutation = mutation  # type: ignore[assignment]
-    audit = Audit()
+    audit = _LifecycleAudit()
     service._audit = audit  # type: ignore[assignment]
-    claim = AuthorityClaimHandle(
-        record_id=uuid4(),
-        idempotency_key=uuid4(),
-        actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
-        actor_ref=str(caller),
-        operation=AuthorityOperation.ACTOR_IDENTITY_LINK_REVOKE,
-        request_digest=DIGEST,
-    )
+    claim = _authority_claim(caller, AuthorityOperation.ACTOR_IDENTITY_LINK_REVOKE)
     request = ActorIdentityLinkRevokeRequest(
         operation=AuthorityOperation.ACTOR_IDENTITY_LINK_REVOKE,
         identity_link_id=target_link,
@@ -7466,7 +7648,8 @@ async def test_identity_link_lifecycle_service_applies_success_and_guards_confli
         claim=claim,
         request=request,
         decision=decision,
-        actor_profile_id=caller, reason=reason,
+        actor_profile_id=caller,
+        reason=reason,
     )
     assert response == IdentityLinkLifecycleMutationResponse(
         resource_type="actor_identity_link",
@@ -7546,7 +7729,7 @@ async def test_identity_link_lifecycle_service_applies_success_and_guards_confli
 async def test_admin_kernel_conceals_targets_until_permission_and_scope_match() -> None:
     context = _runtime_context()
     service, _, facts = _admin_runtime_service(context)
-    project_id = uuid4()
+    project_id = new_record_id()
     resource = AdminRoleGrantCollectionResourceContext(
         resource_type="admin_role_grant_collection",
         resource_id=project_id,
@@ -7566,7 +7749,7 @@ async def test_admin_kernel_conceals_targets_until_permission_and_scope_match() 
         await service.require(ActionId.ADMIN_ROLE_GRANT_LIST, resource)
     assert no_permission.value.public_code == "permission_not_granted"
 
-    facts.matched = SimpleNamespace(id=uuid4())
+    facts.matched = SimpleNamespace(id=new_record_id())
     with pytest.raises(AuthorizationDenied) as absent_project:
         await service.require(ActionId.ADMIN_ROLE_GRANT_LIST, resource)
     assert absent_project.value.public_code == "resource_not_found"
@@ -7588,7 +7771,7 @@ async def test_admin_issue_guards_are_central_and_revalidated_under_control_lock
     assert facts.control_locked is True
 
     facts.request_actor_is_present = False
-    target_resource = self_resource.model_copy(update={"resource_id": uuid4()})
+    target_resource = self_resource.model_copy(update={"resource_id": new_record_id()})
     with pytest.raises(AuthorizationDenied) as missing_request_actor:
         await service.require(ActionId.ADMIN_ROLE_GRANT_ISSUE, target_resource)
     assert missing_request_actor.value.public_code == "identity_link_revoked"
@@ -7603,7 +7786,7 @@ async def test_admin_issue_guards_are_central_and_revalidated_under_control_lock
 async def test_admin_revoke_and_history_guards_fail_closed() -> None:
     context = _runtime_context()
     service, _, facts = _admin_runtime_service(context)
-    grant_id = uuid4()
+    grant_id = new_record_id()
     revoke_resource = AdminRoleGrantResourceContext(
         resource_type="admin_role_grant",
         resource_id=grant_id,
@@ -7622,7 +7805,7 @@ async def test_admin_revoke_and_history_guards_fail_closed() -> None:
         await service.require(ActionId.ADMIN_ROLE_GRANT_REVOKE, revoke_resource)
     assert self_revoke.value.public_code == "self_role_revoke_forbidden"
 
-    target_id = uuid4()
+    target_id = new_record_id()
     history = ActorAdminRoleGrantHistoryResourceContext(
         resource_type="actor_admin_role_grant_history",
         resource_id=target_id,
@@ -7640,19 +7823,19 @@ async def test_admin_revoke_and_history_guards_fail_closed() -> None:
     [
         ("issue", {"action_id": ActionId.ADMIN_ROLE_GRANT_REVOKE}),
         ("issue", {"resource_type": "admin_role_grant"}),
-        ("issue", {"resource_id": uuid4()}),
+        ("issue", {"resource_id": new_record_id()}),
         ("issue", {"permission_id": PermissionId.ADMIN_ROLE_REVOKE}),
         ("issue", {"matched_grant_id": None}),
         ("issue", {"matched_authority_kind": MatchedAuthorityKind.ACTOR_SELF}),
-        ("issue", {"matched_scope_project_id": uuid4()}),
+        ("issue", {"matched_scope_project_id": new_record_id()}),
         ("issue", {"revalidated": False}),
         ("revoke", {"action_id": ActionId.ADMIN_ROLE_GRANT_ISSUE}),
         ("revoke", {"resource_type": "admin_role_grant_issue"}),
-        ("revoke", {"resource_id": uuid4()}),
+        ("revoke", {"resource_id": new_record_id()}),
         ("revoke", {"permission_id": PermissionId.ADMIN_ROLE_GRANT}),
         ("revoke", {"matched_grant_id": None}),
         ("revoke", {"matched_authority_kind": MatchedAuthorityKind.ACTOR_SELF}),
-        ("revoke", {"matched_scope_project_id": uuid4()}),
+        ("revoke", {"matched_scope_project_id": new_record_id()}),
         ("revoke", {"revalidated": False}),
     ],
 )
@@ -7661,7 +7844,12 @@ async def test_admin_mutations_reject_decisions_not_bound_to_exact_request(
     decision_change: dict,
 ) -> None:
     """Feature mutation cannot consume authority issued for another operation."""
-    actor_id, target_id, grant_id, matched_grant_id = uuid4(), uuid4(), uuid4(), uuid4()
+    actor_id, target_id, grant_id, matched_grant_id = (
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
+    )
     if operation == "issue":
         request = AdminRoleGrantIssueRequest(
             operation=AuthorityOperation.ADMIN_ROLE_GRANT_ISSUE,
@@ -7685,7 +7873,7 @@ async def test_admin_mutations_reject_decisions_not_bound_to_exact_request(
         resource_type = "admin_role_grant"
         resource_id = grant_id
     decision = AuthorizationDecision(
-        decision_id=uuid4(),
+        decision_id=new_record_id(),
         action_id=action_id,
         permission_id=permission_id,
         allowed=True,
@@ -7697,17 +7885,10 @@ async def test_admin_mutations_reject_decisions_not_bound_to_exact_request(
         matched_grant_id=matched_grant_id,
         matched_scope_project_id=None,
         revalidated=True,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     ).model_copy(update=decision_change)
-    claim = AuthorityClaimHandle(
-        record_id=uuid4(),
-        idempotency_key=uuid4(),
-        actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
-        actor_ref=str(actor_id),
-        operation=request.operation,
-        request_digest=DIGEST,
-    )
+    claim = _authority_claim(actor_id, request.operation)
     service = AdminRoleGrantService(object())  # type: ignore[arg-type]
 
     if operation == "issue":
@@ -7729,7 +7910,7 @@ async def test_admin_mutations_reject_decisions_not_bound_to_exact_request(
             await service.record_issue_conflict(
                 actor_profile_id=actor_id,
                 request=request,
-                grant_id=uuid4(),
+                grant_id=new_record_id(),
                 decision=decision,
             )
     else:
@@ -7758,7 +7939,12 @@ async def test_admin_mutations_reject_decisions_not_bound_to_exact_request(
 
 async def test_admin_resource_digest_alone_rejects_substituted_role_and_disposition() -> None:
     """Every admin consumer rejects cross-wiring hidden by equal target IDs."""
-    actor_id, target_id, grant_id, matched_grant_id = uuid4(), uuid4(), uuid4(), uuid4()
+    actor_id, target_id, grant_id, matched_grant_id = (
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
+    )
 
     class NoWrites:
         def __getattr__(self, name):
@@ -7780,30 +7966,12 @@ async def test_admin_resource_digest_alone_rejects_substituted_role_and_disposit
     issue_digest = authorization_resource_digest(_admin_resource_context(issue_request))
     substituted_issue_digest = authorization_resource_digest(substituted_issue_context)
     assert issue_digest != substituted_issue_digest
-    issue_decision = AuthorizationDecision(
-        decision_id=uuid4(),
-        action_id=ActionId.ADMIN_ROLE_GRANT_ISSUE,
-        permission_id=PermissionId.ADMIN_ROLE_GRANT,
-        allowed=True,
-        denial_code=None,
-        resource_type="admin_role_grant_issue",
-        resource_id=target_id,
+    issue_decision = _admin_allowed_decision(
+        issue_request,
+        matched_grant_id,
         resource_context_digest=substituted_issue_digest,
-        matched_authority_kind=MatchedAuthorityKind.ADMIN_ROLE_GRANT,
-        matched_grant_id=matched_grant_id,
-        matched_scope_project_id=None,
-        revalidated=True,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
     )
-    issue_claim = AuthorityClaimHandle(
-        record_id=uuid4(),
-        idempotency_key=uuid4(),
-        actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
-        actor_ref=str(actor_id),
-        operation=issue_request.operation,
-        request_digest=DIGEST,
-    )
+    issue_claim = _authority_claim(actor_id, issue_request.operation)
     service = AdminRoleGrantService(object())  # type: ignore[arg-type]
     service._repository = NoWrites()  # type: ignore[assignment]
     service._mutation = NoWrites()  # type: ignore[assignment]
@@ -7826,7 +7994,7 @@ async def test_admin_resource_digest_alone_rejects_substituted_role_and_disposit
         await service.record_issue_conflict(
             actor_profile_id=actor_id,
             request=issue_request,
-            grant_id=uuid4(),
+            grant_id=new_record_id(),
             decision=issue_decision,
         )
 
@@ -7840,21 +8008,10 @@ async def test_admin_resource_digest_alone_rejects_substituted_role_and_disposit
         _admin_resource_context(revoke_request, existing_idempotency_record=True)
     )
     assert normal_digest != existing_digest
-    revoke_decision = AuthorizationDecision(
-        decision_id=uuid4(),
-        action_id=ActionId.ADMIN_ROLE_GRANT_REVOKE,
-        permission_id=PermissionId.ADMIN_ROLE_REVOKE,
-        allowed=True,
-        denial_code=None,
-        resource_type="admin_role_grant",
-        resource_id=grant_id,
+    revoke_decision = _admin_allowed_decision(
+        revoke_request,
+        matched_grant_id,
         resource_context_digest=existing_digest,
-        matched_authority_kind=MatchedAuthorityKind.ADMIN_ROLE_GRANT,
-        matched_grant_id=matched_grant_id,
-        matched_scope_project_id=None,
-        revalidated=True,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
     )
     revoke_claim = issue_claim.model_copy(update={"operation": revoke_request.operation})
     with pytest.raises(TypeError, match="requires exact matched authority"):
@@ -7881,7 +8038,7 @@ async def test_admin_resource_digest_alone_rejects_substituted_role_and_disposit
 
 
 async def test_final_access_admin_guard_ignores_ineffective_target_and_is_service_owned() -> None:
-    grant_id, target_id = uuid4(), uuid4()
+    grant_id, target_id = new_record_id(), new_record_id()
     grant = SimpleNamespace(
         id=grant_id,
         target_actor_profile_id=str(target_id),
@@ -7937,31 +8094,9 @@ async def test_final_access_admin_guard_ignores_ineffective_target_and_is_servic
         grant_id=grant_id,
         reason_digest=derive_reason_digest("Cannot remove final access"),
     )
-    actor_id, authorizer_id = uuid4(), uuid4()
-    decision = AuthorizationDecision(
-        decision_id=uuid4(),
-        action_id=ActionId.ADMIN_ROLE_GRANT_REVOKE,
-        permission_id=PermissionId.ADMIN_ROLE_REVOKE,
-        allowed=True,
-        denial_code=None,
-        resource_type="admin_role_grant",
-        resource_id=grant_id,
-        resource_context_digest=authorization_resource_digest(_admin_resource_context(request)),
-        matched_authority_kind=MatchedAuthorityKind.ADMIN_ROLE_GRANT,
-        matched_grant_id=authorizer_id,
-        matched_scope_project_id=None,
-        revalidated=True,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
-    )
-    claim = AuthorityClaimHandle(
-        record_id=uuid4(),
-        idempotency_key=uuid4(),
-        actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
-        actor_ref=str(actor_id),
-        operation=request.operation,
-        request_digest=DIGEST,
-    )
+    actor_id, authorizer_id = new_record_id(), new_record_id()
+    decision = _admin_allowed_decision(request, authorizer_id)
+    claim = _authority_claim(actor_id, request.operation)
     with pytest.raises(LastAccessAdministratorConflict) as exc_info:
         await service.complete_revoke(
             claim=claim,
@@ -7976,36 +8111,19 @@ async def test_final_access_admin_guard_ignores_ineffective_target_and_is_servic
 
 async def test_admin_revoke_stages_complete_state_and_evidence() -> None:
     """A valid revoke mutates history and completes one linked evidence unit."""
-    actor_id, target_id, grant_id, authorizer_id = uuid4(), uuid4(), uuid4(), uuid4()
+    actor_id, target_id, grant_id, authorizer_id = (
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
+    )
     request = AdminRoleGrantRevokeRequest(
         operation=AuthorityOperation.ADMIN_ROLE_GRANT_REVOKE,
         grant_id=grant_id,
         reason_digest=derive_reason_digest("Rotation ended"),
     )
-    decision = AuthorizationDecision(
-        decision_id=uuid4(),
-        action_id=ActionId.ADMIN_ROLE_GRANT_REVOKE,
-        permission_id=PermissionId.ADMIN_ROLE_REVOKE,
-        allowed=True,
-        denial_code=None,
-        resource_type="admin_role_grant",
-        resource_id=grant_id,
-        resource_context_digest=authorization_resource_digest(_admin_resource_context(request)),
-        matched_authority_kind=MatchedAuthorityKind.ADMIN_ROLE_GRANT,
-        matched_grant_id=authorizer_id,
-        matched_scope_project_id=None,
-        revalidated=True,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
-    )
-    claim = AuthorityClaimHandle(
-        record_id=uuid4(),
-        idempotency_key=uuid4(),
-        actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
-        actor_ref=str(actor_id),
-        operation=request.operation,
-        request_digest=DIGEST,
-    )
+    decision = _admin_allowed_decision(request, authorizer_id)
+    claim = _authority_claim(actor_id, request.operation)
     grant = SimpleNamespace(
         id=grant_id,
         target_actor_profile_id=str(target_id),
@@ -8110,7 +8228,7 @@ async def test_admin_revoke_stages_complete_state_and_evidence() -> None:
 
 async def test_admin_issue_stages_complete_state_and_evidence() -> None:
     """A valid issue returns its bounded reference and linked success evidence."""
-    actor_id, target_id, authorizer_id = uuid4(), uuid4(), uuid4()
+    actor_id, target_id, authorizer_id = new_record_id(), new_record_id(), new_record_id()
     request = AdminRoleGrantIssueRequest(
         operation=AuthorityOperation.ADMIN_ROLE_GRANT_ISSUE,
         target_actor_id=target_id,
@@ -8118,30 +8236,8 @@ async def test_admin_issue_stages_complete_state_and_evidence() -> None:
         scope_type=AdminScope.SYSTEM,
         reason_digest=derive_reason_digest("On-call operations coverage"),
     )
-    decision = AuthorizationDecision(
-        decision_id=uuid4(),
-        action_id=ActionId.ADMIN_ROLE_GRANT_ISSUE,
-        permission_id=PermissionId.ADMIN_ROLE_GRANT,
-        allowed=True,
-        denial_code=None,
-        resource_type="admin_role_grant_issue",
-        resource_id=target_id,
-        resource_context_digest=authorization_resource_digest(_admin_resource_context(request)),
-        matched_authority_kind=MatchedAuthorityKind.ADMIN_ROLE_GRANT,
-        matched_grant_id=authorizer_id,
-        matched_scope_project_id=None,
-        revalidated=True,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
-    )
-    claim = AuthorityClaimHandle(
-        record_id=uuid4(),
-        idempotency_key=uuid4(),
-        actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
-        actor_ref=str(actor_id),
-        operation=request.operation,
-        request_digest=DIGEST,
-    )
+    decision = _admin_allowed_decision(request, authorizer_id)
+    claim = _authority_claim(actor_id, request.operation)
 
     class Repository:
         issued = None
@@ -8198,8 +8294,8 @@ async def test_admin_grant_pagination_and_bootstrap_corruption_fail_closed() -> 
 
     def grant(index: int):
         return SimpleNamespace(
-            id=uuid4(),
-            target_actor_profile_id=str(uuid4()),
+            id=new_record_id(),
+            target_actor_profile_id=str(new_record_id()),
             role=AdminRole.OPERATOR.value,
             scope_type=AdminScope.SYSTEM.value,
             scope_project_id=None,
@@ -8268,7 +8364,7 @@ async def test_admin_grant_pagination_and_bootstrap_corruption_fail_closed() -> 
     malformed_payloads = [
         {"unexpected": "mapping"},
         [now.isoformat(), "not-a-uuid"],
-        [now.replace(tzinfo=None).isoformat(), str(uuid4())],
+        [now.replace(tzinfo=None).isoformat(), str(new_record_id())],
     ]
     for payload in malformed_payloads:
         cursor = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
@@ -8282,7 +8378,7 @@ async def test_admin_grant_pagination_and_bootstrap_corruption_fail_closed() -> 
                 cursor=cursor,
             )
 
-    actor_id, completed_grant_id = uuid4(), uuid4()
+    actor_id, completed_grant_id = new_record_id(), new_record_id()
     with pytest.raises(RuntimeError, match="authority control is missing"):
         await service.bootstrap_eligible(actor_id)
     session.control = SimpleNamespace(bootstrap_completed=True, bootstrap_grant_id=None)
@@ -8302,7 +8398,7 @@ async def test_admin_grant_pagination_and_bootstrap_corruption_fail_closed() -> 
 
 
 async def test_post_allow_admin_denials_preserve_matched_grant_provenance() -> None:
-    actor_id, target_id, matched_grant_id = uuid4(), uuid4(), uuid4()
+    actor_id, target_id, matched_grant_id = new_record_id(), new_record_id(), new_record_id()
     request = AdminRoleGrantIssueRequest(
         operation=AuthorityOperation.ADMIN_ROLE_GRANT_ISSUE,
         target_actor_id=target_id,
@@ -8310,22 +8406,7 @@ async def test_post_allow_admin_denials_preserve_matched_grant_provenance() -> N
         scope_type=AdminScope.SYSTEM,
         reason_digest=DIGEST,
     )
-    decision = AuthorizationDecision(
-        decision_id=uuid4(),
-        action_id=ActionId.ADMIN_ROLE_GRANT_ISSUE,
-        permission_id=PermissionId.ADMIN_ROLE_GRANT,
-        allowed=True,
-        denial_code=None,
-        resource_type="admin_role_grant_issue",
-        resource_id=target_id,
-        resource_context_digest=authorization_resource_digest(_admin_resource_context(request)),
-        matched_authority_kind=MatchedAuthorityKind.ADMIN_ROLE_GRANT,
-        matched_grant_id=matched_grant_id,
-        matched_scope_project_id=None,
-        revalidated=True,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
-    )
+    decision = _admin_allowed_decision(request, matched_grant_id)
 
     class EvidenceRepository:
         def __init__(self) -> None:
@@ -8349,10 +8430,10 @@ async def test_post_allow_admin_denials_preserve_matched_grant_provenance() -> N
     await service.record_issue_conflict(
         actor_profile_id=actor_id,
         request=request,
-        grant_id=uuid4(),
+        grant_id=new_record_id(),
         decision=decision,
     )
-    revoke_grant_id = uuid4()
+    revoke_grant_id = new_record_id()
     revoke_request = AdminRoleGrantRevokeRequest(
         operation=AuthorityOperation.ADMIN_ROLE_GRANT_REVOKE,
         grant_id=revoke_grant_id,
@@ -8401,7 +8482,7 @@ async def test_authorization_dependency_rolls_back_a_forgotten_route_transaction
         async def rollback(self) -> None:
             self.rollback_count += 1
 
-    actor_id, link_id = uuid4(), uuid4()
+    actor_id, link_id = new_record_id(), new_record_id()
     resolved = SimpleNamespace(
         profile=SimpleNamespace(id=str(actor_id), actor_kind="human", status="active"),
         identity_link=SimpleNamespace(id=str(link_id), status="active"),
@@ -8455,7 +8536,7 @@ async def test_prepared_dependency_closes_handles_and_owns_denial_evidence(
         def in_transaction(self):
             return self.transaction_open
 
-    actor_id, link_id = uuid4(), uuid4()
+    actor_id, link_id = new_record_id(), new_record_id()
     resolved = SimpleNamespace(
         profile=SimpleNamespace(id=str(actor_id), actor_kind="human", status="active"),
         identity_link=SimpleNamespace(id=str(link_id), status="active"),
@@ -8492,7 +8573,7 @@ async def test_prepared_dependency_closes_handles_and_owns_denial_evidence(
         accept_test_denial,
     )
     denied = AuthorizationDecision(
-        decision_id=uuid4(),
+        decision_id=new_record_id(),
         action_id=ActionId.ACTOR_PROFILE_UPDATE_SELF,
         permission_id=PermissionId.ACTOR_PROFILE_UPDATE_SELF,
         allowed=False,
@@ -8508,8 +8589,8 @@ async def test_prepared_dependency_closes_handles_and_owns_denial_evidence(
         ),
         matched_authority_kind=None,
         revalidated=True,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
     with pytest.raises(StructuredHTTPException):
         await denial_dependency.athrow(  # type: ignore[attr-defined]
@@ -8566,8 +8647,8 @@ async def test_prepared_dependency_rolls_back_every_transaction_failure(
             return False
 
     resolved = SimpleNamespace(
-        profile=SimpleNamespace(id=str(uuid4()), actor_kind="human", status="active"),
-        identity_link=SimpleNamespace(id=str(uuid4()), status="active"),
+        profile=SimpleNamespace(id=str(new_record_id()), actor_kind="human", status="active"),
+        identity_link=SimpleNamespace(id=str(new_record_id()), status="active"),
     )
     request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
     session = Session()
@@ -8594,15 +8675,23 @@ async def test_authorization_dependency_admits_service_without_human_rate_contro
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     token = SimpleNamespace(subject_kind="service")
-    admitted = SimpleNamespace(profile=SimpleNamespace(
-        id=str(uuid4()), actor_kind="service", service_identity="workstream.artifact.binding",
-    ), identity_link=SimpleNamespace(id=str(uuid4())))
+    admitted = SimpleNamespace(
+        profile=SimpleNamespace(
+            id=str(new_record_id()),
+            actor_kind="service",
+            service_identity="workstream.artifact.binding",
+        ),
+        identity_link=SimpleNamespace(id=str(new_record_id())),
+    )
     calls: list[object] = []
+
     async def resolve_service(_self, current):
         calls.append(current)
         return admitted
+
     async def forbidden_human_lookup(*_args, **_kwargs):
         raise AssertionError("service admission entered the human path")
+
     monkeypatch.setattr(ActorService, "resolve_service_for_authorization", resolve_service)
     monkeypatch.setattr(ActorService, "find_actor_for_authorization", forbidden_human_lookup)
     request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
@@ -8616,7 +8705,10 @@ async def test_authorization_dependency_admits_service_without_human_rate_contro
 
     identity = await get_authorization_actor_identity(resolved)
     assert identity.service_identity == "workstream.artifact.binding"
-    human = SimpleNamespace(profile=SimpleNamespace(id=str(uuid4()), actor_kind="human", service_identity=None), identity_link=SimpleNamespace(id=str(uuid4())))
+    human = SimpleNamespace(
+        profile=SimpleNamespace(id=str(new_record_id()), actor_kind="human", service_identity=None),
+        identity_link=SimpleNamespace(id=str(new_record_id())),
+    )
     assert (await get_authorization_actor_identity(human)).actor_kind.value == "human"
     assert calls == [token]
 
@@ -8643,12 +8735,12 @@ async def test_inactive_service_dependency_stages_no_observation(
     monkeypatch.setattr(ActorService, "touch_after_authorization", forbidden_touch)
     resolved = SimpleNamespace(
         profile=SimpleNamespace(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             actor_kind="service",
             status=profile_status,
             service_identity=ServiceIdentity.ARTIFACT_VERIFIER.value,
         ),
-        identity_link=SimpleNamespace(id=str(uuid4()), status=link_status),
+        identity_link=SimpleNamespace(id=str(new_record_id()), status=link_status),
     )
     request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
     dependency = get_authorization_service(request, resolved, Session())  # type: ignore[arg-type]
@@ -8674,7 +8766,7 @@ async def test_service_denial_rolls_back_observations_before_clean_restage(
             return True
 
     session = Session()
-    actor_id, link_id = uuid4(), uuid4()
+    actor_id, link_id = new_record_id(), new_record_id()
     resolved = SimpleNamespace(
         profile=SimpleNamespace(
             id=str(actor_id),
@@ -8731,12 +8823,12 @@ async def test_service_dependency_cancellation_rolls_back_staged_observation(
     session = Session()
     resolved = SimpleNamespace(
         profile=SimpleNamespace(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             actor_kind="service",
             status="active",
             service_identity=ServiceIdentity.ARTIFACT_VERIFIER.value,
         ),
-        identity_link=SimpleNamespace(id=str(uuid4()), status="active"),
+        identity_link=SimpleNamespace(id=str(new_record_id()), status="active"),
     )
     observations: list[str] = []
 
@@ -8774,12 +8866,12 @@ async def test_service_observation_persistence_failure_is_retryable_and_private(
     session = Session()
     resolved = SimpleNamespace(
         profile=SimpleNamespace(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             actor_kind="service",
             status="active",
             service_identity=ServiceIdentity.ARTIFACT_VERIFIER.value,
         ),
-        identity_link=SimpleNamespace(id=str(uuid4()), status="active"),
+        identity_link=SimpleNamespace(id=str(new_record_id()), status="active"),
     )
 
     async def fail_observation(_self, _resolved):
@@ -8918,14 +9010,14 @@ async def test_fixed_service_kernel_selects_exact_action_before_availability() -
     resource = SystemResourceContext(resource_type="system", resource_id="workstream:system")
     for identity, own_actions in SERVICE_ACTIONS_BY_IDENTITY.items():
         context = ServiceAuthorizationContext(
-            actor_profile_id=uuid4(),
+            actor_profile_id=new_record_id(),
             actor_kind=ActorKind.SERVICE,
             actor_status=ActorStatus.ACTIVE,
-            identity_link_id=uuid4(),
+            identity_link_id=new_record_id(),
             identity_link_status=IdentityLinkStatus.ACTIVE,
             service_identity=identity,
-            request_id=uuid4(),
-            correlation_id=uuid4(),
+            request_id=new_record_id(),
+            correlation_id=new_record_id(),
         )
         service, _ = _runtime_service(context)
         for action in set().union(*SERVICE_ACTIONS_BY_IDENTITY.values()):
@@ -8999,13 +9091,13 @@ async def test_fixed_service_active_artifact_action_requires_prepared_consumptio
     service, evidence = _runtime_service(context, revalidate_service=revalidate)
     resource = ArtifactVerificationJobResourceContext(
         resource_type="artifact_verification_job",
-        resource_id=uuid4(),
-        replica_id=uuid4(),
+        resource_id=new_record_id(),
+        replica_id=new_record_id(),
         namespace_fingerprint="sha256:" + "1" * 64,
         provider_object_ref="provider/object",
         sha256="sha256:" + "2" * 64,
         byte_count=1,
-        executor_id=uuid4(),
+        executor_id=new_record_id(),
         execution_generation=1,
     )
 
@@ -9104,7 +9196,7 @@ async def test_fixed_service_real_revalidation_rejects_locked_drift(
         def in_transaction(self):
             return True
 
-    actor_id, link_id = uuid4(), uuid4()
+    actor_id, link_id = new_record_id(), new_record_id()
     resolved = SimpleNamespace(
         profile=SimpleNamespace(
             id=str(actor_id),
@@ -9337,7 +9429,7 @@ async def test_denial_is_restaged_with_the_same_bounded_identity() -> None:
             ActionId.ACTOR_PROFILE_READ_SELF,
             lambda context: ActorSelfResourceContext(
                 resource_type="actor_profile",
-                resource_id=uuid4(),
+                resource_id=new_record_id(),
                 requested_fields=(),
             ),
             ActorKind.HUMAN,
@@ -9396,7 +9488,7 @@ async def test_actor_self_guards_fail_closed(
 def test_authorization_decision_and_denial_reject_incoherent_outcomes() -> None:
     context = _runtime_context()
     base = {
-        "decision_id": uuid4(),
+        "decision_id": new_record_id(),
         "action_id": ActionId.ACTOR_PROFILE_READ_SELF,
         "permission_id": PermissionId.ACTOR_PROFILE_READ_SELF,
         "resource_type": "actor_profile",
@@ -9462,8 +9554,8 @@ async def test_authorization_state_is_not_cached_across_requests() -> None:
     revoked = active.model_copy(
         update={
             "identity_link_status": IdentityLinkStatus.REVOKED,
-            "request_id": uuid4(),
-            "correlation_id": uuid4(),
+            "request_id": new_record_id(),
+            "correlation_id": new_record_id(),
         }
     )
     second, _ = _runtime_service(revoked)
@@ -9615,82 +9707,52 @@ async def test_project_read_permissions_have_postgresql_role_scope_matrix(
 ) -> None:
     """Prove persisted grants confer only the reviewed read projections."""
     now = datetime.now(UTC)
-    project_id, other_project_id = uuid4(), uuid4()
-    bootstrap_actor_id, bootstrap_link_id, bootstrap_grant_id = uuid4(), uuid4(), uuid4()
+    project_id, other_project_id = new_record_id(), new_record_id()
+    bootstrap_actor_id, bootstrap_link_id, bootstrap_grant_id = (
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
+    )
     role_cases = (
         (AdminRole.OPERATOR, AdminScope.SYSTEM, None, True),
         (AdminRole.PROJECT_MANAGER, AdminScope.PROJECT, project_id, True),
         (AdminRole.AUDIT_AUTHORITY, AdminScope.PROJECT, project_id, True),
         (AdminRole.FINANCE_AUTHORITY, AdminScope.PROJECT, project_id, False),
     )
-    actor_cases = [(role, uuid4(), uuid4(), uuid4()) for role, *_rest in role_cases]
-    contributor_cases = [(role, uuid4(), uuid4(), uuid4(), uuid4()) for role in ProjectRole]
+    actor_cases = [
+        (role, new_record_id(), new_record_id(), new_record_id()) for role, *_rest in role_cases
+    ]
+    contributor_cases = [
+        (role, new_record_id(), new_record_id(), new_record_id(), new_record_id())
+        for role in ProjectRole
+    ]
 
     async with authorization_factory() as session:
         session.add_all(
-            [
-                ActorProfile(
-                    id=str(bootstrap_actor_id),
-                    actor_kind="human",
-                    status="active",
-                    provisioning_method="automatic_first_access",
-                    created_by=str(bootstrap_actor_id),
-                ),
-                ActorIdentityLink(
-                    id=str(bootstrap_link_id),
-                    actor_profile_id=str(bootstrap_actor_id),
-                    issuer="https://identity.flowresearch.tech",
-                    subject=f"auth-11a-bootstrap-{bootstrap_actor_id}",
-                    subject_kind="human",
-                    status="active",
-                    linked_by=str(bootstrap_actor_id),
-                    last_verified_at=now,
-                ),
-            ]
+            _actor_rows(
+                bootstrap_actor_id,
+                bootstrap_link_id,
+                subject=f"auth-11a-bootstrap-{bootstrap_actor_id}",
+                now=now,
+            )
         )
         for _role, actor_id, link_id, _grant_id in actor_cases:
             session.add_all(
-                [
-                    ActorProfile(
-                        id=str(actor_id),
-                        actor_kind="human",
-                        status="active",
-                        provisioning_method="automatic_first_access",
-                        created_by=str(actor_id),
-                    ),
-                    ActorIdentityLink(
-                        id=str(link_id),
-                        actor_profile_id=str(actor_id),
-                        issuer="https://identity.flowresearch.tech",
-                        subject=f"auth-11a-admin-{actor_id}",
-                        subject_kind="human",
-                        status="active",
-                        linked_by=str(actor_id),
-                        last_verified_at=now,
-                    ),
-                ]
+                _actor_rows(
+                    actor_id,
+                    link_id,
+                    subject=f"auth-11a-admin-{actor_id}",
+                    now=now,
+                )
             )
         for _role, actor_id, link_id, _snapshot_id, _grant_id in contributor_cases:
             session.add_all(
-                [
-                    ActorProfile(
-                        id=str(actor_id),
-                        actor_kind="human",
-                        status="active",
-                        provisioning_method="automatic_first_access",
-                        created_by=str(actor_id),
-                    ),
-                    ActorIdentityLink(
-                        id=str(link_id),
-                        actor_profile_id=str(actor_id),
-                        issuer="https://identity.flowresearch.tech",
-                        subject=f"auth-11a-contributor-{actor_id}",
-                        subject_kind="human",
-                        status="active",
-                        linked_by=str(actor_id),
-                        last_verified_at=now,
-                    ),
-                ]
+                _actor_rows(
+                    actor_id,
+                    link_id,
+                    subject=f"auth-11a-contributor-{actor_id}",
+                    now=now,
+                )
             )
         session.add(
             AdminRoleGrant(
@@ -9821,29 +9883,16 @@ async def test_authorization_locks_refresh_cached_actor_lifecycle_state(
     authorization_factory,
 ) -> None:
     """Locked authorization rows must replace stale identity-map state."""
-    profile_id, link_id = uuid4(), uuid4()
+    profile_id, link_id = new_record_id(), new_record_id()
     now = datetime.now(UTC)
     async with authorization_factory() as seed:
         seed.add_all(
-            [
-                ActorProfile(
-                    id=str(profile_id),
-                    actor_kind="human",
-                    status="active",
-                    provisioning_method="automatic_first_access",
-                    created_by=str(profile_id),
-                ),
-                ActorIdentityLink(
-                    id=str(link_id),
-                    actor_profile_id=str(profile_id),
-                    issuer="https://identity.flowresearch.tech",
-                    subject=f"lock-refresh-{profile_id}",
-                    subject_kind="human",
-                    status="active",
-                    linked_by=str(profile_id),
-                    last_verified_at=now,
-                ),
-            ]
+            _actor_rows(
+                profile_id,
+                link_id,
+                subject=f"lock-refresh-{profile_id}",
+                now=now,
+            )
         )
         await seed.commit()
 
@@ -9943,7 +9992,7 @@ async def test_authorization_locks_refresh_cached_actor_lifecycle_state(
 def _request(target: UUID | None = None) -> ActorProfileSuspendRequest:
     return ActorProfileSuspendRequest(
         operation=AuthorityOperation.ACTOR_PROFILE_SUSPEND,
-        actor_profile_id=target or uuid4(),
+        actor_profile_id=target or new_record_id(),
         reason_digest=DIGEST,
     )
 
@@ -9955,7 +10004,7 @@ def _success(
     request_id: UUID | None = None,
     correlation_id: UUID | None = None,
 ) -> AuthorityAuditEventInput:
-    event_id = uuid4()
+    event_id = new_record_id()
     return AuthorityAuditEventInput(
         event_id=event_id,
         event_type=AuthorityEventType.ACTOR_PROFILE_SUSPENDED,
@@ -9963,9 +10012,10 @@ def _success(
         entity_id=str(request.actor_profile_id),
         actor_ref_kind=claim.actor_ref_kind,
         actor_ref=claim.actor_ref,
-        request_id=request_id or uuid4(),
-        correlation_id=correlation_id or uuid4(),
-        target_actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE, target_actor_ref=str(request.actor_profile_id),
+        request_id=request_id or new_record_id(),
+        correlation_id=correlation_id or new_record_id(),
+        target_actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
+        target_actor_ref=str(request.actor_profile_id),
         permission_id="actor.profile.suspend",
         resource_type="actor_profile",
         resource_id=str(request.actor_profile_id),
@@ -9988,58 +10038,7 @@ def _operation_success(
     identity_link_target: UUID | None = None,
 ) -> AuthorityAuditEventInput:
     """Build the exact concrete success evidence for one canonical operation case."""
-    event, permission, reason = {
-        AuthorityOperation.SERVICE_ACTOR_CREATE: (
-            AuthorityEventType.SERVICE_ACTOR_PROVISIONED,
-            "actor.service.provision",
-            "manual_service_provisioning",
-        ),
-        AuthorityOperation.ADMIN_ROLE_GRANT_ISSUE: (
-            AuthorityEventType.ADMIN_ROLE_GRANT_ISSUED,
-            "admin_role.grant",
-            "authority_assignment",
-        ),
-        AuthorityOperation.ADMIN_ROLE_GRANT_REVOKE: (
-            AuthorityEventType.ADMIN_ROLE_GRANT_REVOKED,
-            "admin_role.revoke",
-            "authority_revocation",
-        ),
-        AuthorityOperation.PROJECT_ROLE_GRANT_ISSUE: (
-            AuthorityEventType.PROJECT_ROLE_GRANT_ISSUED,
-            "project.role_grant.manage",
-            "authority_assignment",
-        ),
-        AuthorityOperation.PROJECT_ROLE_GRANT_REVOKE: (
-            AuthorityEventType.PROJECT_ROLE_GRANT_REVOKED,
-            "project.role_grant.manage",
-            "authority_revocation",
-        ),
-        AuthorityOperation.ACTOR_PROFILE_SUSPEND: (
-            AuthorityEventType.ACTOR_PROFILE_SUSPENDED,
-            "actor.profile.suspend",
-            "security_response",
-        ),
-        AuthorityOperation.ACTOR_PROFILE_REACTIVATE: (
-            AuthorityEventType.ACTOR_PROFILE_REACTIVATED,
-            "actor.profile.reactivate",
-            "administrative_correction",
-        ),
-        AuthorityOperation.ACTOR_PROFILE_DEACTIVATE: (
-            AuthorityEventType.ACTOR_PROFILE_DEACTIVATED,
-            "actor.profile.deactivate",
-            "security_response",
-        ),
-        AuthorityOperation.ACTOR_IDENTITY_LINK_REVOKE: (
-            AuthorityEventType.ACTOR_IDENTITY_LINK_REVOKED,
-            "actor.identity_link.revoke",
-            "identity_lifecycle_change",
-        ),
-        AuthorityOperation.ACTOR_IDENTITY_LINK_REACTIVATE: (
-            AuthorityEventType.ACTOR_IDENTITY_LINK_REACTIVATED,
-            "actor.identity_link.reactivate",
-            "identity_lifecycle_change",
-        ),
-    }[request.operation]
+    event, permission, reason, _resource_type = OPERATION_SUCCESS_METADATA[request.operation]
     before_facts = None
     after_facts = None
     project_id = None
@@ -10107,11 +10106,23 @@ def _operation_success(
         }
         after_facts = before_facts | {"status": "revoked", "effective": False}
     elif isinstance(request, ActorProfileSuspendRequest):
-        target_actor, before_facts, after_facts = request.actor_profile_id, {"status": "active"}, {"status": "suspended"}
+        target_actor, before_facts, after_facts = (
+            request.actor_profile_id,
+            {"status": "active"},
+            {"status": "suspended"},
+        )
     elif isinstance(request, ActorProfileReactivateRequest):
-        target_actor, before_facts, after_facts = request.actor_profile_id, {"status": "suspended"}, {"status": "active"}
+        target_actor, before_facts, after_facts = (
+            request.actor_profile_id,
+            {"status": "suspended"},
+            {"status": "active"},
+        )
     elif isinstance(request, ActorProfileDeactivateRequest):
-        target_actor, before_facts, after_facts = request.actor_profile_id, {"status": "active"}, {"status": "deactivated"}
+        target_actor, before_facts, after_facts = (
+            request.actor_profile_id,
+            {"status": "active"},
+            {"status": "deactivated"},
+        )
     elif isinstance(request, ActorIdentityLinkRevokeRequest):
         if identity_link_target is None:
             raise AssertionError("identity-link revoke proof requires its owning actor")
@@ -10123,15 +10134,16 @@ def _operation_success(
         target_actor = identity_link_target
         before_facts, after_facts = {"status": "revoked"}, {"status": "active"}
 
-    event_id = uuid4()
+    event_id = new_record_id()
     return AuthorityAuditEventInput(
         event_id=event_id,
         event_type=event,
         entity_type=response.resource_type.value,
         entity_id=str(response.resource_id),
-        actor_ref_kind=claim.actor_ref_kind, actor_ref=claim.actor_ref,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        actor_ref_kind=claim.actor_ref_kind,
+        actor_ref=claim.actor_ref,
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
         target_actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE if target_actor else None,
         target_actor_ref=str(target_actor) if target_actor else None,
         matched_grant_id=str(matched_grant) if matched_grant else None,
@@ -10164,14 +10176,17 @@ async def _complete(service, claim, request):
     response = AuthorityResponseReference(
         resource_type=AuthorityResourceType.ACTOR_PROFILE,
         resource_id=request.actor_profile_id,
-        version=1, http_status=200,
+        version=1,
+        http_status=200,
     )
     result = await service.complete(
         publication=assignment_invalidation_publication(service._repository._session),
-        claim=claim, request=request.model_dump(),
-        response=response, success=success,
+        claim=claim,
+        request=request.model_dump(),
+        response=response,
+        success=success,
         invalidation=AuthorityInvalidationContext(
-            event_id=uuid4(),
+            event_id=new_record_id(),
             request_id=success.request_id,
             correlation_id=success.correlation_id,
         ),
@@ -10183,7 +10198,7 @@ async def _complete(service, claim, request):
 async def test_claim_completion_and_exact_replay_have_one_evidence_pair(
     authorization_factory,
 ) -> None:
-    actor, key, request = uuid4(), uuid4(), _request()
+    actor, key, request = new_record_id(), new_record_id(), _request()
     async with authorization_factory() as session:
         service = AuthorityMutationService(session)
         claim = await _claim(service, actor, key, request)
@@ -10216,7 +10231,7 @@ async def test_claim_completion_and_exact_replay_have_one_evidence_pair(
 async def test_committed_record_rejects_additional_success_and_invalidation(
     authorization_factory,
 ) -> None:
-    actor, key, request = uuid4(), uuid4(), _request()
+    actor, key, request = new_record_id(), new_record_id(), _request()
     async with authorization_factory() as session:
         service = AuthorityMutationService(session)
         claim = await _claim(service, actor, key, request)
@@ -10234,7 +10249,7 @@ async def test_committed_record_rejects_additional_success_and_invalidation(
                 response=completed.response,
                 success=extra_success,
                 invalidation=AuthorityInvalidationContext(
-                    event_id=uuid4(),
+                    event_id=new_record_id(),
                     request_id=extra_success.request_id,
                     correlation_id=extra_success.correlation_id,
                 ),
@@ -10249,7 +10264,7 @@ async def test_committed_record_rejects_additional_success_and_invalidation(
             ),
             {"id": claim.record_id},
         )
-        context_id, request_id, correlation_id = uuid4(), uuid4(), uuid4()
+        context_id, request_id, correlation_id = new_record_id(), new_record_id(), new_record_id()
         invalidation = AuthorityAuditEventInput(
             event_id=context_id,
             event_type=AuthorityEventType.AUTHORITY_INVALIDATION_REQUESTED,
@@ -10264,7 +10279,7 @@ async def test_committed_record_rejects_additional_success_and_invalidation(
             resource_id=str(request.actor_profile_id),
             reason="authority_state_changed",
             idempotency_reference=claim.record_id,
-            invalidation_cause_event_id=UUID(cause_id),
+            invalidation_cause_event_id=UUID(int=cause_id.int),
             invalidation_target_kind="actor_profile",
             invalidation_target_ref=str(request.actor_profile_id),
             before_facts={"effective": True},
@@ -10288,7 +10303,7 @@ async def test_committed_record_rejects_additional_success_and_invalidation(
 async def test_completion_rejects_resource_and_project_not_bound_to_request(
     authorization_factory,
 ) -> None:
-    actor, key, request = uuid4(), uuid4(), _request()
+    actor, key, request = new_record_id(), new_record_id(), _request()
     wrong_request = _request()
     async with authorization_factory() as session:
         service = AuthorityMutationService(session)
@@ -10306,7 +10321,7 @@ async def test_completion_rejects_resource_and_project_not_bound_to_request(
                 ),
                 success=wrong_success,
                 invalidation=AuthorityInvalidationContext(
-                    event_id=uuid4(),
+                    event_id=new_record_id(),
                     request_id=wrong_success.request_id,
                     correlation_id=wrong_success.correlation_id,
                 ),
@@ -10315,31 +10330,31 @@ async def test_completion_rejects_resource_and_project_not_bound_to_request(
 
     project_request = ProjectRoleGrantIssueRequest(
         operation=AuthorityOperation.PROJECT_ROLE_GRANT_ISSUE,
-        project_id=uuid4(),
-        target_actor_id=uuid4(),
+        project_id=new_record_id(),
+        target_actor_id=new_record_id(),
         role=ProjectRole.SUBMITTER,
         qualification=_project_role_qualification(),
         reason_digest=DIGEST,
     )
-    wrong_project = project_request.model_copy(update={"project_id": uuid4()})
+    wrong_project = project_request.model_copy(update={"project_id": new_record_id()})
     async with authorization_factory() as session:
         service = AuthorityMutationService(session)
-        claim = await _claim(service, actor, uuid4(), project_request)
+        claim = await _claim(service, actor, new_record_id(), project_request)
         response = AuthorityResponseReference(
             resource_type=AuthorityResourceType.PROJECT_ROLE_GRANT,
-            resource_id=uuid4(),
+            resource_id=new_record_id(),
             http_status=201,
         )
         issued = _operation_success(
             claim,
             wrong_project,
             response,
-            admin_authorizer_grant_id=uuid4(),
+            admin_authorizer_grant_id=new_record_id(),
         )
-        qualification_snapshot_id = uuid4()
+        qualification_snapshot_id = new_record_id()
         qualification = issued.model_copy(
             update={
-                "event_id": uuid4(),
+                "event_id": new_record_id(),
                 "event_type": AuthorityEventType.PROJECT_ROLE_QUALIFICATION_CAPTURED,
                 "entity_type": "qualification_snapshot",
                 "entity_id": str(qualification_snapshot_id),
@@ -10353,7 +10368,8 @@ async def test_completion_rejects_resource_and_project_not_bound_to_request(
         )
         with pytest.raises(TypeError, match="invalid authority completion input"):
             await service.complete(
-                publication=None, claim=claim,
+                publication=None,
+                claim=claim,
                 request=project_request.model_dump(),
                 response=response,
                 success=(qualification, issued),
@@ -10366,18 +10382,20 @@ async def test_completion_rejects_resource_and_project_not_bound_to_request(
 async def test_database_rejects_cross_actor_entity_and_cause_context_bypasses(
     authorization_factory,
 ) -> None:
-    actor, request = uuid4(), _request()
+    actor, request = new_record_id(), _request()
     async with authorization_factory() as session:
         service = AuthorityMutationService(session)
-        claim = await _claim(service, actor, uuid4(), request)
-        cross_actor = _success(claim, request).model_copy(update={"actor_ref": str(uuid4())})
+        claim = await _claim(service, actor, new_record_id(), request)
+        cross_actor = _success(claim, request).model_copy(
+            update={"actor_ref": str(new_record_id())}
+        )
         with pytest.raises(IntegrityError, match="idempotency reference"):
             await AuditService(session).add_authority_event(cross_actor)
         await session.rollback()
 
     async with authorization_factory() as session:
         service = AuthorityMutationService(session)
-        claim = await _claim(service, actor, uuid4(), request)
+        claim = await _claim(service, actor, new_record_id(), request)
         wrong_entity = _success(claim, request).model_copy(
             update={"entity_type": "admin_role_grant"}
         )
@@ -10387,10 +10405,10 @@ async def test_database_rejects_cross_actor_entity_and_cause_context_bypasses(
 
     async with authorization_factory() as session:
         service = AuthorityMutationService(session)
-        claim = await _claim(service, actor, uuid4(), request)
+        claim = await _claim(service, actor, new_record_id(), request)
         success = _success(claim, request)
         await AuditService(session).add_authority_event(success)
-        event_id = uuid4()
+        event_id = new_record_id()
         wrong_context = AuthorityAuditEventInput(
             event_id=event_id,
             event_type=AuthorityEventType.AUTHORITY_INVALIDATION_REQUESTED,
@@ -10398,7 +10416,7 @@ async def test_database_rejects_cross_actor_entity_and_cause_context_bypasses(
             entity_id=str(event_id),
             actor_ref_kind=claim.actor_ref_kind,
             actor_ref=claim.actor_ref,
-            request_id=uuid4(),
+            request_id=new_record_id(),
             correlation_id=success.correlation_id,
             permission_id="actor.profile.suspend",
             resource_type="actor_profile",
@@ -10418,7 +10436,7 @@ async def test_database_rejects_cross_actor_entity_and_cause_context_bypasses(
 
 @pytest.mark.asyncio
 async def test_pending_commit_fails_and_rollback_allows_retry(authorization_factory) -> None:
-    actor, key, request = uuid4(), uuid4(), _request()
+    actor, key, request = new_record_id(), new_record_id(), _request()
     async with authorization_factory() as session:
         await _claim(AuthorityMutationService(session), actor, key, request)
         with pytest.raises(DBAPIError, match="pending authority idempotency"):
@@ -10432,7 +10450,7 @@ async def test_pending_commit_fails_and_rollback_allows_retry(authorization_fact
 
 @pytest.mark.asyncio
 async def test_same_session_pending_and_forged_claim_fail_closed(authorization_factory) -> None:
-    actor, key, request = uuid4(), uuid4(), _request()
+    actor, key, request = new_record_id(), new_record_id(), _request()
     async with authorization_factory() as session:
         service = AuthorityMutationService(session)
         claim = await _claim(service, actor, key, request)
@@ -10458,7 +10476,7 @@ async def test_same_session_pending_and_forged_claim_fail_closed(authorization_f
 
 @pytest.mark.asyncio
 async def test_mismatch_is_private_and_denial_uses_clean_transaction(authorization_factory) -> None:
-    actor, key, request = uuid4(), uuid4(), _request()
+    actor, key, request = new_record_id(), new_record_id(), _request()
     async with authorization_factory() as session:
         service = AuthorityMutationService(session)
         claim = await _claim(service, actor, key, request)
@@ -10481,7 +10499,7 @@ async def test_mismatch_is_private_and_denial_uses_clean_transaction(authorizati
             actor_ref=str(actor),
             request=different.model_dump(),
             context=AuthorityMismatchContext(
-                event_id=uuid4(), request_id=uuid4(), correlation_id=uuid4()
+                event_id=new_record_id(), request_id=new_record_id(), correlation_id=new_record_id()
             ),
         )
         await session.commit()
@@ -10520,7 +10538,7 @@ def test_request_admission_is_frozen_bounded_and_nonretaining() -> None:
 
     rejected = [
         {**_request().model_dump(), "reason_digest": secret},
-        {**_request().model_dump(), "actor_profile_id": str(uuid4()).upper()},
+        {**_request().model_dump(), "actor_profile_id": str(new_record_id()).upper()},
         {**_request().model_dump(), "extra": secret},
     ]
     for value in rejected:
@@ -10534,19 +10552,19 @@ def test_request_admission_is_frozen_bounded_and_nonretaining() -> None:
     for construct in (
         lambda: ActorProfileSuspendRequest(
             operation=AuthorityOperation.ACTOR_PROFILE_SUSPEND,
-            actor_profile_id=uuid4(),
+            actor_profile_id=new_record_id(),
             reason_digest=secret,
         ),
         lambda: ActorProfileSuspendRequest.model_validate(
             {
                 "operation": AuthorityOperation.ACTOR_PROFILE_SUSPEND,
-                "actor_profile_id": uuid4(),
+                "actor_profile_id": new_record_id(),
                 "reason_digest": secret,
             }
         ),
         lambda: ActorProfileSuspendRequest.model_validate_json(
             '{"operation":"actor_profile.suspend","actor_profile_id":"'
-            + str(uuid4())
+            + str(new_record_id())
             + '","reason_digest":"'
             + secret
             + '"}'
@@ -10603,7 +10621,7 @@ def _service_actor_decision(request: ServiceActorCreateRequest) -> Authorization
         resource_id=request.service_identity,
     )
     return AuthorizationDecision(
-        decision_id=uuid4(),
+        decision_id=new_record_id(),
         action_id=ActionId.ACTOR_SERVICE_PROVISION,
         permission_id=PermissionId.ACTOR_SERVICE_PROVISION,
         allowed=True,
@@ -10612,11 +10630,11 @@ def _service_actor_decision(request: ServiceActorCreateRequest) -> Authorization
         resource_id=resource.resource_id,
         resource_context_digest=authorization_resource_digest(resource),
         matched_authority_kind=MatchedAuthorityKind.ADMIN_ROLE_GRANT,
-        matched_grant_id=uuid4(),
+        matched_grant_id=new_record_id(),
         matched_scope_project_id=None,
         revalidated=True,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
 
 
@@ -10670,7 +10688,7 @@ async def test_service_actor_conflict_precedence_is_fixed_and_private() -> None:
 
 
 async def test_service_actor_replay_fails_closed_on_committed_state_drift() -> None:
-    actor_id, creator_id = uuid4(), uuid4()
+    actor_id, creator_id = new_record_id(), new_record_id()
     request = _service_actor_request()
     response = AuthorityResponseReference(
         resource_type=AuthorityResourceType.ACTOR_PROFILE,
@@ -10678,25 +10696,16 @@ async def test_service_actor_replay_fails_closed_on_committed_state_drift() -> N
         version=None,
         http_status=201,
     )
-    profile = ActorProfile(
-        id=str(actor_id),
+    profile, link = _actor_rows(
+        actor_id,
+        new_record_id(),
+        subject="opaque-service-subject",
+        now=datetime.now(UTC),
         actor_kind="service",
-        status="active",
-        provisioning_method="manual_service_provisioning",
+        creator_id=creator_id,
         service_identity=request.service_identity.value,
-        created_by=str(creator_id),
     )
     profile.created_at = datetime.now(UTC)
-    link = ActorIdentityLink(
-        id=str(uuid4()),
-        actor_profile_id=profile.id,
-        issuer="https://identity.flowresearch.tech",
-        subject="opaque-service-subject",
-        subject_kind="service",
-        status="active",
-        linked_by=str(creator_id),
-        last_verified_at=None,
-    )
     link.linked_at = datetime.now(UTC)
 
     class Actors:
@@ -10835,17 +10844,10 @@ async def test_service_actor_replay_fails_closed_on_committed_state_drift() -> N
 
 
 async def test_service_actor_mutation_rejects_authority_and_request_drift_before_writes() -> None:
-    actor_id = uuid4()
+    actor_id = new_record_id()
     request = _service_actor_request()
     decision = _service_actor_decision(request)
-    claim = AuthorityClaimHandle(
-        record_id=uuid4(),
-        idempotency_key=uuid4(),
-        actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
-        actor_ref=str(actor_id),
-        operation=request.operation,
-        request_digest=DIGEST,
-    )
+    claim = _authority_claim(actor_id, request.operation)
     service = ServiceActorProvisioningService(object())  # type: ignore[arg-type]
 
     with pytest.raises(TypeError, match="exact matched authority"):
@@ -10894,7 +10896,7 @@ async def test_service_actor_mutation_rejects_authority_and_request_drift_before
 
 
 def test_every_operation_has_one_strict_canonical_request_variant() -> None:
-    project, actor, resource = uuid4(), uuid4(), uuid4()
+    project, actor, resource = new_record_id(), new_record_id(), new_record_id()
     requests = [
         ServiceActorCreateRequest(
             operation=AuthorityOperation.SERVICE_ACTOR_CREATE,
@@ -10963,7 +10965,7 @@ def test_every_operation_has_one_strict_canonical_request_variant() -> None:
 
 
 def test_project_role_contract_rejects_replacement_and_bounds_qualification_references() -> None:
-    project_id, actor_id = uuid4(), uuid4()
+    project_id, actor_id = new_record_id(), new_record_id()
     base = {
         "operation": "project_role_grant.issue",
         "project_id": project_id,
@@ -10974,7 +10976,7 @@ def test_project_role_contract_rejects_replacement_and_bounds_qualification_refe
     for invalid in (
         base | {"role": "both"},
         base | {"role": "adjudicator"},
-        base | {"replaced_grant_id": uuid4()},
+        base | {"replaced_grant_id": new_record_id()},
     ):
         with pytest.raises(TypeError, match="invalid authority mutation request"):
             parse_authority_request(invalid)
@@ -10996,7 +10998,7 @@ def test_project_role_contract_rejects_replacement_and_bounds_qualification_refe
             "requested_role": ProjectRole.REVIEWER,
             "skills_snapshot": available,
             "reputation_snapshot": unavailable,
-            "prior_project_work_refs": [uuid4()],
+            "prior_project_work_refs": [new_record_id()],
             "external_expertise_refs": ["expertise:opaque-1"],
         }
     )
@@ -11029,17 +11031,17 @@ def test_project_role_qualification_evidence_rejects_coerced_values() -> None:
     base = {
         "skills_snapshot": available,
         "reputation_snapshot": unavailable,
-        "prior_project_work_refs": [uuid4()],
+        "prior_project_work_refs": [new_record_id()],
         "external_expertise_refs": ["expertise:opaque-1"],
     }
     assert ProjectRoleQualificationEvidence.model_validate(base).prior_project_work_refs
-    canonical_string = str(uuid4())
+    canonical_string = str(new_record_id())
     assert ProjectRoleQualificationEvidence.model_validate(
         base | {"prior_project_work_refs": [canonical_string]}
     ).prior_project_work_refs == [UUID(canonical_string)]
     for invalid in (
         base | {"prior_project_work_refs": [1]},
-        base | {"prior_project_work_refs": [uuid4().bytes]},
+        base | {"prior_project_work_refs": [new_record_id().bytes]},
         base | {"external_expertise_refs": [1]},
         base | {"external_expertise_refs": [b"expertise:opaque-1"]},
     ):
@@ -11048,7 +11050,7 @@ def test_project_role_qualification_evidence_rejects_coerced_values() -> None:
 
 
 def test_actor_profile_lifecycle_public_schemas_are_strict_bounded_and_typed() -> None:
-    target = uuid4()
+    target = new_record_id()
     assert ActorLifecycleBody(reason="  approved correction  ").reason == "approved correction"
     assert ActorLifecycleBody(reason="\tapproved correction\n").reason == "approved correction"
     assert ActorLifecycleBody(reason="\u00a0approved correction\u00a0").reason == (
@@ -11086,9 +11088,14 @@ def test_actor_profile_lifecycle_public_schemas_are_strict_bounded_and_typed() -
 async def test_project_role_and_all_operation_mappings_commit_one_linked_pair(
     authorization_factory,
 ) -> None:
-    project, actor, resource, admin_revoke_target = uuid4(), uuid4(), uuid4(), uuid4()
-    identity_link_target = uuid4()
-    admin_authorizer_grant_id = uuid4()
+    project, actor, resource, admin_revoke_target = (
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
+    )
+    identity_link_target = new_record_id()
+    admin_authorizer_grant_id = new_record_id()
     requests = [
         ServiceActorCreateRequest(
             operation=AuthorityOperation.SERVICE_ACTOR_CREATE,
@@ -11143,36 +11150,14 @@ async def test_project_role_and_all_operation_mappings_commit_one_linked_pair(
             reason_digest=DIGEST,
         ),
     ]
-    resource_types = {
-        AuthorityOperation.SERVICE_ACTOR_CREATE: AuthorityResourceType.ACTOR_PROFILE,
-        AuthorityOperation.ADMIN_ROLE_GRANT_ISSUE: AuthorityResourceType.ADMIN_ROLE_GRANT,
-        AuthorityOperation.ADMIN_ROLE_GRANT_REVOKE: AuthorityResourceType.ADMIN_ROLE_GRANT,
-        AuthorityOperation.PROJECT_ROLE_GRANT_ISSUE: AuthorityResourceType.PROJECT_ROLE_GRANT,
-        AuthorityOperation.PROJECT_ROLE_GRANT_REVOKE: AuthorityResourceType.PROJECT_ROLE_GRANT,
-        AuthorityOperation.ACTOR_PROFILE_SUSPEND: AuthorityResourceType.ACTOR_PROFILE,
-        AuthorityOperation.ACTOR_PROFILE_REACTIVATE: AuthorityResourceType.ACTOR_PROFILE,
-        AuthorityOperation.ACTOR_PROFILE_DEACTIVATE: AuthorityResourceType.ACTOR_PROFILE,
-        AuthorityOperation.ACTOR_IDENTITY_LINK_REVOKE: AuthorityResourceType.ACTOR_IDENTITY_LINK,
-        AuthorityOperation.ACTOR_IDENTITY_LINK_REACTIVATE: AuthorityResourceType.ACTOR_IDENTITY_LINK,
-    }
-    create_operations = {
-        AuthorityOperation.SERVICE_ACTOR_CREATE,
-        AuthorityOperation.ADMIN_ROLE_GRANT_ISSUE,
-    }
-    admin_operations = {
-        AuthorityOperation.ADMIN_ROLE_GRANT_ISSUE,
-        AuthorityOperation.ADMIN_ROLE_GRANT_REVOKE,
-        AuthorityOperation.PROJECT_ROLE_GRANT_ISSUE,
-        AuthorityOperation.PROJECT_ROLE_GRANT_REVOKE,
-    }
     expected_pairs = {}
     async with authorization_factory() as session:
         service = AuthorityMutationService(session)
         for request in requests:
-            claim = await _claim(service, uuid4(), uuid4(), request)
+            claim = await _claim(service, new_record_id(), new_record_id(), request)
             response_id = (
-                uuid4()
-                if request.operation in create_operations
+                new_record_id()
+                if request.operation in CREATE_AUTHORITY_OPERATIONS
                 else getattr(
                     request,
                     "grant_id",
@@ -11182,17 +11167,19 @@ async def test_project_role_and_all_operation_mappings_commit_one_linked_pair(
                 )
             )
             response = AuthorityResponseReference(
-                resource_type=resource_types[request.operation],
+                resource_type=OPERATION_SUCCESS_METADATA[request.operation][3],
                 resource_id=response_id,
                 version=1,
-                http_status=201 if request.operation in create_operations else 200,
+                http_status=201 if request.operation in CREATE_AUTHORITY_OPERATIONS else 200,
             )
             success = _operation_success(
                 claim,
                 request,
                 response,
                 admin_authorizer_grant_id=(
-                    admin_authorizer_grant_id if request.operation in admin_operations else None
+                    admin_authorizer_grant_id
+                    if request.operation in ADMIN_AUTHORITY_OPERATIONS
+                    else None
                 ),
                 admin_revoke_target=(
                     admin_revoke_target
@@ -11211,12 +11198,12 @@ async def test_project_role_and_all_operation_mappings_commit_one_linked_pair(
             )
             if request.operation is AuthorityOperation.ADMIN_ROLE_GRANT_REVOKE:
                 assert success.target_actor_ref == str(admin_revoke_target)
-            if request.operation in admin_operations:
+            if request.operation in ADMIN_AUTHORITY_OPERATIONS:
                 assert success.matched_grant_id == str(admin_authorizer_grant_id)
                 assert success.matched_grant_id != str(response.resource_id)
             success_input = success
             invalidation = AuthorityInvalidationContext(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 request_id=success.request_id,
                 correlation_id=success.correlation_id,
                 target_ref_kind=(
@@ -11241,8 +11228,18 @@ async def test_project_role_and_all_operation_mappings_commit_one_linked_pair(
                 ),
             )
             completed = await service.complete(
-                publication=assignment_invalidation_publication(session) if request.operation in {AuthorityOperation.ACTOR_PROFILE_SUSPEND, AuthorityOperation.ACTOR_PROFILE_DEACTIVATE, AuthorityOperation.ACTOR_IDENTITY_LINK_REVOKE, AuthorityOperation.PROJECT_ROLE_GRANT_REVOKE} else None,
-                claim=claim, request=request.model_dump(), response=response,
+                publication=assignment_invalidation_publication(session)
+                if request.operation
+                in {
+                    AuthorityOperation.ACTOR_PROFILE_SUSPEND,
+                    AuthorityOperation.ACTOR_PROFILE_DEACTIVATE,
+                    AuthorityOperation.ACTOR_IDENTITY_LINK_REVOKE,
+                    AuthorityOperation.PROJECT_ROLE_GRANT_REVOKE,
+                }
+                else None,
+                claim=claim,
+                request=request.model_dump(),
+                response=response,
                 success=success_input,
                 invalidation=invalidation,
             )
@@ -11319,11 +11316,11 @@ async def test_project_role_and_all_operation_mappings_commit_one_linked_pair(
 
 async def test_project_role_issue_shared_completion_writes_ordered_zero_invalidation_pair() -> None:
     project_id, actor_id, target_id, grant_id, snapshot_id = (
-        uuid4(),
-        uuid4(),
-        uuid4(),
-        uuid4(),
-        uuid4(),
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
     )
     request = ProjectRoleGrantIssueRequest(
         operation=AuthorityOperation.PROJECT_ROLE_GRANT_ISSUE,
@@ -11333,12 +11330,9 @@ async def test_project_role_issue_shared_completion_writes_ordered_zero_invalida
         qualification=_project_role_qualification(),
         reason_digest=DIGEST,
     )
-    claim = AuthorityClaimHandle(
-        record_id=uuid4(),
-        idempotency_key=uuid4(),
-        actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
-        actor_ref=str(actor_id),
-        operation=request.operation,
+    claim = _authority_claim(
+        actor_id,
+        request.operation,
         request_digest=canonical_json_hash(request.model_dump(mode="json", exclude_none=True)),
     )
     response = AuthorityResponseReference(
@@ -11351,11 +11345,11 @@ async def test_project_role_issue_shared_completion_writes_ordered_zero_invalida
         claim,
         request,
         response,
-        admin_authorizer_grant_id=uuid4(),
+        admin_authorizer_grant_id=new_record_id(),
     )
     qualification = issued.model_copy(
         update={
-            "event_id": uuid4(),
+            "event_id": new_record_id(),
             "event_type": AuthorityEventType.PROJECT_ROLE_QUALIFICATION_CAPTURED,
             "entity_type": "qualification_snapshot",
             "entity_id": str(snapshot_id),
@@ -11409,20 +11403,22 @@ async def test_project_role_issue_shared_completion_writes_ordered_zero_invalida
 async def test_issue_mismatch_derives_project_and_omits_nonexistent_grant_resource(
     authorization_factory,
 ) -> None:
-    project = uuid4()
+    project = new_record_id()
     request = ProjectRoleGrantIssueRequest(
         operation=AuthorityOperation.PROJECT_ROLE_GRANT_ISSUE,
         project_id=project,
-        target_actor_id=uuid4(),
+        target_actor_id=new_record_id(),
         role=ProjectRole.REVIEWER,
         qualification=_project_role_qualification(),
         reason_digest=DIGEST,
     )
-    context = AuthorityMismatchContext(event_id=uuid4(), request_id=uuid4(), correlation_id=uuid4())
+    context = AuthorityMismatchContext(
+        event_id=new_record_id(), request_id=new_record_id(), correlation_id=new_record_id()
+    )
     async with authorization_factory() as session:
         event_id = await AuthorityMutationService(session).record_mismatch_denial(
             actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
-            actor_ref=str(uuid4()),
+            actor_ref=str(new_record_id()),
             request=request.model_dump(),
             context=context,
         )
@@ -11435,26 +11431,26 @@ async def test_issue_mismatch_derives_project_and_omits_nonexistent_grant_resour
                 {"id": str(event_id)},
             )
         ).one()
-    assert row == (str(project), None, None)
+    assert row == (project, None, None)
 
 
 @pytest.mark.asyncio
 async def test_failure_after_evidence_flush_rolls_back_claim_and_events(
     authorization_factory, monkeypatch
 ) -> None:
-    actor, key, request = uuid4(), uuid4(), _request()
+    actor, key, request = new_record_id(), new_record_id(), _request()
     async with authorization_factory() as session:
         service = AuthorityMutationService(session)
         claim = await _claim(service, actor, key, request)
-        synthetic_id = uuid4()
+        synthetic_id = new_record_id()
         await service.record_mismatch_denial(
             actor_ref_kind=claim.actor_ref_kind,
             actor_ref=claim.actor_ref,
             request=request.model_dump(),
             context=AuthorityMismatchContext(
                 event_id=synthetic_id,
-                request_id=uuid4(),
-                correlation_id=uuid4(),
+                request_id=new_record_id(),
+                correlation_id=new_record_id(),
             ),
         )
 
@@ -11517,7 +11513,7 @@ async def test_concurrent_exact_and_mismatched_retries_serialize_at_unique_names
     authorization_factory,
 ) -> None:
     del authorization_factory  # fixture owns immutable-row cleanup
-    actor, key, request = uuid4(), uuid4(), _request()
+    actor, key, request = new_record_id(), new_record_id(), _request()
     winner_engine = create_async_engine(
         authorization_database_env,
         connect_args={"server_settings": {"application_name": "auth05b-winner"}},
@@ -11551,7 +11547,7 @@ async def test_concurrent_exact_and_mismatched_retries_serialize_at_unique_names
             await winner.commit()
         assert isinstance(await asyncio.wait_for(loser, timeout=5), ReplayedReservation)
 
-        key = uuid4()
+        key = new_record_id()
         async with winner_factory() as winner:
             service = AuthorityMutationService(winner)
             claim = await _claim(service, actor, key, request)
@@ -11572,8 +11568,8 @@ async def test_concurrent_exact_and_mismatched_retries_serialize_at_unique_names
 async def test_same_key_is_isolated_independently_by_actor_and_reference_kind(
     authorization_factory,
 ) -> None:
-    key, request = uuid4(), _request()
-    actor = str(uuid4())
+    key, request = new_record_id(), _request()
+    actor = str(new_record_id())
     async with (
         authorization_factory() as first,
         authorization_factory() as second,
@@ -11594,7 +11590,7 @@ async def test_same_key_is_isolated_independently_by_actor_and_reference_kind(
         three = await AuthorityMutationService(third).reserve(
             idempotency_key=key,
             actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
-            actor_ref=str(uuid4()),
+            actor_ref=str(new_record_id()),
             request=request.model_dump(),
         )
         assert isinstance(one, ClaimedReservation)
@@ -11611,46 +11607,30 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
     authorization_factory,
     monkeypatch,
 ) -> None:
-    caller_id, caller_link_id, target_id, target_link_id, project_id = (uuid4(), uuid4(), uuid4(), uuid4(), uuid4())
-    manager_grant_id = uuid4()
-    bootstrap_grant_id = uuid4()
+    caller_id, caller_link_id, target_id, target_link_id, project_id = (
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
+    )
+    manager_grant_id = new_record_id()
+    bootstrap_grant_id = new_record_id()
     now = datetime.now(UTC)
     async with authorization_factory() as session:
         session.add_all(
             [
-                ActorProfile(
-                    id=str(caller_id),
-                    actor_kind="human",
-                    status="active",
-                    provisioning_method="automatic_first_access",
-                    created_by=str(caller_id),
-                ),
-                ActorIdentityLink(
-                    id=str(caller_link_id),
-                    actor_profile_id=str(caller_id),
-                    issuer="https://identity.flowresearch.tech",
+                *_actor_rows(
+                    caller_id,
+                    caller_link_id,
                     subject=f"auth10c-caller-{caller_id}",
-                    subject_kind="human",
-                    status="active",
-                    linked_by=str(caller_id),
-                    last_verified_at=now,
+                    now=now,
                 ),
-                ActorProfile(
-                    id=str(target_id),
-                    actor_kind="human",
-                    status="active",
-                    provisioning_method="automatic_first_access",
-                    created_by=str(target_id),
-                ),
-                ActorIdentityLink(
-                    id=str(target_link_id),
-                    actor_profile_id=str(target_id),
-                    issuer="https://identity.flowresearch.tech",
+                *_actor_rows(
+                    target_id,
+                    target_link_id,
                     subject=f"auth10c-target-{target_id}",
-                    subject_kind="human",
-                    status="active",
-                    linked_by=str(target_id),
-                    last_verified_at=now,
+                    now=now,
                 ),
                 AdminRoleGrant(
                     id=bootstrap_grant_id,
@@ -11705,7 +11685,8 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
             actor_status=ActorStatus.ACTIVE,
             identity_link_id=caller_link_id,
             identity_link_status=IdentityLinkStatus.ACTIVE,
-            request_id=uuid4(), correlation_id=uuid4(),
+            request_id=new_record_id(),
+            correlation_id=new_record_id(),
         )
         repository = AdminAuthorizationRepository(session)
         authorization = AuthorizationService(session, context, admin_repository=repository)
@@ -11719,7 +11700,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
             qualification=_project_role_qualification(),
             reason_digest=derive_reason_digest(issue_reason),
         )
-        issue_key = uuid4()
+        issue_key = new_record_id()
         await session.begin()
         issue_reservation = await project_role_mutation_service(session).reserve(
             key=issue_key,
@@ -11765,7 +11746,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
             decision.model_copy(update={"action_id": ActionId.PROJECT_ROLE_GRANT_REVOKE}),
             decision.model_copy(update={"permission_id": PermissionId.PROJECT_READ}),
             decision.model_copy(update={"revalidated": False}),
-            decision.model_copy(update={"matched_scope_project_id": uuid4()}),
+            decision.model_copy(update={"matched_scope_project_id": new_record_id()}),
             decision.model_copy(update={"resource_context_digest": f"sha256:{'0' * 64}"}),
         ):
             with pytest.raises(TypeError, match="requires exact matched authority"):
@@ -11809,7 +11790,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
             grant_id=issued.id,
             reason_digest=derive_reason_digest(revoke_reason),
         )
-        revoke_key = uuid4()
+        revoke_key = new_record_id()
         revoke_reservation = await project_role_mutation_service(session).reserve(
             key=revoke_key,
             actor_profile_id=caller_id,
@@ -11861,7 +11842,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
             ),
             (revoke_decision.model_copy(update={"revalidated": False}), revoke_resource),
             (
-                revoke_decision.model_copy(update={"matched_scope_project_id": uuid4()}),
+                revoke_decision.model_copy(update={"matched_scope_project_id": new_record_id()}),
                 revoke_resource,
             ),
             (
@@ -11872,7 +11853,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
             ),
             (
                 revoke_decision,
-                revoke_resource.model_copy(update={"actor_profile_id": uuid4()}),
+                revoke_resource.model_copy(update={"actor_profile_id": new_record_id()}),
             ),
             (
                 revoke_decision,
@@ -11978,7 +11959,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
         )
         qualification = _project_role_qualification()
         existing_snapshot = ProjectRoleQualificationSnapshot(
-            id=uuid4(),
+            id=new_record_id(),
             project_id=str(project_id),
             actor_profile_id=str(target_id),
             requested_role="reviewer",
@@ -11993,7 +11974,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
         await session.flush()
         session.add(
             ProjectRoleGrant(
-                id=uuid4(),
+                id=new_record_id(),
                 project_id=str(project_id),
                 actor_profile_id=str(target_id),
                 role="reviewer",
@@ -12015,7 +11996,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
             qualification=_project_role_qualification(),
             reason=race_reason,
         )
-        race_key = uuid4()
+        race_key = new_record_id()
         original_find = AdminAuthorizationRepository.find_active_project_role
         original_reserve = ProjectRoleGrantMutationService.reserve
         find_calls = 0
@@ -12130,7 +12111,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
         qualification=_project_role_qualification(),
         reason_digest=derive_reason_digest("AUTH-10C concurrency proof"),
     )
-    waiting_key = uuid4()
+    waiting_key = new_record_id()
     async with authorization_factory() as locker, authorization_factory() as waiter:
         locker_repository = AdminAuthorizationRepository(locker)
         locker_authorization = AuthorizationService(
@@ -12156,7 +12137,7 @@ async def test_project_role_issue_postgresql_prep_binds_target_role_and_scope(
         await locker_prepared.prepare(
             ActionId.PROJECT_ROLE_GRANT_ISSUE,
             PreparedAuthorizationInput(
-                idempotency_key=uuid4(), request_value=canonical.model_dump(mode="json")
+                idempotency_key=new_record_id(), request_value=canonical.model_dump(mode="json")
             ),
             scope,
         )

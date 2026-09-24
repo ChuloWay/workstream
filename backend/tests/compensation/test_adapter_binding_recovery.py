@@ -2,7 +2,8 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import func, select
@@ -27,7 +28,7 @@ async def _create(project_id: UUID, adapter_id: UUID, actor_id: UUID):
         async with session.begin():
             result = await service(session, authorization).create(
                 AdapterBindingCreateRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id,
+                    operation_id=new_record_id(), actor_profile_id=actor_id,
                     project_id=project_id, instrument_type="money",
                     adapter_actor_id=adapter_id, route_key="adapter.primary",
                 )
@@ -41,7 +42,7 @@ async def _request_for_transition(
     created = await _create(project_id, adapter_id, actor_id)
     if transition == "suspend":
         return AdapterBindingSuspendRequest(
-            operation_id=uuid4(), actor_profile_id=actor_id, project_id=project_id,
+            operation_id=new_record_id(), actor_profile_id=actor_id, project_id=project_id,
             adapter_binding_id=created.adapter_binding_id, expected_lifecycle_version=1,
         )
     authorization = Authorization()
@@ -49,13 +50,13 @@ async def _request_for_transition(
         async with session.begin():
             await service(session, authorization).suspend(
                 AdapterBindingSuspendRequest(
-                    operation_id=uuid4(), actor_profile_id=actor_id,
+                    operation_id=new_record_id(), actor_profile_id=actor_id,
                     project_id=project_id, adapter_binding_id=created.adapter_binding_id,
                     expected_lifecycle_version=1,
                 )
             )
     return AdapterBindingResumeRequest(
-        operation_id=uuid4(), actor_profile_id=actor_id, project_id=project_id,
+        operation_id=new_record_id(), actor_profile_id=actor_id, project_id=project_id,
         adapter_binding_id=created.adapter_binding_id, expected_lifecycle_version=2,
     )
 

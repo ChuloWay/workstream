@@ -3,7 +3,7 @@
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 from httpx import Response
 import pytest
@@ -15,8 +15,8 @@ import auth_concurrency_support as support
 
 def requests():
     return (
-        ("first", "/first", {}, {}, str(uuid4())),
-        ("second", "/second", {}, {}, str(uuid4())),
+        ("first", "/first", {}, {}, str(new_record_id())),
+        ("second", "/second", {}, {}, str(new_record_id())),
     )
 
 
@@ -95,8 +95,8 @@ async def test_observer_requires_exact_waiter_and_blocker(postgres_database_url,
     """A real lock wait belonging to another backend cannot satisfy exact custody."""
     engine = create_async_engine(postgres_database_url)
     contender = None
-    name = f"auth-exact-waiter-{uuid4().hex}"
-    key = uuid4().int % (2**63)
+    name = f"auth-exact-waiter-{new_record_id().hex}"
+    key = new_record_id().int % (2**63)
 
     def one_observation(default_poll_budget):
         assert default_poll_budget == 5000
@@ -164,8 +164,8 @@ async def test_observer_detects_waiter_after_initial_miss(
     monkeypatch.setattr(support, "create_async_engine", observed_engine)
     engine = create_async_engine(postgres_database_url)
     tasks = []
-    name = f"auth-late-waiter-{uuid4().hex}"
-    key = uuid4().int % (2**63)
+    name = f"auth-late-waiter-{new_record_id().hex}"
+    key = new_record_id().int % (2**63)
     try:
         async with engine.connect() as blocker, engine.connect() as waiter:
             blocker_pid = await blocker.scalar(text("select pg_backend_pid()"))

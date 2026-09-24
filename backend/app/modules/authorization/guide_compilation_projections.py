@@ -21,8 +21,7 @@ from app.modules.authorization.api import (
     ProjectGuideProjectionAuthorityReceipt,
     ProjectGuideProjectionIdentity,
     ProjectGuideProjectionLocator,
-    artifact_policy_projection_identity,
-    guide_sufficiency_projection_identity,
+    projection_preparation_identity,
 )
 from app.modules.authorization.domain.guide_compilation_projections import (
     ProjectionComponent,
@@ -45,9 +44,6 @@ from app.modules.authorization.runtime import (
     PreparedAuthorityScopeKind,
 )
 
-_ZERO = UUID(int=0)
-
-
 class _PreparedProjection:
     """Nominal non-serializable view over one existing PREP handle."""
 
@@ -56,6 +52,8 @@ class _PreparedProjection:
         "_custody",
         "_handle",
         "_input",
+        "_actor_profile_id",
+        "_identity_link_id",
         "_identity",
         "_locator",
     )
@@ -66,7 +64,8 @@ class _PreparedProjection:
         custody: FixedServicePreparedAuthorization,
         handle: PreparedAuthorizationHandle,
         caller_input: PreparedAuthorizationInput,
-        identity: ProjectGuideProjectionIdentity,
+        actor_profile_id: UUID,
+        identity_link_id: UUID,
         locator: ProjectGuideProjectionLocator,
     ) -> None:
         """Bind one public projection view to its opaque PREP custody."""
@@ -74,13 +73,26 @@ class _PreparedProjection:
         self._custody = custody
         self._handle = handle
         self._input = caller_input
-        self._identity = identity
+        self._actor_profile_id = actor_profile_id
+        self._identity_link_id = identity_link_id
+        self._identity: ProjectGuideProjectionIdentity | None = None
         self._locator = locator
 
-    @property
-    def identity(self) -> ProjectGuideProjectionIdentity:
-        """Return the immutable operation identity exposed to the consumer."""
-        return self._identity
+    def identity(
+        self, *, operation_id: UUID, correlation_id: UUID, output_id: UUID
+    ) -> ProjectGuideProjectionIdentity:
+        """Bind owner-selected UUIDv7 values to the prepared service principal."""
+        identity = ProjectGuideProjectionIdentity(
+            operation_id=operation_id,
+            correlation_id=correlation_id,
+            output_id=output_id,
+            actor_profile_id=self._actor_profile_id,
+            identity_link_id=self._identity_link_id,
+        )
+        if self._identity is not None and self._identity != identity:
+            raise PreparedAuthorizationInvalid("prepared projection identity changed")
+        self._identity = identity
+        return identity
 
     def __copy__(self) -> NoReturn:
         """Reject copying of process-local projection authority."""
@@ -97,6 +109,8 @@ class _PreparedProjection:
     def _resource(self, facts):
         """Build and validate the exact final projection resource."""
         try:
+            if self._identity is None:
+                raise ValueError("projection identity has not been bound")
             resource = projection_resource_context(self._component, self._identity, facts)
         except (TypeError, ValueError) as exc:
             raise PreparedAuthorizationInvalid("prepared projection authority is invalid") from exc
@@ -127,9 +141,9 @@ class _PreparedProjection:
             raise AuthorizationUnavailable("projection authority unavailable") from exc
         return ProjectGuideProjectionAuthorityReceipt(
             decision_event_id=decision.decision_id,
-            actor_profile_id=self._identity.actor_profile_id,
-            identity_link_id=self._identity.identity_link_id,
-            service_identity=self._identity.service_identity,
+            actor_profile_id=self._actor_profile_id,
+            identity_link_id=self._identity_link_id,
+            service_identity="workstream.project.setup",
             resource_context_digest=projection_resource_digest(resource),
         )
 
@@ -164,28 +178,17 @@ class _ProjectionAuthorization:
         self._session = session
         self._component = component
 
-    def _identity(self, attempt_id: UUID, actor: UUID, link: UUID):
-        """Derive the deterministic component identity."""
-        helper = (
-            guide_sufficiency_projection_identity
-            if self._component == "guide_sufficiency"
-            else artifact_policy_projection_identity
-        )
-        return helper(
-            attempt_id=attempt_id,
-            actor_profile_id=actor,
-            identity_link_id=link,
-        )
-
     @asynccontextmanager
     async def _prepare(self, locator: ProjectGuideProjectionLocator):
         """Prepare and close one exact fixed-service capability."""
-        seed = self._identity(locator.attempt_id, _ZERO, _ZERO)
+        request_id, correlation_id = projection_preparation_identity(
+            attempt_id=locator.attempt_id, component=self._component
+        )
         manager = fixed_service_prepared_authorization(
             self._session,
             service_identity=ServiceIdentity.PROJECT_SETUP,
-            request_id=seed.operation_id,
-            correlation_id=seed.correlation_id,
+            request_id=request_id,
+            correlation_id=correlation_id,
         )
         try:
             custody = await manager.__aenter__()
@@ -197,14 +200,14 @@ class _ProjectionAuthorization:
             raise AuthorizationUnavailable("projection authority unavailable") from exc
         try:
             try:
-                identity = self._identity(
-                    locator.attempt_id,
+                prepare = projection_prepare_context(
+                    self._component,
+                    locator,
                     custody.actor_profile_id,
                     custody.identity_link_id,
                 )
-                prepare = projection_prepare_context(self._component, locator, identity)
                 caller_input = PreparedAuthorizationInput(
-                    idempotency_key=identity.operation_id,
+                    idempotency_key=request_id,
                     request_value=prepare.model_dump(mode="json"),
                 )
                 handle = await custody.service.prepare(
@@ -228,7 +231,8 @@ class _ProjectionAuthorization:
                 custody,
                 handle,
                 caller_input,
-                identity,
+                custody.actor_profile_id,
+                custody.identity_link_id,
                 locator,
             )
         finally:

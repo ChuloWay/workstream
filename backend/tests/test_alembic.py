@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
@@ -12,10 +11,6 @@ from alembic.script import ScriptDirectory
 import asyncpg
 import pytest
 
-from adapter_binding_fixtures import (
-    seed_nonempty_0003_adapter_binding,
-    snapshot_nonempty_0003_adapter_binding,
-)
 from scripts.schema_baseline_manifest import (
     APPLICATION_ACL_PRINCIPALS,
     build_manifest,
@@ -27,7 +22,7 @@ from scripts.schema_baseline_sql import split_sql_statements
 from tests.migration_fixtures import current_schema_revision
 
 HEAD_REVISION = current_schema_revision()
-BASELINE_REVISION = "0001_v01_baseline"
+BASELINE_REVISION = "0001_uuid7_v01"
 RECREATE_GUIDANCE = "Workstream v0.1 requires a fresh database; recreate this database"
 pytestmark = pytest.mark.postgres_schema_contract
 
@@ -84,38 +79,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
     script = ScriptDirectory.from_config(config)
     revisions = list(script.walk_revisions())
 
-    assert [revision.revision for revision in revisions] == [
-        HEAD_REVISION,
-        "0029_assignment_authority",
-        "0028_outbox_dispatch_authority",
-        "0027_outbox_delivery_custody",
-        "0026_outbox_dispatch_identity",
-        "0025_task_command_replay",
-        "0024_task_policy_lineage",
-        "0023_guide_activation_custody",
-        "0022_adapter_binding_audit_resource",
-        "0021_pre_submit_attempts",
-        "0020_post_submit_policy_custody",
-        "0019_guide_proposal_review",
-        "0018_guide_document_creation",
-        "0017_task_project_authority",
-        "0016_guide_document_runtime",
-        "0015_guide_runtime_configuration",
-        "0014_project_role_scope",
-        "0013_compilation_request_origin",
-        "0012_contribution_policy_audit_resource",
-        "0011_review_policy_human_review",
-        "0010_project_guide_setup_finalization",
-        "0009_guide_compilation_projections",
-        "0008_guide_compilation_authorized_persistence",
-        "0007_contribution_policy_publication_custody",
-        "0006_contribution_policy_operations",
-        "0005_compensation_adapter_identity",
-        "0004_compensation_adapter_binding_lifecycle",
-        "0003_submission_lineage",
-        "0002_admission_version",
-        BASELINE_REVISION,
-    ]
+    assert [revision.revision for revision in revisions] == [BASELINE_REVISION]
     assert revisions[-1].down_revision is None
     assert script.get_heads() == [HEAD_REVISION]
 
@@ -133,6 +97,27 @@ def test_fresh_database_matches_committed_manifest(
     actual = canonical_bytes(asyncio.run(build_manifest(isolated_database_env)))
     assert hashlib.sha256(actual).hexdigest() == hashlib.sha256(expected).hexdigest()
     assert actual == expected
+
+    async def validate_installed_bodies() -> None:
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        transaction = connection.transaction()
+        await transaction.start()
+        try:
+            await connection.execute("set local check_function_bodies = true")
+            definitions = await connection.fetch(
+                "select pg_get_functiondef(p.oid) as definition from pg_proc p "
+                "join pg_namespace n on n.oid=p.pronamespace "
+                "where n.nspname='public' and p.prokind in ('f','p') order by p.oid"
+            )
+            assert definitions
+            for definition in definitions:
+                await connection.execute(definition["definition"])
+        finally:
+            # Recompile against the complete schema without retaining DDL changes.
+            await transaction.rollback()
+            await connection.close()
+
+    asyncio.run(validate_installed_bodies())
 
 
 def test_repeated_upgrade_head_preserves_current_database(
@@ -272,6 +257,9 @@ def test_current_head_installs_compensation_binding_lifecycle(
                 "where table_schema='public' and table_name='alembic_version' "
                 "and column_name='version_num'"
             )
+            assert await connection.fetchval(
+                "select version_num from alembic_version"
+            ) == HEAD_REVISION
             triggers = await connection.fetch(
                 "select tgname from pg_trigger t join pg_class c on c.oid=t.tgrelid "
                 "where c.relname=any($1::text[]) and not t.tgisinternal",
@@ -307,7 +295,8 @@ def test_current_head_installs_compensation_binding_lifecycle(
 
     exists, revision_length, triggers, functions, binding_checks = asyncio.run(contract())
     assert exists is True
-    assert revision_length == 64
+    # Historical long revision names are gone; the fresh root must fit and be stamped.
+    assert revision_length >= len(HEAD_REVISION)
     assert triggers >= {
         "project_compensation_binding_update_guard",
         "compensation_binding_event_insert_guard",
@@ -361,34 +350,19 @@ def test_current_head_installs_compensation_adapter_identity(
     assert "workstream.compensation.adapter" in asyncio.run(identity_constraint())
 
 
-def test_0004_nonempty_binding_preflight_leaves_0003_unchanged(
-    isolated_database_env: str, migration_lock
-) -> None:
-    config = _alembic_config()
-    with migration_lock():
-        asyncio.run(
-            _execute(isolated_database_env, "drop schema public cascade; create schema public")
-        )
-        command.upgrade(config, "0003_submission_lineage")
-        asyncio.run(seed_nonempty_0003_adapter_binding(isolated_database_env))
-        before = asyncio.run(snapshot_nonempty_0003_adapter_binding(isolated_database_env))
-        with pytest.raises(RuntimeError, match="requires a fresh database"):
-            command.upgrade(config, HEAD_REVISION)
-
-    assert asyncio.run(snapshot_nonempty_0003_adapter_binding(isolated_database_env)) == before
 
 
 def test_manifest_covers_every_required_object_class() -> None:
     manifest = json.loads(_manifest_path().read_text(encoding="utf-8"))
     assert manifest["format"] == "workstream-v01-schema-manifest-1"
-    assert len(manifest["tables"]) == 75
+    assert len(manifest["tables"]) == 89
     assert len(manifest["columns"]) >= 1_200
     assert len(manifest["constraints"]) >= 850
     assert len(manifest["indexes"]) >= 400
     assert len(manifest["sequences"]) == 2
-    assert len(manifest["routines"]) == 81
-    assert len(manifest["triggers"]) == 113
-    assert sum(row["principal"] == "PUBLIC" for row in manifest["acl"]) == 81
+    assert len(manifest["routines"]) == 155
+    assert len(manifest["triggers"]) == 211
+    assert sum(row["principal"] == "PUBLIC" for row in manifest["acl"]) == 155
     assert set(manifest["reference_rows"]) == {
         "actor_profile_migration_state",
         "authority_control",
@@ -401,7 +375,7 @@ def test_manifest_covers_every_required_object_class() -> None:
 
 
 @pytest.mark.parametrize(
-    "name", ("v01_pre_reset_source_manifest.json", "v01_baseline_manifest.json")
+    "name", ("v01_baseline_manifest.json",)
 )
 def test_committed_schema_manifests_are_compact_canonical_json(name: str) -> None:
     path = _manifest_path().with_name(name)
@@ -410,23 +384,6 @@ def test_committed_schema_manifests_are_compact_canonical_json(name: str) -> Non
     assert payload.count(b"\n") == 1
 
 
-def test_source_to_baseline_delta_is_exactly_the_approved_sequence_repair() -> None:
-    baseline_dir = _manifest_path().parent
-    source = json.loads((baseline_dir / "v01_pre_reset_source_manifest.json").read_text())
-    expected = json.loads(_manifest_path().read_text())
-    delta = json.loads((baseline_dir / "v01_approved_manifest_delta.json").read_text())
-    repaired = deepcopy(source)
-    changes = {entry["name"]: entry for entry in delta["sequence_state_changes"]}
-    assert set(changes) == {
-        "actor_profile_migration_state_id_seq",
-        "authority_control_id_seq",
-    }
-    for sequence in repaired["sequences"]:
-        if sequence["name"] in changes:
-            change = changes[sequence["name"]]
-            assert sequence[change["field"]] == change["from"]
-            sequence[change["field"]] = change["to"]
-    assert canonical_bytes(repaired) == canonical_bytes(expected)
 
 
 def test_acl_principals_are_closed_and_owner_mapping_is_role_name_independent() -> None:
@@ -527,9 +484,13 @@ def test_baseline_sql_splitter_preserves_function_bodies() -> None:
         split_sql_statements("SELECT $$broken")
 
 
+@pytest.mark.parametrize("old_revision", [
+    "0001_v01_baseline", "0030_task_management", "0063_compilation_authority",
+])
 def test_unknown_old_stamp_refuses_before_mutation(
     isolated_database_env: str,
     migration_lock,
+    old_revision: str,
 ) -> None:
     config = _alembic_config()
     with migration_lock():
@@ -539,10 +500,12 @@ def test_unknown_old_stamp_refuses_before_mutation(
                 "drop schema public cascade; create schema public; "
                 "create table sentinel(id integer primary key, value text not null); "
                 "insert into sentinel values (1,'preserve-me'); "
-                "create table alembic_version(version_num varchar(32) primary key); "
-                "insert into alembic_version values ('0063_compilation_authority')",
+                "create table alembic_version(version_num varchar(128) primary key)",
             )
         )
+        asyncio.run(_execute(
+            isolated_database_env, "insert into alembic_version values ($1)", old_revision,
+        ))
         before = asyncio.run(_database_snapshot(isolated_database_env))
         with pytest.raises(RuntimeError, match=RECREATE_GUIDANCE):
             command.upgrade(config, "head")
@@ -572,20 +535,12 @@ def test_root_upgrade_refuses_nonempty_unstamped_schema_before_product_ddl(
     assert ("r", "projects") not in snapshot["objects"]
 
 
-@pytest.mark.parametrize("revision,message", [
-    (BASELINE_REVISION, "0001_v01_baseline cannot be downgraded; recreate the database"),
-    ("0025_task_command_replay", "guide document creation custody cannot be downgraded"),
-    ("0026_outbox_dispatch_identity", "Workstream v0.1 migrations cannot be downgraded; recreate the database"),
-    ("0027_outbox_delivery_custody", "Workstream v0.1 migrations cannot be downgraded; recreate the database"),
-    ("0029_assignment_authority", "Workstream v0.1 migrations cannot be downgraded; recreate the database"),
-    (HEAD_REVISION, "Workstream v0.1 migrations cannot be downgraded; recreate the database"),
-])
 def test_downgrade_refuses_without_mutation(
     isolated_database_env: str,
     migration_lock,
-    revision: str,
-    message: str,
 ) -> None:
+    revision = BASELINE_REVISION
+    message = "0001_uuid7_v01 cannot be downgraded; recreate the database"
     config = _alembic_config()
     with migration_lock():
         asyncio.run(_execute(isolated_database_env, "drop schema public cascade; create schema public"))
@@ -613,21 +568,9 @@ def test_seeded_sequences_advance_past_singleton_rows(isolated_database_env: str
     assert asyncio.run(read_next_values()) == (2, 2)
 
 
-def test_immediate_predecessor_upgrades_to_current_guide_creation_custody(
+def test_fresh_head_installs_guide_creation_custody(
     isolated_database_env: str,
-    migration_lock,
-    migration_schema_at,
 ) -> None:
-    with migration_lock():
-        migration_schema_at("0017_task_project_authority")
-    before = asyncio.run(_database_snapshot(isolated_database_env))
-    assert before["versions"] == ["0017_task_project_authority"]
-    with migration_lock():
-        command.upgrade(_alembic_config(), HEAD_REVISION)
-    after = asyncio.run(_database_snapshot(isolated_database_env))
-    assert after["versions"] == [HEAD_REVISION]
-    assert after["reference_rows"] == before["reference_rows"]
-
     async def creation_guards() -> int:
         connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
         try:

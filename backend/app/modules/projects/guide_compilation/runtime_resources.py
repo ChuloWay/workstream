@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -127,7 +128,7 @@ class SqlAlchemyGuideRuntimeCustody(SqlAlchemyGuideRuntimeCleanupCustody):
             elif any(value is not None for value in (parent_provider_id, source_file_allocation_id, container_allocation_id)):
                 raise ValueError("guide runtime parent is invalid")
             facts = _file_document_facts(self._documents[document_handle]) if kind == "file" else {}
-            allocation_id = uuid4()
+            allocation_id = new_record_id()
             session.add(ProjectGuideRuntimeAllocation(
                 id=allocation_id, attempt_id=self._attempt_id,
                 manifest_sha256=self._manifest.sha256, runtime_key=self._runtime_key,
@@ -182,7 +183,7 @@ class SqlAlchemyGuideRuntimeCustody(SqlAlchemyGuideRuntimeCleanupCustody):
             if attachment is None:
                 raise ValueError("guide document staging is unconfirmed")
             session.add(ProjectGuideDocumentAccess(
-                id=uuid4(), attempt_id=self._attempt_id, source_item_id=str(document.source_item_id),
+                id=new_record_id(), attempt_id=self._attempt_id, source_item_id=str(document.source_item_id),
                 document_version_id=str(document.ingest_id), attachment_allocation_id=attachment.id,
                 manifest_sha256=self._manifest.sha256, sha256=document.sha256,
                 document_handle=UUID(handle),

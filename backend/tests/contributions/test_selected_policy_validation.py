@@ -4,7 +4,7 @@ from dataclasses import FrozenInstanceError, replace
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -82,7 +82,7 @@ async def test_exact_selection_returns_immutable_canonical_facts(purpose):
 @pytest.mark.asyncio
 async def test_activation_requires_selector_equality_even_when_version_is_published():
     f = selection_fixture()
-    f.policy.current_published_version_id = uuid4()
+    f.policy.current_published_version_id = new_record_id()
     assert (
         f.version.status == "published"
     )  # The later retired-version guard cannot mask this proof.
@@ -101,7 +101,7 @@ async def test_activation_requires_selector_equality_even_when_version_is_publis
 async def test_revision_checks_exact_bound_version_without_current_selector(status, policy_status):
     f = selection_fixture()
     f.policy.status = policy_status
-    f.policy.current_published_version_id = uuid4()
+    f.policy.current_published_version_id = new_record_id()
     f.version.status = status
     result = await f.service.validate_contribution_policy(
         replace(f.request, purpose=Purpose.REVISION_ADOPTION)
@@ -204,9 +204,9 @@ async def test_selected_graph_uses_canonical_complete_rule_validation(failure):
     elif failure == "unknown_instrument":
         f.definitions[0].instrument_type = "unknown"
     elif failure == "foreign_rule":
-        f.rules[0].project_id = str(uuid4())
+        f.rules[0].project_id = str(new_record_id())
     elif failure == "foreign_definition":
-        f.definitions[0].project_id = str(uuid4())
+        f.definitions[0].project_id = str(new_record_id())
     else:
         f.definitions.clear()
     with pytest.raises(ContributionPolicyUnavailable):
@@ -244,8 +244,8 @@ async def test_both_purposes_require_current_resource_eligibility(purpose, resou
             instrument_type=CompensationInstrumentType.MONEY,
         )
         changes = {
-            "wrong_binding": {"adapter_binding_id": uuid4()},
-            "wrong_project": {"project_id": uuid4()},
+            "wrong_binding": {"adapter_binding_id": new_record_id()},
+            "wrong_project": {"project_id": new_record_id()},
             "wrong_instrument": {"instrument_type": type(original.instrument_type).PROJECT_POINTS},
         }
         f.service._bindings = SimpleNamespace(
@@ -264,7 +264,7 @@ async def test_project_eligibility_fails_before_policy_disclosure(failure):
     f.service._projects = SimpleNamespace(
         lock_contribution_policy_project=AsyncMock(
             side_effect=ProjectContributionPolicyUnavailable if failure == "unavailable" else None,
-            return_value=SimpleNamespace(project_id=uuid4()),
+            return_value=SimpleNamespace(project_id=new_record_id()),
         )
     )
     with pytest.raises(ContributionPolicyUnavailable):
@@ -296,7 +296,7 @@ async def test_one_binding_cannot_supply_two_instruments():
     f = selection_fixture()
     rule = f.rules[0]
     definition = ContributionAwardDefinition(
-        id=uuid4(),
+        id=new_record_id(),
         contribution_rule_id=rule.id,
         contribution_policy_version_id=f.version.id,
         project_id=str(f.request.project_id),

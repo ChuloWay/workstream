@@ -28,11 +28,12 @@ def case():
 
     projects = SimpleNamespace(
         add_submission_artifact_policy=AsyncMock(side_effect=stamp_created),
+        get_project=AsyncMock(return_value=SimpleNamespace(id=str(rows.PROJECT))),
         get_submission_artifact_policy=AsyncMock(return_value=prior),
         supersede_draft_submission_artifact_policy=AsyncMock(return_value=True),
     )
     replay = SimpleNamespace(
-        find_by_operation=AsyncMock(return_value=None),
+        find_human_namespace=AsyncMock(return_value=None),
         reserve=AsyncMock(return_value=("claimed", SimpleNamespace(id=rows.OPERATION))),
         complete=AsyncMock(),
     )
@@ -138,7 +139,7 @@ async def capture_replay(case, command):
         return stored[policy_id]
 
     case.projects.get_submission_artifact_policy.side_effect = select_policy
-    case.replay.find_by_operation.return_value = record
+    case.replay.find_human_namespace.return_value = record
     for port in (case.projects, case.replay, case.prepared):
         for value in vars(port).values():
             if isinstance(value, AsyncMock):

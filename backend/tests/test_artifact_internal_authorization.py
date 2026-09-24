@@ -6,7 +6,8 @@ from __future__ import annotations
 from dataclasses import replace
 from types import SimpleNamespace
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import select, text
@@ -94,13 +95,13 @@ class _Session:
 
 def _principal(status: str = "active"):
     profile = SimpleNamespace(
-        id=str(uuid4()),
+        id=str(new_record_id()),
         actor_kind="service",
         status=status,
         service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER.value,
     )
     link = SimpleNamespace(
-        id=str(uuid4()),
+        id=str(new_record_id()),
         actor_profile_id=profile.id,
         subject_kind="service",
         status="active",
@@ -111,13 +112,24 @@ def _principal(status: str = "active"):
 def _facts() -> ArtifactPutAttemptAuthorityFacts:
     return ArtifactPutAttemptAuthorityFacts(
         resource_type=ArtifactInternalResourceType.PUT_ATTEMPT,
-        resource_id=uuid4(),
+        resource_id=new_record_id(),
         operation_identity="sha256:" + "1" * 64,
         namespace_fingerprint="sha256:" + "2" * 64,
         sha256="sha256:" + "3" * 64,
         byte_count=7,
-        executor_id=uuid4(),
+        executor_id=new_record_id(),
         execution_generation=1,
+    )
+
+
+def _internal_authority(session, service_identity: ServiceIdentity):
+    """Build one authority whose request and correlation share an operation trace."""
+    request_id = new_record_id()
+    return PreparedArtifactInternalAuthority(
+        session,
+        service_identity=service_identity,
+        request_id=request_id,
+        correlation_id=request_id,
     )
 
 
@@ -126,8 +138,8 @@ async def test_adapter_normalizes_malformed_resource_selector_to_denial() -> Non
     authority = PreparedArtifactInternalAuthority(
         _Session(),  # type: ignore[arg-type]
         service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
     malformed = replace(_facts(), resource_id="not-a-uuid")  # type: ignore[arg-type]
 
@@ -137,7 +149,7 @@ async def test_adapter_normalizes_malformed_resource_selector_to_denial() -> Non
             action_id=ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
             facts=malformed,
             phase="claim",
-            idempotency_key=uuid4(),
+            idempotency_key=new_record_id(),
         )
 
 
@@ -148,8 +160,8 @@ async def test_adapter_fails_closed_for_invalid_state_and_service_principal(
     authority = PreparedArtifactInternalAuthority(
         _Session(),  # type: ignore[arg-type]
         service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
     with pytest.raises(ArtifactAuthorityDeniedError, match="authority is invalid"):
         await authority.prepare(
@@ -157,7 +169,7 @@ async def test_adapter_fails_closed_for_invalid_state_and_service_principal(
             action_id=ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
             facts=_facts(),
             phase="claim",
-            idempotency_key=uuid4(),
+            idempotency_key=new_record_id(),
         )
     with pytest.raises(ArtifactAuthorityDeniedError, match="evidence is unavailable"):
         await authority.persist_denial()
@@ -172,8 +184,8 @@ async def test_adapter_fails_closed_for_invalid_state_and_service_principal(
     scheduler = PreparedArtifactInternalAuthority(
         _Session(),  # type: ignore[arg-type]
         service_identity=ServiceIdentity.ARTIFACT_SCHEDULER,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
     with pytest.raises(ArtifactAuthorityDeniedError, match="resource is invalid"):
         await scheduler.prepare(
@@ -181,7 +193,7 @@ async def test_adapter_fails_closed_for_invalid_state_and_service_principal(
             action_id=ActionId.ARTIFACT_PENDING_WORK_SCAN,
             facts=pending,
             phase="scan",
-            idempotency_key=uuid4(),
+            idempotency_key=new_record_id(),
         )
 
     class MissingActors:
@@ -199,7 +211,7 @@ async def test_adapter_fails_closed_for_invalid_state_and_service_principal(
             action_id=ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
             facts=_facts(),
             phase="claim",
-            idempotency_key=uuid4(),
+            idempotency_key=new_record_id(),
         )
 
     class InvalidActors:
@@ -230,7 +242,7 @@ async def test_adapter_fails_closed_for_invalid_state_and_service_principal(
             action_id=ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
             facts=_facts(),
             phase="terminal",
-            idempotency_key=uuid4(),
+            idempotency_key=new_record_id(),
         )
 
 
@@ -272,7 +284,7 @@ def _service_principal(
     *,
     status: str = "active",
 ) -> tuple[ActorProfile, ActorIdentityLink]:
-    profile_id, link_id = uuid4(), uuid4()
+    profile_id, link_id = new_record_id(), new_record_id()
     suspended = status == "suspended"
     return (
         ActorProfile(
@@ -338,8 +350,8 @@ async def test_adapter_consumes_exact_fixed_service_resource_once(
     authority = PreparedArtifactInternalAuthority(
         session,  # type: ignore[arg-type]
         service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
     facts = _facts()
 
@@ -376,8 +388,8 @@ async def test_adapter_rejects_same_resource_fence_substitution(
     authority = PreparedArtifactInternalAuthority(
         _Session(),  # type: ignore[arg-type]
         service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
     facts = _facts()
     await authority.prepare(
@@ -414,8 +426,8 @@ async def test_adapter_restages_lifecycle_denial_only_after_caller_rollback(
     authority = PreparedArtifactInternalAuthority(
         session,  # type: ignore[arg-type]
         service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
     facts = _facts()
 
@@ -444,7 +456,7 @@ async def test_postgresql_fixed_service_allow_and_clean_denial_evidence(
 ) -> None:
     engine = create_async_engine(isolated_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    profile_id, link_id = uuid4(), uuid4()
+    profile_id, link_id = new_record_id(), new_record_id()
     try:
         async with factory() as session:
             session.add(
@@ -473,8 +485,8 @@ async def test_postgresql_fixed_service_allow_and_clean_denial_evidence(
             allowed = PreparedArtifactInternalAuthority(
                 session,
                 service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-                request_id=uuid4(),
-                correlation_id=uuid4(),
+                request_id=new_record_id(),
+                correlation_id=new_record_id(),
             )
             async with session.begin():
                 await allowed.prepare(
@@ -499,8 +511,8 @@ async def test_postgresql_fixed_service_allow_and_clean_denial_evidence(
             denied = PreparedArtifactInternalAuthority(
                 session,
                 service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-                request_id=uuid4(),
-                correlation_id=uuid4(),
+                request_id=new_record_id(),
+                correlation_id=new_record_id(),
             )
             with pytest.raises(AuthorizationDenied):
                 async with session.begin():
@@ -558,7 +570,7 @@ async def test_scanner_failure_after_consume_rolls_back_evidence_and_publishes_n
                     session, settings, namespace, actor_context, guide_item_id, source
                 )
 
-            request_id = uuid4()
+            request_id = new_record_id()
             real_authority = PreparedArtifactInternalAuthority(
                 session,
                 service_identity=ServiceIdentity.ARTIFACT_SCHEDULER,
@@ -592,7 +604,7 @@ async def test_scanner_failure_after_consume_rolls_back_evidence_and_publishes_n
             ) is None
             await session.rollback()
 
-            retry_request_id = uuid4()
+            retry_request_id = new_record_id()
             recording = _RecordingAuthority(
                 PreparedArtifactInternalAuthority(
                     session,
@@ -661,13 +673,7 @@ async def test_put_claim_and_terminal_injected_failures_roll_back_both_sides(
                 admission = await _admit_guide(
                     session, settings, namespace, actor_context, guide_item_id, source
                 )
-                request_id = uuid4()
-                authority = PreparedArtifactInternalAuthority(
-                    session,
-                    service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-                    request_id=request_id,
-                    correlation_id=request_id,
-                )
+                authority = _internal_authority(session, ServiceIdentity.ARTIFACT_PUT_RESOLVER)
                 orchestrator = ArtifactStorageOrchestrator(
                     session, store, namespace, settings, authority
                 )
@@ -695,13 +701,8 @@ async def test_put_claim_and_terminal_injected_failures_roll_back_both_sides(
                 ) is None
                 await session.rollback()
 
-                retry_request_id = uuid4()
-                retry_authority = PreparedArtifactInternalAuthority(
-                    session,
-                    service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-                    request_id=retry_request_id,
-                    correlation_id=retry_request_id,
-                )
+                retry_authority = _internal_authority(
+                    session, ServiceIdentity.ARTIFACT_PUT_RESOLVER)
                 retry = ArtifactStorageOrchestrator(
                     session, store, namespace, settings, retry_authority
                 )
@@ -743,18 +744,12 @@ async def test_put_claim_and_terminal_injected_failures_roll_back_both_sides(
                     {"id": str(admission.attempt_id)},
                 )
                 await session.commit()
-                final_request_id = uuid4()
                 final = ArtifactStorageOrchestrator(
                     session,
                     store,
                     namespace,
                     settings,
-                    PreparedArtifactInternalAuthority(
-                        session,
-                        service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-                        request_id=final_request_id,
-                        correlation_id=final_request_id,
-                    ),
+                    _internal_authority(session, ServiceIdentity.ARTIFACT_PUT_RESOLVER),
                 )
                 assert await final.resolve_put_attempt(admission.attempt_id) == "document_stored"
                 attempt = await session.get(ArtifactPutAttempt, str(admission.attempt_id))
@@ -823,7 +818,7 @@ async def test_claim_and_scanner_denials_persist_without_art_side_effects(
                 admission = await _admit_guide(
                     session, settings, namespace, actor_context, guide_item_id, source
                 )
-                claim_request_id = uuid4()
+                claim_request_id = new_record_id()
                 claim_authority = PreparedArtifactInternalAuthority(
                     session,
                     service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
@@ -853,7 +848,7 @@ async def test_claim_and_scanner_denials_persist_without_art_side_effects(
             async def publish_job(job_id: str) -> None:
                 published.append(job_id)
 
-            scan_request_id = uuid4()
+            scan_request_id = new_record_id()
             scan_authority = PreparedArtifactInternalAuthority(
                 session,
                 service_identity=ServiceIdentity.ARTIFACT_SCHEDULER,
@@ -913,19 +908,13 @@ async def test_verification_claim_and_terminal_failures_roll_back_both_sides(
             async with minted_source(tmp_path / "atomic-verify", b"verified") as source:
                 _, _, _, admission = await _admit_checker_output(
                     session, settings, namespace, source)
-                put_request_id = uuid4()
                 assert (
                     await ArtifactStorageOrchestrator(
                         session,
                         store,
                         namespace,
                         settings,
-                        PreparedArtifactInternalAuthority(
-                            session,
-                            service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-                            request_id=put_request_id,
-                            correlation_id=put_request_id,
-                        ),
+                        _internal_authority(session, ServiceIdentity.ARTIFACT_PUT_RESOLVER),
                     ).execute_committed_put(
                         attempt_id=admission.attempt_id,
                         source=source,
@@ -937,18 +926,12 @@ async def test_verification_claim_and_terminal_failures_roll_back_both_sides(
             assert job is not None
             job_id = UUID(job.id)
             await session.rollback()
-            claim_request_id = uuid4()
             claim = ArtifactStorageOrchestrator(
                 session,
                 store,
                 namespace,
                 settings,
-                PreparedArtifactInternalAuthority(
-                    session,
-                    service_identity=ServiceIdentity.ARTIFACT_VERIFIER,
-                    request_id=claim_request_id,
-                    correlation_id=claim_request_id,
-                ),
+                _internal_authority(session, ServiceIdentity.ARTIFACT_VERIFIER),
             )
             original_claim = claim._repo.claim_verification_job
 
@@ -971,18 +954,12 @@ async def test_verification_claim_and_terminal_failures_roll_back_both_sides(
             ) is None
             await session.rollback()
 
-            terminal_request_id = uuid4()
             terminal = ArtifactStorageOrchestrator(
                 session,
                 store,
                 namespace,
                 settings,
-                PreparedArtifactInternalAuthority(
-                    session,
-                    service_identity=ServiceIdentity.ARTIFACT_VERIFIER,
-                    request_id=terminal_request_id,
-                    correlation_id=terminal_request_id,
-                ),
+                _internal_authority(session, ServiceIdentity.ARTIFACT_VERIFIER),
             )
             original_receipt = terminal._repo.add_verification_receipt
 
@@ -1020,19 +997,13 @@ async def test_verification_claim_and_terminal_failures_roll_back_both_sides(
                 {"id": str(job_id)},
             )
             await session.commit()
-            final_request_id = uuid4()
             assert (
                 await ArtifactStorageOrchestrator(
                     session,
                     store,
                     namespace,
                     settings,
-                    PreparedArtifactInternalAuthority(
-                        session,
-                        service_identity=ServiceIdentity.ARTIFACT_VERIFIER,
-                        request_id=final_request_id,
-                        correlation_id=final_request_id,
-                    ),
+                    _internal_authority(session, ServiceIdentity.ARTIFACT_VERIFIER),
                 ).verify_object(job_id)
                 == "verified"
             )
@@ -1072,7 +1043,7 @@ async def test_post_provider_revocation_commits_denial_but_no_terminal_artifact_
     actor_context = _context()
     engine = create_async_engine(isolated_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    profile_id, link_id = uuid4(), uuid4()
+    profile_id, link_id = new_record_id(), new_record_id()
     assert settings.artifact_local_root is not None
     bootstrap = LocalStorageBootstrap(LocalStorageAdapter(root=settings.artifact_local_root))
     store = bootstrap.initialize_after_namespace_claim(
@@ -1141,13 +1112,7 @@ async def test_post_provider_revocation_commits_denial_but_no_terminal_artifact_
                 admission = await _admit_guide(
                     session, settings, namespace, actor_context, guide_item_id, source
                 )
-                request_id = uuid4()
-                authority = PreparedArtifactInternalAuthority(
-                    session,
-                    service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
-                    request_id=request_id,
-                    correlation_id=request_id,
-                )
+                authority = _internal_authority(session, ServiceIdentity.ARTIFACT_PUT_RESOLVER)
                 orchestrator = ArtifactStorageOrchestrator(
                     session,
                     SuspendAfterPut(),

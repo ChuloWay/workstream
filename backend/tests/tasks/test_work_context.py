@@ -5,7 +5,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 import re
 from unittest.mock import MagicMock
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from pydantic import ValidationError
@@ -41,13 +42,13 @@ ACTIONS = ("task.work_context.read", "project.task.work_context.read")
 
 
 def context_values():
-    project_id, now = uuid4(), datetime.now(UTC)
-    task = ContributorTaskDetail(uuid4(), project_id, "Title", "Work", None, None, ("tag",), None,
+    project_id, now = new_record_id(), datetime.now(UTC)
+    task = ContributorTaskDetail(new_record_id(), project_id, "Title", "Work", None, None, ("tag",), None,
                                  "claimed", None, None, None, now, now)
-    selection = GuidePolicySelection(policy_id=uuid4(), generation=1, policy_hash="sha256:" + "1" * 64)
+    selection = GuidePolicySelection(policy_id=new_record_id(), generation=1, policy_hash="sha256:" + "1" * 64)
     values = dict(project=ProjectDisplayFacts(project_id, "Project", "project", None),
-                  guide=GuideDisplayFacts(uuid4(), project_id, "guide", None, now),
-                  review_policy=selection, revision_policy=selection, contribution_policy_version_id=uuid4())
+                  guide=GuideDisplayFacts(new_record_id(), project_id, "guide", None, now),
+                  review_policy=selection, revision_policy=selection, contribution_policy_version_id=new_record_id())
     manager = ManagementTaskDetail(**asdict(task), source_type="manual", source_ref="private",
                                    source_payload_hash=None, import_batch_id=None, external_task_id=None,
                                    created_by="creator", assigned_to="owner")
@@ -65,14 +66,14 @@ def test_work_context_contracts():
         assert type(result.task) is type(detail)
         assert not hasattr(result.task, "_sa_instance_state")
         with pytest.raises(ValidationError, match="frozen"):
-            result.contribution_policy_version_id = uuid4()
+            result.contribution_policy_version_id = new_record_id()
         with pytest.raises(FrozenInstanceError):
             result.task.title = "changed"
         for replacement in (
             {"task": manager if detail is task else task},
-            {"task": replace(detail, project_id=uuid4())},
-            {"project": replace(values["project"], id=uuid4())},
-            {"guide": replace(values["guide"], project_id=uuid4())},
+            {"task": replace(detail, project_id=new_record_id())},
+            {"project": replace(values["project"], id=new_record_id())},
+            {"guide": replace(values["guide"], project_id=new_record_id())},
             {"contribution_policy_version_id": "invalid"},
         ):
             with pytest.raises(ValidationError):
@@ -121,11 +122,11 @@ def test_work_context_openapi():
 async def test_work_context_invalid_selectors():
     session, authority = MagicMock(), MagicMock()
     commands = AuthorizedTaskCommands(session, authorization=authority, audit=MagicMock(),
-                                      actor_profile_id=uuid4(), contexts=MagicMock())
-    for invalid in (None, "not-a-uuid", str(uuid4()), []):
+                                      actor_profile_id=new_record_id(), contexts=MagicMock())
+    for invalid in (None, "not-a-uuid", str(new_record_id()), []):
         with pytest.raises(TaskValidationError):
             await commands.contributor_work_context(invalid)
-        for args in ((invalid, uuid4()), (uuid4(), invalid)):
+        for args in ((invalid, new_record_id()), (new_record_id(), invalid)):
             with pytest.raises(TaskValidationError):
                 await commands.management_work_context(*args)
     session.begin.assert_not_called()

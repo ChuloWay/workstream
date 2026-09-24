@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING
 import threading
-from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid5
+from app.core.identifiers import new_record_id
 
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -483,7 +484,7 @@ class _PreSubmitEvidenceRepository:
         ArtifactCommitment.validate_sha256(packet_sha256)
         values.update(attempt_id=str(attempt_id), attempt_request_digest=attempt_request_digest,
                       packet_sha256=packet_sha256)
-        evidence_set_id = uuid4()
+        evidence_set_id = new_record_id()
         await self._session.execute(
             insert(PreSubmitEvidenceSet).values(id=str(evidence_set_id), **values)
         )
@@ -492,7 +493,7 @@ class _PreSubmitEvidenceRepository:
         ):
             self._session.add(
                 PreSubmitEvidenceResult(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     evidence_set_id=str(evidence_set_id),
                     **self._result_values(result_order, result, plan_entry.result_schema),
                 )

@@ -9,7 +9,8 @@ from app.adapters.tasks import task_service
 import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import func, select, text
@@ -90,7 +91,7 @@ async def _ready_workflow(harness, session, calls):
 
 async def _manager_runtime(harness, session):
     """Use the canonical AUTH PREP service and a real project-manager grant."""
-    manager_id, link_id = uuid4(), uuid4()
+    manager_id, link_id = new_record_id(), new_record_id()
     session.add_all([
         ActorProfile(
             id=str(manager_id), actor_kind="human", status="active",
@@ -112,7 +113,7 @@ async def _manager_runtime(harness, session):
         actor_profile_id=manager_id, actor_kind=ActorKind.HUMAN,
         actor_status=ActorStatus.ACTIVE, identity_link_id=link_id,
         identity_link_status=IdentityLinkStatus.ACTIVE,
-        request_id=uuid4(), correlation_id=uuid4(),
+        request_id=new_record_id(), correlation_id=new_record_id(),
     )
     repository = AdminAuthorizationRepository(session)
     authority = AuthorizationService(session, context, admin_repository=repository)
@@ -166,8 +167,8 @@ async def test_revocation_fences_art_materialization_and_evidence_persistence(
         await _seed_materializer(harness.factory)
         project_id = harness.request.effective_plan.lineage.project_id
         grant_id = await _submitter_grant(harness)
-        revoke_name = f"pol07a_revoke_{uuid4().hex[:12]}"
-        art_name = f"pol07a_revoke_art_{uuid4().hex[:12]}"
+        revoke_name = f"pol07a_revoke_{new_record_id().hex[:12]}"
+        art_name = f"pol07a_revoke_art_{new_record_id().hex[:12]}"
         art_engine, art_factory = _named_factory(isolated_database_env, art_name)
         revoke_engine, revoke_factory = _named_factory(isolated_database_env, revoke_name)
         art_before_project, revoke_has_project = asyncio.Event(), asyncio.Event()
@@ -207,7 +208,7 @@ async def test_revocation_fences_art_materialization_and_evidence_persistence(
                     return await authorization_router.revoke_project_role_grant(
                         project_id=project_id, grant_id=UUID(str(grant_id)),
                         payload=ProjectRoleGrantRevokeBody(reason="Concurrent pre-submit grant revocation"),
-                        idempotency_key=uuid4(), resolved=resolved_manager,
+                        idempotency_key=new_record_id(), resolved=resolved_manager,
                         prepared=prepared_revoke, session=revoke_session,
                     )
 
@@ -285,7 +286,7 @@ async def test_work_context_task_lock_precedes_art_actor_lock(
     release_task = asyncio.Event()
     try:
         await _seed_materializer(harness.factory)
-        art_name = f"pol07a_task_art_{uuid4().hex[:12]}"
+        art_name = f"pol07a_task_art_{new_record_id().hex[:12]}"
         art_engine = create_async_engine(
             isolated_database_env,
             connect_args={"server_settings": {"application_name": art_name}},
@@ -303,7 +304,7 @@ async def test_work_context_task_lock_precedes_art_actor_lock(
                 actor_status=ActorStatus.ACTIVE,
                 identity_link_id=harness.identity_link_id,
                 identity_link_status=IdentityLinkStatus.ACTIVE,
-                request_id=uuid4(), correlation_id=uuid4(),
+                request_id=new_record_id(), correlation_id=new_record_id(),
             )
             task_authority = PreparedTaskAuthorization(task_session, context)
             real_prepare = task_authority.prepare

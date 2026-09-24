@@ -5,6 +5,8 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from app.core.identifiers import new_record_id
+
 from app.modules.authorization.api import (
     artifact_policy_projection_facts_digest,
     artifact_policy_projection_identity,
@@ -28,29 +30,25 @@ from app.modules.authorization.runtime import ProjectGuideSufficiencyMutationRes
 from .support import policy_facts, sufficiency_facts
 
 
+def projection_identity(factory, actor_id=None, link_id=None):
+    return factory(
+        operation_id=new_record_id(),
+        correlation_id=new_record_id(),
+        output_id=new_record_id(),
+        actor_profile_id=actor_id or uuid4(),
+        identity_link_id=link_id or uuid4(),
+    )
+
+
 def test_projection_identity_matches_public_contract() -> None:
-    attempt_id, actor_id, link_id = uuid4(), uuid4(), uuid4()
+    actor_id, link_id = uuid4(), uuid4()
 
-    sufficiency = guide_sufficiency_projection_identity(
-        attempt_id=attempt_id,
-        actor_profile_id=actor_id,
-        identity_link_id=link_id,
-    )
-    policy = artifact_policy_projection_identity(
-        attempt_id=attempt_id,
-        actor_profile_id=actor_id,
-        identity_link_id=link_id,
-    )
+    sufficiency = projection_identity(guide_sufficiency_projection_identity, actor_id, link_id)
+    policy = projection_identity(artifact_policy_projection_identity, actor_id, link_id)
 
-    assert sufficiency == guide_sufficiency_projection_identity(
-        attempt_id=attempt_id,
-        actor_profile_id=actor_id,
-        identity_link_id=link_id,
-    )
-    assert policy == artifact_policy_projection_identity(
-        attempt_id=attempt_id,
-        actor_profile_id=actor_id,
-        identity_link_id=link_id,
+    assert all(
+        value.version == 7
+        for value in (sufficiency.operation_id, sufficiency.correlation_id, sufficiency.output_id)
     )
     assert sufficiency.operation_id != policy.operation_id
     assert sufficiency.output_id != policy.output_id
@@ -62,18 +60,14 @@ def test_projection_identity_matches_public_contract() -> None:
 def test_projection_resource_digests_match_public_contract(component: str) -> None:
     project_id, attempt_id, actor_id, link_id = (uuid4() for _ in range(4))
     identity = (
-        guide_sufficiency_projection_identity(
-            attempt_id=attempt_id, actor_profile_id=actor_id, identity_link_id=link_id
-        )
+        projection_identity(guide_sufficiency_projection_identity, actor_id, link_id)
         if component == "guide_sufficiency"
-        else artifact_policy_projection_identity(
-            attempt_id=attempt_id, actor_profile_id=actor_id, identity_link_id=link_id
-        )
+        else projection_identity(artifact_policy_projection_identity, actor_id, link_id)
     )
     facts = (
-        sufficiency_facts(project_id, attempt_id)
+        sufficiency_facts(project_id, attempt_id, identity.output_id)
         if component == "guide_sufficiency"
-        else policy_facts(project_id, attempt_id)
+        else policy_facts(project_id, attempt_id, identity.output_id)
     )
     resource = projection_resource_context(component, identity, facts)
     facts_digest = (
@@ -91,28 +85,24 @@ def test_projection_resource_digests_match_public_contract(component: str) -> No
 
 def test_projection_prepare_binds_complete_authority() -> None:
     locator = ProjectGuideProjectionLocator(project_id=uuid4(), attempt_id=uuid4())
-    identity = guide_sufficiency_projection_identity(
-        attempt_id=locator.attempt_id,
-        actor_profile_id=uuid4(),
-        identity_link_id=uuid4(),
+    identity = projection_identity(guide_sufficiency_projection_identity)
+    prepared = projection_prepare_context(
+        "guide_sufficiency", locator, identity.actor_profile_id, identity.identity_link_id
     )
-    prepared = projection_prepare_context("guide_sufficiency", locator, identity)
     resource = projection_resource_context(
         "guide_sufficiency",
         identity,
-        sufficiency_facts(locator.project_id, locator.attempt_id),
+        sufficiency_facts(locator.project_id, locator.attempt_id, identity.output_id),
     )
     assert projection_prepare_matches(prepared.model_dump(mode="json"), resource)
 
 
 def test_projection_prepare_cannot_consume_a_legacy_resource_kind() -> None:
     locator = ProjectGuideProjectionLocator(project_id=uuid4(), attempt_id=uuid4())
-    identity = guide_sufficiency_projection_identity(
-        attempt_id=locator.attempt_id,
-        actor_profile_id=uuid4(),
-        identity_link_id=uuid4(),
+    identity = projection_identity(guide_sufficiency_projection_identity)
+    prepared = projection_prepare_context(
+        "guide_sufficiency", locator, identity.actor_profile_id, identity.identity_link_id
     )
-    prepared = projection_prepare_context("guide_sufficiency", locator, identity)
     legacy = ProjectGuideSufficiencyMutationResourceContext.model_construct(
         resource_type="project_guide_sufficiency_mutation",
         resource_id=uuid4(),
@@ -123,19 +113,15 @@ def test_projection_prepare_cannot_consume_a_legacy_resource_kind() -> None:
     projection = projection_resource_context(
         "guide_sufficiency",
         identity,
-        sufficiency_facts(locator.project_id, locator.attempt_id),
+        sufficiency_facts(locator.project_id, locator.attempt_id, identity.output_id),
     )
     assert not projection_context_matches(None, projection)
 
 
 def test_projection_facts_digest_cannot_be_forged() -> None:
     project_id, attempt_id = uuid4(), uuid4()
-    identity = guide_sufficiency_projection_identity(
-        attempt_id=attempt_id,
-        actor_profile_id=uuid4(),
-        identity_link_id=uuid4(),
-    )
-    facts = sufficiency_facts(project_id, attempt_id)
+    identity = projection_identity(guide_sufficiency_projection_identity)
+    facts = sufficiency_facts(project_id, attempt_id, identity.output_id)
     resource = projection_resource_context("guide_sufficiency", identity, facts)
     with pytest.raises(ValueError, match="digest"):
         resource.model_copy(update={"facts_digest": "sha256:" + "b" * 64}).__class__(
@@ -148,24 +134,18 @@ def test_projection_facts_digest_cannot_be_forged() -> None:
 
 def test_projection_components_cannot_swap_authority() -> None:
     project_id, attempt_id = uuid4(), uuid4()
-    identity = guide_sufficiency_projection_identity(
-        attempt_id=attempt_id,
-        actor_profile_id=uuid4(),
-        identity_link_id=uuid4(),
-    )
+    identity = projection_identity(guide_sufficiency_projection_identity)
     with pytest.raises(ValueError, match="do not match"):
         projection_resource_context(
-            "guide_sufficiency", identity, policy_facts(project_id, attempt_id)
+            "guide_sufficiency", identity, policy_facts(project_id, attempt_id, identity.output_id)
         )
 
 
 def test_projection_resource_rejects_incomplete_facts() -> None:
     project_id, attempt_id = uuid4(), uuid4()
-    identity = guide_sufficiency_projection_identity(
-        attempt_id=attempt_id, actor_profile_id=uuid4(), identity_link_id=uuid4()
-    )
+    identity = projection_identity(guide_sufficiency_projection_identity)
     resource = projection_resource_context(
-        "guide_sufficiency", identity, sufficiency_facts(project_id, attempt_id)
+        "guide_sufficiency", identity, sufficiency_facts(project_id, attempt_id, identity.output_id)
     )
     values = resource.model_dump()
     values["projection_facts"].pop("report_id")
@@ -175,11 +155,9 @@ def test_projection_resource_rejects_incomplete_facts() -> None:
 
 def test_projection_resource_rejects_wrong_project() -> None:
     project_id, attempt_id = uuid4(), uuid4()
-    identity = guide_sufficiency_projection_identity(
-        attempt_id=attempt_id, actor_profile_id=uuid4(), identity_link_id=uuid4()
-    )
+    identity = projection_identity(guide_sufficiency_projection_identity)
     resource = projection_resource_context(
-        "guide_sufficiency", identity, sufficiency_facts(project_id, attempt_id)
+        "guide_sufficiency", identity, sufficiency_facts(project_id, attempt_id, identity.output_id)
     )
     values = resource.model_dump()
     values["scope_project_id"] = uuid4()
@@ -189,11 +167,9 @@ def test_projection_resource_rejects_wrong_project() -> None:
 
 def test_projection_resource_rejects_wrong_resource_identity() -> None:
     project_id, attempt_id = uuid4(), uuid4()
-    identity = guide_sufficiency_projection_identity(
-        attempt_id=attempt_id, actor_profile_id=uuid4(), identity_link_id=uuid4()
-    )
+    identity = projection_identity(guide_sufficiency_projection_identity)
     resource = projection_resource_context(
-        "guide_sufficiency", identity, sufficiency_facts(project_id, attempt_id)
+        "guide_sufficiency", identity, sufficiency_facts(project_id, attempt_id, identity.output_id)
     )
     with pytest.raises(ValueError, match="resource identity"):
         ProjectGuideProjectionResourceContext(**{**resource.model_dump(), "resource_id": uuid4()})
@@ -207,14 +183,10 @@ def test_projection_prepare_parser_is_closed_and_action_bound() -> None:
             {"binding_kind": "project_guide_projection"},
         )
     locator = ProjectGuideProjectionLocator(project_id=uuid4(), attempt_id=uuid4())
-    identity = guide_sufficiency_projection_identity(
-        attempt_id=locator.attempt_id,
-        actor_profile_id=uuid4(),
-        identity_link_id=uuid4(),
-    )
-    value = projection_prepare_context("guide_sufficiency", locator, identity).model_dump(
-        mode="json"
-    )
+    identity = projection_identity(guide_sufficiency_projection_identity)
+    value = projection_prepare_context(
+        "guide_sufficiency", locator, identity.actor_profile_id, identity.identity_link_id
+    ).model_dump(mode="json")
     with pytest.raises(ValueError, match="does not match"):
         parse_projection_prepare(ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE, value)
 

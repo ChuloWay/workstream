@@ -14,7 +14,7 @@ from app.modules.authorization.api import (
     ProjectSetupFinalizationLocator,
     setup_finalization_fact_values,
     setup_finalization_facts_digest,
-    setup_finalization_identity,
+    setup_finalization_preparation_identity,
 )
 from app.modules.projects.api import (
     ProjectGuideSetupFinalizationCommand,
@@ -37,14 +37,13 @@ def mutated(facts, field):
     return "changed"
 
 
-def test_finalization_identity_uses_exact_uuid5_namespaces_and_seed():
-    identities = setup_finalization_identity(
+def test_finalization_preparation_uses_exact_nonrow_uuid5_selectors():
+    identities = setup_finalization_preparation_identity(
         UUID("11111111-1111-4111-8111-111111111111"),
         2,
         UUID("33333333-3333-4333-8333-333333333333"),
     )
     assert tuple(map(str, identities)) == (
-        "38b5b694-2802-53b4-958a-3df7d4a2faf0",
         "61c2c6fd-634e-538f-a92d-3d62f42e0024",
         "d825a8b2-a9ad-5f54-831c-0af0e4e18910",
     )
@@ -55,7 +54,7 @@ def test_identity_rejects_invalid_seed(index):
     values = [uuid4(), 1, uuid4()]
     values[index] = False if index == 1 else "not-parsed"
     with pytest.raises(ValueError):
-        setup_finalization_identity(*values)
+        setup_finalization_preparation_identity(*values)
 
 
 @pytest.mark.parametrize("field", [f.name for f in fields(ProjectSetupFinalizationFacts)])
@@ -71,7 +70,7 @@ async def test_each_finalization_fact_mutation_denies(field, monkeypatch):
     case = scenario()
     changed = deepcopy(case.auth.expected)
     object.__setattr__(changed, field, mutated(changed, field))
-    monkeypatch.setattr(finalization, "compose_facts", lambda *_args: changed)
+    monkeypatch.setattr(finalization, "compose_facts", lambda *_args, **_kwargs: changed)
     with pytest.raises(ProjectGuideSetupFinalizationError, match="service_authority_denied"):
         await case.service.finalize(case.command)
     assert "persist" not in case.repo.calls
@@ -128,7 +127,12 @@ def test_component_hash_values_and_order_are_validated():
 
 def test_locator_accepts_only_parsed_ids():
     with pytest.raises(ValueError):
-        ProjectSetupFinalizationLocator(project_id="wrong", operation_id=uuid4(), correlation_id=uuid4())
+        ProjectSetupFinalizationLocator(
+            project_id="wrong",
+            setup_run_id=uuid4(),
+            setup_generation=1,
+            compilation_id=uuid4(),
+        )
 
 
 @pytest.mark.parametrize("operation", [copy, deepcopy, pickle.dumps])

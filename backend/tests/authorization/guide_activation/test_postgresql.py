@@ -7,6 +7,7 @@ from sqlalchemy import text
 
 from app.modules.projects.api.guide_proposals import GuideProposalError
 from app.modules.projects.guide_activation.custody import load_guide_activation
+from app.modules.projects.guide_activation.service import activation_authorization_selector
 from app.modules.projects.models import ProjectGuide
 from tests.projects.guide_activation.pg_support import activation_case
 from tests.projects.guide_compilation.proposals.pg_support import seed_review_actor, revoke_review_grant
@@ -22,9 +23,13 @@ async def test_complete_activation_and_live_replay(clean_postgres_database):
         operation, event = before["operations"][0], before["events"][0]
         assert event.after_facts == dict(allowed=True, resource_context_digest=operation.resource_context_digest)
         assert str(event.matched_grant_id) == str(grant)
-        assert str(event.correlation_id) == str(receipt.operation_id)
+        assert event.correlation_id == activation_authorization_selector(
+            actor.actor_profile_id, command.idempotency_key
+        )
         assert operation.activation_authority_json["resource_context_digest"] == operation.resource_context_digest
-        assert operation.activation_authority_json["authorization_decision_event_id"] == event.id
+        assert operation.activation_authority_json["authorization_decision_event_id"] == str(
+            event.id
+        )
         async with factory() as session:
             guide = await session.get(ProjectGuide, str(command.target.proposal.guide_id))
             assert guide.status == "active"

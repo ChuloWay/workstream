@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -91,7 +91,7 @@ class _CompleteBeforeDurable:
 
 async def _seed_second_contributor_task(harness):
     """Share PROJECT locks while avoiding actor, grant, task and assignment collisions."""
-    actor_id, link_id, task_id, assignment_id = (uuid4() for _ in range(4))
+    actor_id, link_id, task_id, assignment_id = (new_record_id() for _ in range(4))
     project_id = harness.request.effective_plan.lineage.project_id
     async with harness.engine.begin() as connection:
         await connection.execute(text(
@@ -102,8 +102,8 @@ async def _seed_second_contributor_task(harness):
         await connection.execute(text(
             "insert into actor_identity_links "
             "(id,actor_profile_id,issuer,subject,subject_kind,status,linked_by,last_verified_at) "
-            "values (:link,:actor,'flow-test',:actor,'human','active','test',now())"
-        ), {"actor": str(actor_id), "link": str(link_id)})
+            "values (:link,:actor,'flow-test',:subject,'human','active','test',now())"
+        ), {"actor": str(actor_id), "subject": str(actor_id), "link": str(link_id)})
         await seed_started_task_for_artifact_test(connection, {
             "project": str(project_id), "task": str(task_id),
             "assignment": str(assignment_id), "actor": str(actor_id),
@@ -262,7 +262,7 @@ async def test_same_project_reservation_and_execution_complete_without_auth_proj
         second_request = _second_preparation_request(
             harness, second_actor, second_link, second_task_id, second_assignment_id,
         )
-        application_name = f"pol07a_lock_order_{uuid4().hex[:12]}"
+        application_name = f"pol07a_lock_order_{new_record_id().hex[:12]}"
         second_engine = create_async_engine(
             isolated_database_env,
             connect_args={"server_settings": {"application_name": application_name}},

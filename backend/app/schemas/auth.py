@@ -60,12 +60,12 @@ class AuthVerificationResult(BaseModel):
     token: VerifiedIssuerToken
     legacy: LegacyAuthorizationCompatibilityContext | None = None
 
-    def legacy_actor(self) -> "ActorContext":
-        """Build the temporary actor context for verified human callers only."""
+    def legacy_actor(self, *, actor_id: str) -> "ActorContext":
+        """Build the temporary actor context for one resolved human actor."""
         if self.token.subject_kind != "human" or self.legacy is None:
             raise ValueError("legacy authorization compatibility requires a human token")
         return ActorContext(
-            actor_id=actor_id_from_external_identity(self.token.issuer, self.token.subject),
+            actor_id=actor_id,
             external_subject=self.token.subject,
             external_issuer=self.token.issuer,
             roles=self.legacy.roles,

@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import insert, text, update
 from sqlalchemy.exc import DBAPIError
 
+from app.core.identifiers import new_record_id
 from app.modules.projects.api.guide_documents import guide_document_handle
 from app.modules.projects.guide_compilation.models import ProjectGuideRuntimeAllocation, ProjectGuideDocumentAccess
 from app.modules.projects.guide_compilation.runtime_resources import SqlAlchemyGuideRuntimeCustody
@@ -17,7 +18,7 @@ from .test_document_access_postgresql import grant_case as grant_case
 def file_intent(grant, context):
     """Specify the persisted original independently of the service's mapping helper."""
     doc = context.material.documents[0]
-    return dict(id=uuid4(), attempt_id=grant._attempt_id, manifest_sha256=context.material.sha256,
+    return dict(id=new_record_id(), attempt_id=grant._attempt_id, manifest_sha256=context.material.sha256,
                 runtime_key=runtime_configuration().runtime_key, kind="file", state="allocating",
                 document_handle=UUID(context.material.handle_for(doc)), source_item_id=str(doc.source_item_id),
                 document_version_id=str(doc.ingest_id), put_attempt_id=str(doc.put_attempt_id),
@@ -76,7 +77,7 @@ async def allocated_parents(grant, context):
 
 
 def attachment_intent(grant, context, container, file):
-    return dict(id=uuid4(), attempt_id=grant._attempt_id, manifest_sha256=context.material.sha256,
+    return dict(id=new_record_id(), attempt_id=grant._attempt_id, manifest_sha256=context.material.sha256,
         runtime_key=runtime_configuration().runtime_key, kind="attachment", state="allocating",
         document_handle=UUID(context.material.handle_for(context.material.documents[0])),
         parent_provider_id="cntr_test", container_allocation_id=container, source_file_allocation_id=file,
@@ -103,7 +104,7 @@ async def test_access_requires_the_exact_attachment_original(grant_case, field):
         await session.execute(insert(ProjectGuideRuntimeAllocation).values(**attachment))
     await custody.record_allocated(attachment["id"], "cfile_test")
     doc = context.material.documents[0]
-    valid = dict(id=uuid4(), attempt_id=grant._attempt_id, attachment_allocation_id=attachment["id"],
+    valid = dict(id=new_record_id(), attempt_id=grant._attempt_id, attachment_allocation_id=attachment["id"],
         source_item_id=str(doc.source_item_id), document_version_id=str(doc.ingest_id), sha256=doc.sha256,
         manifest_sha256=context.material.sha256, document_handle=attachment["document_handle"])
     value = ("sha256:"+"b"*64 if field == "sha256" else

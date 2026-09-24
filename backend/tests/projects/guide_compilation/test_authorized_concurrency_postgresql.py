@@ -79,7 +79,7 @@ async def test_concurrent_finalization_commits_one_compilation_and_event(
                 identity=identity(context(values)),
                 runtime_configuration=runtime_configuration(),
             )
-        facts = _preflight(values, requested.attempt_id)
+        facts = _preflight(values, requested.attempt_id, requested.operation_id)
         async with factory() as session:
             execution = _execution_service(session, service)
             await execution.fence_dispatch(actor=service, facts=facts)

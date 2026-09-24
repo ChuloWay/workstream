@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -52,7 +52,7 @@ def test_target_identity_is_provisionable_but_has_no_service_actions() -> None:
 
 @pytest.mark.asyncio
 async def test_exact_active_adapter_profile_and_link_are_eligible() -> None:
-    actor_id = uuid4()
+    actor_id = new_record_id()
     session = SimpleNamespace(scalar=AsyncMock(side_effect=[_profile(actor_id), _link(actor_id)]))
 
     facts = await CompensationAdapterActorEligibility(session).lock_compensation_adapter_actor(
@@ -68,15 +68,15 @@ async def test_exact_active_adapter_profile_and_link_are_eligible() -> None:
     "profile",
     [
         None,
-        _profile(uuid4(), actor_kind="human"),
-        _profile(uuid4(), status="suspended"),
+        _profile(new_record_id(), actor_kind="human"),
+        _profile(new_record_id(), status="suspended"),
     ],
 )
 async def test_ineligible_profiles_are_concealed(profile) -> None:
     session = SimpleNamespace(scalar=AsyncMock(return_value=profile))
 
     with pytest.raises(CompensationAdapterActorUnavailable):
-        await CompensationAdapterActorEligibility(session).lock_compensation_adapter_actor(uuid4())
+        await CompensationAdapterActorEligibility(session).lock_compensation_adapter_actor(new_record_id())
 
     session.scalar.assert_awaited_once()
 
@@ -85,11 +85,11 @@ async def test_ineligible_profiles_are_concealed(profile) -> None:
 @pytest.mark.parametrize("identity", SERVICE_IDENTITIES - {ServiceIdentity.COMPENSATION_ADAPTER})
 async def test_every_action_bearing_service_identity_is_ineligible(identity) -> None:
     session = SimpleNamespace(
-        scalar=AsyncMock(return_value=_profile(uuid4(), service_identity=identity.value))
+        scalar=AsyncMock(return_value=_profile(new_record_id(), service_identity=identity.value))
     )
 
     with pytest.raises(CompensationAdapterActorUnavailable):
-        await CompensationAdapterActorEligibility(session).lock_compensation_adapter_actor(uuid4())
+        await CompensationAdapterActorEligibility(session).lock_compensation_adapter_actor(new_record_id())
 
 
 @pytest.mark.asyncio
@@ -97,12 +97,12 @@ async def test_every_action_bearing_service_identity_is_ineligible(identity) -> 
     "link",
     [
         None,
-        _link(uuid4(), subject_kind="human"),
-        _link(uuid4(), status="revoked"),
+        _link(new_record_id(), subject_kind="human"),
+        _link(new_record_id(), status="revoked"),
     ],
 )
 async def test_ineligible_identity_links_are_concealed(link) -> None:
-    actor_id = uuid4()
+    actor_id = new_record_id()
     session = SimpleNamespace(scalar=AsyncMock(side_effect=[_profile(actor_id), link]))
 
     with pytest.raises(CompensationAdapterActorUnavailable):

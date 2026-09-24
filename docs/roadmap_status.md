@@ -157,10 +157,15 @@ cannot be reused as post-submission review-gate evidence. See the
 
 - FastAPI, SQLAlchemy 2.x async, PostgreSQL, Alembic, Celery, and Redis form the
   locked backend execution stack.
-- The schema has one clean v0.1 Alembic baseline; later bounded migrations
-  extend it without compatibility bridges for discarded pre-v0.1 history.
+- The schema has one fresh `0001_uuid7_v01` Alembic baseline. Generated record
+  identities use UUIDv7 and native PostgreSQL UUID relationships; meaningful
+  natural keys and external request tokens retain their semantics. Old stamped
+  development databases require explicitly scoped recreation, not conversion or
+  compatibility stamping. Local Compose uses a separate UUIDv7 database volume.
 - AWS S3 is the hosted artifact target, MinIO proves the storage protocol in
   development and CI, and all storage access stays behind `ArtifactStore`.
+  Development/CI MinIO uses a shared pinned-source build; existing artifact
+  volumes and real S3-protocol tests remain unchanged.
 - Private extraction scratch is bounded by `ArtifactScratchManager`; it is not
   durable artifact storage.
 - Cross-module behavior is moving through explicit public ports under the

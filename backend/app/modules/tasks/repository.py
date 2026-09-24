@@ -94,7 +94,7 @@ class TaskRepository:
         if request.project_id is not None:
             statement = statement.where(assignment.project_id == str(request.project_id))
         if request.after is not None:
-            statement = statement.where(assignment.id > str(request.after))
+            statement = statement.where(assignment.id > request.after)
         with self._session.no_autoflush:
             rows = (await self._session.execute(statement.order_by(assignment.id).limit(101))).all()
         return AssignmentInvalidationTargetsPage(
@@ -172,7 +172,7 @@ class TaskRepository:
         if request.after is not None:
             statement = statement.where(
                 tuple_(task.created_at, task.id) > tuple_(
-                    request.after.created_at, str(request.after.task_id),
+                    request.after.created_at, request.after.task_id,
                 ),
             )
         statement = statement.order_by(task.created_at, task.id).limit(request.limit + 1)

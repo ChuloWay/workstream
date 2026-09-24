@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 import zipfile
 
 import pytest
@@ -39,7 +39,7 @@ def _predecessor(
     *, archive: str = "b", manifest: str = "c", version: int = 1
 ) -> SubmissionCanonicalPredecessor:
     return SubmissionCanonicalPredecessor(
-        uuid4(), version, f"sha256:{archive * 64}", f"sha256:{manifest * 64}"
+        new_record_id(), version, f"sha256:{archive * 64}", f"sha256:{manifest * 64}"
     )
 
 
@@ -106,7 +106,7 @@ def test_exact_archive_and_semantically_unchanged_reject_distinctly() -> None:
         current_predecessor=exact_predecessor,
     )
     semantic_predecessor = SubmissionCanonicalPredecessor(
-        uuid4(), 1, f"sha256:{'b' * 64}", manifest.sha256
+        new_record_id(), 1, f"sha256:{'b' * 64}", manifest.sha256
     )
     _rejects(
         SubmissionChangeFailureCode.MANIFEST_UNCHANGED,

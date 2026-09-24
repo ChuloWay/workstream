@@ -17,17 +17,21 @@ from app.modules.projects.guide_activation.custody import (
     load_guide_activation,
     require_authority,
 )
+from app.modules.projects.guide_activation.service import activation_authorization_selector
 from .test_contracts import receipt_values
 
 
 def custody_case():
     receipt = GuideActivationReceipt(**receipt_values())
+    actor_profile_id = uuid4()
     locator = GuideActivationLocator(
         project_id=receipt.command.target.proposal.project_id,
         guide_id=receipt.command.target.proposal.guide_id,
-        actor_profile_id=uuid4(),
+        actor_profile_id=actor_profile_id,
         identity_link_id=uuid4(),
-        operation_id=receipt.operation_id,
+        operation_id=activation_authorization_selector(
+            actor_profile_id, receipt.command.idempotency_key
+        ),
         request_id=uuid4(),
     )
     facts = GuideActivationFacts(locator=locator, receipt=receipt)

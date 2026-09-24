@@ -2,7 +2,7 @@
 # pyright: reportOptionalMemberAccess=false, reportOptionalOperand=false
 from __future__ import annotations
 
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import func, select
@@ -23,10 +23,6 @@ from app.modules.actors.service import (
     UnsupportedSubjectKind,
 )
 from app.modules.actors.api import ServiceIdentity
-from app.schemas.auth import (
-    actor_id_from_external_identity,
-)
-
 from tests.actors.support import ISSUER, verified_token, resolved_actor
 from app.modules.tasks.models import AuditEvent
 
@@ -118,8 +114,8 @@ async def test_unsupported_subject_kinds_create_nothing(
         with pytest.raises(UnsupportedSubjectKind):
             await ActorService(session).resolve_verified_actor(
                 verified_token(f"unsupported-{kind}", kind=kind),
-                request_id=uuid4(),
-                correlation_id=uuid4(),
+                request_id=new_record_id(),
+                correlation_id=new_record_id(),
             )
         assert await session.scalar(select(func.count()).select_from(ActorProfile)) == 0
         assert await session.scalar(select(func.count()).select_from(ActorIdentityLink)) == 0
@@ -135,7 +131,7 @@ async def test_unknown_service_creates_nothing(actor_database_env, entry):
     async with db_session.get_session_factory()() as session:
         service = ActorService(session)
         options = (
-            {"request_id": uuid4(), "correlation_id": uuid4()}
+            {"request_id": new_record_id(), "correlation_id": new_record_id()}
             if entry == "resolve_verified_actor"
             else {}
         )
@@ -158,8 +154,8 @@ async def test_revoked_identity_denies_verified_actor_lookup(actor_database_env:
     async with db_session.get_session_factory()() as session:
         resolved = await ActorService(session).resolve_verified_actor(
             human_token,
-            request_id=uuid4(),
-            correlation_id=uuid4(),
+            request_id=new_record_id(),
+            correlation_id=new_record_id(),
         )
         resolved.identity_link.status = "revoked"
         resolved.identity_link.revoked_by = resolved.profile.id
@@ -176,8 +172,8 @@ async def test_deactivated_actor_denies_direct_self_update(actor_database_env: s
     async with db_session.get_session_factory()() as session:
         deactivated = await ActorService(session).resolve_verified_actor(
             deactivated_token,
-            request_id=uuid4(),
-            correlation_id=uuid4(),
+            request_id=new_record_id(),
+            correlation_id=new_record_id(),
         )
         deactivated.profile.status = "deactivated"
         deactivated.profile.deactivated_by = deactivated.profile.id
@@ -194,7 +190,7 @@ async def test_deactivated_actor_denies_direct_self_update(actor_database_env: s
 @pytest.fixture
 async def known_service(actor_database_env):
     service_token = verified_token("known-service", kind="service")
-    service_actor_id = actor_id_from_external_identity(ISSUER, service_token.subject)
+    service_actor_id = str(new_record_id())
     async with db_session.get_session_factory()() as session:
         session.add_all(
             [
@@ -208,7 +204,7 @@ async def known_service(actor_database_env):
                     last_seen_at=None,
                 ),
                 ActorIdentityLink(
-                    id=str(uuid4()),
+                    id=str(new_record_id()),
                     actor_profile_id=service_actor_id,
                     issuer=ISSUER,
                     subject=service_token.subject,
@@ -230,8 +226,8 @@ async def test_known_service_cannot_use_human_authorization_entry(known_service)
         with pytest.raises(ServiceActorNotProvisioned):
             await service.resolve_actor_for_authorization(
                 service_token,
-                request_id=uuid4(),
-                correlation_id=uuid4(),
+                request_id=new_record_id(),
+                correlation_id=new_record_id(),
             )
         assert await session.scalar(select(func.count()).select_from(AuditEvent)) == 0
 

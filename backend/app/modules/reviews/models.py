@@ -27,6 +27,7 @@ class ReviewQueueEntry(Base):
 
     __tablename__ = "review_queue_entries"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["submission_id", "task_id", "submission_version"],
             ["submissions.id", "submissions.task_id", "submissions.version"],
@@ -160,6 +161,7 @@ class ReviewAdmissionIdempotencyRecord(Base):
 
     __tablename__ = "review_admission_idempotency_records"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["submission_id", "task_id", "submission_version"],
             ["submissions.id", "submissions.task_id", "submissions.version"],
@@ -242,6 +244,7 @@ class ReviewLease(Base):
 
     __tablename__ = "review_leases"
     __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             [
                 "review_queue_entry_id",

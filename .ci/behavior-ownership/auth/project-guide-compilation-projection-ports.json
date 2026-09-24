@@ -23,7 +23,8 @@
     "app.modules.authorization.api.project_guide_projections.artifact_policy_projection_identity",
     "app.modules.authorization.api.project_guide_projections.guide_sufficiency_projection_facts_digest",
     "app.modules.authorization.api.project_guide_projections.guide_sufficiency_projection_identity",
-    "app.modules.authorization.api.project_guide_projections.projection_authority_digest"
+    "app.modules.authorization.api.project_guide_projections.projection_authority_digest",
+    "app.modules.authorization.api.project_guide_projections.projection_preparation_identity"
   ],
   "group": "auth",
   "outcomes": ["return", "denial", "mapped_error", "idempotent_replay"],
@@ -34,6 +35,6 @@
   "tests": [
     "backend/tests/projects/guide_compilation/test_projection_contracts.py::test_public_projection_contracts_are_closed_and_hash_bound",
     "backend/tests/projects/guide_compilation/test_projection_contracts.py::test_projection_identities_and_digests_are_component_specific",
-    "backend/tests/projects/guide_compilation/test_projection_migration.py::test_sql_digest_vectors_match_python_and_each_field_is_sensitive"
+    "backend/tests/projects/guide_compilation/test_projection_schema.py::test_sql_digest_vectors_match_python_and_each_field_is_sensitive"
   ]
 }

@@ -1,6 +1,6 @@
 """Direct PostgreSQL rejection proof for final policy lifecycle custody."""
 
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import text
@@ -24,7 +24,7 @@ async def test_database_rejects_event_without_matching_row_transition(
 ) -> None:
     del policy_database_env
     project_id, created, _, published = await _exercise_policy()
-    operation_id = uuid4()
+    operation_id = new_record_id()
     with pytest.raises(DBAPIError):
         async with db_session.get_session_factory()() as session, session.begin():
             await session.execute(
@@ -54,7 +54,7 @@ async def test_database_rejects_event_without_matching_row_transition(
                     ":policy,:version,1,'draft','active','draft','published')"
                 ),
                 {
-                    "id": uuid4(),
+                    "id": new_record_id(),
                     "operation_id": operation_id,
                     "digest": "sha256:" + "1" * 64,
                     "actor": str(created.actor_profile_id),
@@ -162,7 +162,7 @@ async def test_database_rejects_forged_publication_attribution(
                 text(
                     "update contribution_policy_versions set published_by=:actor where id=:version"
                 ),
-                {"actor": uuid4(), "version": published.contribution_policy_version_id},
+                {"actor": new_record_id(), "version": published.contribution_policy_version_id},
             )
 
 
@@ -182,7 +182,7 @@ async def test_database_rejects_forged_retirement_attribution(
         )
         await service.retire(
             ContributionPolicyRetireRequest(
-                operation_id=uuid4(),
+                operation_id=new_record_id(),
                 actor_profile_id=created.actor_profile_id,
                 project_id=project_id,
                 contribution_policy_id=created.contribution_policy_id,
@@ -193,7 +193,7 @@ async def test_database_rejects_forged_retirement_attribution(
         async with db_session.get_session_factory()() as session, session.begin():
             await session.execute(
                 text("update contribution_policy_versions set retired_by=:actor where id=:version"),
-                {"actor": uuid4(), "version": published.contribution_policy_version_id},
+                {"actor": new_record_id(), "version": published.contribution_policy_version_id},
             )
 
 
@@ -203,7 +203,7 @@ async def test_database_rejects_stale_replacement_identity(
 ) -> None:
     del policy_database_env
     project_id, created, _, published = await _exercise_policy()
-    operation_id = uuid4()
+    operation_id = new_record_id()
     with pytest.raises(DBAPIError):
         async with db_session.get_session_factory()() as session, session.begin():
             await session.execute(
@@ -222,7 +222,7 @@ async def test_database_rejects_stale_replacement_identity(
                     "project": str(project_id),
                     "policy": created.contribution_policy_id,
                     "version": published.contribution_policy_version_id,
-                    "stale_prior": uuid4(),
+                    "stale_prior": new_record_id(),
                 },
             )
 

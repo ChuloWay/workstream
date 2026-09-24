@@ -31,6 +31,7 @@ from scripts.test_lane_catalogue import (  # noqa: E402
     PARTITION_LANES_BY_MODULE,
     TestLane,
 )
+from scripts.record_id_collection import RecordIdCollection  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS_DIR = ROOT / "tests"
@@ -73,6 +74,7 @@ INTERRUPTED = False
 _ORIGINAL_UUID4: Any = None
 _UUID4_ORDINALS: dict[tuple[str, int], int] = {}
 _UUID4_HEAD = ""
+_RECORD_IDS = RecordIdCollection()
 
 
 class LaneError(RuntimeError):
@@ -196,6 +198,7 @@ def pytest_sessionstart(session: Any) -> None:
     _UUID4_HEAD = head
     _UUID4_ORDINALS.clear()
     uuid.uuid4 = _deterministic_uuid4
+    _RECORD_IDS.start(ROOT, head)
 
 
 def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
@@ -207,6 +210,7 @@ def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
 def _restore_uuid4() -> None:
     """Restore uuid4 and repository aliases captured during collection."""
     global _ORIGINAL_UUID4, _UUID4_HEAD
+    _RECORD_IDS.restore()
     original = _ORIGINAL_UUID4
     if original is None:
         _UUID4_HEAD = ""

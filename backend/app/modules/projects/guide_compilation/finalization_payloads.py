@@ -13,12 +13,10 @@ from app.modules.authorization.api import (
     FINALIZATION_SERVICE,
     ProjectSetupFinalizationAuthorityReceipt,
     ProjectSetupFinalizationFacts,
-    artifact_policy_projection_identity,
-    guide_sufficiency_projection_identity,
+    projection_preparation_identity,
     setup_finalization_authority_digest,
     setup_finalization_fact_values,
     setup_finalization_facts_digest,
-    setup_finalization_identity,
 )
 from app.modules.projects.api import (
     ProjectGuideSetupFinalizationCommand,
@@ -145,7 +143,14 @@ def require_source_shape(view: LockedFinalization) -> str:
     )
 
 
-def compose_facts(view: LockedFinalization, source_digest: str) -> ProjectSetupFinalizationFacts:
+def compose_facts(
+    view: LockedFinalization,
+    source_digest: str,
+    *,
+    finalization_id: UUID,
+    operation_id: UUID,
+    correlation_id: UUID,
+) -> ProjectSetupFinalizationFacts:
     """Validate accepted content and its complete exact existing projection set."""
     c, a, s = view.compilation, view.attempt, view.setup
     accepted = AcceptedCompilationResult(
@@ -168,9 +173,6 @@ def compose_facts(view: LockedFinalization, source_digest: str) -> ProjectSetupF
     for op in view.operations:
         require_projection(view, op, source_digest, result)
     require_outputs(view, report_op, policy_op, result)
-    receipt_id, operation_id, correlation_id = setup_finalization_identity(
-        UUID(s.id), s.setup_generation, c.id
-    )
     return ProjectSetupFinalizationFacts(
         project_id=UUID(c.project_id),
         guide_id=UUID(c.guide_id),
@@ -181,7 +183,7 @@ def compose_facts(view: LockedFinalization, source_digest: str) -> ProjectSetupF
         setup_generation=s.setup_generation,
         celery_task_id=UUID(s.celery_task_id),
         source_state_digest=source_digest,
-        finalization_id=receipt_id,
+        finalization_id=finalization_id,
         operation_id=operation_id,
         correlation_id=correlation_id,
         attempt_id=a.id,
@@ -222,6 +224,10 @@ def require_projection(view, op, source_digest, result) -> None:
     ):
         if getattr(op, name) != getattr(c, name):
             deny()
+    _, expected_correlation_id = projection_preparation_identity(
+        attempt_id=a.id,
+        component=op.component,
+    )
     if (
         op.compilation_id != c.id
         or op.attempt_id != a.id
@@ -232,23 +238,15 @@ def require_projection(view, op, source_digest, result) -> None:
         or op.result_schema_version != result["schema_version"]
         or op.compilation_agent_name != result["agent_name"]
         or op.compilation_agent_version != result["agent_version"]
+        or op.correlation_id != expected_correlation_id
     ):
         deny()
-    sufficient = op.component == "guide_sufficiency"
-    factory = (
-        guide_sufficiency_projection_identity if sufficient else artifact_policy_projection_identity
-    )
-    identity = factory(
-        attempt_id=a.id,
-        actor_profile_id=UUID(op.actor_profile_id),
-        identity_link_id=UUID(op.identity_link_id),
-    )
     if (
-        op.operation_id != identity.operation_id
-        or op.output_id != identity.output_id
-        or op.correlation_id != identity.correlation_id
+        any(value.version != 7 for value in (op.operation_id, op.output_id))
         or op.component_hash
-        != c.component_hashes["sufficiency_hash" if sufficient else "artifact_policy_hash"]
+        != c.component_hashes[
+            "sufficiency_hash" if op.component == "guide_sufficiency" else "artifact_policy_hash"
+        ]
     ):
         deny()
 

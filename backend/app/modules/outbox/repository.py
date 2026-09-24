@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.identifiers import new_record_id
 from app.modules.outbox.models import OutboxEvent
 from app.modules.outbox.api import OutboxAppendInput
 
@@ -33,11 +34,11 @@ class OutboxRepository:
         *,
         payload_digest: str,
     ) -> OutboxReservation:
-        """Insert a complete event or lock every conflicting identity in UUID order."""
+        """Mint a record identity or recover the locked natural-key winner."""
         created_id = await self._session.scalar(
             insert(OutboxEvent)
             .values(
-                event_id=value.event_id,
+                event_id=new_record_id(),
                 event_type=value.event_type,
                 event_version=value.event_version,
                 aggregate_type=value.aggregate_type,
@@ -49,7 +50,7 @@ class OutboxRepository:
                 payload=value.payload,
                 payload_digest=payload_digest,
             )
-            .on_conflict_do_nothing()
+            .on_conflict_do_nothing(index_elements=[OutboxEvent.idempotency_key])
             .returning(OutboxEvent.event_id)
         )
         await self._session.flush()
@@ -58,10 +59,7 @@ class OutboxRepository:
                 await self._session.scalars(
                     select(OutboxEvent)
                     .where(
-                        or_(
-                            OutboxEvent.event_id == value.event_id,
-                            OutboxEvent.idempotency_key == value.idempotency_key,
-                        )
+                        OutboxEvent.idempotency_key == value.idempotency_key
                     )
                     .order_by(OutboxEvent.event_id)
                     .with_for_update()

@@ -2,7 +2,7 @@
 
 import asyncio
 from dataclasses import replace
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import select, func
@@ -49,7 +49,7 @@ async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
         plan, policy = await approved_pre_submit_fixture(factory, namespace, guide_version="v1")
         context = _context()
         await _seed_services(factory)
-        task_id, assignment_id = uuid4(), uuid4()
+        task_id, assignment_id = new_record_id(), new_record_id()
         async with factory.begin() as session:
             await _seed_human_actor(session, context)
         async with engine.begin() as connection:
@@ -70,7 +70,7 @@ async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
             task_id=task_id,
             assignment_id=assignment_id,
             predecessor_submission_id=None,
-            idempotency_key=uuid4(),
+            idempotency_key=new_record_id(),
             summary="Completed the required project work and included evidence.",
             contributor_attestation="I confirm no confidential client data, credentials, or copied source material is included in this submission; rights_confirmed. "
             + " ".join(policy["attestation_terms"]),
@@ -96,9 +96,9 @@ async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
                 await compose_hidden_submission_creation_command(
                     session,
                     context,
-                    request_id=uuid4(),
-                    correlation_id=uuid4(),
-                ).create(replace(creation, admission_id=uuid4()))
+                    request_id=new_record_id(),
+                    correlation_id=new_record_id(),
+                ).create(replace(creation, admission_id=new_record_id()))
         async with factory() as session:
             assert await session.scalar(select(func.count()).select_from(Submission)) == 0
             admission = await session.get(SubmissionBundleAdmission, str(admission_id))
@@ -109,8 +109,8 @@ async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
                 return await compose_hidden_submission_creation_command(
                     session,
                     context,
-                    request_id=uuid4(),
-                    correlation_id=uuid4(),
+                    request_id=new_record_id(),
+                    correlation_id=new_record_id(),
                 ).create(creation)
 
         results = await asyncio.wait_for(

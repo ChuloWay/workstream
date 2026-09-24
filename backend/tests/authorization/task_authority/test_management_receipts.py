@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
+from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from tests.test_tasks import (
     task_database_env as task_database_env,
@@ -28,6 +29,7 @@ async def test_manager_receipt_rejects_unproven_sql_shape(task_client):
         ("action", "project.task.unknown", "task_command_action"),
     ]:
         params = dict(
+            receipt_id=new_record_id(),
             actor=task["created_by"],
             task=task["id"],
             action="project.task.create",
@@ -42,7 +44,7 @@ async def test_manager_receipt_rejects_unproven_sql_shape(task_client):
                     text("""insert into task_command_receipts
                   (id,actor_profile_id,action_id,idempotency_key,request_digest,task_id,status,
                    assignment_id,contributor_id,locked_context_hash,response,committed_at)
-                  values(gen_random_uuid(),:actor,:action,gen_random_uuid(),'sha256:'||repeat('a',64),
+                  values(:receipt_id,:actor,:action,gen_random_uuid(),'sha256:'||repeat('a',64),
                          :task,'committed',:assignment,:contributor,:hash,'{}'::jsonb,now())"""),
                     params,
                 )
@@ -54,14 +56,18 @@ async def test_pending_create_requires_task_by_commit(task_client):
     project = await create_active_project(task_client)
     existing = await create_draft_task(task_client, project["id"])
     for insert_task in (False, True):
-        task_id = str(uuid4())
+        task_id = str(new_record_id())
         async with db_session.get_session_factory()() as session:
             await session.execute(
                 text("""insert into task_command_receipts
               (id,actor_profile_id,action_id,idempotency_key,request_digest,task_id,status)
-              values(gen_random_uuid(),:actor,'project.task.create',gen_random_uuid(),
+              values(:receipt_id,:actor,'project.task.create',gen_random_uuid(),
                      'sha256:'||repeat('a',64),:task,'pending')"""),
-                {"actor": existing["created_by"], "task": task_id},
+                {
+                    "receipt_id": new_record_id(),
+                    "actor": existing["created_by"],
+                    "task": task_id,
+                },
             )
             if insert_task:
                 await session.execute(
@@ -86,9 +92,13 @@ async def test_missing_task_proof_detects_removed_custody_guard(task_client):
             await session.execute(
                 text("""insert into task_command_receipts
               (id,actor_profile_id,action_id,idempotency_key,request_digest,task_id,status)
-              values(gen_random_uuid(),:actor,'project.task.create',gen_random_uuid(),
+              values(:receipt_id,:actor,'project.task.create',gen_random_uuid(),
                      'sha256:'||repeat('a',64),:task,'pending')"""),
-                {"actor": task["created_by"], "task": str(uuid4())},
+                {
+                    "receipt_id": new_record_id(),
+                    "actor": task["created_by"],
+                    "task": str(new_record_id()),
+                },
             )
             await session.execute(text("set constraints all immediate"))
 
@@ -111,7 +121,7 @@ async def insert_audit_copy(session, row, *, rejected):
     import json
 
     candidate = json.loads(json.dumps(row))
-    candidate["id"] = str(uuid4())
+    candidate["id"] = str(new_record_id())
     transaction = await session.begin_nested()
     try:
         statement = text(

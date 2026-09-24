@@ -2,7 +2,8 @@
 
 from contextlib import asynccontextmanager
 import json
-from uuid import uuid4
+from types import SimpleNamespace
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -83,8 +84,8 @@ class Harness:
     async def append(self, **changes):
         event = _event(changes.pop("project_id", self.project), **changes)
         async with self.factory() as session, session.begin():
-            await OutboxService(session).append(event)
-        return event
+            result = await OutboxService(session).append(event)
+        return SimpleNamespace(event_id=result.event_id, **event.model_dump())
 
     async def claim(self, **changes):
         event = await self.append(**changes)
@@ -110,7 +111,7 @@ class Harness:
 async def delivery_harness(outbox_factory):  # noqa: F811 - pytest fixture injection
     factory, project = outbox_factory
     h = Harness(factory, project)
-    h.actor_id, h.link_id = uuid4(), uuid4()
+    h.actor_id, h.link_id = new_record_id(), new_record_id()
     async with factory() as session, session.begin():
         session.add(ActorProfile(
             id=str(h.actor_id), actor_kind="service", status="active",
@@ -129,6 +130,6 @@ async def delivery_harness(outbox_factory):  # noqa: F811 - pytest fixture injec
 async def phase_decision(session, facts):
     """Real PREP evidence for direct-SQL tests of independent custody guards."""
     async with outbox_dispatch_authorization(session).prepare_outbox_dispatch(
-        facts=facts, request_id=uuid4(), correlation_id=uuid4(),
+        facts=facts, request_id=new_record_id(), correlation_id=new_record_id(),
     ) as prepared:
         return str((await prepared.consume(facts)).decision_id)

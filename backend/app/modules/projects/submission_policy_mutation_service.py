@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from typing import Literal, cast
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import UUID
 
 from pydantic import JsonValue
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.hashing import canonical_json_hash
+from app.core.identifiers import new_record_id
 from app.modules.actors.service import ResolvedActor
 from app.modules.authorization.prepared import PreparedAuthorizationService
 from app.modules.authorization.runtime import (
@@ -116,30 +117,6 @@ class SubmissionPolicyMutationService:
         self._projects = ProjectRepository(session)
         self._admin = AdminAuthorizationRepository(session)
         self._validation = ProjectService(session)
-
-    @staticmethod
-    def _stable_uuid(*parts: object) -> UUID:
-        return uuid5(NAMESPACE_URL, "workstream:submission-policy:" + ":".join(map(str, parts)))
-
-    def _operation_identity(
-        self,
-        *,
-        action: ActionId,
-        resolved: ResolvedActor,
-        project_id: UUID,
-        predecessor_id: UUID | None,
-        key: UUID,
-    ) -> tuple[UUID, UUID]:
-        """Derive the stable operation and committed-policy identities once."""
-        parts = (
-            action.value,
-            resolved.profile.id,
-            resolved.identity_link.id,
-            project_id,
-            predecessor_id or "create",
-            key,
-        )
-        return self._stable_uuid("operation", *parts), self._stable_uuid("policy", *parts)
 
     @staticmethod
     def _prove_human_authority(decision, project_id: UUID) -> None:
@@ -434,16 +411,33 @@ class SubmissionPolicyMutationService:
             if predecessor_id is not None
             else "POST /api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies"
         )
-        operation_id, committed_policy_id = self._operation_identity(
-            action=action,
-            resolved=resolved,
-            project_id=project_id,
-            predecessor_id=predecessor_id,
-            key=key,
-        )
         canonical_body, policy_hash = self._validation.canonical_manual_submission_policy_body(
             policy_body
         )
+        existing = await self._replay.find_human_namespace(
+            actor_profile_id=resolved.profile.id,
+            idempotency_key=key,
+        )
+        if existing is not None:
+            replayed = await self._existing_manual_replay(
+                resolved=resolved,
+                prepared=prepared,
+                key=key,
+                action=action,
+                project_id=project_id,
+                guide_id=guide_id,
+                selected_policy_id=predecessor_id,
+                successor_policy_version=policy_version,
+                expected_policy_hash=expected_policy_hash,
+                source_snapshot_id=source_snapshot_id,
+                policy_body=canonical_body,
+                change_summary=change_summary,
+                replay=existing,
+            )
+            if replayed is None:
+                raise SubmissionPolicyMutationConflict("idempotency_mismatch")
+            return replayed
+        operation_id, committed_policy_id = new_record_id(), new_record_id()
         initial = await self._lineage(
             project_id,
             guide_id,
@@ -491,6 +485,32 @@ class SubmissionPolicyMutationService:
             request_value=cast(JsonValue, initial_resource.model_dump(mode="json")),
         )
         handle = await self._prepare(prepared, action, caller, project_id, initial_resource)
+        locked_project = await self._projects.get_project(str(project_id), for_update=True)
+        if locked_project is None:
+            raise GuideNotFound("project not found")
+        existing = await self._replay.find_human_namespace(
+            actor_profile_id=resolved.profile.id,
+            idempotency_key=key,
+        )
+        if existing is not None:
+            replayed = await self._existing_manual_replay(
+                resolved=resolved,
+                prepared=prepared,
+                key=key,
+                action=action,
+                project_id=project_id,
+                guide_id=guide_id,
+                selected_policy_id=predecessor_id,
+                successor_policy_version=policy_version,
+                expected_policy_hash=expected_policy_hash,
+                source_snapshot_id=source_snapshot_id,
+                policy_body=canonical_body,
+                change_summary=change_summary,
+                replay=existing,
+            )
+            if replayed is None:
+                raise SubmissionPolicyMutationConflict("idempotency_mismatch")
+            return replayed
         final = await self._lineage(
             project_id,
             guide_id,
@@ -505,7 +525,7 @@ class SubmissionPolicyMutationService:
         final_resource = self._resource(
             project_id=project_id,
             guide_id=guide_id,
-            policy_id=resource_policy_id,
+            policy_id=predecessor_id or committed_policy_id,
             policy_version=final.predecessor_version or policy_version,
             successor_id=committed_policy_id if predecessor_id is not None else None,
             successor_version=policy_version if predecessor_id is not None else None,
@@ -530,15 +550,7 @@ class SubmissionPolicyMutationService:
             policy_id=str(committed_policy_id),
             setup_generation=final.setup_generation,
         )
-        disposition, replay = await self.reserve_replay(facts)
-        if disposition == "replayed":
-            if replay.response_json is None or replay.committed_policy_id != str(
-                committed_policy_id
-            ):
-                raise SubmissionPolicyMutationConflict("idempotency_mismatch")
-            return SubmissionPolicyMutationOutcome(
-                SubmissionArtifactPolicyResponse.model_validate(replay.response_json), True
-            )
+        disposition, _replay = await self.reserve_replay(facts)
         if disposition != "claimed":
             raise SubmissionPolicyMutationConflict(f"idempotency_{disposition}")
         policy = SubmissionArtifactPolicy(
@@ -593,34 +605,23 @@ class SubmissionPolicyMutationService:
         self,
         *,
         resolved: ResolvedActor,
+        prepared: PreparedAuthorizationService,
         key: UUID,
         action: ActionId,
         project_id: UUID,
         guide_id: UUID,
-        selected_policy_id: UUID,
-        successor_policy_id: UUID | None,
+        selected_policy_id: UUID | None,
         successor_policy_version: str,
         expected_policy_hash: str | None,
         source_snapshot_id: UUID | None,
         policy_body: dict | None,
         change_summary: str | None,
+        replay: SubmissionPolicyMutationIdempotencyRecord | None = None,
     ) -> SubmissionPolicyMutationOutcome | None:
-        """Classify an existing operation without coupling replay to live lineage."""
-        operation_id, derived_policy_id = self._operation_identity(
-            action=action,
-            resolved=resolved,
-            project_id=project_id,
-            predecessor_id=(
-                selected_policy_id
-                if action is ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_UPDATE
-                else None
-            ),
-            key=key,
+        """Reauthorize one exact stored operation without coupling replay to live lineage."""
+        replay = replay or await self._replay.find_human_namespace(
+            actor_profile_id=resolved.profile.id, idempotency_key=key
         )
-        expected_committed_id = successor_policy_id or selected_policy_id
-        if expected_committed_id != derived_policy_id:
-            raise SubmissionPolicyMutationConflict("idempotency_mismatch")
-        replay = await self._replay.find_by_operation(operation_id)
         if replay is None:
             return None
         if (
@@ -635,6 +636,11 @@ class SubmissionPolicyMutationService:
         resource = ProjectSubmissionArtifactPolicyMutationResourceContext.model_validate_json(
             json.dumps(replay.resource_context_json)
         )
+        if replay.status == "pending":
+            raise SubmissionPolicyMutationConflict("idempotency_pending")
+        if replay.committed_policy_id is None:
+            raise SubmissionPolicyMutationConflict("idempotency_mismatch")
+        committed_policy_id = UUID(replay.committed_policy_id)
         response = (
             SubmissionArtifactPolicyResponse.model_validate(replay.response_json)
             if replay.status == "committed" and replay.response_json is not None
@@ -642,7 +648,9 @@ class SubmissionPolicyMutationService:
         )
         snapshot_id = source_snapshot_id or resource.source_snapshot_id
         predecessor = None
-        if policy_body is None or (change_summary is None and response is None):
+        if response is None and (policy_body is None or change_summary is None):
+            if selected_policy_id is None:
+                raise SubmissionPolicyMutationConflict("idempotency_mismatch")
             predecessor = await self._projects.get_submission_artifact_policy(
                 str(selected_policy_id)
             )
@@ -686,8 +694,16 @@ class SubmissionPolicyMutationService:
             key=key,
             project_id=project_id,
             guide_id=guide_id,
-            policy_id=selected_policy_id,
-            successor_id=successor_policy_id,
+            policy_id=(
+                committed_policy_id
+                if action is ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_CREATE
+                else selected_policy_id
+            ),
+            successor_id=(
+                committed_policy_id
+                if action is ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_UPDATE
+                else None
+            ),
             successor_version=successor_policy_version,
             source_snapshot_id=snapshot_id,
             body=body,
@@ -697,22 +713,34 @@ class SubmissionPolicyMutationService:
         )
         if (
             resource.target_kind != expected_target
-            or resource.operation_id != operation_id
+            or resource.operation_id != replay.operation_id
             or resource.request_digest != expected_digest
             or replay.request_digest != expected_digest
             or replay.resource_context_digest != authorization_resource_digest(resource)
             or resource.scope_project_id != project_id
             or resource.guide_id != guide_id
             or resource.source_snapshot_id != snapshot_id
-            or resource.policy_id != selected_policy_id
+            or resource.policy_id
+            != (
+                committed_policy_id
+                if action is ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_CREATE
+                else selected_policy_id
+            )
             or resource.policy_digest != expected_policy_hash
-            or resource.successor_policy_id != successor_policy_id
+            or resource.successor_policy_id
+            != (
+                committed_policy_id
+                if action is ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_UPDATE
+                else None
+            )
             or resource.successor_policy_version
-            != (successor_policy_version if successor_policy_id is not None else None)
+            != (
+                successor_policy_version
+                if action is ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_UPDATE
+                else None
+            )
         ):
             raise SubmissionPolicyMutationConflict("idempotency_mismatch")
-        if replay.status == "pending":
-            raise SubmissionPolicyMutationConflict("idempotency_pending")
         if response is None or replay.committed_policy_id is None:
             raise SubmissionPolicyMutationConflict("idempotency_mismatch")
         committed = await self._projects.get_submission_artifact_policy(replay.committed_policy_id)
@@ -727,6 +755,13 @@ class SubmissionPolicyMutationService:
             or committed.creation_action_id != action.value
         ):
             raise SubmissionPolicyMutationConflict("idempotency_mismatch")
+        caller = PreparedAuthorizationInput(
+            idempotency_key=key,
+            request_value=cast(JsonValue, resource.model_dump(mode="json")),
+        )
+        handle = await self._prepare(prepared, action, caller, project_id, resource)
+        decision = await prepared.consume(handle, action, caller, resource)
+        self._prove_human_authority(decision, project_id)
         return SubmissionPolicyMutationOutcome(response, True)
 
     async def create_manual(
@@ -740,31 +775,7 @@ class SubmissionPolicyMutationService:
     ) -> SubmissionPolicyMutationOutcome:
         """Create one manually authored policy draft under exact PM authority."""
         source_snapshot_id = payload.source_snapshot_id
-        action = ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_CREATE
-        _operation_id, policy_id = self._operation_identity(
-            action=action,
-            resolved=resolved,
-            project_id=project_id,
-            predecessor_id=None,
-            key=key,
-        )
         await self._require_pm_admission(resolved=resolved, project_id=project_id)
-        replay = await self._existing_manual_replay(
-            resolved=resolved,
-            key=key,
-            action=action,
-            project_id=project_id,
-            guide_id=guide_id,
-            selected_policy_id=policy_id,
-            successor_policy_id=None,
-            successor_policy_version=payload.policy_version,
-            expected_policy_hash=None,
-            source_snapshot_id=source_snapshot_id,
-            policy_body=payload.policy_body.model_dump(mode="json"),
-            change_summary=payload.change_summary,
-        )
-        if replay is not None:
-            return replay
         return await self._manual_mutation(
             resolved=resolved,
             prepared=prepared,
@@ -790,35 +801,34 @@ class SubmissionPolicyMutationService:
         payload: SubmissionArtifactPolicyUpdate,
     ) -> SubmissionPolicyMutationOutcome:
         """Append one authorized replacement for a selected manual draft."""
-        action = ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_UPDATE
-        _operation_id, successor_id = self._operation_identity(
-            action=action,
-            resolved=resolved,
-            project_id=project_id,
-            predecessor_id=policy_id,
-            key=key,
-        )
         await self._require_pm_admission(resolved=resolved, project_id=project_id)
-        replay = await self._existing_manual_replay(
-            resolved=resolved,
-            key=key,
-            action=action,
-            project_id=project_id,
-            guide_id=guide_id,
-            selected_policy_id=policy_id,
-            successor_policy_id=successor_id,
-            successor_policy_version=payload.successor_policy_version,
-            expected_policy_hash=payload.expected_policy_hash,
-            source_snapshot_id=None,
-            policy_body=(
-                payload.policy_body.model_dump(mode="json")
-                if payload.policy_body is not None
-                else None
-            ),
-            change_summary=payload.change_summary,
+        existing = await self._replay.find_human_namespace(
+            actor_profile_id=resolved.profile.id,
+            idempotency_key=key,
         )
-        if replay is not None:
-            return replay
+        if existing is not None:
+            replayed = await self._existing_manual_replay(
+                resolved=resolved,
+                prepared=prepared,
+                key=key,
+                action=ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_UPDATE,
+                project_id=project_id,
+                guide_id=guide_id,
+                selected_policy_id=policy_id,
+                successor_policy_version=payload.successor_policy_version,
+                expected_policy_hash=payload.expected_policy_hash,
+                source_snapshot_id=None,
+                policy_body=(
+                    payload.policy_body.model_dump(mode="json")
+                    if payload.policy_body is not None
+                    else None
+                ),
+                change_summary=payload.change_summary,
+                replay=existing,
+            )
+            if replayed is None:
+                raise SubmissionPolicyMutationConflict("idempotency_mismatch")
+            return replayed
         predecessor = await self._projects.get_submission_artifact_policy(str(policy_id))
         if (
             predecessor is None

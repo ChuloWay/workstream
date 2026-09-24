@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.identifiers import new_record_id
 from app.modules.actors.models import (
     ActorIdentityLink,
     ActorProfile,
@@ -28,7 +29,7 @@ from app.modules.audit.schemas import (
 )
 from app.modules.audit.service import AuditService
 from app.modules.authorization.runtime import ActorSelfResourceContext
-from app.schemas.auth import ActorContext, VerifiedIssuerToken, actor_id_from_external_identity
+from app.schemas.auth import ActorContext, VerifiedIssuerToken
 
 
 class ActorRegistryError(Exception):
@@ -160,7 +161,7 @@ class ActorService:
         if resolved is not None:
             return await self._touch_verified_actor(resolved)
 
-        profile_id = actor_id_from_external_identity(token.issuer, token.subject)
+        profile_id = str(new_record_id())
         profile = ActorProfile(
             id=profile_id,
             actor_kind="human",
@@ -172,7 +173,7 @@ class ActorService:
             last_seen_at=func.now(),
         )
         link = ActorIdentityLink(
-            id=str(uuid4()),
+            id=str(new_record_id()),
             actor_profile_id=profile_id,
             issuer=token.issuer,
             subject=token.subject,
@@ -433,7 +434,7 @@ class ActorService:
         }
         await self._audit.add_authority_event(
             AuthorityAuditEventInput(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 event_type=AuthorityEventType.ACTOR_PROFILE_PROVISIONED,
                 entity_type="actor_profile",
                 entity_id=profile.id,
@@ -452,7 +453,7 @@ class ActorService:
         )
         await self._audit.add_authority_event(
             AuthorityAuditEventInput(
-                event_id=uuid4(),
+                event_id=new_record_id(),
                 event_type=AuthorityEventType.ACTOR_IDENTITY_LINKED,
                 entity_type="actor_identity_link",
                 entity_id=link.id,

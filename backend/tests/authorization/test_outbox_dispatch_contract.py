@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.core.identifiers import new_record_id
 from app.modules.actors.api import ServiceIdentity
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.authorization.api import (
@@ -167,7 +168,7 @@ async def test_dispatch_service_admission(clean_postgres_database):
                 await admit(ServiceIdentity.OUTBOX_DISPATCHER, ActionId.OUTBOX_DISPATCH)
             assert missing.value.denial_code is AuthorizationDenialCode.ACTOR_NOT_FOUND
             for identity in (ServiceIdentity.OUTBOX_DISPATCHER, ServiceIdentity.ARTIFACT_VERIFIER):
-                actor_id, link_id = str(uuid4()), str(uuid4())
+                actor_id, link_id = str(new_record_id()), str(new_record_id())
                 session.add(ActorProfile(id=actor_id, actor_kind='service', status='active',
                     provisioning_method='manual_service_provisioning', service_identity=identity.value,
                     created_by=actor_id))

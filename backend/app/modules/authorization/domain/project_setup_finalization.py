@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 import json
 from typing import Any, Literal, TYPE_CHECKING
 from uuid import UUID
@@ -12,8 +11,8 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from app.modules.authorization.api.project_setup_finalization import (
     ProjectSetupFinalizationFacts,
     ProjectSetupFinalizationLocator,
+    setup_finalization_preparation_identity,
     setup_finalization_authority_digest,
-    setup_finalization_identity,
 )
 from app.modules.authorization.catalogue import ActionId
 
@@ -30,8 +29,9 @@ class ProjectSetupFinalizationPrepareContext(BaseModel):
     model_config = _STRICT
     binding_kind: Literal["project_guide_setup_finalization"] = "project_guide_setup_finalization"
     project_id: UUID
-    operation_id: UUID
-    correlation_id: UUID
+    setup_run_id: UUID
+    setup_generation: int
+    compilation_id: UUID
     actor_profile_id: UUID
     identity_link_id: UUID
     service_identity: Literal["workstream.project.setup"] = "workstream.project.setup"
@@ -51,13 +51,8 @@ class ProjectSetupFinalizationResourceContext(BaseModel):
 
     @model_validator(mode="after")
     def require_exact_identity(self):
-        """Revalidate public scalars and deterministic identity without private POL reads."""
-        facts = replace(self.facts)
-        identity = setup_finalization_identity(
-            facts.setup_run_id, facts.setup_generation, facts.compilation_id
-        )
-        if identity != (facts.finalization_id, facts.operation_id, facts.correlation_id):
-            raise ValueError("finalization identity is inconsistent")
+        """Bind generated identities to the exact natural selector and project."""
+        facts = self.facts
         if self.resource_id != facts.finalization_id or self.scope_project_id != facts.project_id:
             raise ValueError("finalization resource identity is inconsistent")
         return self
@@ -69,8 +64,9 @@ def finalization_prepare_context(
     """Create the narrow preparation binding from canonical resolved identity."""
     return ProjectSetupFinalizationPrepareContext(
         project_id=locator.project_id,
-        operation_id=locator.operation_id,
-        correlation_id=locator.correlation_id,
+        setup_run_id=locator.setup_run_id,
+        setup_generation=locator.setup_generation,
+        compilation_id=locator.compilation_id,
         actor_profile_id=actor_profile_id,
         identity_link_id=identity_link_id,
     )
@@ -110,8 +106,9 @@ def finalization_context_matches(prepared: dict | None, resource: object) -> boo
         return prepared == finalization_prepare_context(
             ProjectSetupFinalizationLocator(
                 project_id=resource.scope_project_id,
-                operation_id=resource.facts.operation_id,
-                correlation_id=resource.facts.correlation_id,
+                setup_run_id=resource.facts.setup_run_id,
+                setup_generation=resource.facts.setup_generation,
+                compilation_id=resource.facts.compilation_id,
             ),
             resource.actor_profile_id,
             resource.identity_link_id,
@@ -143,14 +140,17 @@ def parse_finalization_prepare(
     if not tagged:
         raise ValueError("finalization preparation is required")
     parsed = ProjectSetupFinalizationPrepareContext.model_validate_json(json.dumps(request_value))
+    expected_request_id, expected_correlation_id = setup_finalization_preparation_identity(
+        parsed.setup_run_id, parsed.setup_generation, parsed.compilation_id
+    )
     if (
         parsed.actor_profile_id != actor_profile_id
         or parsed.identity_link_id != identity_link_id
         or parsed.service_identity != service_identity
         or parsed.project_id != scope_project_id
-        or parsed.operation_id != request_id
-        or parsed.correlation_id != correlation_id
-        or parsed.operation_id != idempotency_key
+        or request_id != expected_request_id
+        or correlation_id != expected_correlation_id
+        or idempotency_key != expected_request_id
     ):
         raise ValueError("finalization preparation differs from private custody")
     return parsed.model_dump(mode="json")

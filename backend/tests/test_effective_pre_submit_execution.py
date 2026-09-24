@@ -3,7 +3,8 @@
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -54,26 +55,26 @@ def _sha(character: str) -> str:
 
 def _context() -> PreSubmitEvidenceContext:
     return PreSubmitEvidenceContext(
-        actor_profile_id=uuid4(),
-        identity_link_id=uuid4(),
-        project_id=uuid4(),
-        task_id=uuid4(),
-        assignment_id=uuid4(),
+        actor_profile_id=new_record_id(),
+        identity_link_id=new_record_id(),
+        project_id=new_record_id(),
+        task_id=new_record_id(),
+        assignment_id=new_record_id(),
         predecessor_submission_id=None,
         predecessor_submission_version=None,
-        prepared_generation_id=uuid4(),
+        prepared_generation_id=new_record_id(),
         archive_sha256=_sha("1"),
         archive_byte_count=1024,
-        semantic_manifest_id=uuid4(),
+        semantic_manifest_id=new_record_id(),
         semantic_manifest_sha256=_sha("2"),
-        guide_id=uuid4(),
+        guide_id=new_record_id(),
         guide_version="1",
-        source_snapshot_id=uuid4(),
+        source_snapshot_id=new_record_id(),
         source_snapshot_sha256=_sha("8"),
         locked_guide_sha256=_sha("3"),
-        effective_policy_id=uuid4(),
+        effective_policy_id=new_record_id(),
         locked_artifact_policy_sha256=_sha("4"),
-        pre_submit_policy_id=uuid4(),
+        pre_submit_policy_id=new_record_id(),
         locked_checker_policy_sha256=_sha("5"),
         catalogue_id="workstream.pre_submission_checkers",
         catalogue_version="v0.1",
@@ -87,7 +88,7 @@ def test_evidence_operation_identity_binds_every_custody_fact() -> None:
     identity = context.operation_identity(attempt_id=UUID(int=1), attempt_request_digest=_sha("9"), effective_plan_sha256=_sha("7"))
 
     assert identity == context.operation_identity(attempt_id=UUID(int=1), attempt_request_digest=_sha("9"), effective_plan_sha256=_sha("7"))
-    assert identity != replace(context, prepared_generation_id=uuid4()).operation_identity(
+    assert identity != replace(context, prepared_generation_id=new_record_id()).operation_identity(
         attempt_id=UUID(int=1), attempt_request_digest=_sha("9"), effective_plan_sha256=_sha("7")
     )
     assert identity != context.operation_identity(attempt_id=UUID(int=1), attempt_request_digest=_sha("9"), effective_plan_sha256=_sha("8"))
@@ -100,11 +101,11 @@ def test_evidence_operation_identity_binds_every_custody_fact() -> None:
 
 
 def test_post_byte_relock_rejects_advanced_predecessor_version() -> None:
-    predecessor_id = uuid4()
+    predecessor_id = new_record_id()
     task_context = TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
-        task_id=uuid4(),
-        assignment_id=uuid4(),
-        contributor_id=uuid4(),
+        task_id=new_record_id(),
+        assignment_id=new_record_id(),
+        contributor_id=new_record_id(),
         status="needs_revision",
         kind="revision",
         predecessor=SubmissionPredecessorFacts(
@@ -112,13 +113,13 @@ def test_post_byte_relock_rejects_advanced_predecessor_version() -> None:
             version=2,
         ),
         locked_project_context=TaskLockedProjectContextReferences(locked_contribution_policy_version_id=UUID(int=100),
-            project_id=uuid4(),
+            project_id=new_record_id(),
             guide_version="1",
-            source_snapshot_id=uuid4(),
+            source_snapshot_id=new_record_id(),
             source_snapshot_hash=_sha("1"),
-            effective_policy_id=uuid4(),
+            effective_policy_id=new_record_id(),
             effective_policy_hash=_sha("2"),
-            pre_submit_policy_id=uuid4(),
+            pre_submit_policy_id=new_record_id(),
             pre_submit_policy_bundle_hash=_sha("3"),
         ),
     )
@@ -137,8 +138,8 @@ def test_semantic_manifest_identity_is_server_deterministic() -> None:
 
 
 def test_pass_capability_is_generation_bound_and_single_use() -> None:
-    evidence_set_id = uuid4()
-    generation_id = uuid4()
+    evidence_set_id = new_record_id()
+    generation_id = new_record_id()
     capability = PreSubmitEvidenceService(
         SimpleNamespace(),
         task_contexts=SimpleNamespace(),
@@ -155,7 +156,7 @@ def test_pass_capability_is_generation_bound_and_single_use() -> None:
 
     with pytest.raises(PreSubmitEvidenceConflict, match="pre_submit_pass_capability_invalid"):
         capability.consume(
-            prepared_generation_id=uuid4(),
+            prepared_generation_id=new_record_id(),
             predecessor_submission_id=None,
             effective_plan_sha256=_sha("7"),
             archive_sha256=_sha("1"),
@@ -300,15 +301,15 @@ def test_compiler_rejects_duplicate_policy_keys_and_projected_paths() -> None:
 
 @pytest.mark.asyncio
 async def test_locked_context_revalidates_identity_assignment_and_policy_lineage() -> None:
-    actor_id = uuid4()
-    identity_link_id = uuid4()
-    project_id = uuid4()
-    task_id = uuid4()
-    assignment_id = uuid4()
-    guide_id = uuid4()
-    effective_policy_id = uuid4()
-    checker_policy_id = uuid4()
-    source_snapshot_id = uuid4()
+    actor_id = new_record_id()
+    identity_link_id = new_record_id()
+    project_id = new_record_id()
+    task_id = new_record_id()
+    assignment_id = new_record_id()
+    guide_id = new_record_id()
+    effective_policy_id = new_record_id()
+    checker_policy_id = new_record_id()
+    source_snapshot_id = new_record_id()
     session = SimpleNamespace(
         scalar=AsyncMock(
             side_effect=[
@@ -371,7 +372,7 @@ async def test_locked_context_revalidates_identity_assignment_and_policy_lineage
 
 @pytest.mark.asyncio
 async def test_locked_context_rejects_revoked_identity_before_policy_reads() -> None:
-    actor_id = uuid4()
+    actor_id = new_record_id()
     session = SimpleNamespace(
         scalar=AsyncMock(
             side_effect=[
@@ -387,9 +388,9 @@ async def test_locked_context_rejects_revoked_identity_before_policy_reads() -> 
         await load_locked_pre_submit_context(
             session,
             actor_profile_id=actor_id,
-            identity_link_id=uuid4(),
-            task_id=uuid4(),
-            assignment_id=uuid4(),
+            identity_link_id=new_record_id(),
+            task_id=new_record_id(),
+            assignment_id=new_record_id(),
             predecessor_submission_id=None,
         )
 
@@ -397,11 +398,11 @@ async def test_locked_context_rejects_revoked_identity_before_policy_reads() -> 
 
 
 def test_failure_audit_projection_is_bounded_and_path_free() -> None:
-    actor_id = uuid4()
-    project_id = uuid4()
-    task_id = uuid4()
-    generation_id = uuid4()
-    evidence = PersistedPreSubmitEvidence(uuid4(), _sha("1"), False)
+    actor_id = new_record_id()
+    project_id = new_record_id()
+    task_id = new_record_id()
+    generation_id = new_record_id()
+    evidence = PersistedPreSubmitEvidence(new_record_id(), _sha("1"), False)
     execution = PreSubmitExecutionResult(
         custody=PreSubmitExecutionCustody(
             prepared_generation_id=generation_id,
@@ -491,14 +492,14 @@ def test_result_validation_rejects_failure_code_on_non_failed_result() -> None:
     policy_hash = canonical_json_hash(effective_policy)
     compiled = compile_effective_project_submission_artifact_policy(effective_policy, policy_hash)
     lineage = EffectivePreSubmissionPlanLineage(
-        project_id=uuid4(),
-        guide_id=uuid4(),
+        project_id=new_record_id(),
+        guide_id=new_record_id(),
         guide_version="1",
-        source_snapshot_id=uuid4(),
+        source_snapshot_id=new_record_id(),
         source_snapshot_hash=_sha("a"),
-        effective_policy_id=uuid4(),
+        effective_policy_id=new_record_id(),
         effective_policy_hash=policy_hash,
-        pre_submit_policy_id=uuid4(),
+        pre_submit_policy_id=new_record_id(),
         pre_submit_policy_bundle_hash=compiled.compiled_bundle_hash,
     )
     plan = compile_effective_pre_submission_execution_plan(
@@ -510,7 +511,7 @@ def test_result_validation_rejects_failure_code_on_non_failed_result() -> None:
     forged = PreSubmissionExecutionResult(
         plan_sha256=plan.plan_sha256,
         custody=PreSubmissionExecutionCustody(
-            prepared_generation_id=uuid4(),
+            prepared_generation_id=new_record_id(),
             archive_sha256=_sha("b"),
             archive_byte_count=1,
             semantic_manifest_sha256=_sha("c"),

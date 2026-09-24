@@ -1,7 +1,7 @@
 """Focused PostgreSQL setup helpers for submission-preparation AUTH proof."""
 
 import json
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import text
 
@@ -21,7 +21,7 @@ async def install_submitter_grant(connection, params) -> None:
     async with AsyncSession(bind=connection, expire_on_commit=False) as session:
         bootstrap = await ensure_fixture_bootstrap(session)
         authorizer_id, admin_grant_id = bootstrap.target_actor_profile_id, bootstrap.id
-    qualification_id, project_grant_id = uuid4(), uuid4()
+    qualification_id, project_grant_id = new_record_id(), new_record_id()
     await connection.execute(
         text(
             "insert into project_role_qualification_snapshots "

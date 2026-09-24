@@ -31,15 +31,19 @@ FINALIZATION_RESOURCE = "project_guide_setup_finalization"
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ProjectSetupFinalizationLocator:
-    """Non-locking project and deterministic operation selectors for preflight."""
+    """Stable natural selector known before PROJECTS takes owner locks."""
 
     project_id: UUID
-    operation_id: UUID
-    correlation_id: UUID
+    setup_run_id: UUID
+    setup_generation: int
+    compilation_id: UUID
 
     def __post_init__(self) -> None:
         """Require parsed identities."""
-        if not all(isinstance(value, UUID) for value in (self.project_id, self.operation_id, self.correlation_id)):
+        if not all(
+            isinstance(value, UUID)
+            for value in (self.project_id, self.setup_run_id, self.compilation_id)
+        ) or type(self.setup_generation) is not int or self.setup_generation <= 0:
             raise ValueError("finalization locator IDs must be UUIDs")
 
 
@@ -97,6 +101,8 @@ class ProjectSetupFinalizationFacts:
                     raise ValueError(f"{field.name} must be a UUID")
             elif not isinstance(value, str) or not value.strip() or len(value) > 160:
                 raise ValueError(f"{field.name} must be a bounded string")
+        if any(value.version != 7 for value in (self.finalization_id, self.operation_id)):
+            raise ValueError("finalization record identities must be UUIDv7")
         policy = (
             self.artifact_policy_operation_id,
             self.artifact_policy_id,
@@ -198,10 +204,10 @@ class SetupFinalizationAuthorizationPort(Protocol):
     ) -> AbstractAsyncContextManager[PreparedSetupFinalization]: ...
 
 
-def setup_finalization_identity(
+def setup_finalization_preparation_identity(
     setup_run_id: UUID, setup_generation: int, compilation_id: UUID
-) -> tuple[UUID, UUID, UUID]:
-    """Derive receipt, operation and correlation IDs in the fixed URL namespace."""
+) -> tuple[UUID, UUID]:
+    """Derive non-row AUTH request/correlation selectors for natural custody."""
     if (
         not isinstance(setup_run_id, UUID)
         or not isinstance(compilation_id, UUID)
@@ -210,9 +216,9 @@ def setup_finalization_identity(
     ):
         raise ValueError("finalization identity seed is invalid")
     seed = f"{setup_run_id}:{setup_generation}:{compilation_id}"
-    return tuple(
-        uuid5(NAMESPACE_URL, f"workstream.project-guide-setup-finalization:{kind}:{seed}")
-        for kind in ("receipt", "operation", "correlation")
+    return (
+        uuid5(NAMESPACE_URL, f"workstream.project-guide-setup-finalization:operation:{seed}"),
+        uuid5(NAMESPACE_URL, f"workstream.project-guide-setup-finalization:correlation:{seed}"),
     )
 
 
@@ -280,7 +286,7 @@ __all__ = (
     "ProjectSetupFinalizationLocator",
     "ProjectSetupFinalizationFacts",
     "ProjectSetupFinalizationAuthorityReceipt",
-    "setup_finalization_identity",
+    "setup_finalization_preparation_identity",
     "setup_finalization_fact_values",
     "setup_finalization_facts_digest",
     "setup_finalization_authority_digest",

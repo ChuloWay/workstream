@@ -9,10 +9,9 @@ from app.core.config import get_settings
 
 from app.adapters.tasks import task_service
 
-from uuid import uuid4
-
 from sqlalchemy import select
 
+from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from app.modules.actors.models import ActorIdentityLink
 from app.modules.tasks.models import EvidenceItem, Submission, TaskAssignment, WorkstreamTask
@@ -27,7 +26,7 @@ async def seed_finalized_submission_for_checker_test(
 ) -> str:
     """Seed one upstream packet, then run real finalization and checker enqueue."""
     packet = SubmissionCreate.model_validate(payload)
-    submission_id = str(uuid4())
+    submission_id = str(new_record_id())
     async with db_session.get_session_factory()() as session:
         task = await session.get(WorkstreamTask, task_id)
         assert task is not None
@@ -64,7 +63,7 @@ async def seed_finalized_submission_for_checker_test(
             artifact_hash_manifest=[entry.model_dump() for entry in packet.artifact_hash_manifest],
             supersedes_submission_id=predecessor_id,
             evidence_items=[EvidenceItem(
-                id=str(uuid4()), submission_id=submission_id, type=item.type,
+                id=str(new_record_id()), submission_id=submission_id, type=item.type,
                 label=item.label, uri=item.uri, hash=item.hash,
                 size_bytes=item.size_bytes, metadata_json=item.metadata,
             ) for item in packet.evidence_items],

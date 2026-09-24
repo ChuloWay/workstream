@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Literal
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -31,7 +32,7 @@ class SubmissionPolicyMutationReplayRepository:
             )
         )
 
-    async def _find_namespace(
+    async def find_human_namespace(
         self,
         *,
         actor_profile_id: str,
@@ -68,7 +69,7 @@ class SubmissionPolicyMutationReplayRepository:
     ]:
         """Reserve or classify one exact immutable replay namespace."""
         values = {
-            "id": uuid4(),
+            "id": new_record_id(),
             "actor_profile_id": actor_profile_id,
             "identity_link_id": identity_link_id,
             "service_identity": None,
@@ -98,7 +99,7 @@ class SubmissionPolicyMutationReplayRepository:
         if record_id is None:
             record = await self.find_by_operation(operation_id)
             if record is None:
-                record = await self._find_namespace(
+                record = await self.find_human_namespace(
                     actor_profile_id=actor_profile_id,
                     idempotency_key=idempotency_key,
                 )

@@ -1,7 +1,7 @@
 """Real registered handlers and reachable counterexamples."""
 
 from dataclasses import replace
-from uuid import uuid4
+from app.core.identifiers import new_record_id
 
 import pytest
 
@@ -88,7 +88,7 @@ async def test_current_policy_context_without_payment(field, kind):
     replacement = None
     if kind == "crossed":
         replacement = (
-            uuid4()
+            new_record_id()
             if field.endswith("_id")
             else 2
             if type(old) is int
@@ -252,4 +252,4 @@ def test_context_rejects_unsupported_or_fabricated_observations(field):
 
     values = request().structural_input.observed_context.model_dump()
     with pytest.raises(ValueError, match="Extra inputs"):
-        ObservedPostSubmitContext.model_validate({**values, field: uuid4()})
+        ObservedPostSubmitContext.model_validate({**values, field: new_record_id()})

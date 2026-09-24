@@ -81,9 +81,16 @@ async def test_policy_tuple_and_transition_shape(monkeypatch, classification):
         "resource_context_digest": receipt.resource_context_digest,
     }
     assert event.resource_id == str(case.facts.finalization_id)
-    assert event.request_id == case.facts.operation_id
-    assert event.correlation_id == case.facts.correlation_id
-    assert case.fixed_calls == [(case.facts.operation_id, case.facts.correlation_id)]
+    from app.modules.authorization.api import setup_finalization_preparation_identity
+
+    request_id, correlation_id = setup_finalization_preparation_identity(
+        case.facts.setup_run_id,
+        case.facts.setup_generation,
+        case.facts.compilation_id,
+    )
+    assert event.request_id == request_id
+    assert event.correlation_id == correlation_id
+    assert case.fixed_calls == [(request_id, correlation_id)]
 
 
 @pytest.mark.parametrize("classification", ["draft_ready", "draft_ready_with_warnings"])
@@ -142,20 +149,24 @@ def test_finalization_rejects_conflicting_classification_outcome(
         replace(case.facts, setup_outcome=outcome)
 
 
-@pytest.mark.parametrize("field", ["finalization_id", "operation_id", "correlation_id"])
-def test_deterministic_finalization_identity_is_exact(monkeypatch, field):
+@pytest.mark.parametrize("field", ["finalization_id", "operation_id"])
+def test_finalization_record_identity_rejects_non_v7(monkeypatch, field):
     case = Case(monkeypatch)
-    changed = replace(case.facts, **{field: uuid4()})
-    with pytest.raises(ValueError, match="finalization identity is inconsistent"):
-        case.resource(changed)
+    with pytest.raises(ValueError, match="record identities must be UUIDv7"):
+        replace(case.facts, **{field: uuid4()})
 
 
-@pytest.mark.parametrize("field", ["project_id", "operation_id", "correlation_id"])
+@pytest.mark.parametrize(
+    "field", ["project_id", "setup_run_id", "setup_generation", "compilation_id"]
+)
 async def test_locator_substitution_reaches_adapter_guard(monkeypatch, field):
     case = Case(monkeypatch)
     from .support import locator_for
 
-    locator = replace(locator_for(case.facts), **{field: uuid4()})
+    locator = replace(
+        locator_for(case.facts),
+        **{field: 2 if field == "setup_generation" else uuid4()},
+    )
     async with case.adapter.prepare_setup_finalization(locator) as prepared:
         with pytest.raises(PreparedAuthorizationInvalid):
             await prepared.consume_new(case.facts)
@@ -167,8 +178,8 @@ async def test_locator_substitution_reaches_adapter_guard(monkeypatch, field):
     [
         "actor_profile_id",
         "identity_link_id",
-        "operation_id",
-        "correlation_id",
+        "setup_run_id",
+        "compilation_id",
         "project_id",
         "idempotency",
     ],
@@ -210,7 +221,7 @@ def test_resource_is_closed_and_deeply_immutable(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "field", ["actor_profile_id", "identity_link_id", "operation_id", "correlation_id"]
+    "field", ["actor_profile_id", "identity_link_id", "setup_run_id", "compilation_id"]
 )
 async def test_consistently_forged_public_pair_cannot_replace_private_custody(monkeypatch, field):
     from .support import locator_for
@@ -220,9 +231,7 @@ async def test_consistently_forged_public_pair_cannot_replace_private_custody(mo
     )
 
     case = Case(monkeypatch)
-    facts = (
-        alternate(case.facts, field) if field in {"operation_id", "correlation_id"} else case.facts
-    )
+    facts = alternate(case.facts, field) if field in {"setup_run_id", "compilation_id"} else case.facts
     actor = uuid4() if field == "actor_profile_id" else case.first.actor_profile_id
     link = uuid4() if field == "identity_link_id" else case.first.identity_link_id
     forged_resource = finalization_resource_context(facts, actor, link)
@@ -232,10 +241,15 @@ async def test_consistently_forged_public_pair_cannot_replace_private_custody(mo
     assert finalization_context_matches(forged_body, forged_resource)
     async with case.prepare() as prepared:
         service = case.services[-1]
+        from app.modules.authorization.api import setup_finalization_preparation_identity
+
+        request_id, _ = setup_finalization_preparation_identity(
+            facts.setup_run_id, facts.setup_generation, facts.compilation_id
+        )
         forged_input = prepared._input.model_copy(
             update={
                 "request_value": forged_body,
-                "idempotency_key": facts.operation_id,
+                "idempotency_key": request_id,
             }
         )
         scope = service._scope_from_resource(ActionId.PROJECT_SETUP_RUN_UPDATE, forged_resource)

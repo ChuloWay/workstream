@@ -174,7 +174,7 @@ async def get_registered_actor(
             error_code="unsupported_subject_kind",
             error_message="Unsupported subject kind",
         )
-    actor = result.legacy_actor()
+    actor = result.legacy_actor(actor_id=resolved.profile.id)
     try:
         if resolved.profile.status == "suspended":
             raise ActorSuspended("Actor is suspended")

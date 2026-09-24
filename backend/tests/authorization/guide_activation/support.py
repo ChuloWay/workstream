@@ -7,6 +7,7 @@ from app.modules.authorization import guide_activation_authorization as adapters
 from app.modules.projects.api.guide_activation import (
     GuideActivationFacts, GuideActivationLocator, GuideActivationReceipt,
 )
+from app.modules.projects.guide_activation.service import activation_authorization_selector
 from tests.authorization.guide_proposals.support import Case as ProposalCase
 from tests.projects.guide_activation.test_contracts import receipt_values
 
@@ -24,11 +25,15 @@ def activation_facts(project_id=None):
         values["command"] = command.model_copy(update={"target": target})
         values["contribution"] = values["contribution"].model_copy(update={"project_id": project_id})
     receipt = GuideActivationReceipt(**values)
+    actor_profile_id = uuid4()
     return GuideActivationFacts(
         locator=GuideActivationLocator(
             project_id=receipt.command.target.proposal.project_id,
             guide_id=receipt.command.target.proposal.guide_id,
-            operation_id=receipt.operation_id, actor_profile_id=uuid4(),
+            operation_id=activation_authorization_selector(
+                actor_profile_id, receipt.command.idempotency_key
+            ),
+            actor_profile_id=actor_profile_id,
             identity_link_id=uuid4(), request_id=uuid4(),
         ),
         receipt=receipt,

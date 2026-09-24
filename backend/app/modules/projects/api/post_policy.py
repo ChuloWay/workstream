@@ -1,7 +1,7 @@
 """Exact post-policy projection, review and decision values; no execution authority."""
 
 from typing import Generic, Literal, Protocol, TypeVar
-from uuid import UUID, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -98,7 +98,24 @@ class PostPolicyReceipt(PostPolicyValue):
             raise ValueError("post-policy correction receipt must be complete or absent")
         if self.correction and self.correction.target_digest != self.target.proposal.digest:
             raise ValueError("post-policy correction predecessor mismatch")
+        if self.operation_id.version != 7:
+            raise ValueError("post-policy operation identity must be UUIDv7")
         return self
+
+
+def post_policy_derive_authorization_selector(upstream_operation_id: UUID) -> UUID:
+    """Return the stable non-row selector for fixed-service derivation PREP."""
+    return uuid5(upstream_operation_id, "post-policy-projection")
+
+
+def post_policy_human_authorization_selector(
+    actor_profile_id: UUID, idempotency_key: UUID, kind: Literal["approve", "correction"]
+) -> UUID:
+    """Return the stable non-row selector for human decision PREP."""
+    return uuid5(
+        NAMESPACE_URL,
+        f"workstream.post-policy-{kind}:{actor_profile_id}:{idempotency_key}",
+    )
 
 
 _PolicyT = TypeVar("_PolicyT", covariant=True)

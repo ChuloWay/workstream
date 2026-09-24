@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import UUID, uuid4
+from uuid import UUID
+from app.core.identifiers import new_record_id
 
 import pytest
 from pydantic import ValidationError
@@ -65,13 +66,13 @@ INTERNAL_ACTIONS = (
 
 def _context() -> HumanAuthorizationContext:
     return HumanAuthorizationContext(
-        actor_profile_id=uuid4(),
+        actor_profile_id=new_record_id(),
         actor_kind=ActorKind.HUMAN,
         actor_status=ActorStatus.ACTIVE,
-        identity_link_id=uuid4(),
+        identity_link_id=new_record_id(),
         identity_link_status=IdentityLinkStatus.ACTIVE,
-        request_id=uuid4(),
-        correlation_id=uuid4(),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
     )
 
 
@@ -103,7 +104,7 @@ async def test_production_operator_authority_denies() -> None:
             authorization_context=_context(),
             facts=ArtifactOperatorAuthorityFacts(
                 resource_type=ArtifactOperatorResourceType.CONTENT,
-                resource_id=str(uuid4()),
+                resource_id=str(new_record_id()),
                 project_ids=(),
                 action_id=ActionId.ARTIFACT_REPLICA_READ,
             ),
@@ -115,7 +116,7 @@ class _WrongEvidenceAuthority:
         return ArtifactOperatorAuthorizationEvidence(
             action_id=ActionId.ARTIFACT_BINDING_READ,
             permission_id=PermissionId.ARTIFACT_BINDING_READ.value,
-            decision_id=uuid4(),
+            decision_id=new_record_id(),
         )
 
 
@@ -128,7 +129,7 @@ async def test_operator_service_rejects_mismatched_authority_evidence() -> None:
             _context(),
             ActionId.ARTIFACT_REPLICA_READ,
             ArtifactOperatorResourceType.CONTENT,
-            str(uuid4()),
+            str(new_record_id()),
             (),
         )
 
@@ -175,7 +176,7 @@ async def test_quota_reconciliation_is_configuration_driven_and_rollback_safe() 
     )
     counter = ArtifactAdmissionScope(
         scope_type="project",
-        scope_id=str(uuid4()),
+        scope_id=str(new_record_id()),
         limit_bytes=100,
         counted_bytes=80,
         cas_version=3,
@@ -183,11 +184,11 @@ async def test_quota_reconciliation_is_configuration_driven_and_rollback_safe() 
     facts = _AdmissionFacts(
         request_type="guide",
         producer_type="actor_profile",
-        producer_ref=str(uuid4()),
+        producer_ref=str(new_record_id()),
         project_id=counter.scope_id,
         guide_id=None,
         task_id=None,
-        guide_source_item_id=str(uuid4()),
+        guide_source_item_id=str(new_record_id()),
         guide_source_snapshot_id=None,
         checker_run_id=None,
         logical_role=None,
@@ -219,8 +220,8 @@ async def test_quota_reconciliation_is_configuration_driven_and_rollback_safe() 
 def test_operator_response_schema_rejects_provider_fields() -> None:
     with pytest.raises(ValidationError):
         ArtifactReplicaResponse(
-            id=uuid4(),
-            content_id=uuid4(),
+            id=new_record_id(),
+            content_id=new_record_id(),
             verification_state="pending",
             availability_state="unknown",
             integrity_state="unknown",
@@ -246,13 +247,13 @@ def test_operator_response_schema_rejects_provider_fields() -> None:
 async def test_binding_resource_resolver_uses_canonical_product_lineage(
     resource_type: str,
 ) -> None:
-    project_id = str(uuid4())
+    project_id = str(new_record_id())
     session = SimpleNamespace(scalar=AsyncMock(return_value=project_id))
     service = ArtifactOperatorService(
         session, _WrongEvidenceAuthority(), Settings(), InProcessArtifactAdmissionMetrics()
     )
 
-    assert await service._binding_resource_project(resource_type, str(uuid4())) == project_id
+    assert await service._binding_resource_project(resource_type, str(new_record_id())) == project_id
     session.scalar.assert_awaited_once()
 
 
@@ -262,12 +263,12 @@ async def test_binding_resource_resolver_fails_closed_for_unknown_type() -> None
         session, _WrongEvidenceAuthority(), Settings(), InProcessArtifactAdmissionMetrics()
     )
 
-    assert await service._binding_resource_project("review", str(uuid4())) is None
+    assert await service._binding_resource_project("review", str(new_record_id())) is None
     session.scalar.assert_not_awaited()
 
 
 def test_operator_page_helpers_are_bounded_and_deduplicate_projects() -> None:
-    first, second, third = (SimpleNamespace(id=str(uuid4())) for _ in range(3))
+    first, second, third = (SimpleNamespace(id=str(new_record_id())) for _ in range(3))
     page = ArtifactOperatorService._result(
         [first, second, third], 2, lambda row: {"id": row.id}
     )
@@ -280,26 +281,26 @@ def test_operator_page_helpers_are_bounded_and_deduplicate_projects() -> None:
 
 
 async def test_audit_resource_resolver_composes_exact_artifact_lineage() -> None:
-    project_id = str(uuid4())
-    replica_id = str(uuid4())
+    project_id = str(new_record_id())
+    replica_id = str(new_record_id())
     session = SimpleNamespace(scalar=AsyncMock(side_effect=(project_id, replica_id)))
     service = ArtifactOperatorService(
         session, _WrongEvidenceAuthority(), Settings(), InProcessArtifactAdmissionMetrics()
     )
-    content_projects = (uuid4(),)
-    replica_projects = (uuid4(),)
+    content_projects = (new_record_id(),)
+    replica_projects = (new_record_id(),)
     service._content_projects = AsyncMock(return_value=content_projects)
     service._replica_projects = AsyncMock(return_value=replica_projects)
 
-    binding_projects = await service._audit_projects("artifact_binding", str(uuid4()))
+    binding_projects = await service._audit_projects("artifact_binding", str(new_record_id()))
     assert binding_projects == (UUID(project_id),)
-    assert await service._audit_projects("artifact_content", str(uuid4())) == content_projects
+    assert await service._audit_projects("artifact_content", str(new_record_id())) == content_projects
     assert await service._audit_projects("artifact_replica", replica_id) == replica_projects
     assert (
-        await service._audit_projects("artifact_verification_job", str(uuid4()))
+        await service._audit_projects("artifact_verification_job", str(new_record_id()))
         == replica_projects
     )
-    assert await service._audit_projects("unknown", str(uuid4())) == ()
+    assert await service._audit_projects("unknown", str(new_record_id())) == ()
     service._content_projects.assert_awaited_once()
     assert service._replica_projects.await_count == 2
 
@@ -311,18 +312,18 @@ async def test_audit_resource_resolver_conceals_missing_lineage() -> None:
     )
     service._replica_projects = AsyncMock()
 
-    assert await service._audit_projects("artifact_binding", str(uuid4())) == ()
-    assert await service._audit_projects("artifact_verification_job", str(uuid4())) == ()
+    assert await service._audit_projects("artifact_binding", str(new_record_id())) == ()
+    assert await service._audit_projects("artifact_verification_job", str(new_record_id())) == ()
     service._replica_projects.assert_not_awaited()
 
 
 async def test_binding_discovery_projects_canonical_authorized_page() -> None:
-    project_id = uuid4()
-    resource_id = uuid4()
-    first_id, second_id = str(uuid4()), str(uuid4())
+    project_id = new_record_id()
+    resource_id = new_record_id()
+    first_id, second_id = str(new_record_id()), str(new_record_id())
     row = SimpleNamespace(
         id=first_id,
-        content_id=str(uuid4()),
+        content_id=str(new_record_id()),
         project_id=str(project_id),
         resource_type="task",
         resource_id=str(resource_id),
@@ -384,7 +385,7 @@ async def test_binding_discovery_conceals_missing_canonical_resource() -> None:
         await service.list_bindings(
             authorization_context=_context(),
             resource_type="task",
-            resource_id=uuid4(),
+            resource_id=new_record_id(),
             cursor=None,
             limit=1,
         )

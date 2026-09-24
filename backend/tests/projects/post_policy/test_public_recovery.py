@@ -102,7 +102,7 @@ async def test_lost_post_policy_correction_discovered_and_dispatched_by_new_mana
             assert len(dispatched) == 1
             async with factory() as session:
                 assert await session.scalar(text("SELECT count(*) FROM project_guide_proposal_corrections")) == 1
-                assert await session.scalar(text("SELECT actor_profile_id FROM project_guide_compilation_request_operations WHERE expected_predecessor_compilation_id=:id"), {"id":UUID(pending["predecessor_compilation_id"])}) == str(manager.actor_profile_id)
+                assert await session.scalar(text("SELECT actor_profile_id FROM project_guide_compilation_request_operations WHERE expected_predecessor_compilation_id=:id"), {"id":UUID(pending["predecessor_compilation_id"])}) == manager.actor_profile_id
 
 
 async def test_stale_delivery_does_not_create_policy_and_scan_excludes_successor(
