@@ -1,6 +1,6 @@
 # WS-DB-002 — Uniform UUIDv7 record identities
 
-- Durable disposition: Planned
+- Disposition: Planned
 - Intent: every Workstream-owned generated record identity uses UUIDv7 and native
   PostgreSQL UUID storage; references use the same type. Recreate disposable
   development data rather than preserve earlier development identities.

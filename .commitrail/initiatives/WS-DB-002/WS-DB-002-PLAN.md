@@ -4,7 +4,7 @@
 - Durable disposition: Complete
 - Intended merge outcome: a reviewed plan for uniform record identities, not an implemented cutover.
 
-## Intent and current behavior
+## Intent
 
 The human requests planning first, with no preservation of disposable development
 data. Current models mix UUID and text identities; writers include v4 and
@@ -33,7 +33,7 @@ roadmap edit or spreadsheet export is required.
 - Required reviewers: focused architecture/plan review, including replay safety.
 - Human review focus: uniformity scope, fresh-schema reset and realistic review size.
 
-## Evidence and reconciliation
+## Evidence
 
 Source inspection: main after PR #436, model registry, owner models, UUID writers,
 active baseline, runtime versions and open work. No runtime behavior or performance
