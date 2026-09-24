@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.modules.tasks.api.transition_audit import TaskPolicyLineage
+
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
@@ -357,30 +359,11 @@ class PostSubmitPolicyBodySummary(BaseModel):
     blocking_severities: tuple[str, ...]
 
 
-class _TaskLockedContextReferences(BaseModel):
-    """Exact immutable policy identities, without policy bodies or work content."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+class _TaskLockedContextReferences(TaskPolicyLineage):
+    """Exact TASK/project selectors alongside the shared immutable policy lineage."""
 
     task_id: UUID
     project_id: UUID
-    locked_guide_version: str = Field(pattern=r"\S")
-    locked_guide_source_snapshot_id: UUID
-    locked_guide_source_snapshot_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    locked_effective_project_submission_artifact_policy_id: UUID
-    locked_effective_project_submission_artifact_policy_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    locked_pre_submit_checker_policy_id: UUID
-    locked_pre_submit_checker_bundle_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    locked_post_submit_checker_policy_id: UUID
-    locked_post_submit_checker_policy_version: str = Field(pattern=r"\S")
-    locked_post_submit_checker_policy_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    locked_review_policy_id: UUID
-    locked_review_policy_generation: int = Field(gt=0)
-    locked_review_policy_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    locked_revision_policy_id: UUID
-    locked_revision_policy_generation: int = Field(gt=0)
-    locked_revision_policy_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    locked_contribution_policy_version_id: UUID
 
 
 class ManagementTaskLockedContext(_TaskLockedContextReferences):

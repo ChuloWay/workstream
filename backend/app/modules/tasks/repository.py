@@ -255,13 +255,17 @@ class TaskRepository:
         """Require exact transition references without exposing stored diagnostics."""
         assignment_id = decision_id = None
         try:
-            if row.event_type in {"TaskClaimed", "TaskStarted", "TaskStartOverridden", "TaskAssignmentAuthorityRevoked"}:
+            if row.event_type in {"TaskCreated", "TaskScreened", "TaskReleased", "TaskClaimed", "TaskStarted", "TaskStartOverridden", "TaskAssignmentAuthorityRevoked"}:
                 if (
                     UUID(row.reference_project_id) != request.project_id
                     or UUID(row.reference_task_id) != request.task_id
                 ):
                     raise ValueError("scope")
-                assignment_id = UUID(row.assignment_id)
+                if row.event_type in {"TaskCreated", "TaskScreened", "TaskReleased"}:
+                    if row.assignment_id is not None:
+                        raise ValueError("manager assignment")
+                else:
+                    assignment_id = UUID(row.assignment_id)
                 decision_id = UUID(row.authorization_decision_id)
             return AuditTaskEvidence(
                 UUID(row.event_id), row.event_type, row.from_status, row.to_status,

@@ -9,7 +9,8 @@ public APIs and one integrated readiness proof.
 
 Execution sequence: 03C1 real fixed-service assignment authority and exact
 decision receipts; completed 03C2 originating atomic producer fan-out plus first handler
-registration with enforced prefork topology; then bounded public task activation.
+registration with enforced prefork topology; completed [03C3](../../WS-ARCH-001-03C3.md)
+manager create/screen/release; then bounded public queues and remaining projections.
 03C1 does not publish or dispatch retained invalidations. Combining the first
 producer with handler registration keeps newly emitted events drainable.
 
@@ -26,9 +27,10 @@ The bounded [project-grant repair](../../../../changes/task-project-grant-author
 owns the active `task.claim`, `task.start`, `task.work_context.read`,
 `project.task.work_context.read` and `operations.task.start_override` actions.
 Reuse those registrations and extend their exact locked-context proof with the
-CP08-delivered contribution-policy attempt lineage. The other rows below remain
-proposed registrations, not claims of usable actions. This repair does not
-activate the queue, remaining projections or invalidation handler.
+CP08-delivered contribution-policy attempt lineage. 03C3 activates the three manager create/screen/release rows below. The remaining
+queue/detail/requirements/locked-context/evidence rows are proposed registrations,
+not claims of usable actions. Invalidation publication and handler registration
+are delivered separately by 03C2.
 
 | Surface | Proposed action | Permission / principal |
 |---|---|---|

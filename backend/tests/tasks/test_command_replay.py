@@ -38,7 +38,8 @@ async def _counts(task_id):
         return tuple([await session.scalar(select(func.count()).select_from(model).where(predicate))
                       for model, predicate in (
                           (TaskAssignment, TaskAssignment.task_id == task_id),
-                          (TaskCommandReceipt, TaskCommandReceipt.task_id == task_id),
+                          (TaskCommandReceipt, (TaskCommandReceipt.task_id == task_id) &
+                           TaskCommandReceipt.action_id.in_(("task.claim", "task.start", "operations.task.start_override"))),
                           (AuditEvent, (AuditEvent.entity_id == task_id) &
                            AuditEvent.event_type.in_(("TaskClaimed", "TaskStarted", "TaskStartOverridden"))),
                       )])
@@ -357,7 +358,7 @@ async def test_committed_receipt_is_immutable_through_sql(task_client, task_data
                 await session.execute(text(statement))
             await session.rollback()
     async with db_session.get_session_factory()() as session, session.begin():
-        assert (await session.execute(text("update task_command_receipts set id=id"))).rowcount == 1
+        assert (await session.execute(text("update task_command_receipts set id=id"))).rowcount == 4
     assert await _counts(task["id"]) == (1, 1, 1)
     from tests.migration_fixtures import run_guarded_revision_downgrade
     with pytest.raises(RuntimeError, match="task command history prevents downgrade"):

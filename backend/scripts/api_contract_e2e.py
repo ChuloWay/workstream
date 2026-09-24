@@ -1713,6 +1713,7 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
                 "acceptance_criteria": "Must fail.",
             },
             403,
+            idempotency_key=str(uuid4()),
         )
 
         task = await request_json(
@@ -1734,6 +1735,7 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
                 "rejection_criteria": "Evidence is missing.",
             },
             201,
+            idempotency_key=str(uuid4()),
         )
         await request_json(client, "GET", f"/api/v1/tasks/{task['id']}", manager_token)
         screened = await request_json(
@@ -1742,6 +1744,7 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             f"/api/v1/tasks/{task['id']}/screen",
             manager_token,
             {"reason": "real API screening passed"},
+            idempotency_key=str(uuid4()),
         )
         assert screened["locked_guide_version"] == "v1"
         assert screened["locked_review_policy_generation"] == 1
@@ -1755,6 +1758,7 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             f"/api/v1/tasks/{task['id']}/release",
             manager_token,
             {"reason": "real API release"},
+            idempotency_key=str(uuid4()),
         )
 
         canonical_actor = await request_json(

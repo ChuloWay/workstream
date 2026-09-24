@@ -282,6 +282,14 @@ post-submit checker policy reference.
 
 ### Task Screening Gate
 
+The existing create, screen and release APIs use exact Project Manager authority.
+Send one UUID `Idempotency-Key` for each command and retain it for lost-response
+retries. Creating a draft does not require an active guide. Screening locks the
+approved active guide; release validates those frozen policies and requires a
+nonblank decision reason. A receipt does not preserve authority after revocation.
+Task-state changes prevent stale replay; a newer guide does not replace the
+policies already locked onto the task.
+
 CP08 enforces the guide-bound ContributionPolicyVersion lock before `READY`
 and carries it through TaskAssignment and Submission. ReviewLease propagation
 remains planned. See [the capability ledger](roadmap_status.md) for delivered

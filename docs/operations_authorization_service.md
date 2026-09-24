@@ -114,6 +114,13 @@ Use `GET /api/v1/actors/me` for canonical actor self-read. The duplicate
 email or display name into the profile. Consumers must not treat token identity
 metadata or workflow eligibility as profile or authorization truth. Human-owned
 display data is written only through `PATCH /api/v1/actors/me`.
+Task create/screen/release require a current covering Project Manager grant and
+`project.task.manage`; token roles and creator identity do not grant access. Each
+mutation requires one UUID replay key and atomically records its authorization,
+task change, lifecycle evidence and receipt. Draft creation checks project
+existence without imposing guide readiness. Screening/release retain existing
+approved and frozen policy checks.
+
 Task claim/start/work-context require current canonical authority and the applicable
 exact project grant. Token claims and eligibility rows are not authority.
 The API drill ends its task journey at that supported public boundary; hidden

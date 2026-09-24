@@ -26,7 +26,7 @@ from app.modules.tasks.schemas import (
     TaskTransitionRequest,
     TaskWithAssignmentResponse,
 )
-from app.modules.tasks.service import TaskServiceError
+from app.modules.tasks.service import TaskProjectNotReady, TaskServiceError
 from app.adapters.tasks import task_service
 from app.schemas.auth import ActorContext
 
@@ -131,22 +131,27 @@ def permission_http_error(exc: PermissionDenied) -> HTTPException:
 
 @router.post(
     "/projects/{project_id}/tasks",
+    openapi_extra={"x-workstream-action-id": TaskAuthorityOperation.CREATE.value,
+                   "parameters": [TASK_IDEMPOTENCY_PARAMETER]},
     response_model=TaskResponse,
     response_model_exclude_none=True,
     status_code=201,
 )
 async def create_task(
-    request: Request,
     project_id: str,
     payload: TaskCreate,
-    actor: Annotated[ActorContext, Depends(get_registered_actor)],
-    session: Annotated[AsyncSession, Depends(get_db_session)],
+    idempotency_key: Annotated[UUID, Depends(require_task_command_key)],
+    commands: Annotated[AuthorizedTaskCommands, Depends(get_task_commands)],
 ) -> TaskResponse:
-    """Create a draft task under a project."""
+    """Create a draft under exact project-manager authority."""
     try:
-        return await task_service(session, settings=request.app.state.settings).create_task(actor, project_id, payload)
-    except PermissionDenied as exc:
-        raise permission_http_error(exc) from exc
+        try:
+            project = UUID(project_id)
+        except ValueError as exc:
+            raise TaskProjectNotReady("project not found") from exc
+        if str(project) != project_id:
+            raise TaskProjectNotReady("project not found")
+        return await commands.create_task(project, payload, idempotency_key=idempotency_key)
     except TaskServiceError as exc:
         raise task_http_error(exc) from exc
 
@@ -215,50 +220,40 @@ async def get_task_locked_context(
 
 @router.post(
     "/tasks/{task_id}/screen",
+    openapi_extra={"x-workstream-action-id": TaskAuthorityOperation.SCREEN.value,
+                   "parameters": [TASK_IDEMPOTENCY_PARAMETER]},
     response_model=TaskResponse,
     response_model_exclude_none=True,
 )
 async def screen_task(
-    request: Request,
-    task_id: str,
-    actor: Annotated[ActorContext, Depends(get_registered_actor)],
-    session: Annotated[AsyncSession, Depends(get_db_session)],
+    task_id: UUID,
+    idempotency_key: Annotated[UUID, Depends(require_task_command_key)],
+    commands: Annotated[AuthorizedTaskCommands, Depends(get_task_commands)],
     payload: TaskTransitionRequest | None = None,
 ) -> TaskResponse:
-    """Move a draft task into screening."""
+    """Apply the exact manager screen command atomically."""
     try:
-        return await task_service(session, settings=request.app.state.settings).move_to_screening(
-            actor,
-            task_id,
-            None if payload is None else payload.reason,
-        )
-    except PermissionDenied as exc:
-        raise permission_http_error(exc) from exc
+        return await commands.screen(task_id, payload.reason if payload else None, idempotency_key=idempotency_key)
     except TaskServiceError as exc:
         raise task_http_error(exc) from exc
 
 
 @router.post(
     "/tasks/{task_id}/release",
+    openapi_extra={"x-workstream-action-id": TaskAuthorityOperation.RELEASE.value,
+                   "parameters": [TASK_IDEMPOTENCY_PARAMETER]},
     response_model=TaskResponse,
     response_model_exclude_none=True,
 )
 async def release_task(
-    request: Request,
-    task_id: str,
-    actor: Annotated[ActorContext, Depends(get_registered_actor)],
-    session: Annotated[AsyncSession, Depends(get_db_session)],
+    task_id: UUID,
+    idempotency_key: Annotated[UUID, Depends(require_task_command_key)],
+    commands: Annotated[AuthorizedTaskCommands, Depends(get_task_commands)],
     payload: TaskTransitionRequest | None = None,
 ) -> TaskResponse:
-    """Move a screened task into the ready queue."""
+    """Apply the exact manager release command atomically."""
     try:
-        return await task_service(session, settings=request.app.state.settings).release_to_ready(
-            actor,
-            task_id,
-            None if payload is None else payload.reason,
-        )
-    except PermissionDenied as exc:
-        raise permission_http_error(exc) from exc
+        return await commands.release(task_id, payload.reason if payload else None, idempotency_key=idempotency_key)
     except TaskServiceError as exc:
         raise task_http_error(exc) from exc
 

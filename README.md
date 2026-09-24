@@ -596,8 +596,10 @@ route keeps its current authority wrapper. ARCH-03B8 supplies bounded internal A
 ARCH-03B9 supplies hidden exact-assignment invalidation with committed cause
 verification and a same-transaction delivery fence. ARCH-03C1 supplies real
 fixed-service authority and exact decision receipts; ARCH-03C2 supplies atomic
-AUTH event publication and production handler registration. Public task cutover
-remains pending. Canonical checker materialization follows in
+AUTH event publication and production handler registration. ARCH-03C3 replaces
+the create/screen/release role-only path with exact Project Manager authority,
+atomic audit evidence and durable replay. Public queue and remaining task-read
+authority cutover remains pending. Canonical checker materialization follows in
 ARCH-04B/04C.
 
 ## v0.1 Success Standard

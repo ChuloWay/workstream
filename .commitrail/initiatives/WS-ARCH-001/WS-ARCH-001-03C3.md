@@ -1,7 +1,7 @@
 # WS-ARCH-001-03C3 — Authorized manager task readiness
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: the existing create, screen and release HTTP operations
   use exact project-manager authority and atomic replay through the existing TASK
   command owner; screening retains the approved guide's complete policy lineage.
@@ -15,9 +15,9 @@ Claim/start already have canonical authority and retain their behavior. Contribu
 leases and voluntary skip remain parked in #433. Include the retained two-line
 roadmap correction from closed #435 in this product PR, not a separate cleanup PR.
 
-## Current behavior
+## Starting behavior
 
-Main `27aac3d9` includes merged #434/ARCH-03C2. The public routes in
+The implementation base, main `27aac3d9`, includes merged #434/ARCH-03C2. The public routes in
 `tasks/router.py` call `TaskService.create_task`, `move_to_screening` and
 `release_to_ready`. Those methods still use `require_any_role`, old actor-context
 roles and owner-local commits. CP08 already implements complete guide stamping.
@@ -139,7 +139,7 @@ methods, retained-data deletion or workflow/coverage weakening. No live model ca
 | Correct screening and release | `test_management_commands.py::test_screen_and_release_lock_approved_context`: existing real approved/active guide fixture, actual manager requests; exact policy UUIDs remain on READY and on a following real contributor claim |
 | Wrong principal/project and revoked authority | `test_management_authority.py`: real scoped grants and stored foreign project/task; deny each action before mutation; existing AUTH audit targets project with exact resource digest, not task ID |
 | Header validation | Missing/malformed/duplicate key cases for all three routes before identity resolution/product SQL; preserve token/rate-control boundary wording |
-| Replay, changed input and stale state | `test_management_replay.py`: lost response, same key across managers/actions, changed project/payload/reason; advanced task conflicts while successor guide with unchanged frozen context replays exactly; no extra task/transition; new authority check on every retry |
+| Replay, changed input and stale state | `test_management_commands.py` and `test_management_concurrency.py`: lost response, same key across managers/actions, changed project/payload/reason; advanced task conflicts while successor guide with unchanged frozen context replays exactly; no extra task/transition; new authority check on every retry |
 | Atomicity | Parameterize create/screen/release: real PostgreSQL fault after staged mutation/audit and before completion: task state, receipt and success evidence all roll back, same key can subsequently succeed |
 | Concurrency | Independent sessions: same-key create converges; same-action screen/screen and release/release permit one mutation; cross-action screen/release preserves legal serialization (screen first may permit both; release first denies release); grant revocation versus manager transition both orderings. Trace and probe guide activation lock order without mocking AUTH |
 | Database preservation | `test_task_management_receipts.py`: additive migration retains existing claim/start receipts byte-for-byte; direct SQL rejects invalid closed action/state shapes and immutable-result rewrite, allows valid manager receipt with no assignment; pending create plus task commits together, missing task at commit rejects, assignment smuggling/null or malformed digest rejects |
@@ -162,12 +162,30 @@ missing receipt shape/state guard), not assertions that merely mirror code.
 
 ## Evidence
 
-Discovery traced the live routes, role-only TaskService methods, existing command
-receipt assignment constraints, real project-manager fixtures, and ART lineage
-fixture consumer. The acceptance table is proposed proof, not executed evidence. Plan review found
-and corrected proposed-task binding, manager audit consumer shapes, mandatory
-receipt custody, post-state replay admission, legal race outcomes, guide succession
-replay semantics and the existing HTTP drill caller. No runtime proof is claimed.
+Discovery traced the live routes, superseded role-only TaskService methods,
+receipt constraints, real project-manager fixtures, and ART lineage consumer.
+Plan review corrected proposed-task binding, manager audit consumer shapes,
+mandatory receipt custody, post-state replay admission, legal race outcomes,
+guide succession replay semantics and the existing HTTP drill caller.
+
+Implementation extends the existing command/replay and audit owners. TASK owns
+one typed locked-lineage value; the audit adapter serializes it and AUDIT validates
+the closed storage representation without importing TASK's API. This preserves
+the existing dependency direction. Removed tests asserted obsolete service-owned
+transactions; real PostgreSQL rollback tests now protect that required behavior
+through the canonical command owner. No tests are skipped and no compatibility
+entry points remain for these three mutations.
+
+Focused PostgreSQL proof covers exact manager scope and revocation, create before
+a guide exists, screening/release replay, rollback after audit staging, same-key
+and cross-command concurrency, grant revocation and guide activation races,
+frozen-guide replay, downstream ZIP/Submission lineage, and receipt custody.
+A removed-FK mutation proves missing-task rejection depends on that guard; a
+removed audit validator proves omitted lineage rejection depends on validation.
+An actual Alembic lock-removal mutation fails the blocked-writer proof. Direct SQL
+accepts valid manager audit lineage and rejects missing, substituted or extra facts.
+Exact-head execution receipts and hosted full-suite results belong in the PR
+trust bundle, not this durable navigation record.
 
 ## Reconciliation
 

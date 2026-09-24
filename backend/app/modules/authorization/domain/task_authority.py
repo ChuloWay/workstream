@@ -18,7 +18,10 @@ TASK_SUBMITTER_ACTIONS = frozenset(
         ActionId.TASK_WORK_CONTEXT_READ,
     }
 )
-TASK_ACTIONS = TASK_SUBMITTER_ACTIONS | {
+TASK_MANAGER_ACTIONS = frozenset({
+    ActionId.PROJECT_TASK_CREATE, ActionId.PROJECT_TASK_SCREEN, ActionId.PROJECT_TASK_RELEASE,
+})
+TASK_ACTIONS = TASK_SUBMITTER_ACTIONS | TASK_MANAGER_ACTIONS | {
     ActionId.OPERATIONS_TASK_START_OVERRIDE,
     ActionId.PROJECT_TASK_WORK_CONTEXT_READ,
 }
@@ -41,6 +44,8 @@ class TaskAuthorityResourceContext(BaseModel):
     reason: str | None
     idempotency_key: UUID | None = None
     replay_assignment_id: UUID | None = None
+    request_digest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+    replay_command_id: UUID | None = None
 
 
 def parse_task_authority_binding(
@@ -61,6 +66,23 @@ def parse_task_authority_binding(
 
 def task_resource_guard(action: ActionId, resource: TaskAuthorityResourceContext) -> bool:
     """No authority allow may substitute for assignment and task currentness."""
+    if action in TASK_MANAGER_ACTIONS:
+        if (resource.idempotency_key is None or resource.request_digest is None
+                or resource.replay_assignment_id is not None):
+            return False
+        if resource.replay_command_id is not None:
+            # TASK supplies only a committed receipt from this actor/action/key.
+            # Fresh authority precedes TASK replay currentness/conflict checks.
+            return True
+        if any(value is not None for value in (resource.assigned_to, resource.assignment_id,
+                                               resource.assignment_contributor_id)):
+            return False
+        return resource.task_status == {
+            ActionId.PROJECT_TASK_CREATE: "draft", ActionId.PROJECT_TASK_SCREEN: "draft",
+            ActionId.PROJECT_TASK_RELEASE: "screening",
+        }[action]
+    if resource.request_digest is not None or resource.replay_command_id is not None:
+        return False
     own_assignment = (
         resource.assignment_id is not None
         and resource.assignment_contributor_id == resource.actor_profile_id

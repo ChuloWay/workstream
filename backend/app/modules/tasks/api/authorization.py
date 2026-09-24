@@ -7,6 +7,9 @@ from uuid import UUID
 
 
 class TaskAuthorityOperation(StrEnum):
+    CREATE = "project.task.create"
+    SCREEN = "project.task.screen"
+    RELEASE = "project.task.release"
     CLAIM = "task.claim"
     START = "task.start"
     START_OVERRIDE = "operations.task.start_override"
@@ -28,6 +31,8 @@ class TaskAuthorityFacts:
     reason: str | None = None
     idempotency_key: UUID | None = None
     replay_assignment_id: UUID | None = None
+    request_digest: str | None = None
+    replay_command_id: UUID | None = None
 
 
 class TaskAuthorityDenied(RuntimeError):

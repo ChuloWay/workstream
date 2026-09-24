@@ -40,7 +40,8 @@ checker-remediation boundary before public Submission cutover.
 | [ARCH-03B9](../WS-ARCH-001-03B9.md) | ARCH-03B8, CON-02B and AUTH-OUTBOX-02 | Complete: hidden exact-assignment invalidation with committed cause and delivery custody |
 | [ARCH-03C1](../WS-ARCH-001-03C1.md) | ARCH-03B9, AUTH-OUTBOX-02 | Complete: exact reconciler authority and decision-bound release receipts |
 | [ARCH-03C2](../WS-ARCH-001-03C2.md) | ARCH-03C1 | Complete: atomic originating publication and registered assignment delivery with enforced prefork topology |
-| ARCH-03C public cutover | ARCH-03C2 and hidden TASK owner contracts | Planned: exact public task/assignment authority and integrated readiness proof |
+| [ARCH-03C3](../WS-ARCH-001-03C3.md) | ARCH-03C2 and hidden TASK owner contracts | Complete: exact manager create/screen/release authority, atomic evidence and replay |
+| ARCH-03C remaining public cutover | ARCH-03C3 and hidden TASK owner contracts | Planned: public queue and remaining task-read authority and integrated readiness proof |
 | CP09 (later cleanup coordination) | All legacy consumers replaced, including CHECKER and public 02I path | Physical economic deletion; not on the allow_review critical path |
 | ARCH-04B | ARCH-04A, POL-07, ARCH-03C, merged ARCH-02H | ART exact stored Submission materialization |
 | ARCH-04B2 | ARCH-04A and merged ART admission/verification/binding foundations | ART bounded checker output/log ingestion and verified binding, no routing |

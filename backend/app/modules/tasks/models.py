@@ -41,20 +41,25 @@ class TaskCommandReceipt(Base):
             name="fk_task_command_assignment",
         ),
         CheckConstraint(
-            "action_id in ('task.claim','task.start','operations.task.start_override')",
+            "action_id in ('task.claim','task.start','operations.task.start_override',"
+            "'project.task.create','project.task.screen','project.task.release')",
             name="task_command_action",
         ),
         CheckConstraint("request_digest ~ '^sha256:[0-9a-f]{64}$'", name="task_command_request_digest"),
         CheckConstraint(
             "(status='pending' and assignment_id is null and contributor_id is null "
             "and locked_context_hash is null and response is null and committed_at is null) or "
-            "(status='committed' and assignment_id is not null and contributor_id is not null "
+            "(status='committed' and ((action_id in ('task.claim','task.start','operations.task.start_override') "
+            "and assignment_id is not null and contributor_id is not null) or "
+            "(action_id in ('project.task.create','project.task.screen','project.task.release') "
+            "and assignment_id is null and contributor_id is null)) "
             "and locked_context_hash is not null and locked_context_hash ~ '^sha256:[0-9a-f]{64}$' "
             "and response is not null and jsonb_typeof(response)='object' and committed_at is not null)",
             name="task_command_state_shape",
         ),
         CheckConstraint(
-            "status='pending' or (action_id='operations.task.start_override' and actor_profile_id<>contributor_id) "
+            "status='pending' or action_id in ('project.task.create','project.task.screen','project.task.release') "
+            "or (action_id='operations.task.start_override' and actor_profile_id<>contributor_id) "
             "or (action_id in ('task.claim','task.start') and actor_profile_id=contributor_id)",
             name="task_command_contributor",
         ),
@@ -69,8 +74,10 @@ class TaskCommandReceipt(Base):
     action_id: Mapped[str] = mapped_column(String(160))
     idempotency_key: Mapped[UUID] = mapped_column(Uuid())
     request_digest: Mapped[str] = mapped_column(String(71))
-    # Pending selectors are untrusted; the completed assignment FK proves custody.
-    task_id: Mapped[str] = mapped_column(String(36))
+    # Defer TASK custody until after reservation and proposed-task insertion.
+    task_id: Mapped[str] = mapped_column(ForeignKey(
+        "workstream_tasks.id", name="fk_task_command_task", deferrable=True, initially="DEFERRED",
+    ))
     status: Mapped[str] = mapped_column(String(16), default="pending")
     assignment_id: Mapped[str | None] = mapped_column(String(36))
     contributor_id: Mapped[str | None] = mapped_column(String(36))

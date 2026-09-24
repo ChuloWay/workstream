@@ -160,7 +160,9 @@ async def test_task_creation_before_guide_and_missing_project_atomicity(task_cli
         "/api/v1/projects/malformed-project/tasks", headers=auth_headers(),
         json=complete_task_payload(),
     )
-    assert denied.status_code == 403, denied.text
+    # Invalid selectors cannot reach a scoped authority decision. Valid foreign
+    # selectors are covered by the canonical manager authority matrix.
+    assert denied.status_code == 422, denied.text
     assert await _task_audit_counts() == before
 
 

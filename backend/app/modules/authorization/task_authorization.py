@@ -48,6 +48,8 @@ class PreparedTaskAuthorization:
             reason=facts.reason,
             idempotency_key=facts.idempotency_key,
             replay_assignment_id=facts.replay_assignment_id,
+            request_digest=facts.request_digest,
+            replay_command_id=facts.replay_command_id,
         )
 
     async def prepare(self, facts: TaskAuthorityFacts) -> object:
