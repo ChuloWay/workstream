@@ -27,9 +27,9 @@ async def insert(connection, action, permission, *, allowed=True):
         request_id,correlation_id,permission_id,action_id,reason,project_id,resource_type,
         resource_id,after_facts,matched_grant_id,target_ref_kind,target_ref_id,denial_code)
         values($1,'authorization_decision',$1,$2,$3,'[]','{}','local_authority',false,'{}',
-        'authority',1,'actor_profile',$4,$5,$6,$7,'authorization_evaluation',$8,'project',$8,
+        'authority',1,'actor_profile',$4,$5,$6,$7,'authorization_evaluation',$8::uuid,'project',($8::uuid)::text,
         json_build_object('allowed',$9::boolean,'resource_context_digest','sha256:'||repeat('a',64)),
-        $10,'project',$8,$11)""",
+        $10,'project',($8::uuid)::text,$11)""",
         identity, "SensitiveAuthorizationAllowed" if allowed else "SensitiveAuthorizationDenied",
         str(new_record_id()), str(new_record_id()), str(new_record_id()), permission, action, project, allowed,
         str(new_record_id()) if allowed else None, None if allowed else "permission_not_granted",
