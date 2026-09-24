@@ -26,8 +26,10 @@ image change. The first build requires network access and Go compilation
 resources; do not launch it on an already memory-constrained workstation.
 Subsequent builds reuse Docker layers.
 
-Backend CI builds or restores one image cache keyed by this directory's contents
-and runner platform, verifies server startup, then supplies a checksummed image
+Backend CI builds or restores one image cache keyed by the exact Git commit,
+this directory's contents and runner platform. Older PR commits cannot supply a
+cached executable to a new commit; retries of the same commit can reuse its
+image. CI verifies server startup, then supplies a checksummed image
 artifact to the existing lanes and aggregate job. Jobs never substitute a mock
 storage provider. A missing build, artifact or health check fails verification.
 The source-image artifact is independent of test/coverage evidence and cannot

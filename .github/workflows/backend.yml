@@ -41,7 +41,7 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: ${{ runner.temp }}/minio-image/minio.tar
-          key: minio-source-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('docker/minio/**') }}
+          key: minio-source-v1-${{ github.sha }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('docker/minio/**') }}
 
       - name: Build source-pinned MinIO once
         if: steps.cache.outputs.cache-hit != 'true'

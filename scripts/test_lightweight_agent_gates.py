@@ -187,6 +187,10 @@ class LightweightAgentGateTests(unittest.TestCase):
         self.assertEqual(workflow.count('docker build --tag "${MINIO_IMAGE}" docker/minio'), 1)
         self.assertNotIn("quay.io/minio", workflow)
         self.assertIn("hashFiles('docker/minio/**')", image_job)
+        self.assertIn(
+            "key: minio-source-v1-${{ github.sha }}-${{ runner.os }}-${{ runner.arch }}-",
+            image_job,
+        )
         self.assertNotIn("restore-keys:", image_job)
         self.assertIn("minio-source-${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}", image_job)
         self.assertIn("artifact: ${{ steps.identity.outputs.artifact }}", image_job)
