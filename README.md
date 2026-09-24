@@ -315,7 +315,7 @@ bounded recovery scans. ARCH-03C2 registers exact assignment invalidation,
 with atomic publication from supported authority mutations and separate fixed
 feature authority. Checker routing still needs its own authorized handler.
 Delivery consumes `workstream.outbox` only under a validated non-eager prefork
-worker; other queues can use their appropriate execution pool.
+Celery process; other queues can use their appropriate execution pool.
 
 ## Developer Quickstart
 

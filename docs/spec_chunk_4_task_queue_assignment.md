@@ -6,9 +6,9 @@ Workstream is developing its first, unreleased v0.1. This specification covers
 the existing task-record and assignment foundation, including the bounded
 [project-grant authorization replacement](../.commitrail/changes/task-project-grant-authorization.md).
 CP08 delivers exact contribution-policy lineage through task, assignment and
-hidden Submission creation. It does not claim the complete public task queue,
-submission public cutover, or authority-invalidation worker is delivered.
-The [capability ledger](roadmap_status.md) distinguishes those remaining owners.
+hidden Submission creation. ARCH-03C2 delivers exact assignment-invalidation
+publication and registered delivery. Public task queue and Submission cutover
+remain pending; the [capability ledger](roadmap_status.md) identifies their owners.
 
 ## Records and ownership
 
@@ -105,8 +105,8 @@ cannot be modified, deleted or truncated through ordinary SQL.
 Revocation immediately prevents subsequent contributor commands. Closing an
 existing assignment and returning a task to the ready queue through durable
 invalidation has a hidden ARCH-03B9 operation. ARCH-03C1 supplies real service authority;
-producer wiring and registration remain ARCH-03C2; a denied start is not proof
-that an invalidation worker has run.
+ARCH-03C2 supplies atomic producer wiring and registered delivery. A denied
+start is not proof that the Celery assignment-reconciliation handler has run.
 
 ## Work-context hints
 
@@ -337,11 +337,11 @@ its transaction; later claim/command authorization never relies on these facts.
 ## Hidden exact-assignment authority invalidation
 
 ARCH-03B9 supplies `AssignmentInvalidationOperation` and the transaction-owning
-`TransactionalAssignmentInvalidationHandler`. No production handler is
-registered. ARCH-03C1 replaces the unavailable authorization adapter with the
-canonical fixed-service AUTH/PREP implementation for the sole
-`task.assignment.authority_reconcile` action. Atomic AUTH producer wiring and
-first registration remain ARCH-03C2.
+`TransactionalAssignmentInvalidationHandler`. ARCH-03C1 supplies the canonical
+fixed-service AUTH/PREP implementation for the sole
+`task.assignment.authority_reconcile` action. ARCH-03C2 delivers atomic AUTH
+producer wiring and registers this sole production handler under enforced
+prefork delivery. Bounded public task activation remains separate.
 
 Each `TaskAssignmentAuthorityInvalidationRequested` event (protocol version 1)
 addresses one original project/task/assignment/contributor and one immutable AUTH

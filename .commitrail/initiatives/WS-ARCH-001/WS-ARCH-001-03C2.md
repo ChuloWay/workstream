@@ -59,7 +59,9 @@ activation guard. No producer may scan retained invalidation rows for backfill.
 - Exact ownership registration, lane inventory, import/debt/assertion metadata
   only where real moved/added owners require it; do not raise limits.
 - This record, current ARCH plan/overview/map/03C contract, affected AUTH/CON/POL
-  overviews/index, README, roadmap, TASK/AUTH operational specifications and
+  overviews/index, current AUTH/POL planning maps, README, roadmap,
+  `docs/operations_project_operating_manual.md`, `docs/spec_authorization_service.md`,
+  `docs/engineering/authorization_activation_custody.md`, TASK/AUTH operational specifications and
   worker deployment examples and current shared OUTBOX specifications. Update
   ignored roadmap exports together if present.
 
@@ -236,10 +238,14 @@ The prefork proof observes its owned child exit sentinel; the pool remains the
 sole waitpid/reaping owner. This avoids competing reapers while retaining the
 same termination bound and UNKNOWN/duplicate-delivery assertions.
 
+The positive target proof covers both claimed and started, unsubmitted work; a
+claimed-only selector mutation must fail the started-task case.
+
 ## Reconciliation
 
-- Current-source reconciliation: 03C1 and shared OUTBOX authority are merged;
-  handler registration and producer remain absent. Draft #433 is deferred.
+- Intended merged outcome: 03C1 and shared OUTBOX authority are joined by
+  atomic producer publication and the sole registered assignment-invalidation
+  handler. Draft #433 remains deferred.
 - Next usable boundary: existing bounded public task/guide activation; no lease
   or skip dependency and no automatic next-chunk start.
 - Remaining risks: large actor-wide changes hold AUTH locks through complete

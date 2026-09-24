@@ -21,13 +21,13 @@ AUTH-13/14 cutovers are not additional implementation work.
   locked policy references.
   ARCH-03B projections through 03B8 are complete. Hidden exact assignment
   invalidation is delivered by 03B9; ARCH-03C1 exact feature authority is complete.
-  ARCH-03C2 atomic originating producer wiring and first registration come next;
+  ARCH-03C2 atomic originating producer wiring and first registration are complete;
   public TASK activation remains separately bounded.
 - CP05 owns exact ContributionPolicy-action activation after merged CP04B.
 - CP08 delivered the minimal lineage writers. ARCH-03B8 hidden task audit
   evidence and 03B9 hidden assignment invalidation are complete. ARCH-03C owns
   public TASK activation after completed 03C1 exact feature authority and
-  planned 03C2 originating-transaction event production/registration.
+  completed 03C2 originating-transaction event production/registration.
   [AUTH-13 is superseded](chunks/WS-AUTH-001-13-task-assignment-cutover.md).
 - ARCH-04D alone activates post-submit materialization/output and CHECKERS
   execution/finalization after ARCH-04B/04B2/04C; historical AUTH-14 and XINT-06B
@@ -76,11 +76,11 @@ Disposition: Complete. [Contract and proof](../WS-AUTH-001-OUTBOX02.md).
 The exact hidden CON-02B mechanics now use fixed-dispatcher authority,
 phase/resource/actor/project matching, immutable decision bindings and bounded
 prefork workers. Unprovable existing attempts are refused, with no fictional
-backfill or retained-data deletion. Production feature registration remains
-empty: each handler needs its own authorization. ARCH-03B9 supplies hidden
-assignment invalidation; ARCH-03C1 completes its real feature authority.
-ARCH-03C2 next owns atomic originating-transaction-only producer wiring and
-first registration with enforced prefork topology. Never backfill or dispatch retained
+backfill or retained-data deletion. ARCH-03B9 supplies hidden assignment
+invalidation; ARCH-03C1 completes its real feature authority. ARCH-03C2 completes
+atomic originating-transaction-only producer wiring and registers that sole
+production handler with enforced prefork topology. Future handlers still need
+their own exact authority. Never backfill or dispatch retained
 invalidation rows whose transaction-start timestamps do not prove mutation chronology.
 Missing dispatcher provisioning denies work, not startup or provisioning access.
 

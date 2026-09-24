@@ -8,14 +8,18 @@ from sqlalchemy import func, select, text
 
 from app.modules.tasks.api.assignment_invalidation import AssignmentInvalidationTargetsRequest
 from app.modules.tasks.repository import TaskRepository
-from app.modules.tasks.models import TaskAssignment
+from app.modules.tasks.models import TaskAssignment, WorkstreamTask
 from tests.test_tasks import task_client as task_client, task_database_env as task_database_env
 from tests.tasks.invalidation_support import setup_assignment
 
 
-async def test_target_projection_exact_membership(task_client, monkeypatch):
-    s = await setup_assignment(task_client, monkeypatch)
+@pytest.mark.parametrize("started", [False, True], ids=["claimed", "in_progress"])
+async def test_target_projection_exact_membership(task_client, monkeypatch, started):
+    s = await setup_assignment(task_client, monkeypatch, started=started)
     async with s.sessions() as session:
+        assert await session.scalar(select(WorkstreamTask.status).where(
+            WorkstreamTask.id == s.task["id"],
+        )) == ("in_progress" if started else "claimed")
         assigned_at = await session.scalar(select(TaskAssignment.assigned_at).where(
             TaskAssignment.id == s.assignment["id"],
         ))

@@ -1306,16 +1306,16 @@ Eager execution and solo/thread/greenlet pools do not provide this process
 containment. Delivery is routed to `workstream.outbox`; startup rejects a consumer
 of that queue unless it uses prefork and disables eager execution. Delivery entry
 also rejects direct, eager or unvalidated consumers, including a queue added to
-an unvalidated worker after startup. Guide-only solo workers must select their
+an unvalidated Celery process after startup. Guide-only solo processes must select their
 other queues explicitly.
 
 Run the dedicated consumer with:
 
 ```sh
-celery -A app.workers.celery_app:celery_app worker --pool=prefork -Q workstream.outbox
+celery -A app.workers.celery_app worker --pool=prefork -Q workstream.outbox
 ```
 
-Keep a normal worker consuming `celery` for the recovery scan and run the existing
+Keep a Celery process consuming `celery` for the recovery scan and run the existing
 Celery beat schedule. Provision both dispatcher and assignment-reconciler service
 identities through their authorized workflow. Missing/revoked feature authority
 leaves TASK unchanged; a dispatcher grant never supplies feature authority.
