@@ -422,6 +422,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/api/task_queues.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/artifact_project_authority.py"
     },
     {
@@ -522,6 +526,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/domain/project_reads.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/domain/project_setup_finalization.py"
     },
     {
@@ -531,6 +539,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/task_authority.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/task_queues.py"
     },
     {
       "group": "auth",
@@ -659,6 +671,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/task_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/task_queue_read.py"
     },
     {
       "group": "artifacts",
@@ -1250,6 +1266,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/queue_router.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/repository.py"
     },
     {
@@ -1401,7 +1421,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "3e849ccb61da7234c75b8ebe9a6892c81199bfbe6f754491b90014a2e40b2890",
+  "authority_digest": "1fbee6e16432cd61e1faf2c16b55e7f4fb82668a29bf247d460db2f7be7c398f",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

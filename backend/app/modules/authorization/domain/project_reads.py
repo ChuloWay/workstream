@@ -73,4 +73,3 @@ async def project_read_denial(action, resource, context, repository, revalidate_
         None,
         True,
     )
-

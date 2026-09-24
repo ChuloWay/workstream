@@ -83,6 +83,14 @@ ARCH_03C2_TARGETS = frozenset({
 })
 ARCH_03C2_REMOVED_TARGETS = frozenset({"backend/app/modules/outbox/schemas.py"})
 
+ARCH_03C4_TARGETS = frozenset({
+    "backend/app/modules/authorization/api/task_queues.py",
+    "backend/app/modules/authorization/domain/project_reads.py",
+    "backend/app/modules/authorization/domain/task_queues.py",
+    "backend/app/modules/authorization/task_queue_read.py",
+    "backend/app/modules/tasks/queue_router.py",
+})
+
 ARCH_03C1_TARGETS = frozenset({
     "backend/app/modules/authorization/domain/assignment_invalidation.py",
     "backend/app/modules/authorization/assignment_invalidation_authorization.py",
@@ -621,6 +629,7 @@ def _validate_additive_partition_transition(
         | AUTH_OUTBOX_02_TARGETS
         | ARCH_03C1_TARGETS
         | ARCH_03C2_TARGETS
+        | ARCH_03C4_TARGETS
         | ARCH_03B9_TARGETS
         | CI_LANE_CATALOGUE_TARGETS
         | MODULE_BOUNDARY_FOUNDATION_TARGETS

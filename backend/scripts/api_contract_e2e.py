@@ -449,6 +449,7 @@ async def request_json(
     expected_status: int = 200,
     idempotency_key: str | None = None,
     if_match: str | None = None,
+    timeout_seconds: float | None = None,
 ) -> dict | list:
     """Call one API endpoint and assert its status.
 
@@ -461,6 +462,7 @@ async def request_json(
         expected_status: Expected HTTP status code.
         idempotency_key: Optional UUID replay key for mutation boundaries.
         if_match: Optional exact HTTP policy selector precondition.
+        timeout_seconds: Optional bound for slow cold schema generation.
 
     Returns:
         Parsed JSON response body.
@@ -481,6 +483,7 @@ async def request_json(
         path,
         headers=headers,
         json=payload,
+        timeout=client.timeout if timeout_seconds is None else timeout_seconds,
     )
     if response.status_code != expected_status:
         try:
@@ -1148,7 +1151,8 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
     async with httpx.AsyncClient(base_url=base_url, timeout=10) as client:
         await request_json(client, "GET", "/health")
         await request_json(client, "GET", "/api/v1/health")
-        openapi = await request_json(client, "GET", "/openapi.json")
+        # Cold schema generation also exceeds 10s on the unchanged base locally.
+        openapi = await request_json(client, "GET", "/openapi.json", timeout_seconds=60)
         read_actions = {
             path: item["get"]["x-workstream-action-id"]
             for path, item in openapi["paths"].items()

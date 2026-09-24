@@ -16,10 +16,10 @@ canonical request actor, stored grants, audit and signed keyset pagination.
 Queue reads never claim work or authorize a later claim. Foreground commands
 retain their current-authority and exact-task guards.
 
-The 03C parent manifest is a skeleton, not implementation proof. Current main
-has nonlocking `TaskRepository.read_ready_tasks`, `read_management_tasks` and
+The 03C parent manifest provides coordination and navigation. At the recorded
+base, TASK had nonlocking `TaskRepository.read_ready_tasks`, `read_management_tasks` and
 `read_operational_tasks`, with exact project filtering before pagination. No
-public queue route currently exists. The earlier API drill also establishes
+public queue route existed. The earlier API drill also establishes
 that retained task-detail/locked-context/audit reads still require old role and
 creator checks; those distinct read cutovers remain the next bounded work.
 
@@ -142,7 +142,8 @@ These targets define the required proof for the merged boundary.
   `test_queue_authority_matrix` (signed requests, each of the three actions,
   independent roles/scopes, PM system and project positive controls),
   `test_queue_conceals_absent_and_unauthorized_projects`,
-  `test_queue_revalidates_grant` and `test_queue_rejects_inactive_identity`,
+  `test_queue_revalidates_grant` (including malformed cursor after revocation)
+  and `test_queue_rejects_inactive_identity`,
   `test_queue_project_lifecycle` (persist a paused Project as a guards-on fixture;
   do not claim a public pause operation ran).
 - `backend/tests/tasks/test_public_queues.py`:
@@ -160,9 +161,14 @@ These targets define the required proof for the merged boundary.
   `test_queue_records_exact_page_authority` (committed exact matched grant/action/
   permission/project and digest, first versus next-page cursor hash),
   `test_queue_failure_rolls_back_allow` (projection, serialization and audit
-  failures; positive control), `test_queue_lock_order` (observed real SQL sequence),
+  failures; positive control), `test_queue_lock_order` (observed real SQL sequence).
+- `backend/tests/authorization/task_queues/test_concurrency.py`:
   `test_queue_serializes_with_authority_revocation` (independent sessions and
-  PostgreSQL blocking observation), `test_queue_serializes_with_guide_activation`.
+  PostgreSQL blocking observation),
+  `test_ready_queue_serializes_with_live_authority_change` (real project-role
+  revocation and actor suspension in both orders),
+  `test_queue_serializes_with_guide_activation` (distinct managers and a
+  reader-only Project lock removal control).
   Mutation controls remove each authorization/tenant filter, add forbidden
   selected columns, omit presented-cursor binding, and reverse grant/Project locks;
   each relevant positive-plus-negative proof must detect its own defect.
@@ -182,11 +188,12 @@ Plan review found and corrected draft lock ordering, stable cursor versus audit
 request digest ambiguity, covered-PM scope wording, obsolete public-absence
 assertions, request-shape precedence, and incomplete selected-column proof.
 The repaired contract requires exact audit action pairs and named positive/
-negative controls; implementation and runtime evidence remain outstanding.
+negative controls; implementation and runtime evidence were outstanding at
+that plan-review boundary.
 
 ## Risk and review routing
 
-Lead runs Ruff, module/AUTH boundary and test-structure checks, changed Markdown
+Lead runs Ruff, behavior-ownership partition, module/AUTH boundary and test-structure checks, changed Markdown
 links, stale-wording scans, Commitrail, focused isolated PostgreSQL tests and
 complete local real HTTP drill (PG/Redis/MinIO). Full suite and coverage belong
 in hosted CI. No `.env` or real providers are required. Freeze clean base/head
@@ -206,6 +213,14 @@ concealment, privacy, cursor replay, read/revoke ordering and atomic evidence.
 - Remaining risks: bounded live pages are not snapshots; claim always rechecks.
 
 ## Implementation boundary reconciliation
+
+CI custody includes the five exact new production targets in
+`.ci/behavior-ownership/partition.v1.json`, their approved registration in
+`backend/scripts/behavior_ownership.py` and the adjacent-target rejection test
+in `backend/tests/test_behavior_ownership.py`. The protected base and gate
+rules remain unchanged. The queue test package marker prevents global
+collection from shadowing root fixtures or same-named tests.
+
 
 The dependency guard rejected private AUTH/TASK imports in the draft delivery
 wiring. TASK now registers its own queue router; AUTH exposes a typed public
@@ -232,7 +247,10 @@ revocation and guide activation. A deliberate project-before-grant lock makes
 the lock-order proof fail. Actual migration tests preserve retained audit rows
 and reject wrong action/permission pairs; removing the constraint invalidates
 the rejection proof. Existing project-read tests protect the extracted evaluator.
-The complete real HTTP drill adds all three queues before claim/start.
+The complete real HTTP drill includes all three queues before claim/start.
+Cold OpenAPI generation has a separate 60-second drill request timeout; other
+requests retain 10 seconds. Unchanged-base generation exceeded the old bound
+locally; this does not change a product timeout or performance requirement.
 
 Ruff, module/AUTH boundaries, the structural-debt guard, Markdown links and
 Commitrail remain mandatory. Full hosted tests and coverage, exact-head internal

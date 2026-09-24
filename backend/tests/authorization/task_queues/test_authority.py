@@ -82,7 +82,7 @@ async def test_queue_project_lifecycle(admin_access, kind):
 
 
 @pytest.mark.parametrize("kind", PATHS)
-async def test_queue_revalidates_grant(admin_access, kind):
+async def test_queue_revalidates_grant(admin_access, kind, monkeypatch):
     project = await project_fixture()
     grant_id = await grant_queue_role(admin_access, project, {
         "ready": "submitter", "management": "project_manager", "operational": "operator",
@@ -111,7 +111,14 @@ async def test_queue_revalidates_grant(admin_access, kind):
     else:
         revoked = await admin_access.signed.revoke(admin_access.admin, grant_id)
     assert revoked.status_code == 200, revoked.text
-    for params in ({}, {"cursor": cursor}):
+    from app.modules.tasks.repository import TaskRepository
+
+    async def unexpected_read(*args, **kwargs):
+        pytest.fail("denied authority must not reach TASK")
+
+    for method in ("read_ready_tasks", "read_management_tasks", "read_operational_tasks"):
+        monkeypatch.setattr(TaskRepository, method, unexpected_read)
+    for params in ({}, {"cursor": cursor}, {"cursor": "malformed"}):
         denied = await client.get(path, params=params, headers=actor.headers)
         assert denied.status_code == 404, denied.text
 

@@ -2055,3 +2055,21 @@ def test_assignment_publication_partition_changes_are_exact():
         )
     with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
         ownership._validate_additive_partition_transition(_partition(sorted(targets)), trusted)
+
+
+def test_public_task_queue_partition_additions_are_exact():
+    targets = {
+        "backend/app/modules/authorization/api/task_queues.py",
+        "backend/app/modules/authorization/domain/project_reads.py",
+        "backend/app/modules/authorization/domain/task_queues.py",
+        "backend/app/modules/authorization/task_queue_read.py",
+        "backend/app/modules/tasks/queue_router.py",
+    }
+    assert ownership.ARCH_03C4_TARGETS == targets
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(_partition(sorted([retained, *targets])), trusted)
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted([retained, *targets, "backend/app/modules/tasks/another_queue.py"])), trusted,
+        )
