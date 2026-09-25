@@ -3,25 +3,62 @@
   "components": {
     "schemas": {
       "ActorProfileSelfResponse": {
-        "additionalProperties": false,
-        "description": "Privacy-bounded canonical profile returned to its human owner.",
         "properties": {
-          "actor_kind": {
-            "const": "human",
-            "title": "Actor Kind",
-            "type": "string"
-          },
           "actor_profile_id": {
-            "title": "Actor Profile Id",
-            "type": "string"
+            "type": "string",
+            "title": "Actor Profile Id"
+          },
+          "actor_kind": {
+            "type": "string",
+            "const": "human",
+            "title": "Actor Kind"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "suspended",
+              "deactivated"
+            ],
+            "title": "Status"
+          },
+          "domains": {
+            "items": {
+              "type": "string",
+              "const": "contributor"
+            },
+            "type": "array",
+            "title": "Domains",
+            "default": [
+              "contributor"
+            ]
           },
           "admin_roles": {
-            "default": [],
             "items": {
               "type": "string"
             },
+            "type": "array",
             "title": "Admin Roles",
-            "type": "array"
+            "default": []
+          },
+          "project_role_grants": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Project Role Grants",
+            "default": []
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
           },
           "contact_email": {
             "anyOf": [
@@ -35,67 +72,30 @@
             "title": "Contact Email"
           },
           "created_at": {
+            "type": "string",
             "format": "date-time",
-            "title": "Created At",
-            "type": "string"
+            "title": "Created At"
           },
-          "display_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Display Name"
-          },
-          "domains": {
-            "default": [
-              "contributor"
-            ],
-            "items": {
-              "const": "contributor",
-              "type": "string"
-            },
-            "title": "Domains",
-            "type": "array"
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
           },
           "last_seen_at": {
             "anyOf": [
               {
-                "format": "date-time",
-                "type": "string"
+                "type": "string",
+                "format": "date-time"
               },
               {
                 "type": "null"
               }
             ],
             "title": "Last Seen At"
-          },
-          "project_role_grants": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Project Role Grants",
-            "type": "array"
-          },
-          "status": {
-            "enum": [
-              "active",
-              "suspended",
-              "deactivated"
-            ],
-            "title": "Status",
-            "type": "string"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
           }
         },
+        "additionalProperties": false,
+        "type": "object",
         "required": [
           "actor_profile_id",
           "actor_kind",
@@ -107,34 +107,34 @@
           "last_seen_at"
         ],
         "title": "ActorProfileSelfResponse",
-        "type": "object"
+        "description": "Privacy-bounded canonical profile returned to its human owner."
       },
       "ApiError": {
-        "additionalProperties": false,
-        "description": "Canonical machine-readable API error.",
         "properties": {
           "code": {
-            "title": "Code",
-            "type": "string"
+            "type": "string",
+            "title": "Code"
           },
-          "correlation_id": {
-            "title": "Correlation Id",
-            "type": "string"
+          "message": {
+            "type": "string",
+            "title": "Message"
           },
           "details": {
             "additionalProperties": true,
-            "title": "Details",
-            "type": "object"
+            "type": "object",
+            "title": "Details"
           },
-          "message": {
-            "title": "Message",
-            "type": "string"
+          "correlation_id": {
+            "type": "string",
+            "title": "Correlation Id"
           },
           "retryable": {
-            "title": "Retryable",
-            "type": "boolean"
+            "type": "boolean",
+            "title": "Retryable"
           }
         },
+        "additionalProperties": false,
+        "type": "object",
         "required": [
           "code",
           "message",
@@ -143,12 +143,13 @@
           "retryable"
         ],
         "title": "ApiError",
-        "type": "object"
+        "description": "Canonical machine-readable API error."
       },
       "ApiErrorResponse": {
-        "additionalProperties": false,
-        "description": "Canonical error plus additive legacy compatibility fields.",
         "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          },
           "detail": {
             "anyOf": [
               {},
@@ -157,48 +158,28 @@
               }
             ],
             "title": "Detail"
-          },
-          "error": {
-            "$ref": "#/components/schemas/ApiError"
           }
         },
+        "additionalProperties": false,
+        "type": "object",
         "required": [
           "error"
         ],
         "title": "ApiErrorResponse",
-        "type": "object"
+        "description": "Canonical error plus additive legacy compatibility fields."
       }
     }
   },
   "operation": {
+    "tags": [
+      "actors"
+    ],
+    "summary": "Read Current Actor Profile",
     "description": "Return the caller's canonical Contributor-domain profile.",
     "operationId": "read_current_actor_profile_api_v1_actors_me_get",
-    "parameters": [
-      {
-        "in": "header",
-        "name": "X-Request-ID",
-        "required": false,
-        "schema": {
-          "format": "uuid",
-          "maxLength": 36,
-          "minLength": 36,
-          "type": "string"
-        }
-      },
-      {
-        "in": "header",
-        "name": "X-Correlation-ID",
-        "required": false,
-        "schema": {
-          "format": "uuid",
-          "maxLength": 36,
-          "minLength": 36,
-          "type": "string"
-        }
-      }
-    ],
     "responses": {
       "200": {
+        "description": "Successful Response",
         "content": {
           "application/json": {
             "schema": {
@@ -206,155 +187,154 @@
             }
           }
         },
-        "description": "Successful Response",
         "headers": {
-          "X-Correlation-ID": {
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          },
           "X-Request-ID": {
             "required": true,
             "schema": {
-              "format": "uuid",
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
             }
           }
         }
       },
       "400": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ApiErrorResponse"
-            }
-          }
-        },
         "description": "Invalid request.",
         "headers": {
-          "X-Correlation-ID": {
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          },
           "X-Request-ID": {
             "required": true,
             "schema": {
-              "format": "uuid",
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
             }
           }
-        }
-      },
-      "401": {
+        },
         "content": {
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/ApiErrorResponse"
-            }
-          }
-        },
-        "description": "Authentication failed.",
-        "headers": {
-          "WWW-Authenticate": {
-            "schema": {
-              "type": "string"
-            }
-          },
-          "X-Correlation-ID": {
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          },
-          "X-Request-ID": {
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        }
-      },
-      "403": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ApiErrorResponse"
-            }
-          }
-        },
-        "description": "Permission denied.",
-        "headers": {
-          "X-Correlation-ID": {
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          },
-          "X-Request-ID": {
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
             }
           }
         }
       },
       "500": {
+        "description": "Internal server error.",
+        "headers": {
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
         "content": {
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/ApiErrorResponse"
             }
           }
-        },
-        "description": "Internal server error.",
+        }
+      },
+      "401": {
+        "description": "Authentication failed.",
         "headers": {
-          "X-Correlation-ID": {
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          },
           "X-Request-ID": {
             "required": true,
             "schema": {
-              "format": "uuid",
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "WWW-Authenticate": {
+            "schema": {
               "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        }
+      },
+      "403": {
+        "description": "Permission denied.",
+        "headers": {
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
             }
           }
         }
       },
       "503": {
+        "description": "Identity verification unavailable.",
+        "headers": {
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
         "content": {
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/ApiErrorResponse"
-            }
-          }
-        },
-        "description": "Identity verification unavailable.",
-        "headers": {
-          "X-Correlation-ID": {
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          },
-          "X-Request-ID": {
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
             }
           }
         }
@@ -365,11 +345,31 @@
         "HTTPBearer": []
       }
     ],
-    "summary": "Read Current Actor Profile",
-    "tags": [
-      "actors"
-    ],
-    "x-workstream-action-id": "actor.profile.read_self"
+    "x-workstream-action-id": "actor.profile.read_self",
+    "parameters": [
+      {
+        "name": "X-Request-ID",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "uuid",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      },
+      {
+        "name": "X-Correlation-ID",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "uuid",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    ]
   },
   "schema_version": 1,
   "source": {
