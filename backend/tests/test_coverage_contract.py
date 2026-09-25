@@ -13,7 +13,7 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import coverage_policy as policy  # noqa: E402
 
-HEAD = "0001_uuid7_v01"
+HEAD = "0002_task_queue_authority"
 SHA = "a" * 40
 PEP695_INVALID = sys.version_info < (3, 12)
 

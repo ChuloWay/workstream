@@ -452,13 +452,19 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         f"POST {post_policy_prefix}/corrections",
     }
     assert post_policy_routes <= set(protected_inventory)
-    assert len(route_inventory) == 77
-    retained_routes = sorted(set(route_inventory) - proposal_routes - post_policy_routes)
-    retained_protected = sorted(set(protected_inventory) - proposal_routes - post_policy_routes)
+    queue_routes = {
+        "GET /api/v1/projects/{project_id}/tasks",
+        "GET /api/v1/projects/{project_id}/tasks/ready",
+        "GET /api/v1/operations/projects/{project_id}/tasks",
+    }
+    assert queue_routes <= set(protected_inventory)
+    assert len(route_inventory) == 80
+    retained_routes = sorted(set(route_inventory) - proposal_routes - post_policy_routes - queue_routes)
+    retained_protected = sorted(set(protected_inventory) - proposal_routes - post_policy_routes - queue_routes)
     assert sha256("\n".join(retained_routes).encode()).hexdigest() == (
         "97ca137cb6ffe96cb58f81cbb1d786772b48ed8996d159473d3be04928a77eca"
     )
-    assert len(protected_inventory) == 75
+    assert len(protected_inventory) == 78
     assert sha256("\n".join(retained_protected).encode()).hexdigest() == (
         "54b9a1fbb6c5cf1dffc47fa6c7b43da333baf22e733556eff4a6973a9b4dc7d4"
     )
@@ -494,6 +500,9 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         f"POST {proposal_prefix}/corrections": "project.guide_compilation.correction.request",
         f"POST {proposal_prefix}/corrections/{{correction_operation_id}}/dispatch": "project.guide_compilation.request",
         "POST /api/v1/projects/{project_id}/tasks": "project.task.create",
+        "GET /api/v1/projects/{project_id}/tasks": "project.task.queue.read",
+        "GET /api/v1/projects/{project_id}/tasks/ready": "task.queue.read",
+        "GET /api/v1/operations/projects/{project_id}/tasks": "operations.task.queue.read",
         "POST /api/v1/tasks/{task_id}/screen": "project.task.screen",
         "POST /api/v1/tasks/{task_id}/release": "project.task.release",
         "POST /api/v1/tasks/{task_id}/claim": "task.claim",

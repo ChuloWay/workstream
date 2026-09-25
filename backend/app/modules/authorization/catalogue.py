@@ -94,6 +94,9 @@ class PermissionId(StrEnum):
 class ActionId(StrEnum):
     """Closed action identifiers reserved by approved owner chunks."""
 
+    TASK_QUEUE_READ = "task.queue.read"
+    PROJECT_TASK_QUEUE_READ = "project.task.queue.read"
+    OPERATIONS_TASK_QUEUE_READ = "operations.task.queue.read"
     PROJECT_TASK_CREATE = "project.task.create"
     PROJECT_TASK_SCREEN = "project.task.screen"
     PROJECT_TASK_RELEASE = "project.task.release"
@@ -256,6 +259,7 @@ class ActionOwner(StrEnum):
     AUTH_12G = "WS-AUTH-001-12G"
     AUTH_12H = "WS-AUTH-001-12H"
     ARCH_03C3 = "WS-ARCH-001-03C3"
+    ARCH_03C4 = "WS-ARCH-001-03C4"
     ARCH_03C1 = "WS-ARCH-001-03C1"
     AUTH_OUTBOX_01 = "WS-AUTH-001-OUTBOX-01"
     AUTH_14 = "WS-AUTH-001-14"
@@ -582,19 +586,14 @@ ACTION_DEFINITIONS = (
         PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE,
         ActionOwner.AUTH_12G,
     ),
-    _active(
-        ActionId.PROJECT_SETUP_RUN_UPDATE,
-        PermissionId.PROJECT_GUIDE_MANAGE,
-        ActionOwner.AUTH_12B2,
-    ),
-    _active(
-        ActionId.PROJECT_GUIDE_ACTIVATE,
-        PermissionId.PROJECT_GUIDE_MANAGE,
-        ActionOwner.AUTH_12H,
-    ),
+    _active(ActionId.PROJECT_SETUP_RUN_UPDATE, PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.AUTH_12B2),
+    _active(ActionId.PROJECT_GUIDE_ACTIVATE, PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.AUTH_12H),
     _active(ActionId.TASK_CLAIM, PermissionId.TASK_CLAIM, ActionOwner.TASK_PROJECT_GRANT),
     _active(ActionId.TASK_START, PermissionId.TASK_CLAIM, ActionOwner.TASK_PROJECT_GRANT),
     _active(ActionId.TASK_WORK_CONTEXT_READ, PermissionId.TASK_QUEUE_READ, ActionOwner.TASK_PROJECT_GRANT),
+    _active(ActionId.TASK_QUEUE_READ, PermissionId.TASK_QUEUE_READ, ActionOwner.ARCH_03C4),
+    _active(ActionId.PROJECT_TASK_QUEUE_READ, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.ARCH_03C4),
+    _active(ActionId.OPERATIONS_TASK_QUEUE_READ, PermissionId.OPERATIONS_STATUS_READ, ActionOwner.ARCH_03C4),
     _active(ActionId.PROJECT_TASK_CREATE, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.ARCH_03C3),
     _active(ActionId.PROJECT_TASK_SCREEN, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.ARCH_03C3),
     _active(ActionId.PROJECT_TASK_RELEASE, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.ARCH_03C3),
@@ -884,7 +883,7 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 75 or len(ACTION_IDS) != 121:
+    if len(PERMISSION_IDS) != 75 or len(ACTION_IDS) != 124:
         raise RuntimeError("authorization catalogue count mismatch")
     if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 26:
         raise RuntimeError("authorization permission boundary mismatch")
@@ -1004,6 +1003,7 @@ def _index_actions(
         ActionId.TASK_CLAIM, ActionId.TASK_START, ActionId.TASK_WORK_CONTEXT_READ,
         ActionId.PROJECT_TASK_WORK_CONTEXT_READ, ActionId.OPERATIONS_TASK_START_OVERRIDE,
         ActionId.PROJECT_TASK_CREATE, ActionId.PROJECT_TASK_SCREEN, ActionId.PROJECT_TASK_RELEASE,
+        ActionId.TASK_QUEUE_READ, ActionId.PROJECT_TASK_QUEUE_READ, ActionId.OPERATIONS_TASK_QUEUE_READ,
     }:
         raise RuntimeError("authorization active action boundary mismatch")
     if set(definitions) != set(ACTION_DEFINITIONS):

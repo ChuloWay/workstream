@@ -223,9 +223,17 @@ async def test_ready_queue_does_not_wait_for_task_lock(task_client):
             assert [item.task_id for item in page.items] == [UUID(task["id"])]
 
 
-async def test_ready_queue_has_no_public_route(task_client):
+async def test_public_queue_openapi_contract(task_client):
+    from tests.authorization.task_queues.support import PATHS, ACTIONS
+
     response = await task_client.get("/openapi.json")
     assert response.status_code == 200
-    assert not any("queue" in path and "task" in path for path in response.json()["paths"])
-    response = await task_client.get(f"/api/v1/projects/{new_record_id()}/tasks")
-    assert response.status_code == 405  # Existing project task creation only.
+    paths = response.json()["paths"]
+    for kind, template in PATHS.items():
+        route = paths[template.replace("{project}", "{project_id}")]["get"]
+        assert route["x-workstream-action-id"] == ACTIONS[kind]
+        assert route["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith({
+            "ready": "ContributorTaskQueueResponse", "management": "ManagementTaskQueueResponse",
+            "operational": "OperationalTaskQueueResponse",
+        }[kind])
+    assert paths["/api/v1/projects/{project_id}/tasks"]["post"]["x-workstream-action-id"] == "project.task.create"
