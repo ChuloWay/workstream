@@ -79,7 +79,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
     script = ScriptDirectory.from_config(config)
     revisions = list(script.walk_revisions())
 
-    assert [revision.revision for revision in revisions] == [BASELINE_REVISION]
+    assert [revision.revision for revision in revisions] == [HEAD_REVISION, BASELINE_REVISION]
     assert revisions[-1].down_revision is None
     assert script.get_heads() == [HEAD_REVISION]
 
@@ -485,7 +485,8 @@ def test_baseline_sql_splitter_preserves_function_bodies() -> None:
 
 
 @pytest.mark.parametrize("old_revision", [
-    "0001_v01_baseline", "0030_task_management", "0063_compilation_authority",
+    "0001_v01_baseline", "0030_task_management", "0031_task_queue_authority",
+    "0063_compilation_authority",
 ])
 def test_unknown_old_stamp_refuses_before_mutation(
     isolated_database_env: str,
@@ -535,12 +536,16 @@ def test_root_upgrade_refuses_nonempty_unstamped_schema_before_product_ddl(
     assert ("r", "projects") not in snapshot["objects"]
 
 
+@pytest.mark.parametrize("revision,message", [
+    (BASELINE_REVISION, "0001_uuid7_v01 cannot be downgraded; recreate the database"),
+    (HEAD_REVISION, "Workstream v0.1 migrations cannot be downgraded; recreate the database"),
+])
 def test_downgrade_refuses_without_mutation(
     isolated_database_env: str,
     migration_lock,
+    revision: str,
+    message: str,
 ) -> None:
-    revision = BASELINE_REVISION
-    message = "0001_uuid7_v01 cannot be downgraded; recreate the database"
     config = _alembic_config()
     with migration_lock():
         asyncio.run(_execute(isolated_database_env, "drop schema public cascade; create schema public"))

@@ -195,10 +195,22 @@ the assignment. Screening and release check that the installed pre/post policies
 are supported; historical reads do not rerun availability. No superseded economic configuration is
 required. Task display now comes from detached values supplied by PROJECTS,
 including the exact historical guide after a successor activates. Draft task
-creation still works before guide configuration. A hidden project-scoped ready queue read now returns bounded contributor
-summaries. Hidden management and operational reads also cover all project task
-states: managers receive planning fields; operators receive only IDs, status
-and timestamps. None grants authority or exposes a public queue.
+creation still works before guide configuration. The public project task queues use separate authority and fixed fields:
+
+- `GET /api/v1/projects/{project_id}/tasks/ready`: active exact-project Submitters
+  discover unassigned ready work in an active project.
+- `GET /api/v1/projects/{project_id}/tasks`: covering Project Managers inspect
+  planning summaries in any retained project state.
+- `GET /api/v1/operations/projects/{project_id}/tasks`: system Operators inspect
+  only task/project IDs, status and timestamps.
+
+Each page accepts `limit` 1–100 (default 50) and the returned opaque `cursor`.
+Reuse the same project, route and limit for continuation. Every page rechecks
+current authority; a cursor neither reserves work nor authorizes claim. Live
+pages may lose a task when someone claims it. Unauthorized and absent projects
+are concealed alike. Well-shaped invalid or forged cursors return 422 after
+authorization and do not commit a successful queue decision. Request-shape
+validation rejects cursors over 512 characters before endpoint authorization.
 ARCH-03B4 also supplies hidden contributor and manager detail facts; these are
 not new public endpoints. ARCH-03B6 supplies distinct management, operational and
 audit locked-context projections through one historical resolver. Operational and
@@ -209,8 +221,9 @@ visibility wrapper pending ARCH-03C. ARCH-03B8 supplies bounded internal Audit
 Authority task evidence. ARCH-03B9 supplies hidden exact-assignment invalidation,
 AUTH-OUTBOX-02 supplies shared delivery, and ARCH-03C1 supplies exact reconciler
 authority and decision-bound receipts. ARCH-03C2 delivers atomic producer
-publication and first handler registration with enforced prefork topology; public
-task authority/cutover remains separately bounded under ARCH-03C.
+publication and first handler registration with enforced prefork topology.
+Remaining task detail, requirements, locked-context and audit read authority
+stays separately bounded under ARCH-03C.
 
 The intended unified flow uses one compilation result for sufficiency and
 artifact/pre-submit/post-submit proposals. Once finalized, its `ProjectSetupRun`,

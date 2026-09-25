@@ -7,9 +7,9 @@ Review, revision, FinalAcceptance, and review-sourced contribution behavior
 below is planned and unavailable until its owning REV/CON chunks, exact AUTH
 activation, and REV-13 joint release complete.
 
-Contributor, management and operational task queues currently have hidden owner
-reads only. Exact queue authorization and public routes remain ARCH-03C work;
-queue steps below describe the intended workflow. See the
+Contributor, management and operational task queues have exact-authorized public
+reads with distinct fields and signed pagination. Remaining task detail,
+requirements, locked-context and audit read authority stays ARCH-03C work. See the
 [capability ledger](roadmap_status.md) for current availability.
 
 ## Roles
@@ -55,8 +55,8 @@ Reads authorized immutable and operational evidence without mutation.
 
 ```text
 1. Project Manager: check the covered-project task queue.
-2. Project Manager: create or release ready tasks under project lifecycle guards.
-3. Project Manager: assign tasks under project policy.
+2. Project Manager: create drafts, then screen and release tasks under project lifecycle guards.
+3. Contributor: claim a ready task under an exact-project Submitter grant.
 4. Reviewer: consume current work as active lease, one server-selected offer, or none.
 5. Reviewer and Submitter: issue and respond to `needs_revision`; Project Manager
    observes the covered-project queue without recording either party's action.
@@ -70,18 +70,16 @@ Reads authorized immutable and operational evidence without mutation.
 
 ## Task Creation Workflow
 
-1. Select project.
-2. Confirm active project guide.
-3. Create task title and description.
-4. Add acceptance criteria.
-5. Add required output format.
-6. Confirm the active guide binds a published ContributionPolicyVersion with
-   explicit submitter and reviewer compensated/unpaid rules; task readiness
-   locks it before `READY`, Assignment copies it, Submission stamps the attempt
-   value, and ReviewLease later copies that immutable stamp.
-7. Set skill tags.
-8. Run task schema check.
-9. Move to READY.
+1. Select the covered project.
+2. Create a draft with its title, description, acceptance criteria and skill tags.
+   An active guide is not required to create the draft.
+3. Before screening and release, confirm the active approved guide and policies,
+   including the required artifact outputs and a published ContributionPolicyVersion
+   with explicit submitter and reviewer compensated/unpaid rules. Task readiness
+   locks that policy before `READY`; Assignment copies it and Submission stamps
+   the attempt value. ReviewLease will later copy that immutable stamp.
+4. Screen the draft under the current project guide and lifecycle guards.
+5. Release the screened task to `READY` for contributor claim.
 
 ## Contributor Submission Workflow
 

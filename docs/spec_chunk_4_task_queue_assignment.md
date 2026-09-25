@@ -7,8 +7,9 @@ the existing task-record and assignment foundation, including the bounded
 [project-grant authorization replacement](../.commitrail/changes/task-project-grant-authorization.md).
 CP08 delivers exact contribution-policy lineage through task, assignment and
 hidden Submission creation. ARCH-03C2 delivers exact assignment-invalidation
-publication and registered delivery. Public task queue and Submission cutover
-remain pending; the [capability ledger](roadmap_status.md) identifies their owners.
+publication and registered delivery. ARCH-03C4 delivers the three public task
+queues with exact project authority. Public Submission cutover remains pending;
+the [capability ledger](roadmap_status.md) identifies its owner.
 
 ## Records and ownership
 
@@ -34,6 +35,9 @@ Contributor commands and work context use canonical project authority:
 
 | Surface | Authority |
 |---|---|
+| `GET /api/v1/projects/{project_id}/tasks/ready` | Active same-project Submitter; active project; ready unassigned tasks |
+| `GET /api/v1/projects/{project_id}/tasks` | Covering project or system Project Manager; management projection |
+| `GET /api/v1/operations/projects/{project_id}/tasks` | System Operator; status-only operational projection |
 | `POST /api/v1/projects/{project_id}/tasks` | Covered Project Manager; existing project; guide not required for draft |
 | `POST /api/v1/tasks/{task_id}/screen` | Covered Project Manager; draft; approved active guide and complete policy lineage |
 | `POST /api/v1/tasks/{task_id}/release` | Covered Project Manager; screening; frozen policy validation and nonblank decision reason |
@@ -143,7 +147,7 @@ policy-governed routing; it does not own final acceptance.
 - Boundary checks, applicable tests, hosted coverage and focused reviews pass
   before the implementation is declared ready.
 
-## Hidden ready queue facts
+## Ready queue facts and public authority
 
 ARCH-03B2 provides `ReadyTaskQueuePort` through `TaskRepository`: an internal
 data-owner read, not an HTTP route or authorization decision. It returns only
@@ -157,7 +161,7 @@ identity, policy bodies/hashes and artifact references. The project-bound cursor
 is a position, not a permission token. The read performs no flush, commit or row
 lock. Pages are live views, not reservations; claim rechecks authority and state.
 
-ARCH-03C must authorize the exact project collection before calling this port
+ARCH-03C4 authorizes the exact project collection before calling this port
 or using a client cursor, with current-grant/revocation and concealment proof.
 No per-task AUTH handle or token role can substitute for that collection gate.
 ARCH-03B8 supplies hidden task audit evidence. ARCH-03B9 supplies the hidden
@@ -165,12 +169,12 @@ assignment-invalidation operation; ARCH-03C1 supplies its real authority.
 Producer wiring and public evidence access remain separate.
 
 
-## Hidden management and operational queues
+## Management and operational queues
 
 ARCH-03B3 extends the existing TaskRepository with `ManagementTaskQueuePort`
 and `OperationalTaskQueuePort`. Each reads all task states within one exact
 project, including draft, active work and post-submit states. These are internal
-owner facts; ARCH-03C still owns separate manager/operator permissions and routes.
+owner facts; ARCH-03C4 supplies separate manager/operator permissions and public routes.
 
 Management summaries contain task/project IDs, title, task type, difficulty,
 immutable skill tags, estimated minutes, status, deadline and creation/update
@@ -183,9 +187,12 @@ All three queues use the single `TaskQueueRequest` and `TaskQueueCursor`
 contract. Project/cursor filtering precedes bounded pagination; an extra row
 alone supplies continuation. The ready queue retains its independent eligibility
 filters. Cursors identify a live position, not authority, audience or membership.
-No queue flushes, commits, rolls back or takes a row lock. No counts, reservation
-or snapshot guarantee is supplied. Later authorized composition must validate
-exact project authority before using an untrusted cursor.
+The owner reads do not flush, commit, roll back or take row locks. No counts,
+reservation or snapshot guarantee is supplied. The public composition validates
+live project authority before decoding a signed, audience-bound cursor, locks
+the actor, matched grant and project in the canonical order, and commits its
+authorization evidence atomically with response construction. Each page records
+the exact grant used; pagination never supplies authority.
 
 ## Hidden contributor and management task detail
 
@@ -344,7 +351,9 @@ ARCH-03B9 supplies `AssignmentInvalidationOperation` and the transaction-owning
 fixed-service AUTH/PREP implementation for the sole
 `task.assignment.authority_reconcile` action. ARCH-03C2 delivers atomic AUTH
 producer wiring and registers this sole production handler under enforced
-prefork delivery. Bounded public task activation remains separate.
+prefork delivery. ARCH-03C4 separately delivers the three public queues.
+Task-detail, requirements, locked-context and audit read authority remain
+separately bounded.
 
 Each `TaskAssignmentAuthorityInvalidationRequested` event (protocol version 1)
 addresses one original project/task/assignment/contributor and one immutable AUTH
@@ -392,8 +401,8 @@ while authority locks serialize claim. Producers must not acquire TASK locks
 after AUTH locks. The registered handler uses dedicated `workstream.outbox`
 routing with enforced non-eager prefork execution. Real PostgreSQL tests prove
 originating publication, rollback and both claim/loss orderings; a real Redis
-and prefork drill exercises production delivery. This does not activate public
-queue APIs, timed contributor leases or voluntary skip.
+and prefork drill exercises production delivery. Public queues are delivered
+separately by ARCH-03C4; timed contributor leases and voluntary skip remain deferred.
 
 ### Manager readiness commands
 

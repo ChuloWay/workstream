@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, call
 from uuid import UUID
 
 import pytest
+from sqlalchemy import and_
 from sqlalchemy.dialects import postgresql
 
 from app.modules.projects import submission_policy_mutation_service as module
@@ -237,7 +238,7 @@ async def test_completion_requires_exact_pending_row(repo_case, matched):
     else:
         with pytest.raises(module.ProjectRepositoryIntegrityError, match="invalid.*completion"):
             await call
-    sql, params = predicates(case.session.scalar.await_args.args[0])
+    _, params = predicates(case.session.scalar.await_args.args[0])
     fields = {
         "operation_id": values["operation_id"],
         **values,
@@ -247,7 +248,23 @@ async def test_completion_requires_exact_pending_row(repo_case, matched):
         "setup_task_id": None,
         "correlation_id": None,
     }
-    assert sorted(sql.split(" AND ")) == sorted(
-        expected_predicate(field, value) for field, value in fields.items()
+    # Prove the predicates, not driver-specific rendering of bind type casts.
+    record = module.SubmissionPolicyMutationIdempotencyRecord
+    expected = and_(
+        record.operation_id == values["operation_id"],
+        record.actor_profile_id == values["actor_profile_id"],
+        record.identity_link_id == values["identity_link_id"],
+        record.service_identity.is_(None),
+        record.action_id == values["action_id"],
+        record.idempotency_key == values["idempotency_key"],
+        record.request_digest == values["request_digest"],
+        record.resource_context_digest == values["resource_context_digest"],
+        record.setup_run_id.is_(None),
+        record.setup_generation == values["setup_generation"],
+        record.setup_task_id.is_(None),
+        record.correlation_id.is_(None),
+        record.status == "pending",
     )
+    statement = case.session.scalar.await_args.args[0]
+    assert statement.whereclause.compare(expected, compare_values=True, compare_keys=False)
     assert params == {f"{field}_1": value for field, value in fields.items() if value is not None}

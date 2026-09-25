@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 from app.api.deps.authorization import get_task_commands
+from app.modules.tasks.queue_router import router as queue_router
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.api import TaskAuthorityOperation
 from typing import Annotated
@@ -420,3 +421,7 @@ async def get_management_task_work_context(
         if getattr(exc, "code", None) is not None:
             return task_domain_error_response(request, exc)
         raise task_http_error(exc) from exc
+
+
+# Queue reads share TASK delivery ownership and AUTH public contracts.
+router.include_router(queue_router)

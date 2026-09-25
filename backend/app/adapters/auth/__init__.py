@@ -222,3 +222,9 @@ def project_role_mutation_service(session: AsyncSession):
     """Compose grant mutations; only Submitter loss publishes assignment targets."""
     from app.modules.authorization.project_role_service import ProjectRoleGrantMutationService
     return ProjectRoleGrantMutationService(session, publication=assignment_invalidation_publication(session))
+
+
+def task_queue_authorization(kernel, secret):
+    """Compose the canonical queue AUTH adapter without exporting private owners."""
+    from app.modules.authorization.task_queue_read import TaskQueueReadAuthorization
+    return TaskQueueReadAuthorization(kernel, secret)

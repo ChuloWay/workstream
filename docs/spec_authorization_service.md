@@ -706,8 +706,16 @@ Separate management/operational/audit projections preserve their respective
 permissions rather than switching one action's mapping based on token roles.
 ARCH-03C3 activates `project.task.create`, `project.task.screen` and
 `project.task.release` under existing `project.task.manage`; no new permission or
-broader Project Manager permission set is introduced. Remaining queue, detail
-and projection actions in the manifest are proposed.
+broader Project Manager permission set is introduced. ARCH-03C4 activates:
+`task.queue.read` under `task.queue.read` for exact-project Submitters;
+`project.task.queue.read` under `project.task.manage` for covering Project Managers;
+and `operations.task.queue.read` under `operations.status.read` for system Operators.
+All three lock the live actor profile/link, matched grant and exact Project in
+that order, then read TASK without row locks. Contributor discovery requires an
+active project. Signed cursors bind action/project/limit/order, while decision
+evidence separately binds the hash of the presented cursor. Authority, projection,
+JSON validation and the successful decision commit share one transaction.
+Remaining detail and projection actions in the manifest are proposed.
 
 The [AUTH-12F4 contract](../.commitrail/initiatives/WS-AUTH-001/planning/chunks/WS-AUTH-001-12F4-submission-policy-approval.md)
 activates exact complete-compilation review-package read and correction under
