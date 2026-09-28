@@ -469,3 +469,10 @@ an unfinished run for its non-admissibility test, stage each invalid queue fact
 before completion, and roll back each attempt. Preserve the three exact REV
 rejections and then complete a valid run before its remaining lineage assertions.
 Do not disable the new custody guard or restore terminal rewriting in fixtures.
+
+The race-test barrier must preserve the lookup's `FOUND` value independently of
+any rejection predicate. Its setup must accept the actual pre-fix function,
+including `IF FOUND AND ...`, so replaying that function reaches the concurrent
+late insertion and fails the required-rejection assertion, not test setup.
+This is a proof-harness correction only; it changes no product capability or
+roadmap boundary.

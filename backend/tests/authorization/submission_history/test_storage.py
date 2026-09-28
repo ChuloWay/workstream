@@ -294,12 +294,15 @@ async def test_parent_committing_after_lookup_cannot_receive_late_result(task_cl
     function_name = "protect_checker_result_custody()"
     async with factory() as admin:
         definition = await admin.scalar(text("select pg_get_functiondef(cast(:name as regprocedure))"), {"name": function_name})
-        instrumented = definition.replace(
-            "DECLARE parent_status text; parent_completed_at timestamptz;",
-            "DECLARE parent_status text; parent_completed_at timestamptz; parent_was_found boolean;",
+        # Preserve the lookup result across the barrier regardless of which guard
+        # consumes it. Instrumentation must also admit the pre-fix function.
+        import re
+        declaration = "DECLARE parent_status text; parent_completed_at timestamptz;"
+        assert definition.count(declaration) == 1 and definition.count("FOR UPDATE;") == 1
+        instrumented = re.sub(r"\bFOUND\b", "parent_was_found", definition)
+        instrumented = instrumented.replace(
+            declaration, declaration + " parent_was_found boolean;",
         ).replace("FOR UPDATE;", "FOR UPDATE; parent_was_found := FOUND; PERFORM pg_advisory_xact_lock(4476001);")
-        instrumented = instrumented.replace("IF NOT FOUND THEN", "IF NOT parent_was_found THEN")
-        assert instrumented != definition and "IF NOT parent_was_found THEN" in instrumented
         await admin.execute(text(instrumented))
         await admin.commit()
     pending = None
