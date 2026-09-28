@@ -10,6 +10,40 @@ from app.modules.projects.guide_activation.service import GuideActivationService
 from .support import activation_case, activation_state
 
 
+@pytest.mark.parametrize('mismatched_id', ['project_id', 'guide_id'])
+async def test_path_body_mismatch_never_calls_activation(
+    isolated_database_env, monkeypatch, post_policy_worker, mismatched_id,
+):
+    async with activation_case(isolated_database_env, monkeypatch, post_policy_worker) as (
+        factory, command, _, _, manager, _, _, path, body, _, _,
+    ):
+        before = await activation_state(factory, command.guide_id)
+        original = GuideActivationService.activate
+        calls = []
+
+        async def tracked(owner, *args, **kwargs):
+            calls.append((args, kwargs))
+            return await original(owner, *args, **kwargs)
+
+        monkeypatch.setattr(GuideActivationService, 'activate', tracked)
+        # Keep the complete valid body unchanged; substitute only one URL identity.
+        mismatch_path = path.replace(str(getattr(command, mismatched_id)), str(uuid4()))
+        response = await manager.post(
+            mismatch_path, json=body, headers={'Idempotency-Key': str(uuid4())},
+        )
+        assert response.status_code == 404, response.text
+        assert response.json()['error']['code'] == 'proposal_unavailable'
+        assert calls == []
+        assert await activation_state(factory, command.guide_id) == before
+
+        # The same body can activate through the matching URL.
+        accepted = await manager.post(
+            path, json=body, headers={'Idempotency-Key': str(uuid4())},
+        )
+        assert accepted.status_code == 200, accepted.text
+        assert len(calls) == 1
+
+
 async def test_independently_stale_selections_cannot_activate(isolated_database_env, monkeypatch, post_policy_worker):
     async with activation_case(isolated_database_env, monkeypatch, post_policy_worker) as (
         factory, command, _, _, manager, _, _, path, body, _, _,

@@ -1286,7 +1286,7 @@ execution task, calls no provider, and does not make the hidden POL workflow liv
 | `project.post_submit_checker_policy.correction.request` | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
 | `project.post_submit_checker_policy.derive` | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
 | `project.setup_run.update` (active) | `project.guide.manage` | `WS-AUTH-001-12B2` |
-| `project.guide.activate` (active internally) | `project.guide.manage` | `WS-AUTH-001-12H` |
+| `project.guide.activate` (public through AUTH-18) | `project.guide.manage` | `WS-AUTH-001-12H`, `WS-AUTH-001-18` |
 
 The v0.1 baseline preserves historical sufficiency
 rows as readable, unattributed records while requiring complete creation or

@@ -86,8 +86,11 @@ or broader role is needed for the existing activation operation.
 - First activation and successor activation retain exact locked lineage; repeat
   key returns the original receipt without duplicate effects/audit. Revocation
   denies both reads and replay. Wrong-project requests do not lock foreign rows.
-- Duplicate/missing/invalid headers reject before actor/product access. A failed
-  response validation or real audit/storage write rolls back all effects.
+- Duplicate/missing/invalid headers reject before actor/product access. Independent
+  URL/body project and guide mismatches return concealed 404 before activation
+  service invocation, preserving guide, replay and audit state. The same valid
+  body succeeds at the matching URL; removing the route guard fails both cases.
+  A failed response validation or real audit/storage write rolls back all effects.
 - Public API drill reaches activation through real routes; meaningful existing
   PostgreSQL replay, race and lineage tests remain. Add only missing boundary
   proof, with failing-defect probes for new critical guards.
