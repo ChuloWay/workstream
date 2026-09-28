@@ -116,3 +116,37 @@ claimed delivered until the intended implementation and verification exist.
 
 Next usable boundary: approved-guide intake integration, then immutable admitted
 Submission and durable post-submit evaluation. This does not resume lease work.
+
+## Plan-review resolutions
+
+- Read lock order is explicit: existing manager AUTH PREP, exact requested
+  PROJECT row, existing proposal/finalization/guide/post-policy rows, predecessor
+  and review/revision selectors, then CON published-selector query. Publication
+  and retirement lock this same PROJECT first. Never acquire the PROJECT lock
+  for the first time after guide/attempt locks. Wrong-project queries cannot
+  lock a foreign guide or policy.
+- Extend the draft-only post-policy review package with `activation_context`.
+  Review/revision triples, predecessor ID/generation, published CON policy/version
+  and post-approval operation/output digest are complete pairs/triples or absent.
+  Read the approval digest from retained `custody.approval.output_digest`.
+  The existing read facts digest commits to the entire expanded package.
+  Do not add a readiness flag, implicit command builder or active-guide re-read
+  dependency: replay uses the original POST body and immutable receipt.
+- POST input excludes idempotency and server authority facts. Validate and detach
+  the receipt via TypeAdapter before commit, including serialization validation;
+  response-model validation after commit is insufficient. Apply this same
+  pre-commit validation to the expanded read response.
+- Refine the existing shared guide error boundary: AuthorizationDenied keeps the
+  concealed `authority_unavailable`/404 outcome. AuthorizationUnavailable and
+  PreparedAuthorizationInvalid become `authorization_service_unavailable`/503.
+  Keep missing=404, stale/conflict=409, SQL=503. Existing absent-adapter, non-human
+  and invalid-root preconditions remain fail-closed. Shared guide proposal error
+  helper/HTTP mapping and their directly affected failure tests are allowed files.
+- Add focused proofs for stale guide/predecessor/review/revision/CON/post-approval
+  selections; replay after active/superseded state and CON retirement; revoked
+  new/replay authority; project lock races with CON publication/retirement and
+  competing activation; wrong-project noninterference; both response validation
+  and serialization failure after staged writes; a real audit insert failure.
+  Reuse existing owner proofs where they already establish the same boundary.
+- Plan review traced feasibility, not executed new runtime evidence. No new
+  migration or AUTH action is required by this design.
