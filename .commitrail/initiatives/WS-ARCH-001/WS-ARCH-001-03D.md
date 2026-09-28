@@ -32,7 +32,7 @@ for the exact deleted-target allowlist, and `backend/tests/architecture/`.
 Allowed records: `.ci/module-boundaries/private-edge-debt.v1.json`,
 `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json` for exact shrinking fixture inventory,
 `.ci/behavior-ownership/partition.v1.json`, this record, current ARCH/POL/AUTH/CON
-`OVERVIEW.md`, ARCH planning `PLAN.md`/`CHUNK_MAP.md` and linked completed 03B contract, `.commitrail/INDEX.md`,
+`OVERVIEW.md`, ARCH/AUTH planning `PLAN.md`/`CHUNK_MAP.md` and linked completed 03B contract, `.commitrail/INDEX.md`,
 `docs/roadmap_status.md`, `README.md`, `docs/operations_project_operating_manual.md`, `docs/architecture_checker_framework.md`,
 and related local roadmap exports when present.
 Prohibited: new public routes, authority actions, migrations, post-submit execution,
@@ -97,16 +97,18 @@ supersession; negative proof must reach final validation after valid checking.
 ## Evidence
 
 `test_final_intake_keeps_original_guide_after_successor` composes a real successor
-activation with a distinct ContributionPolicyVersion, then resolves final intake
-facts against the original assignment. `test_final_intake_rejects_invalid_owner_context`
+activation with a distinct ContributionPolicyVersion, then commits a durable intent through the admission writer against the original
+assignment. An independent session checks its evidence and put-attempt lineage. `test_final_intake_rejects_invalid_owner_context`
 uses real checked ZIP custody and PostgreSQL for an archived project; its separate
-ContributionPolicy substitution case changes only typed TASK facts. Both have valid
-controls before/after the rejected operation. They prove owner revalidation, not
+ContributionPolicy substitution case changes only typed TASK facts. Both enter the actual admission writer, assert no intent after rejection, and
+commit a valid control with the same custody after rollback. They prove durable
+admission with final AUTH and custody, not
 provider execution or public HTTP.
 
-`test_command_holds_actor_and_project_before_final_handoff` runs the real command,
+`test_command_holds_authorized_context_before_final_handoff` runs the real command,
 materializer, AUTH and durable-intent owners. Independent PostgreSQL sessions must
-time out taking the actor/project locks at final handoff. Provider execution is
+time out taking task, assignment, actor, identity-link, project and submitter-grant
+locks at final handoff. Provider execution is
 explicitly stopped after committed intent. Existing
 `test_effective_evidence_workflow_persists_once_and_replays_exactly` retains full
 intent/replay, inactive-assignment, denial and admission custody coverage.
@@ -135,3 +137,11 @@ Public API, provider transport and full lifecycle release proof remain separate.
   which owns the required prelocks. Document that internal call precondition;
   any future standalone caller must preserve it. No new capability wrapper is
   introduced for a nonexistent second caller.
+
+- QA-03D-002: replace direct owner-lookup proof with real durable admission, a
+  committed successor case and committed post-rejection controls. Check persisted
+  intent/evidence/attempt linkage in an independent session.
+- QA-03D-003: observe every claimed final-handoff lock, including task, assignment
+  and exact submitter grant, with independent PostgreSQL sessions.
+- DOC-03D-002: advance current AUTH plan/map from completed hidden intake to
+  ARCH-04B; public intake remains ARCH-02I after its prerequisites.

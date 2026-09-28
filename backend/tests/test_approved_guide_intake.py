@@ -8,7 +8,7 @@ from sqlalchemy import func, select, text
 
 from app.core.config import Settings
 from app.core.hashing import canonical_json_hash
-from app.modules.artifacts.models import SubmissionBundleDurableIntent
+from app.modules.artifacts.models import ArtifactPutAttempt, PreSubmitEvidenceSet, SubmissionBundleDurableIntent
 from app.modules.artifacts.schemas import SubmissionBundleArtifactAdmissionRequest
 from app.modules.artifacts.service import ArtifactAdmissionRelationshipError, ArtifactAdmissionService
 from app.modules.artifacts.submission_custody import SubmissionBundlePreparedCustody
@@ -18,6 +18,7 @@ from app.modules.projects.models import ProjectGuide
 from app.modules.projects.guide_activation.custody import load_guide_activation
 from app.modules.tasks.repository import TaskRepository
 from tests.pre_submit_test_helpers import execute_evidence_workflow
+from tests.artifact_store_helpers import artifact_admission_limit_settings
 from tests.test_pre_submit_attempt_recovery import _harness
 
 
@@ -37,21 +38,45 @@ async def _checked(harness, session):
     )
 
 
-def _admission(session):
+def _admission(session, tmp_path):
     namespace = ArtifactStorageNamespaceSpec(
         backend="local", adapter="local", provider_profile="test",
         namespace_descriptor={"test": "submission-bundle"},
         namespace_fingerprint=canonical_json_hash({"test": "submission-bundle"}),
     )
-    return ArtifactAdmissionService(session, Settings(_env_file=None), namespace)
+    return ArtifactAdmissionService(session, Settings(_env_file=None, environment="test", artifact_store_backend="local",
+        artifact_local_root=tmp_path / "durable", artifact_scratch_root=tmp_path / "scratch",
+        artifact_scratch_minimum_free_bytes=0,
+        **artifact_admission_limit_settings(1024 * 1024)), namespace)
 
 
-async def _facts(session, request):
-    # Direct owner-validation proof, not provider execution or final AUTH proof.
-    return await _admission(session)._submission_bundle_facts(
-        request, task_contexts=TaskRepository(session),
-        project_contexts=ProjectLockedPolicyRepository(session),
+async def _admit(session, request, authority, tmp_path, *, task_contexts=None):
+    # This is the real durable-admission writer, including final AUTH and custody.
+    return await _admission(session, tmp_path).admit(
+        request, submission_prepared_authorization=authority,
+        submission_task_contexts=task_contexts or TaskRepository(session),
+        submission_project_contexts=ProjectLockedPolicyRepository(session),
+        existing_transaction=True,
     )
+
+
+async def _assert_intent(factory, request, admission, lineage):
+    # Read committed facts independently of the writer's session.
+    async with factory() as session:
+        intent, evidence, attempt = (await session.execute(
+            select(SubmissionBundleDurableIntent, PreSubmitEvidenceSet, ArtifactPutAttempt)
+            .join(PreSubmitEvidenceSet, PreSubmitEvidenceSet.id == SubmissionBundleDurableIntent.pre_submit_evidence_set_id)
+            .join(ArtifactPutAttempt, ArtifactPutAttempt.id == SubmissionBundleDurableIntent.put_attempt_id)
+        )).one()
+        assert intent.put_attempt_id == str(admission.attempt_id) == attempt.id
+        assert intent.pre_submit_evidence_set_id == str(request.pre_submit_evidence_set_id) == evidence.id
+        assert attempt.task_id == evidence.task_id
+        assert attempt.project_id == evidence.project_id == str(lineage.project_id)
+        assert evidence.guide_id == str(lineage.guide_id)
+        assert evidence.source_snapshot_id == str(lineage.source_snapshot_id)
+        assert evidence.effective_policy_id == str(lineage.effective_policy_id)
+        assert evidence.pre_submit_policy_id == str(lineage.pre_submit_policy_id)
+        assert evidence.locked_checker_policy_sha256 == lineage.pre_submit_policy_bundle_hash
 
 
 async def test_final_intake_keeps_original_guide_after_successor(tmp_path, isolated_database_env):
@@ -64,8 +89,8 @@ async def test_final_intake_keeps_original_guide_after_successor(tmp_path, isola
         async with harness.factory() as session:
             request = await _checked(harness, session)
             async with session.begin():
-                original, _ = await _facts(session, request)
-                guide = await session.get(ProjectGuide, str(original.guide_id))
+                lineage = harness.request.effective_plan.lineage
+                guide = await session.get(ProjectGuide, str(lineage.guide_id))
                 first = await load_guide_activation(session, guide)
             target = first.command.target.proposal
             from app.modules.actors.models import ActorIdentityLink
@@ -95,10 +120,12 @@ async def test_final_intake_keeps_original_guide_after_successor(tmp_path, isola
             next_receipt = await activate(harness.factory, actor, successor)
             assert next_receipt.command.contribution_policy_version_id != first.command.contribution_policy_version_id
             async with session.begin():
-                retained, _ = await _facts(session, request)
-                assert retained == original
-                guide = await session.get(ProjectGuide, str(original.guide_id), populate_existing=True)
+                authority = harness.contributor_authority(session)
+                await authority.revalidate(request=harness.preparation_request, project_id=lineage.project_id)
+                admission = await _admit(session, request, authority, tmp_path)
+                guide = await session.get(ProjectGuide, str(lineage.guide_id), populate_existing=True)
                 assert guide.status == "superseded"
+            await _assert_intent(harness.factory, request, admission, lineage)
     finally:
         await harness.close()
 
@@ -109,24 +136,24 @@ async def test_final_intake_rejects_invalid_owner_context(tmp_path, isolated_dat
     try:
         async with harness.factory() as session:
             request = await _checked(harness, session)
+            lineage = harness.request.effective_plan.lineage
+            authority = harness.contributor_authority(session)
             async with session.begin():
-                original, _ = await _facts(session, request)
-            assert original.pre_submit_policy_id == harness.request.effective_plan.lineage.pre_submit_policy_id
-            async with session.begin():
+                await authority.revalidate(request=harness.preparation_request, project_id=lineage.project_id)
                 if drift == "archived_project":
                     await session.execute(text("UPDATE projects SET status='archived' WHERE id=:id"),
-                                          {"id": str(original.project_id)})
+                                          {"id": str(lineage.project_id)})
                     await session.flush()
                     with pytest.raises(ArtifactAdmissionRelationshipError, match="pre_submit_locked_context_changed"):
-                        await _facts(session, request)
+                        await _admit(session, request, authority, tmp_path)
                 else:
                     # Substitute a same-shaped owner result; database guards are not disabled.
                     from app.core.identifiers import new_record_id
                     real = TaskRepository(session)
                     from app.modules.tasks.api import TaskSubmissionContextRequest
                     facts = await real.lock_submission_context(TaskSubmissionContextRequest(
-                        task_id=original.task_id, assignment_id=original.assignment_id,
-                        contributor_id=original.actor_profile_id, predecessor_submission_id=None,
+                        task_id=harness.request.task_id, assignment_id=harness.request.assignment_id,
+                        contributor_id=harness.actor_id, predecessor_submission_id=None,
                     ))
                     foreign = new_record_id()
                     substituted = replace(facts,
@@ -136,22 +163,20 @@ async def test_final_intake_rejects_invalid_owner_context(tmp_path, isolated_dat
                     async def wrong_context(_):
                         return substituted
                     with pytest.raises(ArtifactAdmissionRelationshipError, match="locked context changed"):
-                        await _admission(session)._submission_bundle_facts(
-                            request, task_contexts=SimpleNamespace(lock_submission_context=wrong_context),
-                            project_contexts=ProjectLockedPolicyRepository(session),
-                        )
+                        await _admit(session, request, authority, tmp_path,
+                            task_contexts=SimpleNamespace(lock_submission_context=wrong_context))
                 assert await session.scalar(select(func.count()).select_from(SubmissionBundleDurableIntent)) == 0
                 await session.rollback()
             async with session.begin():
                 # The same passing custody remains valid after the rejected transaction rolls back.
-                control, _ = await _facts(session, request)
-                assert control == original
-                assert request.custody.pass_capability.evidence_set_id == request.pre_submit_evidence_set_id
+                await authority.revalidate(request=harness.preparation_request, project_id=lineage.project_id)
+                control = await _admit(session, request, authority, tmp_path)
+            await _assert_intent(harness.factory, request, control, lineage)
     finally:
         await harness.close()
 
 
-async def test_command_holds_actor_and_project_before_final_handoff(tmp_path, isolated_database_env):
+async def test_command_holds_authorized_context_before_final_handoff(tmp_path, isolated_database_env):
     """Observe real row locks at the final handoff of the actual async command."""
     from contextlib import asynccontextmanager
     from sqlalchemy.exc import DBAPIError
@@ -162,7 +187,6 @@ async def test_command_holds_actor_and_project_before_final_handoff(tmp_path, is
         SubmissionBundleDurablePutService, SubmissionBundleDurablePutResult,
     )
     from app.modules.checkers.api import UnavailablePostSubmissionExecution
-    from tests.artifact_store_helpers import artifact_admission_limit_settings
     from tests.authorization.test_pre_submit_attempt_authority import _seed_materializer
     from tests.test_default_pre_submit_execution import _archive, _bytes
 
@@ -179,21 +203,25 @@ async def test_command_holds_actor_and_project_before_final_handoff(tmp_path, is
             calls = []
             workflow = harness.workflow(session, calls, preparation_authorization=contributor)
             workflow._materialization._authorization = materializer
-            admission = _admission(session)
-            admission._settings = Settings(_env_file=None,
-                **artifact_admission_limit_settings(1024 * 1024),
-                environment="test", artifact_store_backend="local",
-                artifact_local_root=tmp_path / "durable", artifact_scratch_root=tmp_path / "scratch",
-                artifact_scratch_minimum_free_bytes=0)
+            admission = _admission(session, tmp_path)
             durable = SubmissionBundleDurablePutService(
                 session=session, admission=admission, storage=object(), authorization=contributor,
                 task_contexts=TaskRepository(session), project_contexts=ProjectLockedPolicyRepository(session),
             )
             observed = []
             async def final_handoff(request):
+                grant_id = (await session.execute(text(
+                    "SELECT id FROM project_role_grants WHERE actor_profile_id=:actor "
+                    "AND project_id=:project AND role='submitter' AND status='active'"
+                ), {"actor": str(harness.actor_id),
+                    "project": str(harness.request.effective_plan.lineage.project_id)})).scalar_one()
                 for table, record_id in (
+                    ("workstream_tasks", harness.request.task_id),
+                    ("task_assignments", harness.request.assignment_id),
                     ("actor_profiles", harness.actor_id),
+                    ("actor_identity_links", harness.identity_link_id),
                     ("projects", harness.request.effective_plan.lineage.project_id),
+                    ("project_role_grants", grant_id),
                 ):
                     async with harness.factory() as probe:
                         with pytest.raises(DBAPIError, match="lock timeout"):
