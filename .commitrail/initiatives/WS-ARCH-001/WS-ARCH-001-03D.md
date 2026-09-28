@@ -4,7 +4,7 @@
 - Durable disposition: `Complete`
 - Intended merge outcome: Hidden contributor preparation carries the exact activated historical guide through its final durable handoff using canonical owner ports.
 
-## Intent and current behavior
+## Intent
 
 AUTH-18 delivers public manager activation. ART preparation already obtains TASK
 assignment facts and PROJECTS activated, hash-validated historical context through
@@ -68,7 +68,7 @@ real database handoff regressions.
 - The private helper and its ART import are removed, boundary checks pass, and
   public preparation/Submission cutover remains explicitly deferred.
 
-## Risk and verification
+## Risk and review routing
 
 Risk class: L1. Required reviewers: architecture/reuse, security, QA/test delta,
 documentation/product operations, and CI integrity for exact target deletion and test-lane registration. Human focus: exact historical lineage,
@@ -92,7 +92,7 @@ submission-specific service; the final transaction must reacquire the existing
 authority lock order; distinct successor activation does not imply pre-policy
 supersession; negative proof must reach final validation after valid checking.
 
-## Proof and removed tests
+## Evidence
 
 `test_final_intake_keeps_original_guide_after_successor` composes a real successor
 activation with a distinct ContributionPolicyVersion, then resolves final intake
