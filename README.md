@@ -605,8 +605,9 @@ selectors. Missing selectors remain explicit; the context does not promise readi
 Managers obtain those selectors without Finance privileges, then submit the exact
 selection with one UUID `Idempotency-Key`. Save the body and key for receipt replay;
 the draft context is not an active-guide replay endpoint. Response validation,
-authority evidence and activation effects commit together. Approved-guide intake
-and controlled revision integration remain separate.
+authority evidence and activation effects commit together. ARCH-03D connects the
+hidden intake handoff to the exact activated guide. Public intake and controlled
+revision integration remain separate.
 
 ARCH-03A completes the existing internal PROJECTS context port. New work selects
 one active activated guide; existing work resolves its exact frozen guide and
@@ -648,7 +649,8 @@ removing their old role/creator wrappers. ARCH-03C6 exposes separate manager, sy
 locked-context reads with exact current grants. ARCH-03C7 exposes bounded task
 history only to covered Audit Authority and removes the old payload-bearing
 task-only audit route. AUTH-18 delivers public manager guide activation;
-approved-guide intake integration remains pending. Canonical checker materialization follows in
+ARCH-03D connects hidden intake through final durable intent to canonical TASK/PROJECTS
+ports, preserving historical guide selection. Public intake remains deferred. Canonical checker materialization follows in
 ARCH-04B/04C.
 
 ## v0.1 Success Standard

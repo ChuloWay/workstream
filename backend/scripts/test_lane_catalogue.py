@@ -418,6 +418,7 @@ TASK_MODULES = (
     "tests/test_checkers.py",
     "tests/checkers/test_effective_intake_rules.py",
     "tests/test_default_pre_submit_execution.py",
+    "tests/test_approved_guide_intake.py",
     "tests/test_pre_submit_attempt_recovery.py",
     "tests/test_pre_submit_attempt_contracts.py",
     "tests/test_pre_submit_attempt_authority_integration.py",

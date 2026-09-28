@@ -101,6 +101,7 @@ ARCH_03C2_TARGETS = frozenset({
     "backend/app/modules/authorization/api/assignment_invalidation.py",
     "backend/app/workers/outbox_topology.py",
 })
+ARCH_03D_REMOVED_TARGETS = frozenset({"backend/app/modules/tasks/pre_submit_context.py"})
 ARCH_03C2_REMOVED_TARGETS = frozenset({"backend/app/modules/outbox/schemas.py"})
 
 ARCH_03C4_TARGETS = frozenset({
@@ -652,7 +653,7 @@ def _validate_additive_partition_transition(
     ]
     if (
         trusted_targets != sorted(trusted_targets)
-        or removed - (TASK_CHECKER_CLEANUP_REMOVED_TARGETS | ARCH_03C2_REMOVED_TARGETS | OUTBOX_IDENTITY_REMOVED_TARGETS | V01_BASELINE_REMOVED_TARGETS | POL_03B_REMOVED_TARGETS | POL_04B_REMOVED_TARGETS | POL_05A_REMOVED_TARGETS | ARCH_03A_GUIDE_CONTEXT_REMOVED_TARGETS)
+        or removed - (ARCH_03D_REMOVED_TARGETS | TASK_CHECKER_CLEANUP_REMOVED_TARGETS | ARCH_03C2_REMOVED_TARGETS | OUTBOX_IDENTITY_REMOVED_TARGETS | V01_BASELINE_REMOVED_TARGETS | POL_03B_REMOVED_TARGETS | POL_04B_REMOVED_TARGETS | POL_05A_REMOVED_TARGETS | ARCH_03A_GUIDE_CONTEXT_REMOVED_TARGETS)
         or [current_by_target[item["target"]] for item in retained_trusted]
         != retained_trusted
     ):

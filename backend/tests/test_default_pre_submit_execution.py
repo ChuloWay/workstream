@@ -24,6 +24,8 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.hashing import canonical_json_hash
+from app.modules.projects.locked_policy_repository import ProjectLockedPolicyRepository
+from app.modules.tasks.repository import TaskRepository
 from app.core.config import Settings
 from app.modules.artifacts.preparation import (
     HARD_MAXIMUM_ARTIFACT_BYTES,
@@ -582,6 +584,8 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                 )
                 durable_service = SubmissionBundleDurablePutService(
                     session=session,
+                    task_contexts=TaskRepository(session),
+                    project_contexts=ProjectLockedPolicyRepository(session),
                     admission=ArtifactAdmissionService(
                         session,
                         admission_settings,
@@ -669,6 +673,8 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
             denied_prepared, denied = await fresh_checked_bundle()
             denied_service = SubmissionBundleDurablePutService(
                 session=session,
+                task_contexts=TaskRepository(session),
+                project_contexts=ProjectLockedPolicyRepository(session),
                 admission=ArtifactAdmissionService(
                     session,
                     admission_settings,

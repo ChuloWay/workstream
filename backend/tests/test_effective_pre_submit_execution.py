@@ -2,17 +2,13 @@
 
 from dataclasses import replace
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 from uuid import UUID
 from app.core.identifiers import new_record_id
 
 import pytest
 
 from app.core.hashing import canonical_json_hash
-from app.modules.tasks.pre_submit_context import (
-    PreSubmitLockedContextInvalid,
-    load_locked_pre_submit_context,
-)
+
 from app.modules.artifacts.pre_submit_evidence import (
     PreSubmitExecutionCustody,
     PreSubmitExecutionResult,
@@ -297,104 +293,6 @@ def test_compiler_rejects_duplicate_policy_keys_and_projected_paths() -> None:
         compile_effective_project_submission_artifact_policy(duplicate_keys, _sha("9"))
     with pytest.raises(PreSubmitCheckerCompilerError, match="paths are ambiguous"):
         compile_effective_project_submission_artifact_policy(duplicate_paths, _sha("9"))
-
-
-@pytest.mark.asyncio
-async def test_locked_context_revalidates_identity_assignment_and_policy_lineage() -> None:
-    actor_id = new_record_id()
-    identity_link_id = new_record_id()
-    project_id = new_record_id()
-    task_id = new_record_id()
-    assignment_id = new_record_id()
-    guide_id = new_record_id()
-    effective_policy_id = new_record_id()
-    checker_policy_id = new_record_id()
-    source_snapshot_id = new_record_id()
-    session = SimpleNamespace(
-        scalar=AsyncMock(
-            side_effect=[
-                SimpleNamespace(id=str(actor_id), status="active"),
-                SimpleNamespace(
-                    id=str(identity_link_id), actor_profile_id=str(actor_id), status="active"
-                ),
-                SimpleNamespace(
-                    id=str(task_id),
-                    project_id=str(project_id),
-                    assigned_to=str(actor_id),
-                    status="in_progress",
-                    locked_guide_version="1",
-                    locked_guide_source_snapshot_id=str(source_snapshot_id),
-                    locked_guide_source_snapshot_hash=_sha("1"),
-                    locked_effective_project_submission_artifact_policy_id=str(effective_policy_id),
-                    locked_effective_project_submission_artifact_policy_hash=_sha("2"),
-                    locked_pre_submit_checker_policy_id=str(checker_policy_id),
-                    locked_pre_submit_checker_bundle_hash=_sha("3"),
-                ),
-                SimpleNamespace(
-                    id=str(assignment_id),
-                    task_id=str(task_id),
-                    contributor_id=str(actor_id),
-                    status="active",
-                ),
-                None,
-                SimpleNamespace(id=str(guide_id), project_id=str(project_id), version="1"),
-                SimpleNamespace(
-                    id=str(effective_policy_id),
-                    effective_policy_hash=_sha("2"),
-                    effective_policy={},
-                ),
-                SimpleNamespace(
-                    id=str(checker_policy_id),
-                    compiled_bundle_hash=_sha("3"),
-                    compiled_bundle={},
-                ),
-            ]
-        )
-    )
-
-    result = await load_locked_pre_submit_context(
-        session,
-        actor_profile_id=actor_id,
-        identity_link_id=identity_link_id,
-        task_id=task_id,
-        assignment_id=assignment_id,
-        predecessor_submission_id=None,
-    )
-
-    assert result.project_id == project_id
-    assert result.effective_policy_id == effective_policy_id
-    assert result.pre_submit_policy_id == checker_policy_id
-    assert result.guide_version == "1"
-    assert result.source_snapshot_id == source_snapshot_id
-    assert result.source_snapshot_sha256 == _sha("1")
-    assert session.scalar.await_count == 8
-
-
-@pytest.mark.asyncio
-async def test_locked_context_rejects_revoked_identity_before_policy_reads() -> None:
-    actor_id = new_record_id()
-    session = SimpleNamespace(
-        scalar=AsyncMock(
-            side_effect=[
-                SimpleNamespace(id=str(actor_id), status="active"),
-                SimpleNamespace(actor_profile_id=str(actor_id), status="revoked"),
-                None,
-                None,
-            ]
-        )
-    )
-
-    with pytest.raises(PreSubmitLockedContextInvalid, match="pre_submit_locked_context_invalid"):
-        await load_locked_pre_submit_context(
-            session,
-            actor_profile_id=actor_id,
-            identity_link_id=new_record_id(),
-            task_id=new_record_id(),
-            assignment_id=new_record_id(),
-            predecessor_submission_id=None,
-        )
-
-    assert session.scalar.await_count == 4
 
 
 def test_failure_audit_projection_is_bounded_and_path_free() -> None:

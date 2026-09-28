@@ -771,6 +771,8 @@ async def test_durable_put_admits_in_transaction_then_publishes(tmp_path) -> Non
         resume_committed_put=AsyncMock(),
     )
     service = SubmissionBundleDurablePutService(
+        task_contexts=object(),
+        project_contexts=object(),
         session=session,
         admission=admission,
         storage=storage,
@@ -947,6 +949,8 @@ async def test_fresh_checked_custody_resumes_existing_committed_intent(tmp_path)
         resume_committed_put=AsyncMock(return_value="object_confirmed"),
     )
     service = SubmissionBundleDurablePutService(
+        task_contexts=object(),
+        project_contexts=object(),
         session=SimpleNamespace(
             sync_session=SimpleNamespace(get_transaction=lambda: SimpleNamespace(is_active=True)),
             in_nested_transaction=lambda: False,
@@ -989,6 +993,8 @@ async def test_object_confirmed_replay_does_not_reclaim_provider_work(tmp_path) 
         resume_committed_put=AsyncMock(),
     )
     service = SubmissionBundleDurablePutService(
+        task_contexts=object(),
+        project_contexts=object(),
         session=SimpleNamespace(
             in_transaction=lambda: False,
             scalar=AsyncMock(return_value=None),
@@ -1033,6 +1039,8 @@ async def test_durable_put_rejects_capability_replay_before_admission(tmp_path) 
     )
     admission = SimpleNamespace(admit=AsyncMock())
     service = SubmissionBundleDurablePutService(
+        task_contexts=object(),
+        project_contexts=object(),
         session=SimpleNamespace(
             sync_session=SimpleNamespace(get_transaction=lambda: SimpleNamespace(is_active=True)),
             in_nested_transaction=lambda: False,

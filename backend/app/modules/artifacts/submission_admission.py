@@ -129,11 +129,15 @@ class SubmissionBundleDurablePutService:
         admission: ArtifactAdmissionService,
         storage: ArtifactStorageOrchestrator,
         authorization: SubmissionBundlePreparedAuthorization,
+        task_contexts: TaskSubmissionContextPort,
+        project_contexts: ProjectLockedPolicyContextPort,
     ) -> None:
         self._session = session
         self._admission = admission
         self._storage = storage
         self._authorization = authorization
+        self._task_contexts = task_contexts
+        self._project_contexts = project_contexts
 
     async def admit_in_transaction(
         self,
@@ -167,6 +171,8 @@ class SubmissionBundleDurablePutService:
                     replay_durable_intent_id=request.replay_durable_intent_id,
                 ),
                 submission_prepared_authorization=self._authorization,
+                submission_task_contexts=self._task_contexts,
+                submission_project_contexts=self._project_contexts,
                 prepared_authorization=request.prepared_authorization,
                 existing_transaction=True,
             )
@@ -555,6 +561,7 @@ class PreparedSubmissionBundlePreparationCommand:
                     evidence.evidence.evidence_set_id
                 )
                 async with self._authority.transaction():
+                    await self._lock_authorized_context(request)
                     retained, _, durable = await runtime.durable_put.admit_in_transaction(
                         SubmissionBundleDurablePutRequest(
                             prepared_authorization=None,
