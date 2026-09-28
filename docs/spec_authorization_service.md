@@ -1530,7 +1530,7 @@ or activates guide policies.
 
 ### Complete guide activation custody
 
-`project.guide.activate` is active internally through AUTH-12H's explicit adapter
+`project.guide.activate` is publicly exposed by AUTH-18 through AUTH-12H's explicit adapter
 for CP07's sole activation operation. Only a live human Project Manager with an
 exact-project grant may prepare it. System-scoped manager grants and service
 identities are insufficient. The operation acquires shared authority locks before
@@ -1542,7 +1542,9 @@ selectors and that digest, never the policy body or guide material.
 Replay validates the original event under fresh live authority and returns the
 original receipt without another activation or decision. Readiness and policy
 selection remain CP07 responsibilities; unavailable automated acceptance still
-blocks `human_review_required=false`. Public activation wiring remains pending.
+blocks `human_review_required=false`. The existing exact-manager post-policy read
+also discloses activation selections, with the complete response bound to its
+authorization digest; this grants no Finance policy-body access.
 
 ### Registered outbox dispatcher contract
 

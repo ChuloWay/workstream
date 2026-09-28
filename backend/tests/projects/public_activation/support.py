@@ -3,6 +3,8 @@
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
+from sqlalchemy import text
+
 from tests.projects.post_policy.public_support import public_approved_case, deliver
 from tests.projects.guide_compilation.proposals.public_support import proposal_client, proposal_path
 from tests.projects.guide_compilation.proposals.pg_support import seed_review_actor, seed_selected_review_revision_inputs
@@ -58,3 +60,12 @@ async def activation_case(url, monkeypatch, worker):
             body = activation_body(response.json())
             path = f"/api/v1/projects/{command.project_id}/guides/{command.guide_id}/activate"
             yield factory, command, actor, grant, manager, finance_client, policy_path, path, body, published, version_path
+
+
+async def activation_state(factory, guide_id):
+    async with factory() as session:
+        return (
+            (await session.execute(text("select status,activation_operation_id,mutation_generation from project_guides where id=:id"), {'id': str(guide_id)})).one(),
+            await session.scalar(text("select count(*) from guide_mutation_idempotency_records where action_id='project.guide.activate'")),
+            await session.scalar(text("select count(*) from audit_events where action_id='project.guide.activate'")),
+        )

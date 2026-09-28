@@ -370,13 +370,13 @@ cannot be reused as post-submission review-gate evidence. See the
   findings, cleanup and replay. It correctly stopped for absent project-wide
   file/archive size limits, without demanding one selected paper. This proves
   that bounded blocked-result flow; it does not establish a ready policy for
-  those inputs or broad semantic accuracy. CP07 now supplies hidden complete-guide
-  activation and immutable ContributionPolicy binding. It requires both exact
+  those inputs or broad semantic accuracy. CP07 supplies complete-guide activation and immutable ContributionPolicy
+  binding, exposed through AUTH-18 public manager activation. It requires both exact
   approvals and current complete review/revision inputs, supersedes the selected
   prior guide and promotes a draft Project atomically. Active-guide reads require
   the committed binding. AUTH-12H supplies live exact-project manager authority;
   CP08 locks and carries exact policy lineage through Task, TaskAssignment and
-  Submission. Approved-guide intake integration remain pending.
+  Submission. Approved-guide intake integration remains pending.
 - Contributor ZIP preparation uses one verified byte lineage from scratch
   inspection through durable admission and eventual Submission binding.
 

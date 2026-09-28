@@ -31,8 +31,8 @@ manager journey, not an isolated POST whose inputs require private queries.
 - Focused public API tests, existing activation/approval fixtures, actual API
   drill, route/action/OpenAPI/lane/ownership inventories affected by exposure.
 - README, operating/canonical activation contracts, roadmap affected summaries,
-  scoreboard/dependency/gates/trace references, current AUTH/ARCH/CON/POL overview
-  and index next boundary, this record; ignored spreadsheet exports if present.
+  scoreboard/dependency/gates/trace references, current diagrams and their rendered
+  exports, AUTH/ARCH/CON/POL overview/chunk-map and index next boundary, this record; ignored spreadsheet exports if present.
 
 ### Not allowed
 

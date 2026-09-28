@@ -157,8 +157,8 @@ The backend component view zooms into the FastAPI container. It shows how the mo
 
 ## Lifecycle Sequence
 
-The sequence below shows the target v0.1 loop. Public guide activation and canonical
-post-submit execution/recovery remain pending. Retained history does not execute
+The sequence below shows the target v0.1 loop. Public manager guide activation is
+delivered; canonical post-submit execution/recovery remains pending. Retained history does not execute
 checkers or authorize acceptance.
 
 <div class="diagram sequence">

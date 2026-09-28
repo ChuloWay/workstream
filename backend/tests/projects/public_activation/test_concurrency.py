@@ -8,7 +8,7 @@ from sqlalchemy import text
 from app.adapters.projects.contribution_validation import GuideContributionPolicyDiscovery
 from app.modules.projects.contribution_policy import ProjectContributionPolicyEligibility
 from tests.auth_concurrency_support import wait_for_named_database_lock
-from .support import activation_case
+from .support import activation_case, activation_state
 
 
 async def test_context_holds_project_until_finance_retirement_can_commit(isolated_database_env, monkeypatch, post_policy_worker):
@@ -76,6 +76,8 @@ async def test_competing_public_activations_commit_one_guide_generation(isolated
 
 async def test_wrong_project_public_requests_do_not_wait_on_foreign_guide(isolated_database_env, monkeypatch, post_policy_worker):
     import json
+    from app.core.hashing import canonical_json_hash
+    from app.modules.projects.api.guide_activation import GuideActivationInput
     from app.core.identifiers import new_record_id
     from tests.project_create_fixtures import seed_authorized_project
     from tests.projects.guide_compilation.proposals.pg_support import seed_review_actor
@@ -89,6 +91,11 @@ async def test_wrong_project_public_requests_do_not_wait_on_foreign_guide(isolat
         await seed_review_actor(factory, other, actor=actor)
         # Supply a structurally consistent request under the manager's other project.
         foreign_body = json.loads(json.dumps(body).replace(str(command.project_id), str(other)))
+        target = foreign_body['target']
+        target['upstream']['target_digest'] = canonical_json_hash(target['proposal'])
+        target['upstream_output_digest'] = canonical_json_hash(target['upstream'])
+        assert GuideActivationInput.model_validate(foreign_body).target.proposal.project_id == other
+        before = await activation_state(factory, command.guide_id)
         async with factory() as holder, holder.begin():
             await holder.execute(text('select id from project_guides where id=:id for update'), {'id': str(command.guide_id)})
             read = await asyncio.wait_for(manager.get(policy_path.replace(str(command.project_id), str(other))), 5)
@@ -97,3 +104,4 @@ async def test_wrong_project_public_requests_do_not_wait_on_foreign_guide(isolat
                 headers={'Idempotency-Key': str(uuid4())},
             ), 5)
             assert read.status_code == activate.status_code == 404, (read.text, activate.text)
+        assert await activation_state(factory, command.guide_id) == before

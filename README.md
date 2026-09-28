@@ -647,8 +647,8 @@ pagination. ARCH-03C5 exposes separate Contributor/Manager detail and requiremen
 removing their old role/creator wrappers. ARCH-03C6 exposes separate manager, system-Operator and Audit Authority
 locked-context reads with exact current grants. ARCH-03C7 exposes bounded task
 history only to covered Audit Authority and removes the old payload-bearing
-task-only audit route. Public guide activation and approved-guide intake
-integration remain pending. Canonical checker materialization follows in
+task-only audit route. AUTH-18 delivers public manager guide activation;
+approved-guide intake integration remains pending. Canonical checker materialization follows in
 ARCH-04B/04C.
 
 ## v0.1 Success Standard

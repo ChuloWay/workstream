@@ -7,16 +7,7 @@ import pytest
 from sqlalchemy import text
 
 from app.modules.projects.guide_activation.service import GuideActivationService
-from .support import activation_case
-
-
-async def activation_state(factory, guide_id):
-    async with factory() as session:
-        return (
-            (await session.execute(text("select status,activation_operation_id,mutation_generation from project_guides where id=:id"), {'id': str(guide_id)})).one(),
-            await session.scalar(text("select count(*) from guide_mutation_idempotency_records where action_id='project.guide.activate'")),
-            await session.scalar(text("select count(*) from audit_events where action_id='project.guide.activate'")),
-        )
+from .support import activation_case, activation_state
 
 
 async def test_independently_stale_selections_cannot_activate(isolated_database_env, monkeypatch, post_policy_worker):
