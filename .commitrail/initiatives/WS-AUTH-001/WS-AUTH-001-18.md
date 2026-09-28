@@ -6,7 +6,7 @@
   complete activation selections and invoke the existing atomic guide activation
   through public APIs, without Finance privileges or internal database access.
 
-## Intent and current behavior
+## Intent
 
 Main `ed4ac83e` contains canonical history cleanup and public Finance policy
 administration. PROJECTS `GuideActivationService.activate` already binds separate
@@ -103,7 +103,7 @@ or broader role is needed for the existing activation operation.
 - Human focus: complete usable manager journey, no Finance privilege expansion,
   exact selection/replay, atomic evidence, no premature execution/acceptance.
 
-## Evidence and reconciliation
+## Evidence
 
 Existing activation and AUTH-12H suites establish owner semantics. Inspect their
 proof before adding tests. New focused public activation tests and real API drill
