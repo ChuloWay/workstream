@@ -159,8 +159,10 @@ class GuideProposalService:
             yield
         except GuideProposalError:
             raise
-        except (AuthorizationDenied, AuthorizationUnavailable, PreparedAuthorizationInvalid):
+        except AuthorizationDenied:
             raise GuideProposalError("authority_unavailable") from None
+        except (AuthorizationUnavailable, PreparedAuthorizationInvalid):
+            raise GuideProposalError("authorization_service_unavailable") from None
         except (
             GuideCompilationIntegrityError,
             ProjectGuideSetupFinalizationError,

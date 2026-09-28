@@ -2091,3 +2091,22 @@ def test_public_task_queue_partition_additions_are_exact():
         ownership._validate_additive_partition_transition(
             _partition(sorted([retained, *targets, "backend/app/modules/tasks/another_queue.py"])), trusted,
         )
+
+
+def test_public_activation_partition_additions_are_exact():
+    targets = {
+        "backend/app/api/deps/guide_activation.py",
+        "backend/app/api/routes/guide_activation.py",
+        "backend/app/modules/projects/api/guide_activation_context.py",
+        "backend/app/modules/contributions/api/published_selection.py",
+    }
+    assert ownership.AUTH_18_PUBLIC_ACTIVATION_TARGETS == targets
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(_partition(sorted([retained, *targets])), trusted)
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted([retained, *targets, "backend/app/api/routes/extra_activation.py"])), trusted,
+        )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(_partition(sorted(targets)), trusted)

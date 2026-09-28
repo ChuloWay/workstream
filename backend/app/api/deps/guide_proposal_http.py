@@ -22,6 +22,8 @@ def proposal_http_error(exc: GuideProposalError) -> StructuredHTTPException:
     """Conceal selectors and authority; retain bounded actionable conflicts."""
     if exc.code in {"authority_unavailable", "proposal_unavailable"}:
         code, status, message = "proposal_unavailable", 404, "Guide proposal unavailable"
+    elif exc.code == "authorization_service_unavailable":
+        code, status, message = exc.code, 503, "Guide authorization service unavailable"
     elif exc.code == "storage_unavailable":
         code, status, message = exc.code, 503, "Guide proposal storage unavailable"
     else:

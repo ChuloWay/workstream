@@ -22,12 +22,14 @@ AUTH-13/14 cutovers are not additional implementation work.
   ARCH-03B projections through 03B8 are complete. Hidden exact assignment
   invalidation is delivered by 03B9; ARCH-03C1 exact feature authority is complete.
   ARCH-03C2 atomic originating producer wiring and first registration are complete;
-  public TASK activation remains separately bounded.
+  public TASK activation is complete through ARCH-03C7.
+- [AUTH-18](../WS-AUTH-001-18.md) delivers public manager activation and exact
+  selection discovery over CP07/AUTH-12H; approved-guide intake integration is next.
 - CP05 owns exact ContributionPolicy-action activation after merged CP04B.
 - CP08 delivered the minimal lineage writers. ARCH-03B8 hidden task audit
-  evidence and 03B9 hidden assignment invalidation are complete. ARCH-03C owns
-  public TASK activation after completed 03C1 exact feature authority and
-  completed 03C2 originating-transaction event production/registration.
+  evidence and 03B9 hidden assignment invalidation are complete. ARCH-03C delivered
+  public TASK activation through 03C7, after 03C1 exact feature authority and
+  03C2 originating-transaction event production/registration.
   [AUTH-13 is superseded](chunks/WS-AUTH-001-13-task-assignment-cutover.md).
 - ARCH-04D alone activates post-submit materialization/output and CHECKERS
   execution/finalization after ARCH-04B/04B2/04C; historical AUTH-14 and XINT-06B
@@ -47,9 +49,10 @@ The bounded [task project-grant repair](../../../changes/task-project-grant-auth
 replaces contributor claim/start/work-context authority, adds separate management
 context and reasoned system-Operator start, and removes self-activated eligibility
 and public JSON-packet Submission creation. Admission-backed creation stays hidden.
-ARCH-03B/03C must reuse these exact actions and command owners while completing
-public access/authority cutover and live wiring for delivered hidden invalidation; CP08
-already delivered ContributionPolicyVersion lineage. Do not restore eligibility
+ARCH-03B/03C reuse these exact actions and command owners; public TASK access
+and authority are delivered through 03C7, with invalidation wiring in 03C2.
+CP08 delivered ContributionPolicyVersion lineage. Approved-guide intake
+integration remains next. Do not restore eligibility
 or register replacement aliases.
 
 ## WS-AUTH-001-OUTBOX-01 — unavailable dispatcher contract

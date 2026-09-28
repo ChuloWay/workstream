@@ -24,6 +24,10 @@ from app.modules.projects.api.post_policy import (
 )
 from app.modules.projects.guide_compilation.proposal_service import GuideProposalService
 from app.modules.projects.models import PostSubmitCheckerPolicy
+from app.modules.projects.repository import ProjectRepository
+from app.modules.projects.api.guide_activation_context import (
+    GuideActivationContext, GuidePolicySelection, GuideContributionDiscoveryPort,
+)
 
 from .compiler import compile_saved_post_policy
 from .custody import load_post_policy_custody, operation_receipt, require_post_authority
@@ -134,17 +138,38 @@ class PostPolicyService:
             await self._persist(command, actor, receipt, facts, authority, command.idempotency_key)
             return receipt
 
-    async def review_package(self, selection: PostPolicySelection, *, actor: ActorIdentityFacts, request_id: UUID) -> PostPolicyReviewPackage[CompiledPostSubmitPolicy]:
+    async def review_package(self, selection: PostPolicySelection, *, actor: ActorIdentityFacts, request_id: UUID, contribution: GuideContributionDiscoveryPort) -> PostPolicyReviewPackage[CompiledPostSubmitPolicy]:
         """Disclose the complete exact policy and safe findings through existing read authority."""
         self._require_transaction()
         locator = self._locator(selection, actor, request_id, uuid5(request_id, "post-policy-read"), "read")
         async with GuideProposalService._bounded_errors():
             async with self.authorization.prepare_post_policy_operation(locator) as prepared:
                 self._require_prepared(prepared)
+                projects = ProjectRepository(self.session)
+                if await projects.get_project(str(selection.project_id), for_update=True) is None:
+                    raise GuideProposalError("proposal_unavailable")
                 locked, policy, custody = await self.repository.lock_policy(selection)
+                previous = await projects.lock_active_guide(str(selection.project_id))
+                guide = locked.view.guide
+                review = await projects.lock_review_policy(guide.project_id, guide.version)
+                revision = await projects.lock_revision_policy(guide.project_id, guide.version)
+                def selected(row):
+                    return None if row is None else GuidePolicySelection(
+                        policy_id=row.id, generation=row.policy_generation, policy_hash=row.policy_hash,
+                    )
+                activation = GuideActivationContext(
+                    guide_mutation_generation=guide.mutation_generation,
+                    review=selected(review), revision=selected(revision),
+                    contribution=await contribution.published_selection(selection.project_id),
+                    expected_previous_active_guide_id=previous.id if previous else None,
+                    expected_previous_active_guide_generation=previous.mutation_generation if previous else None,
+                    post_approval_operation_id=custody.approval.operation_id if custody.approval else None,
+                    post_approval_output_digest=custody.approval.output_digest if custody.approval else None,
+                )
                 proposal = await self.repository.proposals.package(locked)
                 package = PostPolicyReviewPackage[CompiledPostSubmitPolicy](
                     target=custody.target, policy=custody.compiled, proposal=proposal,
+                    activation_context=activation,
                     lifecycle_status=policy.lifecycle_status,
                     current=locked.current and policy.lifecycle_status != "superseded"
                     and proposal.current_approval_operation_id == custody.target.upstream.operation_id,

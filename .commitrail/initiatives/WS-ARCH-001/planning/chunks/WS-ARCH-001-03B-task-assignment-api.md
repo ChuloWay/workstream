@@ -1,109 +1,85 @@
 # Chunk Contract: WS-ARCH-001-03B TASK Assignment API
 
-Status: coordination contract after completed 03A and CP08. Risk: L1.
-Outcome: bounded TASK metadata, queues, actor-specific projections and assignment
-recovery through owner ports. Each implementation child supplies exact proof.
+Durable disposition: Complete. Risk: L1.
 
-The bounded [project-grant repair](../../../../changes/task-project-grant-authorization.md)
-already owns canonical contributor claim/start/work-context, separate management
-work-context and system-Operator start authority. Reuse its command/port and
-assignment transaction, not a second claim implementation. CP08 completes the contribution-policy attempt locks and minimal writers.
-The [03B2 child](../../WS-ARCH-001-03B2.md) supplies hidden contributor-ready
-queue facts and pagination, without live AUTH or HTTP exposure. The [03B8 child](../../WS-ARCH-001-03B8.md) completes hidden task audit evidence.
-[03B9](../../WS-ARCH-001-03B9.md) completes hidden exact-assignment invalidation;
-03C1 completes its real feature authority. 03C2 supplies atomic publication
-and registered delivery; bounded public activation remains. The
-[03B3 child](../../WS-ARCH-001-03B3.md) delivers hidden all-state management
-and status-only operational queue facts.
-The [03B4 child](../../WS-ARCH-001-03B4.md) delivers hidden contributor and
-management task detail; reuse its fixed projections and visibility facts.
-The [03B5 child](../../WS-ARCH-001-03B5.md) replaces the already-authorized
-contributor and manager work-context responses using those facts and exact
-receipt-selected review/revision/ContributionPolicy identities.
+This completed coordination contract covers TASK metadata, queues, actor-specific
+projections and assignment recovery through owner ports. Its implementation
+children are complete; it is not a skeleton or an instruction to restart work.
+The subsequent ARCH-03C children delivered exact authority and public TASK
+exposure through 03C7. AUTH-18 delivers public manager guide activation/context;
+approved-guide intake integration is the next boundary in the
+[current dependency contract](../PLAN.md#current-dependency-contract).
 
-The [03B6 child](../../WS-ARCH-001-03B6.md) supplies explicit management, operational
-and audit locked-context projections through the existing historical resolver.
-The retained management-capable HTTP route uses the same management implementation;
-its token-role/creator authority remains a named 03C dependency. Operational/audit
-reads stay internal.
+## Delivered boundaries
 
-The reconciled CP08 chunk owns contribution-policy fields and the minimal
-existing screening/claim/Submission copy paths together after ARCH-03A. This
-chunk consumes those complete frozen attempt facts; it must not reimplement the
-writers or select current CON policy during ordinary claim. Preserve the
-screening-time lock and existing authority/transaction ownership.
+- [ARCH-03B1](../../WS-ARCH-001-03B1.md) replaces TaskService's private PROJECTS
+  draft/display reads with the existing port and immutable exact-guide facts.
+- [03B2](../../WS-ARCH-001-03B2.md) and
+  [03B3](../../WS-ARCH-001-03B3.md) provide contributor-ready, management and
+  operational queues. [03B4](../../WS-ARCH-001-03B4.md) provides contributor and
+  management detail; [03B5](../../WS-ARCH-001-03B5.md) provides work context with
+  exact receipt-selected review/revision/ContributionPolicy identities.
+- [03B6](../../WS-ARCH-001-03B6.md) provides distinct management, operational and
+  audit locked-context projections through one historical resolver.
+  [03B7](../../WS-ARCH-001-03B7.md) provides immutable submission requirements;
+  [03B8](../../WS-ARCH-001-03B8.md) provides bounded task audit evidence.
+- [03B9](../../WS-ARCH-001-03B9.md) provides exact-assignment invalidation.
+  [03C1](../../WS-ARCH-001-03C1.md) supplies its fixed-service authority and
+  [03C2](../../WS-ARCH-001-03C2.md) supplies atomic originating publication and
+  registered delivery with enforced prefork topology.
+- [03C3](../../WS-ARCH-001-03C3.md) supplies manager task create/screen/release
+  authority. Public queues, detail/requirements, locked contexts and audit history
+  are delivered by [03C4](../../WS-ARCH-001-03C4.md),
+  [03C5](../../WS-ARCH-001-03C5.md), [03C6](../../WS-ARCH-001-03C6.md) and
+  [03C7](../../WS-ARCH-001-03C7.md), respectively. Their exact authority replaces
+  the former token-role/creator wrappers; operational/audit reads are publicly
+  exposed only through their separately authorized projections.
 
-Allowed: dependency-gated assignment invalidation and
-public facts, focused tests, composition adapters, deny-only route
-declarations, boundary ledgers and current documentation. Not allowed: duplicate
-lineage writers, project-policy evaluation, checker planning, ART custody, AUTH
-decisions, compatibility paths, public cutover or human revision semantics.
+The [project-grant repair](../../../../changes/task-project-grant-authorization.md)
+owns canonical contributor claim/start/work-context, separate management work
+context and system-Operator start authority. CP08 delivered the frozen
+contribution-policy attempt fields and minimal screening/claim/Submission writers
+after ARCH-03A. These remain the shared owners, not additional work for this parent.
 
-Reuse delivered ready, management and operational queue facts, 03B4 detail and
-03B5 work context; declare remaining
-replacement task surfaces against hidden owner commands; ARCH-03C owns their exact activation and live route switch.
-Do not leave an unowned route step between public ports and user-visible
-behavior. The queue must filter project/visibility before counts and cursors.
-Reuse the completed 03B6 locked-context field contracts and 03B8 bounded audit
-evidence contract. The [03B7 child](../../WS-ARCH-001-03B7.md) supplies immutable contributor and management submission requirements using one historical translator; contributor visibility follows the shared TASK lock. The retained requirements route keeps its current authority wrapper. 03C supplies separate action/permission declarations;
-03B3 supplies the management/operational queue facts; 03B8 supplies the covered Audit
-task-evidence facts; their live authority remains 03C. Scope filtering precedes counts, cursors and
-serialization; operational status never includes contributor-private detail.
-For every one of these surfaces,
-no projection selects a permission using a token role or leaks another
-principal's fields. Preserve authorized PM reads when replacing old routes.
+## Preserved owner and safety contracts
 
-Preserve pre-submit authority invalidation: exact submitter-grant revocation
-or actor/link suspension/deactivation closes claimed/in-progress assignments
-as `authority_revoked`, returns the task to READY, clears `assigned_to` and
-retains history. The operation verifies exact cause event, actor, grant/link,
-project and role, is idempotent, and does not restore work on reactivation.
-Another eligible submitter may then claim normally. Wrong-role events and
-already-submitted/evaluation/review history cannot be rewritten. Downstream
-needs-revision obligations and manager reassignment remain REV-owned work;
-there is no new direct manager assignment feature here.
+Reuse the existing command ports and assignment transaction. Do not duplicate
+lineage writers, select today's CON policy during ordinary claim, or introduce
+parallel assignment, contributor, predecessor, locked-context or Submission
+vocabulary. Preserve the screening-time lock and caller-owned transactions.
+`TaskSubmissionContextPort`, `TaskSubmissionContextFacts` and
+`SubmissionCreationCommand` remain the typed boundaries for their consumers.
 
-AUTH-OUTBOX-01, CON-02B and AUTH-OUTBOX-02 supply shared committed delivery
-and dispatcher authority. 03B9 consumes the complete committed envelope and
-holds the OUTBOX event/attempt fence through the hidden TASK effect transaction.
-AUTH invalidation audit rows still are not dispatched events. Actor-wide
-invalidation needs bounded per-project/per-assignment TASK fan-out; TASK and
-REV effects cannot share an implicit acknowledgement. The hidden handler
-uses the real fixed-service feature authority completed by ARCH-03C1.
-ARCH-03C2 owns atomic producer wiring and first production registration,
-including durable AUTH invalidation events in their originating transaction;
-a response hint such as `auth13_assignment` is not a delivered reconciliation.
+Scope and visibility filtering precede queue counts, cursors and serialization.
+Operational status excludes contributor-private detail. Projections never choose
+a permission from token roles or disclose another principal's fields. Preserve
+exact-authorized Project Manager reads and distinct operational/audit authority.
 
-Reuse and extend `TaskSubmissionContextPort`, `TaskSubmissionContextFacts`, and
-`SubmissionCreationCommand`. Do not introduce parallel assignment,
-contributor, predecessor, locked-context, or Submission vocabulary unless a
-reviewed current-main delta proves the existing public type cannot carry it.
+Pre-submit authority invalidation closes only the exact claimed/in-progress
+assignment affected by submitter-grant revocation or actor/link
+suspension/deactivation, records `authority_revoked`, returns the task to READY,
+clears `assigned_to` and retains history. It verifies the committed cause event,
+actor, grant/link, project and role, is idempotent, and does not restore work on
+reactivation. Another eligible submitter may claim normally. Wrong-role events,
+replacement assignments and submitted/evaluation/review history cannot be rewritten.
 
-Before implementation, replace this skeleton with a current-main contract that
-enumerates exact files, commands, migration head and reviewers.
+The shared AUTH-OUTBOX/CON dispatcher owns delivery. TASK consumes the committed
+envelope and holds its event/attempt fence through the effect transaction; AUTH
+invalidation audit rows alone are not dispatched events. Originating publication
+uses bounded per-project/per-assignment fan-out. TASK and REV effects cannot
+share an implicit acknowledgement. No parallel worker, fabricated claim value,
+or response hint substitutes for committed delivery custody.
 
-The completed CP08 screening/claim/Submission lineage and concurrency proofs
-remain required regressions, not duplicate writers for this parent. For each
-remaining child, verify focused unit/PostgreSQL and public composition tests,
-boundary validators, Ruff and hosted coverage. Required reviews are selected
-from the child's actual architecture, security, product/ops, QA, senior and
-test-delta impact.
+## Remaining work and verification
 
-## Current bounded sequence
+No implementation remains under this parent. Approved-guide intake uses its own
+bounded contract and the delivered ports; public admitted Submission and durable
+post-submit execution remain separate. TASK public exposure does not imply those
+surfaces are live. Human revision obligations and manager reassignment remain
+REV-owned; this contract adds no direct manager assignment feature.
 
-1. [ARCH-03B1](../../WS-ARCH-001-03B1.md): remove TaskService's private PROJECTS
-   draft/display reads using the existing port and immutable exact-guide facts.
-   Its public response shapes and authorization remain unchanged. The separate
-   pre-submit context consumer is explicitly outside this metadata cutover.
-2. 03B2/03B3 hidden queues, 03B4 detail, 03B5 work context, 03B6 locked context,
-   03B7 requirements and [03B8 bounded audit evidence](../../WS-ARCH-001-03B8.md)
-   are complete. Existing public audit/recovery readers remain required until
-   their explicit 03C authority replacement.
-3. [03B9](../../WS-ARCH-001-03B9.md) hidden assignment invalidation is complete.
-   03C1 exact feature AUTH and ARCH-03C2 atomic producer publication/first
-   registration are complete. Bounded public activation remains next.
-   No parallel worker or fabricated claim value substitutes for those dependencies.
-
-## Merge state
-
-- Outcome on merge: `planned`
+Retain the completed CP08 lineage/concurrency regressions and the 03B/03C
+isolation, authority, rollback, delivery and public-composition proof. Child change
+records preserve their implementation evidence; they are not an active-work queue.
+Future changes use current owner contracts and impact-selected reviews rather
+than reopening this completed parent.

@@ -1265,7 +1265,8 @@ authority injection; there is no unconfigured construction path.
 
 AUTH-12H activates only `project.guide.activate` with `project.guide.manage`
 through the explicit `guide_activation_authorization` adapter. It authorizes the
-existing CP07 internal operation; it does not expose a new public endpoint.
+existing CP07 operation; AUTH-18 exposes it through the public guide activation
+POST and extends the authorized draft post-policy read with exact selectors.
 Only a current human Project Manager grant scoped to the exact project qualifies.
 System scope, other administrative roles and fixed services do not qualify.
 
@@ -1282,8 +1283,8 @@ it returns the original receipt without a second allow or activation. Supersessi
 or later ContributionPolicy retirement does not rewrite that evidence. Revoked
 actor/link/grant authority denies replay. Composition without the explicit adapter
 continues to deny. CP08 delivers Task, Assignment and hidden Submission policy
-lineage. Manager activation context and public guide activation remain pending,
-followed by approved-guide intake integration.
+lineage. Public manager activation is delivered; approved-guide intake
+integration remains next.
 
 ## Shared outbox dispatcher
 

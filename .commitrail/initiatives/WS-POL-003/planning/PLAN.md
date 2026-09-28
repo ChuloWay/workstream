@@ -51,14 +51,14 @@ approval lifecycle behavior, and one-call orchestration. AUTH must not
 implement a second compiler or agent lifecycle; POL must not create broad
 `project.guide.compile_everything` authority.
 
-AUTH-12E and AUTH-12F3 are merged transitional separate-inference paths. Their
-action-specific projection custody remains reusable, but POL-04B makes their
-independent model calls unreachable without aliases or fallbacks. Remaining
-AUTH-12F4 supplies proposal authority; 12G and 12H remain narrow authorization/activation gates placed
-after the corresponding hidden POL behavior and before its live cutover. They
-are not blanket prerequisites for POL-01.
+POL-04B replaced the separate inference paths with unified setup, without
+aliases or fallbacks. AUTH-12F4 and AUTH-12G supply the delivered pre/post
+approval authority. AUTH-12H supplies exact guide activation authority;
+AUTH-18 exposes manager activation and selection discovery publicly.
+Approved-guide intake integration is the next boundary.
 
-The hidden sequence through AUTH-12B2 is complete; POL-04B1 adds automatic request custody before the POL-04B live cutover:
+The sequence through POL-04B is complete; POL-04B1 supplies automatic request
+custody for the delivered live cutover:
 
 ```text
 POL-04A hidden compilation
@@ -360,7 +360,7 @@ ART verified original-document custody
 -> trusted effective + pre-submit compilation
 -> deterministic post-submit proposal compilation (zero model calls)
 -> separate PostSubmitCheckerPolicy approval
--> CP07 hidden activation command + AUTH-12H exact live authority
+-> AUTH-18 public manager activation/context over CP07 + AUTH-12H
 ```
 
 Automatic initial compilation stops at findings and draft proposals. An insufficient

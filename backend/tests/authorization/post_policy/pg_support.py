@@ -1,5 +1,8 @@
 """Same-session live AUTH composition over real finalized product fixtures."""
 
+from app.adapters.contributions import published_contribution_policy_port
+from app.adapters.projects.contribution_validation import GuideContributionPolicyDiscovery
+
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
@@ -22,7 +25,7 @@ from app.modules.projects.api.post_policy import (
     PostPolicySelection,
 )
 from tests.projects.guide_compilation.helpers import service_actor
-from tests.projects.guide_compilation.proposals.pg_support import proposal_case
+from tests.projects.guide_activation.source_fixtures import source_case
 from tests.projects.post_policy.pg_support import prepare_upstream
 
 
@@ -73,6 +76,8 @@ async def service(factory, actor):
 async def operate(factory, actor, operation, command):
     async with service(factory, actor) as (session, owner, request, context):
         kwargs = dict(actor=actor, request_id=request)
+        if operation == "review_package":
+            kwargs["contribution"] = GuideContributionPolicyDiscovery(published_contribution_policy_port(session))
         if operation == "request_correction":
             kwargs["guide_authorization"] = guide_proposal_authorization(session, context)
         return await getattr(owner, operation)(command, **kwargs)
@@ -80,7 +85,7 @@ async def operate(factory, actor, operation, command):
 
 @asynccontextmanager
 async def ready_case(url):
-    async with proposal_case(url) as (values, factory, command, actor, grant):
+    async with source_case(url) as (values, factory, command, actor, grant):
         payload = await prepare_upstream(factory, command, actor, grant)
         setup_actor = service_actor(values)
         projected = await operate(factory, setup_actor, "derive", payload)

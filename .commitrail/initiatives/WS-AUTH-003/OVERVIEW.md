@@ -8,7 +8,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Completed boundary: recovery foundation and [TASK/checker authorization cleanup](WS-AUTH-003-TASKCHECKER.md).
 - Intent: route public authorization capability through `authorization.api`
   and remove cross-module repository/model coupling.
-- Next usable boundary: manager activation context/public guide activation.
+- Next usable boundary: approved-guide intake integration after delivered
+  [AUTH-18 public manager activation](../WS-AUTH-001/WS-AUTH-001-18.md).
   Submission/checker history uses canonical authority; the alternate gate lifecycle
   is removed. Continue shrinking the canonical import ledger as implementation
   reaches each remaining consumer.

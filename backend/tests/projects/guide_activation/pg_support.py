@@ -1,5 +1,7 @@
 """Complete approved guide and real CON publication, with controlled hidden authority."""
 
+from app.modules.projects.api.guide_activation_context import GuidePolicySelection
+
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
@@ -12,7 +14,6 @@ from app.modules.authorization.repository import AdminAuthorizationRepository
 from app.modules.projects.api.guide_activation import (
     GuideActivationAuthorityReceipt,
     GuideActivationCommand,
-    GuidePolicySelection,
     PreparedGuideActivation,
 )
 from app.modules.projects.api.post_policy import PostPolicyApproval

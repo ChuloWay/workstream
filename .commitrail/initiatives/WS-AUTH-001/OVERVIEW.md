@@ -1,6 +1,7 @@
 # WS-AUTH-001 — Workstream authorization service
 
-Latest completed activation: [AUTH-12H complete-guide authority](WS-AUTH-001-12H.md),
+Latest completed activation: [AUTH-18 public manager activation](WS-AUTH-001-18.md),
+using [AUTH-12H complete-guide authority](WS-AUTH-001-12H.md),
 following [AUTH-12G post-policy authority](WS-AUTH-001-12G.md).
 Current remaining [plan](planning/PLAN.md) and [activation map](planning/CHUNK_MAP.md).
 
@@ -22,8 +23,9 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Public post-policy composition: POL-06B delivered using existing AUTH-12G.
 - Completed activation boundary: AUTH-12H exact-project manager authority for
   CP07 complete-guide activation/binding, with live-authority replay.
-- Next usable boundary: manager activation context and public guide activation,
-  then approved-guide intake integration.
+- Next usable boundary: approved-guide intake integration, then admitted Submission and durable
+  post-submit evaluation. [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers
+  public manager activation context and exact guide activation.
   [CP05A](../WS-ARCH-001/WS-ARCH-001-CP05A.md) delivers public Finance
   ContributionPolicy administration and recovery of a draft selector, a published
   selector, or both. ARCH-03C3 through ARCH-03C7 deliver public task readiness,
@@ -74,5 +76,6 @@ manager proposal review, pre-submit approval and manual correction dispatch.
 2. ARCH-03B/03C replace broad AUTH-13 and ARCH-04D replaces AUTH-14/XINT-06B.
    AUTH-OUTBOX-01/02 bracket hidden CON-02B dispatch; ARCH-04E2 activates only
    the proven TASK routing handler before ARCH-04E3 live composition.
-   Remaining cleanup/conformance and queue/read work must use its exact owner;
-   do not execute those superseded broad designs.
+   TASK queue/read exposure is complete through ARCH-03C7. AUTH-18 public
+   manager guide activation/context is delivered; approved-guide intake is next.
+   Remaining work must use its exact owner, not the superseded broad designs.

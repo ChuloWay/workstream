@@ -7,7 +7,7 @@ import pytest
 
 from app.core.config import get_settings
 from app.modules.projects.api.post_policy import post_policy_task_id
-from tests.projects.guide_compilation.proposals.pg_support import proposal_case
+from tests.projects.guide_activation.source_fixtures import source_case
 from tests.projects.guide_compilation.proposals.public_support import proposal_client, proposal_path
 
 
@@ -41,7 +41,7 @@ async def public_approved_case(url, monkeypatch, *, broker_failure=False):
         if broker_failure:
             raise OSError("isolated broker unavailable")
     monkeypatch.setattr(queue, "enqueue_derivation", enqueue)
-    async with proposal_case(url) as (_, factory, command, actor, grant):
+    async with source_case(url) as (_, factory, command, actor, grant):
         async with proposal_client(factory, actor) as client:
             path = proposal_path(command)
             package = await client.get(path + "/proposal")

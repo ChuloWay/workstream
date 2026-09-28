@@ -14,7 +14,9 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Current boundary: one CHECKERS catalogue, compiler/parser and implementation
   per checker ID serve active policy consumers; production post-submit phase
   execution remains unavailable.
-- Next usable boundary: manager activation context and public guide activation, then approved-guide intake integration.
+- Next usable boundary: approved-guide intake integration.
+  [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers public manager activation
+  context and exact guide activation using the existing CP07 operation.
   [CP05A](WS-ARCH-001-CP05A.md) supplies public Finance policy administration and recoverable draft selectors.
   [ARCH-03C7](WS-ARCH-001-03C7.md) exposes bounded exact-authorized task history.
   [ARCH-03C6](WS-ARCH-001-03C6.md) exposes distinct exact-authorized locked-context reads.
@@ -46,8 +48,9 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   02H; the public route remains unchanged.
 - Internal adapter-binding behavior and authority, public ContributionPolicy
   administration and exact Finance Authority are complete.
-  CP06 exact selected-policy validation and CP07 hidden complete-guide activation
-  and [AUTH-12H live authority](../WS-AUTH-001/WS-AUTH-001-12H.md) are complete.
+  CP06 exact selected-policy validation, CP07 complete-guide activation,
+  [AUTH-12H live authority](../WS-AUTH-001/WS-AUTH-001-12H.md) and
+  [AUTH-18 public manager activation](../WS-AUTH-001/WS-AUTH-001-18.md) are complete.
   [CP08](WS-ARCH-001-CP08.md) exact task-attempt lineage and minimal writers are complete.
   CP09 scoped economic removal remains.
   [CP07A](WS-ARCH-001-CP07A.md) supplies the cross-owner authority lock repair

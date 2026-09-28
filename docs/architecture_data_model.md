@@ -274,8 +274,10 @@ Migration 0023 enforces this custody. Retained unbound active rows remain stored
 without invented evidence; current active-guide reads require an exact committed
 activation receipt and exclude those rows. A valid successor may supersede an
 explicitly selected retained predecessor without backfilling it. AUTH-12H supplies
-explicit internal activation authority for a live exact-project Project Manager;
-composition without an authority adapter and HTTP activation remain unavailable.
+explicit activation authority for a live exact-project Project Manager;
+composition without an authority adapter remains unavailable. AUTH-18 exposes
+the existing activation operation and draft-policy activation selectors through
+public HTTP without adding storage or changing retained receipt semantics.
 
 The internal `ProjectLockedPolicyContextPort` returns a complete immutable graph
 through `lock_active_policy_context(project_id)` or

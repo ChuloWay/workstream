@@ -14,14 +14,14 @@ post-task requirement. Historical split parents 05/06 are not extra PRs.
 | `WS-POL-003-02` | One `compile_project_guide` adapter method and fake-runtime proof. Merged PR #301. | 01 |
 | `WS-POL-003-03A` | Hidden immutable attempt/compilation schema, validator, repository, crash fence, and deny-by-default authorization seams. | 02 |
 | `WS-AUTH-001-12I` | Register and activate exact PM compilation request/recovery plus fixed-service compilation execute authority. | 03A exact resource/action manifest |
-| `WS-POL-003-03B` | Complete authorized immutable compilation persistence; no policy projection or setup-service cutover. POL-04A is the next boundary. | 03A + AUTH-12I satisfied |
+| `WS-POL-003-03B` | Complete authorized immutable compilation persistence; no policy projection or setup-service cutover. Subsequent setup and approval boundaries through POL-07 are complete. | 03A + AUTH-12I satisfied |
 | `WS-POL-003-04A` | Complete hidden one-attempt setup orchestrator over the complete result; the three legacy inference methods are denied and unreachable in the candidate call graph. | 03B |
 | `WS-POL-003-04A3` | Complete hidden compilation-derived sufficiency/artifact-policy projections with immutable provenance and no model call. | Merged 04A |
 | `WS-POL-003-04A2` | Complete hidden immutable setup-ledger finalization with closed outcomes and no live route. | Merged 04A3 |
 | `WS-AUTH-001-12J` | Complete exact fixed-service authority for the two compilation-derived projection ports. | Merged 04A3 |
 | `WS-AUTH-001-12B2` | Complete exact setup-finalization authority (PR #384). | Complete POL-04A2 + AUTH-12J |
 | `WS-POL-003-04B1` | Complete hidden automatic request authority and origin custody in the same request operation; current PM replay validation. | AUTH-12I + completed immutable compilation and ART material foundation |
-| `WS-POL-003-04B` | Planned automatic initial live cutover with replaceable runtime/model/instructions through the hidden projection/finalization chain; physically delete the three superseded inference methods, prompts, affected consumers and obsolete tests in the same change. | 04B1 + merged 04A3 + 04A2 + AUTH-12J + AUTH-12B2 + ARCH-04A catalogue/schema |
+| `WS-POL-003-04B` | Complete automatic initial live cutover with replaceable runtime/model/instructions through the projection/finalization chain; superseded inference methods and affected callers removed. | 04B1 + merged 04A3 + 04A2 + AUTH-12J + AUTH-12B2 + ARCH-04A catalogue/schema |
 | `WS-POL-003-05A` | Hidden complete review package, PM correction/manual rerun in a new generation, and approval/effective/pre-submit behavior. | 04B |
 | `WS-AUTH-001-12F4` | Activate exact review-package read, PM correction/approval and PREP composition for the hidden 05A manifest. | 05A |
 | `WS-POL-003-05B` | Live PM approval and trusted effective/pre-submit projection cutover. | 05A + AUTH-12F4 |
@@ -29,7 +29,7 @@ post-task requirement. Historical split parents 05/06 are not extra PRs.
 | `WS-AUTH-001-12G` | Activate exact fixed-service projection plus PM approval/correction authority for the hidden 06A manifest. | 06A |
 | `WS-POL-003-06B` | Live deterministic post-submit projection/approval cutover with zero additional inference. | 06A + AUTH-12G |
 | `WS-POL-003-07` | One typed facade over existing ART pre and CHECKER post contracts; no post-result persistence. | 06B + ARCH-04A registered capability proof + merged ART-04B1-04B3 |
-| `WS-AUTH-001-12H` | Complete internal guide activation authority over the approved current-generation unified chain. CP08, ARCH-03A and ARCH-03B1 are delivered. ARCH-03B queues/actor projections and 03B9 hidden exact invalidation are complete. ARCH-03C1 real feature authority is complete. ARCH-03C2 atomic producer wiring and first registration are complete; bounded public activation remains next. CP09 remains later. | POL-07 + corrected AUTH-12B2 + CP05 active ContributionPolicy behavior + CP06 validation + CP07 ProjectGuide binding |
+| `WS-AUTH-001-12H` / [AUTH-18](../../WS-AUTH-001/WS-AUTH-001-18.md) | Complete: exact guide activation authority and public manager activation/context over the approved unified chain. CP08 lineage and ARCH-03 task authority/projections are delivered; approved-guide intake is next. CP09 remains later. | POL-07 + corrected AUTH-12B2 + CP05 active ContributionPolicy behavior + CP06 validation + CP07 ProjectGuide binding |
 | `WS-POL-003-08` | Supplementary visibility; separate remaining cleanup is parked and handled within each affected module. Essential review/correction belongs to 05A/05B and 06A/06B. | Planned after 07 + AUTH-12H + canonical WS-ARCH-001-04E manifest; any separately authorized retained-data change requires CP09's inventory, mapping and readability/recoverability proof for affected facts; no cleanup prerequisite for 04B |
 
 The 04E manifest proves canonical routing, not legacy-history preservation.

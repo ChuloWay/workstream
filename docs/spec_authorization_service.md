@@ -1282,11 +1282,11 @@ execution task, calls no provider, and does not make the hidden POL workflow liv
 | `project.guide_compilation.review_package.read` (active) | `project.guide.manage` | `WS-AUTH-001-12F4` |
 | `project.guide_compilation.correction.request` (active) | `project.guide_compilation.request` | `WS-AUTH-001-12F4` |
 | `project.submission_artifact_policy.approve` (active) | `project.effective_policy.manage` | `WS-AUTH-001-12F4` |
-| `project.post_submit_checker_policy.approve` | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
-| `project.post_submit_checker_policy.correction.request` | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
-| `project.post_submit_checker_policy.derive` | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
+| `project.post_submit_checker_policy.approve` (active) | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
+| `project.post_submit_checker_policy.correction.request` (active) | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
+| `project.post_submit_checker_policy.derive` (active) | `project.effective_policy.manage` | `WS-AUTH-001-12G` |
 | `project.setup_run.update` (active) | `project.guide.manage` | `WS-AUTH-001-12B2` |
-| `project.guide.activate` (active internally) | `project.guide.manage` | `WS-AUTH-001-12H` |
+| `project.guide.activate` (public through AUTH-18) | `project.guide.manage` | `WS-AUTH-001-12H`, `WS-AUTH-001-18` |
 
 The v0.1 baseline preserves historical sufficiency
 rows as readable, unattributed records while requiring complete creation or
@@ -1530,7 +1530,7 @@ or activates guide policies.
 
 ### Complete guide activation custody
 
-`project.guide.activate` is active internally through AUTH-12H's explicit adapter
+`project.guide.activate` is publicly exposed by AUTH-18 through AUTH-12H's explicit adapter
 for CP07's sole activation operation. Only a live human Project Manager with an
 exact-project grant may prepare it. System-scoped manager grants and service
 identities are insufficient. The operation acquires shared authority locks before
@@ -1542,7 +1542,9 @@ selectors and that digest, never the policy body or guide material.
 Replay validates the original event under fresh live authority and returns the
 original receipt without another activation or decision. Readiness and policy
 selection remain CP07 responsibilities; unavailable automated acceptance still
-blocks `human_review_required=false`. Public activation wiring remains pending.
+blocks `human_review_required=false`. The existing exact-manager post-policy read
+also discloses activation selections, with the complete response bound to its
+authorization digest; this grants no Finance policy-body access.
 
 ### Registered outbox dispatcher contract
 

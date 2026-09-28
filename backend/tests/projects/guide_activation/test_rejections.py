@@ -165,7 +165,7 @@ async def test_retired_con_policy_cannot_form_a_new_binding(clean_postgres_datab
     ):
         async with factory() as session, session.begin():
             await world.service(session).retire(world.request("retire", policy))
-        with pytest.raises(GuideProposalError, match="proposal_unavailable"):
+        with pytest.raises(GuideProposalError, match="proposal_stale"):
             async with factory() as session, session.begin():
                 await activation_service(session, actor, command, grant).activate(
                     command, actor=actor, request_id=uuid4()

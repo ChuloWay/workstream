@@ -1,6 +1,8 @@
 """Translate CON public validation facts without importing its composition root."""
 
 from uuid import UUID
+from app.modules.contributions.api.published_selection import PublishedContributionPolicyPort
+from app.modules.projects.api.guide_activation_context import GuidePublishedContributionSelection
 
 from app.modules.contributions.api.policies import ContributionPolicyUnavailable
 from app.modules.contributions.api.validation import (
@@ -49,4 +51,25 @@ class GuideContributionPolicyValidation:
             version_number=facts.version_number,
             rules_and_definitions_digest=facts.rules_and_definitions_digest,
             adapter_binding_ids=facts.adapter_binding_ids,
+        )
+
+
+class GuideContributionPolicyDiscovery:
+    """Translate only published CON identities into the manager context contract."""
+
+    def __init__(self, discovery: PublishedContributionPolicyPort) -> None:
+        self.discovery = discovery
+
+    async def published_selection(self, project_id: UUID) -> GuidePublishedContributionSelection | None:
+        try:
+            value = await self.discovery.published_selection(project_id)
+        except ContributionPolicyUnavailable:
+            raise ValueError("contribution selector unavailable") from None
+        if value is None:
+            return None
+        if value.project_id != project_id:
+            raise ValueError("contribution selector project mismatch")
+        return GuidePublishedContributionSelection(
+            contribution_policy_id=value.contribution_policy_id,
+            contribution_policy_version_id=value.contribution_policy_version_id,
         )

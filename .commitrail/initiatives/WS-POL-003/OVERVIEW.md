@@ -27,8 +27,9 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   Production post-submit phase execution remains unavailable.
 - Intent: compile one locked guide and its policies into authoritative,
   versioned project behavior without circular subsystem authority.
-- Next usable boundary: manager activation context and public guide activation,
-  then approved-guide intake integration.
+- Next usable boundary: approved-guide intake integration, then admitted Submission and durable
+  post-submit evaluation. [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers
+  public manager activation context and exact guide activation.
   [CP05A](../WS-ARCH-001/WS-ARCH-001-CP05A.md) delivers public Finance
   ContributionPolicy administration and recovery of a draft selector, a published
   selector, or both. ARCH-03C3 through ARCH-03C7 deliver public task readiness,
@@ -53,7 +54,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Governing sources: project-guide specifications, authorization and
   contribution-policy specifications, code, migrations, and tests.
 - Preserve: trusted policy compilation, explicit ownership, atomic persistence,
-  no public activation route or default live-authority composition, and no concrete
+  explicit live-authority composition for public activation and no concrete
   adapter leakage.
 
 ## Delivered
@@ -90,7 +91,8 @@ POL-05/06 and AUTH-12F4/12G deliver public proposal and post-policy visibility,
 separate approvals and shared corrections. Automatic derivation and recovery
 consume committed upstream approvals while finalized setup remains immutable.
 
-1. CP06 validation and CP07 hidden complete-guide activation/binding are delivered. AUTH-12H now authorizes CP07's hidden command without a
+1. CP06 validation and CP07 complete-guide activation/binding are delivered. AUTH-12H
+   authorizes that command and AUTH-18 exposes its manager workflow without a
    Task/CheckerRun dependency. POL-07B supplies the internal phase service;
    ARCH-04C alone owns later durable post-submit persistence.
    Remove obsolete owner code in each replacement chunk; no compatibility or

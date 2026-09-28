@@ -225,6 +225,13 @@ ARCH_03A_GUIDE_CONTEXT_REMOVED_TARGETS = frozenset({
     "backend/app/modules/projects/policy_lineage.py",
 })
 
+AUTH_18_PUBLIC_ACTIVATION_TARGETS = frozenset({
+    "backend/app/api/deps/guide_activation.py",
+    "backend/app/api/routes/guide_activation.py",
+    "backend/app/modules/projects/api/guide_activation_context.py",
+    "backend/app/modules/contributions/api/published_selection.py",
+})
+
 ARCH_CP07_GUIDE_ACTIVATION_TARGETS = frozenset({
     "backend/app/adapters/projects/contribution_validation.py",
     "backend/app/modules/projects/api/guide_activation.py",
@@ -692,6 +699,7 @@ def _validate_additive_partition_transition(
             | ARCH_CP04B_CONTRIBUTION_POLICY_TARGETS
         | ARCH_04A_POST_SUBMIT_TARGETS
         | ARCH_CP05_POLICY_AUTH_TARGETS
+        | AUTH_18_PUBLIC_ACTIVATION_TARGETS
         | ARCH_CP05A_PUBLIC_POLICY_TARGETS
         | ARCH_CP06_SELECTED_POLICY_TARGETS
         | ARCH_CP07_GUIDE_ACTIVATION_TARGETS

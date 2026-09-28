@@ -1,5 +1,8 @@
 """Observe real manager-grant serialization against complete proposal disclosure."""
 
+from app.adapters.contributions import published_contribution_policy_port
+from app.adapters.projects.contribution_validation import GuideContributionPolicyDiscovery
+
 import asyncio
 from uuid import uuid4
 
@@ -47,6 +50,7 @@ async def test_manager_operation_and_revocation_serialize(clean_postgres_databas
                     if name == "read":
                         await owner.review_package(
                             selection,
+                            contribution=GuideContributionPolicyDiscovery(published_contribution_policy_port(session)),
                             actor=actor,
                             request_id=request,
                         )
