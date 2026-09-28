@@ -6,6 +6,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.core.hashing import canonical_json_hash
+from app.modules.projects.api.guide_activation_context import GuideActivationContext, GuideContributionDiscoveryPort
 from app.modules.projects.api.guide_proposal_package import GuideProposalReviewPackage
 from app.modules.projects.api.guide_proposals import (
     Digest, GuideProposalApprovalReceipt, GuideProposalCorrectionInput,
@@ -127,10 +128,18 @@ class PostPolicyReviewPackage(PostPolicyValue, Generic[_PolicyT]):
     target: PostPolicyTarget
     policy: _PolicyT
     proposal: GuideProposalReviewPackage
+    activation_context: GuideActivationContext
     lifecycle_status: Literal["compiled", "approved", "superseded"]
     current: bool
     approval_operation_id: UUID | None
     correction: GuideProposalCorrectionReceipt | None
+
+
+    @model_validator(mode="after")
+    def approval_context_matches(self):
+        if self.activation_context.post_approval_operation_id != self.approval_operation_id:
+            raise ValueError("activation context approval mismatch")
+        return self
 
 
 _ActorT = TypeVar("_ActorT", contravariant=True)
@@ -144,7 +153,7 @@ class PostPolicyOperationsPort(Protocol[_ActorT, _GuideAuthorityT, _PolicyT]):
 
     async def approve(self, command: PostPolicyApproval, *, actor: _ActorT, request_id: UUID) -> PostPolicyReceipt: ...
 
-    async def review_package(self, selection: PostPolicySelection, *, actor: _ActorT, request_id: UUID) -> PostPolicyReviewPackage[_PolicyT]: ...
+    async def review_package(self, selection: PostPolicySelection, *, actor: _ActorT, request_id: UUID, contribution: GuideContributionDiscoveryPort) -> PostPolicyReviewPackage[_PolicyT]: ...
 
     async def request_correction(
         self, command: PostPolicyCorrection, *, actor: _ActorT, request_id: UUID,

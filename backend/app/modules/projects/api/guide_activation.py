@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.core.hashing import canonical_json_hash
 from app.modules.projects.api.guide_proposals import Digest
 from app.modules.projects.api.post_policy import PostPolicyTarget
+from app.modules.projects.api.guide_activation_context import GuidePolicySelection
 
 
 class ActivationValue(BaseModel):
@@ -19,15 +20,7 @@ class ActivationValue(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, revalidate_instances="always")
 
 
-class GuidePolicySelection(ActivationValue):
-    """The selected review or revision version, never a latest-row lookup."""
-
-    policy_id: UUID
-    generation: Annotated[int, Field(strict=True, gt=0)]
-    policy_hash: Digest
-
-
-class GuideActivationCommand(ActivationValue):
+class GuideActivationInput(ActivationValue):
     """Bind exactly the separately approved generation displayed to the manager."""
 
     target: PostPolicyTarget
@@ -40,7 +33,6 @@ class GuideActivationCommand(ActivationValue):
     contribution_policy_version_id: UUID
     expected_previous_active_guide_id: UUID | None
     expected_previous_active_guide_generation: Annotated[int, Field(strict=True, gt=0)] | None
-    idempotency_key: UUID
 
     @model_validator(mode="after")
     def exact_predecessor(self):
@@ -52,6 +44,11 @@ class GuideActivationCommand(ActivationValue):
         if self.expected_previous_active_guide_id == self.target.proposal.guide_id:
             raise ValueError("activation cannot supersede its own guide")
         return self
+
+class GuideActivationCommand(GuideActivationInput):
+    """Exact public selections plus the transport-validated replay key."""
+
+    idempotency_key: UUID
 
     @property
     def digest(self) -> str:
@@ -178,7 +175,7 @@ _Actor = TypeVar("_Actor", contravariant=True)
 
 
 class GuideActivationPort(Protocol[_Actor]):
-    """One caller-owned atomic operation, with no public activation authority yet."""
+    """One caller-owned atomic operation with explicit live activation authority."""
 
     async def activate(
         self,

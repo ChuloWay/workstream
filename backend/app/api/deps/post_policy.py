@@ -10,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.auth import guide_proposal_authorization, post_policy_authorization
 from app.adapters.projects import project_post_policy_service
+from app.adapters.contributions import published_contribution_policy_port
+from app.adapters.projects.contribution_validation import GuideContributionPolicyDiscovery
+from app.modules.projects.api.guide_activation_context import GuideContributionDiscoveryPort
 from app.api.deps.authorization import (
     _authorization_context, get_authorization_actor, get_authorization_actor_identity,
 )
@@ -34,6 +37,7 @@ class PostPolicyRequest:
     guide_authorization: GuideProposalAuthorizationPort
     actor: ActorIdentityFacts
     request_id: UUID
+    contribution: GuideContributionDiscoveryPort
 
 
 async def get_post_policy_request(
@@ -55,6 +59,7 @@ async def get_post_policy_request(
                     current_post_submit_catalogue(),
                 ),
                 guide_proposal_authorization(session, context), actor, request_id,
+                GuideContributionPolicyDiscovery(published_contribution_policy_port(session)),
             )
     finally:
         if session.in_transaction():

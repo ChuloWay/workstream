@@ -8,12 +8,12 @@ from sqlalchemy import text
 from app.modules.projects.api.guide_proposals import GuideProposalError
 from app.modules.projects.api.post_policy import PostPolicyCorrection, PostPolicySelection
 from tests.projects.guide_compilation.helpers import service_actor
-from tests.projects.guide_compilation.proposals.pg_support import proposal_case
+from tests.projects.guide_activation.source_fixtures import source_case
 from .pg_support import prepare_post_policy, operate
 
 
 async def test_correction_replays_one_existing_unified_successor_and_read_recovers_it(clean_postgres_database):
-    async with proposal_case(clean_postgres_database) as (values, factory, command, actor, grant):
+    async with source_case(clean_postgres_database) as (values, factory, command, actor, grant):
         _, projected = await prepare_post_policy(factory, command, actor, grant, service_actor(values))
         correction = PostPolicyCorrection(target=projected.target, idempotency_key=uuid4(), reason='Reconsider the task evaluation requirements')
         first = await operate(factory, actor, command.project_id, grant, 'request_correction', correction)
@@ -33,7 +33,7 @@ async def test_correction_replays_one_existing_unified_successor_and_read_recove
 
 @pytest.mark.parametrize('which', ['post', 'guide'])
 async def test_either_prepared_close_failure_rolls_back_both_operations(clean_postgres_database, which):
-    async with proposal_case(clean_postgres_database) as (values, factory, command, actor, grant):
+    async with source_case(clean_postgres_database) as (values, factory, command, actor, grant):
         _, projected = await prepare_post_policy(factory, command, actor, grant, service_actor(values))
         correction = PostPolicyCorrection(target=projected.target, idempotency_key=uuid4(), reason='Reconsider the task evaluation requirements')
         with pytest.raises(GuideProposalError, match='authority_unavailable'):

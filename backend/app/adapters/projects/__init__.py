@@ -208,7 +208,7 @@ def project_guide_activation_port(
     pre_catalogue: PreSubmissionCapabilityProjection, post_catalogue: PostSubmitCatalogue,
     authorization: GuideActivationAuthorizationPort | None = None,
 ) -> GuideActivationPort[ActorIdentityFacts]:
-    """Compose hidden activation with explicit CON validation and unavailable default authority."""
+    """Compose canonical activation with explicit CON validation and authority."""
     from app.modules.projects.guide_activation.service import GuideActivationService
 
     return GuideActivationService(

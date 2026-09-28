@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
 from app.modules.contributions.api import ContributionPolicyProjectSelection
+from app.modules.contributions.api.published_selection import PublishedContributionPolicySelection
 
 from app.modules.contributions.models import (
     ContributionAwardDefinition,
@@ -71,6 +72,26 @@ class ContributionPolicyRepository:
             current_published_version_id=row.current_published_version_id,
             open_draft_version_id=row.open_draft_version_id,
         )
+
+    async def published_selection(self, project_id: UUID) -> PublishedContributionPolicySelection | None:
+        """Read only one active aggregate's exact current published version."""
+        rows = (await self._session.execute(select(
+            ContributionPolicy.project_id, ContributionPolicy.id, ContributionPolicyVersion.id,
+        ).join(ContributionPolicyVersion, and_(
+            ContributionPolicyVersion.id == ContributionPolicy.current_published_version_id,
+            ContributionPolicyVersion.contribution_policy_id == ContributionPolicy.id,
+            ContributionPolicyVersion.project_id == ContributionPolicy.project_id,
+        )).where(
+            ContributionPolicy.project_id == str(project_id),
+            ContributionPolicy.status == "active", ContributionPolicyVersion.status == "published",
+        ).limit(2))).all()
+        if not rows:
+            return None
+        if len(rows) != 1:
+            from app.modules.contributions.api import ContributionPolicyUnavailable
+            raise ContributionPolicyUnavailable("contribution_policy_unavailable")
+        project, policy, version = rows[0]
+        return PublishedContributionPolicySelection(UUID(project), policy, version)
 
     async def lock_operation(self, operation_id: UUID) -> None:
         """Serialize requests sharing one immutable operation identifier."""

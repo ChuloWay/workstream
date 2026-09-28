@@ -206,7 +206,14 @@ policy. It supersedes the selected prior guide and activates a draft Project
 atomically. AUTH-12H now supplies live authorization for an active Project Manager
 with a grant scoped to that exact project. System-scoped managers, other roles and
 services cannot activate. Replay requires current authority and returns the original
-receipt. Public activation API wiring remains pending. An active-guide read requires
+receipt. Managers read `activation_context` in the draft post-policy review package,
+then POST those exact selections to `/api/v1/projects/{project_id}/guides/{guide_id}/activate`
+with one UUID `Idempotency-Key`. Finance separately publishes ContributionPolicy;
+the manager context shows only published identities. Missing selections remain
+explicit and the read does not guarantee readiness. Retain the submitted body and
+key for replay after activation or supersession; the draft read is not a replay
+endpoint. Validation and serialization occur before effects and AUTH evidence commit.
+An active-guide read requires
 the committed binding; historical rows without that binding are unavailable.
 
 Internal task/intake integrations now resolve that complete binding through one
@@ -253,7 +260,7 @@ ARCH-03B9 supplies hidden exact-assignment invalidation,
 AUTH-OUTBOX-02 supplies shared delivery, and ARCH-03C1 supplies exact reconciler
 authority and decision-bound receipts. ARCH-03C2 delivers atomic producer
 publication and first handler registration with enforced prefork topology.
-Public guide activation and approved-guide intake integration remain next.
+Public manager activation is delivered; approved-guide intake integration remains next.
 
 The intended unified flow uses one compilation result for sufficiency and
 artifact/pre-submit/post-submit proposals. Once finalized, its `ProjectSetupRun`,

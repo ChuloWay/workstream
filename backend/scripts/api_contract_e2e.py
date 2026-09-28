@@ -31,7 +31,6 @@ from app.modules.api_controls.service import (
     rate_key_digest,
 )
 from app.modules.projects.models import (
-    ProjectGuide,
     PreSubmitCheckerPolicy,
 )
 from run_isolated_tests import NAME_RE as DERIVED_DATABASE_NAME
@@ -58,32 +57,58 @@ GUIDE_ARTIFACT_PIPELINE_SERVICE_IDENTITIES = (
 )
 
 
-async def activate_guide_for_e2e(project_id: str, guide_id: str, fixture_bundle: dict) -> dict:
-    """Use authorized internal activation while its HTTP exposure remains deferred."""
-    from tests.projects.guide_activation.read_fixtures import activate_approved_guide
+async def activate_guide_for_e2e(
+    client, manager_token, finance_token, project_id: str, guide_id: str, fixture_bundle: dict,
+) -> dict:
+    """Arrange scripted setup, then discover and activate through real public HTTP."""
     from tests.projects.post_submit_fixtures import seed_post_submit_policy_for_downstream_tests
+    from tests.contributions.public_policy.support import UNPAID
 
     sessions = db_session.get_session_factory()
     async with sessions() as session:
         database_name = await session.scalar(text("select current_database()"))
         if DERIVED_DATABASE_NAME.fullmatch(str(database_name)) is None:
             raise RuntimeError("activation fixture requires an isolated E2E database")
-        finalized = await session.scalar(
-            text("select 1 from project_guide_setup_finalizations where guide_id=:guide"),
-            {"guide": guide_id},
-        )
-        ensure(finalized is not None, "task fixture requires unified finalization")
     await seed_post_submit_policy_for_downstream_tests(
         project_id=project_id, guide_id=guide_id,
         source_snapshot=fixture_bundle["source_snapshot"],
         pre_submit_checker_policy=fixture_bundle["pre_submit_checker_policy"],
         sessions=sessions,
     )
-    active = await activate_approved_guide(sessions, project_id=project_id, guide_id=guide_id)
-    async with sessions() as session:
-        guide = await session.get(ProjectGuide, guide_id)
-        ensure(guide.contribution_policy_version_id is not None, "activation omitted CON custody")
-        active["contribution_policy_version_id"] = str(guide.contribution_policy_version_id)
+    root = f"/api/v1/projects/{project_id}"
+    policy = await request_json(
+        client, "POST", root + "/contribution-policies/drafts", finance_token,
+        {"name": "API drill policy"}, 201, idempotency_key=str(uuid4()),
+    )
+    version = (root + f"/contribution-policies/{policy['contribution_policy_id']}"
+               f"/versions/{policy['contribution_policy_version_id']}")
+    await request_json(client, "PUT", version, finance_token, UNPAID,
+                       idempotency_key=str(uuid4()))
+    await request_json(client, "POST", version + "/publication", finance_token, {},
+                       idempotency_key=str(uuid4()))
+    guide_path = root + f"/guides/{guide_id}"
+    setup = await request_json(client, "GET", guide_path + "/setup-runs/latest", manager_token)
+    compilation = guide_path + f"/compilations/{setup['finalized_compilation_id']}"
+    proposal = await request_json(client, "GET", compilation + "/proposal", manager_token)
+    package = await request_json(
+        client, "GET", compilation + f"/post-submission-policies/{proposal['post_submit_policy_id']}",
+        manager_token,
+    )
+    context = package["activation_context"]
+    body = {"target": package["target"], **{
+        field: context[field] for field in (
+            "post_approval_operation_id", "post_approval_output_digest", "guide_mutation_generation",
+            "review", "revision", "expected_previous_active_guide_id", "expected_previous_active_guide_generation",
+        )
+    }, **context["contribution"]}
+    key = str(uuid4())
+    receipt = await request_json(client, "POST", guide_path + "/activate", manager_token, body,
+                                 idempotency_key=key)
+    replay = await request_json(client, "POST", guide_path + "/activate", manager_token, body,
+                                idempotency_key=key)
+    ensure(replay == receipt, "public activation replay drifted")
+    active = await request_json(client, "GET", root + "/active-guide", manager_token)
+    active["contribution_policy_version_id"] = receipt["contribution"]["contribution_policy_version_id"]
     return active
 
 
@@ -1617,7 +1642,7 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             "POST",
             f"/api/v1/projects/{project['id']}/guides/{guide['id']}/activate",
             manager_token,
-            expected_status=404,
+            expected_status=422,
         )
         live_guide_id = guide["id"]
         guide = await request_json(
@@ -1651,8 +1676,20 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             documents=guide["documents"],
             task_fixture=True,
         )
+        finance_token = issue_flow_token(
+            f"real-api-finance-{run_id}", [], issuer=flow_issuer,
+            audience=flow_audience, secret=flow_secret,
+        )
+        finance_actor = await request_json(client, "GET", "/api/v1/actors/me", finance_token)
+        await request_json(
+            client, "POST", "/api/v1/admin-role-grants", manager_token,
+            {"target_actor_profile_id": finance_actor["actor_profile_id"],
+             "role": "finance_authority", "scope_type": "project", "scope_project_id": project["id"],
+             "reason": "Separate Finance authority for the public activation drill"},
+            201, idempotency_key=str(uuid4()),
+        )
         active = await activate_guide_for_e2e(
-            project["id"], guide["id"], fixture_bundle
+            client, project_reader_token, finance_token, project["id"], guide["id"], fixture_bundle
         )
         assert active["guide"]["version"] == "v1"
         assert active["guide"]["id"] == guide["id"] != live_guide_id

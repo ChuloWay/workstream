@@ -1,7 +1,7 @@
 # WS-AUTH-001-18 — Public manager guide activation
 
 - Initiative: WS-AUTH-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: an exact-project Project Manager can discover the
   complete activation selections and invoke the existing atomic guide activation
   through public APIs, without Finance privileges or internal database access.
@@ -103,7 +103,7 @@ or broader role is needed for the existing activation operation.
 - Human focus: complete usable manager journey, no Finance privilege expansion,
   exact selection/replay, atomic evidence, no premature execution/acceptance.
 
-## Verification and reconciliation
+## Evidence and reconciliation
 
 Existing activation and AUTH-12H suites establish owner semantics. Inspect their
 proof before adding tests. New focused public activation tests and real API drill
@@ -155,3 +155,21 @@ Submission and durable post-submit evaluation. This does not resume lease work.
   same sanitized `proposal_stale`/409. Do not catch storage or authority failures
   as staleness; those retain unavailable handling. CON's validation remains
   fail-closed and no policy-existence distinction is exposed.
+
+## Implemented proof boundaries
+
+- `tests/projects/public_activation/` covers public selection/activation, stale
+  inputs, retirement/revocation replay, transaction rollback on serialized response
+  failures and an actual audit INSERT failure, project-scoped noninterference and
+  concurrent Finance retirement/activation.
+- Existing PROJECTS and AUTH activation suites retain successor/historical replay,
+  exact policy custody, service denial and live authorization race proof.
+- `scripts/api_contract_e2e.py` uses scripted setup prerequisites, separate public
+  Finance publication, public manager selector reads and public activation/replay
+  before the existing claim/start drill. It does not claim live model inference
+  or public Submission/post-submit execution.
+- The affected post-policy fixtures now create governed guide metadata through
+  the existing authorized fixture; no missing-generation fallback was added.
+- No migrations, new dependencies, compatibility routes or retained-data deletion.
+  Coverage is diagnostic. Exact candidate execution/reviewer freshness belongs to
+  the PR, not this durable record. Local spreadsheet exports are absent.

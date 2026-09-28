@@ -5,6 +5,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.exc import SQLAlchemyError
+from pydantic import TypeAdapter, ValidationError
+from pydantic_core import PydanticSerializationError
 
 from app.api.deps.authorization import enforce_human_authorization_read
 from app.api.deps.guide_proposal_http import (
@@ -50,13 +52,15 @@ async def read_post_policy(
         response = await request.service.review_package(
             PostPolicySelection(project_id=project_id, guide_id=guide_id,
                                 compilation_id=compilation_id, policy_id=policy_id),
-            actor=request.actor, request_id=request.request_id,
+            actor=request.actor, request_id=request.request_id, contribution=request.contribution,
         )
+        adapter = TypeAdapter(PostPolicyReviewPackage[CompiledPostSubmitPolicy])
+        response = adapter.validate_json(adapter.dump_json(response, warnings="error"))
         await request.session.commit()
         return response
     except GuideProposalError as exc:
         raise proposal_http_error(exc) from exc
-    except SQLAlchemyError as exc:
+    except (SQLAlchemyError, ValidationError, PydanticSerializationError) as exc:
         raise proposal_http_error(GuideProposalError("storage_unavailable")) from exc
 
 

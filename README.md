@@ -588,7 +588,7 @@ CON provides internal exact selected-policy validation: a
 new guide binding must match the active policy’s current published version;
 the revision-adoption purpose validates an explicitly supplied historical version
 without reselection. Both validate complete rules and current unit/binding
-eligibility in the caller transaction. CP07 adds one hidden activation operation:
+eligibility in the caller transaction. CP07 supplies the canonical activation operation:
 exact separate pre/post approvals, review/revision selections and the published
 ContributionPolicyVersion become one immutable guide binding. It atomically
 supersedes the explicitly selected prior guide and activates a draft Project.
@@ -598,8 +598,15 @@ AUTH-12H supplies explicit live authority for an active Project Manager scoped t
 that exact project. Shared prepared authorization locks current identity and grant
 before product resources, binds the complete activation digest and rechecks live
 authority on replay. Composition without an authority adapter still denies.
-Manager activation context and public guide activation remain pending;
-approved-guide intake and revision integration remain separate.
+AUTH-18 exposes `POST /api/v1/projects/{project_id}/guides/{guide_id}/activate`.
+The draft post-policy review package supplies `activation_context`: exact guide,
+review/revision, predecessor, separately approved post-policy and published CON
+selectors. Missing selectors remain explicit; the context does not promise readiness.
+Managers obtain those selectors without Finance privileges, then submit the exact
+selection with one UUID `Idempotency-Key`. Save the body and key for receipt replay;
+the draft context is not an active-guide replay endpoint. Response validation,
+authority evidence and activation effects commit together. Approved-guide intake
+and controlled revision integration remain separate.
 
 ARCH-03A completes the existing internal PROJECTS context port. New work selects
 one active activated guide; existing work resolves its exact frozen guide and

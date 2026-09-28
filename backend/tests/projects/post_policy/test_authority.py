@@ -1,5 +1,7 @@
 """Real foreign principals and an exact separately authorized disclosure boundary."""
 
+from tests.projects.guide_activation.source_fixtures import source_case
+
 from dataclasses import replace
 from uuid import uuid4
 
@@ -11,7 +13,7 @@ from app.modules.authorization.api import AuthorizationDenied
 from app.modules.projects.api.guide_proposals import GuideProposalError
 from app.modules.projects.api.post_policy import PostPolicyApproval, PostPolicyCorrection, PostPolicySelection
 from tests.projects.guide_compilation.helpers import service_actor
-from tests.projects.guide_compilation.proposals.pg_support import proposal_case, seed_review_actor, revoke_review_grant
+from tests.projects.guide_compilation.proposals.pg_support import seed_review_actor, revoke_review_grant
 from .pg_support import PreparedPostPolicy, prepare_post_policy, operate
 
 
@@ -36,7 +38,7 @@ async def state(factory):
 
 
 async def test_stored_foreign_authority_cannot_mutate_replay_or_read_policy(clean_postgres_database):
-    async with proposal_case(clean_postgres_database) as (values, factory, command, owner, grant):
+    async with source_case(clean_postgres_database) as (values, factory, command, owner, grant):
         derive, projected = await prepare_post_policy(factory, command, owner, grant, service_actor(values))
         foreign_project, foreign, foreign_grant, crossed_grant = await foreign_manager(factory, owner)
         approval = PostPolicyApproval(target=projected.target, idempotency_key=uuid4())
@@ -66,7 +68,7 @@ async def test_stored_foreign_authority_cannot_mutate_replay_or_read_policy(clea
 
 
 async def test_exact_draft_is_not_disclosed_when_read_decision_denies(clean_postgres_database, monkeypatch):
-    async with proposal_case(clean_postgres_database) as (values, factory, command, actor, grant):
+    async with source_case(clean_postgres_database) as (values, factory, command, actor, grant):
         derive, projected = await prepare_post_policy(factory, command, actor, grant, service_actor(values))
         selection = PostPolicySelection(**derive.selection.model_dump(), policy_id=projected.target.policy_id)
         before = await state(factory)

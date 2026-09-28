@@ -1,5 +1,8 @@
 """Strict test-only post-policy authority over real actors, decisions and transactions."""
 
+from app.adapters.contributions import published_contribution_policy_port
+from app.adapters.projects.contribution_validation import GuideContributionPolicyDiscovery
+
 from contextlib import asynccontextmanager
 from uuid import UUID, uuid4
 
@@ -131,6 +134,8 @@ async def operate(factory, actor, project_id, grant, operation, command, *, clos
     async with factory() as session, session.begin():
         service = PostPolicyService(session, PostAuthority(session, actor, project_id, grant, close_error=close_error), current_post_submit_catalogue())
         kwargs = dict(actor=actor, request_id=uuid4())
+        if operation == "review_package":
+            kwargs["contribution"] = GuideContributionPolicyDiscovery(published_contribution_policy_port(session))
         if operation == 'request_correction':
             kwargs['guide_authorization'] = ProposalAuthority(session, actor, project_id, grant, close_error=guide_close_error)
         return await getattr(service, operation)(command, **kwargs)

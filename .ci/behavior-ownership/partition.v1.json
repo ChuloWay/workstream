@@ -70,6 +70,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/api/deps/guide_activation.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/api/deps/guide_proposal_http.py"
     },
     {
@@ -103,6 +107,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/api/routes/contribution_policies.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/routes/guide_activation.py"
     },
     {
       "group": "shared",
@@ -814,6 +822,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/contributions/api/published_selection.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/contributions/api/validation.py"
     },
     {
@@ -899,6 +911,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/projects/api/guide_activation.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/guide_activation_context.py"
     },
     {
       "group": "lifecycle",
@@ -1441,7 +1457,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "df8c617a17828cb1a310462ce2cee2ff0efba1b53b74de351831bcf479e3f10a",
+  "authority_digest": "86d2fd6415332086b20e756e25d5f06a19194ddddebc69fa58f262e5bde20d84",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

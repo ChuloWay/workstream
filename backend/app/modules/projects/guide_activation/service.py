@@ -1,4 +1,4 @@
-"""One hidden complete-guide activation operation in the caller root transaction."""
+"""One complete-guide activation operation in the caller root transaction."""
 
 from datetime import UTC, datetime
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -153,13 +153,15 @@ class GuideActivationService:
                     self._readiness(command, locked, policy, post_custody, review, revision)
                 except ProjectServiceError:
                     raise GuideProposalError("approval_blocked") from None
-                contribution = GuideContributionPolicyFacts.model_validate(
-                    await self.contribution.validate_for_activation(
+                try:
+                    selected_contribution = await self.contribution.validate_for_activation(
                         target.project_id,
                         command.contribution_policy_id,
                         command.contribution_policy_version_id,
                     )
-                )
+                except ValueError:
+                    raise GuideProposalError("proposal_stale") from None
+                contribution = GuideContributionPolicyFacts.model_validate(selected_contribution)
                 operation_id = new_record_id()
                 receipt = GuideActivationReceipt(
                     operation_id=operation_id,

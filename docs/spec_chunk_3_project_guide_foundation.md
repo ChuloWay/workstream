@@ -74,7 +74,7 @@ task artifact requirements come from the locked project policy and checker bundl
 
 The guide version is the join key for the guide-specific policies.
 
-The hidden CP07 guide activation operation requires:
+The canonical CP07 guide activation operation, exposed by AUTH-18, requires:
 
 - a draft guide in a draft or active Project, with an exact mutation generation
 - an intact source manifest and finalized current unified compilation
@@ -214,7 +214,7 @@ may be corrected but cannot be approved, and uncertain provider attempts are
 not correction targets. Guide activation still requires a complete compiled
 pre-submission policy and the separately governed post-submission policy.
 
-CP07 provides the hidden complete-guide activation command and immutable receipt.
+CP07 provides the complete-guide activation command and immutable receipt.
 Its command selects both approval receipts, review/revision generations, exact
 ContributionPolicy/version, guide mutation generation and expected predecessor.
 The receipt preserves those inputs, CON validation facts and activation time.
@@ -227,8 +227,12 @@ guide and its compiled/approved policy context, including the guide's bound
 ContributionPolicy/version and activation operation identifiers. It requires
 immutable activation custody; retained unbound rows are unavailable. The GET is
 available only to a covered Project Manager or Audit Authority grant, or a
-system-scoped Operator grant. AUTH-12H supplies internal activation authority only
-for a live exact-project Project Manager. HTTP activation exposure remains pending.
+system-scoped Operator grant. AUTH-12H supplies activation authority only for a live exact-project Project
+Manager. AUTH-18 exposes the canonical POST on `/api/v1/projects/{project_id}/guides/{guide_id}/activate`.
+The draft post-policy review package supplies complete activation selectors without
+Finance policy bodies or draft selectors. Missing inputs are explicit, not defaults.
+One UUID Idempotency-Key and the original body recover the receipt with fresh
+authority; response serialization and validation precede commit.
 
 ## Lifecycle Impact
 
@@ -302,4 +306,4 @@ no operation reopens finalization or calls an evaluator. Affected active-guide
 reads require this operation custody instead of role-string approval fields.
 AUTH-12G and POL-06B supply live post-policy authority and public exposure.
 AUTH-12H supplies live exact-project manager authority for the existing internal
-complete-guide activation operation; no HTTP activation endpoint is exposed.
+complete-guide activation operation; AUTH-18 exposes its exact-authorized HTTP endpoint.

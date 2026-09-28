@@ -1,6 +1,7 @@
 """CONTRIBUTIONS-owned composition adapters."""
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.modules.contributions.api.published_selection import PublishedContributionPolicyPort
 
 from app.adapters.compensation import policy_adapter_binding_port
 from app.adapters.projects import project_contribution_policy_eligibility_port
@@ -41,3 +42,9 @@ def contribution_policy_validation_port(
         projects=project_contribution_policy_eligibility_port(session),
         bindings=policy_adapter_binding_port(session),
     )
+
+
+def published_contribution_policy_port(session: AsyncSession) -> PublishedContributionPolicyPort:
+    """Compose the bounded internal selector read; callers own disclosure authority."""
+    from app.modules.contributions.repository import ContributionPolicyRepository
+    return ContributionPolicyRepository(session)

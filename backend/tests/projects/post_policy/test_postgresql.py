@@ -1,5 +1,10 @@
 """Canonical post-policy projection and decisions over complete PostgreSQL custody."""
 
+from tests.projects.guide_activation.source_fixtures import source_case
+
+from app.adapters.contributions import published_contribution_policy_port
+from app.adapters.projects.contribution_validation import GuideContributionPolicyDiscovery
+
 from uuid import uuid4
 
 from sqlalchemy import text
@@ -9,13 +14,13 @@ from app.modules.projects.api.guide_proposals import GuideProposalApproval, Guid
 from app.modules.projects.api.post_policy import PostPolicyApproval, PostPolicyDerive, PostPolicySelection
 from app.modules.projects.post_policy.service import PostPolicyService
 from tests.projects.guide_compilation.helpers import service_actor
-from tests.projects.guide_compilation.proposals.pg_support import proposal_case, read_package
+from tests.projects.guide_compilation.proposals.pg_support import read_package
 from tests.projects.guide_compilation.proposals.test_postgresql import approve
 from .pg_support import PostAuthority
 
 
 async def test_post_policy_operation_preserves_finalization_without_provider_or_evaluator_calls(clean_postgres_database, monkeypatch):
-    async with proposal_case(clean_postgres_database) as (values, factory, command, actor, grant):
+    async with source_case(clean_postgres_database) as (values, factory, command, actor, grant):
         package = await read_package(factory, command, actor, grant)
         upstream = await approve(factory, command, actor, grant,
                                  GuideProposalApproval(target=package.target, idempotency_key=uuid4()))
@@ -45,7 +50,7 @@ async def test_post_policy_operation_preserves_finalization_without_provider_or_
         target = receipts[0].target
         async with factory() as session, session.begin():
             service = PostPolicyService(session, PostAuthority(session, actor, command.project_id, grant), current_post_submit_catalogue())
-            draft = await service.review_package(PostPolicySelection(**payload.selection.model_dump(), policy_id=target.policy_id), actor=actor, request_id=uuid4())
+            draft = await service.review_package(PostPolicySelection(**payload.selection.model_dump(), policy_id=target.policy_id), actor=actor, request_id=uuid4(), contribution=GuideContributionPolicyDiscovery(published_contribution_policy_port(session)))
         assert draft.current and draft.lifecycle_status == 'compiled'
         assert draft.policy.policy_hash == target.policy_hash
         assert len(draft.policy.entries) == 8

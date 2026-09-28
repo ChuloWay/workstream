@@ -1,6 +1,7 @@
 # WS-AUTH-001 — Workstream authorization service
 
-Latest completed activation: [AUTH-12H complete-guide authority](WS-AUTH-001-12H.md),
+Latest completed activation: [AUTH-18 public manager activation](WS-AUTH-001-18.md),
+using [AUTH-12H complete-guide authority](WS-AUTH-001-12H.md),
 following [AUTH-12G post-policy authority](WS-AUTH-001-12G.md).
 Current remaining [plan](planning/PLAN.md) and [activation map](planning/CHUNK_MAP.md).
 
@@ -22,8 +23,9 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Public post-policy composition: POL-06B delivered using existing AUTH-12G.
 - Completed activation boundary: AUTH-12H exact-project manager authority for
   CP07 complete-guide activation/binding, with live-authority replay.
-- Next usable boundary: manager activation context and public guide activation,
-  then approved-guide intake integration.
+- Next usable boundary: approved-guide intake integration, then admitted Submission and durable
+  post-submit evaluation. [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers
+  public manager activation context and exact guide activation.
   [CP05A](../WS-ARCH-001/WS-ARCH-001-CP05A.md) delivers public Finance
   ContributionPolicy administration and recovery of a draft selector, a published
   selector, or both. ARCH-03C3 through ARCH-03C7 deliver public task readiness,
