@@ -228,3 +228,16 @@ async def assert_admission_replay_state(session, evidence_id, attempt_id, admiss
     async with session.begin():
         current = await current_submission_bundle_admission_id(session, put_attempt_id=attempt_id)
         assert current == (UUID(admission_id) if status == "ready" else None)
+
+
+def durable_put_service(session, settings, namespace, storage, authorization):
+    """Compose final ART handoff with the same transaction-bound canonical owners."""
+    from app.modules.artifacts.service import ArtifactAdmissionService
+    from app.modules.artifacts.submission_admission import SubmissionBundleDurablePutService
+
+    return SubmissionBundleDurablePutService(
+        session=session, admission=ArtifactAdmissionService(session, settings, namespace),
+        storage=storage, authorization=authorization,
+        task_contexts=TaskRepository(session),
+        project_contexts=ProjectLockedPolicyRepository(session),
+    )

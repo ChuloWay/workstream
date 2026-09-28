@@ -22,6 +22,7 @@ Allowed product paths: `backend/app/modules/artifacts/service.py`,
 `backend/app/adapters/artifacts/__init__.py`, and removal of
 `backend/app/modules/tasks/pre_submit_context.py`.
 Allowed proof: `backend/tests/test_approved_guide_intake.py`,
+`backend/tests/pre_submit_test_helpers.py`,
 `backend/tests/test_default_pre_submit_execution.py`,
 `backend/tests/test_submission_bundle_admission.py`,
 `backend/tests/test_effective_pre_submit_execution.py`,
@@ -29,9 +30,10 @@ Allowed proof: `backend/tests/test_approved_guide_intake.py`,
 `backend/scripts/behavior_ownership.py` and `backend/tests/test_behavior_ownership.py`
 for the exact deleted-target allowlist, and `backend/tests/architecture/`.
 Allowed records: `.ci/module-boundaries/private-edge-debt.v1.json`,
+`.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json` for exact shrinking fixture inventory,
 `.ci/behavior-ownership/partition.v1.json`, this record, current ARCH/POL/AUTH/CON
 `OVERVIEW.md`, ARCH planning `PLAN.md`/`CHUNK_MAP.md` and linked completed 03B contract, `.commitrail/INDEX.md`,
-`docs/roadmap_status.md`, `README.md`, `docs/architecture_checker_framework.md`,
+`docs/roadmap_status.md`, `README.md`, `docs/operations_project_operating_manual.md`, `docs/architecture_checker_framework.md`,
 and related local roadmap exports when present.
 Prohibited: new public routes, authority actions, migrations, post-submit execution,
 review/revision or lease implementation, retained-data deletion, fallback paths,
@@ -121,3 +123,15 @@ fail their expected rejection assertions. Temporary final-lock removal is a
 separate lock-custody probe. Exact commands, results and frozen review targets
 belong to the PR evidence; no mutation instrumentation ships with the product.
 Public API, provider transport and full lifecycle release proof remain separate.
+
+## Review findings and disposition
+
+- CI-03D-001: explicit port construction grew an existing oversized test. Reuse a
+  small fixture constructor, preserving all assertions and reducing both test
+  and file size; refresh only their exact structural-debt facts. Limits unchanged.
+- DOC-03D-001: reconcile the linked operating manual and move delivered intake
+  statements out of remaining-work columns.
+- SEC-03D-01 (low): the sole production handoff caller is the preparation command,
+  which owns the required prelocks. Document that internal call precondition;
+  any future standalone caller must preserve it. No new capability wrapper is
+  introduced for a nonexistent second caller.

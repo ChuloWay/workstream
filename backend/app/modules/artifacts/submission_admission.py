@@ -143,7 +143,11 @@ class SubmissionBundleDurablePutService:
         self,
         request: SubmissionBundleDurablePutRequest,
     ) -> tuple[PreparedArtifact, UUID, ArtifactAdmissionResult]:
-        """Consume live custody and persist the complete intent in the caller transaction."""
+        """Persist intent after the preparation command locks its authorized context.
+
+        The caller holds TASK, actor, PROJECT and grant locks in that order;
+        the admission reads below revalidate those already-locked owner facts.
+        """
         if type(request) is not SubmissionBundleDurablePutRequest:
             raise TypeError("invalid submission bundle durable put request")
         transaction = self._session.sync_session.get_transaction()
