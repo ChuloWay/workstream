@@ -150,3 +150,8 @@ Submission and durable post-submit evaluation. This does not resume lease work.
   Reuse existing owner proofs where they already establish the same boundary.
 - Plan review traced feasibility, not executed new runtime evidence. No new
   migration or AUTH action is required by this design.
+- At activation's exact CON validation boundary, translate the adapter's invalid
+  selection `ValueError` (foreign, missing, retired or changed selector) into the
+  same sanitized `proposal_stale`/409. Do not catch storage or authority failures
+  as staleness; those retain unavailable handling. CON's validation remains
+  fail-closed and no policy-existence distinction is exposed.
