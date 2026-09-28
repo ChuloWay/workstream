@@ -13,7 +13,7 @@ from urllib.parse import unquote, urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.modules.projects.api.guide_activation import GuidePolicySelection
+from app.modules.projects.api.guide_activation_context import GuidePolicySelection
 from app.modules.projects.api.locked_policy import GuideDisplayFacts, ProjectDisplayFacts
 from app.modules.tasks.api.task_detail import ContributorTaskDetail, ManagementTaskDetail
 

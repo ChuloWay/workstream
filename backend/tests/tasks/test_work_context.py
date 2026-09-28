@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from app.db import session as db_session
 from app.main import create_app
-from app.modules.projects.api.guide_activation import GuidePolicySelection
+from app.modules.projects.api.guide_activation_context import GuidePolicySelection
 from app.modules.projects.api.locked_policy import GuideDisplayFacts, ProjectDisplayFacts
 from app.modules.tasks.api import ContributorTaskDetail, ManagementTaskDetail
 from app.modules.tasks.schemas import (

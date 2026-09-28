@@ -85,7 +85,7 @@ def test_project_locked_policy_rejects_malformed_digest() -> None:
 def test_context_preserves_persisted_review_semantics(semantics_format):
     """The projection validates retained business hashes using their canonical owner."""
     from types import SimpleNamespace
-    from app.modules.projects.api.guide_activation import GuidePolicySelection
+    from app.modules.projects.api.guide_activation_context import GuidePolicySelection
     from app.modules.projects.locked_policy_projection import _policy_body
     from app.modules.projects.api.policy_lineage import ReviewPolicySemantics, policy_digest
 
