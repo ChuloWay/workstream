@@ -29,7 +29,8 @@ manager journey, not an isolated POST whose inputs require private queries.
   current post-policy read composition, existing AUTH read/activation adapters
   only where necessary to preserve exact authority and safe HTTP errors.
 - Focused public API tests, existing activation/approval fixtures, actual API
-  drill, route/action/OpenAPI/lane/ownership inventories affected by exposure.
+  drill, route/action/OpenAPI/lane/ownership and identifier-generation inventories
+  affected by exposure.
 - README, operating/canonical activation contracts, roadmap affected summaries,
   scoreboard/dependency/gates/trace references, current diagrams and their rendered
   exports, AUTH/ARCH/CON/POL overview/chunk-map and index next boundary, this record; ignored spreadsheet exports if present.
