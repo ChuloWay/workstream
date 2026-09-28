@@ -49,9 +49,10 @@ The bounded [task project-grant repair](../../../changes/task-project-grant-auth
 replaces contributor claim/start/work-context authority, adds separate management
 context and reasoned system-Operator start, and removes self-activated eligibility
 and public JSON-packet Submission creation. Admission-backed creation stays hidden.
-ARCH-03B/03C must reuse these exact actions and command owners while completing
-public access/authority cutover and live wiring for delivered hidden invalidation; CP08
-already delivered ContributionPolicyVersion lineage. Do not restore eligibility
+ARCH-03B/03C reuse these exact actions and command owners; public TASK access
+and authority are delivered through 03C7, with invalidation wiring in 03C2.
+CP08 delivered ContributionPolicyVersion lineage. Approved-guide intake
+integration remains next. Do not restore eligibility
 or register replacement aliases.
 
 ## WS-AUTH-001-OUTBOX-01 — unavailable dispatcher contract

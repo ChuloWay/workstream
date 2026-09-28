@@ -76,5 +76,6 @@ manager proposal review, pre-submit approval and manual correction dispatch.
 2. ARCH-03B/03C replace broad AUTH-13 and ARCH-04D replaces AUTH-14/XINT-06B.
    AUTH-OUTBOX-01/02 bracket hidden CON-02B dispatch; ARCH-04E2 activates only
    the proven TASK routing handler before ARCH-04E3 live composition.
-   Remaining cleanup/conformance and queue/read work must use its exact owner;
-   do not execute those superseded broad designs.
+   TASK queue/read exposure is complete through ARCH-03C7. AUTH-18 public
+   manager guide activation/context is delivered; approved-guide intake is next.
+   Remaining work must use its exact owner, not the superseded broad designs.
