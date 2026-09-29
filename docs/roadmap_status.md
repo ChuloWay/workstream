@@ -105,7 +105,7 @@ guide using canonical owner ports. ARCH-04B adds hidden verified Submission inpu
 with scoped async access. ARCH-04B2 adds hidden typed checker-output storage,
 byte-free recovery and flush-only verified binding over generic ART
 put/verification. ARCH-04C supplies hidden durable evaluation, immutable ordered
-results, database-timed worker leases and atomic completion events. Production
+results, database-timed execution leases and atomic completion events. Production
 authority remains deny-only pending ARCH-04D; public intake remains deferred to
 the later cutover prerequisites. Required success
 then branches on the locked ReviewPolicy: true routes to human `allow_review`;
@@ -426,8 +426,8 @@ Delivered capabilities are summarized in the [scoreboard](#end-to-end-lifecycle-
 their evidence is linked under [completed work](#what-has-been-completed).
 The [dependency and ownership plan](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
 owns implementation sequencing. The existing checker phase service supports
-hidden pre-submit execution/replay, but production post-submit execution remains
-unavailable. Live setup does not wait for downstream task/checker execution.
+hidden pre-submit execution/replay and hidden durable post-submit execution.
+Production post-submit authority and automatic routing remain unavailable. Live setup does not wait for downstream task/checker execution.
 
 The next dependency-safe product sequence is:
 
@@ -540,8 +540,8 @@ ARCH-04B2 adds hidden typed checker-output `store` and byte-free
 `recover(selector)` operations, per-slot preparation caps, generic put and
 verification reuse, and flush-only immutable verified binding. Controlled
 nonempty slots prove ART mechanics only; the current structural catalogue has
-zero slots. CHECKERS reservation/currentness and live output authority remain
-unavailable, so this does not activate production execution or public intake.
+zero slots. ARCH-04C supplies CHECKERS reservation/currentness; live output and
+execution authority remain deny-only. Public intake is not activated.
 
 ## Critical Dependency Map
 
@@ -567,7 +567,7 @@ Delivered foundations (not a claim of full public integration)
 Remaining integration
   live evaluation authority + automatic routing + remediation
   -> public intake and immutable admitted Submission cutover
-  -> durable current post-submit result + required checks pass
+  -> automatically consume the durable current result + required checks pass
        |
        +-- locked true -> allow_review -> human Review
        |                                    | accept

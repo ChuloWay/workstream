@@ -44,9 +44,11 @@ dispatcher to preserve.
   `backend/app/adapters/artifacts/__init__.py` for explicit composition through
   CHECKERS-owned contracts, preserving deny-before-access defaults.
 - `backend/alembic/versions/0008_checker_execution.py`, current model registration,
+  `backend/alembic/env.py` head admission and coverage/migration head fixtures,
   schema fingerprint/reset inventory and predecessor-migration fixtures. Update
   the two existing hidden REV admission/queue SQL guards in this migration to
-  derive currentness from the fence; preserve their other admission conditions.
+  derive currentness from the fence and retain its lock through admission; preserve
+  their other admission conditions.
 - New focused `backend/tests/checkers/execution/` tests/helpers; existing
   `tests/checkers/post_submit/`, `tests/checkers/test_phase_service.py`,
   `tests/authorization/submission_history/`, `tests/submission_fixtures.py`,
@@ -63,7 +65,11 @@ dispatcher to preserve.
   `docs/engineering/authorization_activation_custody.md`,
   `docs/architecture_system_architecture.md`,
   `docs/architecture_brief/workstream_architecture_brief.md` and
-  `docs/current_system_data_flow.html` for current execution/activation claims.
+  `docs/current_system_data_flow.html` and linked architecture diagram sources
+  (`docs/architecture_brief/task_lifecycle_sequence.puml`,
+  `docs/diagrams/backend_v01_components.md`, `backend_v01_components.puml`,
+  `workstream_v01_container.puml`) plus their rendered SVG/PNG/PDF assets for
+  current execution/activation claims.
 
 ### Not allowed
 
@@ -209,24 +215,27 @@ and fail the discriminating assertion, not a fixture/setup assertion.
 
 | Behavior atom | Module and test symbol | Proof strength / execution custody |
 | --- | --- | --- |
-| Exact reserve replay, changed envelope conflict | `test_coordination.py::test_reservation_replay_rejects_changed_envelope` | transaction / real PostgreSQL caller rollback |
+| Exact reserve replay, changed envelope conflict | `test_coordination.py::test_reservation_replay_rejects_changed_envelope` | transaction / real PostgreSQL caller rollback and nested-transaction rejection |
 | Concurrent first reservation converges | `test_concurrency.py::test_concurrent_initial_reservation` | concurrency / independent PostgreSQL sessions |
 | Request ID collision across valid submissions | `test_concurrency.py::test_cross_submission_request_collision` | concurrency / independent sessions, valid foreign lineage |
 | Request/phase and submission/phase/generation uniqueness | `test_storage.py::test_duplicate_request_and_generation_rejected` | direct_sql / valid duplicate controls |
-| Default denial precedes repository, provider and scratch | `test_execution.py::test_production_denies_before_access` | composition + negative_structure / actual composition with access spies |
+| Default denial precedes repository, provider and scratch | `test_execution.py::test_production_denies_before_access` | composition + negative_structure / actual composition with an unbound session and forbidden materialization |
 | Execute evidence cannot finalize; late denial rolls back | `test_execution.py::test_action_authority_is_not_interchangeable` | transaction / strict phase-specific participants |
 | No CHECKERS lock or PREP crosses materialization | `test_concurrency.py::test_evaluation_releases_transaction_before_materialization` | concurrency / independent lock probes during paused real materialization |
 | Actual stored ZIP, complete ordered members, replay without reinvocation | `test_execution.py::test_verified_material_execution_and_replay` | transaction / real Local and MinIO materialization |
-| Zero slots, no output call, unexpected binding rejected | `test_execution.py::test_zero_output_finalization` | service + transaction / canonical catalogue and output access spies |
+| Zero slots, no output call, unexpected binding rejected | `test_execution.py::test_zero_output_finalization` | service + transaction / canonical catalogue, extra-binding rejection and absent persisted checker binding |
 | Expired takeover retains run; stale worker rejects in both orders | `test_concurrency.py::test_stale_worker_cannot_finalize_after_takeover` | concurrency / independent sessions with database-timed lease |
 | Supersession and finalization serialize in both orders | `test_concurrency.py::test_generation_advance_and_finalize_serialize` | concurrency / two commit orders, exact fence assertions |
+| Hidden REV queue insertion and admission commit serialize with supersession | `tests/test_review_queue_persistence.py::test_review_currentness_serializes_with_successor` | concurrency / independent PostgreSQL sessions, both consumers and commit orders |
+| Member insertion waits on exact parent and rejects after completion | `test_concurrency.py::test_member_insertion_waits_for_terminal_parent` | concurrency / observed database wait before member uniqueness can interfere |
 | Infrastructure terminal never restarts or routes | `test_execution.py::test_infrastructure_failure_is_terminal` | transaction / repeat invocation and absent completion event |
 | Category precedence, locked severity, warning semantics | `test_results.py::test_routing_uses_complete_locked_policy` | pure / each supported category and severity selection |
-| Missing/extra/foreign members, blocking allow_review, extra output | `test_storage.py::test_terminal_member_and_routing_custody`, `test_member_shape_and_complete_set_enforced_in_database`, `test_execution.py::test_zero_output_finalization` | direct_sql + service / independent invalid tuples with valid controls |
+| Missing/extra/foreign members, blocking allow_review, extra output | `test_storage.py::test_terminal_member_and_routing_custody`, `test_member_shape_and_complete_set_enforced_in_database`, `test_consistently_short_result_cannot_omit_selected_policy_member`, `test_execution.py::test_zero_output_finalization` | direct_sql + service / independent invalid tuples with valid controls |
 | Current-result foreign identifiers concealed | `test_coordination.py::test_current_result_conceals_foreign_lineage` | repository_isolation / two independently valid stored owners |
 | Actual outbox insert failure rolls back every final fact | `test_execution.py::test_finalization_outbox_failure_rolls_back` | transaction / fail real outbox insert, inspect new session |
 | Envelope, lease, completed members/outcome immutable; no late append/delete | `test_storage.py::test_execution_custody_rejects_mutation`, `test_unfinished_members_cannot_commit` and existing `tests/authorization/submission_history/test_storage.py` | direct_sql / independent input, terminal and parent mutations |
-| Empty upgrade succeeds; nonempty migration refuses unchanged schema/data | `test_migration.py::test_migration_refuses_retained_history` | direct_sql / real predecessor database, before/after snapshots |
+| Empty database upgrades to usable execution custody | `test_migration.py::test_empty_database_installs_execution_custody` | direct_sql / empty PostgreSQL schema, real Alembic head installation |
+| Nonempty migration refuses unchanged schema/data | `test_migration.py::test_migration_refuses_retained_history` | direct_sql / real predecessor database, before/after snapshots |
 | History derives currentness; closed nested values match exact stored parent | `tests/authorization/submission_history/test_privacy.py::test_nested_values_match_exact_stored_parents` | repository_isolation / stored foreign same-shaped members |
 | History excludes private request, authority and material facts | `tests/authorization/submission_history/test_privacy.py::test_fixed_projection_and_selected_columns` | service / exact contributor and manager field/value assertions |
 
@@ -273,8 +282,10 @@ completed, running, blocking and superseded runs rather than rewriting outcomes.
 The old partial-member commit premise no longer exists: the member insertion itself
 schedules a deferred terminal constraint, and incomplete members cannot commit.
 The former insert-before-completion fixture is replaced by complete finalization,
-actual outbox insert rollback and direct SQL incomplete-member rejection. Parent
-insertion still locks exact ownership before accepting a member. Migration proof
+actual outbox insert rollback and direct SQL incomplete-member rejection. `test_member_insertion_waits_for_terminal_parent` independently observes parent
+insertion waiting on the finalization lock, then rejecting after completion.
+`test_review_currentness_serializes_with_successor` proves both REV consumers
+hold the exact current fence through commit, in both commit orders. Migration proof
 uses the actual predecessor schema with retained rows and verifies refusal leaves
 both data and schema unchanged. It does not invent new request custody for old rows.
 

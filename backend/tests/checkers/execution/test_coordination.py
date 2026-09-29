@@ -21,6 +21,10 @@ async def test_reservation_replay_rejects_changed_envelope(tmp_path, isolated_da
             await reserve(h, changed)
         async with h.factory() as session:
             assert list(await session.scalars(select(CheckerRun.id))) == [str(first.attempt_id)]
+        async with h.factory() as session, session.begin():
+            async with session.begin_nested():
+                with pytest.raises(CheckerExecutionUnavailable, match="caller_transaction"):
+                    await EvaluationCoordinator(session).reserve_current_evaluation(h.request)
         with pytest.raises(CheckerExecutionUnavailable, match="caller_transaction"):
             async with h.factory() as session:
                 await EvaluationCoordinator(session).reserve_current_evaluation(h.request)

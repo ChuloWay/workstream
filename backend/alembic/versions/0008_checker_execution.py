@@ -455,12 +455,19 @@ CREATE OR REPLACE FUNCTION public.guard_review_admission_record() RETURNS trigge
              or checker_row.submission_version <> new.submission_version then
             raise exception 'review admission checker lineage mismatch' using errcode='23514';
           end if;
-          if new.status='committed' and (
-             checker_row.status <> 'completed'
-             or checker_row.routing_recommendation <> 'allow_review'
-             or not exists(select 1 from checker_submission_fences f
-               where f.submission_id=new.submission_id and f.current_run_id=checker_row.id)) then
-            raise exception 'review admission checker is not admissible' using errcode='23514';
+          if new.status='committed' then
+            perform 1 from checker_submission_fences f
+              where f.submission_id=new.submission_id and f.current_run_id=new.admitting_checker_run_id
+              for update;
+            if not found then
+              raise exception 'review admission checker is not admissible' using errcode='23514';
+            end if;
+            -- Identity was qualified above without a lock. Re-read the outcome
+            -- only after retaining the sole fence through the caller commit.
+            select * into checker_row from checker_runs where id=new.admitting_checker_run_id;
+            if checker_row.status <> 'completed' or checker_row.routing_recommendation <> 'allow_review' then
+              raise exception 'review admission checker is not admissible' using errcode='23514';
+            end if;
           end if;
           return new;
         end $$;
@@ -518,9 +525,14 @@ CREATE OR REPLACE FUNCTION public.guard_review_queue_entry() RETURNS trigger
              or checker_row.submission_version <> new.submission_version then
             raise exception 'review queue checker lineage mismatch' using errcode='23514';
           end if;
-          if checker_row.status <> 'completed' or checker_row.routing_recommendation <> 'allow_review'
-             or not exists(select 1 from checker_submission_fences f
-               where f.submission_id=new.submission_id and f.current_run_id=checker_row.id) then
+          perform 1 from checker_submission_fences f
+            where f.submission_id=new.submission_id and f.current_run_id=new.admitting_checker_run_id
+            for update;
+          if not found then
+            raise exception 'review queue checker is not admissible' using errcode='23514';
+          end if;
+          select * into checker_row from checker_runs where id=new.admitting_checker_run_id;
+          if checker_row.status <> 'completed' or checker_row.routing_recommendation <> 'allow_review' then
             raise exception 'review queue checker is not admissible' using errcode='23514';
           end if;
           return new;

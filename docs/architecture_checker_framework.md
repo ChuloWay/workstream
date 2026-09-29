@@ -166,19 +166,19 @@ ARCH-04C extends the existing CheckerRun/CheckerResult aggregate. A caller-owned
 coordination transaction reserves the exact request and advances one per-Submission
 fence. Global request/phase and submission/phase/generation uniqueness prevent
 split attempts. Replay returns the original identity; it cannot restore an old
-request as current. Execution claims a PostgreSQL-timed worker lease and releases
+request as current. Execution claims a PostgreSQL-timed execution lease and releases
 all locks and prepared authority before materialization or evaluator work.
 
 The existing registry evaluates exactly the compiled structural entries against
 ART-verified material. Finalization consumes separate action-specific authority,
 checks the current fence and unexpired lease, and commits complete ordered closed
-members, terminal result and shared-outbox completion together. Expired-worker
+members, terminal result and shared-outbox completion together. Expired-lease
 recovery retains the attempt; terminal infrastructure failures never restart or
 publish a routable result. No generated outputs or provider inference are enabled.
 The current-result port checks the exact request inside the caller transaction.
 
 Production composition denies execute/finalize and material access until ARCH-04D.
-No new worker, delivery handler or public execution endpoint exists. ARCH-04E
+No new Celery task, delivery handler or public execution endpoint exists. ARCH-04E
 must recheck currentness when consuming a completion event and apply the locked
 ReviewPolicy; CHECKERS never accepts a contribution or mutates TASK state.
 Migration 0008 refuses retained checker history before changing schema rather
@@ -353,7 +353,7 @@ obtains fresh authority. Replay returns ART's canonical result unchanged.
 
 The post command validates and delegates CHECKER's closed value contract.
 Production composes the canonical executor with separate deny-only execute and
-finalize authorities. ARCH-04C reserves the exact request, fences workers and
+finalize authorities. ARCH-04C reserves the exact request, fences execution attempts and
 atomically persists complete closed member results and a completion event; it
 does not activate material reads or automatic dispatch. ARCH-04B supplies the hidden ART input port: exact consumed
 Submission bytes, rebuilt manifest, async scoped file access and cleanup, followed

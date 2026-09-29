@@ -552,3 +552,77 @@ async def test_preferred_shape_is_storage_only_and_lease_shape_is_impossible(
                 {"id": preferred.id},
             )
         await session.rollback()
+
+
+@pytest.mark.parametrize("boundary", ["queue", "admission"])
+@pytest.mark.parametrize("admission_first", [True, False])
+async def test_review_currentness_serializes_with_successor(
+    review_client, review_database_env, monkeypatch, boundary, admission_first,
+):
+    import asyncio
+    from app.modules.checkers.execution_coordination import EvaluationCoordinator
+    from app.modules.checkers.execution_repository import stored_request
+    from tests.checkers.post_submit.support import change_request
+    from tests.auth_concurrency_support import wait_for_named_database_lock
+
+    project, task, submission = await _reviewable_lineage(review_client, monkeypatch)
+    factory = db_session.get_session_factory()
+    queue_value = _queue_input(project,task,submission)
+    reservation_value = _reservation_input(project,task,submission)
+    async with factory() as session, session.begin():
+        run = await session.get(CheckerRun,submission["checker_run_id"])
+        successor = change_request(stored_request(run),evaluation_request_id=new_record_id(),evaluation_generation=2)
+        if boundary == "admission":
+            repository = ReviewQueueRepository(session)
+            await repository.reserve_admission(reservation_value)
+            await repository.add_queue_entry(queue_value)
+
+    async def admit(session):
+        repository = ReviewQueueRepository(session)
+        if boundary == "queue":
+            await repository.add_queue_entry(queue_value)
+        else:
+            await repository.commit_admission(reservation_id=reservation_value.id,queue_entry_id=queue_value.id)
+
+    waiter_name = "checker-review-race-" + new_record_id().hex
+    async def competing():
+        async with factory() as session, session.begin():
+            await session.execute(text("select set_config('application_name',:name,true)"),{"name":waiter_name})
+            if admission_first:
+                await EvaluationCoordinator(session).reserve_current_evaluation(successor)
+            else:
+                await admit(session)
+
+    contender = None
+    try:
+        async with factory() as session,session.begin():
+            blocker = await session.scalar(text("select pg_backend_pid()"))
+            if admission_first:
+                await admit(session)
+            else:
+                await EvaluationCoordinator(session).reserve_current_evaluation(successor)
+            contender = asyncio.create_task(competing())
+            # Observe a real independent-session lock wait before releasing the
+            # winner, not a sleep that merely assumes the desired ordering.
+            await asyncio.wait_for(wait_for_named_database_lock(
+                review_database_env,waiter_name,expected_blocker_pid=blocker,
+            ),timeout=10)
+            assert not contender.done()
+        if admission_first:
+            await contender
+        else:
+            with pytest.raises(IntegrityError,match=f"review {boundary} checker is not admissible"):
+                await contender
+    finally:
+        if contender is not None:
+            if not contender.done():
+                contender.cancel()
+            await asyncio.gather(contender,return_exceptions=True)
+    async with factory() as session:
+        current = await session.scalar(text("select current_run_id from checker_submission_fences where submission_id=:id"),{"id":submission["id"]})
+        assert str(current) != submission["checker_run_id"]
+        if boundary == "queue":
+            assert (await session.get(ReviewQueueEntry,queue_value.id) is not None) == admission_first
+        else:
+            record = await session.get(ReviewAdmissionIdempotencyRecord,reservation_value.id)
+            assert record.status == ("committed" if admission_first else "pending")

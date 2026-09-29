@@ -201,3 +201,53 @@ async def test_member_shape_and_complete_set_enforced_in_database(
             ).status == "running"
         monkeypatch.setattr(ExecutionRepository, "write_members", original)
         assert await executor.finalize(facts) == facts.result
+
+
+async def test_consistently_short_result_cannot_omit_selected_policy_member(
+    tmp_path, isolated_database_env, monkeypatch
+):
+    from app.modules.checkers.execution_results import ResultClassification
+    from app.modules.checkers.post_submit_contracts import make_post_submit_result
+    from app.modules.outbox.models import OutboxEvent
+    from app.modules.checkers.api.execution import COMPLETION_EVENT
+    from sqlalchemy import func
+    import app.modules.checkers.execution as execution
+
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        await reserve(h)
+        executor = controlled_executor(h)
+        lease, _ = await executor._claim(h.request)
+        valid = final_facts(h, lease)
+        assert len(valid.result.member_results) > 1
+        assert all(member.status == "passed" for member in valid.result.member_results)
+        body = valid.result.model_dump(exclude={"result_digest"})
+        body["member_results"] = valid.result.member_results[:-1]
+        short = make_post_submit_result(**body)
+        facts = valid.model_copy(update={"result": short})
+        # Simulate a faulty validator/compiler accepting a self-consistent short
+        # result. Persisted members, counts, result digest and event all agree;
+        # only comparison with the locked policy's selected set can reject it.
+        canonical = execution.classify_result
+
+        def faulty_classifier(request, result):
+            assert request == h.request and result == short
+            return ResultClassification("allow_review", len(short.member_results), 0, 0, 0)
+
+        monkeypatch.setattr(execution, "classify_result", faulty_classifier)
+        with pytest.raises(IntegrityError, match="checker completed custody or routing invalid"):
+            await executor.finalize(facts)
+        async with h.factory() as session:
+            assert (
+                await session.get(CheckerRun, str(lease.reservation.attempt_id))
+            ).status == "running"
+            assert await session.scalar(select(func.count()).select_from(CheckerResult)) == 0
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(OutboxEvent)
+                    .where(OutboxEvent.event_type == COMPLETION_EVENT)
+                )
+                == 0
+            )
+        monkeypatch.setattr(execution, "classify_result", canonical)
+        assert await executor.finalize(valid) == valid.result

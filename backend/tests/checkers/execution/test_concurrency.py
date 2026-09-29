@@ -232,3 +232,90 @@ async def test_evaluation_releases_transaction_before_materialization(
         executor._materialization = MaterializationProbe()
         assert (await executor.evaluate_post_submission(h.request)).outcome == "completed"
         assert observed == ["before_bytes", "inside_consumer"]
+
+
+async def test_member_insertion_waits_for_terminal_parent(
+    tmp_path, isolated_database_env, monkeypatch
+):
+    from sqlalchemy import insert
+    from sqlalchemy.exc import IntegrityError
+    from app.modules.checkers.models import CheckerResult
+    from app.modules.checkers.execution_repository import ExecutionRepository
+    from tests.auth_concurrency_support import wait_for_named_database_lock
+
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        await reserve(h)
+        executor = controlled_executor(h)
+        lease, _ = await executor._claim(h.request)
+        facts = final_facts(h, lease)
+        entered, release = asyncio.Event(), asyncio.Event()
+        holder = []
+        original = ExecutionRepository.write_members
+
+        async def paused(repo, run, result):
+            holder.append(await repo.session.scalar(text("select pg_backend_pid()")))
+            entered.set()
+            await release.wait()
+            return await original(repo, run, result)
+
+        monkeypatch.setattr(ExecutionRepository, "write_members", paused)
+        first = facts.result.member_results[0]
+        waiter = "checker-member-race-" + new_record_id().hex
+
+        async def insert_member():
+            async with h.factory() as session, session.begin():
+                await session.execute(
+                    text("select set_config('application_name',:name,true)"), {"name": waiter}
+                )
+                await session.execute(
+                    insert(CheckerResult).values(
+                        id=str(new_record_id()),
+                        checker_run_id=str(facts.result.attempt_id),
+                        task_id=str(h.request.task_id),
+                        submission_id=str(h.request.submission_id),
+                        member_order=0,
+                        checker_name=first.checker_id,
+                        definition_version=first.definition_version,
+                        implementation_version=first.implementation_version,
+                        status=first.status,
+                        code=first.code,
+                        failure_category=first.failure_category,
+                        severity=first.severity,
+                        counters=[],
+                    )
+                )
+
+        completing = asyncio.create_task(executor.finalize(facts))
+        inserting = None
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=10)
+            inserting = asyncio.create_task(insert_member())
+            await asyncio.wait_for(
+                wait_for_named_database_lock(
+                    isolated_database_env,
+                    waiter,
+                    expected_blocker_pid=holder[0],
+                ),
+                timeout=10,
+            )
+            assert not inserting.done()
+            release.set()
+            assert await completing == facts.result
+            with pytest.raises(
+                IntegrityError, match="finished or unclaimed checker run cannot receive results"
+            ):
+                await inserting
+        finally:
+            release.set()
+            pending = [completing] + ([inserting] if inserting is not None else [])
+            for task in pending:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+        async with h.factory() as session:
+            assert await session.scalar(select(func.count()).select_from(CheckerResult)) == len(
+                facts.result.member_results
+            )
+            assert (
+                await session.get(CheckerRun, str(facts.result.attempt_id))
+            ).status == "completed"

@@ -567,8 +567,9 @@ cannot execute again under the same key. POL-07B connects the internal
 checker phase service and removes the standalone JSON precheck. Both fresh
 pre-submit execution and completed replay use that service, with ART retaining
 canonical evidence ownership. The obsolete checker worker, manual execution and
-submission-finalize repair routes are removed. `evaluate_post_submission` remains
-explicitly unavailable until canonical durable execution and routing land.
+submission-finalize repair routes are removed. `evaluate_post_submission` now
+uses hidden durable execution with deny-only production authority; live service
+authority and automatic routing remain ARCH-04D/04E work.
 Submission and checker history use live exact-project Submitter authority for the
 original contributor. Separate `/projects/{project_id}` reads require a covering
 Project Manager grant and expose fixed management fields. Token roles confer no
@@ -656,7 +657,7 @@ ports, preserving historical guide selection. Public intake remains deferred. AR
 input with scoped async file access and cleanup. ARCH-04B2 adds hidden typed
 checker-output storage, byte-free recovery and flush-only verified binding over
 the generic ART put/verification path. ARCH-04C supplies hidden durable execution,
-exact request/worker custody, immutable member results and atomic completion events.
+exact request/execution-lease custody, immutable member results and atomic completion events.
 The structural catalogue produces no output files. Production authority remains
 deny-only; ARCH-04D activates exact services before ARCH-04E automatic routing.
 

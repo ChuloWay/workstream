@@ -124,3 +124,41 @@ async def test_migration_refuses_retained_history(tmp_path, isolated_database_en
         ):
             await asyncio.to_thread(command.upgrade, _config(), "head")
         assert await snapshot() == before
+
+
+async def test_empty_database_installs_execution_custody(isolated_database_env):
+    import asyncpg
+    from app.db import session as db_session
+
+    await db_session.dispose_engine()
+    url = isolated_database_env.replace("+asyncpg", "")
+    conn = await asyncpg.connect(url)
+    try:
+        await conn.execute("drop schema public cascade; create schema public")
+    finally:
+        await conn.close()
+    await asyncio.to_thread(command.upgrade, _config(), "head")
+    conn = await asyncpg.connect(url)
+    try:
+        assert (
+            await conn.fetchval("select version_num from alembic_version")
+            == "0008_checker_execution"
+        )
+        assert await conn.fetchval("select count(*) from checker_submission_fences") == 0
+        columns = set(
+            await conn.fetchval(
+                "select array_agg(column_name) from information_schema.columns where table_schema='public' and table_name='checker_runs'"
+            )
+        )
+        assert {
+            "evaluation_request_id",
+            "request_digest",
+            "worker_lease_id",
+            "result_digest",
+            "completion_event_id",
+        } <= columns
+        assert {"is_current_for_submission", "attempt_number", "trigger_auth_source"}.isdisjoint(
+            columns
+        )
+    finally:
+        await conn.close()

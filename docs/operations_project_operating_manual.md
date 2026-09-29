@@ -411,7 +411,9 @@ route is removed. Submission recovery retains its separate internal evidence rea
 
 ### Submission Quality Gate — Target Contract
 
-Canonical post-submit execution, routing and recovery are not yet available.
+Hidden durable post-submit execution and unfinished-attempt recovery are
+implemented. Live authority, automatic routing and authorized terminal retry
+remain unavailable.
 `operations.checker.retry` is planned; the removed alternate Celery worker and repair
 route do not provide it. The required future behavior is:
 

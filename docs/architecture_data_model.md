@@ -1639,7 +1639,7 @@ Key custody fields:
 - `routing_recommendation`, member counts and execution provenance
 
 States are `queued -> running -> completed | infrastructure_failed`. An expired
-worker lease can be replaced without changing the request or attempt. Completed
+execution lease can be replaced without changing the request or attempt. Completed
 and infrastructure-failed outcomes cannot be rewritten. Member results, terminal
 facts and the shared-outbox completion event commit together; infrastructure
 failure produces no routable completion event. Deletion and truncation reject.

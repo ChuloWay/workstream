@@ -30,7 +30,8 @@ participant "Checker\nRunner" as Checks
 note over PM, Checks
 Target sequence. Canonical history reads are delivered.
 Public manager guide activation is delivered.
-Canonical post-submit execution, routing and recovery remain unavailable.
+Hidden durable checker execution/currentness is delivered.
+Live authority and automatic routing remain unavailable.
 Flow authenticates; canonical AUTH decides from live exact grants.
 end note
 
