@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy import Uuid
 from sqlalchemy import (
@@ -151,7 +152,7 @@ class CheckerRun(Base):
     result_json: Mapped[str | None] = mapped_column(Text)
     result_digest: Mapped[str | None] = mapped_column(String(71))
     material_custody: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
-    completion_event_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), ForeignKey("outbox_events.event_id"))
+    completion_event_id: Mapped[UUID | None] = mapped_column(Uuid(), ForeignKey("outbox_events.event_id"))
     supersedes_checker_run_id: Mapped[str | None] = mapped_column(
         Uuid(as_uuid=False),
         index=True,

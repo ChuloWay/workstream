@@ -10,6 +10,7 @@ from app.db.base import Base
 # These keys express business uniqueness, not generated record identities.
 NATURAL_PRIMARY_KEYS = {
     "authority_control": ("id",),
+    "checker_submission_fences": ("submission_id",),
     "artifact_storage_namespaces": ("id",),
     "legacy_actor_identities": ("actor_id",),
     "iso_4217_currency_codes": ("code",),

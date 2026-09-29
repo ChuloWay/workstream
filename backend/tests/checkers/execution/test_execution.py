@@ -12,13 +12,32 @@ from tests.post_submit_materialization_helpers import material_fixture
 from .support import controlled_executor, denied_executor, reserve
 
 
+@pytest.fixture
+def autoflush_clock(monkeypatch):
+    """Exercise a real ORM query flush at the database-clock boundary."""
+    from app.modules.checkers.execution_repository import ExecutionRepository
+
+    original = ExecutionRepository.now
+
+    async def read_clock(repo):
+        assert repo.session.autoflush
+        # ORM SELECTs trigger autoflush even when the installed SQLAlchemy version
+        # does not autoflush a scalar SQL-function SELECT. Keep real DB guards on.
+        await repo.session.scalar(select(CheckerRun.id).limit(1))
+        return await original(repo)
+
+    monkeypatch.setattr(ExecutionRepository, "now", read_clock)
+
+
 async def test_production_denies_before_access():
     with pytest.raises(CheckerExecutionUnavailable, match="post_submit_execution_unavailable"):
         await denied_executor().evaluate_post_submission(request())
 
 
 @pytest.mark.parametrize("provider", ["local", "minio"])
-async def test_verified_material_execution_and_replay(tmp_path, isolated_database_env, provider):
+async def test_verified_material_execution_and_replay(
+    tmp_path, isolated_database_env, provider, autoflush_clock
+):
     if provider == "minio":
         from tests.test_s3_artifact_store import provision_minio_bucket
 
@@ -62,7 +81,7 @@ async def test_verified_material_execution_and_replay(tmp_path, isolated_databas
         assert list((h.scratch / "workspaces").iterdir()) == []
 
 
-async def test_infrastructure_failure_is_terminal(tmp_path, isolated_database_env):
+async def test_infrastructure_failure_is_terminal(tmp_path, isolated_database_env, autoflush_clock):
     from app.modules.checkers.runner import CheckerRegistry
 
     async with material_fixture(tmp_path, isolated_database_env) as h:

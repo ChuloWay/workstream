@@ -12,8 +12,6 @@ from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import inspect, select
-from sqlalchemy.dialects import postgresql
-from sqlalchemy.schema import CreateIndex
 
 from app.core.config import get_settings
 from app.core.hashing import canonical_json_hash
@@ -562,8 +560,10 @@ def test_checker_models_are_registered_for_alembic_metadata() -> None:
 def test_checker_routing_recommendation_schema_uses_canonical_routing_tokens() -> None:
     adapter = TypeAdapter(CheckerRoutingRecommendation)
 
-    assert adapter.validate_python("checker_retry") == "checker_retry"
-    assert adapter.validate_python("task_setup_blocked") == "task_setup_blocked"
+    for token in ("not_evaluated", "allow_review", "needs_revision", "task_setup_blocked"):
+        assert adapter.validate_python(token) == token
+    with pytest.raises(ValidationError):
+        adapter.validate_python("checker_retry")
     with pytest.raises(ValidationError):
         adapter.validate_python("operator" + "_retry")
 
@@ -575,18 +575,6 @@ async def test_checker_migration_creates_expected_tables(checker_database_env: s
         )
 
     assert {"checker_runs", "checker_results"}.issubset(table_names)
-
-
-def test_checker_run_current_partial_unique_index_metadata_compiles() -> None:
-    index = next(
-        index
-        for index in CheckerRun.__table__.indexes
-        if index.name == "uq_checker_runs_current_per_submission"
-    )
-
-    postgres_compiled = str(CreateIndex(index).compile(dialect=postgresql.dialect()))
-
-    assert "is_current_for_submission = true" in postgres_compiled
 
 
 def test_checker_run_binds_to_locked_post_submit_policy_context() -> None:
@@ -611,9 +599,8 @@ def test_checker_run_binds_to_locked_post_submit_policy_context() -> None:
             if constraint.name == constraint_name
         )
         assert [column.name for column in constraint.columns] == local_columns
-    assert "ck_checker_runs_post_submit_policy_lock_complete" in {
-        constraint.name for constraint in CheckerRun.__table__.constraints
-    }
+    for name in expected_constraints["fk_checker_runs_locked_post_submit_policy_hash"]:
+        assert CheckerRun.__table__.c[name].nullable is False
 
 
 def test_artifact_manifest_hash_is_stable_and_rejects_duplicates() -> None:

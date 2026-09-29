@@ -266,6 +266,7 @@ class PostSubmissionExecutor:
                     return stored_result(run)
                 run = await repo.require_lease(request, facts.lease)
                 evidence_id = _evidence(await prepared.consume(facts), FinalizeEvidence, facts)
+                completed_at = await repo.now()
                 await repo.write_members(run, result)
                 if result.outcome == "completed":
                     reference = PostSubmitCurrentResultReference(
@@ -297,7 +298,7 @@ class PostSubmissionExecutor:
                             payload=event.model_dump(mode="json"),
                         )
                     )
-                    run.completion_event_id = str(appended.event_id)
+                    run.completion_event_id = appended.event_id
                 run.result_json = canonical_post_submit_bytes(
                     result, exclude={"result_digest"}
                 ).decode("utf-8")
@@ -312,7 +313,7 @@ class PostSubmissionExecutor:
                     classification.failed,
                     classification.blocking,
                 )
-                run.completed_at = await repo.now()
+                run.completed_at = completed_at
                 run.failure_code = result.infrastructure_failure_code
                 run.outcome_source = "auto_checker"
                 run.status = result.outcome

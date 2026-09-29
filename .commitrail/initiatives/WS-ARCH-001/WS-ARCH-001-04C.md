@@ -53,6 +53,7 @@ dispatcher to preserve.
   `tests/checkers/post_submit/`, `tests/checkers/test_phase_service.py`,
   `tests/authorization/submission_history/`, `tests/submission_fixtures.py`,
   `tests/test_artifact_admission.py`, `tests/test_tasks.py`,
+  `tests/test_checkers.py`, `tests/test_identifier_schema.py`,
   `tests/test_review_queue_persistence.py`, intake/pre-submit recovery and authority
   fixtures that compose the phase facade, checker-output and
   materialization helpers/tests only for traced aggregate/contract changes.
@@ -223,6 +224,7 @@ and fail the discriminating assertion, not a fixture/setup assertion.
 | Execute evidence cannot finalize; late denial rolls back | `test_execution.py::test_action_authority_is_not_interchangeable` | transaction / strict phase-specific participants |
 | No CHECKERS lock or PREP crosses materialization | `test_concurrency.py::test_evaluation_releases_transaction_before_materialization` | concurrency / independent lock probes during paused real materialization |
 | Actual stored ZIP, complete ordered members, replay without reinvocation | `test_execution.py::test_verified_material_execution_and_replay` | transaction / real Local and MinIO materialization |
+| Completion and infrastructure failure remain atomic with query autoflush enabled | `test_execution.py::test_verified_material_execution_and_replay`, `test_infrastructure_failure_is_terminal` | transaction / real PostgreSQL guards and an ORM-query clock probe force autoflush before each clock read |
 | Zero slots, no output call, unexpected binding rejected | `test_execution.py::test_zero_output_finalization` | service + transaction / canonical catalogue, extra-binding rejection and absent persisted checker binding |
 | Expired takeover retains run; stale worker rejects in both orders | `test_concurrency.py::test_stale_worker_cannot_finalize_after_takeover` | concurrency / independent sessions with database-timed lease |
 | Supersession and finalization serialize in both orders | `test_concurrency.py::test_generation_advance_and_finalize_serialize` | concurrency / two commit orders, exact fence assertions |
@@ -276,6 +278,13 @@ real AUTH evidence and broker delivery are explicit later owner proofs.
 Remove the arbitrary-message/current-flag/trigger-auth fixtures with their removed
 columns. History now proves exact closed nested members, deterministic projection,
 foreign ownership, terminal immutability, late-append rejection and derived currentness.
+The obsolete partial-current-index metadata test is removed: exact per-Submission
+fence/generation uniqueness is exercised by the new PostgreSQL coordination and
+storage tests. Locked policy fields now use required columns rather than the
+removed optional-tuple check; their metadata proof retains exact foreign keys
+and requiredness. The fence key is the existing Submission identity, not another
+generated record ID. Completion event references preserve OUTBOX native UUID
+values at the owner boundary.
 The hidden REV admission/queue guards also use the fence, replacing their
 removed current-flag read without exposing REV. Their tests construct valid
 completed, running, blocking and superseded runs rather than rewriting outcomes.
