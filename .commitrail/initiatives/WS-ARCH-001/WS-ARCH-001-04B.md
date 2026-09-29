@@ -201,17 +201,24 @@ deny-only. New-owner docstrings explain these boundaries without changing CI gat
 
 Plan review passed on the expanded contract before product implementation. The
 existing full ZIP admission/Submission fixture passed on migrated PostgreSQL.
-Focused implementation proof: 94 tests passed, including full Local/MinIO
-admission/consumption/materialization, wrong selectors, concurrent replica/Submission
-drift, async cancellation and deadline cleanup, plus retained pre-submit/archive
-proof. The added post-submit aggregate-quota test passed separately. Module,
-ownership and structure validators pass. Production AUTH/currentness and public
-HTTP remain unavailable and are not claimed by these owner tests.
-Three isolated runtime guard-removal probes made the unchanged named regressions
-fail at their intended `DID NOT RAISE` assertion: removing final selection freshness,
-request/Submission identity matching, or canonical-manifest matching. Restoring
-normal code retains passing controls. The ownership, boundary and lane tests passed
-227 cases; no guards were weakened and no required tests were removed.
+Focused implementation proof on clean `8fee6012`: 98 tests passed, including full
+Local/MinIO admission/consumption/materialization, exact executable metadata,
+wrong selectors, stored and supplied manifest mismatches, foreign result rejection,
+provider-stream transaction/lock observation, concurrent replica/Submission drift,
+async cancellation/deadline/quota cleanup, and retained pre-submit/archive proof.
+The ownership, boundary and lane suite passed 227 cases. Module, ownership,
+structure and documentation checks passed; no guards were weakened and no required
+tests were removed. Production AUTH/currentness and public HTTP remain unavailable
+and are not claimed by these owner tests.
+
+Three isolated guard-removal probes on that clean target made the unchanged
+regressions fail at their intended assertions: removing only the stored-manifest
+comparison, replacing executable flags with null, or removing result/request
+validation. Earlier development probes also caught removed final-selection
+freshness, request/Submission identity matching and supplied-manifest validation;
+those earlier runs are not claimed as exact-clean-target execution. Tests and
+metadata for each reviewable candidate are bound to its committed head; hosted
+full-suite evidence remains in the PR checks rather than a durable status claim.
 
 ### Plan review
 

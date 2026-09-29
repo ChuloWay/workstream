@@ -1647,11 +1647,11 @@ Fields:
 - `locked_revision_policy_id`
 - `locked_revision_policy_generation`
 - `locked_revision_policy_hash`
-- `artifact_binding_id` (target after ARCH-04B/04C custody)
-- `submission_bundle_manifest_id` (target after ARCH-04B/04C custody)
-- `package_hash` (legacy; replacement custody in ARCH-04B/04C)
-- `artifact_hash_manifest` (legacy; replacement custody in ARCH-04B/04C)
-- `artifact_manifest_hash` (legacy; replacement custody in ARCH-04B/04C)
+- `artifact_binding_id` (target after ARCH-04B2/04C custody)
+- `submission_bundle_manifest_id` (target after ARCH-04B2/04C custody)
+- `package_hash` (legacy; replacement custody in ARCH-04B2/04C)
+- `artifact_hash_manifest` (legacy; replacement custody in ARCH-04B2/04C)
+- `artifact_manifest_hash` (legacy; replacement custody in ARCH-04B2/04C)
 - `summary`
 
 Status:
