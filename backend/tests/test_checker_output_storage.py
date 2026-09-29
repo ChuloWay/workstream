@@ -302,6 +302,67 @@ async def test_checker_attempt_static_custody_allows_only_execution_lifecycle(
 
 
 @pytest.mark.asyncio
+async def test_artifact_binding_truncate_custody_blocks_direct_and_cascade_deletion(
+    isolated_database_env: str,
+    tmp_path: Path,
+) -> None:
+    """Table-wide deletion cannot bypass immutable artifact binding custody."""
+    async with _verified_output(isolated_database_env, tmp_path) as case:
+        binding_id = str(new_record_id())
+        async with case.factory() as session, session.begin():
+            await session.execute(
+                _INSERT_BINDING,
+                _binding_values(case, id=binding_id),
+            )
+
+        for statement in (
+            "truncate artifact_bindings",
+            "truncate artifact_contents cascade",
+        ):
+            with pytest.raises(DBAPIError, match="artifact_bindings rows are immutable"):
+                async with case.factory() as session, session.begin():
+                    await session.execute(text(statement))
+            async with case.factory() as session:
+                assert await session.scalar(
+                    text("select count(*) from artifact_bindings where id=:id"),
+                    {"id": binding_id},
+                ) == 1
+
+        async with case.factory() as session:
+            transaction = await session.begin()
+            try:
+                await session.execute(
+                    text(
+                        "alter table artifact_bindings disable trigger "
+                        "trg_artifact_bindings_no_truncate"
+                    )
+                )
+                await session.execute(text("truncate artifact_bindings"))
+                assert await session.scalar(
+                    text("select count(*) from artifact_bindings where id=:id"),
+                    {"id": binding_id},
+                ) == 0
+            finally:
+                await transaction.rollback()
+
+        async with case.factory() as session:
+            assert await session.scalar(
+                text("select count(*) from artifact_bindings where id=:id"),
+                {"id": binding_id},
+            ) == 1
+            trigger_definition = await session.scalar(
+                text(
+                    "select pg_get_triggerdef(oid) from pg_trigger "
+                    "where tgrelid='artifact_bindings'::regclass "
+                    "and tgname='trg_artifact_bindings_no_truncate'"
+                )
+            )
+            assert trigger_definition is not None
+            assert "BEFORE TRUNCATE" in trigger_definition
+            assert "EXECUTE FUNCTION reject_artifact_fact_mutation()" in trigger_definition
+
+
+@pytest.mark.asyncio
 async def test_binding_guard_uses_only_artifact_ancestry_and_exact_owner_fks(
     isolated_database_env: str,
 ) -> None:
@@ -349,6 +410,7 @@ async def _restore_pre_0007_schema(connection) -> None:
     """Remove only 0007 custody inside the caller's rollback-only transaction."""
     for table, trigger in (
         ("artifact_bindings", "checker_output_binding_insert"),
+        ("artifact_bindings", "trg_artifact_bindings_no_truncate"),
         ("artifact_put_attempts", "checker_output_put_attempt_custody"),
         ("artifact_put_attempts", "checker_output_put_attempt_no_truncate"),
     ):

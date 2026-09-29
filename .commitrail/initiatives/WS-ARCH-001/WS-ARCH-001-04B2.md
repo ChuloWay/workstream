@@ -124,7 +124,8 @@ claim the current structural catalogue supports them.
   to register changed owners and keep existing gates intact.
 - This record, linked ARCH output skeleton, current ARCH/ART/AUTH/POL/CON navigation,
   `.commitrail/INDEX.md`, `README.md`, `docs/roadmap_status.md`, artifact/checker/data
-  model specifications, operating manual and authorization custody page for affected claims.
+  model specifications, authorization specification, operating manual and
+  authorization custody page for affected claims.
 
 ### Not allowed
 
@@ -203,6 +204,19 @@ identity while authorizing the caller's exact claimed active lease on every phas
 Existing binding
 immutability is reused; no generated-output catalogue expansion or duplicate
 custody aggregate is authorized.
+
+## Review findings
+
+- Immutable binding custody must cover statement-level deletion as well as row
+  mutation. Reuse the existing ART fact-mutation rejection function for a binding
+  no-TRUNCATE trigger; prove direct and cascading truncation rejects and preserves
+  a real verified binding. The canonical isolated test reset disables/restores
+  this guard and pins the resulting schema fingerprint.
+- Service-level binding proof must substitute valid foreign put/receipt identities
+  after both valid controls, independently of the database insert guard. The
+  requested-attempt filter removal must make the negative service test fail.
+- Current authorization specifications must show delivered input/output custody,
+  then ARCH-04C execution/results, then ARCH-04D activation.
 
 ## Reconciliation
 

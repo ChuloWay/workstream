@@ -537,8 +537,9 @@ runtime `ActionOwner` values or the current implementation boundaries.
 In particular, the XINT-06B grouping corresponds to runtime
 `WS-AUTH-001-ART-06A` for post-submit materialization and
 `WS-AUTH-001-ART-06B` for checker-output write/binding. The current replacement
-activation contract is ARCH-04D, after delivered ARCH-04B hidden input and
-remaining ARCH-04B2 output custody/ARCH-04C durable execution. It does not reopen XINT-06B as a parallel implementation lane. Likewise ARCH-02G/02H
+activation contract is ARCH-04D. ARCH-04B hidden input and ARCH-04B2 output
+custody are delivered; ARCH-04C durable execution/results is next, followed by
+ARCH-04D activation. This does not reopen XINT-06B as a parallel implementation lane. Likewise ARCH-02G/02H
 are replacement implementation boundaries, not automatic registry renames.
 Read exact runtime ownership from the typed catalogue. No planning-only
 change may promote or reassign an action.

@@ -199,6 +199,80 @@ async def test_foreign_lineage_and_changed_bytes_fail_before_provider(
         assert (await harness.manager.usage()).reservation_count == 0
 
 
+async def test_binding_rejects_mixed_stored_lineage_before_consumption_or_mutation(
+    tmp_path,
+    isolated_database_env,
+) -> None:
+    """Bind two valid controls, then reject every original/foreign custody mix."""
+    async with output_custody_harness(tmp_path, isolated_database_env) as harness:
+        original_reservation = harness.state.reservation
+        original_selector = harness.selector
+        foreign_reservation = await harness.seed_reservation()
+        foreign_selector = selector_for(foreign_reservation)
+
+        original = await harness.service.store(harness.request(b"original binding control"))
+        harness.state.reservation = foreign_reservation
+        foreign = await harness.service.store(
+            harness.request(b"foreign binding control", selector=foreign_selector)
+        )
+        assert original.content_id is not None and original.verification_receipt_id is not None
+        assert foreign.content_id is not None and foreign.verification_receipt_id is not None
+
+        harness.state.reservation = original_reservation
+        original_bound = await harness.bind(original_selector, original)
+        harness.state.reservation = foreign_reservation
+        foreign_bound = await harness.bind(foreign_selector, foreign)
+        assert (
+            original_bound.content_id,
+            original_bound.put_attempt_id,
+            original_bound.verification_receipt_id,
+            original_bound.replayed,
+        ) == (
+            original.content_id,
+            original.put_attempt_id,
+            original.verification_receipt_id,
+            False,
+        )
+        assert (
+            foreign_bound.content_id,
+            foreign_bound.put_attempt_id,
+            foreign_bound.verification_receipt_id,
+            foreign_bound.replayed,
+        ) == (
+            foreign.content_id,
+            foreign.put_attempt_id,
+            foreign.verification_receipt_id,
+            False,
+        )
+
+        binding_baseline = await harness.binding_rows()
+        assert {UUID(row[0]) for row in binding_baseline} == {
+            original_bound.binding_id,
+            foreign_bound.binding_id,
+        }
+        consumed_baseline = len(harness.state.bindings)
+        assert consumed_baseline == 2
+
+        harness.state.reservation = original_reservation
+        for put_attempt_id, receipt_id, failure in (
+            (foreign.put_attempt_id, original.verification_receipt_id, "identity_mismatch"),
+            (original.put_attempt_id, foreign.verification_receipt_id, "verification_unavailable"),
+            (foreign.put_attempt_id, foreign.verification_receipt_id, "identity_mismatch"),
+        ):
+            async with harness.factory() as session:
+                with pytest.raises(CheckerOutputUnavailable, match=failure):
+                    async with session.begin():
+                        await harness.binding_service(session).bind_checker_output(
+                            CheckerOutputBindingRequest(
+                                original_selector,
+                                put_attempt_id,
+                                receipt_id,
+                            )
+                        )
+            assert len(harness.state.bindings) == consumed_baseline
+            assert await harness.binding_rows() == binding_baseline
+
+
 async def test_binding_rollback_and_concurrent_replay_are_atomic(
     tmp_path,
     isolated_database_env,

@@ -365,3 +365,8 @@ def _install_checker_output_binding_guard() -> None:
         "CREATE TRIGGER checker_output_binding_insert BEFORE INSERT ON artifact_bindings "
         "FOR EACH ROW EXECUTE FUNCTION guard_checker_output_binding_insert()"
     )
+    op.execute(
+        "CREATE TRIGGER trg_artifact_bindings_no_truncate BEFORE TRUNCATE "
+        "ON artifact_bindings FOR EACH STATEMENT "
+        "EXECUTE FUNCTION reject_artifact_fact_mutation()"
+    )

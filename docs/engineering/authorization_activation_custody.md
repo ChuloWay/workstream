@@ -58,8 +58,8 @@ The table retains historical planning-custody labels, not a literal mapping
 of every typed runtime `ActionOwner`. XINT-06B groups runtime
 `WS-AUTH-001-ART-06A` post-submit materialization and
 `WS-AUTH-001-ART-06B` output write/binding. ARCH-04D is their current replacement
-activation boundary after delivered ARCH-04B hidden input and ARCH-04B2 hidden
-output custody, followed by ARCH-04C durable execution/results. ARCH-04B2 owns
+activation boundary. ARCH-04B hidden input and ARCH-04B2 hidden output custody
+are delivered; ARCH-04C durable execution/results is next, followed by ARCH-04D. ARCH-04B2 owns
 fresh authority participants internally for each store, recovery and binding
 phase; public requests carry selectors and byte sources, never PREP handles.
 Default output reservation and authority composition remains unavailable, and

@@ -15,7 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.adapters.artifacts import create_artifact_store_bootstrap
 from app.core.identifiers import new_record_id
-from app.interfaces.artifact_operations import CheckerOutputArtifactRequest
+from app.interfaces.artifact_operations import (
+    CheckerOutputArtifactRequest,
+    CheckerOutputArtifactResult,
+    CheckerOutputBindingRequest,
+    CheckerOutputBindingResult,
+)
 from app.interfaces.artifacts import (
     ArtifactByteRange,
     ArtifactStoreNamespaceClaim,
@@ -28,6 +33,7 @@ from app.modules.artifacts.checker_output_bindings import (
 )
 from app.modules.artifacts.checker_output_custody import CheckerOutputStoredFacts
 from app.modules.artifacts.checker_outputs import CheckerArtifactOutputService
+from app.modules.artifacts.models import ArtifactBinding
 from app.modules.artifacts.preparation import (
     ArtifactPreparationService,
     ArtifactScratchManager,
@@ -270,6 +276,37 @@ class OutputCustodyHarness:
             authority=ControlledBindingAuthority(self.state),
             namespace_fingerprint=self.namespace.namespace_fingerprint,
         )
+
+    async def bind(
+        self,
+        selector: CheckerOutputSelector,
+        stored: CheckerOutputArtifactResult,
+    ) -> CheckerOutputBindingResult:
+        """Bind one successful stored-output control in its own transaction."""
+        assert stored.verification_receipt_id is not None
+        async with self.factory() as session:
+            async with session.begin():
+                return await self.binding_service(session).bind_checker_output(
+                    CheckerOutputBindingRequest(
+                        selector,
+                        stored.put_attempt_id,
+                        stored.verification_receipt_id,
+                    )
+                )
+
+    async def binding_rows(self) -> list[tuple[str, str, str, str, str]]:
+        """Snapshot exact immutable binding identities for denial-side-effect proof."""
+        async with self.factory() as session:
+            rows = await session.execute(
+                select(
+                    ArtifactBinding.id,
+                    ArtifactBinding.content_id,
+                    ArtifactBinding.resource_id,
+                    ArtifactBinding.put_attempt_id,
+                    ArtifactBinding.verification_receipt_id,
+                ).order_by(ArtifactBinding.id)
+            )
+            return [tuple(row) for row in rows]
 
     async def seed_reservation(
         self,
