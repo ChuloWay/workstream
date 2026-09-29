@@ -69,7 +69,13 @@ aliases, parallel execution implementations or weakened CI.
 1. Extend the existing CheckerRun as the logical attempt. Its UUID is the phase
    attempt ID; persist the exact immutable request envelope/hash, opaque request
    ID, phase, generation, active execution lease and terminal result facts there.
-   Existing CheckerResult rows remain the sole member-result history. Remove
+   Existing CheckerResult rows remain the sole member-result history: replace
+   arbitrary messages, visibility, evidence references and metadata with closed
+   checker/version/implementation identity, status, code, failure category, severity
+   and counters, plus deterministic member order and immutable row ID/timestamps.
+   History derives its messages and contributor visibility from those closed facts;
+   update affected fixtures/privacy assertions and API expectations together. Preserve
+   uq_checker_runs_ownership(id, task_id, submission_id), consumed by ART. Remove
    superseded trigger-auth/current-flag fields and update affected readers and
    fixtures together. No one-to-one execution sidecar or second history store.
 2. Add one CHECKERS-owned per-Submission fence pointing at the current run.
@@ -77,7 +83,10 @@ aliases, parallel execution implementations or weakened CI.
    fence only in an existing, non-nested caller transaction. Initial generation
    is one; successors must be exact monotonic next generations and reference the
    prior run. Identical request replay returns the winner; the same request ID
-   with different envelope is a conflict. It flushes, never commits or executes.
+   with different envelope is a conflict. PostgreSQL owns unique
+   (evaluation_request_id, phase) across all submissions, unique
+   (submission_id, phase, evaluation_generation), and composite fence/run ownership.
+   It flushes, never commits or executes.
    Future 04E composes this participant with TASK's dispatch outbox atomically.
    No production route/handler receives it in this chunk.
 3. Execution never creates or advances the fence. Fresh execute authority is
@@ -182,15 +191,58 @@ aliases, parallel execution implementations or weakened CI.
 
 ## Evidence
 
-Future focused tests live under `backend/tests/checkers/execution/`: contracts,
-coordination, execution/replay, storage and concurrency. Run through
-`backend/scripts/run_isolated_tests.py` with isolated PostgreSQL/MinIO; use concrete
-Local/MinIO materialization for storage claims and pure tests for routing rules.
-Run Ruff, ownership/module/structure validators, affected history/migration proof,
-markdown links, stale wording and Commitrail checks. Full hosted lanes remain
-required. Named negative proofs must fail after valid controls when the exact
-guard is removed; fixture/setup failures are not mutation detection. Exact results
-and review heads belong in the PR, not this durable record.
+The following are **future tests**, not executed evidence. All new symbols below
+live in `backend/tests/checkers/execution/`; parameterized cases exercise each
+listed atom independently. Each negative control first reaches the relevant
+boundary with valid stored prerequisites. Removing the named guard must reach
+and fail the discriminating assertion, not a fixture/setup assertion.
+
+| Behavior atom | Future module and test symbol | Proof strength / execution custody |
+| --- | --- | --- |
+| Exact reserve replay, changed envelope conflict | `test_coordination.py::test_reservation_replay_rejects_changed_envelope` | transaction / real PostgreSQL caller rollback |
+| Concurrent first reservation converges | `test_concurrency.py::test_concurrent_initial_reservation` | concurrency / independent PostgreSQL sessions |
+| Request ID collision across valid submissions | `test_concurrency.py::test_cross_submission_request_collision` | concurrency / independent sessions, valid foreign lineage |
+| Request/phase and submission/phase/generation uniqueness | `test_storage.py::test_duplicate_request_and_generation_rejected` | direct_sql / valid duplicate controls |
+| Default denial precedes repository, provider and scratch | `test_execution.py::test_production_denies_before_access` | composition + negative_structure / actual composition with access spies |
+| Execute evidence cannot finalize; late denial rolls back | `test_execution.py::test_action_authority_is_not_interchangeable` | transaction / strict phase-specific participants |
+| No CHECKERS lock or PREP crosses materialization | `test_concurrency.py::test_evaluation_releases_transaction_before_materialization` | concurrency / independent lock probes during paused real materialization |
+| Actual stored ZIP, complete ordered members, replay without reinvocation | `test_execution.py::test_verified_material_execution_and_replay` | storage + transaction / real Local and MinIO materialization |
+| Zero slots, no output call, unexpected binding rejected | `test_execution.py::test_zero_output_finalization` | service + transaction / canonical catalogue and output access spies |
+| Expired takeover retains run; stale worker rejects in both orders | `test_concurrency.py::test_stale_worker_cannot_finalize_after_takeover` | concurrency / independent sessions with database-timed lease |
+| Supersession and finalization serialize in both orders | `test_concurrency.py::test_generation_advance_and_finalize_serialize` | concurrency / two commit orders, exact fence assertions |
+| Infrastructure terminal never restarts or routes | `test_execution.py::test_infrastructure_failure_is_terminal` | transaction / repeat invocation and absent completion event |
+| Category precedence, locked severity, warning semantics | `test_results.py::test_routing_uses_complete_locked_policy` | pure / each supported category and severity selection |
+| Missing/extra/foreign members, blocking allow_review, extra output | `test_storage.py::test_terminal_member_and_routing_custody` | direct_sql / each independent invalid tuple with valid control |
+| Current-result foreign identifiers concealed | `test_coordination.py::test_current_result_conceals_foreign_lineage` | repository_isolation / two independently valid stored owners |
+| Actual outbox insert failure rolls back every final fact | `test_execution.py::test_finalization_outbox_failure_rolls_back` | transaction / fail real outbox insert, inspect new session |
+| Envelope, lease, completed members/outcome immutable; no late append/delete | `test_storage.py::test_execution_custody_rejects_mutation` | direct_sql / independent mutations and guard-removal probes |
+| Empty upgrade succeeds; nonempty migration refuses unchanged schema/data | `test_migration.py::test_migration_refuses_retained_history` | direct_sql / real predecessor database, before/after snapshots |
+| History derives currentness; closed nested values match exact stored parent | `test_history.py::test_history_preserves_exact_closed_results` | repository_isolation / stored foreign same-shaped members |
+| History excludes private request, authority and material facts | `test_history.py::test_history_excludes_execution_private_facts` | service / exact contributor and manager field/value assertions |
+
+Run from `backend/`, with the existing local test-admin database and MinIO
+environment supplied without committing credentials:
+
+```sh
+.venv/bin/python scripts/run_isolated_tests.py --metadata-json /tmp/arch04c-db.json --timeout-seconds 1200 -- .venv/bin/python -m pytest tests/checkers/execution tests/checkers/post_submit tests/authorization/submission_history -q --tb=short
+.venv/bin/python -m ruff check app tests scripts
+.venv/bin/python -m scripts.module_boundaries validate --protected-base bb640f0a
+.venv/bin/python -m scripts.behavior_ownership validate
+.venv/bin/python -m scripts.test_structure_boundary validate --policy ../.ci/auth-boundaries/TEST_STRUCTURE_POLICY.md --ledger ../.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json
+```
+
+From the repository root:
+
+```sh
+backend/.venv/bin/python scripts/check_markdown_links.py
+backend/.venv/bin/python scripts/check_commitrail_records.py
+backend/.venv/bin/python scripts/check_stale_workstream_wording.py
+```
+
+Run affected existing ART custody and schema tests as well; complete hosted lanes
+remain required. Exact command results, review targets and freshness belong in
+the PR, not this durable record. These commands describe planned verification,
+not passing future runtime proof.
 
 ## Plan review disposition
 
