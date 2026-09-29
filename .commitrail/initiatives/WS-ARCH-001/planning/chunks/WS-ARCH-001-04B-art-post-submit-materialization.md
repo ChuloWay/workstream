@@ -60,7 +60,7 @@ bodies. No TASK mutation or current-guide rebasing is introduced.
 ### Exact selection predicates
 
 TASK returns project/task/assignment/Submission ID and version, contributor ID,
-predecessor ID, status, contribution-policy version, admission/binding/content IDs,
+predecessor ID and version, status, contribution-policy version, admission/binding/content IDs,
 and guide/source/effective/pre/post/review/revision identities, versions/generations
 and hashes. Require Submission status `submitted`, exact project/task/assignment
 and Submission/version, and exact binding/content. Compare the full stamped context
@@ -145,13 +145,13 @@ creation and admission consumption. Reuse its helpers; do not use the reduced
 Concrete commands (from `backend/`, with the existing local test services/env):
 
 ```sh
-.venv/bin/python scripts/run_isolated_tests.py --metadata-json /tmp/arch04b-focused.json --timeout-seconds 900 -- .venv/bin/python -m pytest tests/test_post_submit_materialization.py tests/test_post_submit_selection.py tests/test_checker_materialization.py tests/tasks/test_submission_lineage.py -q
+.venv/bin/python scripts/run_isolated_tests.py --metadata-json /tmp/arch04b-focused.json --timeout-seconds 900 -- .venv/bin/python -m pytest tests/test_post_submit_materialization.py tests/test_post_submit_selection.py tests/test_checker_materialization.py tests/test_submission_archive.py tests/test_default_pre_submit_execution.py tests/tasks/test_submission_lineage.py -q
 .venv/bin/python -m pytest tests/test_artifact_architecture.py tests/architecture/test_module_boundaries.py tests/test_ci_lane_catalogue.py -q
 .venv/bin/ruff check app/modules/artifacts app/modules/tasks/api app/modules/tasks/submitted_bundle.py app/adapters/artifacts app/adapters/tasks tests/test_post_submit_materialization.py tests/test_post_submit_selection.py tests/post_submit_materialization_helpers.py
 ```
 
 From repository root run `python3 scripts/check_markdown_links.py`,
-`python3 scripts/check_commitrail_records.py`,
+`python3 scripts/check_commitrail_records.py --base-ref 5e35f635`,
 `python3 scripts/check_stale_artifact_contracts.py`,
 `python3 scripts/check_stale_workstream_wording.py`, and `git diff --check`.
 Use a unique metadata path per isolated rerun. New test paths above are planned.
@@ -172,7 +172,9 @@ separation from future durable execution and live authorization.
 
 Read-only design review identified the missing TASK read boundary and selected
 existing closed CHECKERS request/result contracts over generic object returns.
-Final expanded-plan review is pending; no product implementation has started.
+The review required exact selection predicates, a reachable full admission fixture,
+async projection lifetime and executable commands. Those corrections are adopted;
+implementation follows the reviewed design without live AUTH or execution activation.
 
 ## ARCH-04B2 — Separate ART output-custody child
 
