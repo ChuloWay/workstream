@@ -148,7 +148,9 @@ def test_admission_metrics_are_bounded_and_classified() -> None:
 
 
 def test_readiness_is_static_and_aws_never_active() -> None:
-    disabled = artifact_provider_readiness(Settings())
+    disabled = artifact_provider_readiness(
+        Settings.model_construct(artifact_store_backend="disabled")
+    )
     assert disabled["status"] == "inactive_disabled"
     assert disabled["active"] is False
 
@@ -192,6 +194,10 @@ async def test_quota_reconciliation_is_configuration_driven_and_rollback_safe() 
         guide_source_snapshot_id=None,
         checker_run_id=None,
         logical_role=None,
+        submission_id=None,
+        submission_version=None,
+        checker_request_digest=None,
+        checker_request_digest_facts=None,
         pre_submit_evidence_set_id=None,
         operation_identity="sha256:" + "a" * 64,
     )

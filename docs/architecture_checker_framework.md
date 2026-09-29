@@ -523,11 +523,13 @@ severities.
 ## Checker Run Flow — Target Contract
 
 The following is the intended end-to-end lifecycle. Pre-submit intake and
-retained-history reads are implemented. Canonical durable post-submit execution,
-result routing and recovery remain unavailable pending ARCH-04C/04D/04E/04F;
-ARCH-04B hidden input and ARCH-04B2 hidden output custody are delivered with
-deny-only/unavailable production composition;
-the flow below is not a claim that those jobs or transitions are live.
+retained-history reads are implemented. Canonical durable post-submit execution
+and result routing remain unavailable pending ARCH-04C/04D/04E. ARCH-04F adds
+contributor-correctable remediation and gates public intake and enabling the
+false-policy acceptance path; the true `allow_review` route may ship before
+ARCH-04F. ARCH-04B hidden input and ARCH-04B2 hidden output custody are delivered
+with deny-only/unavailable production composition. The flow below is not a claim
+that those jobs or transitions are live.
 
 ```text
 Draft packet

@@ -119,7 +119,9 @@ claim the current structural catalogue supports them.
   `test_artifact_authorization.py`, `backend/tests/conftest.py` (exact migrated
   fingerprint and protected-table reset inventory), `backend/alembic/env.py`,
   `test_alembic.py`, `test_coverage_contract.py` for exact migration-head registration, module boundary
-  tests and migration tests for traced consumers and retained behavior.
+  tests and migration tests, including
+  `backend/tests/authorization/submission_history/test_migration.py` for exact
+  predecessor-schema restoration across the new dependent foreign key.
 - Existing lane/ownership/module/test-structure inventories and their tests only
   to register changed owners and keep existing gates intact.
 - This record, linked ARCH output skeleton, current ARCH/ART/AUTH/POL/CON navigation,
@@ -216,7 +218,14 @@ custody aggregate is authorized.
   after both valid controls, independently of the database insert guard. The
   requested-attempt filter removal must make the negative service test fail.
 - Current authorization specifications must show delivered input/output custody,
-  then ARCH-04C execution/results, then ARCH-04D activation.
+  then ARCH-04C execution/results, then ARCH-04D activation. ARCH-04F gates
+  remediation/public intake and enabling false, not the earlier true routing branch.
+- Retained-data migration probes must remove the exact new dependent ART foreign
+  key when reconstructing the predecessor checker schema and restore it after
+  committed concurrency probes; no CASCADE shortcut or weakened assertion. The
+  existing guide quota-reconciliation fixture supplies explicit null checker
+  custody fields under the expanded internal admission facts; its rollback and
+  configured-limit assertions remain intact.
 
 ## Reconciliation
 
