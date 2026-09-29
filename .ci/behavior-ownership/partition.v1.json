@@ -258,15 +258,23 @@
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/artifacts/api/submission_materialization.py"
-    },
-    {
-      "group": "artifacts",
       "target": "backend/app/modules/artifacts/api/submission_preparation.py"
     },
     {
       "group": "artifacts",
       "target": "backend/app/modules/artifacts/authorization.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/checker_output_bindings.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/checker_output_custody.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/checker_outputs.py"
     },
     {
       "group": "artifacts",
@@ -723,6 +731,14 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/checkers/api/history.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/materialization.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/output_custody.py"
     },
     {
       "group": "artifacts",
@@ -1473,7 +1489,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "45c8605a1e6b8a29cd5c9fb59771f423f8e87f04ed7da07833139cc1f657e22b",
+  "authority_digest": "c836827deba926d6b40689de2d7a723c9640fe209b11edb49d78dacb12b5744e",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

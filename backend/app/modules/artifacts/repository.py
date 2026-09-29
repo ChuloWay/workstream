@@ -30,7 +30,6 @@ from app.modules.artifacts.models import (
     SubmissionBundleDurableIntent,
 )
 from app.modules.artifacts.schemas import VERIFICATION_PRODUCERS
-from app.modules.checkers.models import CheckerRun
 from app.modules.projects.models import (
     GuideSourceArtifactIngest,
     GuideSourceSnapshot,
@@ -38,7 +37,6 @@ from app.modules.projects.models import (
     Project,
     ProjectGuide,
 )
-from app.modules.tasks.models import Submission, WorkstreamTask
 
 
 class GuideSourceIngestConflict(ValueError):
@@ -72,15 +70,6 @@ class GuideLineageFacts:
     media_type: str | None
 
 
-@dataclass(frozen=True, slots=True)
-class CheckerOutputAdmissionFacts:
-    """Authoritative project/task ownership for one checker run."""
-
-    checker_run_id: str
-    project_id: str
-    task_id: str
-
-
 class ArtifactRepository:
     """Persist artifact state transitions under caller-owned transactions."""
 
@@ -94,12 +83,6 @@ class ArtifactRepository:
         if value is None:
             raise RuntimeError("PostgreSQL clock did not return a timestamp")
         return value
-
-    async def lock_checker_run(self, checker_run_id: str) -> CheckerRun | None:
-        """Lock one checker run for canonical recovery resource derivation."""
-        return await self._session.scalar(
-            select(CheckerRun).where(CheckerRun.id == checker_run_id).with_for_update()
-        )
 
     async def get_guide_admission_facts(
         self, guide_source_item_id: str
@@ -235,32 +218,6 @@ class ArtifactRepository:
             source_kind=lineage.source_kind,
             ingestion_adapter=lineage.ingestion_adapter,
             media_type=lineage.media_type,
-        )
-
-    async def get_checker_output_admission_facts(
-        self, checker_run_id: str
-    ) -> CheckerOutputAdmissionFacts | None:
-        """Load canonical project/task ownership for one checker run."""
-        row = (
-            await self._session.execute(
-                select(CheckerRun.id, Submission.task_id, WorkstreamTask.project_id)
-                .join(
-                    Submission,
-                    (Submission.id == CheckerRun.submission_id)
-                    & (Submission.version == CheckerRun.submission_version)
-                    & (Submission.task_id == CheckerRun.task_id),
-                )
-                .join(WorkstreamTask, WorkstreamTask.id == Submission.task_id)
-                .where(CheckerRun.id == checker_run_id)
-                .with_for_update(of=(CheckerRun, Submission, WorkstreamTask))
-            )
-        ).one_or_none()
-        if row is None:
-            return None
-        return CheckerOutputAdmissionFacts(
-            checker_run_id=row.id,
-            project_id=row.project_id,
-            task_id=row.task_id,
         )
 
     async def ensure_and_lock_admission_scopes(

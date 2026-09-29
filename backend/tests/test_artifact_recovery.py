@@ -27,9 +27,11 @@ from app.interfaces.artifacts import (
     ArtifactStoreUnavailableError,
 )
 from app.modules.artifacts.models import (
+    ArtifactPutAttempt,
     ArtifactRecoveryAttempt,
     ArtifactVerificationJob,
 )
+from app.modules.artifacts.repository import ArtifactRepository
 from app.modules.artifacts.schemas import (
     ArtifactRecoveryAuthorizationEvidence,
     ArtifactRecoveryConflictError,
@@ -42,7 +44,6 @@ from app.modules.artifacts.service import (
     ArtifactStorageOrchestrator,
     artifact_storage_namespace_spec,
 )
-from app.modules.checkers.models import CheckerRun
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.authorization.runtime import (
     ActorKind,
@@ -186,7 +187,7 @@ async def _exhausted_job(session, settings, tmp_path, context):
     async with minted_source(
         tmp_path / "checker-output", b"recover checker output", limits=limits,
     ) as source:
-        project_id, task_id, checker_run_id, admission = await _admit_checker_output(
+        project_id, task_id, _checker_run_id, admission = await _admit_checker_output(
             session, settings, namespace, source, policy_bundle=policy_bundle)
         await _seed_recovery_actor(session, context)
         await session.commit()
@@ -209,12 +210,17 @@ async def _exhausted_job(session, settings, tmp_path, context):
         await orchestrator.verify_object(UUID(job_id))
         job = await session.get(ArtifactVerificationJob, job_id)
         assert job is not None
-        checker_run = await session.get(CheckerRun, checker_run_id)
-        assert checker_run is not None
-        submission_id = checker_run.submission_id
+        attempt = await session.get(ArtifactPutAttempt, str(admission.attempt_id))
+        assert attempt is not None
+        submission_id = attempt.submission_id
+        assert submission_id is not None
         await session.refresh(job)
         await session.commit()
     return project_id, task_id, submission_id, job, orchestrator, bootstrap
+
+
+def test_recovery_repository_has_no_checker_run_lookup() -> None:
+    assert not hasattr(ArtifactRepository, "lock_checker_run")
 
 
 def _request(

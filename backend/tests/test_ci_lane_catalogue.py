@@ -231,6 +231,8 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/test_approved_guide_intake.py",
             "tests/test_post_submit_materialization.py",
             "tests/test_post_submit_selection.py",
+            "tests/test_checker_output_custody.py",
+            "tests/test_checker_output_storage.py",
             "tests/test_pre_submit_attempt_recovery.py",
             "tests/test_pre_submit_attempt_contracts.py",
             "tests/test_pre_submit_attempt_authority_integration.py",

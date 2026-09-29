@@ -92,23 +92,30 @@ from app.modules.artifacts.schemas import (
     ArtifactRecoveryIneligibleError,
     ArtifactRecoveryNotFoundError,
     DenyArtifactInternalAuthority,
+    CheckerOutputAdmissionAuthority,
     CheckerOutputArtifactAdmissionRequest,
     GuideArtifactAdmissionRequest,
     GuideArtifactIngestAuthorityFacts,
     SubmissionBundleArtifactAdmissionRequest,
     SubmissionBundleDurableIntentAuthorityFacts,
+    checker_output_operation_identity,
+    checker_output_request_digest_facts,
 )
 from app.modules.artifacts.submission_authorization import (
     SubmissionBundlePreparedAuthorization,
 )
 from app.modules.artifacts.sources import CommittedArtifactSource, PreparedArtifact
+from app.modules.checkers.api.output_custody import (
+    CheckerOutputReservation,
+    CheckerOutputSelector,
+    CheckerOutputUnavailable,
+)
 from app.modules.authorization.runtime import (
     ActorKind,
     ActorStatus,
     AuthorizationContext,
     HumanAuthorizationContext,
     IdentityLinkStatus,
-    ServiceAuthorizationContext,
 )
 from app.modules.authorization.prepared import PreparedAuthorizationHandle
 from app.modules.authorization.catalogue import ActionId, PermissionId
@@ -181,6 +188,10 @@ class _AdmissionFacts:
     guide_source_snapshot_id: str | None
     checker_run_id: str | None
     logical_role: str | None
+    submission_id: str | None
+    submission_version: int | None
+    checker_request_digest: str | None
+    checker_request_digest_facts: dict[str, object] | None
     pre_submit_evidence_set_id: str | None
     operation_identity: str
 
@@ -1602,12 +1613,7 @@ class ArtifactRecoveryService:
             if self._is_exact_replay(existing, request, digest):
                 return self._result(existing, replayed=True)
             raise ArtifactRecoveryConflictError("artifact recovery source is already owned")
-        checker_run = (
-            await self._repo.lock_checker_run(put_attempt.checker_run_id)
-            if put_attempt.checker_run_id is not None
-            else None
-        )
-        canonical_submission_id = checker_run.submission_id if checker_run is not None else None
+        canonical_submission_id = put_attempt.submission_id
         canonical_project_id = UUID(put_attempt.project_id)
         canonical_task_id = UUID(put_attempt.task_id)
         canonical_submission_uuid = (
@@ -1906,16 +1912,27 @@ class ArtifactAdmissionService:
         submission_prepared_authorization: SubmissionBundlePreparedAuthorization | None = None,
         submission_task_contexts: TaskSubmissionContextPort | None = None,
         submission_project_contexts: ProjectLockedPolicyContextPort | None = None,
+        checker_output_authority: CheckerOutputAdmissionAuthority | None = None,
         prepared_authorization: PreparedAuthorizationHandle | None = None,
         existing_transaction: bool = False,
     ) -> ArtifactAdmissionResult:
         """Reserve every derived scope and persist one prepared attempt atomically."""
+        if (
+            type(request) is CheckerOutputArtifactAdmissionRequest
+            and checker_output_authority is None
+        ):
+            raise ArtifactAuthorityDeniedError(
+                "checker output admission authority is unavailable"
+            )
         self._validate_request_boundary(request)
         commitment = request.source.commitment
         async with _artifact_admission_transaction(
             self._session,
             existing=existing_transaction,
         ):
+            if type(request) is CheckerOutputArtifactAdmissionRequest:
+                assert checker_output_authority is not None
+                await checker_output_authority.consume(request)
             if type(request) is GuideArtifactAdmissionRequest:
                 if (
                     guide_prepared_authorization is None
@@ -2040,6 +2057,15 @@ class ArtifactAdmissionService:
                     "guide_source_item_id": facts.guide_source_item_id,
                     "checker_run_id": facts.checker_run_id,
                     "logical_role": facts.logical_role,
+                    **(
+                        {
+                            "submission_id": facts.submission_id,
+                            "submission_version": facts.submission_version,
+                            "checker_output_request": facts.checker_request_digest_facts,
+                        }
+                        if facts.request_type == "checker_output"
+                        else {}
+                    ),
                     "pre_submit_evidence_set_id": facts.pre_submit_evidence_set_id,
                     "sha256": commitment.sha256,
                     "byte_count": commitment.byte_count,
@@ -2103,6 +2129,9 @@ class ArtifactAdmissionService:
                 guide_source_item_id=facts.guide_source_item_id,
                 checker_run_id=facts.checker_run_id,
                 logical_role=facts.logical_role,
+                submission_id=facts.submission_id,
+                submission_version=facts.submission_version,
+                checker_request_digest=facts.checker_request_digest,
                 sha256=commitment.sha256,
                 byte_count=commitment.byte_count,
                 media_type=commitment.media_type,
@@ -2149,7 +2178,22 @@ class ArtifactAdmissionService:
         if type(request.source) is not CommittedArtifactSource:
             raise TypeError("invalid artifact admission source")
         if type(request) is CheckerOutputArtifactAdmissionRequest:
-            ArtifactAdmissionService._validate_logical_role(request.logical_role)
+            if type(request.reservation) is not CheckerOutputReservation:
+                raise TypeError("invalid checker output reservation")
+            try:
+                request.reservation.select(
+                    CheckerOutputSelector(
+                        evaluation=request.reservation.evaluation,
+                        checker_run_id=request.reservation.checker_run_id,
+                        worker_lease_id=request.reservation.worker_lease_id,
+                        worker_lease_generation=request.reservation.worker_lease_generation,
+                        slot_key=request.slot_key,
+                    )
+                )
+            except (CheckerOutputUnavailable, ValueError) as exc:
+                raise ArtifactAdmissionRelationshipError(
+                    "checker output reservation is unavailable"
+                ) from exc
         if type(request) is GuideArtifactAdmissionRequest:
             lineage_claims = (
                 request.project_id,
@@ -2163,14 +2207,7 @@ class ArtifactAdmissionService:
             return
         if type(request) is SubmissionBundleArtifactAdmissionRequest:
             return
-        context = request.authorization_context
-        if type(context) not in {HumanAuthorizationContext, ServiceAuthorizationContext}:
-            raise TypeError("invalid artifact admission authorization context")
-        if (
-            context.actor_status is not ActorStatus.ACTIVE
-            or context.identity_link_status is not IdentityLinkStatus.ACTIVE
-        ):
-            raise ArtifactAdmissionRelationshipError("artifact admission actor is not active")
+        return
 
     async def _derive_admission_facts(self, request: ArtifactAdmissionRequest) -> _AdmissionFacts:
         """Load every product and producer relationship from authoritative rows."""
@@ -2208,6 +2245,10 @@ class ArtifactAdmissionService:
             guide_source_snapshot_id=row.guide_source_snapshot_id,
             checker_run_id=None,
             logical_role=None,
+            submission_id=None,
+            submission_version=None,
+            checker_request_digest=None,
+            checker_request_digest_facts=None,
             pre_submit_evidence_set_id=None,
             operation_identity=operation_identity,
         )
@@ -2215,51 +2256,55 @@ class ArtifactAdmissionService:
     async def _checker_output_facts(
         self, request: CheckerOutputArtifactAdmissionRequest
     ) -> _AdmissionFacts:
-        """Bind committed bytes to one run and fixed checker service actor."""
-        context = request.authorization_context
-        if context.actor_kind is not ActorKind.SERVICE:
-            raise ArtifactAdmissionRelationshipError(
-                "checker output producer must be a service actor"
+        """Bind committed bytes to one owner-issued run slot and fixed service."""
+        reservation = CheckerOutputReservation.model_validate(request.reservation)
+        try:
+            slot = reservation.select(
+                CheckerOutputSelector(
+                    evaluation=reservation.evaluation,
+                    checker_run_id=reservation.checker_run_id,
+                    worker_lease_id=reservation.worker_lease_id,
+                    worker_lease_generation=reservation.worker_lease_generation,
+                    slot_key=request.slot_key,
+                )
             )
-        logical_role = request.logical_role
-        service_actor = await self._actors.lock_admission_proof(
-            context.actor_profile_id,
-            context.identity_link_id,
-        )
+        except (CheckerOutputUnavailable, ValueError) as exc:
+            raise ArtifactAdmissionRelationshipError(
+                "checker output reservation is unavailable"
+            ) from exc
+        commitment = request.source.commitment
         if (
-            service_actor is None
-            or service_actor.actor_kind != "service"
-            or service_actor.actor_status != "active"
-            or service_actor.identity_link_id != str(context.identity_link_id)
-            or service_actor.identity_link_subject_kind != "service"
-            or service_actor.identity_link_status != "active"
-            or service_actor.service_identity != ServiceIdentity.ARTIFACT_CHECKER_OUTPUT.value
+            commitment.media_type != slot.media_type
+            or commitment.byte_count > slot.maximum_bytes
         ):
             raise ArtifactAdmissionRelationshipError(
-                "checker output service identity is unavailable"
+                "checker output does not match reserved slot"
             )
-        checker_run_id = str(request.checker_run_id)
-        row = await self._repo.get_checker_output_admission_facts(checker_run_id)
-        if row is None:
-            raise ArtifactAdmissionRelationshipError("checker run relationship is unavailable")
-        operation_identity = canonical_json_hash(
-            {
-                "request_type": "checker_output",
-                "checker_run_id": checker_run_id,
-                "logical_role": logical_role,
-            }
+        evaluation = reservation.evaluation
+        checker_run_id = str(reservation.checker_run_id)
+        logical_role = slot.key
+        operation_identity = checker_output_operation_identity(
+            checker_run_id=reservation.checker_run_id, slot_key=logical_role
+        )
+        digest_facts = checker_output_request_digest_facts(
+            reservation=reservation,
+            slot=slot,
         )
         return _AdmissionFacts(
             request_type="checker_output",
             producer_type="service_identity",
             producer_ref=ServiceIdentity.ARTIFACT_CHECKER_OUTPUT.value,
-            project_id=row.project_id,
+            project_id=str(evaluation.project_id),
             guide_id=None,
-            task_id=row.task_id,
+            task_id=str(evaluation.task_id),
             guide_source_item_id=None,
             guide_source_snapshot_id=None,
             checker_run_id=checker_run_id,
             logical_role=logical_role,
+            submission_id=str(evaluation.submission_id),
+            submission_version=evaluation.submission_version,
+            checker_request_digest=canonical_json_hash(digest_facts),
+            checker_request_digest_facts=digest_facts,
             pre_submit_evidence_set_id=None,
             operation_identity=operation_identity,
         )
@@ -2519,6 +2564,10 @@ class ArtifactAdmissionService:
             guide_source_snapshot_id=evidence.source_snapshot_id,
             checker_run_id=None,
             logical_role=None,
+            submission_id=None,
+            submission_version=None,
+            checker_request_digest=None,
+            checker_request_digest_facts=None,
             pre_submit_evidence_set_id=evidence.id,
             operation_identity=operation_identity,
         )
@@ -2541,20 +2590,6 @@ class ArtifactAdmissionService:
             raise ArtifactAdmissionRelationshipError(
                 "artifact admission human identity is unavailable"
             )
-
-    @staticmethod
-    def _validate_logical_role(value: str) -> str:
-        """Require one bounded printable checker-output role."""
-        if (
-            not isinstance(value, str)
-            or value != value.strip()
-            or not value
-            or not value.isascii()
-            or len(value) > 100
-            or any(ord(character) < 32 or ord(character) == 127 for character in value)
-        ):
-            raise ArtifactAdmissionRelationshipError("checker output logical role is invalid")
-        return value
 
     def _derive_scopes(self, facts: _AdmissionFacts) -> tuple[_AdmissionScopeSpec, ...]:
         """Derive the complete closed scope set without caller participation."""

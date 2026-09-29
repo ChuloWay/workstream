@@ -68,8 +68,20 @@ def test_audit_migration_preserves_prior_evidence(isolated_database_env, migrati
 
 
 async def _before_custody(connection):
-    """Restore only this unmerged migration's predecessor checker schema in a transaction."""
+    """Restore the history migration's predecessor checker schema in a transaction."""
     from sqlalchemy import text
+    dependent_fk = "fk_artifact_put_attempts_checker_run_ownership"
+    dependent_fk_definition = await connection.scalar(
+        text(
+            "select pg_get_constraintdef(oid) from pg_constraint "
+            "where conname=:name and conrelid='artifact_put_attempts'::regclass"
+        ),
+        {"name": dependent_fk},
+    )
+    assert isinstance(dependent_fk_definition, str)
+    await connection.execute(
+        text(f"alter table artifact_put_attempts drop constraint {dependent_fk}")
+    )
     for table, owner in (("checker_runs", "run"), ("checker_results", "result")):
         for suffix in ("custody", "no_truncate"):
             await connection.execute(text(f"drop trigger checker_{owner}_{suffix} on {table}"))
@@ -85,6 +97,7 @@ async def _before_custody(connection):
         ("checker_results", "submission_id", "submissions"),
     ):
         await connection.execute(text(f"alter table {table} add constraint fk_{table}_{column}_{parent} foreign key ({column}) references {parent}(id)"))
+    return dependent_fk_definition
 
 
 def _upgrade_custody(connection):
@@ -137,7 +150,7 @@ async def test_checker_migration_locks_out_coherent_rebinding(task_client, monke
     factory = db_session.get_session_factory()
     async with factory() as prepare:
         audit_definition = await prepare.scalar(text("select pg_get_constraintdef(oid) from pg_constraint where conname=:name"), {"name": CONSTRAINT})
-        await _before_custody(await prepare.connection())
+        dependent_fk_definition = await _before_custody(await prepare.connection())
         await prepare.commit()
     preflight = asyncio.Event()
     original_execute = op.execute
@@ -189,4 +202,19 @@ async def test_checker_migration_locks_out_coherent_rebinding(task_client, monke
         assert str(row.task_id) == case[1] and str(row.submission_id) == case[2]
         await session.execute(text(f"alter table audit_events drop constraint {CONSTRAINT}"))
         await session.execute(text(f"alter table audit_events add constraint {CONSTRAINT} {audit_definition}"))
+        await session.execute(
+            text(
+                "alter table artifact_put_attempts add constraint "
+                "fk_artifact_put_attempts_checker_run_ownership "
+                f"{dependent_fk_definition}"
+            )
+        )
+        restored_fk_definition = await session.scalar(
+            text(
+                "select pg_get_constraintdef(oid) from pg_constraint "
+                "where conname='fk_artifact_put_attempts_checker_run_ownership' "
+                "and conrelid='artifact_put_attempts'::regclass"
+            )
+        )
+        assert restored_fk_definition == dependent_fk_definition
         await session.commit()

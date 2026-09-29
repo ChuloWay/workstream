@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.cancellation import await_cancellation_resistant
 from app.interfaces.artifacts import ArtifactStore
-from app.modules.artifacts.api.submission_materialization import (
+from app.modules.checkers.api.materialization import (
     PostSubmissionMaterialConsumer, PostSubmissionMaterializationResult,
     PostSubmissionMaterializationUnavailable, SubmissionMaterialEntry,
 )

@@ -262,7 +262,9 @@ authority and decision-bound receipts. ARCH-03C2 delivers atomic producer
 publication and first handler registration with enforced prefork topology.
 Public manager activation and ARCH-03D hidden approved-guide intake are delivered.
 Hidden exact post-submit input (ARCH-04B) is delivered with deny-only production
-authority. ARCH-04B2 output custody is next. Public intake remains deferred
+authority. Hidden ARCH-04B2 output storage, recovery and verified binding are
+delivered with production reservations and authority unavailable. ARCH-04C durable
+execution is next. Public intake remains deferred
 to ARCH-02I after evaluation and remediation prerequisites.
 
 The intended unified flow uses one compilation result for sufficiency and

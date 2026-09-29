@@ -62,7 +62,6 @@ from app.modules.artifacts.authorization import (
 from app.modules.artifacts.schemas import (
     ArtifactAuthorityDeniedError,
     ArtifactInternalResourceType,
-    CheckerOutputArtifactAdmissionRequest,
     GuideArtifactAdmissionRequest,
 )
 from app.modules.artifacts.service import (
@@ -100,6 +99,13 @@ from app.modules.tasks.models import AuditEvent, WorkstreamTask
 from tests.artifact_store_helpers import (
     artifact_admission_limit_settings,
     minted_source,
+)
+from tests.checker_output_admission_helpers import (
+    ControlledCheckerOutputAdmissionAuthority,
+    assert_checker_admission_unchanged,
+    assert_exact_checker_admission,
+    checker_admission_baseline,
+    make_checker_output_admission_request as _checker_output_request,
 )
 
 
@@ -521,15 +527,13 @@ async def _admit_checker_output(session, settings, namespace, source, *, policy_
             session, actor_id, link_id, subject=f"checker-output-{actor_id}")
     else:
         actor_id, link_id = (UUID(value) for value in existing)
-    context = _context(actor_profile_id=actor_id, identity_link_id=link_id, actor_kind=ActorKind.SERVICE)
     await session.commit()
+    request = await _checker_output_request(session, checker_run_id, source)
     result = await ArtifactAdmissionService(session, settings, namespace).admit(
-        CheckerOutputArtifactAdmissionRequest(
-            authorization_context=context,
-            checker_run_id=UUID(checker_run_id),
-            logical_role="platform-review",
-            source=source,
-        )
+        request,
+        checker_output_authority=ControlledCheckerOutputAdmissionAuthority(
+            session, actor_id, link_id
+        ),
     )
     return project_id, task_id, checker_run_id, result
 
@@ -2416,11 +2420,6 @@ async def test_checker_output_requires_exact_active_fixed_service_identity(
     namespace = _namespace(settings)
     actor_id = new_record_id()
     link_id = new_record_id()
-    context = _context(
-        actor_profile_id=actor_id,
-        identity_link_id=link_id,
-        actor_kind=ActorKind.SERVICE,
-    )
     engine = create_async_engine(admission_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
@@ -2439,75 +2438,61 @@ async def test_checker_output_requires_exact_active_fixed_service_identity(
                 await session.commit()
             await session.rollback()
 
-            baseline = {model: await _count(session, model) for model in (
-                ArtifactPutAttempt, ArtifactContent, ArtifactReplica, ArtifactOperationReceipt,
-            )}
+            baseline = await checker_admission_baseline(session)
             await session.rollback()
             async with minted_source(tmp_path / "scratch-source", b"checker") as source:
                 service = ArtifactAdmissionService(session, settings, namespace)
-                forged = context.model_copy(update={"identity_link_id": new_record_id()})
+                request = await _checker_output_request(
+                    session, checker_run_id, source
+                )
                 with pytest.raises(
-                    ArtifactAdmissionRelationshipError,
+                    ArtifactAuthorityDeniedError,
+                    match="admission authority is unavailable",
+                ):
+                    await service.admit(request)
+                await assert_checker_admission_unchanged(session, baseline)
+                await session.rollback()
+
+                with pytest.raises(
+                    ArtifactAuthorityDeniedError,
                     match="service identity is unavailable",
                 ):
                     await service.admit(
-                        CheckerOutputArtifactAdmissionRequest(
-                            authorization_context=forged,
-                            checker_run_id=UUID(checker_run_id),
-                            logical_role="platform-review",
-                            source=source,
-                        )
+                        request,
+                        checker_output_authority=ControlledCheckerOutputAdmissionAuthority(
+                            session, actor_id, new_record_id()
+                        ),
                     )
-                assert await _count(session, ArtifactStorageNamespace) == 1
-                assert await _count(session, ArtifactAdmissionScope) == 0
-                assert await _count(session, ArtifactAdmissionCharge) == 0
-                assert await _count(session, ArtifactPutAttempt) == baseline[ArtifactPutAttempt]
+                await assert_checker_admission_unchanged(session, baseline)
                 await session.rollback()
-
-                request = CheckerOutputArtifactAdmissionRequest(
-                    authorization_context=context,
-                    checker_run_id=UUID(checker_run_id),
-                    logical_role="platform-review",
-                    source=source,
+                authority = ControlledCheckerOutputAdmissionAuthority(
+                    session, actor_id, link_id
                 )
-                result = await service.admit(request)
-                replay = await service.admit(request)
+                result = await service.admit(
+                    request, checker_output_authority=authority
+                )
+                replay = await service.admit(
+                    request, checker_output_authority=authority
+                )
+                takeover_request = replace(
+                    request,
+                    reservation=request.reservation.model_copy(
+                        update={
+                            "worker_lease_id": new_record_id(),
+                            "worker_lease_generation": 2,
+                        }
+                    ),
+                )
+                takeover = await service.admit(
+                    takeover_request,
+                    checker_output_authority=authority,
+                )
 
-            attempt = await session.get(ArtifactPutAttempt, str(result.attempt_id))
-            scopes = (await session.scalars(select(ArtifactAdmissionScope).order_by(
-                ArtifactAdmissionScope.scope_type, ArtifactAdmissionScope.scope_id,
-            ))).all()
-            links = (await session.scalars(select(ArtifactPutAttemptCharge).where(
-                ArtifactPutAttemptCharge.attempt_id == str(result.attempt_id),
-            ))).all()
-            assert attempt is not None
-            assert replay.attempt_id == result.attempt_id
-            assert replay.charge_ids == result.charge_ids
-            assert attempt.status == "prepared"
-            assert attempt.producer_request_type == "checker_output"
-            assert attempt.producer_type == "service_identity"
-            assert attempt.producer_ref == ServiceIdentity.ARTIFACT_CHECKER_OUTPUT.value
-            assert attempt.project_id == project_id
-            assert attempt.task_id == task_id
-            assert attempt.checker_run_id == checker_run_id
-            assert attempt.logical_role == "platform-review"
-            assert attempt.executor_id is None
-            assert attempt.lease_expires_at is None
-            assert attempt.next_run_at is None
-            assert attempt.execution_generation == 0
-            assert {scope.scope_type for scope in scopes} == {
-                "deployment",
-                "producer",
-                "project",
-                "task",
-            }
-            assert len(result.charge_ids) == 4
-            assert len(links) == 4
-            assert await _count(session, ArtifactPutAttempt) == baseline[ArtifactPutAttempt] + 1
-            assert await _count(session, ArtifactAdmissionCharge) == 4
-            assert await _count(session, ArtifactContent) == baseline[ArtifactContent]
-            assert await _count(session, ArtifactReplica) == baseline[ArtifactReplica]
-            assert await _count(session, ArtifactOperationReceipt) == baseline[ArtifactOperationReceipt]
+            await assert_exact_checker_admission(
+                session, result=result, replay=replay, takeover=takeover,
+                request=request, authority=authority, project_id=project_id,
+                task_id=task_id, checker_run_id=checker_run_id, baseline=baseline,
+            )
     finally:
         await engine.dispose()
 
@@ -2703,7 +2688,7 @@ async def test_checker_output_put_observation_terminal_outcomes(
         await engine.dispose()
 
 
-async def test_invalid_checker_role_precedes_namespace_drift(
+async def test_invalid_checker_slot_precedes_namespace_drift(
     admission_database_env: str,
     tmp_path: Path,
 ) -> None:
@@ -2713,34 +2698,32 @@ async def test_invalid_checker_role_precedes_namespace_drift(
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with factory() as session:
-            session.add(
-                ArtifactStorageNamespace(
-                    id="primary",
-                    backend=namespace.backend,
-                    adapter=namespace.adapter,
-                    provider_profile=namespace.provider_profile,
-                    namespace_descriptor=namespace.namespace_descriptor,
-                    namespace_fingerprint="sha256:" + "f" * 64,
-                )
+            project_id, task_id, checker_run_id = await _seed_checker_output_relationships(
+                session, namespace
             )
-            await session.commit()
+            del project_id, task_id
+            baseline = await checker_admission_baseline(session)
+            await session.rollback()
+            drifted_namespace = replace(
+                namespace,
+                namespace_fingerprint="sha256:" + "f" * 64,
+            )
             async with minted_source(tmp_path / "scratch-source", b"checker") as source:
+                valid = await _checker_output_request(
+                    session, checker_run_id, source
+                )
+                invalid = replace(valid, slot_key="missing-slot")
                 with pytest.raises(
                     ArtifactAdmissionRelationshipError,
-                    match="logical role is invalid",
+                    match="reservation is unavailable",
                 ):
-                    await ArtifactAdmissionService(session, settings, namespace).admit(
-                        CheckerOutputArtifactAdmissionRequest(
-                            authorization_context=_context(actor_kind=ActorKind.SERVICE),
-                            checker_run_id=new_record_id(),
-                            logical_role="é" * 100,
-                            source=source,
-                        )
+                    await ArtifactAdmissionService(
+                        session, settings, drifted_namespace
+                    ).admit(
+                        invalid,
+                        checker_output_authority=AsyncMock(),
                     )
-            assert await _count(session, ArtifactStorageNamespace) == 1
-            assert await _count(session, ArtifactAdmissionScope) == 0
-            assert await _count(session, ArtifactAdmissionCharge) == 0
-            assert await _count(session, ArtifactPutAttempt) == 0
+            await assert_checker_admission_unchanged(session, baseline)
     finally:
         await engine.dispose()
 

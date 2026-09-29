@@ -9,17 +9,12 @@ from uuid import UUID
 
 from app.modules.authorization.prepared import PreparedAuthorizationHandle
 from app.modules.authorization.runtime import AuthorizationContext
-
 __all__ = (
     "ArtifactAuditResourceType",
     "ArtifactBindingResourceType",
-    "ArtifactBindingPort",
     "ArtifactOperatorReadPort",
     "ArtifactOperatorRecoveryPort",
     "ArtifactRecoveryRequest",
-    "CheckerArtifactOutputPort",
-    "CheckerOutputBindingRequest",
-    "CheckerOutputArtifactRequest",
     "GuideArtifactIngestPort",
     "GuideArtifactIngestCommand",
     "GuideArtifactIngestRequest",
@@ -74,31 +69,6 @@ class GuideArtifactIngestResult:
 
 
 @dataclass(frozen=True, slots=True)
-class CheckerOutputBindingRequest:
-    """Verified checker output and its exact CheckerRun owner."""
-
-    prepared_authorization: PreparedAuthorizationHandle
-    project_id: UUID
-    task_id: UUID
-    submission_id: UUID
-    checker_run_id: UUID
-    logical_role: str
-    verified_content_ids: tuple[UUID, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class CheckerOutputArtifactRequest:
-    """Generated checker bytes bound to one fixed service execution."""
-
-    prepared_authorization: PreparedAuthorizationHandle
-    task_id: UUID
-    submission_id: UUID
-    checker_run_id: UUID
-    logical_role: str
-    byte_source: AsyncIterable[bytes]
-
-
-@dataclass(frozen=True, slots=True)
 class ArtifactRecoveryRequest:
     """Reason-bound Operator retry of one exact verification job."""
 
@@ -135,20 +105,6 @@ class GuideArtifactIngestCommand(Protocol):
         byte_source: AsyncIterable[bytes],
     ) -> GuideArtifactIngestResult:
         """Prepare authority before delegating to durable byte ingestion."""
-
-
-class ArtifactBindingPort(Protocol):
-    """Create exact action-bound bindings from verified content."""
-
-    async def bind_checker_output(self, request: CheckerOutputBindingRequest) -> object:
-        """Bind verified checker output under the checker binding action."""
-
-
-class CheckerArtifactOutputPort(Protocol):
-    """Store generated output for one fixed checker execution."""
-
-    async def store(self, request: CheckerOutputArtifactRequest) -> object:
-        """Store one generated checker artifact."""
 
 
 class ArtifactOperatorReadPort(Protocol):

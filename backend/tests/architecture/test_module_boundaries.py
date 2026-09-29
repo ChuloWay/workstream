@@ -413,6 +413,53 @@ def test_cyclic_public_dependencies_fail_closed() -> None:
         boundary._validate_acyclic(graph)  # noqa: SLF001 - architecture proof
 
 
+def test_art_implements_checker_consumer_ports_without_a_public_cycle() -> None:
+    """The delivered seam is ART implementation to CHECKERS-owned public ports."""
+    registry = boundary.load_registry(REGISTRY)
+    private, graph, _ = boundary.scan(ROOT, registry)
+    assert "checkers" in graph["artifacts"]
+    assert "artifacts" not in graph["checkers"]
+    assert {
+        (edge.source_file, edge.imported_private_path)
+        for edge in private
+        if edge.source_file.startswith("backend/app/modules/checkers/")
+        and edge.target_module == "artifacts"
+    } == {
+        (
+            "backend/app/modules/checkers/pre_submit_execution.py",
+            "app.modules.artifacts.sources",
+        ),
+        (
+            "backend/app/modules/checkers/pre_submit_execution.py",
+            "app.modules.artifacts.submission_archive",
+        ),
+        (
+            "backend/app/modules/checkers/pre_submit_execution.py",
+            "app.modules.artifacts.submission_manifest",
+        ),
+    }
+    boundary._validate_acyclic(graph)  # noqa: SLF001 - architecture proof
+
+
+def test_checker_to_art_public_import_would_close_a_cycle(tmp_path: Path) -> None:
+    """A concrete future CHECKERS import of ART public API fails closed."""
+    registry_path = tmp_path / "registry.json"
+    _registry(registry_path)
+    _write(
+        tmp_path / "backend/app/modules/artifacts/implementation.py",
+        "from app.modules.checkers.api.output_custody import CheckerArtifactOutputPort\n",
+    )
+    _write(
+        tmp_path / "backend/app/modules/checkers/future_execution.py",
+        "from app.modules.artifacts.api import SubmissionBundlePreparationCommand\n",
+    )
+    _, graph, _ = boundary.scan(tmp_path, boundary.load_registry(registry_path))
+    assert graph["artifacts"] == {"checkers"}
+    assert graph["checkers"] == {"artifacts"}
+    with pytest.raises(boundary.ModuleBoundaryError, match="cyclic_public_dependency"):
+        boundary._validate_acyclic(graph)  # noqa: SLF001 - architecture proof
+
+
 def test_general_ledger_rejects_copied_authorization_edges(tmp_path: Path) -> None:
     """AUTH debt remains exclusively owned by the AUTH-003 ledger."""
     document = {

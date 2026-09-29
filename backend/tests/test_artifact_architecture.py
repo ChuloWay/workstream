@@ -20,6 +20,15 @@ SUBMISSION_PREPARATION_API = (
     APP_ROOT / "modules" / "artifacts" / "api" / "submission_preparation.py"
 )
 SUBMISSION_ADMISSION_API = APP_ROOT / "modules" / "artifacts" / "api" / "submission_admission.py"
+CHECKER_OUTPUT_CUSTODY_API = (
+    APP_ROOT / "modules" / "checkers" / "api" / "output_custody.py"
+)
+CHECKER_MATERIALIZATION_API = (
+    APP_ROOT / "modules" / "checkers" / "api" / "materialization.py"
+)
+RETIRED_ARTIFACT_MATERIALIZATION_API = (
+    APP_ROOT / "modules" / "artifacts" / "api" / "submission_materialization.py"
+)
 COMPOSITION_ROOT = APP_ROOT / "adapters" / "artifacts" / "__init__.py"
 AGENT_COMPOSITION_ROOT = APP_ROOT / "adapters/project_agents/__init__.py"
 AGENT_ADAPTER_MODULE = "app.adapters.project_agents.openai_agent_sdk"
@@ -27,15 +36,11 @@ S3_ADAPTER_MODULE = APP_ROOT / "adapters" / "artifacts" / "s3_compatible.py"
 CLOSED_PORTS = {
     "GuideArtifactIngestCommand",
     "GuideArtifactIngestPort",
-    "ArtifactBindingPort",
-    "CheckerArtifactOutputPort",
     "ArtifactOperatorReadPort",
     "ArtifactOperatorRecoveryPort",
 }
 CANONICAL_REQUESTS = {
     "GuideArtifactIngestRequest",
-    "CheckerOutputBindingRequest",
-    "CheckerOutputArtifactRequest",
     "ArtifactRecoveryRequest",
 }
 CANONICAL_RESULTS = {
@@ -46,9 +51,7 @@ CANONICAL_TYPE_ALIASES = {
     "ArtifactBindingResourceType",
 }
 CANONICAL_VALUE_TYPES = set()
-PREPARED_MUTATION_REQUESTS = CANONICAL_REQUESTS - {
-    "ArtifactRecoveryRequest",
-}
+PREPARED_MUTATION_REQUESTS = {"GuideArtifactIngestRequest"}
 PREPARED_HANDLE_FORBIDDEN_ROOTS = (
     APP_ROOT / "adapters",
     APP_ROOT / "api",
@@ -469,7 +472,7 @@ def test_artifact_operations_exports_only_canonical_closed_contracts() -> None:
     }
 
 
-def test_durable_artifact_mutation_ports_require_process_local_prepared_authority() -> None:
+def test_artifact_ports_keep_prepared_authority_at_the_transaction_boundary() -> None:
     tree = _tree(ARTIFACT_OPERATIONS)
     request_classes = {
         node.name: node
@@ -498,15 +501,9 @@ def test_durable_artifact_mutation_ports_require_process_local_prepared_authorit
 
     expected_methods = {
         "GuideArtifactIngestPort": {"ingest"},
-        "ArtifactBindingPort": {
-            "bind_checker_output",
-        },
-        "CheckerArtifactOutputPort": {"store"},
     }
     expected_request_by_method = {
         "ingest": "GuideArtifactIngestRequest",
-        "bind_checker_output": "CheckerOutputBindingRequest",
-        "store": "CheckerOutputArtifactRequest",
     }
     protocols = {
         node.name: node
@@ -524,7 +521,7 @@ def test_durable_artifact_mutation_ports_require_process_local_prepared_authorit
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             assert node.args.posonlyargs == []
-            assert [argument.arg for argument in node.args.args] == ["self", "request"]
+            assert [argument.arg for argument in node.args.args] == ["self", "selector" if node.name == "recover" else "request"]
             assert node.args.kwonlyargs == []
             assert node.args.vararg is None
             assert node.args.kwarg is None
@@ -533,6 +530,116 @@ def test_durable_artifact_mutation_ports_require_process_local_prepared_authorit
                 expected_request_by_method[node.name]
             }
             assert "AuthorizationContext" not in _declared_annotation_names(node)
+
+
+def test_checker_output_contract_has_one_canonical_consumer_owner() -> None:
+    """CHECKERS owns the ports that ART implements for future durable execution."""
+    tree = _tree(CHECKER_OUTPUT_CUSTODY_API)
+    classes = {
+        node.name: node for node in tree.body if isinstance(node, ast.ClassDef)
+    }
+    assert {
+        "CheckerOutputArtifactRequest",
+        "CheckerOutputArtifactResult",
+        "CheckerOutputBindingRequest",
+        "CheckerOutputBindingResult",
+        "CheckerOutputBindingPort",
+        "CheckerArtifactOutputPort",
+    } <= set(classes)
+    assert "ArtifactBindingPort" not in classes
+    for name in ("CheckerOutputArtifactRequest", "CheckerOutputBindingRequest"):
+        annotations = _declared_annotation_names(classes[name])
+        assert {"PreparedAuthorizationHandle", "AuthorizationContext"}.isdisjoint(
+            annotations
+        )
+        assert "CheckerOutputSelector" in annotations
+
+    expected_methods = {
+        "CheckerOutputBindingPort": {"bind_checker_output"},
+        "CheckerArtifactOutputPort": {"store", "recover"},
+    }
+    for name, methods in expected_methods.items():
+        assert {
+            item.name
+            for item in classes[name].body
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+        } == methods
+
+    artifact_source = ARTIFACT_OPERATIONS.read_text(encoding="utf-8")
+    assert "app.modules.checkers" not in artifact_source
+    assert not RETIRED_ARTIFACT_MATERIALIZATION_API.exists()
+    assert "ArtifactBindingPort" not in "\n".join(
+        path.read_text(encoding="utf-8") for path in _python_files(APP_ROOT)
+    )
+
+
+def test_checker_materialization_contract_has_one_canonical_consumer_owner() -> None:
+    """The complete material callback contract resides in CHECKERS public API."""
+    tree = _tree(CHECKER_MATERIALIZATION_API)
+    classes = {
+        node.name: node for node in tree.body if isinstance(node, ast.ClassDef)
+    }
+    assert set(classes) == {
+        "PostSubmissionMaterializationUnavailable",
+        "SubmissionMaterialEntry",
+        "SubmissionMaterialView",
+        "PostSubmissionMaterialConsumer",
+        "PostSubmissionMaterializationResult",
+        "PostSubmissionMaterializationPort",
+    }
+    assert {
+        node.name
+        for node in classes["PostSubmissionMaterializationPort"].body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    } == {"materialize"}
+    artifact_api = APP_ROOT / "modules" / "artifacts" / "api" / "__init__.py"
+    assert "Materialization" not in artifact_api.read_text(encoding="utf-8")
+
+
+def test_art_implementations_are_the_exact_checker_contract_consumers() -> None:
+    """Prevent a reverse dependency or an extra consumer of CHECKERS custody ports."""
+    expected = {
+        "app.modules.checkers.api.output_custody": {
+            "app/adapters/artifacts/__init__.py",
+            "app/modules/artifacts/checker_output_bindings.py",
+            "app/modules/artifacts/checker_output_custody.py",
+            "app/modules/artifacts/checker_outputs.py",
+            "app/modules/artifacts/schemas.py",
+            "app/modules/artifacts/service.py",
+        },
+        "app.modules.checkers.api.materialization": {
+            "app/adapters/artifacts/__init__.py",
+            "app/modules/artifacts/post_submit_materialization.py",
+            "app/modules/artifacts/post_submit_selection.py",
+        },
+    }
+    actual = {module: set() for module in expected}
+    for path in _python_files(APP_ROOT):
+        modules = {
+            node.module
+            for node in ast.walk(_tree(path))
+            if isinstance(node, ast.ImportFrom) and node.module in expected
+        }
+        for module in modules:
+            actual[module].add(path.relative_to(BACKEND_ROOT).as_posix())
+    assert actual == expected
+
+    composition = _tree(COMPOSITION_ROOT)
+    returns = {
+        node.name: _annotation_names(node.returns)
+        for node in composition.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name in {
+            "post_submission_materialization",
+            "checker_output_storage",
+            "checker_output_binding",
+        }
+    }
+    assert returns == {
+        "post_submission_materialization": {"PostSubmissionMaterializationPort"},
+        "checker_output_storage": {"CheckerArtifactOutputPort"},
+        "checker_output_binding": {"CheckerOutputBindingPort"},
+    }
 
 
 def test_submission_preparation_http_request_never_carries_prepared_authority() -> None:

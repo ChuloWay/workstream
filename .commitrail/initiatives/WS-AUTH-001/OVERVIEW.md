@@ -23,8 +23,8 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Public post-policy composition: POL-06B delivered using existing AUTH-12G.
 - Completed activation boundary: AUTH-12H exact-project manager authority for
   CP07 complete-guide activation/binding, with live-authority replay.
-- Next usable boundary: ARCH-04B2 checker output custody after delivered hidden
-  ARCH-04B input materialization, then durable post-submit evaluation and live authority. [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers
+- Next usable boundary: ARCH-04C durable post-submit evaluation after delivered
+  hidden ARCH-04B input materialization and [ARCH-04B2 checker-output custody](../WS-ARCH-001/WS-ARCH-001-04B2.md), then live authority. [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers
   public manager activation context and exact guide activation.
   [CP05A](../WS-ARCH-001/WS-ARCH-001-CP05A.md) delivers public Finance
   ContributionPolicy administration and recovery of a draft selector, a published
@@ -77,5 +77,5 @@ manager proposal review, pre-submit approval and manual correction dispatch.
    AUTH-OUTBOX-01/02 bracket hidden CON-02B dispatch; ARCH-04E2 activates only
    the proven TASK routing handler before ARCH-04E3 live composition.
    TASK queue/read exposure is complete through ARCH-03C7. AUTH-18 public
-   manager guide activation/context is delivered; ARCH-03D hidden intake is delivered; hidden exact post-submit materialization is delivered; ARCH-04B2 output custody is next.
+   manager guide activation/context is delivered; ARCH-03D hidden intake, hidden exact post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C is next.
    Remaining work must use its exact owner, not the superseded broad designs.

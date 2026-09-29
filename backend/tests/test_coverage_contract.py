@@ -12,7 +12,7 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import coverage_policy as policy  # noqa: E402
 
-HEAD = "0006_history_read_authority"
+HEAD = "0007_checker_output_custody"
 SHA = "a" * 40
 PEP695_INVALID = sys.version_info < (3, 12)
 

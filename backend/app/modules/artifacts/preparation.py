@@ -1481,6 +1481,7 @@ class ArtifactPreparationService:
         media_type: str,
         expected_sha256: str | None = None,
         expected_size: int | None = None,
+        maximum_bytes: int | None = None,
     ) -> PreparedArtifact:
         """Hash and count one complete source before any future provider call."""
         self._validate_client_commitment(
@@ -1488,6 +1489,16 @@ class ArtifactPreparationService:
             expected_sha256=expected_sha256,
             expected_size=expected_size,
         )
+        if maximum_bytes is None:
+            source_maximum_bytes = self._manager.limits.maximum_source_bytes
+        else:
+            if (
+                type(maximum_bytes) is not int
+                or maximum_bytes <= 0
+                or maximum_bytes > self._manager.limits.maximum_source_bytes
+            ):
+                raise ValueError("artifact preparation per-call byte limit is invalid")
+            source_maximum_bytes = maximum_bytes
         loop = asyncio.get_running_loop()
         deadline = loop.time() + self._manager.limits.total_deadline_seconds
         reservation: _ScratchReservation | None = None
@@ -1506,7 +1517,7 @@ class ArtifactPreparationService:
                     for offset in range(0, len(view), self._manager.limits.stream_buffer_bytes):
                         chunk = view[offset : offset + self._manager.limits.stream_buffer_bytes]
                         byte_count += len(chunk)
-                        if byte_count > self._manager.limits.maximum_source_bytes:
+                        if byte_count > source_maximum_bytes:
                             raise ArtifactLimitExceededError(
                                 "artifact source exceeds maximum bytes"
                             )

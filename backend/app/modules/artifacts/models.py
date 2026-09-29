@@ -396,6 +396,13 @@ class ArtifactBinding(Base):
             "(scope_version > 1 and supersedes_binding_id is not null)",
             name="scope_version_predecessor",
         ),
+        CheckConstraint(
+            "(resource_type = 'checker_run' and scope_version = 1 "
+            "and put_attempt_id is not null and verification_receipt_id is not null) or "
+            "(resource_type <> 'checker_run' and put_attempt_id is null "
+            "and verification_receipt_id is null)",
+            name="checker_output_lineage",
+        ),
     )
 
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
@@ -411,6 +418,22 @@ class ArtifactBinding(Base):
     scope_version: Mapped[int] = mapped_column(Integer, nullable=False)
     actor_id: Mapped[str] = mapped_column(String(100), nullable=False)
     attribution_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    put_attempt_id: Mapped[str | None] = mapped_column(
+        ForeignKey(
+            "artifact_put_attempts.id",
+            ondelete="RESTRICT",
+            name="fk_artifact_bindings_checker_put_attempt",
+        ),
+        index=True,
+    )
+    verification_receipt_id: Mapped[str | None] = mapped_column(
+        ForeignKey(
+            "artifact_verification_receipts.id",
+            ondelete="RESTRICT",
+            name="fk_artifact_bindings_checker_verification_receipt",
+        ),
+        index=True,
+    )
     supersedes_binding_id: Mapped[str | None] = mapped_column(
         ForeignKey("artifact_bindings.id", ondelete="RESTRICT"), index=True
     )
@@ -969,6 +992,24 @@ class ArtifactPutAttempt(Base):
             ondelete="RESTRICT",
             name="fk_artifact_put_attempts_namespace_fingerprint",
         ),
+        ForeignKeyConstraint(
+            ["task_id", "project_id"],
+            ["workstream_tasks.id", "workstream_tasks.project_id"],
+            ondelete="RESTRICT",
+            name="fk_artifact_put_attempts_task_project",
+        ),
+        ForeignKeyConstraint(
+            ["checker_run_id", "task_id", "submission_id"],
+            ["checker_runs.id", "checker_runs.task_id", "checker_runs.submission_id"],
+            ondelete="RESTRICT",
+            name="fk_artifact_put_attempts_checker_run_ownership",
+        ),
+        ForeignKeyConstraint(
+            ["submission_id", "task_id", "submission_version"],
+            ["submissions.id", "submissions.task_id", "submissions.version"],
+            ondelete="RESTRICT",
+            name="fk_artifact_put_attempts_submission_version",
+        ),
         UniqueConstraint("operation_identity", name="uq_artifact_put_attempt_operation"),
         CheckConstraint(
             "producer_request_type in ('guide', 'checker_output', 'submission_bundle')",
@@ -1004,6 +1045,12 @@ class ArtifactPutAttempt(Base):
         CheckConstraint(
             SHA256_CHECK.format(column="request_digest"),
             name="request_digest_shape",
+        ),
+        CheckConstraint(
+            "(producer_request_type = 'checker_output' and checker_request_digest is not null "
+            "and checker_request_digest ~ '^sha256:[0-9a-f]{64}$') or "
+            "(producer_request_type <> 'checker_output' and checker_request_digest is null)",
+            name="checker_request_digest",
         ),
         CheckConstraint(
             "status in ('prepared', 'put_in_flight', 'acknowledgement_unknown', "
@@ -1046,14 +1093,17 @@ class ArtifactPutAttempt(Base):
         ),
         CheckConstraint(
             "(producer_request_type = 'guide' and guide_source_item_id is not null "
-            "and checker_run_id is null and task_id is null "
+            "and checker_run_id is null and task_id is null and submission_id is null "
+            "and submission_version is null "
             "and logical_role is null) or "
             "(producer_request_type = 'checker_output' and guide_source_item_id is null "
             "and checker_run_id is not null and task_id is not null "
+            "and submission_id is not null and submission_version is not null "
             "and octet_length(logical_role) between 1 and 100) or "
             "(producer_request_type = 'submission_bundle' "
             "and guide_source_item_id is null and checker_run_id is null "
-            "and task_id is not null and logical_role is null)",
+            "and task_id is not null and submission_id is null "
+            "and submission_version is null and logical_role is null)",
             name="producer_reference",
         ),
     )
@@ -1074,6 +1124,8 @@ class ArtifactPutAttempt(Base):
     checker_run_id: Mapped[str | None] = mapped_column(
         ForeignKey("checker_runs.id", ondelete="RESTRICT"), index=True
     )
+    submission_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), index=True)
+    submission_version: Mapped[int | None] = mapped_column(Integer)
     logical_role: Mapped[str | None] = mapped_column(String(100))
     sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     byte_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -1083,6 +1135,10 @@ class ArtifactPutAttempt(Base):
     canonical_target: Mapped[str] = mapped_column(String(1024), nullable=False)
     operation_identity: Mapped[str] = mapped_column(String(71), nullable=False)
     request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    checker_request_digest: Mapped[str | None] = mapped_column(String(71))
+    checker_output_custody_sealed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="prepared", index=True)
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     executor_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
@@ -1312,6 +1368,9 @@ class ArtifactReplica(Base):
     adapter: Mapped[str] = mapped_column(String(50), nullable=False)
     provider_profile: Mapped[str] = mapped_column(String(100), nullable=False)
     provider_object_ref: Mapped[str] = mapped_column(String(1024), nullable=False)
+    checker_output_custody_sealed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     verification_state: Mapped[str] = mapped_column(String(30), nullable=False)
     availability_state: Mapped[str] = mapped_column(String(30), nullable=False)
     integrity_state: Mapped[str] = mapped_column(String(30), nullable=False)
@@ -1452,6 +1511,9 @@ class ArtifactVerificationJob(Base):
     )
     replica_id: Mapped[str] = mapped_column(
         ForeignKey("artifact_replicas.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    checker_output_custody_sealed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
     )
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending", index=True)
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
