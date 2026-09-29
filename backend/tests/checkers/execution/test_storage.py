@@ -270,16 +270,20 @@ async def test_infrastructure_failure_code_is_closed_in_database(tmp_path, isola
         )
         body = result.model_dump(mode="json", exclude={"result_digest"})
         async with h.factory() as session:
-            for code in ("invented_failure", "material_unavailable"):
+            for code, custody in (
+                ("invented_failure", None),
+                ("material_unavailable", {"fabricated": True}),
+                ("material_unavailable", None),
+            ):
                 candidate = body | {"infrastructure_failure_code": code}
                 statement = update(CheckerRun).where(CheckerRun.id == str(result.attempt_id)).values(
-                    status="infrastructure_failed", failure_code=code,
+                    status="infrastructure_failed", failure_code=code, material_custody=custody,
                     result_json=json.dumps(candidate, sort_keys=True, separators=(",", ":")),
                     result_digest=canonical_json_hash(candidate),
                     finalize_evidence_id=str(new_record_id()), completed_at=func.clock_timestamp(),
                     outcome_source="auto_checker", routing_recommendation="not_evaluated",
                 )
-                if code == "invented_failure":
+                if code == "invented_failure" or custody is not None:
                     with pytest.raises(IntegrityError, match="infrastructure terminal shape invalid"):
                         await session.execute(statement)
                         await session.commit()
@@ -292,3 +296,4 @@ async def test_infrastructure_failure_code_is_closed_in_database(tmp_path, isola
         async with h.factory() as session:
             run = await session.get(CheckerRun, str(result.attempt_id))
             assert run.failure_code == "material_unavailable" and run.status == "infrastructure_failed"
+            assert run.material_custody is None

@@ -582,6 +582,7 @@ def test_checker_materialization_contract_has_one_canonical_consumer_owner() -> 
     }
     assert set(classes) == {
         "PostSubmissionMaterializationUnavailable",
+        "PostSubmissionMaterializationFailure",
         "SubmissionMaterialEntry",
         "SubmissionMaterialView",
         "PostSubmissionMaterialConsumer",

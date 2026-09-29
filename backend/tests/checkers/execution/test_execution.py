@@ -343,26 +343,47 @@ async def test_unreadable_stored_bytes_terminalize_and_replay(
                 await EvaluationCoordinator(session).read_current_result(h.request)
 
 
-@pytest.mark.parametrize("failure", ["authority", "cancel", "unexpected", "cleanup"])
+@pytest.mark.parametrize("failure", ["authority", "cancel", "unexpected", "scratch", "cleanup"])
 async def test_nonrecordable_material_failure_leaves_attempt_recoverable(
     tmp_path, isolated_database_env, monkeypatch, failure
 ):
     import asyncio
     from app.modules.artifacts.post_submit_materialization import DenyPostSubmissionMaterializationAuthority
     from app.modules.artifacts.preparation import ArtifactScratchIntegrityError
-    from app.modules.checkers.api.materialization import PostSubmissionMaterializationUnavailable
+    from app.modules.checkers.api.materialization import (
+        PostSubmissionMaterializationUnavailable, PostSubmissionMaterializationFailure,
+    )
 
     async with material_fixture(tmp_path, isolated_database_env) as h:
+        if failure == "cleanup":
+            from tests.checkers.post_submit.support import change_request
+
+            h.request = change_request(h.request, structural_input=h.request.structural_input.model_copy(
+                update={"manifest": ()},
+            ))
         reservation = await reserve(h)
         executor = controlled_executor(h)
         if failure == "authority":
             h.service._authority = DenyPostSubmissionMaterializationAuthority()
             expected = PostSubmissionMaterializationUnavailable
+        elif failure == "cleanup":
+            import sys
+            from app.modules.artifacts.sources import PreparedArtifact
+
+            expected = ArtifactScratchIntegrityError
+            original_close, preceding = PreparedArtifact.close, []
+
+            async def fail_close(prepared):
+                preceding.append(sys.exception())
+                await original_close(prepared)
+                raise ArtifactScratchIntegrityError("controlled close failure")
+
+            monkeypatch.setattr(PreparedArtifact, "close", fail_close)
         else:
             expected = {
                 "cancel": asyncio.CancelledError,
                 "unexpected": RuntimeError,
-                "cleanup": ArtifactScratchIntegrityError,
+                "scratch": ArtifactScratchIntegrityError,
             }[failure]
 
             async def fail_prepare(*args, **kwargs):
@@ -371,6 +392,10 @@ async def test_nonrecordable_material_failure_leaves_attempt_recoverable(
             monkeypatch.setattr(h.preparation, "prepare", fail_prepare)
         with pytest.raises(expected):
             await executor.evaluate_post_submission(h.request)
+        if failure == "cleanup":
+            assert len(preceding) == 1
+            assert isinstance(preceding[0], PostSubmissionMaterializationFailure)
+            assert str(preceding[0]) == "post_submit_material_manifest_mismatch"
         assert len(h.store.opens) == (0 if failure == "authority" else 1)
         assert not h.preparation._active
         async with h.factory() as session:
