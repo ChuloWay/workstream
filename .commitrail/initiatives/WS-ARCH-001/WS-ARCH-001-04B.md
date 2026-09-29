@@ -102,7 +102,9 @@ Submission stamps; no run-generation state is invented before 04C/04D.
 - `backend/app/interfaces/artifact_operations.py` (remove superseded empty contract).
 - New `backend/tests/test_post_submit_materialization.py`,
   `backend/tests/test_post_submit_selection.py`,
-  `backend/tests/post_submit_materialization_helpers.py`; existing
+  `backend/tests/post_submit_materialization_helpers.py`;
+  `backend/tests/tasks/submission_lineage_support.py` (scope the shared test
+  admission lookup to its exact put attempt); existing
   `backend/tests/test_artifact_architecture.py`,
   `backend/tests/test_checker_materialization.py`, `backend/tests/test_submission_archive.py` and
   `backend/tests/architecture/test_module_boundaries.py` for affected proof.
@@ -111,6 +113,7 @@ Submission stamps; no run-generation state is invented before 04C/04D.
 - This contract, current ARCH/AUTH/POL overviews/plans/maps, ART/CON overviews, `.commitrail/INDEX.md`,
   `docs/roadmap_status.md`, `docs/spec_artifact_storage_service.md`,
   `docs/architecture_checker_framework.md`, `docs/architecture_data_model.md`,
+  `docs/engineering/authorization_activation_custody.md`,
   `docs/operations_project_operating_manual.md`, `docs/spec_authorization_service.md`,
   `planning/chunks/WS-ARCH-001-03B-task-assignment-api.md`,
   `../WS-POL-003/planning/chunks/WS-POL-003-07-single-checker-service-port.md`,
@@ -198,6 +201,19 @@ A result for another evaluation generation must fail with scratch/view cleanup.
 Current ARCH/AUTH navigation, checker/storage specs and the operating manual
 identify hidden input as delivered and output custody as next. Production remains
 deny-only. New-owner docstrings explain these boundaries without changing CI gates.
+
+### External review correction
+
+The foreign-record regression provisions two complete valid projects, contributors,
+assignments, admitted originals and immutable Submissions in one migrated database,
+sharing the configured store and fixed service identities. Both unmixed lineages
+must materialize successfully. Mixes in both directions substitute each project,
+task, assignment, Submission, binding and content identifier, plus coherent foreign
+subsets. Every mix must deny before provider open, scratch preparation or consumer
+entry. This closes the gap left by nonexistent-ID negatives; no production change
+or compatibility path is introduced. AUTH-003 index navigation and authorization
+activation custody now agree on ARCH-04B2 before ARCH-04C/04D. The roadmap already
+records that same boundary and needs no capability change for this proof repair.
 
 ## Evidence
 

@@ -85,3 +85,48 @@ async def test_frozen_context_substitution_and_authority_denial_precede_io(tmp_p
         with pytest.raises(PostSubmissionMaterializationUnavailable, match="controlled_generation_denied"):
             await h.service.materialize(h.request, consumer)
         assert not h.store.opens and not h.preparation._active
+
+
+async def test_valid_foreign_lineage_mixes_deny_before_material_access(tmp_path, isolated_database_env, monkeypatch):
+    async with material_fixture(tmp_path / "first", isolated_database_env) as first:
+        # Share the configured store and fixed services, as two real projects do.
+        async with material_fixture(
+            tmp_path / "second", isolated_database_env,
+            storage_settings=first.settings, provision_services=False,
+        ) as second:
+            fields = ("project_id", "task_id", "assignment_id", "submission_id", "binding_id", "content_id")
+            assert all(getattr(first.request, key) != getattr(second.request, key) for key in fields)
+            assert first.facts.contributor_id != second.facts.contributor_id
+            assert first.created.admission_id != second.created.admission_id
+            # Each untouched stored lineage must pass through real materialization.
+            for own in (first, second):
+                value = await own.service.materialize(own.request, Consumer(own.files))
+                assert value.submission_id == own.created.submission_id
+                own.store.opens.clear()
+                own.authority.selections.clear()
+            def forbidden(*args, **kwargs):
+                pytest.fail("foreign lineage reached provider, scratch, or consumer")
+            class ForbiddenConsumer:
+                evaluate = staticmethod(forbidden)
+            for own, foreign in ((first, second), (second, first)):
+                with monkeypatch.context() as patch:
+                    patch.setattr(own.store, "open", forbidden)
+                    patch.setattr(own.preparation, "prepare", forbidden)
+                    mixtures = [{key: getattr(foreign.request, key)} for key in fields]
+                    mixtures.extend((
+                        {key: getattr(foreign.request, key) for key in fields if key != "project_id"},
+                        {key: getattr(foreign.request, key) for key in ("binding_id", "content_id")},
+                    ))
+                    for mix in mixtures:
+                        if "project_id" in mix:
+                            # Keep duplicated project/policy facts schema-valid so
+                            # rejection must come from persisted owner selection.
+                            mix.update(policy=foreign.request.policy,
+                                       expected_context=foreign.request.expected_context,
+                                       structural_input=foreign.request.structural_input)
+                        mixed = change_request(own.request, **mix)
+                        with pytest.raises(PostSubmissionMaterializationUnavailable):
+                            await own.service.materialize(mixed, ForbiddenConsumer())
+                assert not own.authority.selections
+                assert not own.preparation._active
+                assert list((own.scratch / "workspaces").iterdir()) == []

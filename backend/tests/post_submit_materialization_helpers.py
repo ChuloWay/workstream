@@ -65,7 +65,7 @@ class CountedStore:
         return self.wrapped.open(reference)
 
 
-def archive_with_modes(evidence_path):
+def archive_with_modes(evidence_path, project_id):
     """Build a valid packet with independently known executable/plain members."""
     data = _archive(evidence_path=evidence_path)
     # Preserve the valid governed packet and add both Unix file-mode cases.
@@ -77,15 +77,18 @@ def archive_with_modes(evidence_path):
             entry = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
             entry.create_system = 3
             entry.external_attr = mode << 16
-            target.writestr(entry, b"proof\n")
+            target.writestr(entry, f"project {project_id}\n".encode())
     return archive_bytes.getvalue()
 
 
 @asynccontextmanager
-async def material_fixture(tmp_path, database_url, *, provider="local", scratch_limits=None):
+async def material_fixture(tmp_path, database_url, *, provider="local", scratch_limits=None,
+                           storage_settings=None, provision_services=True):
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    if provider == "minio":
+    if storage_settings is not None:
+        settings = storage_settings
+    elif provider == "minio":
         from tests.test_s3_artifact_store import minio_settings
         settings = minio_settings(private_prefix=f"material/{new_record_id()}").model_copy(update={
             **artifact_admission_limit_settings(1024 * 1024),
@@ -103,7 +106,8 @@ async def material_fixture(tmp_path, database_url, *, provider="local", scratch_
     try:
         plan, policy = await approved_pre_submit_fixture(factory, namespace, guide_version="v1")
         context = _context()
-        await _seed_services(factory)
+        if provision_services:
+            await _seed_services(factory)
         task_id, assignment_id = new_record_id(), new_record_id()
         async with factory.begin() as session:
             await _seed_human_actor(session, context)
@@ -112,7 +116,7 @@ async def material_fixture(tmp_path, database_url, *, provider="local", scratch_
                           project=str(plan.lineage.project_id), actor=str(context.actor_profile_id))
             await seed_started_task_for_artifact_test(connection, params)
             await install_submitter_grant(connection, params)
-        data = archive_with_modes(policy["evidence_path"])
+        data = archive_with_modes(policy["evidence_path"], plan.lineage.project_id)
         preparation_request = SubmissionBundlePreparationRequest(
             actor=ActorIdentityFacts(context.actor_profile_id, context.identity_link_id, ActorKind.HUMAN),
             request_id=context.request_id, correlation_id=context.correlation_id,
@@ -167,6 +171,7 @@ async def material_fixture(tmp_path, database_url, *, provider="local", scratch_
         )
         yield SimpleNamespace(service=service, factory=factory, engine=engine, request=request,
                               created=created, facts=facts, files=files, data=data, manifest=manifest,
+                              settings=settings,
                               store=counted, namespace=namespace, preparation=preparation,
                               manager=manager, inspector=inspector, authority=authority,
                               scratch=tmp_path / "post-scratch")
