@@ -40,15 +40,15 @@ CANONICAL_REQUESTS = {
 }
 CANONICAL_RESULTS = {
     "GuideArtifactIngestResult",
+    "CheckerOutputArtifactResult",
+    "CheckerOutputBindingResult",
 }
 CANONICAL_TYPE_ALIASES = {
     "ArtifactAuditResourceType",
     "ArtifactBindingResourceType",
 }
 CANONICAL_VALUE_TYPES = set()
-PREPARED_MUTATION_REQUESTS = CANONICAL_REQUESTS - {
-    "ArtifactRecoveryRequest",
-}
+PREPARED_MUTATION_REQUESTS = {"GuideArtifactIngestRequest"}
 PREPARED_HANDLE_FORBIDDEN_ROOTS = (
     APP_ROOT / "adapters",
     APP_ROOT / "api",
@@ -469,7 +469,7 @@ def test_artifact_operations_exports_only_canonical_closed_contracts() -> None:
     }
 
 
-def test_durable_artifact_mutation_ports_require_process_local_prepared_authority() -> None:
+def test_artifact_ports_keep_prepared_authority_at_the_transaction_boundary() -> None:
     tree = _tree(ARTIFACT_OPERATIONS)
     request_classes = {
         node.name: node
@@ -490,6 +490,12 @@ def test_durable_artifact_mutation_ports_require_process_local_prepared_authorit
         assert all("AuthorizationContext" not in types for types in fields.values()), name
         assert {"action_id", "resource_context", "facts"}.isdisjoint(fields), name
 
+    # Output services own fresh PREP per phase; a public handle cannot span their I/O.
+    for name in ("CheckerOutputArtifactRequest", "CheckerOutputBindingRequest"):
+        node = next(item for item in tree.body if isinstance(item, ast.ClassDef) and item.name == name)
+        annotations = _declared_annotation_names(node)
+        assert {"PreparedAuthorizationHandle", "AuthorizationContext"}.isdisjoint(annotations)
+        assert "CheckerOutputSelector" in annotations
     source = ARTIFACT_OPERATIONS.read_text(encoding="utf-8")
     assert "upload_session" not in source
     assert "ContributorArtifactUploadPort" not in source
@@ -501,12 +507,13 @@ def test_durable_artifact_mutation_ports_require_process_local_prepared_authorit
         "ArtifactBindingPort": {
             "bind_checker_output",
         },
-        "CheckerArtifactOutputPort": {"store"},
+        "CheckerArtifactOutputPort": {"store", "recover"},
     }
     expected_request_by_method = {
         "ingest": "GuideArtifactIngestRequest",
         "bind_checker_output": "CheckerOutputBindingRequest",
         "store": "CheckerOutputArtifactRequest",
+        "recover": "CheckerOutputSelector",
     }
     protocols = {
         node.name: node
@@ -524,7 +531,7 @@ def test_durable_artifact_mutation_ports_require_process_local_prepared_authorit
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             assert node.args.posonlyargs == []
-            assert [argument.arg for argument in node.args.args] == ["self", "request"]
+            assert [argument.arg for argument in node.args.args] == ["self", "selector" if node.name == "recover" else "request"]
             assert node.args.kwonlyargs == []
             assert node.args.vararg is None
             assert node.args.kwarg is None

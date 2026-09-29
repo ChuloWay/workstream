@@ -1,7 +1,7 @@
 # Chunk Contract: WS-ARCH-001-04C CHECKER Current Result Persistence
 
-Disposition: Planned. Dependencies: 04A, 04B, its ART-owned output-custody
-child and POL-07. Risk: L1. Outcome:
+Disposition: Planned. Dependencies: 04A, 04B, delivered
+[ARCH-04B2 output custody](../../WS-ARCH-001-04B2.md) and POL-07. Risk: L1. Outcome:
 CHECKERS installs hidden, deny-only execution of the exact post-submit plan and
 persists one immutable final result with explicit
 supersession/currentness and routing recommendation.
@@ -68,12 +68,16 @@ proves that capability; absent it, remain blocked rather than invoking again.
 Prove slow-worker/takeover completion in both orders and no duplicate provider
 call or final output from stale leases.
 
-Required logs/generated outputs pass the ART-owned output admission and
-independent verification path before final publication. Compose verified
-checker-output bindings and CHECKERS final completion in one caller transaction
-through owner public ports. Missing, stale, unverified or mismatched required
-output prevents final-current result/routing. Do not implement ART writes here,
-persist provider locations as evidence, or charge output bytes to a contributor.
+The current structural catalogue declares zero output slots, and a completed
+evaluation with that exact empty set must finalize without inventing logs or
+generated artifacts. When CHECKERS reserves nonempty slots, every produced
+output passes the delivered ART-owned admission and independent verification
+path before final publication. Compose those verified bindings and CHECKERS
+final completion in one caller transaction through owner public ports. Missing,
+stale, unverified or mismatched owner-required output prevents final-current
+result/routing. Do not implement ART writes here, persist provider locations as
+evidence, charge output bytes to a contributor, or turn ARCH-04B2's controlled
+nonempty fixtures into catalogue requirements.
 
 The final multi-participant transaction must declare one lock order consistent
 with AUTH PREP: prepare required service authority custody before feature locks,

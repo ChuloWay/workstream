@@ -511,3 +511,24 @@ def post_submission_materialization(*, sessions, store, namespace, preparation, 
         preparation=preparation, inspector=inspector,
         authority=DenyPostSubmissionMaterializationAuthority(),
     )
+
+
+def checker_output_storage(*, sessions, store, namespace, preparation, settings):
+    """Compose hidden output custody; live producer and write authority remain absent."""
+    from app.modules.artifacts.checker_outputs import CheckerArtifactOutputService, DenyCheckerOutputWriteAuthority
+    from app.modules.artifacts.schemas import DenyArtifactInternalAuthority
+    from app.modules.checkers.api.output_custody import UnavailableCheckerOutputReservation
+    return CheckerArtifactOutputService(
+        sessions=sessions, store=store, namespace=namespace, preparation=preparation, settings=settings,
+        reservations=lambda session: UnavailableCheckerOutputReservation(),
+        authority=lambda session: DenyCheckerOutputWriteAuthority(),
+        internal_authority=lambda session: DenyArtifactInternalAuthority(),
+    )
+
+
+def checker_output_binding(session, *, namespace):
+    """Compose a deny-only caller-transaction binding participant."""
+    from app.modules.artifacts.checker_output_bindings import CheckerOutputBindingService, DenyCheckerOutputBindingAuthority
+    from app.modules.checkers.api.output_custody import UnavailableCheckerOutputReservation
+    return CheckerOutputBindingService(session, namespace_fingerprint=namespace.namespace_fingerprint,
+        reservations=UnavailableCheckerOutputReservation(), authority=DenyCheckerOutputBindingAuthority())

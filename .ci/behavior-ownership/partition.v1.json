@@ -270,6 +270,18 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/artifacts/checker_output_bindings.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/checker_output_custody.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/checker_outputs.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/artifacts/guide_document_access.py"
     },
     {
@@ -723,6 +735,10 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/checkers/api/history.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/output_custody.py"
     },
     {
       "group": "artifacts",
@@ -1473,7 +1489,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "45c8605a1e6b8a29cd5c9fb59771f423f8e87f04ed7da07833139cc1f657e22b",
+  "authority_digest": "4cb652590f801da4066a1179a5a4ed7df33721a7f685a0b6300d4f46580ac7d0",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

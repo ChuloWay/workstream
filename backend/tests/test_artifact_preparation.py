@@ -365,19 +365,82 @@ async def test_client_commitment_mismatch_prevents_provider_call(
 
 
 @pytest.mark.asyncio
-async def test_preparation_rejects_oversize_and_non_byte_sources(tmp_path: Path) -> None:
-    """Enforce the source ceiling and byte-only stream contract."""
-    limits = preparation_limits(maximum_source_bytes=4)
+async def test_preparation_enforces_source_caps_and_byte_only_streams(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Enforce manager and per-call ceilings before excess bytes reach scratch."""
+    limits = preparation_limits(maximum_source_bytes=8)
     manager = ArtifactScratchManager(root=tmp_path / "scratch", limits=limits)
     service = ArtifactPreparationService(manager)
+    prepared = await service.prepare(
+        byte_stream(b"ab", b"cd"),
+        media_type="text/plain",
+        maximum_bytes=4,
+    )
+    assert prepared.commitment.byte_count == 4
+    await prepared.close()
     with pytest.raises(ArtifactLimitExceededError):
-        await service.prepare(byte_stream(b"abcde"), media_type="text/plain")
+        await service.prepare(byte_stream(b"123456789"), media_type="text/plain")
+
+    written = bytearray()
+    yielded: list[bytes] = []
+    original_write_chunk = service._write_chunk
+
+    async def track_write(descriptor: int, chunk: memoryview) -> None:
+        written.extend(chunk)
+        await original_write_chunk(descriptor, chunk)
+
+    async def over_cap_stream() -> AsyncIterator[bytes]:
+        for chunk in (b"abcd", b"e", b"must-not-be-read"):
+            yielded.append(chunk)
+            yield chunk
+
+    monkeypatch.setattr(service, "_write_chunk", track_write)
+    with pytest.raises(ArtifactLimitExceededError):
+        await service.prepare(
+            over_cap_stream(),
+            media_type="text/plain",
+            maximum_bytes=4,
+        )
+    assert written == b"abcd"
+    assert yielded == [b"abcd", b"e"]
 
     async def invalid_stream() -> AsyncIterator[bytes]:
         yield "not-bytes"  # type: ignore[misc]
 
     with pytest.raises(ArtifactInputMismatchError, match="must yield bytes"):
         await service.prepare(invalid_stream(), media_type="text/plain")
+    assert (await manager.usage()).reservation_count == 0
+    manager.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("maximum_bytes", [True, 0, -1, 65])
+async def test_preparation_rejects_invalid_per_call_caps_before_iteration(
+    tmp_path: Path,
+    maximum_bytes: object,
+) -> None:
+    """Reject malformed or manager-exceeding per-call limits before reserving scratch."""
+    manager = ArtifactScratchManager(
+        root=tmp_path / str(maximum_bytes),
+        limits=preparation_limits(maximum_source_bytes=64),
+    )
+    iterated = False
+
+    async def tracked_stream() -> AsyncIterator[bytes]:
+        nonlocal iterated
+        iterated = True
+        yield b"data"
+
+    with pytest.raises(ValueError, match="per-call byte limit"):
+        await ArtifactPreparationService(manager).prepare(
+            tracked_stream(),
+            media_type="text/plain",
+            maximum_bytes=maximum_bytes,  # type: ignore[arg-type]
+        )
+
+    assert not iterated
     assert (await manager.usage()).reservation_count == 0
     manager.close()
 

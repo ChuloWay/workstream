@@ -318,8 +318,12 @@ Submission's three ART references remain all-null during transaction staging or
 all-present. The production creation command consumes the exact ART admission and
 fills all three before its root transaction commits. This is separate from the
 required initial assignment identity. Hidden exact ART-to-CHECKERS input materialization is delivered by ARCH-04B.
-Output custody (ARCH-04B2) and durable execution/results (ARCH-04C) remain pending;
-production access remains deny-only until ARCH-04D. Retained payment columns on Submission and CheckerRun
+ARCH-04B2 adds checker-output attempt custody with exact Submission version and
+checker-request digest plus immutable verified put/receipt ancestry on each
+run/slot binding. Its migration refuses retained checker attempts or bindings
+whose missing evaluation digest or verified ancestry cannot be proven; it does
+not invent or delete retained data. Durable execution/results (ARCH-04C) remain
+pending, and production access remains deny-only until ARCH-04D. Retained payment columns on Submission and CheckerRun
 are nullable, so new unified-guide work requires no invented economic configuration.
 CP09 owns physical economic-schema removal after its remaining consumers change.
 
@@ -949,10 +953,10 @@ cannot reproduce the authoritative result. At the later public cutover,
 without receiving scratch paths or rerunning the pre-submit plan. Canonical
 admission-backed creation remains hidden until then.
 
-Before that cutover, hidden ART-04B2 establishes the execution boundary without
+Before that cutover, hidden pre-submit materialization establishes the execution boundary without
 exposing a route. The fixed materializer authorizes before any prepared-byte
 read or workspace reservation. One callback-scoped sealed tree is checked
-against the server commitment and semantic manifest. ART-04B3 extends that same
+against the server commitment and semantic manifest. The locked project-policy phase extends that same
 callback to execute the locked project-policy phase and normalize every
 platform and project result into one typed envelope. The tree is cleaned before
 the transaction-bound evidence service reloads the actor, identity link, task,
@@ -1647,12 +1651,17 @@ Fields:
 - `locked_revision_policy_id`
 - `locked_revision_policy_generation`
 - `locked_revision_policy_hash`
-- `artifact_binding_id` (target after ARCH-04B2/04C custody)
-- `submission_bundle_manifest_id` (target after ARCH-04B2/04C custody)
-- `package_hash` (legacy; replacement custody in ARCH-04B2/04C)
-- `artifact_hash_manifest` (legacy; replacement custody in ARCH-04B2/04C)
-- `artifact_manifest_hash` (legacy; replacement custody in ARCH-04B2/04C)
+- `artifact_binding_id` (planned canonical input reference; exact 04C shape pending)
+- `submission_bundle_manifest_id` (planned canonical input reference; exact 04C shape pending)
+- `package_hash` (retained current field; 04C must replace its authority use)
+- `artifact_hash_manifest` (retained current field; 04C must replace its authority use)
+- `artifact_manifest_hash` (retained current field; 04C must replace its authority use)
 - `summary`
+
+ARCH-04B2 does not populate or authorize this retained run writer. It stores
+checker-output custody in ART attempts and bindings only. ARCH-04C owns the
+current CheckerRun/result schema and must select exact canonical input
+references without treating these retained caller-manifest fields as authority.
 
 Status:
 

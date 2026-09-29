@@ -651,9 +651,11 @@ history only to covered Audit Authority and removes the old payload-bearing
 task-only audit route. AUTH-18 delivers public manager guide activation;
 ARCH-03D connects hidden intake through final durable intent to canonical TASK/PROJECTS
 ports, preserving historical guide selection. Public intake remains deferred. ARCH-04B supplies hidden exact verified Submission
-input with scoped async file access and cleanup. Production materialization
-authority remains deny-only; ARCH-04B2 output custody, ARCH-04C durable execution
-and ARCH-04D live authority remain separate steps.
+input with scoped async file access and cleanup. ARCH-04B2 adds hidden typed
+checker-output storage, byte-free recovery and flush-only verified binding over
+the generic ART put/verification path. CHECKERS reservation and output authority
+remain unavailable in production; ARCH-04C durable execution and ARCH-04D live
+authority are the next separate steps.
 
 ## v0.1 Success Standard
 

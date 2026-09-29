@@ -58,9 +58,13 @@ The table retains historical planning-custody labels, not a literal mapping
 of every typed runtime `ActionOwner`. XINT-06B groups runtime
 `WS-AUTH-001-ART-06A` post-submit materialization and
 `WS-AUTH-001-ART-06B` output write/binding. ARCH-04D is their current replacement
-activation boundary after delivered ARCH-04B hidden input, planned ARCH-04B2
-output custody and ARCH-04C durable execution/results. Production materialization
-remains deny-only; the typed catalogue is unchanged by this reconciliation. Do not implement an additional XINT-06B lane.
+activation boundary after delivered ARCH-04B hidden input and ARCH-04B2 hidden
+output custody, followed by ARCH-04C durable execution/results. ARCH-04B2 owns
+fresh authority participants internally for each store, recovery and binding
+phase; public requests carry selectors and byte sources, never PREP handles.
+Default output reservation and authority composition remains unavailable, and
+production materialization remains deny-only. The typed catalogue is unchanged
+by this reconciliation. Do not implement an additional XINT-06B lane.
 
 Runtime owner `WS-XINT-002-07` retains catalogue custody. The only approved
 v0.1 availability transition is 07A packet materialization. Evidence binding

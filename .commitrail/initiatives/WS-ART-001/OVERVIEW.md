@@ -8,8 +8,10 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   storage, and bounded private processing scratch.
 - Current boundary: ready-admission publication and hidden preparation,
   consumption, and binding dependencies are merged through ARCH-02H.
-- Next usable boundary: ARCH-04B2 checker output custody. ARCH-04B hidden input
-  materialization is delivered; live authority and execution cutover remain later.
+- Completed boundary: ARCH-04B hidden input materialization and hidden
+  [ARCH-04B2 checker-output custody](../WS-ARCH-001/WS-ARCH-001-04B2.md).
+  Production reservation and authority remain unavailable.
+- Next usable boundary: ARCH-04C durable execution and results.
 - Governing sources: artifact specifications, `ArtifactStore`,
   `ArtifactScratchManager`, code, migrations, and artifact tests.
 - Preserve: SHA-256/byte-count identity, reread verification, isolation,
@@ -32,8 +34,9 @@ ART retains the merged default-plus-project intake compiler/executor; POL-07
 is a facade, not a replacement or second precheck run. New unified generations
 must prove exact approved lineage at preparation, consumption and binding.
 
-1. ARCH-04B hidden exact Submission materialization is delivered. Continue with
-   ARCH-04B2 output custody, then durable execution and fixed-service authority.
+1. ARCH-04B hidden exact Submission materialization and ARCH-04B2 hidden output
+   custody are delivered. Continue with ARCH-04C durable execution, then
+   fixed-service authority.
 2. ARCH-04F owns checker-remediation resubmission using existing ART ports;
    later reviewer-requested revision remains a separate REV boundary. Add those dependencies before public Submission
    cutover.

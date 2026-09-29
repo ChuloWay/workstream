@@ -331,9 +331,13 @@ Production explicitly uses `UnavailablePostSubmissionExecution`; this does not
 install durable post-submit execution, authorize material reads, or prove attempt and
 currentness ownership. ARCH-04B supplies the hidden ART input port: exact consumed
 Submission bytes, rebuilt manifest, async scoped file access and cleanup, followed
-by a fresh material-selection check. Production composition denies materialization;
-ARCH-04B2 output custody, ARCH-04C durable execution, ARCH-04D authority and ARCH-04E
-routing remain the execution cutover. A returned evaluation value is not a stored
+by a fresh material-selection check. Production composition denies materialization.
+ARCH-04B2 now supplies hidden typed output storage, byte-free recovery and
+flush-only verified binding while its CHECKERS reservation and authority adapters
+remain unavailable. The current structural catalogue reserves zero output slots;
+controlled nonempty slots prove ART mechanics only. ARCH-04C must support that
+empty output set and owns durable execution, followed by ARCH-04D authority and
+ARCH-04E routing. A returned evaluation value is not a stored
 current result or acceptance.
 Retained run and submission history now use canonical AUTH and separate fixed
 contributor/manager projections. The alternate execution service and Celery worker are
@@ -520,8 +524,9 @@ severities.
 
 The following is the intended end-to-end lifecycle. Pre-submit intake and
 retained-history reads are implemented. Canonical durable post-submit execution,
-result routing and recovery remain unavailable pending ARCH-04B2/04C/04D/04E/04F;
-ARCH-04B hidden input is delivered with deny-only production authority;
+result routing and recovery remain unavailable pending ARCH-04C/04D/04E/04F;
+ARCH-04B hidden input and ARCH-04B2 hidden output custody are delivered with
+deny-only/unavailable production composition;
 the flow below is not a claim that those jobs or transitions are live.
 
 ```text
@@ -602,8 +607,8 @@ The checker run records:
 - warning count
 - completion timestamp
 
-With ARCH-04B input delivered, ARCH-04B2 output custody, ARCH-04C result custody,
-ARCH-04D activation and
+With ARCH-04B input and ARCH-04B2 output custody delivered, ARCH-04C result
+custody, ARCH-04D activation and
 ARCH-04E routing integration, this gives reviewers proof that they are reviewing the
 same immutable binding and manifest that passed automated checks; legacy
 caller-owned manifest fields are not authority.

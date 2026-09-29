@@ -8,6 +8,10 @@ from typing import Protocol, TypeAlias, final
 from uuid import UUID
 
 from app.modules.artifacts.sources import CommittedArtifactSource
+from app.modules.checkers.api.output_custody import (
+    CheckerOutputReservation,
+    CheckerOutputSlot,
+)
 from app.modules.authorization.runtime import AuthorizationContext
 from app.modules.authorization.catalogue import ActionId
 from app.modules.actors.api import ServiceIdentity
@@ -32,10 +36,37 @@ class GuideArtifactAdmissionRequest:
 class CheckerOutputArtifactAdmissionRequest:
     """One prepared checker output admitted under its exact checker run."""
 
-    authorization_context: AuthorizationContext
-    checker_run_id: UUID
-    logical_role: str
+    reservation: CheckerOutputReservation
+    slot_key: str
     source: CommittedArtifactSource
+
+
+def checker_output_request_digest_facts(
+    *,
+    reservation: CheckerOutputReservation,
+    slot: CheckerOutputSlot,
+) -> dict[str, object]:
+    """Return stable owner facts shared by checker admission and binding."""
+    evaluation = reservation.evaluation
+    return {
+        "evaluation_request_id": str(evaluation.evaluation_request_id),
+        "evaluation_request_sha256": evaluation.request_sha256,
+        "evaluation_generation": evaluation.evaluation_generation,
+        "checker_run_id": str(reservation.checker_run_id),
+        "project_id": str(evaluation.project_id),
+        "task_id": str(evaluation.task_id),
+        "submission_id": str(evaluation.submission_id),
+        "submission_version": evaluation.submission_version,
+        "slot_key": slot.key,
+        "media_type": slot.media_type,
+        "maximum_bytes": slot.maximum_bytes,
+    }
+
+
+class CheckerOutputAdmissionAuthority(Protocol):
+    """Consume caller-prepared authority for one exact output reservation."""
+
+    async def consume(self, request: CheckerOutputArtifactAdmissionRequest) -> None: ...
 
 
 @final
