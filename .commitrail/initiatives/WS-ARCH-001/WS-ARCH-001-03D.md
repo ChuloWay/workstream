@@ -32,7 +32,7 @@ for the exact deleted-target allowlist, and `backend/tests/architecture/`.
 Allowed records: `.ci/module-boundaries/private-edge-debt.v1.json`,
 `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json` for exact shrinking fixture inventory,
 `.ci/behavior-ownership/partition.v1.json`, this record, current ARCH/POL/AUTH/CON
-`OVERVIEW.md`, ARCH/AUTH planning `PLAN.md`/`CHUNK_MAP.md` and linked completed 03B contract, `.commitrail/INDEX.md`,
+`OVERVIEW.md`, ARCH/AUTH/POL planning `PLAN.md`/`CHUNK_MAP.md` and linked completed 03B contract, `.commitrail/INDEX.md`,
 `docs/roadmap_status.md`, `README.md`, `docs/operations_project_operating_manual.md`, `docs/architecture_checker_framework.md`,
 and related local roadmap exports when present.
 Prohibited: new public routes, authority actions, migrations, post-submit execution,
@@ -145,3 +145,7 @@ Public API, provider transport and full lifecycle release proof remain separate.
   and exact submitter grant, with independent PostgreSQL sessions.
 - DOC-03D-002: advance current AUTH plan/map from completed hidden intake to
   ARCH-04B; public intake remains ARCH-02I after its prerequisites.
+
+- DOC-03D-003: align the current POL plan/map with delivered hidden ARCH-03D
+  intake and next ARCH-04B materialization; leave completed historical records
+  unchanged. Public intake remains ARCH-02I after its prerequisites.
