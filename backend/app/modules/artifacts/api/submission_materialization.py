@@ -13,6 +13,7 @@ class PostSubmissionMaterializationUnavailable(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class SubmissionMaterialEntry:
+    """Expose verified archive metadata without a filesystem path."""
     normalized_path: str
     entry_type: Literal["file", "directory"]
     byte_count: int
@@ -21,6 +22,8 @@ class SubmissionMaterialEntry:
 
 
 class SubmissionMaterialView(Protocol):
+    """Permit bounded reads only during the consumer callback."""
+
     @property
     def entries(self) -> tuple[SubmissionMaterialEntry, ...]:
         """Return verified entries only while the consumer is running."""
@@ -30,6 +33,7 @@ class SubmissionMaterialView(Protocol):
 
 
 class PostSubmissionMaterialConsumer(Protocol):
+    """Evaluate scoped input asynchronously and return detached phase facts."""
     async def evaluate(
         self, request: PostSubmissionEvaluationRequest, material: SubmissionMaterialView,
     ) -> PostSubmissionEvaluationResult:
@@ -38,6 +42,7 @@ class PostSubmissionMaterialConsumer(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class PostSubmissionMaterializationResult:
+    """Bind a validated evaluation to its verified immutable input custody."""
     submission_id: UUID
     submission_version: int
     admission_id: UUID
@@ -51,6 +56,7 @@ class PostSubmissionMaterializationResult:
 
 
 class PostSubmissionMaterializationPort(Protocol):
+    """Verify and scope exact input without publishing durable checker results."""
     async def materialize(
         self, request: PostSubmissionEvaluationRequest, consumer: PostSubmissionMaterialConsumer,
     ) -> PostSubmissionMaterializationResult:

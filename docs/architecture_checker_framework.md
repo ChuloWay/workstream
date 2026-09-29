@@ -156,7 +156,8 @@ The canonical `policy_hash` binds ordered entries, configuration and exact
 catalogue/implementation identities. Domain project policy versions record
 changes to project rules; they do not select obsolete software implementations.
 The public phase execution port remains unavailable pending ARCH-04C/04D.
-POL-04B connects unified guide setup; separate pre/post approval remains later.
+POL-04B connects unified guide setup; POL-05B and POL-06B expose separate
+pre-submit and post-submit policy approvals.
 
 ## Blocking Policy
 
@@ -519,7 +520,8 @@ severities.
 
 The following is the intended end-to-end lifecycle. Pre-submit intake and
 retained-history reads are implemented. Canonical durable post-submit execution,
-result routing and recovery remain unavailable pending ARCH-04B/04C/04D/04E/04F;
+result routing and recovery remain unavailable pending ARCH-04B2/04C/04D/04E/04F;
+ARCH-04B hidden input is delivered with deny-only production authority;
 the flow below is not a claim that those jobs or transitions are live.
 
 ```text
@@ -600,7 +602,8 @@ The checker run records:
 - warning count
 - completion timestamp
 
-After ARCH-04B materialization, ARCH-04C result custody, ARCH-04D activation and
+With ARCH-04B input delivered, ARCH-04B2 output custody, ARCH-04C result custody,
+ARCH-04D activation and
 ARCH-04E routing integration, this gives reviewers proof that they are reviewing the
 same immutable binding and manifest that passed automated checks; legacy
 caller-owned manifest fields are not authority.

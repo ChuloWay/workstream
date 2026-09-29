@@ -4,7 +4,8 @@ Use the [current dependency contract](PLAN.md#current-dependency-contract).
 The [preserved map](../pre-cutover/CHUNK_MAP.md) retains the complete original
 work accounting. Foundations through 02H and CP04B are complete; none restart.
 AUTH-18 public manager activation/context and ARCH-03D hidden approved-guide intake are delivered.
-Exact post-submit materialization is next; public intake remains deferred to ARCH-02I.
+ARCH-04B hidden exact post-submit input is delivered. ARCH-04B2 output custody is next;
+public intake remains deferred to ARCH-02I.
 
 | Boundary | Owner outcome | Risk | Current dependency |
 |---|---|---|---|

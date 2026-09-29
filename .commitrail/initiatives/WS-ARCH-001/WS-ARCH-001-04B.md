@@ -110,7 +110,9 @@ Submission stamps; no run-generation state is invented before 04C/04D.
   to register affected paths and preserve existing proof, never weaken gates.
 - This contract, current ARCH/AUTH/POL overviews/plans/maps, ART/CON overviews, `.commitrail/INDEX.md`,
   `docs/roadmap_status.md`, `docs/spec_artifact_storage_service.md`,
-  `docs/architecture_checker_framework.md`, `README.md` and applicable ART specs
+  `docs/architecture_checker_framework.md`, `docs/architecture_data_model.md`,
+  `docs/operations_project_operating_manual.md`,
+  `.commitrail/initiatives/WS-AUTH-003/OVERVIEW.md`, `README.md` and applicable ART specs
   only for this boundary and navigation identifying 04B2 as next; no 04B2 design
   or implementation changes.
 
@@ -157,11 +159,11 @@ Concrete commands (from `backend/`, with the existing local test services/env):
 From repository root run `python3 scripts/check_markdown_links.py`,
 `python3 scripts/check_commitrail_records.py --base-ref 5e35f635`,
 `python3 scripts/check_stale_artifact_contracts.py`,
-`python3 scripts/check_stale_workstream_wording.py`, and `git diff --check`.
-Use a unique metadata path per isolated rerun. New test paths above are planned.
+`python3 scripts/check_stale_workstream_wording.py`, and `git diff --check 5e35f635 HEAD`.
+Use a unique metadata path per isolated rerun. The named test paths above are implemented.
 
 Run focused tests with `backend/scripts/run_isolated_tests.py` against migrated
-PostgreSQL and existing MinIO; new named files above are planned tests. Run Ruff,
+PostgreSQL and existing MinIO; the named files above are the implementation proof. Run Ruff,
 architecture/ownership/lane tests, `git diff --check`, existing markdown-link and
 Commitrail validators, then all required hosted lanes. Coverage is diagnostic.
 Do not claim production execution or live AUTH from these tests.
@@ -179,6 +181,21 @@ security, QA/test-delta, product-ops/documentation, senior engineering and CI
 integrity against a clean candidate. Human review focus: exact source selection,
 transaction-free I/O, callback lifetime, fail-closed composition and accurate
 separation from future durable execution and live authorization.
+
+## Proof refinements from review
+
+The stored semantic-manifest commitment and the caller file list are distinct
+checks. A real isolated-database corruption fixture changes only the retained
+admission/evidence commitment, with custody triggers disabled solely for that
+fixture; the unchanged request must then fail before consumer entry. Normal
+writes remain protected. Executable and plain ZIP members prove the callback's
+exact executable flags. A paused provider stream plus independently observed
+PostgreSQL activity/locks proves the selection transaction ended before byte I/O.
+A result for another evaluation generation must fail with scratch/view cleanup.
+
+Current ARCH/AUTH navigation, checker/storage specs and the operating manual
+identify hidden input as delivered and output custody as next. Production remains
+deny-only. New-owner docstrings explain these boundaries without changing CI gates.
 
 ## Evidence
 

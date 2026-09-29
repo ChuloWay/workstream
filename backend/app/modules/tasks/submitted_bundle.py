@@ -14,7 +14,9 @@ from app.modules.tasks.models import Submission, WorkstreamTask
 
 
 class SubmittedBundleReader:
+    """Project detached submitted facts from the owning TASK tables."""
     def __init__(self, session: AsyncSession) -> None:
+        """Use the caller-owned short read transaction."""
         self._session = session
 
     async def read(self, request: SubmittedBundleRequest) -> SubmittedBundleFacts:

@@ -26,6 +26,7 @@ from app.modules.tasks.api.submitted_bundle import SubmittedBundlePort, Submitte
 
 
 class PostSubmissionMaterializationAuthority(Protocol):
+    """Separate early service availability from exact resolved-material authority."""
     async def preflight(self, request: PostSubmissionEvaluationRequest) -> None:
         """Deny unavailable fixed-service access before protected reads."""
 
@@ -39,43 +40,54 @@ class DenyPostSubmissionMaterializationAuthority:
     """Production remains unavailable until ARCH-04D activates exact service authority."""
 
     async def preflight(self, request: PostSubmissionEvaluationRequest) -> None:
+        """Reject production access before any protected selection or byte read."""
         raise PostSubmissionMaterializationUnavailable("post_submit_materialization_unavailable")
 
     async def authorize(
         self, request: PostSubmissionEvaluationRequest, selection: PostSubmissionMaterialSelection,
     ) -> None:
+        """Reject exact material access until live authority is implemented."""
         raise PostSubmissionMaterializationUnavailable("post_submit_materialization_unavailable")
 
 
 class _MaterialView:
+    """Revoke callback access independently of the private projection lifetime."""
     def __init__(self, tree: SealedSubmissionTree) -> None:
+        """Wrap the single ART-owned sealed tree without exposing its path."""
         self._tree = tree
         self._closed = False
 
     def close(self) -> None:
+        """Revoke subsequent metadata and file reads."""
         self._closed = True
 
     def _require_open(self) -> None:
+        """Reject retained views after callback completion or cancellation."""
         if self._closed:
             raise RuntimeError("submission material view is closed")
 
     @property
     def entries(self) -> tuple[SubmissionMaterialEntry, ...]:
+        """Project verified metadata while the view remains live."""
         self._require_open()
         return tuple(SubmissionMaterialEntry(
             item.normalized_path, item.entry_type.value, item.byte_count, item.sha256, item.executable,
         ) for item in self._tree.entries)
 
     def read_file(self, normalized_path: str, *, maximum_bytes: int) -> bytes:
+        """Delegate bounded reads to the sealed verified tree."""
         self._require_open()
         return self._tree.read_file(normalized_path, maximum_bytes=maximum_bytes)
 
     def __reduce__(self):
+        """Prevent transfer of a process-local read capability."""
         raise TypeError("submission material view is process-local")
 
 
 class _MaterialProcessor:
+    """Keep async evaluation inside the shared projection and scratch lifetime."""
     def __init__(self, inspector, inspection, request, consumer) -> None:
+        """Bind one inspection, request and consumer for preparation-owned execution."""
         self._inspector, self._inspection = inspector, inspection
         self._request, self._consumer = request, consumer
         self._aborted = False
@@ -83,6 +95,7 @@ class _MaterialProcessor:
         self._view: _MaterialView | None = None
 
     def abort(self) -> None:
+        """Revoke reads and cancel the consumer before preparation drains cleanup."""
         self._aborted = True
         if self._view is not None:
             self._view.close()
@@ -90,6 +103,7 @@ class _MaterialProcessor:
             self._consumer_task.cancel()
 
     async def process(self, reader, workspace) -> PostSubmissionEvaluationResult:
+        """Project off-loop, validate callback output, and drain projection cleanup."""
         projection = self._inspector._projected_tree(reader, workspace, expected=self._inspection)
         # The preparation owner shields and drains this entire operation, including
         # projection entry, before it releases the reader or workspace.
@@ -117,11 +131,13 @@ class PostSubmissionMaterializer:
         namespace: ArtifactStorageNamespaceSpec, preparation: ArtifactPreparationService,
         inspector: SubmissionArchiveInspector, authority: PostSubmissionMaterializationAuthority,
     ) -> None:
+        """Require explicit owner ports, scratch service and material authority."""
         self._sessions, self._tasks, self._store = sessions, tasks, store
         self._namespace, self._preparation = namespace, preparation
         self._inspector, self._authority = inspector, authority
 
     async def _select(self, request) -> PostSubmissionMaterialSelection:
+        """Detach fresh selection facts and close the transaction before I/O."""
         try:
             async with self._sessions() as session, session.begin():
                 return await select_post_submission_material(
@@ -134,6 +150,7 @@ class PostSubmissionMaterializer:
     async def materialize(
         self, request: PostSubmissionEvaluationRequest, consumer: PostSubmissionMaterialConsumer,
     ) -> PostSubmissionMaterializationResult:
+        """Verify bytes, run the scoped consumer, clean up, and reject late drift."""
         request = PostSubmissionEvaluationRequest.model_validate(request)
         await self._authority.preflight(request)
         selected = await self._select(request)

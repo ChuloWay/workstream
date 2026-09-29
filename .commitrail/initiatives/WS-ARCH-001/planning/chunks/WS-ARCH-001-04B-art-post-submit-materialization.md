@@ -29,4 +29,3 @@ the integrated run/binding/result transaction. Neither child owns TASK routing,
 REV records or contributor-blame decisions. Expand each owner-local child into
 its exact implementation record rather than combining ART and CHECKERS writes
 in one implementation PR.
-

@@ -52,8 +52,8 @@ context and reasoned system-Operator start, and removes self-activated eligibili
 and public JSON-packet Submission creation. Admission-backed creation stays hidden.
 ARCH-03B/03C reuse these exact actions and command owners; public TASK access
 and authority are delivered through 03C7, with invalidation wiring in 03C2.
-CP08 delivered ContributionPolicyVersion lineage. ARCH-03D completes hidden approved-guide intake. ARCH-04B exact post-submit
-materialization is next; public intake remains deferred to ARCH-02I. Do not restore eligibility
+CP08 delivered ContributionPolicyVersion lineage. ARCH-03D completes hidden approved-guide intake. ARCH-04B hidden exact post-submit
+input is delivered; ARCH-04B2 output custody is next; public intake remains deferred to ARCH-02I. Do not restore eligibility
 or register replacement aliases.
 
 ## WS-AUTH-001-OUTBOX-01 — unavailable dispatcher contract

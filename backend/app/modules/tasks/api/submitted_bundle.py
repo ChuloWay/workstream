@@ -11,6 +11,7 @@ class SubmittedBundleUnavailable(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class SubmittedBundleRequest:
+    """Select one Submission within its exact project and task."""
     project_id: UUID
     task_id: UUID
     submission_id: UUID
@@ -59,5 +60,6 @@ class SubmittedBundleFacts:
 
 
 class SubmittedBundlePort(Protocol):
+    """Read immutable TASK facts without acquiring mutation authority."""
     async def read(self, request: SubmittedBundleRequest) -> SubmittedBundleFacts:
         """Read exact submitted ownership inside the caller's short transaction."""

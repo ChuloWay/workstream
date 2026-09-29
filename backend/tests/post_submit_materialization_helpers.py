@@ -65,6 +65,22 @@ class CountedStore:
         return self.wrapped.open(reference)
 
 
+def archive_with_modes(evidence_path):
+    """Build a valid packet with independently known executable/plain members."""
+    data = _archive(evidence_path=evidence_path)
+    # Preserve the valid governed packet and add both Unix file-mode cases.
+    archive_bytes = BytesIO()
+    with zipfile.ZipFile(BytesIO(data)) as source, zipfile.ZipFile(archive_bytes, "w") as target:
+        for item in source.infolist():
+            target.writestr(item, source.read(item))
+        for name, mode in (("run.sh", 0o100755), ("notes.txt", 0o100644)):
+            entry = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            entry.create_system = 3
+            entry.external_attr = mode << 16
+            target.writestr(entry, b"proof\n")
+    return archive_bytes.getvalue()
+
+
 @asynccontextmanager
 async def material_fixture(tmp_path, database_url, *, provider="local", scratch_limits=None):
     engine = create_async_engine(database_url)
@@ -96,7 +112,7 @@ async def material_fixture(tmp_path, database_url, *, provider="local", scratch_
                           project=str(plan.lineage.project_id), actor=str(context.actor_profile_id))
             await seed_started_task_for_artifact_test(connection, params)
             await install_submitter_grant(connection, params)
-        data = _archive(evidence_path=policy["evidence_path"])
+        data = archive_with_modes(policy["evidence_path"])
         preparation_request = SubmissionBundlePreparationRequest(
             actor=ActorIdentityFacts(context.actor_profile_id, context.identity_link_id, ActorKind.HUMAN),
             request_id=context.request_id, correlation_id=context.correlation_id,

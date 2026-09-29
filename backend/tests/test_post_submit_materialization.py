@@ -28,6 +28,9 @@ class Consumer:
         self.entered.set()
         await asyncio.sleep(0)  # The view must remain usable across real async work.
         assert {e.normalized_path for e in view.entries if e.entry_type == "file"} == set(self.files)
+        flags = {entry.normalized_path: entry.executable for entry in view.entries}
+        assert flags["run.sh"] is True
+        assert flags["notes.txt"] is False
         for path, data in self.files.items():
             assert view.read_file(path, maximum_bytes=len(data)) == data
         if self.release is not None:
@@ -124,7 +127,7 @@ async def test_async_exit_and_concurrent_drift_never_return_stale_material(tmp_p
             expected = asyncio.CancelledError
         else:
             # An independent transaction must finish while material is in use:
-            # there can be no cross-I/O row lock or retained read transaction.
+            # no row lock may block a change during the callback.
             async with h.factory() as session, session.begin():
                 await session.execute(text("set local lock_timeout='300ms'"))
                 if outcome == "replica_drift":
@@ -205,3 +208,90 @@ async def test_post_submit_expansion_cannot_bypass_aggregate_quota(tmp_path, iso
         assert consumer.calls == 0
         assert not h.preparation._active
         assert list((h.scratch / "workspaces").iterdir()) == []
+
+
+async def test_stored_manifest_mismatch_never_reaches_consumer(tmp_path, isolated_database_env):
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        consumer = Consumer(h.files)
+        # Deliberately corrupt retained custody in this isolated database. Normal
+        # database guards forbid these writes; exercise ART's independent byte check.
+        async with h.factory() as session, session.begin():
+            for table in ("submission_bundle_admissions", "pre_submit_evidence_sets"):
+                await session.execute(text(f"alter table {table} disable trigger user"))
+            await session.execute(text(
+                "update pre_submit_evidence_sets set semantic_manifest_sha256=:bad where id="
+                "(select pre_submit_evidence_set_id from submission_bundle_admissions where id=:id)"
+            ), {"id": str(h.created.admission_id), "bad": "sha256:" + "0" * 64})
+            await session.execute(text(
+                "update submission_bundle_admissions set semantic_manifest_sha256=:bad where id=:id"
+            ), {"id": str(h.created.admission_id), "bad": "sha256:" + "0" * 64})
+            for table in ("submission_bundle_admissions", "pre_submit_evidence_sets"):
+                await session.execute(text(f"alter table {table} enable trigger user"))
+        with pytest.raises(PostSubmissionMaterializationUnavailable, match="manifest_mismatch"):
+            await h.service.materialize(h.request, consumer)
+        assert len(h.store.opens) == 1 and consumer.calls == 0
+        assert not h.preparation._active
+        assert list((h.scratch / "workspaces").iterdir()) == []
+
+
+async def test_foreign_consumer_result_is_rejected_and_cleaned(tmp_path, isolated_database_env):
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        class WrongResult(Consumer):
+            async def evaluate(self, request, view):
+                await super().evaluate(request, view)
+                return result(request, evaluation_generation=request.evaluation_generation + 1)
+        consumer = WrongResult(h.files)
+        with pytest.raises(ValueError, match="request mismatch"):
+            await h.service.materialize(h.request, consumer)
+        assert consumer.calls == 1
+        assert_closed(h, consumer)
+
+
+async def test_provider_stream_has_no_selection_transaction_and_rejects_drift(tmp_path, isolated_database_env):
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        # Tag only selection connections so pg_stat_activity can observe the
+        # actual materializer session, independently of fixture/observer traffic.
+        tag = "material-selection-" + str(new_record_id())
+        selection_engine = create_async_engine(isolated_database_env, connect_args={
+            "server_settings": {"application_name": tag},
+        })
+        h.service._sessions = async_sessionmaker(selection_engine)
+        entered, release = asyncio.Event(), asyncio.Event()
+        original = h.store.open
+        async def paused_stream(reference):
+            async for chunk in original(reference):
+                entered.set()
+                await release.wait()
+                yield chunk
+        h.store.open = paused_stream
+        consumer = Consumer(h.files)
+        operation = asyncio.create_task(h.service.materialize(h.request, consumer))
+        try:
+            await asyncio.wait_for(entered.wait(), 10)
+            assert consumer.calls == 0
+            async with h.factory() as session, session.begin():
+                rows = (await session.execute(text(
+                    "select pid, state, xact_start from pg_stat_activity where application_name=:tag"
+                ), {"tag": tag})).all()
+                assert rows and all(row.state == "idle" and row.xact_start is None for row in rows)
+                locks = await session.scalar(text(
+                    "select count(*) from pg_locks where pid in "
+                    "(select pid from pg_stat_activity where application_name=:tag) "
+                    "and locktype in ('relation', 'tuple', 'transactionid')"
+                ), {"tag": tag})
+                assert locks == 0
+                await session.execute(text("set local lock_timeout='300ms'"))
+                await session.execute(text(
+                    "update artifact_replicas set availability_state='unavailable' where id=:id"
+                ), {"id": str(h.authority.selections[0][1].replica_id)})
+            release.set()
+            with pytest.raises(PostSubmissionMaterializationUnavailable):
+                await asyncio.wait_for(operation, 10)
+            assert_closed(h, consumer)
+        finally:
+            release.set()
+            if not operation.done():
+                operation.cancel()
+            await asyncio.gather(operation, return_exceptions=True)
+            await selection_engine.dispose()
