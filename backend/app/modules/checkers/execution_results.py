@@ -10,6 +10,8 @@ from app.modules.checkers.api.post_submit import (
 
 @dataclass(frozen=True, slots=True)
 class ResultClassification:
+    """Closed routing recommendation and counts derived from the complete locked policy."""
+
     routing: str
     passed: int
     warning: int

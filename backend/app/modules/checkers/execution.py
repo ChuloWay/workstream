@@ -51,6 +51,7 @@ EXECUTION_TIMEOUT_SECONDS = 240
 
 
 def _lease(run):
+    """Recover the exact persisted lease, including its database expiry."""
     return ExecutionLease(
         reservation=reservation(run),
         lease_id=UUID(run.worker_lease_id),
@@ -60,6 +61,7 @@ def _lease(run):
 
 
 def _evidence(value, expected_type, facts):
+    """Reject a wrong-phase receipt or a digest not bound to these facts."""
     if type(value) is not expected_type or value.facts_digest != canonical_json_hash(
         facts.model_dump(mode="json")
     ):
@@ -68,12 +70,16 @@ def _evidence(value, expected_type, facts):
 
 
 class _StructuralConsumer:
+    """Run registered structural checks while ART owns the verified private view."""
+
     def __init__(self, registry, lease):
+        """Bind the installed registry and reserved attempt identities."""
         self._registry, self._lease = registry, lease
 
     async def evaluate(self, request, material):
         # ART retains the verified private view for this callback. These registered
         # rules inspect structural facts whose exact archive manifest ART verified.
+        """Validate installed definitions and convert bounded outcomes to closed results."""
         del material
         identity = dict(
             request_id=request.evaluation_request_id,
@@ -134,11 +140,13 @@ class PostSubmissionExecutor:
         registry: CheckerRegistry,
         outbox: Callable[[AsyncSession], OutboxAppendPort],
     ):
+        """Receive explicit session, authority, materialization and publication ports."""
         self._sessions = sessions
         self._execute_authority, self._finalize_authority = execute_authority, finalize_authority
         self._materialization, self._registry, self._outbox = materialization, registry, outbox
 
     async def _claim(self, request):
+        """Authorize replay or acquire the next database-timed lease atomically."""
         async with self._sessions() as session, session.begin():
             authority = self._execute_authority(session)
             await authority.preflight(request)
@@ -174,6 +182,7 @@ class PostSubmissionExecutor:
     async def evaluate_post_submission(
         self, request: PostSubmissionEvaluationRequest
     ) -> PostSubmissionEvaluationResult:
+        """Evaluate outside custody transactions, then separately authorize finalization."""
         request = PostSubmissionEvaluationRequest.model_validate(request)
         lease, replay = await self._claim(request)
         if replay is not None:

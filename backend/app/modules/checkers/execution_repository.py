@@ -22,15 +22,18 @@ from app.modules.checkers.models import CheckerResult, CheckerRun, CheckerSubmis
 
 
 def require_transaction(session: AsyncSession) -> None:
+    """Require an existing outer transaction so custody follows caller rollback."""
     if not session.in_transaction() or session.in_nested_transaction():
         raise CheckerExecutionUnavailable("checker_caller_transaction_required")
 
 
 def request_text(request: PostSubmissionEvaluationRequest) -> str:
+    """Serialize canonical request facts without the separately stored digest."""
     return canonical_post_submit_bytes(request, exclude={"request_sha256"}).decode("utf-8")
 
 
 def reservation(run: CheckerRun) -> EvaluationReservation:
+    """Project durable identities without granting execution authority."""
     return EvaluationReservation(
         request_id=UUID(run.evaluation_request_id),
         request_digest=run.request_digest,
@@ -41,12 +44,14 @@ def reservation(run: CheckerRun) -> EvaluationReservation:
 
 
 def stored_request(run: CheckerRun) -> PostSubmissionEvaluationRequest:
+    """Reconstitute and validate the stored request with its digest."""
     body = json.loads(run.request_json)
     body["request_sha256"] = run.request_digest
     return PostSubmissionEvaluationRequest.model_validate_json(json.dumps(body))
 
 
 def stored_result(run: CheckerRun) -> PostSubmissionEvaluationResult:
+    """Validate retained results against their stored request and run identities."""
     if run.result_json is None or run.result_digest is None:
         raise CheckerExecutionUnavailable("checker_result_unavailable")
     body = json.loads(run.result_json)
@@ -59,7 +64,10 @@ def stored_result(run: CheckerRun) -> PostSubmissionEvaluationResult:
 
 
 class ExecutionRepository:
+    """Read and write CHECKERS custody without owning transaction commits."""
+
     def __init__(self, session: AsyncSession):
+        """Bind repository operations to the supplied transaction session."""
         self.session = session
 
     async def lock_current(self, request: PostSubmissionEvaluationRequest) -> CheckerRun:
@@ -109,11 +117,13 @@ class ExecutionRepository:
         return run
 
     async def now(self) -> datetime:
+        """Use PostgreSQL wall time for lease decisions."""
         return await self.session.scalar(select(func.clock_timestamp()))
 
     async def require_lease(
         self, request: PostSubmissionEvaluationRequest, lease: ExecutionLease
     ) -> CheckerRun:
+        """Lock current custody and reject stale, expired or substituted leases."""
         run = await self.lock_current(request)
         if (
             run.status != "running"
@@ -127,6 +137,7 @@ class ExecutionRepository:
         return run
 
     async def write_members(self, run: CheckerRun, result: PostSubmissionEvaluationResult) -> None:
+        """Flush ordered closed results under the locked running parent."""
         for order, member in enumerate(result.member_results):
             self.session.add(
                 CheckerResult(

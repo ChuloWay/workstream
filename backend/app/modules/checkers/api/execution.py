@@ -30,6 +30,8 @@ class CheckerRequestConflict(CheckerExecutionUnavailable):
 
 
 class EvaluationReservation(PostSubmitValue):
+    """Stable request, attempt and result identities reserved together."""
+
     request_id: ResourceId
     request_digest: Sha256
     attempt_id: ResourceId
@@ -38,6 +40,8 @@ class EvaluationReservation(PostSubmitValue):
 
 
 class ExecutionLease(PostSubmitValue):
+    """Database-timed generation granting temporary use of one reserved attempt."""
+
     reservation: EvaluationReservation
     lease_id: ResourceId
     lease_generation: VersionNumber
@@ -45,11 +49,15 @@ class ExecutionLease(PostSubmitValue):
 
 
 class ExecuteFacts(PostSubmitValue):
+    """Exact request and lease consumed by execution authority."""
+
     request: PostSubmissionEvaluationRequest
     lease: ExecutionLease
 
 
 class VerifiedMaterialFacts(PostSubmitValue):
+    """ART-verified byte and lineage facts required for completed results."""
+
     submission_id: ResourceId
     submission_version: VersionNumber
     admission_id: ResourceId
@@ -62,6 +70,8 @@ class VerifiedMaterialFacts(PostSubmitValue):
 
 
 class FinalizeFacts(ExecuteFacts):
+    """Exact terminal result and material custody consumed by finalization authority."""
+
     result: PostSubmissionEvaluationResult
     material: VerifiedMaterialFacts | None
     output_binding_ids: tuple[ResourceId, ...] = Field(max_length=0)
@@ -82,27 +92,49 @@ class FinalizeEvidence(PostSubmitValue):
 
 
 class PreparedExecution(ABC):
+    """Single-operation prepared authority for execution facts."""
+
     @abstractmethod
-    async def consume(self, facts: ExecuteFacts) -> ExecuteEvidence: ...
+    async def consume(self, facts: ExecuteFacts) -> ExecuteEvidence:
+        """Consume execution facts and return their action-specific receipt."""
+        ...
 
 
 class PreparedFinalization(ABC):
+    """Separately prepared authority for terminal result publication."""
+
     @abstractmethod
-    async def consume(self, facts: FinalizeFacts) -> FinalizeEvidence: ...
+    async def consume(self, facts: FinalizeFacts) -> FinalizeEvidence:
+        """Consume finalization facts and return their distinct receipt."""
+        ...
 
 
 class ExecutionAuthorityPort(Protocol):
-    async def preflight(self, request: PostSubmissionEvaluationRequest) -> None: ...
+    """Provide fresh authorization before acquiring an execution lease."""
+
+    async def preflight(self, request: PostSubmissionEvaluationRequest) -> None:
+        """Reject unavailable execution authority before entering preparation."""
+        ...
+
     def prepare_execution(
         self, request: PostSubmissionEvaluationRequest
-    ) -> AbstractAsyncContextManager[PreparedExecution]: ...
+    ) -> AbstractAsyncContextManager[PreparedExecution]:
+        """Hold execution preparation within the caller transaction."""
+        ...
 
 
 class FinalizationAuthorityPort(Protocol):
-    async def preflight(self, request: PostSubmissionEvaluationRequest) -> None: ...
+    """Provide fresh authorization for atomic terminal publication."""
+
+    async def preflight(self, request: PostSubmissionEvaluationRequest) -> None:
+        """Reject unavailable finalization authority before preparation."""
+        ...
+
     def prepare_finalization(
         self, request: PostSubmissionEvaluationRequest
-    ) -> AbstractAsyncContextManager[PreparedFinalization]: ...
+    ) -> AbstractAsyncContextManager[PreparedFinalization]:
+        """Hold finalization preparation within the terminal transaction."""
+        ...
 
 
 class CompletedEvaluation(PostSubmitValue):
@@ -114,12 +146,19 @@ class CompletedEvaluation(PostSubmitValue):
 
 
 class EvaluationCoordinationPort(Protocol):
+    """Reserve and read exact current evaluations in caller transactions."""
+
     async def reserve_current_evaluation(
         self, request: PostSubmissionEvaluationRequest
-    ) -> EvaluationReservation: ...
+    ) -> EvaluationReservation:
+        """Reserve or replay the exact request without committing the caller transaction."""
+        ...
+
     async def read_current_result(
         self, request: PostSubmissionEvaluationRequest
-    ) -> CompletedEvaluation: ...
+    ) -> CompletedEvaluation:
+        """Lock and return the completed evaluation for the exact current request."""
+        ...
 
 
 class EvaluationCompletion(PostSubmitValue):

@@ -34,12 +34,16 @@ from app.modules.checkers.models import CheckerRun, CheckerSubmissionFence
 
 
 class EvaluationCoordinator:
+    """Own exact request reservation and current-result reads in caller transactions."""
+
     def __init__(self, session: AsyncSession):
+        """Use the supplied session without taking ownership of its commit."""
         self._session = session
 
     async def reserve_current_evaluation(
         self, request: PostSubmissionEvaluationRequest
     ) -> EvaluationReservation:
+        """Serialize initial creation, exact replay and the next current generation."""
         request = PostSubmissionEvaluationRequest.model_validate(request)
         require_transaction(self._session)
         # Serialize initial creation without taking a foreign TASK row lock. Every
@@ -130,6 +134,7 @@ class EvaluationCoordinator:
     async def read_current_result(
         self, request: PostSubmissionEvaluationRequest
     ) -> CompletedEvaluation:
+        """Return only a locked completed result matching the entire current request."""
         request = PostSubmissionEvaluationRequest.model_validate(request)
         run = await ExecutionRepository(self._session).lock_current(request)
         if run.status != "completed":
@@ -151,9 +156,11 @@ class CheckerOutputReservations:
     """Current structural handlers have exactly zero output slots."""
 
     def __init__(self, session: AsyncSession):
+        """Resolve output custody within the supplied CHECKERS session."""
         self._session = session
 
     async def resolve(self, selector: CheckerOutputSelector) -> CheckerOutputReservation:
+        """Require exact current lease custody and return the supported zero-output contract."""
         from app.modules.checkers.api.execution import CheckerExecutionUnavailable
 
         try:

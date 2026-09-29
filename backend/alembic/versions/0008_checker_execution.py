@@ -119,8 +119,9 @@ def upgrade():
     _review_currentness_guards()
 
 
-def downgrade():
-    raise RuntimeError("checker custody downgrade requires an explicit preservation design")
+def downgrade() -> None:
+    """Refuse downgrade without deleting or rewriting retained custody."""
+    raise RuntimeError("Workstream v0.1 migrations cannot be downgraded; recreate the database")
 
 
 def _guards():
