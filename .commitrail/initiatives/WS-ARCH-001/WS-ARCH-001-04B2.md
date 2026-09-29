@@ -100,7 +100,8 @@ claim the current structural catalogue supports them.
 
 ### Allowed
 
-- `backend/app/interfaces/artifact_operations.py` output requests/results and ports.
+- `backend/app/interfaces/artifact_operations.py` only to remove the superseded
+  output requests/results and ports.
 - `backend/app/modules/artifacts/checker_outputs.py`,
   `backend/app/modules/artifacts/checker_output_custody.py` and
   `backend/app/modules/artifacts/checker_output_bindings.py` (new ART owners).
@@ -109,8 +110,13 @@ claim the current structural catalogue supports them.
   `repository.py` only for affected output custody and traced lookup consumers.
   The separate Operator resource-to-project CHECKERS lookup remains explicitly
   outside this mutation boundary; it is not a second output admission path.
-- `backend/app/modules/checkers/api/output_custody.py` (new closed owner facts),
-  `backend/app/modules/checkers/api/__init__.py`; composition in existing
+- `backend/app/modules/checkers/api/output_custody.py` for closed owner facts,
+  output requests/results and consumer ports, and
+  `backend/app/modules/checkers/api/materialization.py` for the relocated input
+  materialization contract.
+  Remove `backend/app/modules/artifacts/api/submission_materialization.py` and its
+  exports from `backend/app/modules/artifacts/api/__init__.py`; update affected
+  callers without compatibility aliases. Composition in existing
   `backend/app/adapters/artifacts/__init__.py`, `backend/app/adapters/checkers/`.
 - One ART-owned migration `backend/alembic/versions/0007_checker_output_custody.py` after `0006_history_read_authority` for immutable exact
   output intent/binding custody; no CHECKERS run writer or retained-data deletion.
