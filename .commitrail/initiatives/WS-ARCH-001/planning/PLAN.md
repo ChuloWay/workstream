@@ -174,6 +174,10 @@ owning implementation, not with planning prose or fake database claims.
 
 ### Named proof targets for the remaining design
 
+ARCH-04B input proof is delivered in `test_post_submit_materialization.py` and
+`test_post_submit_selection.py`, including deny-before-I/O composition. Output
+custody and durable/live execution proof remain with ARCH-04B2/04C/04D below.
+
 These are required future implementation tests, not tests claimed present or
 executed by this planning PR. Each owner's bounded record fixes the final
 module path alongside implementation; the symbols preserve the behavioral
@@ -189,7 +193,7 @@ claims require their real custody, not unit substitutes.
 | ARCH-04A/POL-07 | `test_registered_evaluator_rejects_invalid_work`, `test_checker_facade_delegates_once` | Actual registered evaluator fixtures and typed composition; presence-only mutant must fail |
 | CP06/CP07/AUTH-12H | `test_activate_without_legacy_payment_or_task`, `test_activation_requires_exact_selected_policy`, `test_activation_rejects_missing_review_revision_config` | PostgreSQL atomic command plus full response serialization; foreign/retired/incomplete new binding denies |
 | CP08/ARCH-03A/03B/03C | `test_ready_preserves_screening_policy_lock`, `test_claim_copies_policy_without_current_lookup` | PostgreSQL and actual AUTH/owner composition; later publication leaves existing attempt unchanged |
-| ARCH-04B/04C/04D | `test_exact_post_materialization_denies_before_io`, `test_late_revocation_cannot_publish_result`, `test_unfinished_checker_recovery_reuses_attempt`, `test_terminal_retry_requires_operator_and_new_attempt` | Local/MinIO, real worker/provider contract, PostgreSQL races; independent sessions and staged/final state |
+| ARCH-04B2/04C/04D | `test_late_revocation_cannot_publish_result`, `test_unfinished_checker_recovery_reuses_attempt`, `test_terminal_retry_requires_operator_and_new_attempt` | Local/MinIO, real worker/provider contract, PostgreSQL races; independent sessions and staged/final state |
 | ARCH-04E | `test_submission_to_current_allow_review`, `test_superseded_run_cannot_route`, `test_duplicate_dispatch_has_one_manifest`; false tests in the shared acceptance contract | Real DB/worker/storage path, exact authority-event references; true creates no acceptance, false creates the shared atomic acceptance with no human Review |
 
 Owner-local schema names and migrations are chosen from the then-current

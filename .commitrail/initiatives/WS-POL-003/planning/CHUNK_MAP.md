@@ -53,7 +53,8 @@ mixed-generation chains deny through the existing locked-lineage checks.
 ## Post-submit execution gate
 
 ARCH-04A contracts/capability conformance precede POL-07 and guide activation.
-ART post-submit materialization and durable CHECKER execution follow only through
-ARCH-04B/04C after POL-07 and task readiness merge.
+ARCH-04B delivers hidden exact ART post-submit input with deny-only production
+authority. ARCH-04B2 output custody is next, followed by ARCH-04C durable CHECKER
+execution/results.
 WS-ARCH-001-04D is the later replacement activation gate. Historical
 XINT-06B and AUTH-14 contracts are superseded/non-executable.

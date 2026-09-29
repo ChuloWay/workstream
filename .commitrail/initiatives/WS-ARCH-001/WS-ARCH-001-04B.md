@@ -111,7 +111,9 @@ Submission stamps; no run-generation state is invented before 04C/04D.
 - This contract, current ARCH/AUTH/POL overviews/plans/maps, ART/CON overviews, `.commitrail/INDEX.md`,
   `docs/roadmap_status.md`, `docs/spec_artifact_storage_service.md`,
   `docs/architecture_checker_framework.md`, `docs/architecture_data_model.md`,
-  `docs/operations_project_operating_manual.md`,
+  `docs/operations_project_operating_manual.md`, `docs/spec_authorization_service.md`,
+  `planning/chunks/WS-ARCH-001-03B-task-assignment-api.md`,
+  `../WS-POL-003/planning/chunks/WS-POL-003-07-single-checker-service-port.md`,
   `.commitrail/initiatives/WS-AUTH-003/OVERVIEW.md`, `README.md` and applicable ART specs
   only for this boundary and navigation identifying 04B2 as next; no 04B2 design
   or implementation changes.

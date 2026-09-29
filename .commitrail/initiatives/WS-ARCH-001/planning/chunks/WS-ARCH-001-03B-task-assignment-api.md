@@ -7,7 +7,8 @@ projections and assignment recovery through owner ports. Its implementation
 children are complete; it is not a skeleton or an instruction to restart work.
 The subsequent ARCH-03C children delivered exact authority and public TASK
 exposure through 03C7. AUTH-18 delivers public manager guide activation/context;
-hidden approved-guide intake is delivered by ARCH-03D; exact post-submit materialization is the next boundary in the
+hidden approved-guide intake is delivered by ARCH-03D. ARCH-04B hidden exact
+post-submit input is delivered; ARCH-04B2 output custody is next in the
 [current dependency contract](../PLAN.md#current-dependency-contract).
 
 ## Delivered boundaries
