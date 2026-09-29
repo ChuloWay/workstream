@@ -44,11 +44,11 @@ checker-remediation boundary before public Submission cutover.
 | [ARCH-03C4](../WS-ARCH-001-03C4.md) | ARCH-03C3 | Complete: exact-authorized contributor, manager and operational public queues |
 | [ARCH-03C5](../WS-ARCH-001-03C5.md) | ARCH-03C4 | Complete: exact-authorized Contributor/Manager detail and requirements |
 | [ARCH-03C6](../WS-ARCH-001-03C6.md) | ARCH-03C5 | Complete: distinct exact-authorized locked-context reads |
-| [ARCH-03C7](../WS-ARCH-001-03C7.md) | ARCH-03C6 and hidden TASK owner contracts | Complete: bounded Audit Authority history access; public guide activation is delivered by AUTH-18; ARCH-03D hidden intake delivered; exact post-submit materialization next |
-| [CP05A](../WS-ARCH-001-CP05A.md) | CP05, existing policy owners | Complete: public Finance policy administration and selector recovery; AUTH-18 public manager activation/context delivered; ARCH-03D hidden intake delivered; exact post-submit materialization next |
+| [ARCH-03C7](../WS-ARCH-001-03C7.md) | ARCH-03C6 and hidden TASK owner contracts | Complete: bounded Audit Authority history access; public guide activation is delivered by AUTH-18; ARCH-03D hidden intake delivered; hidden exact post-submit materialization delivered; ARCH-04B2 output custody next |
+| [CP05A](../WS-ARCH-001-CP05A.md) | CP05, existing policy owners | Complete: public Finance policy administration and selector recovery; AUTH-18 public manager activation/context delivered; ARCH-03D hidden intake delivered; hidden exact post-submit materialization delivered; ARCH-04B2 output custody next |
 | CP09 (later cleanup coordination) | All legacy consumers replaced, including CHECKER and public 02I path | Physical economic deletion; not on the allow_review critical path |
 | [ARCH-03D](../WS-ARCH-001-03D.md) | AUTH-18, ARCH-03A, CP08 and merged ART preparation | Complete: hidden durable intake uses exact historical TASK/PROJECTS ports; public cutover remains ARCH-02I |
-| ARCH-04B | ARCH-04A, POL-07, ARCH-03C, merged ARCH-02H | ART exact stored Submission materialization |
+| ARCH-04B | ARCH-04A, POL-07, ARCH-03C, merged ARCH-02H | Complete: ART hidden verified Submission input; live authority remains deferred |
 | ARCH-04B2 | ARCH-04A and merged ART admission/verification/binding foundations | ART bounded checker output/log ingestion and verified binding, no routing |
 | ARCH-04C | ARCH-04A, ARCH-04B, ARCH-04B2, POL-07 | CHECKERS durable execution/result/currentness and worker recovery |
 | ARCH-04D | ARCH-04B, ARCH-04C | AUTH post-submit materialization/result activation |
@@ -82,7 +82,7 @@ ARCH-03C1 completes exact reconciler authority and decision-bound receipts.
 ARCH-03C2 supplies originating-transaction-only per-assignment producer events
 and first handler registration with enforced prefork topology; it must never
 backfill or dispatch retained invalidation rows. Public TASK activation is complete through ARCH-03C7. AUTH-18 delivers public
-manager guide activation/context; ARCH-03D hidden intake is delivered; exact post-submit materialization is next. Subsequent
+manager guide activation/context; ARCH-03D hidden intake is delivered; hidden exact post-submit materialization is delivered; ARCH-04B2 output custody is next. Subsequent
 PR-sized contracts name exact files, public types, current migration head and
 runnable proof before implementation; they refine this design, not create a
 new permission requirement.
@@ -174,6 +174,10 @@ owning implementation, not with planning prose or fake database claims.
 
 ### Named proof targets for the remaining design
 
+ARCH-04B input proof is delivered in `test_post_submit_materialization.py` and
+`test_post_submit_selection.py`, including deny-before-I/O composition. Output
+custody and durable/live execution proof remain with ARCH-04B2/04C/04D below.
+
 These are required future implementation tests, not tests claimed present or
 executed by this planning PR. Each owner's bounded record fixes the final
 module path alongside implementation; the symbols preserve the behavioral
@@ -189,7 +193,7 @@ claims require their real custody, not unit substitutes.
 | ARCH-04A/POL-07 | `test_registered_evaluator_rejects_invalid_work`, `test_checker_facade_delegates_once` | Actual registered evaluator fixtures and typed composition; presence-only mutant must fail |
 | CP06/CP07/AUTH-12H | `test_activate_without_legacy_payment_or_task`, `test_activation_requires_exact_selected_policy`, `test_activation_rejects_missing_review_revision_config` | PostgreSQL atomic command plus full response serialization; foreign/retired/incomplete new binding denies |
 | CP08/ARCH-03A/03B/03C | `test_ready_preserves_screening_policy_lock`, `test_claim_copies_policy_without_current_lookup` | PostgreSQL and actual AUTH/owner composition; later publication leaves existing attempt unchanged |
-| ARCH-04B/04C/04D | `test_exact_post_materialization_denies_before_io`, `test_late_revocation_cannot_publish_result`, `test_unfinished_checker_recovery_reuses_attempt`, `test_terminal_retry_requires_operator_and_new_attempt` | Local/MinIO, real worker/provider contract, PostgreSQL races; independent sessions and staged/final state |
+| ARCH-04B2/04C/04D | `test_late_revocation_cannot_publish_result`, `test_unfinished_checker_recovery_reuses_attempt`, `test_terminal_retry_requires_operator_and_new_attempt` | Local/MinIO, real worker/provider contract, PostgreSQL races; independent sessions and staged/final state |
 | ARCH-04E | `test_submission_to_current_allow_review`, `test_superseded_run_cannot_route`, `test_duplicate_dispatch_has_one_manifest`; false tests in the shared acceptance contract | Real DB/worker/storage path, exact authority-event references; true creates no acceptance, false creates the shared atomic acceptance with no human Review |
 
 Owner-local schema names and migrations are chosen from the then-current

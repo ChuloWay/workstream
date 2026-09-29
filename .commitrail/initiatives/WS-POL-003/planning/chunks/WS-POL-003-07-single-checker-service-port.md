@@ -26,8 +26,9 @@ the earlier overbroad execution claims in this planning chunk.
   contract. Production explicitly remains unavailable. Exact request, policy,
   catalogue, generation and member correspondence is value-consistency proof,
   not authority, durable ownership, attempt recovery or currentness proof.
-- ARCH-04B/04C/04D/04E retain post materialization, persistence, authorization,
-  event invocation and routing. Their eventual event handler invokes the facade;
+- ARCH-04B delivers hidden post-submit input with deny-only production authority.
+  ARCH-04B2 output custody, ARCH-04C persistence, ARCH-04D authority and ARCH-04E
+  event invocation/routing remain separate. Their eventual event handler invokes the facade;
   its injected executor must not call the facade recursively. Existing post
   callers remain until that cutover, not as a second implementation of this port.
 - Remove the standalone draft JSON precheck, its exclusive code, schemas and

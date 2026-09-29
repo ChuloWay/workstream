@@ -317,8 +317,9 @@ replace the Task and Assignment guards together.
 Submission's three ART references remain all-null during transaction staging or
 all-present. The production creation command consumes the exact ART admission and
 fills all three before its root transaction commits. This is separate from the
-required initial assignment identity. Canonical ART-to-CHECKERS materialization
-remains ARCH-04B/04C work. Retained payment columns on Submission and CheckerRun
+required initial assignment identity. Hidden exact ART-to-CHECKERS input materialization is delivered by ARCH-04B.
+Output custody (ARCH-04B2) and durable execution/results (ARCH-04C) remain pending;
+production access remains deny-only until ARCH-04D. Retained payment columns on Submission and CheckerRun
 are nullable, so new unified-guide work requires no invented economic configuration.
 CP09 owns physical economic-schema removal after its remaining consumers change.
 
@@ -1646,11 +1647,11 @@ Fields:
 - `locked_revision_policy_id`
 - `locked_revision_policy_generation`
 - `locked_revision_policy_hash`
-- `artifact_binding_id` (target after ARCH-04B/04C custody)
-- `submission_bundle_manifest_id` (target after ARCH-04B/04C custody)
-- `package_hash` (legacy; replacement custody in ARCH-04B/04C)
-- `artifact_hash_manifest` (legacy; replacement custody in ARCH-04B/04C)
-- `artifact_manifest_hash` (legacy; replacement custody in ARCH-04B/04C)
+- `artifact_binding_id` (target after ARCH-04B2/04C custody)
+- `submission_bundle_manifest_id` (target after ARCH-04B2/04C custody)
+- `package_hash` (legacy; replacement custody in ARCH-04B2/04C)
+- `artifact_hash_manifest` (legacy; replacement custody in ARCH-04B2/04C)
+- `artifact_manifest_hash` (legacy; replacement custody in ARCH-04B2/04C)
 - `summary`
 
 Status:

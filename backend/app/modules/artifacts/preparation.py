@@ -1679,7 +1679,7 @@ class ArtifactPreparationService:
         reserved_bytes: int,
         maximum_entries: int,
     ) -> _InspectionResult:
-        """Serve only the authority-gated hidden submission materializer."""
+        """Serve authority-gated pre- and post-submit materializers through one scratch lifetime."""
         if type(prepared) is not PreparedArtifact or prepared._owner is not self:
             raise ArtifactScratchIntegrityError("prepared artifact source is unavailable")
         binding = prepared._binding

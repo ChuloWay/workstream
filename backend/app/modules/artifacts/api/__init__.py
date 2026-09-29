@@ -31,3 +31,15 @@ __all__ = (
     "SubmissionAdmissionConsumptionResult",
     "SubmissionAdmissionConsumptionStatus",
 )
+
+from app.modules.artifacts.api.submission_materialization import (
+    PostSubmissionMaterialConsumer, PostSubmissionMaterializationPort,
+    PostSubmissionMaterializationResult, PostSubmissionMaterializationUnavailable,
+    SubmissionMaterialEntry, SubmissionMaterialView,
+)
+
+__all__ += (
+    "PostSubmissionMaterialConsumer", "PostSubmissionMaterializationPort",
+    "PostSubmissionMaterializationResult", "PostSubmissionMaterializationUnavailable",
+    "SubmissionMaterialEntry", "SubmissionMaterialView",
+)

@@ -25,7 +25,7 @@ AUTH-13/14 cutovers are not additional implementation work.
   public TASK activation is complete through ARCH-03C7.
 - [AUTH-18](../WS-AUTH-001-18.md) delivers public manager activation and exact
   selection discovery over CP07/AUTH-12H. ARCH-03D completes hidden approved-guide
-  intake; ARCH-04B exact post-submit materialization is next.
+  intake; ARCH-04B hidden exact post-submit materialization is delivered; ARCH-04B2 output custody is next.
 - CP05 owns exact ContributionPolicy-action activation after merged CP04B.
 - CP08 delivered the minimal lineage writers. ARCH-03B8 hidden task audit
   evidence and 03B9 hidden assignment invalidation are complete. ARCH-03C delivered
@@ -52,8 +52,8 @@ context and reasoned system-Operator start, and removes self-activated eligibili
 and public JSON-packet Submission creation. Admission-backed creation stays hidden.
 ARCH-03B/03C reuse these exact actions and command owners; public TASK access
 and authority are delivered through 03C7, with invalidation wiring in 03C2.
-CP08 delivered ContributionPolicyVersion lineage. ARCH-03D completes hidden approved-guide intake. ARCH-04B exact post-submit
-materialization is next; public intake remains deferred to ARCH-02I. Do not restore eligibility
+CP08 delivered ContributionPolicyVersion lineage. ARCH-03D completes hidden approved-guide intake. ARCH-04B hidden exact post-submit
+input is delivered; ARCH-04B2 output custody is next; public intake remains deferred to ARCH-02I. Do not restore eligibility
 or register replacement aliases.
 
 ## WS-AUTH-001-OUTBOX-01 — unavailable dispatcher contract

@@ -103,7 +103,9 @@ async def _verified_admission(factory, store, namespace, settings, context, requ
             == "verified"
         )
     async with factory() as session:
-        admission = (await session.scalars(select(SubmissionBundleAdmission))).one()
+        admission = (await session.scalars(select(SubmissionBundleAdmission).where(
+            SubmissionBundleAdmission.put_attempt_id == str(result.put_attempt_id),
+        ))).one()
         assert admission.status == "ready"
         admission_id = UUID(admission.id)
     return admission_id
