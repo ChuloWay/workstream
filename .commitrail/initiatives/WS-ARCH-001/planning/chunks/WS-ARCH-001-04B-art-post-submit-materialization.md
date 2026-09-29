@@ -46,7 +46,10 @@ bodies. No TASK mutation or current-guide rebasing is introduced.
    closed PostSubmissionEvaluationResult, validated against its request. ART returns
    that value together with typed material custody facts after cleanup. No raw path,
    provider handle, credential or live tree survives the callback. Cancellation
-   drains processing before releasing the existing scratch reservations.
+   drains processing before releasing the existing scratch reservations. Abort cancels
+   and drains the in-flight consumer; abort during projection prevents consumer
+   entry. Close/revoke the shared projection off-loop in a cancellation-resistant
+   finally. Prove pre/post parity through this one primitive.
 6. Re-read and compare the same persisted selection after I/O before returning.
    A changed Submission/replica rejects the result. No transaction or PREP survives
    provider I/O. This is materialization freshness, not final execution/result
@@ -97,14 +100,15 @@ Submission stamps; no run-generation state is invented before 04C/04D.
   `backend/tests/test_post_submit_selection.py`,
   `backend/tests/post_submit_materialization_helpers.py`; existing
   `backend/tests/test_artifact_architecture.py`,
-  `backend/tests/test_checker_materialization.py` and
+  `backend/tests/test_checker_materialization.py`, `backend/tests/test_submission_archive.py` and
   `backend/tests/architecture/test_module_boundaries.py` for affected proof.
 - Existing lane catalogue and ownership/structure ledgers and their tests only
   to register affected paths and preserve existing proof, never weaken gates.
 - This contract, current ARCH/AUTH/POL overviews/plans/maps, `.commitrail/INDEX.md`,
   `docs/roadmap_status.md`, `docs/spec_artifact_storage_service.md`,
   `docs/architecture_checker_framework.md`, `README.md` and applicable ART specs
-  only for this boundary and the next output-custody step.
+  only for this boundary and navigation identifying 04B2 as next; no 04B2 design
+  or implementation changes.
 
 Prohibited: new routes, TASK writes, policy/compiler changes, checker run/result
 writes, REV packet access, generic downloads, worker activation, output ingestion,
@@ -147,7 +151,9 @@ Concrete commands (from `backend/`, with the existing local test services/env):
 ```
 
 From repository root run `python3 scripts/check_markdown_links.py`,
-`python3 scripts/check_commitrail_records.py`, and `git diff --check`.
+`python3 scripts/check_commitrail_records.py`,
+`python3 scripts/check_stale_artifact_contracts.py`,
+`python3 scripts/check_stale_workstream_wording.py`, and `git diff --check`.
 Use a unique metadata path per isolated rerun. New test paths above are planned.
 
 Run focused tests with `backend/scripts/run_isolated_tests.py` against migrated
