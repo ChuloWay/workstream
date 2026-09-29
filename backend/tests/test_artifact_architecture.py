@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from importlib.util import resolve_name
 from pathlib import Path
 
 import pytest
@@ -619,9 +620,11 @@ def test_checker_custody_ports_have_exact_owner_and_art_consumers() -> None:
     for path in _python_files(APP_ROOT):
         modules: set[str] = set()
         for node in ast.walk(_tree(path)):
-            if isinstance(node, ast.ImportFrom) and node.module:
-                modules.add(node.module)
-                modules.update(f"{node.module}.{alias.name}" for alias in node.names)
+            if isinstance(node, ast.ImportFrom):
+                package = ".".join(path.parent.relative_to(BACKEND_ROOT).parts)
+                module = resolve_name("." * node.level + (node.module or ""), package)
+                modules.add(module)
+                modules.update(f"{module}.{alias.name}" for alias in node.names)
             elif isinstance(node, ast.Import):
                 modules.update(alias.name for alias in node.names)
         for module in modules & expected.keys():
@@ -647,7 +650,7 @@ def test_checker_custody_ports_have_exact_owner_and_art_consumers() -> None:
 
 
 @pytest.mark.parametrize("port", ["output_custody", "materialization"])
-@pytest.mark.parametrize("form", ["symbol", "module", "parent"])
+@pytest.mark.parametrize("form", ["symbol", "module", "parent", "relative", "relative_parent"])
 def test_checker_custody_inventory_rejects_unregistered_import(monkeypatch, port, form):
     """Alternate import spelling must not conceal an additional API consumer."""
     import sys
@@ -656,6 +659,8 @@ def test_checker_custody_inventory_rejects_unregistered_import(monkeypatch, port
         "symbol": f"from app.modules.checkers.api.{port} import AnyContract",
         "module": f"import app.modules.checkers.api.{port} as custody",
         "parent": f"from app.modules.checkers.api import {port} as custody",
+        "relative": f"from .modules.checkers.api.{port} import AnyContract",
+        "relative_parent": f"from .modules.checkers.api import {port} as custody",
     }[form]
     original = _tree
 
