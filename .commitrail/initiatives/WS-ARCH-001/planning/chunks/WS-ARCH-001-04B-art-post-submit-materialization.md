@@ -38,9 +38,11 @@ bodies. No TASK mutation or current-guide rebasing is introduced.
 4. End the transaction before I/O. Stream through the provider-neutral ArtifactStore
    into ArtifactPreparationService. Recompute complete digest/size, inspect the ZIP
    with SubmissionArchiveInspector and compare the rebuilt semantic-manifest hash.
-5. Reuse `_process_prepared_submission` and `project_and_run` to supply a synchronous
+5. Reuse `_process_prepared_submission` and `project_and_run` to supply an asynchronous
    consumer with a typed read-only entry/bounded-file view. The public call remains
-   async; blocking projection runs off-loop. The consumer returns only the existing
+   async; blocking projection runs off-loop. The existing synchronous pre-submit
+   wrapper and the async post-submit consumer share one projection context manager;
+   no second extraction implementation is introduced. The consumer returns only the existing
    closed PostSubmissionEvaluationResult, validated against its request. ART returns
    that value together with typed material custody facts after cleanup. No raw path,
    provider handle, credential or live tree survives the callback. Cancellation
@@ -52,13 +54,40 @@ bodies. No TASK mutation or current-guide rebasing is introduced.
    Full structural packet construction remains 04C; ART validates only the byte
    and locked-context facts owned by its materialization boundary.
 
+### Exact selection predicates
+
+TASK returns project/task/assignment/Submission ID and version, contributor ID,
+predecessor ID, status, contribution-policy version, admission/binding/content IDs,
+and guide/source/effective/pre/post/review/revision identities, versions/generations
+and hashes. Require Submission status `submitted`, exact project/task/assignment
+and Submission/version, and exact binding/content. Compare the full stamped context
+with request.expected_context and request.structural_input.observed_context. Other
+structural text remains outside this port's authority.
+
+ART requires the stored admission to be consumed by that exact Submission/version,
+with matching project/task/assignment/contributor/content and predecessor. Require
+binding project/resource_type= submission/resource_id/logical_role=
+submission_bundle_original/scope_version=1/content to match exactly. Require content
+ZIP media type, digest and size to match the admission and request. The admitted
+replica must match content, active namespace and canonical content-derived provider
+reference, with verified/available/valid states. Its receipt must be verified with
+matching digest/size and a verification job for that replica. Rebuild the exact
+semantic manifest from bytes and compare its hash to admission; require the request's
+file manifest paths/hashes/sizes and package hash to match server-owned byte facts.
+
+Post-I/O selection compares the complete detached TASK facts plus ART admission,
+binding/content/replica/receipt IDs, archive and manifest commitments, replica
+states and namespace/provider identity. No current-guide lookup substitutes for
+Submission stamps; no run-generation state is invented before 04C/04D.
+
 ## Allowed files
 
 - `backend/app/modules/artifacts/api/submission_materialization.py` (new) and
   `backend/app/modules/artifacts/api/__init__.py`.
 - `backend/app/modules/artifacts/post_submit_materialization.py` and
   `backend/app/modules/artifacts/post_submit_selection.py` (new owner files).
-- `backend/app/modules/artifacts/preparation.py` (shared processor wording only).
+- `backend/app/modules/artifacts/preparation.py` (shared processor wording only) and
+  `backend/app/modules/artifacts/submission_archive.py` (one shared projection lifetime).
 - `backend/app/modules/tasks/api/submitted_bundle.py` and
   `backend/app/modules/tasks/submitted_bundle.py` (new read port and owner).
 - `backend/app/modules/tasks/api/__init__.py`,
@@ -101,6 +130,25 @@ private cross-owner imports, alternate scratch or provider implementations.
   live authorization or durable admission proof.
 - Remove the dead interface and update every traced caller/spec/test together.
   Preserve pre-submit behavior and separate production execution unavailability.
+
+The full migrated fixture is the existing
+`tests/tasks/test_submission_lineage.py::test_real_zip_admission_and_hidden_creation_copy_exact_assignment`
+flow and `tests/tasks/submission_lineage_support.py::_verified_admission`:
+real preparation, provider put, independent verifier publication, hidden Submission
+creation and admission consumption. Reuse its helpers; do not use the reduced
+`test_artifact_bindings_db.py` schema as full-lineage proof.
+
+Concrete commands (from `backend/`, with the existing local test services/env):
+
+```sh
+.venv/bin/python scripts/run_isolated_tests.py --metadata-json /tmp/arch04b-focused.json --timeout-seconds 900 -- .venv/bin/python -m pytest tests/test_post_submit_materialization.py tests/test_post_submit_selection.py tests/test_checker_materialization.py tests/tasks/test_submission_lineage.py -q
+.venv/bin/python -m pytest tests/test_artifact_architecture.py tests/architecture/test_module_boundaries.py tests/test_ci_lane_catalogue.py -q
+.venv/bin/ruff check app/modules/artifacts app/modules/tasks/api app/modules/tasks/submitted_bundle.py app/adapters/artifacts app/adapters/tasks tests/test_post_submit_materialization.py tests/test_post_submit_selection.py tests/post_submit_materialization_helpers.py
+```
+
+From repository root run `python3 scripts/check_markdown_links.py`,
+`python3 scripts/check_commitrail_records.py`, and `git diff --check`.
+Use a unique metadata path per isolated rerun. New test paths above are planned.
 
 Run focused tests with `backend/scripts/run_isolated_tests.py` against migrated
 PostgreSQL and existing MinIO; new named files above are planned tests. Run Ruff,
