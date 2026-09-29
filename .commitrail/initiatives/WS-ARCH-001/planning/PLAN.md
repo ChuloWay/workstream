@@ -125,9 +125,10 @@ ingestion, generic quota admission attributed to the fixed service, independent
 reread verification and exact checker-output binding. Production CHECKERS
 reservation/currentness and output authority remain unavailable, and the current
 structural catalogue reserves zero output slots; controlled nonempty fixtures
-prove ART mechanics only. ARCH-04C is next and must accept that empty output set;
-when owner-declared slots exist it composes their verified binding references
-with final-result persistence. ARCH-04D then activates the exact ART write/binding
+prove ART mechanics only. ARCH-04C is next and finalizes only that exact empty output set, using the
+[bounded execution contract](../WS-ARCH-001-04C.md). A future registered
+output-producing capability must add real producer and atomic binding proof
+before activation; controlled nonempty fixtures do not establish that capability. ARCH-04D then activates the exact ART write/binding
 and CHECKERS completion surfaces. In that planned flow, external byte I/O occurs
 before the final caller transaction; binding publication and final result become
 visible atomically.
