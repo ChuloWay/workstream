@@ -27,7 +27,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   Production post-submit phase execution remains unavailable.
 - Intent: compile one locked guide and its policies into authoritative,
   versioned project behavior without circular subsystem authority.
-- Next usable boundary: approved-guide intake integration, then admitted Submission and durable
+- Next usable boundary: exact post-submit materialization after ARCH-03D hidden intake, then durable
   post-submit evaluation. [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers
   public manager activation context and exact guide activation.
   [CP05A](../WS-ARCH-001/WS-ARCH-001-CP05A.md) delivers public Finance

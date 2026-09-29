@@ -11,7 +11,7 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   immutable ContributionRecords and optional
   project-policy-driven compensation awards without coupling lifecycle truth to
   an economic provider.
-- Next usable boundary: approved-guide intake integration, then admitted Submission and durable
+- Next usable boundary: exact post-submit materialization after ARCH-03D hidden intake, then durable
   post-submit evaluation. [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers
   public manager activation context and exact guide activation.
   [CP05A](../WS-ARCH-001/WS-ARCH-001-CP05A.md) delivers public Finance

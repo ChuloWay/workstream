@@ -45,13 +45,11 @@ from app.modules.artifacts.models import (
 from app.modules.artifacts.pre_submit_evidence import PreSubmitEvidenceConflict, _validate_execution
 from app.modules.artifacts.service import (
     ArtifactAdmissionRelationshipError,
-    ArtifactAdmissionService,
     ArtifactStorageNamespaceSpec,
 )
 from app.modules.artifacts.submission_admission import (
     SubmissionBundleAdmissionPublisher,
     SubmissionBundleDurablePutRequest,
-    SubmissionBundleDurablePutService,
 )
 from app.modules.artifacts.operator import ArtifactOperatorService
 from app.modules.artifacts.metrics import artifact_admission_metrics
@@ -92,6 +90,7 @@ from app.modules.checkers.api import PreSubmissionInfrastructureUnavailableError
 from tests.artifact_store_helpers import artifact_admission_limit_settings
 from tests.pre_submit_test_helpers import (
     approved_pre_submit_fixture,
+    durable_put_service,
     assert_pre_submit_evidence_immutable,
     assert_admission_replay_state,
     materialize_member_fixture,
@@ -580,15 +579,8 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
                 final_authority = await prepared_submitter_authority(
                     session, preparation_request, actor_id, identity_link_id, lineage.project_id,
                 )
-                durable_service = SubmissionBundleDurablePutService(
-                    session=session,
-                    admission=ArtifactAdmissionService(
-                        session,
-                        admission_settings,
-                        namespace,
-                    ),
-                    storage=provider,
-                    authorization=final_authority,
+                durable_service = durable_put_service(
+                    session, admission_settings, namespace, provider, final_authority,
                 )
                 (
                     retained,
@@ -667,15 +659,9 @@ async def test_effective_evidence_workflow_persists_once_and_replays_exactly(
             await session.commit()
 
             denied_prepared, denied = await fresh_checked_bundle()
-            denied_service = SubmissionBundleDurablePutService(
-                session=session,
-                admission=ArtifactAdmissionService(
-                    session,
-                    admission_settings,
-                    namespace,
-                ),
-                storage=provider,
-                authorization=DenySubmissionBundlePreparedAuthorization(),
+            denied_service = durable_put_service(
+                session, admission_settings, namespace, provider,
+                DenySubmissionBundlePreparedAuthorization(),
             )
             with pytest.raises(ArtifactAuthorityDeniedError):
                 async with session.begin():

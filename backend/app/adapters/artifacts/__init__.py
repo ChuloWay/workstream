@@ -429,6 +429,8 @@ def get_submission_bundle_preparation_command(
                     admission=admission,
                     storage=storage,
                     authorization=authority,
+                    task_contexts=task_contexts,
+                    project_contexts=project_contexts,
                 ),
             )
         finally:

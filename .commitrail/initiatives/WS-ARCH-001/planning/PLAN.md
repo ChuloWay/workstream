@@ -44,9 +44,10 @@ checker-remediation boundary before public Submission cutover.
 | [ARCH-03C4](../WS-ARCH-001-03C4.md) | ARCH-03C3 | Complete: exact-authorized contributor, manager and operational public queues |
 | [ARCH-03C5](../WS-ARCH-001-03C5.md) | ARCH-03C4 | Complete: exact-authorized Contributor/Manager detail and requirements |
 | [ARCH-03C6](../WS-ARCH-001-03C6.md) | ARCH-03C5 | Complete: distinct exact-authorized locked-context reads |
-| [ARCH-03C7](../WS-ARCH-001-03C7.md) | ARCH-03C6 and hidden TASK owner contracts | Complete: bounded Audit Authority history access; public guide activation is delivered by AUTH-18; approved-guide intake remains next |
-| [CP05A](../WS-ARCH-001-CP05A.md) | CP05, existing policy owners | Complete: public Finance policy administration and selector recovery; AUTH-18 public manager activation/context delivered; approved-guide intake remains next |
+| [ARCH-03C7](../WS-ARCH-001-03C7.md) | ARCH-03C6 and hidden TASK owner contracts | Complete: bounded Audit Authority history access; public guide activation is delivered by AUTH-18; ARCH-03D hidden intake delivered; exact post-submit materialization next |
+| [CP05A](../WS-ARCH-001-CP05A.md) | CP05, existing policy owners | Complete: public Finance policy administration and selector recovery; AUTH-18 public manager activation/context delivered; ARCH-03D hidden intake delivered; exact post-submit materialization next |
 | CP09 (later cleanup coordination) | All legacy consumers replaced, including CHECKER and public 02I path | Physical economic deletion; not on the allow_review critical path |
+| [ARCH-03D](../WS-ARCH-001-03D.md) | AUTH-18, ARCH-03A, CP08 and merged ART preparation | Complete: hidden durable intake uses exact historical TASK/PROJECTS ports; public cutover remains ARCH-02I |
 | ARCH-04B | ARCH-04A, POL-07, ARCH-03C, merged ARCH-02H | ART exact stored Submission materialization |
 | ARCH-04B2 | ARCH-04A and merged ART admission/verification/binding foundations | ART bounded checker output/log ingestion and verified binding, no routing |
 | ARCH-04C | ARCH-04A, ARCH-04B, ARCH-04B2, POL-07 | CHECKERS durable execution/result/currentness and worker recovery |
@@ -81,7 +82,7 @@ ARCH-03C1 completes exact reconciler authority and decision-bound receipts.
 ARCH-03C2 supplies originating-transaction-only per-assignment producer events
 and first handler registration with enforced prefork topology; it must never
 backfill or dispatch retained invalidation rows. Public TASK activation is complete through ARCH-03C7. AUTH-18 delivers public
-manager guide activation/context; approved-guide intake integration is next. Subsequent
+manager guide activation/context; ARCH-03D hidden intake is delivered; exact post-submit materialization is next. Subsequent
 PR-sized contracts name exact files, public types, current migration head and
 runnable proof before implementation; they refine this design, not create a
 new permission requirement.

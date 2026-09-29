@@ -129,17 +129,25 @@ class SubmissionBundleDurablePutService:
         admission: ArtifactAdmissionService,
         storage: ArtifactStorageOrchestrator,
         authorization: SubmissionBundlePreparedAuthorization,
+        task_contexts: TaskSubmissionContextPort,
+        project_contexts: ProjectLockedPolicyContextPort,
     ) -> None:
         self._session = session
         self._admission = admission
         self._storage = storage
         self._authorization = authorization
+        self._task_contexts = task_contexts
+        self._project_contexts = project_contexts
 
     async def admit_in_transaction(
         self,
         request: SubmissionBundleDurablePutRequest,
     ) -> tuple[PreparedArtifact, UUID, ArtifactAdmissionResult]:
-        """Consume live custody and persist the complete intent in the caller transaction."""
+        """Persist intent after the preparation command locks its authorized context.
+
+        The caller holds TASK, actor, PROJECT and grant locks in that order;
+        the admission reads below revalidate those already-locked owner facts.
+        """
         if type(request) is not SubmissionBundleDurablePutRequest:
             raise TypeError("invalid submission bundle durable put request")
         transaction = self._session.sync_session.get_transaction()
@@ -167,6 +175,8 @@ class SubmissionBundleDurablePutService:
                     replay_durable_intent_id=request.replay_durable_intent_id,
                 ),
                 submission_prepared_authorization=self._authorization,
+                submission_task_contexts=self._task_contexts,
+                submission_project_contexts=self._project_contexts,
                 prepared_authorization=request.prepared_authorization,
                 existing_transaction=True,
             )
@@ -555,6 +565,7 @@ class PreparedSubmissionBundlePreparationCommand:
                     evidence.evidence.evidence_set_id
                 )
                 async with self._authority.transaction():
+                    await self._lock_authorized_context(request)
                     retained, _, durable = await runtime.durable_put.admit_in_transaction(
                         SubmissionBundleDurablePutRequest(
                             prepared_authorization=None,

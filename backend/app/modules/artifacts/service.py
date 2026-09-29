@@ -33,6 +33,13 @@ from app.interfaces.artifacts import (
     artifact_store_namespace_material,
 )
 from app.interfaces.external_services import ExternalServiceAdapterIdentity
+from app.modules.projects.api import (
+    ProjectLockedPolicyContextPort, ProjectLockedPolicyContextRequest,
+    ProjectLockedPolicyContextUnavailable,
+)
+from app.modules.tasks.api import (
+    TaskSubmissionContextPort, TaskSubmissionContextRequest, TaskSubmissionContextUnavailable,
+)
 from app.modules.projects.api.guide_documents import DOCUMENT_EXTENSIONS, GuideDocumentUploadTargetPort
 from app.modules.artifacts.guide_formats import BoundGuideFormatInspector, GuideFormatDetector, GuideFormatLimits
 from app.interfaces.artifact_operations import (
@@ -1897,6 +1904,8 @@ class ArtifactAdmissionService:
         *,
         guide_prepared_authorization: GuideArtifactPreparedAuthorization | None = None,
         submission_prepared_authorization: SubmissionBundlePreparedAuthorization | None = None,
+        submission_task_contexts: TaskSubmissionContextPort | None = None,
+        submission_project_contexts: ProjectLockedPolicyContextPort | None = None,
         prepared_authorization: PreparedAuthorizationHandle | None = None,
         existing_transaction: bool = False,
     ) -> ArtifactAdmissionResult:
@@ -1971,12 +1980,17 @@ class ArtifactAdmissionService:
             if type(request) is SubmissionBundleArtifactAdmissionRequest:
                 if (
                     submission_prepared_authorization is None
+                    or submission_task_contexts is None
+                    or submission_project_contexts is None
                     or prepared_authorization is not None
                 ):
                     raise ArtifactAuthorityDeniedError(
                         "submission bundle durable preparation is unavailable"
                     )
-                authority_facts, submission_facts = await self._submission_bundle_facts(request)
+                authority_facts, submission_facts = await self._submission_bundle_facts(
+                    request, task_contexts=submission_task_contexts,
+                    project_contexts=submission_project_contexts,
+                )
                 replay_attempt = await self._submission_bundle_replay_attempt(
                     request,
                     authority_facts,
@@ -2370,14 +2384,11 @@ class ArtifactAdmissionService:
         )
 
     async def _submission_bundle_facts(
-        self, request: SubmissionBundleArtifactAdmissionRequest
+        self, request: SubmissionBundleArtifactAdmissionRequest, *,
+        task_contexts: TaskSubmissionContextPort,
+        project_contexts: ProjectLockedPolicyContextPort,
     ) -> tuple[SubmissionBundleDurableIntentAuthorityFacts, _AdmissionFacts]:
         """Lock exact passing evidence and current TASK-owned lineage."""
-        from app.modules.tasks.pre_submit_context import (
-            PreSubmitLockedContextInvalid,
-            load_locked_pre_submit_context,
-        )
-
         from app.modules.artifacts.pre_submit_evidence import PreSubmitPassCapability
         from app.modules.artifacts.submission_custody import SubmissionBundlePreparedCustody
 
@@ -2412,33 +2423,51 @@ class ArtifactAdmissionService:
                 "submission bundle passing evidence is unavailable"
             )
         try:
-            locked = await load_locked_pre_submit_context(
-                self._session,
-                actor_profile_id=UUID(evidence.actor_profile_id),
-                identity_link_id=UUID(evidence.identity_link_id),
-                task_id=UUID(evidence.task_id),
-                assignment_id=UUID(evidence.assignment_id),
-                predecessor_submission_id=(
-                    UUID(evidence.predecessor_submission_id)
-                    if evidence.predecessor_submission_id is not None
-                    else None
-                ),
-                include_actor_identity_locks=False,
+            task = await task_contexts.lock_submission_context(
+                TaskSubmissionContextRequest(
+                    task_id=UUID(evidence.task_id),
+                    assignment_id=UUID(evidence.assignment_id),
+                    contributor_id=UUID(evidence.actor_profile_id),
+                    predecessor_submission_id=(UUID(evidence.predecessor_submission_id)
+                        if evidence.predecessor_submission_id is not None else None),
+                )
             )
-        except PreSubmitLockedContextInvalid as exc:
-            raise ArtifactAdmissionRelationshipError(str(exc)) from exc
+            references = task.locked_project_context
+            locked = await project_contexts.lock_locked_policy_context(
+                ProjectLockedPolicyContextRequest(
+                    project_id=references.project_id, guide_version=references.guide_version,
+                    source_snapshot_id=references.source_snapshot_id,
+                    source_snapshot_hash=references.source_snapshot_hash,
+                    effective_policy_id=references.effective_policy_id,
+                    effective_policy_hash=references.effective_policy_hash,
+                    pre_submit_policy_id=references.pre_submit_policy_id,
+                    pre_submit_policy_bundle_hash=references.pre_submit_policy_bundle_hash,
+                )
+            )
+        except (TaskSubmissionContextUnavailable, ProjectLockedPolicyContextUnavailable) as exc:
+            raise ArtifactAdmissionRelationshipError("pre_submit_locked_context_changed") from exc
+        guide_hash = canonical_json_hash({
+            "domain": "workstream.locked_task_guide.v1",
+            "project_id": str(locked.project_id), "guide_id": str(locked.guide_id),
+            "guide_version": locked.guide_version,
+            "source_snapshot_id": str(locked.source_snapshot_id),
+            "source_snapshot_sha256": locked.source_snapshot_hash,
+        })
         if (
             locked.project_id != UUID(evidence.project_id)
-            or locked.predecessor_submission_version != evidence.predecessor_submission_version
+            or (task.predecessor.version if task.predecessor else None)
+            != evidence.predecessor_submission_version
+            or task.submitter_contribution_policy_version_id
+            != locked.activation_receipt.command.contribution_policy_version_id
             or locked.guide_id != UUID(evidence.guide_id)
             or locked.guide_version != evidence.guide_version
             or locked.source_snapshot_id != UUID(evidence.source_snapshot_id)
-            or locked.source_snapshot_sha256 != evidence.source_snapshot_sha256
-            or locked.locked_guide_sha256 != evidence.locked_guide_sha256
+            or locked.source_snapshot_hash != evidence.source_snapshot_sha256
+            or guide_hash != evidence.locked_guide_sha256
             or locked.effective_policy_id != UUID(evidence.effective_policy_id)
-            or locked.effective_policy_sha256 != evidence.locked_artifact_policy_sha256
+            or locked.effective_policy_hash != evidence.locked_artifact_policy_sha256
             or locked.pre_submit_policy_id != UUID(evidence.pre_submit_policy_id)
-            or locked.pre_submit_policy_sha256 != evidence.locked_checker_policy_sha256
+            or locked.pre_submit_policy_bundle_hash != evidence.locked_checker_policy_sha256
         ):
             raise ArtifactAdmissionRelationshipError("submission bundle locked context changed")
         operation_identity = canonical_json_hash(

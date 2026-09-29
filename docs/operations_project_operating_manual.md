@@ -260,7 +260,9 @@ ARCH-03B9 supplies hidden exact-assignment invalidation,
 AUTH-OUTBOX-02 supplies shared delivery, and ARCH-03C1 supplies exact reconciler
 authority and decision-bound receipts. ARCH-03C2 delivers atomic producer
 publication and first handler registration with enforced prefork topology.
-Public manager activation is delivered; approved-guide intake integration remains next.
+Public manager activation and ARCH-03D hidden approved-guide intake are delivered.
+Exact post-submit materialization (ARCH-04B) is next. Public intake remains deferred
+to ARCH-02I after evaluation and remediation prerequisites.
 
 The intended unified flow uses one compilation result for sufficiency and
 artifact/pre-submit/post-submit proposals. Once finalized, its `ProjectSetupRun`,

@@ -242,12 +242,6 @@
       "repair_owner": "WS-ARCH-001-03"
     },
     {
-      "source_file": "backend/app/modules/artifacts/service.py",
-      "target_module": "tasks",
-      "imported_private_path": "app.modules.tasks.pre_submit_context",
-      "repair_owner": "WS-ARCH-001-03"
-    },
-    {
       "source_file": "backend/app/modules/audit/repository.py",
       "target_module": "tasks",
       "imported_private_path": "app.modules.tasks.models",
@@ -359,18 +353,6 @@
       "source_file": "backend/app/modules/projects/sufficiency_mutation_service.py",
       "target_module": "actors",
       "imported_private_path": "app.modules.actors.service",
-      "repair_owner": "WS-ARCH-001-03"
-    },
-    {
-      "source_file": "backend/app/modules/tasks/pre_submit_context.py",
-      "target_module": "actors",
-      "imported_private_path": "app.modules.actors.models",
-      "repair_owner": "WS-ARCH-001-03"
-    },
-    {
-      "source_file": "backend/app/modules/tasks/pre_submit_context.py",
-      "target_module": "projects",
-      "imported_private_path": "app.modules.projects.models",
       "repair_owner": "WS-ARCH-001-03"
     },
     {

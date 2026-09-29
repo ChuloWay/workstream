@@ -2110,3 +2110,13 @@ def test_public_activation_partition_additions_are_exact():
         )
     with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
         ownership._validate_additive_partition_transition(_partition(sorted(targets)), trusted)
+
+
+def test_approved_guide_intake_removal_is_exact():
+    removed = "backend/app/modules/tasks/pre_submit_context.py"
+    retained = "backend/app/modules/tasks/repository.py"
+    assert ownership.ARCH_03D_REMOVED_TARGETS == {removed}
+    trusted = _partition(sorted([retained, removed]))
+    ownership._validate_additive_partition_transition(_partition([retained]), trusted)
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(_partition([]), trusted)

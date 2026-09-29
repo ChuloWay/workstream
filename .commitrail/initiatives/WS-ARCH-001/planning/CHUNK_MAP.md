@@ -3,8 +3,8 @@
 Use the [current dependency contract](PLAN.md#current-dependency-contract).
 The [preserved map](../pre-cutover/CHUNK_MAP.md) retains the complete original
 work accounting. Foundations through 02H and CP04B are complete; none restart.
-AUTH-18 public manager activation/context is delivered. Approved-guide intake
-integration is the next boundary.
+AUTH-18 public manager activation/context and ARCH-03D hidden approved-guide intake are delivered.
+Exact post-submit materialization is next; public intake remains deferred to ARCH-02I.
 
 | Boundary | Owner outcome | Risk | Current dependency |
 |---|---|---|---|
@@ -31,14 +31,15 @@ integration is the next boundary.
 | [WS-ARCH-001-03C4](../WS-ARCH-001-03C4.md) | Exact-authorized public task queues | L1 | Complete; contributor, manager and operational projections with signed pagination |
 | [WS-ARCH-001-03C5](../WS-ARCH-001-03C5.md) | Exact-authorized Contributor and Manager detail and requirements | L1 | Complete; canonical projections, historical policy custody and atomic read evidence |
 | [WS-ARCH-001-03C6](../WS-ARCH-001-03C6.md) | Distinct exact-authorized locked-context reads | L1 | Complete; bounded Audit Authority history access delivered by 03C7 |
-| [WS-ARCH-001-03C7](../WS-ARCH-001-03C7.md) | Exact-authorized bounded task history | L1 | Complete; AUTH-18 public guide activation delivered; approved-guide intake integration next |
-| [WS-ARCH-001-03C](chunks/WS-ARCH-001-03C-auth-task-readiness.md) | Exact task/assignment public activation and integrated readiness proof | L1 | Complete through 03C7 audit history, 03C4 queues, 03C5 detail/requirements and 03C6 locked-context reads; AUTH-18 public guide activation delivered; approved-guide intake integration remains separate |
+| [WS-ARCH-001-03C7](../WS-ARCH-001-03C7.md) | Exact-authorized bounded task history | L1 | Complete; AUTH-18 public guide activation delivered; ARCH-03D hidden approved-guide intake delivered; exact post-submit materialization next |
+| [WS-ARCH-001-03C](chunks/WS-ARCH-001-03C-auth-task-readiness.md) | Exact task/assignment public activation and integrated readiness proof | L1 | Complete through 03C7 audit history, 03C4 queues, 03C5 detail/requirements and 03C6 locked-context reads; AUTH-18 public guide activation delivered; ARCH-03D hidden intake delivered; public intake cutover remains separate |
 | [WS-ARCH-001-04A](../WS-ARCH-001-04A.md) | CHECKER post-submit contract and registered evaluator conformance | L1 | Complete canonical catalogue, phase facts and structural conformance; consumed by delivered POL-04B and POL-07B |
 | [WS-ARCH-001-04B](chunks/WS-ARCH-001-04B-art-post-submit-materialization.md) | ART exact verified Submission materialization | L1 | Planned after 04A, POL-07, 03C and merged 02H |
 | [WS-ARCH-001-04B2](chunks/WS-ARCH-001-04B-art-post-submit-materialization.md#arch-04b2--separate-art-output-custody-child) | ART generated-output/log custody and verified binding | L1 | 04A public request/run facts plus merged ART foundations; no CHECKERS private lookup |
 | [WS-ARCH-001-04C](chunks/WS-ARCH-001-04C-checker-current-result.md) | CHECKER hidden durable current output and supersession behavior | L1 | Planned after 04A/04B/04B2; production remains deny-only |
 | [WS-ARCH-001-04D](chunks/WS-ARCH-001-04D-auth-post-submit-activation.md) | AUTH exact fixed-service post-submit activation (replaces XINT-06B) | L1 | Planned after 04B/04C evidence |
 | [WS-ARCH-001-04E](chunks/WS-ARCH-001-04E-canonical-allow-review.md) | TASK current routing: true to canonical `allow_review`, false/pass to shared acceptance | L1 | Source 04E1A -> hidden handlers 04E1B -> AUTH 04E2 -> live 04E3, plus 04D/OUTBOX-02; false consumes shared REV/CON/fence proof and activation also requires 04F remediation |
+| [WS-ARCH-001-03D](../WS-ARCH-001-03D.md) | Exact activated historical guide through hidden durable intake; obsolete lookup removed | L1 | Complete; exact post-submit materialization next, public cutover remains deferred |
 | [WS-ARCH-001-04F](chunks/WS-ARCH-001-04F-checker-remediation.md) | Contributor-correctable checker failures and same-lineage admission-backed replacement Submission | L1 | Planned after 04E; replaces XINT-05C, required before public 02I, not before REV begins from `allow_review` |
 
 CP09, 04E and 04F are coordination parents, not permission for multi-owner PRs.
