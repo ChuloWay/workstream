@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.adapters.artifacts import create_artifact_store_bootstrap
 from app.core.identifiers import new_record_id
-from app.interfaces.artifact_operations import (
+from app.modules.checkers.api.output_custody import (
     CheckerOutputArtifactRequest,
     CheckerOutputArtifactResult,
     CheckerOutputBindingRequest,

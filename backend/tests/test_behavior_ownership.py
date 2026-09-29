@@ -2124,16 +2124,27 @@ def test_approved_guide_intake_removal_is_exact():
 
 def test_post_submit_materialization_partition_additions_are_exact():
     targets = {
-        "backend/app/modules/artifacts/api/submission_materialization.py",
+        "backend/app/modules/checkers/api/materialization.py",
         "backend/app/modules/artifacts/post_submit_materialization.py",
         "backend/app/modules/artifacts/post_submit_selection.py",
         "backend/app/modules/tasks/api/submitted_bundle.py",
         "backend/app/modules/tasks/submitted_bundle.py",
     }
     assert ownership.ARCH_04B_MATERIALIZATION_TARGETS == targets
+    assert ownership.ARCH_04B_SEAM_REMOVED_TARGETS == {
+        "backend/app/modules/artifacts/api/submission_materialization.py"
+    }
     retained = "backend/app/core/config.py"
+    retired = "backend/app/modules/artifacts/api/submission_materialization.py"
     trusted = _partition([retained])
     ownership._validate_additive_partition_transition(_partition(sorted([retained, *targets])), trusted)
+    prior_targets = (targets - {"backend/app/modules/checkers/api/materialization.py"}) | {
+        retired
+    }
+    ownership._validate_additive_partition_transition(
+        _partition(sorted([retained, *targets])),
+        _partition(sorted([retained, *prior_targets])),
+    )
     for forbidden in ("backend/app/modules/artifacts/download.py", "backend/app/modules/tasks/other_material.py"):
         with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
             ownership._validate_additive_partition_transition(_partition(sorted([retained, *targets, forbidden])), trusted)

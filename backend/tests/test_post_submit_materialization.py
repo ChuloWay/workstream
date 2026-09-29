@@ -10,7 +10,7 @@ from sqlalchemy import text
 from app.adapters.artifacts import post_submission_materialization
 from app.core.identifiers import new_record_id
 from app.interfaces.artifacts import ArtifactInputMismatchError
-from app.modules.artifacts.api.submission_materialization import PostSubmissionMaterializationUnavailable
+from app.modules.checkers.api.materialization import PostSubmissionMaterializationUnavailable
 from tests.checkers.post_submit.support import change_request
 from tests.checkers.post_submit.test_result_contract import result
 from tests.post_submit_materialization_helpers import material_fixture

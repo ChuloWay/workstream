@@ -320,7 +320,10 @@ fills all three before its root transaction commits. This is separate from the
 required initial assignment identity. Hidden exact ART-to-CHECKERS input materialization is delivered by ARCH-04B.
 ARCH-04B2 adds checker-output attempt custody with exact Submission version and
 checker-request digest plus immutable verified put/receipt ancestry on each
-run/slot binding. Its migration refuses retained checker attempts or bindings
+run/slot binding. Binding publication atomically seals the terminal put attempt,
+verification job and replica identity. Later replica health changes remain
+possible without rewriting the historical verified ancestry. Its migration
+refuses retained checker attempts or bindings
 whose missing evaluation digest or verified ancestry cannot be proven; it does
 not invent or delete retained data. Durable execution/results (ARCH-04C) remain
 pending, and production access remains deny-only until ARCH-04D. Retained payment columns on Submission and CheckerRun

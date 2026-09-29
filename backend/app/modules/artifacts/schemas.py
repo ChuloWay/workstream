@@ -7,6 +7,7 @@ from enum import StrEnum
 from typing import Protocol, TypeAlias, final
 from uuid import UUID
 
+from app.core.hashing import canonical_json_hash
 from app.modules.artifacts.sources import CommittedArtifactSource
 from app.modules.checkers.api.output_custody import (
     CheckerOutputReservation,
@@ -39,6 +40,17 @@ class CheckerOutputArtifactAdmissionRequest:
     reservation: CheckerOutputReservation
     slot_key: str
     source: CommittedArtifactSource
+
+
+def checker_output_operation_identity(*, checker_run_id: UUID, slot_key: str) -> str:
+    """Keep one logical output identity across worker-lease replacement."""
+    return canonical_json_hash(
+        {
+            "request_type": "checker_output",
+            "checker_run_id": str(checker_run_id),
+            "logical_role": slot_key,
+        }
+    )
 
 
 def checker_output_request_digest_facts(

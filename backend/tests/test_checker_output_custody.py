@@ -12,10 +12,6 @@ from sqlalchemy import func, select
 
 from app.adapters.artifacts import checker_output_binding, checker_output_storage
 from app.core.identifiers import new_record_id
-from app.interfaces.artifact_operations import (
-    CheckerOutputArtifactRequest,
-    CheckerOutputBindingRequest,
-)
 from app.interfaces.artifacts import ArtifactLimitExceededError
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.models import (
@@ -23,10 +19,13 @@ from app.modules.artifacts.models import (
     ArtifactOperationReceipt,
     ArtifactPutObservationReceipt,
     ArtifactPutAttempt,
+    ArtifactVerificationJob,
     ArtifactVerificationReceipt,
 )
 from app.modules.artifacts.service import ArtifactAdmissionConflictError
 from app.modules.checkers.api.output_custody import (
+    CheckerOutputArtifactRequest,
+    CheckerOutputBindingRequest,
     CheckerOutputSelector,
     CheckerOutputUnavailable,
 )
@@ -148,6 +147,89 @@ async def test_real_store_verification_and_binding(
         assert harness.state.admissions
         assert harness.state.recoveries
         assert harness.state.bindings
+
+
+async def test_identical_store_replay_reuses_verified_custody_without_provider_work(
+    tmp_path,
+    isolated_database_env,
+) -> None:
+    """Replay exact bytes through the stable attempt without another put or verify."""
+    async with output_custody_harness(tmp_path, isolated_database_env) as harness:
+        first = await harness.service.store(harness.request(b"stable replay output"))
+        assert first.status == "verified"
+        assert first.content_id is not None
+        assert first.verification_receipt_id is not None
+        assert first.replayed is False
+        provider_counts = (harness.store.puts, harness.store.opens)
+        assert provider_counts == (1, 1)
+        bound = await harness.bind(harness.selector, first)
+        assert (
+            bound.content_id,
+            bound.put_attempt_id,
+            bound.verification_receipt_id,
+            bound.replayed,
+        ) == (
+            first.content_id,
+            first.put_attempt_id,
+            first.verification_receipt_id,
+            False,
+        )
+
+        replay = await harness.service.store(harness.request(b"stable replay output"))
+
+        assert (
+            replay.put_attempt_id,
+            replay.content_id,
+            replay.verification_receipt_id,
+            replay.status,
+            replay.replayed,
+        ) == (
+            first.put_attempt_id,
+            first.content_id,
+            first.verification_receipt_id,
+            "verified",
+            True,
+        )
+        assert (harness.store.puts, harness.store.opens) == provider_counts
+        assert (await harness.manager.usage()).reservation_count == 0
+        assert list((tmp_path / "output-scratch" / "files").iterdir()) == []
+        async with harness.factory() as session:
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ArtifactPutAttempt)
+                    .where(
+                        ArtifactPutAttempt.checker_run_id == str(harness.selector.checker_run_id)
+                    )
+                )
+                == 1
+            )
+            assert (
+                await session.get(
+                    ArtifactVerificationReceipt,
+                    str(first.verification_receipt_id),
+                )
+                is not None
+            )
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ArtifactVerificationJob)
+                    .where(
+                        ArtifactVerificationJob.originating_put_attempt_id
+                        == str(first.put_attempt_id)
+                    )
+                )
+                == 1
+            )
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ArtifactOperationReceipt)
+                    .where(ArtifactOperationReceipt.put_attempt_id == str(first.put_attempt_id))
+                )
+                == 1
+            )
 
 
 async def test_foreign_lineage_and_changed_bytes_fail_before_provider(
@@ -426,6 +508,93 @@ async def test_authority_revocation_during_put_prevents_return_and_binding(
                     )
             binding_count = await session.scalar(select(func.count()).select_from(ArtifactBinding))
             assert binding_count == 0
+
+
+async def test_cancellation_during_provider_put_cleans_scratch_and_retains_uncertainty(
+    tmp_path,
+    isolated_database_env,
+) -> None:
+    """Preserve cancellation while retaining only the durable in-flight attempt."""
+    async with output_custody_harness(tmp_path, isolated_database_env) as harness:
+        harness.store.put_entered = asyncio.Event()
+        harness.store.put_release = asyncio.Event()
+        operation = asyncio.create_task(harness.service.store(harness.request(b"cancelled output")))
+        try:
+            await asyncio.wait_for(harness.store.put_entered.wait(), timeout=10)
+            assert harness.store.puts == 1
+            live_usage = await harness.manager.usage()
+            assert live_usage.reservation_count == 1
+            assert live_usage.reserved_bytes > 0
+
+            operation.cancel("cancelled checker output provider put")
+            with pytest.raises(
+                asyncio.CancelledError,
+                match="cancelled checker output provider put",
+            ):
+                await operation
+        finally:
+            harness.store.put_release.set()
+            if not operation.done():
+                operation.cancel()
+            await asyncio.gather(operation, return_exceptions=True)
+
+        assert harness.store.puts == 1
+        assert harness.store.opens == 0
+        assert (await harness.manager.usage()).reservation_count == 0
+        assert list((tmp_path / "output-scratch" / "files").iterdir()) == []
+        async with harness.factory() as session:
+            attempt = await session.scalar(
+                select(ArtifactPutAttempt).where(
+                    ArtifactPutAttempt.checker_run_id == str(harness.selector.checker_run_id)
+                )
+            )
+            assert attempt is not None
+            assert attempt.status == "put_in_flight"
+            assert attempt.execution_mode == "caller_put"
+            assert attempt.executor_id is not None
+            assert attempt.lease_expires_at is not None
+            assert attempt.replica_id is None
+            assert attempt.receipt_id is None
+            assert attempt.terminal_result_code is None
+            assert attempt.terminal_at is None
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ArtifactOperationReceipt)
+                    .where(
+                        ArtifactOperationReceipt.checker_run_id
+                        == str(harness.selector.checker_run_id)
+                    )
+                )
+                == 0
+            )
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ArtifactPutObservationReceipt)
+                    .where(ArtifactPutObservationReceipt.put_attempt_id == attempt.id)
+                )
+                == 0
+            )
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ArtifactVerificationJob)
+                    .where(ArtifactVerificationJob.originating_put_attempt_id == attempt.id)
+                )
+                == 0
+            )
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ArtifactBinding)
+                    .where(
+                        ArtifactBinding.resource_type == "checker_run",
+                        ArtifactBinding.resource_id == str(harness.selector.checker_run_id),
+                    )
+                )
+                == 0
+            )
 
 
 async def test_per_slot_cap_stops_source_and_cleans_scratch(

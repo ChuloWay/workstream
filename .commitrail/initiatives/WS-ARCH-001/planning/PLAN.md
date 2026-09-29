@@ -119,15 +119,18 @@ checker finalization or task transitions. The implementation contract must
 name those feature action/resource manifests, not infer authority from the
 event type. Lost delivery/redelivery cannot create a new logical evaluation.
 
-ART checker-output storage is also missing, not implicit in CHECKERS result
-persistence. An ART-owned child of 04B supplies bounded generated-output/log
+Hidden ARCH-04B2 ART checker-output storage and binding are delivered, not
+implicit in CHECKERS result persistence. They supply bounded generated-output
 ingestion, generic quota admission attributed to the fixed service, independent
-reread verification and exact checker-output binding. Its controlled hidden
-fixtures use 04A public request/run facts, not a future TASK dispatch row or
-private CHECKERS import. 04C composes the resulting verified binding references
-with final-result persistence; 04D activates the exact ART write/binding and
-CHECKERS completion surfaces. External byte I/O occurs before the final caller
-transaction; binding publication and final result become visible atomically.
+reread verification and exact checker-output binding. Production CHECKERS
+reservation/currentness and output authority remain unavailable, and the current
+structural catalogue reserves zero output slots; controlled nonempty fixtures
+prove ART mechanics only. ARCH-04C is next and must accept that empty output set;
+when owner-declared slots exist it composes their verified binding references
+with final-result persistence. ARCH-04D then activates the exact ART write/binding
+and CHECKERS completion surfaces. In that planned flow, external byte I/O occurs
+before the final caller transaction; binding publication and final result become
+visible atomically.
 Failed storage never becomes contributor blame or an `allow_review` result.
 No second artifact store, quota ledger or historical ART-06B implementation
 lane is introduced.

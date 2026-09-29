@@ -18,8 +18,8 @@ Contributor skip and assignment expiry remain deferred.
 ## Current behavior
 
 Main `9c292100` includes merged ARCH-04B exact verified input and bounded scratch.
-`CheckerArtifactOutputPort.store` and `ArtifactBindingPort.bind_checker_output`
-are unused declarations. Generic ART preparation, quota admission, durable put,
+The output-store and output-binding capabilities begin as unused declarations;
+this change gives them CHECKERS-owned consumer contracts and ART implementations. Generic ART preparation, quota admission, durable put,
 unknown-outcome recovery and independent verification already exist. Checker
 output admission still reads private CheckerRun rows from ART's repository.
 Existing CHECKERS rows do not persist 04A request/generation/worker reservation
@@ -29,8 +29,11 @@ claim the current structural catalogue supports them.
 
 ## Design and decisions
 
-1. Replace the unused output/binding declarations with closed typed requests and
-   results; no compatibility alias or second storage engine. A CHECKERS-owned
+1. Replace the unused output/binding declarations with CHECKERS-owned consumer
+   requests, results and ports in its public API; ART implements them through
+   composition injection. The input-materialization port uses the same dependency
+   direction. Delete the replaced declaration paths; no compatibility alias or
+   second storage engine. A CHECKERS-owned
    public reservation-facts port supplies exact run/request/Submission/policy, worker-lease generation and
    owner-declared output-slot/budget facts. Each slot has a globally unique bounded
    key within its run, media type and byte limit. Its production implementation is explicitly
@@ -81,8 +84,9 @@ claim the current structural catalogue supports them.
    job -> replica -> attempt -> content lock order; do not introduce the inverse.
    Generic bindings receive checker-only put_attempt_id and verification_receipt_id.
    An INSERT guard verifies exact receipt -> job -> attempt -> replica/content
-   ancestry, verified state and project/run/slot ownership. Reuse the existing
-   binding immutability trigger; do not invent a common receipt FK across distinct
+   ancestry, verified state and project/run/slot ownership. Seal terminal
+   attempt/job facts and replica identity atomically with that binding; preserve
+   mutable replica health. Reuse the existing binding immutability trigger; do not invent a common receipt FK across distinct
    direct-put and observation receipt tables. ARCH-04C later composes this participant
    with its final result and outbox; ARCH-04D owns live service activation.
 6. Replace the raw-AuthorizationContext checker admission path with a mandatory
@@ -147,7 +151,9 @@ compatibility paths, CI weakening or contributor quota charges for system output
 - Same run/role/bytes replay produces the same intent and binding; changed request
   or bytes reject. Concurrent publication and caller rollback preserve one binding
   and no partially committed effect.
-- Database rejects intent/binding identity mutation and mismatched stored ancestry.
+- Database rejects intent/binding identity mutation, mismatched stored ancestry,
+  and subsequent changes to sealed verified ancestry, including concurrent writes
+  under READ COMMITTED and REPEATABLE READ.
   Migration refuses retained checker attempts lacking provable evaluation custody;
   it never invents the missing checker-request digest or deletes retained data.
 - Unknown put outcome resumes observation of the same intent without regenerating
@@ -237,3 +243,43 @@ custody aggregate is authorized.
   contributor milestone before live human review/revision.
 - Remaining risks: CHECKERS reservation producer and live authority deliberately
   absent; only controlled hidden storage proof is claimed by this child.
+
+## External review repair scope
+
+The output capability must have a typed acyclic consumer/implementation seam;
+placing its declarations in shared `app.interfaces` does not remove the
+ART-to-CHECKERS dependency. CHECKERS owns the consumed output and materialization
+ports in its public API; ART implements them and composition injects them. Move
+the existing ART materialization contract to that consumer API and delete its
+old path. ARCH-04C imports its own consumer ports, never ART API/private owners.
+The existing pre-submit archive-execution private ART dependency remains a
+separately tracked consumer; it is not a new post-submit dependency or fallback. Replace that affected declaration path, update all
+callers and boundary proof, and make ARCH-04C consume the declared seam without
+importing ART implementation. No compatibility re-export is allowed.
+
+Verified binding custody must survive subsequent SQL mutations, not merely pass
+an insertion check. Protect the ancestry facts used by the inserted binding,
+including put execution state and references, while preserving legitimate
+unbound put/observation recovery. Prove post-bind mutations fail and leave the
+binding and its exact chain unchanged; include the competing-transaction case.
+
+Add focused service proofs for identical `store()` replay without another put
+and cancellation while provider I/O is paused with scratch cleanup. Share the
+canonical run/slot operation identity instead of rebuilding its hash. Reconcile
+the current ARCH plan's stale missing-storage sentence. These are repairs within
+the existing L1 boundary and require fresh architecture/reuse, security,
+QA/test-delta, documentation/product and CI-integrity review. Existing prohibited
+changes and human review focus remain unchanged. The affected owner API,
+architecture boundary tests and ARCH-04C contract are included in allowed scope.
+
+The ancestry repair seals the terminal attempt and verification job plus replica
+identity in the successful binding transaction. A monotonic row-local seal is
+needed because a transaction using an older PostgreSQL snapshot could miss a
+newly inserted binding if protection relied only on cross-table existence checks.
+Binding takes the existing job -> replica -> attempt -> content order with update
+locks on the sealed ancestors, validates the exact chain, and sets seals atomically.
+The attempt/job terminal facts and replica identity cannot change afterward;
+replica health and availability remain operational facts that may change. Failed
+or rolled-back publication must not leave seals behind. Real PostgreSQL proof
+covers both READ COMMITTED and REPEATABLE READ interleavings, not only sequential
+mutation. No separate custody aggregate or public capability is introduced.

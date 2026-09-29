@@ -15,7 +15,10 @@ from app.modules.artifacts.models import (
     ArtifactVerificationJob,
     ArtifactVerificationReceipt,
 )
-from app.modules.artifacts.schemas import checker_output_request_digest_facts
+from app.modules.artifacts.schemas import (
+    checker_output_operation_identity,
+    checker_output_request_digest_facts,
+)
 from app.modules.checkers.api.output_custody import (
     CheckerOutputReservation,
     CheckerOutputSelector,
@@ -37,16 +40,6 @@ class CheckerOutputStoredFacts:
     replica_id: UUID | None
     verification_receipt_id: UUID | None
 
-
-def output_operation_identity(selector: CheckerOutputSelector) -> str:
-    """Use one logical output identity across worker-lease replacement."""
-    return canonical_json_hash(
-        {
-            "request_type": "checker_output",
-            "checker_run_id": str(selector.checker_run_id),
-            "logical_role": selector.slot_key,
-        }
-    )
 
 
 async def select_checker_output(
@@ -70,7 +63,9 @@ async def select_checker_output(
     attempt = await session.scalar(
         select(ArtifactPutAttempt)
         .where(
-            ArtifactPutAttempt.operation_identity == output_operation_identity(selector),
+            ArtifactPutAttempt.operation_identity == checker_output_operation_identity(
+                checker_run_id=selector.checker_run_id, slot_key=selector.slot_key
+            ),
         )
         .execution_options(populate_existing=True)
     )

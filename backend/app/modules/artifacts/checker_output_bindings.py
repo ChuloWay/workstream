@@ -7,9 +7,13 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.identifiers import new_record_id
-from app.interfaces.artifact_operations import (
+from app.modules.checkers.api.output_custody import (
     CheckerOutputBindingRequest,
     CheckerOutputBindingResult,
+    CheckerOutputReservation,
+    CheckerOutputReservationPort,
+    CheckerOutputSelector,
+    CheckerOutputUnavailable,
 )
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.checker_output_custody import (
@@ -17,12 +21,6 @@ from app.modules.artifacts.checker_output_custody import (
     select_checker_output,
 )
 from app.modules.artifacts.models import ArtifactBinding
-from app.modules.checkers.api.output_custody import (
-    CheckerOutputReservation,
-    CheckerOutputReservationPort,
-    CheckerOutputSelector,
-    CheckerOutputUnavailable,
-)
 
 
 class CheckerOutputBindingAuthority(Protocol):

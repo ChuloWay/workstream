@@ -8,9 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
-from app.interfaces.artifact_operations import (
+from app.modules.checkers.api.output_custody import (
     CheckerOutputArtifactRequest,
     CheckerOutputArtifactResult,
+    CheckerOutputReservation,
+    CheckerOutputReservationPort,
+    CheckerOutputSelector,
+    CheckerOutputUnavailable,
 )
 from app.interfaces.artifacts import ArtifactStore
 from app.modules.artifacts.checker_output_custody import (
@@ -27,12 +31,6 @@ from app.modules.artifacts.service import (
     ArtifactAdmissionService,
     ArtifactStorageOrchestrator,
     ArtifactStorageNamespaceSpec,
-)
-from app.modules.checkers.api.output_custody import (
-    CheckerOutputReservation,
-    CheckerOutputReservationPort,
-    CheckerOutputSelector,
-    CheckerOutputUnavailable,
 )
 
 

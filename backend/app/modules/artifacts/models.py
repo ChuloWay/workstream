@@ -1136,6 +1136,9 @@ class ArtifactPutAttempt(Base):
     operation_identity: Mapped[str] = mapped_column(String(71), nullable=False)
     request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
     checker_request_digest: Mapped[str | None] = mapped_column(String(71))
+    checker_output_custody_sealed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="prepared", index=True)
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     executor_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
@@ -1365,6 +1368,9 @@ class ArtifactReplica(Base):
     adapter: Mapped[str] = mapped_column(String(50), nullable=False)
     provider_profile: Mapped[str] = mapped_column(String(100), nullable=False)
     provider_object_ref: Mapped[str] = mapped_column(String(1024), nullable=False)
+    checker_output_custody_sealed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     verification_state: Mapped[str] = mapped_column(String(30), nullable=False)
     availability_state: Mapped[str] = mapped_column(String(30), nullable=False)
     integrity_state: Mapped[str] = mapped_column(String(30), nullable=False)
@@ -1505,6 +1511,9 @@ class ArtifactVerificationJob(Base):
     )
     replica_id: Mapped[str] = mapped_column(
         ForeignKey("artifact_replicas.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    checker_output_custody_sealed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
     )
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending", index=True)
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

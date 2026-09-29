@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 from uuid import UUID
 
-from app.modules.checkers.api import PostSubmissionEvaluationRequest, PostSubmissionEvaluationResult
+from app.modules.checkers.api.post_submit import (
+    PostSubmissionEvaluationRequest,
+    PostSubmissionEvaluationResult,
+)
 
 
 class PostSubmissionMaterializationUnavailable(RuntimeError):

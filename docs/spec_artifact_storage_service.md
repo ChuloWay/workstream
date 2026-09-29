@@ -355,7 +355,7 @@ SubmissionBundlePreparationCommand.prepare(SubmissionBundlePreparationRequest)
 SubmissionAdmissionConsumptionPort.consume(SubmissionAdmissionConsumptionRequest)
 GuideDocumentManifestPort.load(GuideDocumentManifestRequest)
 GuideDocumentGrant.open(opaque_document_handle)
-ArtifactBindingPort.bind_checker_output(CheckerOutputBindingRequest)
+CheckerOutputBindingPort.bind_checker_output(CheckerOutputBindingRequest)
 PostSubmissionMaterializationPort.materialize(PostSubmissionEvaluationRequest, consumer)
 CheckerArtifactOutputPort.store(CheckerOutputArtifactRequest)
 CheckerArtifactOutputPort.recover(CheckerOutputSelector)
@@ -375,6 +375,12 @@ ART obtains separate prepared handles internally
 immediately before materialization and durable put intent. The typed methods fix
 their expected actions, and handles never enter route schemas, outbox/Celery
 payloads, provider interfaces, or serialized contracts.
+
+CHECKERS owns the post-submit materialization and output-custody consumer ports
+in `app.modules.checkers.api.materialization` and
+`app.modules.checkers.api.output_custody`. ART imports those public contracts and
+supplies their concrete custody implementations through composition. CHECKERS
+execution does not import ART APIs or private ART modules to consume them.
 
 `GuideArtifactIngestRequest` contains prepared authority, exact project, guide,
 guide-source snapshot and item IDs, logical role, and authorized byte source.
@@ -1572,7 +1578,12 @@ databases, and no artifact bytes in PostgreSQL. It is not downgradable.
 
 The checker-output custody migration adds exact Submission version and narrow
 checker-request digest fields to checker-output attempts plus verified
-put/receipt ancestry on checker bindings. It refuses any retained checker-output
+put/receipt ancestry on checker bindings. A successful binding atomically seals
+the terminal attempt/job and replica identity under the existing
+job -> replica -> attempt -> content lock order. The database rejects later
+ancestry changes, including writers using an older transaction snapshot; replica
+health and availability remain mutable. Rolling back publication also rolls back
+the seals. It refuses any retained checker-output
 attempt or binding whose missing evaluation/slot digest or verified ancestry
 cannot be proven; it neither invents those facts nor deletes retained data.
 

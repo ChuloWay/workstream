@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from pathlib import Path
 import runpy
 from types import SimpleNamespace
@@ -24,7 +26,7 @@ from app.modules.artifacts.models import (
 )
 from app.modules.artifacts.service import ArtifactStorageOrchestrator
 from projects.unified_policy_fixtures import create_standalone_unified_policy
-from tests.artifact_store_helpers import minted_source
+from tests.artifact_store_helpers import artifact_preparation_limits, minted_source
 from tests.test_artifact_admission import (
     _AllowArtifactAuthority,
     _admit_checker_output,
@@ -47,7 +49,17 @@ async def _store_verified_output(
 ):
     """Store and independently verify one output using shared test infrastructure."""
     async with factory() as session:
-        async with minted_source(source_path, payload, media_type="text/plain") as source:
+        limits = replace(
+            artifact_preparation_limits(),
+            reservation_ttl_seconds=360,
+            total_deadline_seconds=300,
+        )
+        async with minted_source(
+            source_path,
+            payload,
+            media_type="text/plain",
+            limits=limits,
+        ) as source:
             project_id, task_id, checker_run_id, admission = await _admit_checker_output(
                 session,
                 settings,
@@ -86,9 +98,10 @@ async def _store_verified_output(
             assert attempt is not None and receipt_id is not None
             assert attempt.replica_id is not None
             logical_role = attempt.logical_role
+            replica_id = attempt.replica_id
             content_id = await session.scalar(
                 text("select content_id from artifact_replicas where id=:replica_id"),
-                {"replica_id": attempt.replica_id},
+                {"replica_id": replica_id},
             )
             assert content_id is not None
             await session.rollback()
@@ -98,6 +111,8 @@ async def _store_verified_output(
                 task_id=task_id,
                 checker_run_id=checker_run_id,
                 put_attempt_id=str(admission.attempt_id),
+                verification_job_id=str(job_id),
+                replica_id=str(replica_id),
                 verification_receipt_id=receipt_id,
                 content_id=str(content_id),
                 logical_role=logical_role,
@@ -127,6 +142,7 @@ async def _verified_output(database_url: str, tmp_path: Path):
         )
         case.settings = settings
         case.store = store
+        case.engine = engine
         yield case
     finally:
         bootstrap.close()
@@ -160,6 +176,216 @@ _INSERT_BINDING = text(
        :scope_version,:actor_id,:attribution_type,:put_attempt_id,
        :verification_receipt_id,:supersedes_binding_id)"""
 )
+
+_ANCESTOR_MUTATIONS = {
+    "attempt": (
+        "artifact_put_attempts",
+        "put_attempt_id",
+        "cas_version=cas_version+1",
+        "checker_output_put_attempt_custody",
+        "checker output put attempt custody is immutable",
+    ),
+    "job": (
+        "artifact_verification_jobs",
+        "verification_job_id",
+        "cas_version=cas_version+1",
+        "checker_output_verification_job_custody",
+        "checker output verification job custody is immutable",
+    ),
+    "replica": (
+        "artifact_replicas",
+        "replica_id",
+        "provider_profile=provider_profile || '-changed'",
+        "checker_output_replica_custody",
+        "checker output replica custody is immutable",
+    ),
+}
+
+
+async def _sealed_chain(session, case) -> tuple[bool, bool, bool]:
+    values = []
+    for table, attribute in (
+        ("artifact_verification_jobs", "verification_job_id"),
+        ("artifact_replicas", "replica_id"),
+        ("artifact_put_attempts", "put_attempt_id"),
+    ):
+        value = await session.scalar(
+            text(
+                f"select checker_output_custody_sealed from {table} "
+                "where id=:id"
+            ),
+            {"id": getattr(case, attribute)},
+        )
+        values.append(bool(value))
+    return tuple(values)
+
+
+async def _wait_for_lock(session, backend_pid: int) -> None:
+    for _ in range(500):
+        waiting = await session.scalar(
+            text(
+                "select exists(select 1 from pg_locks "
+                "where pid=:pid and not granted)"
+            ),
+            {"pid": backend_pid},
+        )
+        if waiting:
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("competing ancestry transaction did not wait")
+
+
+async def _transaction(connection, isolation: str):
+    transaction = await connection.begin()
+    await connection.execute(text(f"set transaction isolation level {isolation}"))
+    return transaction
+
+
+def _ancestor_update(case, ancestor: str):
+    table, attribute, assignment, _trigger, _error = _ANCESTOR_MUTATIONS[ancestor]
+    return text(f"update {table} set {assignment} where id=:id"), {
+        "id": getattr(case, attribute)
+    }
+
+
+def _invalid_ancestor_update(case, ancestor: str):
+    table, attribute, _assignment, _trigger, _error = _ANCESTOR_MUTATIONS[ancestor]
+    assignment = {
+        "attempt": (
+            "status='conflict', terminal_result_code='conflict', "
+            "terminal_at=clock_timestamp(), cas_version=cas_version+1"
+        ),
+        "job": (
+            "status='conflict', terminal_result_code='conflict', "
+            "terminal_at=clock_timestamp(), cas_version=cas_version+1"
+        ),
+        "replica": "provider_object_ref=provider_object_ref || '-moved'",
+    }[ancestor]
+    return text(f"update {table} set {assignment} where id=:id"), {
+        "id": getattr(case, attribute)
+    }
+
+
+async def _ancestor_without_seal(session, case, ancestor: str):
+    table, attribute, _assignment, _trigger, _error = _ANCESTOR_MUTATIONS[ancestor]
+    return await session.scalar(
+        text(
+            f"select to_jsonb(value) - 'checker_output_custody_sealed' "
+            f"from {table} value where id=:id"
+        ),
+        {"id": getattr(case, attribute)},
+    )
+
+
+def _assert_concurrent_rejection(
+    error: DBAPIError,
+    *,
+    isolation: str,
+    expected: str,
+) -> None:
+    message = str(error)
+    if isolation == "REPEATABLE READ":
+        assert expected in message or "could not serialize access" in message
+    else:
+        assert expected in message
+
+
+async def _binding_first_race(case, ancestor: str, isolation: str) -> None:
+    async with case.factory() as session:
+        before = await _ancestor_without_seal(session, case, ancestor)
+    binder = await case.engine.connect()
+    updater = await case.engine.connect()
+    binding_transaction = await _transaction(binder, isolation)
+    update_transaction = await _transaction(updater, isolation)
+    pending_update = None
+    try:
+        updater_pid = await updater.scalar(text("select pg_backend_pid()"))
+        assert await _sealed_chain(updater, case) == (False, False, False)
+        assert await _ancestor_without_seal(updater, case, ancestor) == before
+        await binder.execute(_INSERT_BINDING, _binding_values(case))
+        statement, parameters = _ancestor_update(case, ancestor)
+        pending_update = asyncio.create_task(updater.execute(statement, parameters))
+        async with case.engine.connect() as observer:
+            await _wait_for_lock(observer, updater_pid)
+        await binding_transaction.commit()
+        with pytest.raises(DBAPIError) as rejected:
+            await pending_update
+        _assert_concurrent_rejection(
+            rejected.value,
+            isolation=isolation,
+            expected=_ANCESTOR_MUTATIONS[ancestor][4],
+        )
+        await update_transaction.rollback()
+    finally:
+        if pending_update is not None and not pending_update.done():
+            pending_update.cancel()
+            await asyncio.gather(pending_update, return_exceptions=True)
+        if binding_transaction.is_active:
+            await binding_transaction.rollback()
+        if update_transaction.is_active:
+            await update_transaction.rollback()
+        await binder.close()
+        await updater.close()
+    async with case.factory() as session:
+        assert await _sealed_chain(session, case) == (True, True, True)
+        assert await _ancestor_without_seal(session, case, ancestor) == before
+        assert await session.scalar(
+            text(
+                "select count(*) from artifact_bindings "
+                "where put_attempt_id=:put_attempt_id"
+            ),
+            {"put_attempt_id": case.put_attempt_id},
+        ) == 1
+
+
+async def _update_first_race(case, ancestor: str, isolation: str) -> None:
+    async with case.factory() as session:
+        before = await _ancestor_without_seal(session, case, ancestor)
+    updater = await case.engine.connect()
+    binder = await case.engine.connect()
+    update_transaction = await _transaction(updater, isolation)
+    binding_transaction = await _transaction(binder, isolation)
+    pending_binding = None
+    try:
+        binder_pid = await binder.scalar(text("select pg_backend_pid()"))
+        statement, parameters = _invalid_ancestor_update(case, ancestor)
+        await updater.execute(statement, parameters)
+        assert await _sealed_chain(binder, case) == (False, False, False)
+        assert await _ancestor_without_seal(binder, case, ancestor) == before
+        pending_binding = asyncio.create_task(
+            binder.execute(_INSERT_BINDING, _binding_values(case))
+        )
+        async with case.engine.connect() as observer:
+            await _wait_for_lock(observer, binder_pid)
+        await update_transaction.commit()
+        with pytest.raises(DBAPIError) as rejected:
+            await pending_binding
+        _assert_concurrent_rejection(
+            rejected.value,
+            isolation=isolation,
+            expected="checker output binding verified ancestry mismatch",
+        )
+        await binding_transaction.rollback()
+    finally:
+        if pending_binding is not None and not pending_binding.done():
+            pending_binding.cancel()
+            await asyncio.gather(pending_binding, return_exceptions=True)
+        if update_transaction.is_active:
+            await update_transaction.rollback()
+        if binding_transaction.is_active:
+            await binding_transaction.rollback()
+        await updater.close()
+        await binder.close()
+    async with case.factory() as session:
+        assert await _sealed_chain(session, case) == (False, False, False)
+        assert await _ancestor_without_seal(session, case, ancestor) != before
+        assert await session.scalar(
+            text(
+                "select count(*) from artifact_bindings "
+                "where put_attempt_id=:put_attempt_id"
+            ),
+            {"put_attempt_id": case.put_attempt_id},
+        ) == 0
 
 
 @pytest.mark.asyncio
@@ -302,6 +528,150 @@ async def test_checker_attempt_static_custody_allows_only_execution_lifecycle(
 
 
 @pytest.mark.asyncio
+async def test_binding_seals_exact_ancestry_but_preserves_replica_health(
+    isolated_database_env: str,
+    tmp_path: Path,
+) -> None:
+    async with _verified_output(isolated_database_env, tmp_path) as case:
+        for ancestor in _ANCESTOR_MUTATIONS:
+            table, attribute, _assignment, _trigger, _error = _ANCESTOR_MUTATIONS[ancestor]
+            with pytest.raises(DBAPIError, match="seal requires binding"):
+                async with case.factory() as session, session.begin():
+                    await session.execute(
+                        text(
+                            f"update {table} set checker_output_custody_sealed=true "
+                            "where id=:id"
+                        ),
+                        {"id": getattr(case, attribute)},
+                    )
+
+        async with case.factory() as session, session.begin():
+            await session.execute(
+                text(
+                    "update artifact_put_attempts set cas_version=cas_version+1 "
+                    "where id=:id"
+                ),
+                {"id": case.put_attempt_id},
+            )
+            await session.execute(
+                text(
+                    "update artifact_verification_jobs set cas_version=cas_version+1 "
+                    "where id=:id"
+                ),
+                {"id": case.verification_job_id},
+            )
+            await session.execute(
+                text(
+                    "update artifact_replicas set last_reconciled_at=clock_timestamp(), "
+                    "updated_at=clock_timestamp() where id=:id"
+                ),
+                {"id": case.replica_id},
+            )
+            await session.execute(_INSERT_BINDING, _binding_values(case))
+            assert await _sealed_chain(session, case) == (True, True, True)
+
+        for ancestor in _ANCESTOR_MUTATIONS:
+            table, attribute, assignment, _trigger, error = _ANCESTOR_MUTATIONS[ancestor]
+            with pytest.raises(DBAPIError, match=error):
+                async with case.factory() as session, session.begin():
+                    await session.execute(
+                        text(f"update {table} set {assignment} where id=:id"),
+                        {"id": getattr(case, attribute)},
+                    )
+            with pytest.raises(DBAPIError, match=error):
+                async with case.factory() as session, session.begin():
+                    await session.execute(
+                        text(f"delete from {table} where id=:id"),
+                        {"id": getattr(case, attribute)},
+                    )
+
+        async with case.factory() as session, session.begin():
+            await session.execute(
+                text(
+                    "update artifact_replicas set verification_state='missing', "
+                    "availability_state='unavailable', integrity_state='invalid', "
+                    "last_reconciled_at=clock_timestamp(), updated_at=clock_timestamp() "
+                    "where id=:id"
+                ),
+                {"id": case.replica_id},
+            )
+            assert await _sealed_chain(session, case) == (True, True, True)
+
+        for ancestor in _ANCESTOR_MUTATIONS:
+            table, attribute, assignment, trigger, _error = _ANCESTOR_MUTATIONS[ancestor]
+            async with case.factory() as session:
+                before = await session.scalar(
+                    text(f"select to_jsonb(value) from {table} value where id=:id"),
+                    {"id": getattr(case, attribute)},
+                )
+                transaction = await session.begin_nested()
+                await session.execute(text(f"alter table {table} disable trigger {trigger}"))
+                await session.execute(
+                    text(f"update {table} set {assignment} where id=:id"),
+                    {"id": getattr(case, attribute)},
+                )
+                after = await session.scalar(
+                    text(f"select to_jsonb(value) from {table} value where id=:id"),
+                    {"id": getattr(case, attribute)},
+                )
+                assert after != before
+                await transaction.rollback()
+                assert await session.scalar(
+                    text(f"select to_jsonb(value) from {table} value where id=:id"),
+                    {"id": getattr(case, attribute)},
+                ) == before
+                await session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_binding_rollback_removes_all_ancestry_seals(
+    isolated_database_env: str,
+    tmp_path: Path,
+) -> None:
+    async with _verified_output(isolated_database_env, tmp_path) as case:
+        binding_id = str(new_record_id())
+        async with case.factory() as session:
+            transaction = await session.begin()
+            await session.execute(
+                _INSERT_BINDING,
+                _binding_values(case, id=binding_id),
+            )
+            assert await _sealed_chain(session, case) == (True, True, True)
+            await transaction.rollback()
+        async with case.factory() as session:
+            assert await _sealed_chain(session, case) == (False, False, False)
+            assert await session.scalar(
+                text("select count(*) from artifact_bindings where id=:id"),
+                {"id": binding_id},
+            ) == 0
+
+
+@pytest.mark.parametrize("ancestor", tuple(_ANCESTOR_MUTATIONS))
+@pytest.mark.parametrize("isolation", ("READ COMMITTED", "REPEATABLE READ"))
+@pytest.mark.asyncio
+async def test_binding_and_ancestor_updates_serialize_fail_closed(
+    isolated_database_env: str,
+    tmp_path: Path,
+    ancestor: str,
+    isolation: str,
+) -> None:
+    async with _verified_output(isolated_database_env, tmp_path) as case:
+        await _binding_first_race(case, ancestor, isolation)
+
+        other = await _store_verified_output(
+            factory=case.factory,
+            settings=case.settings,
+            namespace=case.namespace,
+            store=case.store,
+            policy_bundle=case.policy_bundle,
+            source_path=tmp_path / f"update-first-{ancestor}",
+            payload=f"update-first-{isolation}-{ancestor}".encode(),
+        )
+        other.engine = case.engine
+        await _update_first_race(other, ancestor, isolation)
+
+
+@pytest.mark.asyncio
 async def test_artifact_binding_truncate_custody_blocks_direct_and_cascade_deletion(
     isolated_database_env: str,
     tmp_path: Path,
@@ -409,14 +779,20 @@ async def test_binding_guard_uses_only_artifact_ancestry_and_exact_owner_fks(
 async def _restore_pre_0007_schema(connection) -> None:
     """Remove only 0007 custody inside the caller's rollback-only transaction."""
     for table, trigger in (
+        ("artifact_bindings", "checker_output_binding_seal"),
         ("artifact_bindings", "checker_output_binding_insert"),
         ("artifact_bindings", "trg_artifact_bindings_no_truncate"),
+        ("artifact_verification_jobs", "checker_output_verification_job_custody"),
+        ("artifact_replicas", "checker_output_replica_custody"),
         ("artifact_put_attempts", "checker_output_put_attempt_custody"),
         ("artifact_put_attempts", "checker_output_put_attempt_no_truncate"),
     ):
         await connection.execute(text(f"drop trigger {trigger} on {table}"))
     for function in (
+        "seal_checker_output_binding_ancestry()",
         "guard_checker_output_binding_insert()",
+        "guard_checker_output_verification_job_custody()",
+        "guard_checker_output_replica_custody()",
         "guard_checker_output_put_attempt_custody()",
         "guard_checker_output_put_attempt_truncate()",
     ):
@@ -467,7 +843,20 @@ async def _restore_pre_0007_schema(connection) -> None:
     await connection.execute(
         text(
             "alter table artifact_put_attempts drop column submission_id, "
-            "drop column submission_version, drop column checker_request_digest"
+            "drop column submission_version, drop column checker_request_digest, "
+            "drop column checker_output_custody_sealed"
+        )
+    )
+    await connection.execute(
+        text(
+            "alter table artifact_verification_jobs "
+            "drop column checker_output_custody_sealed"
+        )
+    )
+    await connection.execute(
+        text(
+            "alter table artifact_replicas "
+            "drop column checker_output_custody_sealed"
         )
     )
 

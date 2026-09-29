@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.interfaces.artifacts import ArtifactStore, artifact_provider_object_ref
-from app.modules.artifacts.api.submission_materialization import PostSubmissionMaterializationUnavailable
+from app.modules.checkers.api.materialization import PostSubmissionMaterializationUnavailable
 from app.modules.artifacts.models import (
     ArtifactBinding, ArtifactContent, ArtifactReplica, ArtifactStorageNamespace,
     ArtifactVerificationJob, ArtifactVerificationReceipt, PreSubmitEvidenceSet,

@@ -32,6 +32,33 @@ def upgrade() -> None:
         sa.Column("checker_request_digest", sa.String(length=71), nullable=True),
     )
     op.add_column(
+        "artifact_put_attempts",
+        sa.Column(
+            "checker_output_custody_sealed",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.text("false"),
+        ),
+    )
+    op.add_column(
+        "artifact_verification_jobs",
+        sa.Column(
+            "checker_output_custody_sealed",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.text("false"),
+        ),
+    )
+    op.add_column(
+        "artifact_replicas",
+        sa.Column(
+            "checker_output_custody_sealed",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.text("false"),
+        ),
+    )
+    op.add_column(
         "artifact_bindings",
         sa.Column("put_attempt_id", sa.Uuid(), nullable=True),
     )
@@ -133,6 +160,7 @@ def upgrade() -> None:
     )
 
     _install_checker_output_attempt_custody()
+    _install_checker_output_ancestor_custody()
     _install_checker_output_binding_guard()
 
 
@@ -190,11 +218,36 @@ def _install_checker_output_attempt_custody() -> None:
         LANGUAGE plpgsql AS $$
         BEGIN
           IF TG_OP='DELETE' THEN
-            IF OLD.producer_request_type='checker_output' THEN
+            IF OLD.producer_request_type='checker_output'
+               OR OLD.checker_output_custody_sealed THEN
               RAISE EXCEPTION 'checker output put attempt custody is immutable'
                 USING ERRCODE='55000';
             END IF;
             RETURN OLD;
+          END IF;
+          IF OLD.checker_output_custody_sealed THEN
+            IF NOT NEW.checker_output_custody_sealed
+               OR (to_jsonb(NEW) - 'checker_output_custody_sealed')
+                  IS DISTINCT FROM
+                  (to_jsonb(OLD) - 'checker_output_custody_sealed') THEN
+              RAISE EXCEPTION 'checker output put attempt custody is immutable'
+                USING ERRCODE='55000';
+            END IF;
+            RETURN NEW;
+          END IF;
+          IF NEW.checker_output_custody_sealed THEN
+            IF (to_jsonb(NEW) - 'checker_output_custody_sealed')
+                 IS DISTINCT FROM
+                 (to_jsonb(OLD) - 'checker_output_custody_sealed')
+               OR NOT EXISTS (
+                 SELECT 1 FROM artifact_bindings binding
+                 WHERE binding.resource_type='checker_run'
+                   AND binding.put_attempt_id=OLD.id
+               ) THEN
+              RAISE EXCEPTION 'checker output put attempt seal requires binding'
+                USING ERRCODE='55000';
+            END IF;
+            RETURN NEW;
           END IF;
           IF OLD.producer_request_type='checker_output'
              OR NEW.producer_request_type='checker_output' THEN
@@ -251,6 +304,111 @@ def _install_checker_output_attempt_custody() -> None:
     )
 
 
+def _install_checker_output_ancestor_custody() -> None:
+    op.execute(
+        """
+        CREATE FUNCTION guard_checker_output_verification_job_custody() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        BEGIN
+          IF TG_OP='DELETE' THEN
+            IF OLD.checker_output_custody_sealed THEN
+              RAISE EXCEPTION 'checker output verification job custody is immutable'
+                USING ERRCODE='55000';
+            END IF;
+            RETURN OLD;
+          END IF;
+          IF OLD.checker_output_custody_sealed THEN
+            IF NOT NEW.checker_output_custody_sealed
+               OR (to_jsonb(NEW) - 'checker_output_custody_sealed')
+                  IS DISTINCT FROM
+                  (to_jsonb(OLD) - 'checker_output_custody_sealed') THEN
+              RAISE EXCEPTION 'checker output verification job custody is immutable'
+                USING ERRCODE='55000';
+            END IF;
+            RETURN NEW;
+          END IF;
+          IF NEW.checker_output_custody_sealed THEN
+            IF (to_jsonb(NEW) - 'checker_output_custody_sealed')
+                 IS DISTINCT FROM
+                 (to_jsonb(OLD) - 'checker_output_custody_sealed')
+               OR NOT EXISTS (
+                 SELECT 1
+                 FROM artifact_bindings binding
+                 JOIN artifact_verification_receipts receipt
+                   ON receipt.id=binding.verification_receipt_id
+                 WHERE binding.resource_type='checker_run'
+                   AND receipt.verification_job_id=OLD.id
+               ) THEN
+              RAISE EXCEPTION 'checker output verification job seal requires binding'
+                USING ERRCODE='55000';
+            END IF;
+          END IF;
+          RETURN NEW;
+        END $$
+        """
+    )
+    op.execute(
+        "CREATE TRIGGER checker_output_verification_job_custody "
+        "BEFORE DELETE OR UPDATE ON artifact_verification_jobs FOR EACH ROW "
+        "EXECUTE FUNCTION guard_checker_output_verification_job_custody()"
+    )
+    op.execute(
+        """
+        CREATE FUNCTION guard_checker_output_replica_custody() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        BEGIN
+          IF TG_OP='DELETE' THEN
+            IF OLD.checker_output_custody_sealed THEN
+              RAISE EXCEPTION 'checker output replica custody is immutable'
+                USING ERRCODE='55000';
+            END IF;
+            RETURN OLD;
+          END IF;
+          IF OLD.checker_output_custody_sealed THEN
+            IF NOT NEW.checker_output_custody_sealed
+               OR ROW(
+                    NEW.id, NEW.content_id, NEW.storage_namespace_id,
+                    NEW.namespace_fingerprint, NEW.adapter,
+                    NEW.provider_profile, NEW.provider_object_ref
+                  ) IS DISTINCT FROM ROW(
+                    OLD.id, OLD.content_id, OLD.storage_namespace_id,
+                    OLD.namespace_fingerprint, OLD.adapter,
+                    OLD.provider_profile, OLD.provider_object_ref
+                  ) THEN
+              RAISE EXCEPTION 'checker output replica custody is immutable'
+                USING ERRCODE='55000';
+            END IF;
+            RETURN NEW;
+          END IF;
+          IF NEW.checker_output_custody_sealed THEN
+            IF (to_jsonb(NEW) - 'checker_output_custody_sealed')
+                 IS DISTINCT FROM
+                 (to_jsonb(OLD) - 'checker_output_custody_sealed')
+               OR NOT EXISTS (
+                 SELECT 1
+                 FROM artifact_bindings binding
+                 JOIN artifact_verification_receipts receipt
+                   ON receipt.id=binding.verification_receipt_id
+                 JOIN artifact_verification_jobs job
+                   ON job.id=receipt.verification_job_id
+                 WHERE binding.resource_type='checker_run'
+                   AND job.replica_id=OLD.id
+               ) THEN
+              RAISE EXCEPTION 'checker output replica seal requires binding'
+                USING ERRCODE='55000';
+            END IF;
+          END IF;
+          RETURN NEW;
+        END $$
+        """
+    )
+    op.execute(
+        "CREATE TRIGGER checker_output_replica_custody "
+        "BEFORE DELETE OR UPDATE ON artifact_replicas FOR EACH ROW "
+        "EXECUTE FUNCTION guard_checker_output_replica_custody()"
+    )
+
+
 def _install_checker_output_binding_guard() -> None:
     op.execute(
         """
@@ -279,15 +437,15 @@ def _install_checker_output_binding_guard() -> None:
           SELECT value.* INTO job
           FROM artifact_verification_jobs value
           WHERE value.id=verification.verification_job_id
-          FOR SHARE;
+          FOR UPDATE;
           SELECT value.* INTO replica
           FROM artifact_replicas value
           WHERE value.id=job.replica_id
-          FOR SHARE;
+          FOR UPDATE;
           SELECT value.* INTO attempt
           FROM artifact_put_attempts value
           WHERE value.id=job.originating_put_attempt_id
-          FOR SHARE;
+          FOR UPDATE;
           SELECT value.* INTO content
           FROM artifact_contents value
           WHERE value.id=replica.content_id
@@ -364,6 +522,41 @@ def _install_checker_output_binding_guard() -> None:
     op.execute(
         "CREATE TRIGGER checker_output_binding_insert BEFORE INSERT ON artifact_bindings "
         "FOR EACH ROW EXECUTE FUNCTION guard_checker_output_binding_insert()"
+    )
+    op.execute(
+        """
+        CREATE FUNCTION seal_checker_output_binding_ancestry() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        DECLARE
+          verification artifact_verification_receipts%ROWTYPE;
+          job artifact_verification_jobs%ROWTYPE;
+        BEGIN
+          IF NEW.resource_type <> 'checker_run' THEN
+            RETURN NEW;
+          END IF;
+          SELECT receipt.* INTO STRICT verification
+          FROM artifact_verification_receipts receipt
+          WHERE receipt.id=NEW.verification_receipt_id;
+          SELECT value.* INTO STRICT job
+          FROM artifact_verification_jobs value
+          WHERE value.id=verification.verification_job_id;
+
+          UPDATE artifact_verification_jobs
+          SET checker_output_custody_sealed=true
+          WHERE id=job.id AND NOT checker_output_custody_sealed;
+          UPDATE artifact_replicas
+          SET checker_output_custody_sealed=true
+          WHERE id=job.replica_id AND NOT checker_output_custody_sealed;
+          UPDATE artifact_put_attempts
+          SET checker_output_custody_sealed=true
+          WHERE id=NEW.put_attempt_id AND NOT checker_output_custody_sealed;
+          RETURN NEW;
+        END $$
+        """
+    )
+    op.execute(
+        "CREATE TRIGGER checker_output_binding_seal AFTER INSERT ON artifact_bindings "
+        "FOR EACH ROW EXECUTE FUNCTION seal_checker_output_binding_ancestry()"
     )
     op.execute(
         "CREATE TRIGGER trg_artifact_bindings_no_truncate BEFORE TRUNCATE "

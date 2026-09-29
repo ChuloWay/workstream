@@ -98,6 +98,7 @@ from app.modules.artifacts.schemas import (
     GuideArtifactIngestAuthorityFacts,
     SubmissionBundleArtifactAdmissionRequest,
     SubmissionBundleDurableIntentAuthorityFacts,
+    checker_output_operation_identity,
     checker_output_request_digest_facts,
 )
 from app.modules.artifacts.submission_authorization import (
@@ -2276,12 +2277,8 @@ class ArtifactAdmissionService:
         evaluation = reservation.evaluation
         checker_run_id = str(reservation.checker_run_id)
         logical_role = slot.key
-        operation_identity = canonical_json_hash(
-            {
-                "request_type": "checker_output",
-                "checker_run_id": checker_run_id,
-                "logical_role": logical_role,
-            }
+        operation_identity = checker_output_operation_identity(
+            checker_run_id=reservation.checker_run_id, slot_key=logical_role
         )
         digest_facts = checker_output_request_digest_facts(
             reservation=reservation,

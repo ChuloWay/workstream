@@ -7,7 +7,7 @@ from sqlalchemy import event, text
 
 from app.adapters.tasks import submitted_bundle_port
 from app.core.identifiers import new_record_id
-from app.modules.artifacts.api.submission_materialization import PostSubmissionMaterializationUnavailable
+from app.modules.checkers.api.materialization import PostSubmissionMaterializationUnavailable
 from app.modules.tasks.api.submitted_bundle import SubmittedBundleRequest, SubmittedBundleUnavailable
 from tests.checkers.post_submit.support import change_request
 from tests.post_submit_materialization_helpers import material_fixture

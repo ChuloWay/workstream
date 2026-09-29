@@ -19,7 +19,12 @@ from app.adapters.tasks import task_submission_context_port
 from app.db.session import get_db_session
 from app.interfaces.artifact_operations import GuideArtifactIngestCommand
 from app.modules.projects.api.guide_documents import GuideDocumentUploadTargetPort
-from app.modules.artifacts.api import SubmissionBundlePreparationCommand, PostSubmissionMaterializationPort
+from app.modules.artifacts.api import SubmissionBundlePreparationCommand
+from app.modules.checkers.api.materialization import PostSubmissionMaterializationPort
+from app.modules.checkers.api.output_custody import (
+    CheckerArtifactOutputPort,
+    CheckerOutputBindingPort,
+)
 from app.interfaces.artifacts import (
     ARTIFACT_STORE_CAPABILITY_KEY,
     ArtifactConfigurationError,
@@ -513,7 +518,9 @@ def post_submission_materialization(*, sessions, store, namespace, preparation, 
     )
 
 
-def checker_output_storage(*, sessions, store, namespace, preparation, settings):
+def checker_output_storage(
+    *, sessions, store, namespace, preparation, settings
+) -> CheckerArtifactOutputPort:
     """Compose hidden output custody; live producer and write authority remain absent."""
     from app.modules.artifacts.checker_outputs import CheckerArtifactOutputService, DenyCheckerOutputWriteAuthority
     from app.modules.artifacts.schemas import DenyArtifactInternalAuthority
@@ -526,7 +533,7 @@ def checker_output_storage(*, sessions, store, namespace, preparation, settings)
     )
 
 
-def checker_output_binding(session, *, namespace):
+def checker_output_binding(session, *, namespace) -> CheckerOutputBindingPort:
     """Compose a deny-only caller-transaction binding participant."""
     from app.modules.artifacts.checker_output_bindings import CheckerOutputBindingService, DenyCheckerOutputBindingAuthority
     from app.modules.checkers.api.output_custody import UnavailableCheckerOutputReservation
