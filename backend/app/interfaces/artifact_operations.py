@@ -14,11 +14,9 @@ __all__ = (
     "ArtifactAuditResourceType",
     "ArtifactBindingResourceType",
     "ArtifactBindingPort",
-    "ArtifactMaterializationPort",
     "ArtifactOperatorReadPort",
     "ArtifactOperatorRecoveryPort",
     "ArtifactRecoveryRequest",
-    "BindingMaterializationRequest",
     "CheckerArtifactOutputPort",
     "CheckerOutputBindingRequest",
     "CheckerOutputArtifactRequest",
@@ -89,17 +87,6 @@ class CheckerOutputBindingRequest:
 
 
 @dataclass(frozen=True, slots=True)
-class BindingMaterializationRequest:
-    """Immutable bindings selected by exact execution context."""
-
-    prepared_authorization: PreparedAuthorizationHandle
-    task_id: UUID
-    submission_id: UUID | None
-    checker_run_id: UUID
-    binding_ids: tuple[UUID, ...]
-
-
-@dataclass(frozen=True, slots=True)
 class CheckerOutputArtifactRequest:
     """Generated checker bytes bound to one fixed service execution."""
 
@@ -155,16 +142,6 @@ class ArtifactBindingPort(Protocol):
 
     async def bind_checker_output(self, request: CheckerOutputBindingRequest) -> object:
         """Bind verified checker output under the checker binding action."""
-
-
-class ArtifactMaterializationPort(Protocol):
-    """Materialize only canonical immutable source forms."""
-
-    async def materialize_bindings(
-        self,
-        request: BindingMaterializationRequest,
-    ) -> object:
-        """Materialize exact immutable binding IDs."""
 
 
 class CheckerArtifactOutputPort(Protocol):

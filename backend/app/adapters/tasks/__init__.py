@@ -1,6 +1,7 @@
 """TASK-owned composition adapters and transaction roots."""
 
 from app.modules.tasks.api.submission_history import SubmissionHistoryReadPort
+from app.modules.tasks.api.submitted_bundle import SubmittedBundlePort
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from uuid import UUID
@@ -174,3 +175,9 @@ def submission_history_repository(session) -> SubmissionHistoryReadPort:
     """Compose TASK-owned immutable history selectors and projections."""
     from app.modules.tasks.submission_history import SubmissionHistoryRepository
     return SubmissionHistoryRepository(session)
+
+
+def submitted_bundle_port(session: AsyncSession) -> SubmittedBundlePort:
+    """Compose the exact immutable Submission read without private owner imports in ART."""
+    from app.modules.tasks.submitted_bundle import SubmittedBundleReader
+    return SubmittedBundleReader(session)

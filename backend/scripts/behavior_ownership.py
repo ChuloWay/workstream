@@ -146,6 +146,13 @@ MODULE_PUBLIC_API_FOUNDATION_TARGETS = frozenset(
         "backend/app/modules/authorization/api/outbox_dispatch.py",
     }
 )
+ARCH_04B_MATERIALIZATION_TARGETS = frozenset({
+    "backend/app/modules/artifacts/api/submission_materialization.py",
+    "backend/app/modules/artifacts/post_submit_materialization.py",
+    "backend/app/modules/artifacts/post_submit_selection.py",
+    "backend/app/modules/tasks/api/submitted_bundle.py",
+    "backend/app/modules/tasks/submitted_bundle.py",
+})
 ARCH_04A_POST_SUBMIT_TARGETS = frozenset(
     {
         "backend/app/modules/checkers/api/post_submit.py",
@@ -698,6 +705,7 @@ def _validate_additive_partition_transition(
         | ARCH_CP03B_ADAPTER_BINDING_AUTH_TARGETS
             | ARCH_CP04A_CONTRIBUTION_POLICY_TARGETS
             | ARCH_CP04B_CONTRIBUTION_POLICY_TARGETS
+        | ARCH_04B_MATERIALIZATION_TARGETS
         | ARCH_04A_POST_SUBMIT_TARGETS
         | ARCH_CP05_POLICY_AUTH_TARGETS
         | AUTH_18_PUBLIC_ACTIVATION_TARGETS

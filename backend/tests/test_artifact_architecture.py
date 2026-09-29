@@ -28,7 +28,6 @@ CLOSED_PORTS = {
     "GuideArtifactIngestCommand",
     "GuideArtifactIngestPort",
     "ArtifactBindingPort",
-    "ArtifactMaterializationPort",
     "CheckerArtifactOutputPort",
     "ArtifactOperatorReadPort",
     "ArtifactOperatorRecoveryPort",
@@ -36,7 +35,6 @@ CLOSED_PORTS = {
 CANONICAL_REQUESTS = {
     "GuideArtifactIngestRequest",
     "CheckerOutputBindingRequest",
-    "BindingMaterializationRequest",
     "CheckerOutputArtifactRequest",
     "ArtifactRecoveryRequest",
 }
@@ -195,7 +193,7 @@ def test_product_api_and_workers_cannot_import_or_inject_raw_artifact_types() ->
 
 
 def test_only_artifact_custody_services_own_provider_execution() -> None:
-    """Fence store calls to the orchestrator and narrow guide reader."""
+    """Fence store calls to the orchestrator and exact guide/Submission readers."""
     violations: list[str] = []
     for path in _python_files(APP_ROOT / "modules" / "artifacts"):
         tree = _tree(path)
@@ -203,7 +201,7 @@ def test_only_artifact_custody_services_own_provider_execution() -> None:
             node.name: node
             for node in tree.body
             if isinstance(node, ast.ClassDef)
-            and node.name in {"ArtifactStorageOrchestrator", "ScopedGuideDocumentGrant"}
+            and node.name in {"ArtifactStorageOrchestrator", "ScopedGuideDocumentGrant", "PostSubmissionMaterializer"}
         }
         for node in ast.walk(tree):
             if (
@@ -224,7 +222,7 @@ def test_only_artifact_custody_services_own_provider_execution() -> None:
                     None,
                 )
                 if owner is None or (
-                    owner.name == "ScopedGuideDocumentGrant" and node.func.attr != "open"
+                    owner.name in {"ScopedGuideDocumentGrant", "PostSubmissionMaterializer"} and node.func.attr != "open"
                 ):
                     violations.append(f"{path.relative_to(BACKEND_ROOT)} calls {node.func.attr}")
     assert violations == []
@@ -503,15 +501,11 @@ def test_durable_artifact_mutation_ports_require_process_local_prepared_authorit
         "ArtifactBindingPort": {
             "bind_checker_output",
         },
-        "ArtifactMaterializationPort": {
-            "materialize_bindings",
-        },
         "CheckerArtifactOutputPort": {"store"},
     }
     expected_request_by_method = {
         "ingest": "GuideArtifactIngestRequest",
         "bind_checker_output": "CheckerOutputBindingRequest",
-        "materialize_bindings": "BindingMaterializationRequest",
         "store": "CheckerOutputArtifactRequest",
     }
     protocols = {

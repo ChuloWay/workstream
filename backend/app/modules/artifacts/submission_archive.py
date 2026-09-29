@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import StrEnum
 import hashlib
@@ -274,6 +276,14 @@ class SubmissionArchiveInspector:
         callback: Callable[[SealedSubmissionTree], _ProjectionResult],
     ) -> _ProjectionResult:
         """Project the exact inspected ZIP and keep the tree inside one callback lifetime."""
+        with self._projected_tree(reader, workspace, expected=expected) as tree:
+            return callback(tree)
+
+    @contextmanager
+    def _projected_tree(
+        self, reader: BinaryIO, workspace: Path, *, expected: SubmissionArchiveInspectionResult,
+    ) -> Iterator[SealedSubmissionTree]:
+        """One shared projection lifetime for synchronous and asynchronous consumers."""
         observed = self.inspect(reader)
         if observed != expected:
             self._reject(SubmissionArchiveFailureCode.INTEGRITY_FAILURE)
@@ -344,7 +354,7 @@ class SubmissionArchiveInspector:
                 content=content,
             )
             callback_started = True
-            return callback(tree)
+            yield tree
         except SubmissionArchiveRejectedError:
             raise
         except (OSError, ValueError, zipfile.BadZipFile, RuntimeError):

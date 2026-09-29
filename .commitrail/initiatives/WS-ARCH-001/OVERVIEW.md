@@ -14,7 +14,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Current boundary: one CHECKERS catalogue, compiler/parser and implementation
   per checker ID serve active policy consumers; production post-submit phase
   execution remains unavailable.
-- Next usable boundary: exact post-submit materialization (ARCH-04B), following delivered hidden approved-guide intake (ARCH-03D).
+- Next usable boundary: checker output custody (ARCH-04B2), following delivered hidden input materialization (ARCH-04B). Production execution and live materialization authority remain unavailable.
   [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers public manager activation
   context and exact guide activation using the existing CP07 operation.
   [CP05A](WS-ARCH-001-CP05A.md) supplies public Finance policy administration and recoverable draft selectors.

@@ -19,7 +19,7 @@ from app.adapters.tasks import task_submission_context_port
 from app.db.session import get_db_session
 from app.interfaces.artifact_operations import GuideArtifactIngestCommand
 from app.modules.projects.api.guide_documents import GuideDocumentUploadTargetPort
-from app.modules.artifacts.api import SubmissionBundlePreparationCommand
+from app.modules.artifacts.api import SubmissionBundlePreparationCommand, PostSubmissionMaterializationPort
 from app.interfaces.artifacts import (
     ARTIFACT_STORE_CAPABILITY_KEY,
     ArtifactConfigurationError,
@@ -498,3 +498,16 @@ async def guide_document_access_runtime(session_factory, attempt_id, manifest, c
                 await grant.close()
     finally:
         manager.close()
+
+
+def post_submission_materialization(*, sessions, store, namespace, preparation, inspector) -> PostSubmissionMaterializationPort:
+    """Compose hidden verified input; production authority remains explicitly unavailable."""
+    from app.adapters.tasks import submitted_bundle_port
+    from app.modules.artifacts.post_submit_materialization import (
+        DenyPostSubmissionMaterializationAuthority, PostSubmissionMaterializer,
+    )
+    return PostSubmissionMaterializer(
+        sessions=sessions, tasks=submitted_bundle_port, store=store, namespace=namespace,
+        preparation=preparation, inspector=inspector,
+        authority=DenyPostSubmissionMaterializationAuthority(),
+    )

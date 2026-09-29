@@ -328,7 +328,12 @@ obtains fresh authority. Replay returns ART's canonical result unchanged.
 The post command validates and delegates CHECKER's closed value contract.
 Production explicitly uses `UnavailablePostSubmissionExecution`; this does not
 install durable post-submit execution, authorize material reads, or prove attempt and
-currentness ownership. ARCH-04B/04C/04D/04E own that execution cutover.
+currentness ownership. ARCH-04B supplies the hidden ART input port: exact consumed
+Submission bytes, rebuilt manifest, async scoped file access and cleanup, followed
+by a fresh material-selection check. Production composition denies materialization;
+ARCH-04B2 output custody, ARCH-04C durable execution, ARCH-04D authority and ARCH-04E
+routing remain the execution cutover. A returned evaluation value is not a stored
+current result or acceptance.
 Retained run and submission history now use canonical AUTH and separate fixed
 contributor/manager projections. The alternate execution service and Celery worker are
 removed; the facade neither wraps them nor adds another policy compiler.
