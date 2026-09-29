@@ -4,7 +4,7 @@ import ast
 import inspect
 from pathlib import Path
 
-from app.modules.checkers.api import PostSubmissionExecutionPort, UnavailablePostSubmissionExecution
+from app.modules.checkers.api import PostSubmissionExecutionPort
 from app.modules.checkers.api.post_submit import PostSubmissionEvaluationRequest
 
 
@@ -19,7 +19,7 @@ def test_public_api_has_no_private_owner_types():
         assert not any(
             item.startswith(("sqlalchemy", "app.interfaces.project_agents")) for item in imports
         )
-    for cls in (PostSubmissionExecutionPort, UnavailablePostSubmissionExecution):
+    for cls in (PostSubmissionExecutionPort,):
         methods = [
             name
             for name, method in inspect.getmembers(cls, inspect.isfunction)

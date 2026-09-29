@@ -44,13 +44,13 @@ checker-remediation boundary before public Submission cutover.
 | [ARCH-03C4](../WS-ARCH-001-03C4.md) | ARCH-03C3 | Complete: exact-authorized contributor, manager and operational public queues |
 | [ARCH-03C5](../WS-ARCH-001-03C5.md) | ARCH-03C4 | Complete: exact-authorized Contributor/Manager detail and requirements |
 | [ARCH-03C6](../WS-ARCH-001-03C6.md) | ARCH-03C5 | Complete: distinct exact-authorized locked-context reads |
-| [ARCH-03C7](../WS-ARCH-001-03C7.md) | ARCH-03C6 and hidden TASK owner contracts | Complete: bounded Audit Authority history access; public guide activation, ARCH-03D hidden intake, hidden post-submit materialization and ARCH-04B2 output custody delivered; ARCH-04C next |
-| [CP05A](../WS-ARCH-001-CP05A.md) | CP05, existing policy owners | Complete: public Finance policy administration and selector recovery; public manager activation, ARCH-03D hidden intake, hidden post-submit materialization and ARCH-04B2 output custody delivered; ARCH-04C next |
+| [ARCH-03C7](../WS-ARCH-001-03C7.md) | ARCH-03C6 and hidden TASK owner contracts | Complete: bounded Audit Authority history access; public guide activation, ARCH-03D hidden intake, hidden post-submit materialization and ARCH-04B2 output custody delivered; ARCH-04C hidden execution delivered; ARCH-04D next |
+| [CP05A](../WS-ARCH-001-CP05A.md) | CP05, existing policy owners | Complete: public Finance policy administration and selector recovery; public manager activation, ARCH-03D hidden intake, hidden post-submit materialization and ARCH-04B2 output custody delivered; ARCH-04C hidden execution delivered; ARCH-04D next |
 | CP09 (later cleanup coordination) | All legacy consumers replaced, including CHECKER and public 02I path | Physical economic deletion; not on the allow_review critical path |
 | [ARCH-03D](../WS-ARCH-001-03D.md) | AUTH-18, ARCH-03A, CP08 and merged ART preparation | Complete: hidden durable intake uses exact historical TASK/PROJECTS ports; public cutover remains ARCH-02I |
 | ARCH-04B | ARCH-04A, POL-07, ARCH-03C, merged ARCH-02H | Complete: ART hidden verified Submission input; live authority remains deferred |
 | [ARCH-04B2](../WS-ARCH-001-04B2.md) | ARCH-04A and merged ART admission/verification/binding foundations | Complete: hidden bounded checker-output store/recovery and verified binding, no routing or live reservation |
-| ARCH-04C | ARCH-04A, ARCH-04B, delivered ARCH-04B2, POL-07 | CHECKERS durable execution/result/currentness and worker recovery, including valid empty output sets |
+| ARCH-04C | ARCH-04A, ARCH-04B, delivered ARCH-04B2, POL-07 | Complete hidden CHECKERS execution/result/currentness and worker recovery, including exact empty output sets |
 | ARCH-04D | ARCH-04B, ARCH-04C | AUTH post-submit materialization/result activation |
 | AUTH-OUTBOX-01 | Merged shared outbox persistence and AUTH service/PREP foundations | Complete: planned dispatcher identity/action/matrix and unavailable typed authority contract |
 | CON-02B | AUTH-OUTBOX-01 | Complete: shared hidden dispatcher/claim fencing, typed handlers and recovery |
@@ -87,7 +87,7 @@ ARCH-03C1 completes exact reconciler authority and decision-bound receipts.
 ARCH-03C2 supplies originating-transaction-only per-assignment producer events
 and first handler registration with enforced prefork topology; it must never
 backfill or dispatch retained invalidation rows. Public TASK activation is complete through ARCH-03C7. AUTH-18 delivers public
-manager guide activation/context; ARCH-03D hidden intake, hidden exact post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C is next. Subsequent
+manager guide activation/context; ARCH-03D hidden intake, hidden exact post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C hidden execution is delivered; ARCH-04D is next. Subsequent
 PR-sized contracts name exact files, public types, current migration head and
 runnable proof before implementation; they refine this design, not create a
 new permission requirement.
@@ -122,10 +122,10 @@ event type. Lost delivery/redelivery cannot create a new logical evaluation.
 Hidden ARCH-04B2 ART checker-output storage and binding are delivered, not
 implicit in CHECKERS result persistence. They supply bounded generated-output
 ingestion, generic quota admission attributed to the fixed service, independent
-reread verification and exact checker-output binding. Production CHECKERS
-reservation/currentness and output authority remain unavailable, and the current
+reread verification and exact checker-output binding. CHECKERS
+reservation/currentness is implemented, output authority remains deny-only, and the current
 structural catalogue reserves zero output slots; controlled nonempty fixtures
-prove ART mechanics only. ARCH-04C is next and finalizes only that exact empty output set, using the
+prove ART mechanics only. ARCH-04C finalizes only that exact empty output set, using the
 [bounded execution contract](../WS-ARCH-001-04C.md). A future registered
 output-producing capability must add real producer and atomic binding proof
 before activation; controlled nonempty fixtures do not establish that capability. ARCH-04D then activates the exact ART write/binding
@@ -185,7 +185,7 @@ owning implementation, not with planning prose or fake database claims.
 
 ARCH-04B input proof is delivered in `test_post_submit_materialization.py` and
 `test_post_submit_selection.py`, including deny-before-I/O composition. ARCH-04B2
-delivers output custody proof; durable/live execution proof remains with 04C/04D below.
+delivers output custody proof; ARCH-04C delivers hidden durable execution proof. Live authority proof remains with ARCH-04D.
 
 These are required future implementation tests, not tests claimed present or
 executed by this planning PR. Each owner's bounded record fixes the final

@@ -263,8 +263,9 @@ publication and first handler registration with enforced prefork topology.
 Public manager activation and ARCH-03D hidden approved-guide intake are delivered.
 Hidden exact post-submit input (ARCH-04B) is delivered with deny-only production
 authority. Hidden ARCH-04B2 output storage, recovery and verified binding are
-delivered with production reservations and authority unavailable. ARCH-04C durable
-execution is next. Public intake remains deferred
+delivered. ARCH-04C adds hidden durable execution and exact zero-slot reservations.
+Production authority remains deny-only pending ARCH-04D; automatic delivery and
+routing follow in ARCH-04E. Public intake remains deferred
 to ARCH-02I after evaluation and remediation prerequisites.
 
 The intended unified flow uses one compilation result for sufficiency and
@@ -485,7 +486,8 @@ Before locking a submission packet:
   flow uses one internal pre-submit phase command with ART-owned evidence.
   Broader public Submission caller migration remains WS-ARCH-001-02I
 - no submission row is created until blocking pre-submit checks pass
-- canonical durable post-submit execution and routing remain unavailable
+- ARCH-04C implements hidden durable post-submit execution; live authority and
+  automatic routing remain unavailable until ARCH-04D/04E
 - the obsolete `/submissions/{submission_id}/finalize` repair and manual
   `POST /submissions/{submission_id}/checker-runs` routes are removed. Planned
   exact-authority recovery must not use them.

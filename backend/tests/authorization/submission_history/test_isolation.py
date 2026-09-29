@@ -163,30 +163,27 @@ async def test_same_task_history_separates_contributors(task_client, monkeypatch
 async def test_checker_pagination_and_cursor_audit(task_client, monkeypatch, manager):
     """Retained runs exercise timestamp/id continuation and exact query evidence."""
     from datetime import timedelta
-    from app.core.identifiers import new_record_id
+    from sqlalchemy import event
+    from tests.submission_fixtures import seed_retained_checker_run
     from app.core.hashing import canonical_json_hash
     from app.modules.checkers.models import CheckerRun
     from app.modules.tasks.models import AuditEvent, Submission
     from tests.test_tasks import actor_id
 
     case = await history_case(task_client, monkeypatch)
-    async with db_session.get_session_factory()() as session, session.begin():
+    async with db_session.get_session_factory()() as session:
         original = await session.get(CheckerRun, case[3])
-        template = {column.name: getattr(original, column.name) for column in CheckerRun.__table__.columns}
-        original.is_current_for_submission = False
-        await session.flush()
-        earlier_id, tied_id = str(new_record_id()), str(new_record_id())
-        for run_id, attempt, when, predecessor, current in (
-            (earlier_id, 2, original.created_at - timedelta(hours=1), original.id, False),
-            (tied_id, 3, original.created_at, earlier_id, True),
-        ):
-            values = dict(template)
-            values.update(id=run_id, attempt_number=attempt, supersedes_checker_run_id=predecessor,
-                          is_current_for_submission=current, created_at=when, queued_at=when,
-                          started_at=when, completed_at=when)
-            session.add(CheckerRun(**values))
-            await session.flush()
+        timestamps = iter((original.created_at - timedelta(hours=1), original.created_at))
         contributor_id = (await session.get(Submission, case[2])).contributor_id
+    def fixture_timestamp(mapper, connection, target):
+        target.created_at = next(timestamps)
+        target.queued_at = target.created_at
+    event.listen(CheckerRun, "before_insert", fixture_timestamp)
+    try:
+        earlier_id = await seed_retained_checker_run(case[2], generation=2)
+        tied_id = await seed_retained_checker_run(case[2], generation=3)
+    finally:
+        event.remove(CheckerRun, "before_insert", fixture_timestamp)
     subject = "project-manager-subject" if manager else "worker-one"
     set_dev_actor(monkeypatch, roles="", subject=subject)
     who = await actor_id(subject)
@@ -208,7 +205,7 @@ async def test_checker_pagination_and_cursor_audit(task_client, monkeypatch, man
         async with db_session.get_session_factory()() as session:
             stored = await session.get(CheckerRun, expected)
             assert item["submission_version"] == stored.submission_version
-            assert item["attempt_number"] == stored.attempt_number
+            assert item["attempt_number"] == stored.evaluation_generation
             assert item["supersedes_checker_run_id"] == stored.supersedes_checker_run_id
             if manager:
                 for field in item:

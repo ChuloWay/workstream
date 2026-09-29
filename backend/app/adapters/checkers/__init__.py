@@ -113,3 +113,21 @@ def checker_history_repository(session) -> CheckerHistoryReadPort:
     """Compose retained CHECKERS reads through TASK's public ownership port."""
     from app.modules.checkers.history import CheckerHistoryRepository
     return CheckerHistoryRepository(session)
+
+
+def post_submission_executor(*, sessions, materialization):
+    """Compose the sole executor with action-specific production denial."""
+    from app.adapters.outbox import outbox_append
+    from app.modules.checkers.execution import PostSubmissionExecutor
+    from app.modules.checkers.execution_authority import DenyExecutionAuthority, DenyFinalizationAuthority
+    from app.modules.checkers.runner import default_checker_registry
+    return PostSubmissionExecutor(sessions=sessions, materialization=materialization,
+        execute_authority=lambda session: DenyExecutionAuthority(),
+        finalize_authority=lambda session: DenyFinalizationAuthority(),
+        registry=default_checker_registry(), outbox=outbox_append)
+
+
+def checker_output_reservations(session):
+    """Resolve exact active run/lease custody; current catalogue has zero slots."""
+    from app.modules.checkers.execution_coordination import CheckerOutputReservations
+    return CheckerOutputReservations(session)

@@ -8,7 +8,7 @@ from app.core.identifiers import new_record_id
 import pytest
 
 from app.adapters.artifacts import CheckerPhaseService
-from app.modules.checkers.api import UnavailablePostSubmissionExecution
+from tests.checkers.execution.support import denied_executor
 from fastapi import HTTPException
 from starlette.requests import Request
 
@@ -99,7 +99,7 @@ def _preparation_replay_runtime(prepare_bytes, evidence_id, *, eligible):
 
     runtime.checker_service = CheckerPhaseService(
         pre_submission=runtime.evidence,
-        post_submission=UnavailablePostSubmissionExecution(),
+        post_submission=denied_executor(),
     )
     runtime.checker_service.evaluate_pre_submission = AsyncMock(
         wraps=runtime.checker_service.evaluate_pre_submission,

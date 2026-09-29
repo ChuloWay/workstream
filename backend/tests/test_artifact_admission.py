@@ -360,19 +360,12 @@ async def _seed_checker_output_relationships(session, namespace, *, policy_bundl
     submission_id = str(new_record_id())
     contributor_id = str(new_record_id())
     contributor_link_id = str(new_record_id())
-    checker_run_id = str(new_record_id())
-    guide_version = "v1"
     existing_post = await session.scalar(select(PostSubmitCheckerPolicy).where(
         PostSubmitCheckerPolicy.effective_policy_id == effective_policy_id,
     ))
     assert existing_post is not None
-    post_submit_policy_id = existing_post.id
-    post_submit_policy_body = existing_post.policy_body
-    post_submit_policy_hash = existing_post.policy_hash
     guide = await session.get(ProjectGuide, guide_id)
     assert guide is not None and guide.status == "active" and guide.activation_operation_id is not None
-    review_policy_id, review_hash = guide.selected_review_policy_id, guide.selected_review_policy_hash
-    revision_policy_id, revision_hash = guide.selected_revision_policy_id, guide.selected_revision_policy_hash
     await _seed_human_actor(
         session,
         _context(
@@ -389,50 +382,22 @@ async def _seed_checker_output_relationships(session, namespace, *, policy_bundl
         "actor": contributor_id,
     })
     task = await session.get(WorkstreamTask, task_id)
-    # Stored CHECKERS prerequisites only: canonical ART-to-CHECKERS packet
-    # materialization belongs to ARCH-04B/04C. Do not invent ART admission facts.
-    session.add(build_submission(
+    # Stored ownership for ART mechanics, not a verified input materialization proof.
+    submission = build_submission(
         submission_id=submission_id, task=task, contributor_id=contributor_id,
         task_assignment_id=assignment_id,
         contribution_policy_version_id=task.locked_contribution_policy_version_id,
         version=1, summary="Checker source submission", worker_attestation="complete",
         supersedes_submission_id=None, package_hash=canonical_json_hash({"submission": submission_id}),
-    ))
-    await session.flush()
-    session.add(
-        CheckerRun(
-            id=checker_run_id,
-            task_id=task_id,
-            submission_id=submission_id,
-            submission_version=1,
-            trigger_source="submission_finalized",
-            status="queued",
-            routing_recommendation="not_evaluated",
-            outcome_source="none",
-            triggered_by="setup-actor",
-            triggered_by_subject="setup-subject",
-            triggered_by_issuer="https://issuer.example.test",
-            trigger_auth_source="test",
-            attempt_number=1,
-            is_current_for_submission=True,
-            locked_guide_version=guide_version,
-            locked_post_submit_checker_policy_id=post_submit_policy_id,
-            locked_post_submit_checker_policy_version=guide_version,
-            locked_post_submit_checker_policy_hash=post_submit_policy_hash,
-            locked_post_submit_checker_policy_body=post_submit_policy_body,
-            locked_review_policy_id=review_policy_id,
-            locked_review_policy_generation=1,
-            locked_review_policy_hash=review_hash,
-            locked_revision_policy_id=revision_policy_id,
-            locked_revision_policy_generation=1,
-            locked_revision_policy_hash=revision_hash,
-            locked_payment_policy_version=None,
-            package_hash=canonical_json_hash({"submission": submission_id}),
-            artifact_hash_manifest=[],
-            artifact_manifest_hash=canonical_json_hash([]),
-        )
     )
+    submission.submission_bundle_admission_id = str(new_record_id())
+    submission.artifact_binding_id = str(new_record_id())
+    submission.artifact_content_id = str(new_record_id())
+    session.add(submission)
     await session.commit()
+    from tests.checkers.execution.storage_fixture import seed_storage_run
+    checker_run_id = await seed_storage_run(async_sessionmaker(session.bind, expire_on_commit=False),
+                                            submission_id, state="queued")
     return project_id, task_id, checker_run_id
 
 

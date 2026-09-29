@@ -147,7 +147,7 @@ class PostSubmissionEvaluationRequest(PostSubmitValue):
 
     @model_validator(mode="after")
     def validate_request(self) -> Self:
-        """Reject inconsistent duplicated facts before the unavailable execution port."""
+        """Reject inconsistent duplicated facts before execution."""
         if len(canonical_post_submit_bytes(self)) > 1_048_576:
             raise ValueError("post-submit request capacity exceeded")
         if self.project_id != self.policy.project_id:
@@ -322,10 +322,6 @@ class PostSubmitCurrentResultReference(PostSubmitValue):
             raise ValueError("post-submit current reference result mismatch")
 
 
-class PostSubmissionExecutionUnavailable(RuntimeError):
-    """The real phase executor and its authority are intentionally not installed."""
-
-
 class PostSubmissionExecutionPort(Protocol):
     """One complete locked phase command, never caller-selected individual checks."""
 
@@ -334,14 +330,3 @@ class PostSubmissionExecutionPort(Protocol):
     ) -> PostSubmissionEvaluationResult:
         """Evaluate one request after later owner resolution and authority checks."""
         ...
-
-
-class UnavailablePostSubmissionExecution:
-    """Deny execution after validating a well-formed request, with no external I/O."""
-
-    async def evaluate_post_submission(
-        self, request: PostSubmissionEvaluationRequest
-    ) -> PostSubmissionEvaluationResult:
-        """Keep production unavailable until ARCH-04C/04D supply custody and authority."""
-        PostSubmissionEvaluationRequest.model_validate(request)
-        raise PostSubmissionExecutionUnavailable("post_submit_execution_unavailable")

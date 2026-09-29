@@ -48,9 +48,8 @@ async def seed_retained_submission(
             submission_id=submission_id, task=task, contributor_id=task.assigned_to,
             task_assignment_id=assignment.id,
             contribution_policy_version_id=assignment.submitter_contribution_policy_version_id,
-            # Existing CHECKERS/REV prerequisites, pending ARCH-04B/04C. Exact
-            # TASK assignment custody is required; no ART facts are invented and
-            # this fixture does not prove canonical intake or hidden creation.
+            # Storage-only CHECKERS/REV prerequisite. Exact TASK assignment
+            # custody is required; this does not prove canonical ART intake.
             version=predecessor.version + 1 if predecessor else 1, summary=packet.summary,
             worker_attestation=packet.worker_attestation,
             package_uri=packet.package_uri, package_hash=packet.package_hash,
@@ -62,6 +61,11 @@ async def seed_retained_submission(
                 size_bytes=item.size_bytes, metadata_json=item.metadata,
             ) for item in packet.evidence_items],
         )
+        # Controlled storage references only; history/review tests do not claim
+        # verified ART admission. Real byte custody has its own integration tests.
+        submission.submission_bundle_admission_id = str(new_record_id())
+        submission.artifact_binding_id = str(new_record_id())
+        submission.artifact_content_id = str(new_record_id())
         session.add(submission)
         task.status = "submitted"
         await session.flush()
@@ -73,43 +77,8 @@ async def seed_retained_submission(
     return submission_id
 
 
-async def seed_retained_checker_run(submission_id: str, *, routing="allow_review", results=(), status="completed") -> str:
-    """Seed retained CHECKERS evidence under real foreign keys and immutable guards.
-
-    This is a storage prerequisite, not a claim that runtime evaluation executed.
-    """
-    from app.modules.checkers.models import CheckerRun, CheckerResult
-    from app.modules.checkers.runner import canonical_artifact_manifest_hash
-
-    run_id = str(new_record_id())
-    async with db_session.get_session_factory()() as session:
-        submission = await session.get(Submission, submission_id)
-        assert submission is not None
-        now = datetime.now(UTC)
-        run = CheckerRun(
-            id=run_id, task_id=submission.task_id, submission_id=submission.id,
-            submission_version=submission.version, trigger_source="retained_evidence",
-            status="running", routing_recommendation=routing, outcome_source="auto_checker",
-            triggered_by=submission.contributor_id, triggered_by_subject="retained-subject",
-            triggered_by_issuer="retained-issuer", trigger_auth_source="flow",
-            attempt_number=1, is_current_for_submission=True,
-            **{column.name: getattr(submission, column.name) for column in CheckerRun.__table__.columns
-               if column.name.startswith("locked_")},
-            package_hash=submission.package_hash,
-            artifact_hash_manifest=submission.artifact_hash_manifest,
-            artifact_manifest_hash=canonical_artifact_manifest_hash(submission.artifact_hash_manifest),
-            created_at=now, queued_at=now, started_at=now, completed_at=None,
-            results=[CheckerResult(**dict(dict(
-                id=str(new_record_id()), checker_run_id=run_id, task_id=submission.task_id,
-                submission_id=submission.id, checker_name="check_evidence_present",
-                status="passed", severity="info", blocks_review=False,
-                message="internal sentinel", worker_message="Evidence present",
-                worker_suggested_fix=None, worker_visible=True,
-            ), **item)) for item in results],
-        )
-        session.add(run)
-        await session.flush()  # Result insertion occurs before the terminal outcome.
-        run.status = status
-        run.completed_at = now if status in {"completed", "failed"} else None
-        await session.commit()
-    return run_id
+async def seed_retained_checker_run(submission_id: str, *, failures=(), state="completed", generation=1) -> str:
+    """Seed closed history through real CHECKERS custody, with controlled phase authority."""
+    from tests.checkers.execution.storage_fixture import seed_storage_run
+    return await seed_storage_run(db_session.get_session_factory(), submission_id,
+                                  failures=failures, state=state, generation=generation)

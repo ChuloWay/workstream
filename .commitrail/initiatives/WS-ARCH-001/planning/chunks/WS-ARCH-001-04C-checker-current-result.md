@@ -1,6 +1,6 @@
 # Chunk Contract: WS-ARCH-001-04C — Durable post-submit execution
 
-Disposition: Planned. Dependencies: delivered 04A, 04B,
+Disposition: Complete. Dependencies: delivered 04A, 04B,
 [ARCH-04B2 output custody](../../WS-ARCH-001-04B2.md) and POL-07. Risk: L1.
 
 The current implementation contract is

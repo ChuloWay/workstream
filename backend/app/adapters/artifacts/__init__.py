@@ -12,11 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.api_controls import request_ids
 from app.api.deps.authorization import get_authorization_actor_identity
-from app.adapters.checkers import PreSubmitCheckerExecutionAdapter
-from app.modules.checkers.api.post_submit import UnavailablePostSubmissionExecution
+from app.adapters.checkers import PreSubmitCheckerExecutionAdapter, post_submission_executor, checker_output_reservations
 from app.adapters.projects import project_locked_policy_context_port
 from app.adapters.tasks import task_submission_context_port
-from app.db.session import get_db_session
+from app.db.session import get_db_session, get_session_factory
 from app.interfaces.artifact_operations import GuideArtifactIngestCommand
 from app.modules.projects.api.guide_documents import GuideDocumentUploadTargetPort
 from app.modules.artifacts.api import SubmissionBundlePreparationCommand
@@ -427,7 +426,10 @@ def get_submission_bundle_preparation_command(
                 evidence=evidence,
                 checker_service=CheckerPhaseService(
                     pre_submission=evidence,
-                    post_submission=UnavailablePostSubmissionExecution(),
+                    post_submission=post_submission_executor(
+                        sessions=get_session_factory(), materialization=post_submission_materialization(
+                            sessions=get_session_factory(), store=store, namespace=namespace,
+                            preparation=preparation, inspector=inspector)),
                 ),
                 durable_put=SubmissionBundleDurablePutService(
                     session=session,
@@ -524,10 +526,9 @@ def checker_output_storage(
     """Compose hidden output custody; live producer and write authority remain absent."""
     from app.modules.artifacts.checker_outputs import CheckerArtifactOutputService, DenyCheckerOutputWriteAuthority
     from app.modules.artifacts.schemas import DenyArtifactInternalAuthority
-    from app.modules.checkers.api.output_custody import UnavailableCheckerOutputReservation
     return CheckerArtifactOutputService(
         sessions=sessions, store=store, namespace=namespace, preparation=preparation, settings=settings,
-        reservations=lambda session: UnavailableCheckerOutputReservation(),
+        reservations=checker_output_reservations,
         authority=lambda session: DenyCheckerOutputWriteAuthority(),
         internal_authority=lambda session: DenyArtifactInternalAuthority(),
     )
@@ -536,6 +537,5 @@ def checker_output_storage(
 def checker_output_binding(session, *, namespace) -> CheckerOutputBindingPort:
     """Compose a deny-only caller-transaction binding participant."""
     from app.modules.artifacts.checker_output_bindings import CheckerOutputBindingService, DenyCheckerOutputBindingAuthority
-    from app.modules.checkers.api.output_custody import UnavailableCheckerOutputReservation
     return CheckerOutputBindingService(session, namespace_fingerprint=namespace.namespace_fingerprint,
-        reservations=UnavailableCheckerOutputReservation(), authority=DenyCheckerOutputBindingAuthority())
+        reservations=checker_output_reservations(session), authority=DenyCheckerOutputBindingAuthority())

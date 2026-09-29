@@ -100,8 +100,9 @@ Async policy:
 - Database access, file storage, checker execution orchestration, notifications, and audit writes use non-blocking boundaries.
 - Long-running setup and checker work must not block request/response paths.
 - Project setup automation runs through Celery. Canonical durable post-submit
-  checker execution remains unavailable; its target contract records accepted
-  work and completes it through a durable worker.
+  checker execution has hidden request/lease/result custody through ARCH-04C.
+  Production authority remains deny-only; ARCH-04D activates exact services and
+  ARCH-04E connects delivery through the existing shared outbox worker.
 - FastAPI background tasks are not used for Workstream product lifecycle jobs.
 - A different durable queue can replace Celery later only with an ADR-level reason.
 

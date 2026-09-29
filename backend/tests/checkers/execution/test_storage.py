@@ -1,0 +1,203 @@
+"""Direct-SQL custody and a faulty classifier cannot bypass the database owner."""
+
+from dataclasses import replace
+
+import pytest
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+
+from app.core.identifiers import new_record_id
+from app.modules.checkers.models import CheckerRun, CheckerResult
+from app.modules.checkers.execution_repository import request_text
+from tests.checkers.post_submit.support import change_request
+from tests.post_submit_materialization_helpers import material_fixture
+from .support import reserve, controlled_executor
+from .test_concurrency import final_facts
+
+
+@pytest.mark.parametrize("duplicate", ["request", "generation"])
+async def test_duplicate_request_and_generation_rejected(
+    tmp_path, isolated_database_env, duplicate
+):
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        reservation = await reserve(h)
+        async with h.factory() as session:
+            original = await session.get(CheckerRun, str(reservation.attempt_id))
+            values = {
+                column.name: getattr(original, column.name)
+                for column in CheckerRun.__table__.columns
+            }
+            changed = change_request(
+                h.request,
+                **(
+                    {"evaluation_generation": 2}
+                    if duplicate == "request"
+                    else {"evaluation_request_id": new_record_id()}
+                ),
+            )
+            values.update(
+                id=str(new_record_id()),
+                result_id=str(new_record_id()),
+                evaluation_request_id=str(changed.evaluation_request_id),
+                evaluation_generation=changed.evaluation_generation,
+                request_json=request_text(changed),
+                request_digest=changed.request_sha256,
+            )
+            session.add(CheckerRun(**values))
+            constraint = (
+                "uq_checker_runs_request_phase"
+                if duplicate == "request"
+                else "uq_checker_runs_generation"
+            )
+            with pytest.raises(IntegrityError, match=constraint):
+                await session.flush()
+            await session.rollback()
+
+
+async def test_terminal_member_and_routing_custody(tmp_path, isolated_database_env, monkeypatch):
+    from app.modules.checkers.api.post_submit import PostSubmitMemberResult
+    from app.modules.checkers.post_submit_contracts import make_post_submit_result
+    import app.modules.checkers.execution as execution
+
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        await reserve(h)
+        executor = controlled_executor(h)
+        lease, _ = await executor._claim(h.request)
+        facts = final_facts(h, lease)
+        members = list(facts.result.member_results)
+        definition = h.request.catalogue.definition(
+            members[0].checker_id, members[0].definition_version
+        )
+        members[0] = PostSubmitMemberResult(
+            checker_id=definition.capability_id,
+            implementation_version=definition.implementation_version,
+            status=definition.failure_status,
+            severity=definition.failure_severity,
+            code=definition.failure_code,
+            failure_category=definition.failure_category,
+        )
+        body = facts.result.model_dump(exclude={"result_digest"})
+        body["member_results"] = tuple(members)
+        blocked = make_post_submit_result(**body)
+        facts = facts.model_copy(update={"result": blocked})
+        canonical = execution.classify_result
+        assert canonical(h.request, blocked).routing == "needs_revision"
+        monkeypatch.setattr(
+            execution,
+            "classify_result",
+            lambda request, result: replace(canonical(request, result), routing="allow_review"),
+        )
+        with pytest.raises(IntegrityError, match="completed custody or routing invalid"):
+            await executor.finalize(facts)
+        async with h.factory() as session:
+            run = await session.get(CheckerRun, str(lease.reservation.attempt_id))
+            assert run.status == "running" and run.result_json is None
+            assert list(await session.scalars(select(CheckerResult.id))) == []
+        monkeypatch.setattr(execution, "classify_result", canonical)
+        assert await executor.finalize(facts) == blocked
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["request_json", "evaluation_request_id", "evaluation_generation", "result_id", "project_id"],
+)
+async def test_execution_custody_rejects_mutation(tmp_path, isolated_database_env, field):
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        receipt = await reserve(h)
+        async with h.factory() as session:
+            original = await session.get(CheckerRun, str(receipt.attempt_id))
+            before = getattr(original, field)
+            replacement = (
+                "{}"
+                if field == "request_json"
+                else 2
+                if field == "evaluation_generation"
+                else str(new_record_id())
+            )
+            setattr(original, field, replacement)
+            with pytest.raises(IntegrityError, match="checker run custody is immutable"):
+                await session.flush()
+            await session.rollback()
+            assert getattr(await session.get(CheckerRun, str(receipt.attempt_id)), field) == before
+
+
+async def test_unfinished_members_cannot_commit(tmp_path, isolated_database_env):
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        await reserve(h)
+        lease, _ = await controlled_executor(h)._claim(h.request)
+        async with h.factory() as session:
+            from app.modules.checkers.execution_repository import ExecutionRepository
+
+            repo = ExecutionRepository(session)
+            run = await session.get(CheckerRun, str(lease.reservation.attempt_id))
+            await repo.write_members(run, final_facts(h, lease).result)
+            # An insert must itself schedule the parent terminal constraint; this
+            # cannot depend on the caller remembering to update the parent.
+            with pytest.raises(IntegrityError, match="partial checker members"):
+                await session.commit()
+
+
+async def test_member_shape_and_complete_set_enforced_in_database(
+    tmp_path, isolated_database_env, monkeypatch
+):
+    from sqlalchemy import insert
+    from app.modules.checkers.execution_repository import ExecutionRepository
+
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        await reserve(h)
+        executor = controlled_executor(h)
+        lease, _ = await executor._claim(h.request)
+        facts = final_facts(h, lease)
+        first = facts.result.member_results[0]
+        values = dict(
+            id=str(new_record_id()),
+            checker_run_id=str(lease.reservation.attempt_id),
+            task_id=str(h.request.task_id),
+            submission_id=str(h.request.submission_id),
+            member_order=0,
+            checker_name=first.checker_id,
+            definition_version=first.definition_version,
+            implementation_version=first.implementation_version,
+            status=first.status,
+            code=first.code,
+            failure_category=first.failure_category,
+            severity=first.severity,
+            counters=[],
+        )
+        invalid = [
+            ({"checker_name": "unselected_checker"}, "differs from selected definition"),
+            (
+                {"member_order": len(facts.result.member_results)},
+                "differs from selected definition",
+            ),
+            ({"status": "passed", "code": "packet_fields_missing"}, "passing member shape invalid"),
+            ({"counters": [{"key": "invalid_count", "value": 1025}]}, "counters invalid"),
+            ({"counters": [{"key": "invalid_count"}]}, "counters invalid"),
+            ({"task_id": str(new_record_id())}, "fk_checker_results_run_ownership"),
+        ]
+        async with h.factory() as session:
+            for changes, message in invalid:
+                # Core INSERT bypasses service validation; each tuple changes one
+                # otherwise valid selected member and reaches its specific guard.
+                with pytest.raises(IntegrityError, match=message):
+                    await session.execute(insert(CheckerResult).values(**(values | changes)))
+                await session.rollback()
+            await session.execute(insert(CheckerResult).values(**values))
+            await session.rollback()
+        original = ExecutionRepository.write_members
+
+        async def omit_last(repo, run, result):
+            await original(
+                repo, run, result.model_copy(update={"member_results": result.member_results[:-1]})
+            )
+
+        monkeypatch.setattr(ExecutionRepository, "write_members", omit_last)
+        with pytest.raises(IntegrityError, match="terminal members differ"):
+            await executor.finalize(facts)
+        async with h.factory() as session:
+            assert list(await session.scalars(select(CheckerResult.id))) == []
+            assert (
+                await session.get(CheckerRun, str(lease.reservation.attempt_id))
+            ).status == "running"
+        monkeypatch.setattr(ExecutionRepository, "write_members", original)
+        assert await executor.finalize(facts) == facts.result
