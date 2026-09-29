@@ -26,6 +26,7 @@ SEMANTIC_KEYS = {
     "artifact_put_attempt_charges": ("attempt-to-charge association", ("attempt_id", "charge_id")),
     "artifact_storage_namespaces": ("storage namespace name", ("id",)),
     "authority_control": ("singleton control row", ("id",)),
+    "checker_submission_fences": ("submission-owned shared primary key", ("submission_id",)),
     "guide_source_extraction_retry_budgets": ("binding-owned shared primary key", ("binding_id",)),
     "iso_4217_currency_codes": ("ISO currency code", ("code",)),
     "legacy_actor_identities": ("external legacy actor key", ("actor_id",)),

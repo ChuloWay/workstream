@@ -58,7 +58,9 @@ dispatcher to preserve.
   fixtures that compose the phase facade, checker-output and
   materialization helpers/tests only for traced aggregate/contract changes.
 - Existing migration, architecture, ownership, lane and structure inventories
-  and their tests; register actual paths without weakening checks.
+  and their tests, including `backend/scripts/identifier_inventory.py` and
+  `backend/tests/test_artifact_architecture.py`; register actual paths without
+  weakening checks.
 - Current ARCH/ART/AUTH/POL/CON navigation, this record and linked 04C/04D/04E
   contracts, README, checker/data-model/artifact specifications, operating manual
   and roadmap for affected delivered/remaining claims and local exports if present.

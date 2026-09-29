@@ -596,8 +596,8 @@ def test_checker_materialization_contract_has_one_canonical_consumer_owner() -> 
     assert "Materialization" not in artifact_api.read_text(encoding="utf-8")
 
 
-def test_art_implementations_are_the_exact_checker_contract_consumers() -> None:
-    """Prevent a reverse dependency or an extra consumer of CHECKERS custody ports."""
+def test_checker_custody_ports_have_exact_owner_and_art_consumers() -> None:
+    """Allow only named CHECKERS consumers and ART implementations of custody ports."""
     expected = {
         "app.modules.checkers.api.output_custody": {
             "app/adapters/artifacts/__init__.py",
@@ -606,11 +606,13 @@ def test_art_implementations_are_the_exact_checker_contract_consumers() -> None:
             "app/modules/artifacts/checker_outputs.py",
             "app/modules/artifacts/schemas.py",
             "app/modules/artifacts/service.py",
+            "app/modules/checkers/execution_coordination.py",
         },
         "app.modules.checkers.api.materialization": {
             "app/adapters/artifacts/__init__.py",
             "app/modules/artifacts/post_submit_materialization.py",
             "app/modules/artifacts/post_submit_selection.py",
+            "app/modules/checkers/execution.py",
         },
     }
     actual = {module: set() for module in expected}
