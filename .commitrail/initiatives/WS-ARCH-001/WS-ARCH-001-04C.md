@@ -206,7 +206,7 @@ and fail the discriminating assertion, not a fixture/setup assertion.
 | Default denial precedes repository, provider and scratch | `test_execution.py::test_production_denies_before_access` | composition + negative_structure / actual composition with access spies |
 | Execute evidence cannot finalize; late denial rolls back | `test_execution.py::test_action_authority_is_not_interchangeable` | transaction / strict phase-specific participants |
 | No CHECKERS lock or PREP crosses materialization | `test_concurrency.py::test_evaluation_releases_transaction_before_materialization` | concurrency / independent lock probes during paused real materialization |
-| Actual stored ZIP, complete ordered members, replay without reinvocation | `test_execution.py::test_verified_material_execution_and_replay` | storage + transaction / real Local and MinIO materialization |
+| Actual stored ZIP, complete ordered members, replay without reinvocation | `test_execution.py::test_verified_material_execution_and_replay` | transaction / real Local and MinIO materialization |
 | Zero slots, no output call, unexpected binding rejected | `test_execution.py::test_zero_output_finalization` | service + transaction / canonical catalogue and output access spies |
 | Expired takeover retains run; stale worker rejects in both orders | `test_concurrency.py::test_stale_worker_cannot_finalize_after_takeover` | concurrency / independent sessions with database-timed lease |
 | Supersession and finalization serialize in both orders | `test_concurrency.py::test_generation_advance_and_finalize_serialize` | concurrency / two commit orders, exact fence assertions |
@@ -224,7 +224,7 @@ Run from `backend/`, with the existing local test-admin database and MinIO
 environment supplied without committing credentials:
 
 ```sh
-.venv/bin/python scripts/run_isolated_tests.py --metadata-json /tmp/arch04c-db.json --timeout-seconds 1200 -- .venv/bin/python -m pytest tests/checkers/execution tests/checkers/post_submit tests/authorization/submission_history -q --tb=short
+.venv/bin/python scripts/run_isolated_tests.py --metadata-json /tmp/arch04c-db.json --timeout-seconds 1200 -- .venv/bin/python -m pytest tests/checkers/execution tests/checkers/post_submit tests/authorization/submission_history tests/test_post_submit_materialization.py tests/test_checker_output_storage.py tests/test_checker_output_custody.py tests/test_artifact_admission.py tests/test_alembic.py -q --tb=short
 .venv/bin/python -m ruff check app tests scripts
 .venv/bin/python -m scripts.module_boundaries validate --protected-base bb640f0a
 .venv/bin/python -m scripts.behavior_ownership validate
@@ -234,13 +234,13 @@ environment supplied without committing credentials:
 From the repository root:
 
 ```sh
-backend/.venv/bin/python scripts/check_markdown_links.py
-backend/.venv/bin/python scripts/check_commitrail_records.py
-backend/.venv/bin/python scripts/check_stale_workstream_wording.py
+.venv/bin/python scripts/check_markdown_links.py
+.venv/bin/python scripts/check_commitrail_records.py --base-ref bb640f0a --head-ref HEAD
+.venv/bin/python scripts/check_stale_workstream_wording.py
 ```
 
-Run affected existing ART custody and schema tests as well; complete hosted lanes
-remain required. Exact command results, review targets and freshness belong in
+The command includes affected existing ART custody and schema tests; complete
+hosted lanes remain required. Exact command results, review targets and freshness belong in
 the PR, not this durable record. These commands describe planned verification,
 not passing future runtime proof.
 
