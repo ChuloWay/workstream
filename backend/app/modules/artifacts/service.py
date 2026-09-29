@@ -2057,9 +2057,15 @@ class ArtifactAdmissionService:
                     "guide_source_item_id": facts.guide_source_item_id,
                     "checker_run_id": facts.checker_run_id,
                     "logical_role": facts.logical_role,
-                    "submission_id": facts.submission_id,
-                    "submission_version": facts.submission_version,
-                    "checker_output_request": facts.checker_request_digest_facts,
+                    **(
+                        {
+                            "submission_id": facts.submission_id,
+                            "submission_version": facts.submission_version,
+                            "checker_output_request": facts.checker_request_digest_facts,
+                        }
+                        if facts.request_type == "checker_output"
+                        else {}
+                    ),
                     "pre_submit_evidence_set_id": facts.pre_submit_evidence_set_id,
                     "sha256": commitment.sha256,
                     "byte_count": commitment.byte_count,

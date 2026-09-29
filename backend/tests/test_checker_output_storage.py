@@ -420,6 +420,71 @@ async def test_exact_verified_checker_output_binding_and_generic_binding_remain_
 
 
 @pytest.mark.asyncio
+async def test_checker_binding_rejects_null_verification_terminal_result(
+    isolated_database_env: str,
+    tmp_path: Path,
+) -> None:
+    async with _verified_output(isolated_database_env, tmp_path) as case:
+        async with case.factory() as session:
+            control = await session.begin()
+            await session.execute(_INSERT_BINDING, _binding_values(case))
+            assert await _sealed_chain(session, case) == (True, True, True)
+            await control.rollback()
+
+        async with case.factory() as session, session.begin():
+            await session.execute(
+                text(
+                    "update artifact_verification_jobs "
+                    "set terminal_result_code=null where id=:id"
+                ),
+                {"id": case.verification_job_id},
+            )
+
+        with pytest.raises(
+            DBAPIError,
+            match="checker output binding verified ancestry mismatch",
+        ):
+            async with case.factory() as session, session.begin():
+                await session.execute(_INSERT_BINDING, _binding_values(case))
+        async with case.factory() as session:
+            assert await _sealed_chain(session, case) == (False, False, False)
+            assert await session.scalar(
+                text(
+                    "select count(*) from artifact_bindings "
+                    "where put_attempt_id=:put_attempt_id"
+                ),
+                {"put_attempt_id": case.put_attempt_id},
+            ) == 0
+
+        async with case.factory() as session:
+            mutation = await session.begin()
+            definition = await session.scalar(
+                text(
+                    "select pg_get_functiondef("
+                    "'guard_checker_output_binding_insert()'::regprocedure)"
+                )
+            )
+            assert definition is not None
+            null_safe = "job.terminal_result_code IS DISTINCT FROM 'verified'"
+            old_comparison = "job.terminal_result_code <> 'verified'"
+            assert definition.count(null_safe) == 1
+            await session.execute(text(definition.replace(null_safe, old_comparison)))
+            await session.execute(_INSERT_BINDING, _binding_values(case))
+            assert await _sealed_chain(session, case) == (True, True, True)
+            await mutation.rollback()
+
+        async with case.factory() as session:
+            assert await _sealed_chain(session, case) == (False, False, False)
+            assert await session.scalar(
+                text(
+                    "select count(*) from artifact_bindings "
+                    "where put_attempt_id=:put_attempt_id"
+                ),
+                {"put_attempt_id": case.put_attempt_id},
+            ) == 0
+
+
+@pytest.mark.asyncio
 async def test_checker_binding_rejects_mixed_or_foreign_ancestry(
     isolated_database_env: str,
     tmp_path: Path,

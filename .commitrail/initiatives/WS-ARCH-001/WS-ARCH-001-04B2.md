@@ -116,6 +116,7 @@ claim the current structural catalogue supports them.
   output intent/binding custody; no CHECKERS run writer or retained-data deletion.
 - New `backend/tests/test_checker_output_custody.py`,
   `backend/tests/test_checker_output_storage.py`,
+  `backend/tests/test_artifact_admission_digest.py` for unaffected guide replay,
   `backend/tests/checker_output_custody_helpers.py`,
   `backend/tests/checker_output_admission_helpers.py`, and
   existing `test_artifact_admission.py`, `test_artifact_recovery.py`,
@@ -283,3 +284,14 @@ replica health and availability remain operational facts that may change. Failed
 or rolled-back publication must not leave seals behind. Real PostgreSQL proof
 covers both READ COMMITTED and REPEATABLE READ interleavings, not only sequential
 mutation. No separate custody aggregate or public capability is introduced.
+
+Follow-up review identified two additional bounded repairs. The binding guard
+must reject a null terminal verification result explicitly: SQL's nullable
+comparison cannot establish verified ancestry. Direct-SQL proof supplies an
+otherwise valid chain and checks rejection without a binding or seals. Checker
+lineage fields belong only in the checker-output admission digest; unrelated
+guide and submission producers retain their canonical digest inputs. Guide
+replay must recover its existing attempt without a conflicting digest. Submission
+bundle replay already returns through its owner replay port before this digest;
+no submission replay failure is claimed. These changes add no compatibility
+path and do not rewrite retained attempts.

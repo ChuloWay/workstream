@@ -502,7 +502,7 @@ def _install_checker_output_binding_guard() -> None:
              OR job.originating_put_attempt_id IS DISTINCT FROM attempt.id
              OR job.replica_id IS DISTINCT FROM replica.id
              OR job.status <> 'verified'
-             OR job.terminal_result_code <> 'verified'
+             OR job.terminal_result_code IS DISTINCT FROM 'verified'
              OR job.terminal_at IS NULL
              OR verification.outcome <> 'verified'
              OR verification.execution_generation IS DISTINCT FROM job.execution_generation

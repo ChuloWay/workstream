@@ -9,7 +9,7 @@ The separate output child is delivered by the
 
 Input materialization does not implement output persistence. ARCH-04B2 now
 supplies typed `CheckerArtifactOutputPort.store`, byte-free
-`recover(selector)`, and `ArtifactBindingPort.bind_checker_output` using 04A's
+`recover(selector)`, and `CheckerOutputBindingPort.bind_checker_output` using 04A's
 exact immutable request and owner reservation facts. It reuses generic
 admission, put intent, observation, verification, quota and binding
 infrastructure. ART behavior no longer reads CheckerRun through its private
