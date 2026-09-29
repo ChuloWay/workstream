@@ -9,8 +9,9 @@ from sqlalchemy import text
 
 from app.adapters.artifacts import post_submission_materialization
 from app.core.identifiers import new_record_id
-from app.interfaces.artifacts import ArtifactInputMismatchError
-from app.modules.checkers.api.materialization import PostSubmissionMaterializationUnavailable
+from app.modules.checkers.api.materialization import (
+    PostSubmissionMaterializationUnavailable, PostSubmissionMaterializationFailure,
+)
 from tests.checkers.post_submit.support import change_request
 from tests.checkers.post_submit.test_result_contract import result
 from tests.post_submit_materialization_helpers import material_fixture
@@ -149,11 +150,11 @@ async def test_wrong_provider_bytes_or_manifest_never_reach_consumer(tmp_path, i
         consumer = Consumer(h.files)
         original = h.store.open
         h.store.open = lambda _: _bytes(h.data[:-1] + bytes([h.data[-1] ^ 1]))
-        with pytest.raises(ArtifactInputMismatchError):
+        with pytest.raises(PostSubmissionMaterializationFailure, match="material_unavailable"):
             await h.service.materialize(h.request, consumer)
         h.store.open = original
         packet = h.request.structural_input.model_copy(update={"manifest": ()})
-        with pytest.raises(PostSubmissionMaterializationUnavailable, match="manifest_mismatch"):
+        with pytest.raises(PostSubmissionMaterializationFailure, match="manifest_mismatch"):
             await h.service.materialize(change_request(h.request, structural_input=packet), consumer)
         assert consumer.calls == 0 and not h.preparation._active
 
@@ -186,24 +187,23 @@ async def test_abort_during_projection_prevents_consumer_entry(tmp_path, isolate
 
 async def test_consumer_deadline_revokes_material_and_releases_scratch(tmp_path, isolated_database_env):
     from tests.test_checker_materialization import _limits
-    from app.modules.artifacts.preparation import ArtifactPreparationDeadlineError
     async with material_fixture(tmp_path, isolated_database_env, scratch_limits=_limits(total_deadline_seconds=2)) as h:
         consumer = Consumer(h.files)
         consumer.release = asyncio.Event()
-        with pytest.raises(ArtifactPreparationDeadlineError):
+        with pytest.raises(PostSubmissionMaterializationFailure, match="material_unavailable"):
             await asyncio.wait_for(h.service.materialize(h.request, consumer), 10)
         assert consumer.calls == 1
         assert_closed(h, consumer)
 
 
 async def test_post_submit_expansion_cannot_bypass_aggregate_quota(tmp_path, isolated_database_env):
-    from app.modules.artifacts.preparation import HARD_MAXIMUM_ARTIFACT_BYTES, ArtifactScratchCapacityError
+    from app.modules.artifacts.preparation import HARD_MAXIMUM_ARTIFACT_BYTES
     from tests.test_checker_materialization import _limits
     async with material_fixture(tmp_path, isolated_database_env, scratch_limits=_limits(
         aggregate_reserved_bytes=HARD_MAXIMUM_ARTIFACT_BYTES,
     )) as h:
         consumer = Consumer(h.files)
-        with pytest.raises(ArtifactScratchCapacityError):
+        with pytest.raises(PostSubmissionMaterializationFailure, match="material_unavailable"):
             await h.service.materialize(h.request, consumer)
         assert consumer.calls == 0
         assert not h.preparation._active
@@ -227,7 +227,7 @@ async def test_stored_manifest_mismatch_never_reaches_consumer(tmp_path, isolate
             ), {"id": str(h.created.admission_id), "bad": "sha256:" + "0" * 64})
             for table in ("submission_bundle_admissions", "pre_submit_evidence_sets"):
                 await session.execute(text(f"alter table {table} enable trigger user"))
-        with pytest.raises(PostSubmissionMaterializationUnavailable, match="manifest_mismatch"):
+        with pytest.raises(PostSubmissionMaterializationFailure, match="manifest_mismatch"):
             await h.service.materialize(h.request, consumer)
         assert len(h.store.opens) == 1 and consumer.calls == 0
         assert not h.preparation._active

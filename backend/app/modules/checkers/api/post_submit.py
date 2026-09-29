@@ -246,6 +246,7 @@ class PostSubmissionEvaluationResult(PostSubmitValue):
         Literal[
             "capacity_exceeded",
             "deadline_exceeded",
+            "material_unavailable",
             "implementation_unavailable",
             "invalid_output",
         ]

@@ -363,7 +363,7 @@ def _terminal_guard():
       IF current_run.status='infrastructure_failed' THEN
         IF members <> '[]'::jsonb OR current_run.completion_event_id IS NOT NULL
           OR current_run.failure_code IS NULL OR current_run.failure_code NOT IN
-            ('capacity_exceeded','deadline_exceeded','implementation_unavailable','invalid_output')
+            ('capacity_exceeded','deadline_exceeded','material_unavailable','implementation_unavailable','invalid_output')
           OR result->>'infrastructure_failure_code' IS DISTINCT FROM current_run.failure_code
           OR current_run.routing_recommendation IS DISTINCT FROM 'not_evaluated' THEN
           RAISE EXCEPTION 'checker infrastructure terminal shape invalid' USING ERRCODE='23514';

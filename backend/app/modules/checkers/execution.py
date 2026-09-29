@@ -42,7 +42,9 @@ from app.modules.checkers.post_submit_implementations import (
     detached_checker_context,
 )
 from app.modules.checkers.runner import UnknownChecker, CheckerRegistry
-from app.modules.checkers.api.materialization import PostSubmissionMaterializationPort
+from app.modules.checkers.api.materialization import (
+    PostSubmissionMaterializationPort, PostSubmissionMaterializationFailure,
+)
 from app.modules.outbox.api import OutboxAppendPort
 from app.modules.outbox.api import OutboxAppendInput
 
@@ -197,7 +199,7 @@ class PostSubmissionExecutor:
                 **{k: v for k, v in asdict(materialized).items() if k != "evaluation"}
             )
             result = materialized.evaluation
-        except TimeoutError:
+        except (TimeoutError, PostSubmissionMaterializationFailure) as error:
             result = make_post_submit_result(
                 request_id=request.evaluation_request_id,
                 request_digest=request.request_sha256,
@@ -206,7 +208,9 @@ class PostSubmissionExecutor:
                 evaluation_generation=request.evaluation_generation,
                 outcome="infrastructure_failed",
                 member_results=(),
-                infrastructure_failure_code="deadline_exceeded",
+                infrastructure_failure_code=(
+                    "deadline_exceeded" if isinstance(error, TimeoutError) else "material_unavailable"
+                ),
             )
         return await self.finalize(
             FinalizeFacts(

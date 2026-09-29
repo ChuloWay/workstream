@@ -94,7 +94,7 @@ def test_completed_member_list_matches_plan_exactly(damage):
 
 @pytest.mark.parametrize(
     "code",
-    ("capacity_exceeded", "deadline_exceeded", "implementation_unavailable", "invalid_output"),
+    ("capacity_exceeded", "deadline_exceeded", "material_unavailable", "implementation_unavailable", "invalid_output"),
 )
 def test_infrastructure_failure_never_carries_work_failure(code):
     source = request()

@@ -251,3 +251,44 @@ async def test_consistently_short_result_cannot_omit_selected_policy_member(
             )
         monkeypatch.setattr(execution, "classify_result", canonical)
         assert await executor.finalize(valid) == valid.result
+
+
+async def test_infrastructure_failure_code_is_closed_in_database(tmp_path, isolated_database_env):
+    import json
+    from sqlalchemy import update, func
+    from app.core.hashing import canonical_json_hash
+    from app.modules.checkers.post_submit_contracts import make_post_submit_result
+
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        await reserve(h)
+        lease, _ = await controlled_executor(h)._claim(h.request)
+        result = make_post_submit_result(
+            request_id=h.request.evaluation_request_id, request_digest=h.request.request_sha256,
+            attempt_id=lease.reservation.attempt_id, result_id=lease.reservation.result_id,
+            evaluation_generation=h.request.evaluation_generation, outcome="infrastructure_failed",
+            member_results=(), infrastructure_failure_code="material_unavailable",
+        )
+        body = result.model_dump(mode="json", exclude={"result_digest"})
+        async with h.factory() as session:
+            for code in ("invented_failure", "material_unavailable"):
+                candidate = body | {"infrastructure_failure_code": code}
+                statement = update(CheckerRun).where(CheckerRun.id == str(result.attempt_id)).values(
+                    status="infrastructure_failed", failure_code=code,
+                    result_json=json.dumps(candidate, sort_keys=True, separators=(",", ":")),
+                    result_digest=canonical_json_hash(candidate),
+                    finalize_evidence_id=str(new_record_id()), completed_at=func.clock_timestamp(),
+                    outcome_source="auto_checker", routing_recommendation="not_evaluated",
+                )
+                if code == "invented_failure":
+                    with pytest.raises(IntegrityError, match="infrastructure terminal shape invalid"):
+                        await session.execute(statement)
+                        await session.commit()
+                    await session.rollback()
+                    run = await session.get(CheckerRun, str(result.attempt_id))
+                    assert run.status == "running" and run.result_json is None
+                else:
+                    await session.execute(statement)
+                    await session.commit()
+        async with h.factory() as session:
+            run = await session.get(CheckerRun, str(result.attempt_id))
+            assert run.failure_code == "material_unavailable" and run.status == "infrastructure_failed"

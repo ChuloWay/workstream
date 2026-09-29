@@ -276,3 +276,106 @@ async def test_finalization_outbox_failure_rolls_back(tmp_path, isolated_databas
                 await session.execute(text("drop function test_checker_outbox_failure()"))
         executor._outbox = outbox_append
         assert await executor.finalize(facts) == facts.result
+
+
+@pytest.mark.parametrize("damage", ["missing", "corrupt"])
+async def test_unreadable_stored_bytes_terminalize_and_replay(
+    tmp_path, isolated_database_env, monkeypatch, damage
+):
+    from app.modules.checkers.execution_authority import DenyFinalizationAuthority
+    from .support import ControlledFinalizeAuthority
+    from tests.test_local_artifact_store import object_path
+
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        reservation = await reserve(h)
+        digest = h.request.content_sha256
+        path = object_path(h.settings.artifact_local_root, f"sha256/{digest[7:9]}/{digest[9:]}")
+        assert path.read_bytes() == h.data
+        if damage == "missing":
+            path.unlink()
+        else:
+            path.chmod(0o600)
+            path.write_bytes(bytes([h.data[0] ^ 1]) + h.data[1:])
+            path.chmod(0o400)
+        executor = controlled_executor(h)
+
+        async def forbidden_checker(*args, **kwargs):
+            pytest.fail("unverified stored bytes reached a checker")
+
+        monkeypatch.setattr(executor._registry, "run", forbidden_checker)
+        # The byte failure cannot bypass the separate finalization authority.
+        executor._finalize_authority = lambda session: DenyFinalizationAuthority()
+        pending = []
+        finalize = executor.finalize
+
+        async def retain_finalization(facts):
+            pending.append(facts)
+            return await finalize(facts)
+
+        monkeypatch.setattr(executor, "finalize", retain_finalization)
+        with pytest.raises(CheckerExecutionUnavailable, match="finalization_unavailable"):
+            await executor.evaluate_post_submission(h.request)
+        async with h.factory() as session:
+            run = await session.get(CheckerRun, str(reservation.attempt_id))
+            assert run.status == "running" and run.result_json is None
+            assert run.finalize_evidence_id is None and run.completion_event_id is None
+        executor._finalize_authority = lambda session: ControlledFinalizeAuthority()
+        assert len(pending) == 1
+        result = await finalize(pending[0])
+        assert result.outcome == "infrastructure_failed"
+        assert result.infrastructure_failure_code == "material_unavailable"
+        assert result.member_results == ()
+        assert not h.preparation._active
+        assert list((h.scratch / "workspaces").iterdir()) == []
+        opened = len(h.store.opens)
+        assert opened == 1
+        assert await executor.evaluate_post_submission(h.request) == result
+        assert len(h.store.opens) == opened
+        async with h.factory() as session, session.begin():
+            run = await session.get(CheckerRun, str(reservation.attempt_id))
+            assert run.status == "infrastructure_failed" and run.failure_code == "material_unavailable"
+            assert run.material_custody is None and run.completion_event_id is None
+            assert run.finalize_evidence_id is not None
+            assert run.routing_recommendation == "not_evaluated"
+            assert await session.scalar(select(func.count()).select_from(CheckerResult)) == 0
+            assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 0
+            with pytest.raises(CheckerExecutionUnavailable, match="current_result"):
+                await EvaluationCoordinator(session).read_current_result(h.request)
+
+
+@pytest.mark.parametrize("failure", ["authority", "cancel", "unexpected", "cleanup"])
+async def test_nonrecordable_material_failure_leaves_attempt_recoverable(
+    tmp_path, isolated_database_env, monkeypatch, failure
+):
+    import asyncio
+    from app.modules.artifacts.post_submit_materialization import DenyPostSubmissionMaterializationAuthority
+    from app.modules.artifacts.preparation import ArtifactScratchIntegrityError
+    from app.modules.checkers.api.materialization import PostSubmissionMaterializationUnavailable
+
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        reservation = await reserve(h)
+        executor = controlled_executor(h)
+        if failure == "authority":
+            h.service._authority = DenyPostSubmissionMaterializationAuthority()
+            expected = PostSubmissionMaterializationUnavailable
+        else:
+            expected = {
+                "cancel": asyncio.CancelledError,
+                "unexpected": RuntimeError,
+                "cleanup": ArtifactScratchIntegrityError,
+            }[failure]
+
+            async def fail_prepare(*args, **kwargs):
+                raise expected("controlled nonrecordable failure")
+
+            monkeypatch.setattr(h.preparation, "prepare", fail_prepare)
+        with pytest.raises(expected):
+            await executor.evaluate_post_submission(h.request)
+        assert len(h.store.opens) == (0 if failure == "authority" else 1)
+        assert not h.preparation._active
+        async with h.factory() as session:
+            run = await session.get(CheckerRun, str(reservation.attempt_id))
+            assert run.status == "running" and run.result_json is None
+            assert run.finalize_evidence_id is None and run.completion_event_id is None
+            assert await session.scalar(select(func.count()).select_from(CheckerResult)) == 0
+            assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 0

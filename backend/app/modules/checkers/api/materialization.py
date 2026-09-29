@@ -14,6 +14,10 @@ class PostSubmissionMaterializationUnavailable(RuntimeError):
     """Reject material without exposing provider or private packet details."""
 
 
+class PostSubmissionMaterializationFailure(RuntimeError):
+    """Retain a known post-authorization material failure after successful cleanup."""
+
+
 @dataclass(frozen=True, slots=True)
 class SubmissionMaterialEntry:
     """Expose verified archive metadata without a filesystem path."""

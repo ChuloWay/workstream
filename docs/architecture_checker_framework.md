@@ -549,8 +549,12 @@ severities.
 ## Checker Run Flow — Target Contract
 
 The following is the intended end-to-end lifecycle. Pre-submit intake and
-retained-history reads are implemented. Canonical durable post-submit execution
-and result routing remain unavailable pending ARCH-04D/04E. ARCH-04F adds
+retained-history reads are implemented. Hidden durable post-submit execution is
+implemented; live execution and result routing remain unavailable pending
+ARCH-04D/04E. Known missing or corrupt input after ART authorization records a
+terminal infrastructure failure only after cleanup and fresh finalization
+authorization; it does not route the task. Exact replay does not reread storage.
+Denied material access and unexpected failures remain nonterminal. ARCH-04F adds
 contributor-correctable remediation and gates public intake and enabling the
 false-policy acceptance path; the true `allow_review` route may ship before
 ARCH-04F. ARCH-04B hidden input and ARCH-04B2 hidden output custody are delivered

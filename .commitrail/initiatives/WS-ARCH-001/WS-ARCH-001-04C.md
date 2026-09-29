@@ -37,7 +37,8 @@ dispatcher to preserve.
   for typed custody, pure result rules, action-specific unavailable authority,
   the caller-transaction participant and async execution. Split only cohesive
   owner responsibilities; do not add a generic job framework.
-- Existing `api/post_submit.py`, `api/output_custody.py`,
+- Existing `api/materialization.py`, ART `post_submit_materialization.py`,
+  `api/post_submit.py`, `api/output_custody.py`,
   `post_submit_implementations.py`, `runner.py` and their traced callers to use
   the one registry and replace superseded unavailable declarations.
 - `backend/app/adapters/checkers/__init__.py` and
@@ -121,6 +122,16 @@ aliases, parallel execution implementations or weakened CI.
    sanitize its outcomes through the existing bounded result adapter. Do not add
    a second member dispatcher. Recover unfinished work with the same logical run;
    only these registered, side-effect-free structural handlers may be rerun.
+   After exact ART authorization, known missing/corrupt/unavailable byte-processing
+   failures become a sanitized `PostSubmissionMaterializationFailure`, only after
+   cleanup completes. CHECKERS records `material_unavailable` through fresh
+   finalization authority, with no members, material custody or completion event.
+   Exact replay does not repeat provider access. Authority/selection/drift denial
+   remains `PostSubmissionMaterializationUnavailable`; cancellation, unexpected
+   errors and scratch-cleanup failure propagate without terminalizing the attempt.
+   This closes the material-failure lease loop without a new retry subsystem.
+   Prove real missing/corrupt stored bytes, replay, finalization denial and the
+   distinction from ART denial; retain cancellation/cleanup and late-drift proofs.
 5. Finalization obtains separate fresh finalization authority before feature
    locks, locks fence then run, checks current request and exact unexpired lease,
    validates the complete ordered member set and locked blocking policy, then
@@ -232,6 +243,9 @@ and fail the discriminating assertion, not a fixture/setup assertion.
 | Supersession and finalization serialize in both orders | `test_concurrency.py::test_generation_advance_and_finalize_serialize` | concurrency / two commit orders, exact fence assertions |
 | Hidden REV queue insertion and admission commit serialize with supersession | `tests/test_review_queue_persistence.py::test_review_currentness_serializes_with_successor` | concurrency / independent PostgreSQL sessions, both consumers and commit orders |
 | Member insertion waits on exact parent and rejects after completion | `test_concurrency.py::test_member_insertion_waits_for_terminal_parent` | concurrency / observed database wait before member uniqueness can interfere |
+| Known missing/corrupt stored bytes terminalize only with fresh finalization authority; replay performs no I/O | `test_execution.py::test_unreadable_stored_bytes_terminalize_and_replay` | transaction / real Local bytes, PostgreSQL terminal custody, cleanup and denied-finalization control |
+| ART denial, cancellation, unexpected and scratch-integrity errors remain nonterminal | `test_execution.py::test_nonrecordable_material_failure_leaves_attempt_recoverable` | transaction / real ART denial and controlled preparation failures, no finalization evidence |
+| Infrastructure failure codes remain closed | `test_storage.py::test_infrastructure_failure_code_is_closed_in_database` | direct_sql / unknown-code rejection and valid material failure control |
 | Infrastructure terminal never restarts or routes | `test_execution.py::test_infrastructure_failure_is_terminal` | transaction / repeat invocation and absent completion event |
 | Category precedence, locked severity, warning semantics | `test_results.py::test_routing_uses_complete_locked_policy` | pure / each supported category and severity selection |
 | Missing/extra/foreign members, blocking allow_review, extra output | `test_storage.py::test_terminal_member_and_routing_custody`, `test_member_shape_and_complete_set_enforced_in_database`, `test_consistently_short_result_cannot_omit_selected_policy_member`, `test_execution.py::test_zero_output_finalization` | direct_sql + service / independent invalid tuples with valid controls |
