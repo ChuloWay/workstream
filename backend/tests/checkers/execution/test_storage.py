@@ -297,3 +297,45 @@ async def test_infrastructure_failure_code_is_closed_in_database(tmp_path, isola
             run = await session.get(CheckerRun, str(result.attempt_id))
             assert run.failure_code == "material_unavailable" and run.status == "infrastructure_failed"
             assert run.material_custody is None
+
+
+async def test_unfenced_successor_cannot_poison_next_generation(tmp_path, isolated_database_env):
+    from sqlalchemy import insert
+    from app.modules.checkers.models import CheckerSubmissionFence
+
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        first = await reserve(h)
+        successor = change_request(
+            h.request, evaluation_request_id=new_record_id(), evaluation_generation=2,
+        )
+        orphan_id = str(new_record_id())
+        async with h.factory() as session:
+            original = await session.get(CheckerRun, str(first.attempt_id))
+            values = {column.name: getattr(original, column.name) for column in CheckerRun.__table__.columns}
+            values.update(
+                id=orphan_id, result_id=str(new_record_id()),
+                evaluation_request_id=str(successor.evaluation_request_id),
+                evaluation_generation=2, request_json=request_text(successor),
+                request_digest=successor.request_sha256,
+                supersedes_checker_run_id=str(first.attempt_id),
+            )
+            # Every immediate ownership/shape/uniqueness guard accepts this row.
+            # Only the deferred exact fence check must reject its commit.
+            await session.execute(insert(CheckerRun).values(**values))
+            with pytest.raises(IntegrityError, match="checker run requires currentness custody"):
+                await session.commit()
+            await session.rollback()
+        async with h.factory() as session:
+            assert await session.get(CheckerRun, orphan_id) is None
+            fence = await session.get(CheckerSubmissionFence, str(h.request.submission_id))
+            assert fence.current_run_id == str(first.attempt_id)
+            assert list(await session.scalars(select(CheckerRun.id))) == [str(first.attempt_id)]
+        second = await reserve(h, successor)
+        assert second.evaluation_generation == 2
+        async with h.factory() as session:
+            fence = await session.get(CheckerSubmissionFence, str(h.request.submission_id))
+            assert fence.current_run_id == str(second.attempt_id)
+            run = await session.get(CheckerRun, str(second.attempt_id))
+            assert run.supersedes_checker_run_id == str(first.attempt_id)
+        assert await reserve(h, successor) == second
+        assert await reserve(h) == first

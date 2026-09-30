@@ -329,7 +329,8 @@ def _terminal_guard():
         IF EXISTS(SELECT 1 FROM checker_results WHERE checker_run_id=current_run.id) THEN
           RAISE EXCEPTION 'partial checker members cannot commit' USING ERRCODE='23514';
         END IF;
-        IF NOT EXISTS(SELECT 1 FROM checker_submission_fences WHERE submission_id=current_run.submission_id) THEN
+        IF NOT EXISTS(SELECT 1 FROM checker_submission_fences
+          WHERE submission_id=current_run.submission_id AND current_run_id=current_run.id) THEN
           RAISE EXCEPTION 'checker run requires currentness custody' USING ERRCODE='23514';
         END IF;
         RETURN NULL;

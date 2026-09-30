@@ -661,19 +661,34 @@ Contributor-facing checker-run responses do not expose `routing_recommendation`,
 `outcome_source`, internal route tokens, post-submit policy provenance fields,
 locked post-submit policy body, or hidden task setup details.
 
-Reviewers see:
+ARCH-04C retains closed, ordered post-submit checker identity and implementation
+version, status, code, failure category, severity and the bounded counter fields
+of `PostSubmitMemberResult`. It also retains exact request/result generation and
+digests, locked policy lineage and verified material custody. Current structural
+handlers emit empty counters. Explanations and suggested fixes in history are
+derived deterministically from the closed code; raw handler messages and arbitrary
+metadata are not retained.
 
-- all checker output
-- evidence references
-- full metadata where allowed
+This is retained proof, not a live reviewer projection. Current contributor and
+Project Manager history reads expose only their fixed, permission-appropriate
+DTO fields. Future REV packet/current-work presentation must expose an authorized
+bounded subset after routing and review integration. The current contract does
+not include per-file findings, per-check evidence references, full logs or generated
+output artifacts. For example, a missing-required-file code identifies the failed
+rule but does not retain which path was missing or a missing-file counter.
 
-Authorized Project Manager, Operator, and Audit projections expose only their
-permission-appropriate fields. Depending on the matched permission they may
-see:
+Reviewer file inspection belongs to the planned lease-scoped ART capability bound
+to the exact `ReviewPacketManifest` and active `ReviewLease`; see
+[reviewer packet access](spec_review_lifecycle.md#review-packet-and-artifact-boundary).
+CHECKERS history does not grant artifact access. A reviewer uses the exact immutable
+Submission and locked context, with checker results as bounded provenance.
 
-- full logs
-- internal rule IDs
-- reasoned retry/repair controls
+A richer finding such as a path, location, excerpt, evidence reference or generated
+output needs a typed capability-specific result/evidence schema, visibility rules,
+immutable custody and regression tests before the reviewer contract may promise
+it. This does not introduce a generic metadata store or another checker path.
+Future Operator and Audit projections likewise require their own authorized fields;
+ARCH-04C adds neither full-log reads nor retry/repair controls.
 
 ## Recovery, Not Checker Override
 

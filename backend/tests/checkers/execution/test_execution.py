@@ -59,6 +59,21 @@ async def test_verified_material_execution_and_replay(
         async with h.factory() as session, session.begin():
             current = await EvaluationCoordinator(session).read_current_result(h.request)
             assert current.result == result
+            assert len(h.authority.selections) == 1
+            authorized_request, selected = h.authority.selections[0]
+            assert authorized_request == h.request
+            run = await session.get(CheckerRun, str(result.attempt_id))
+            assert run.material_custody == {
+                "submission_id": str(selected.submission.submission_id),
+                "submission_version": selected.submission.submission_version,
+                "admission_id": str(selected.submission.admission_id),
+                "binding_id": str(selected.submission.binding_id),
+                "content_id": str(selected.submission.content_id),
+                "replica_id": str(selected.replica_id),
+                "content_sha256": selected.sha256,
+                "byte_count": selected.byte_count,
+                "semantic_manifest_sha256": selected.semantic_manifest_sha256,
+            }
             assert current.routing_recommendation in {"allow_review", "needs_revision"}
             rows = list(
                 await session.scalars(

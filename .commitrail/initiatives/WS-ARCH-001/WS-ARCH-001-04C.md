@@ -65,7 +65,8 @@ dispatcher to preserve.
 - Current ARCH/ART/AUTH/POL/CON navigation, this record and linked 04C/04D/04E
   contracts, README, checker/data-model/artifact specifications, operating manual
   and roadmap for affected delivered/remaining claims and local exports if present.
-  This includes `docs/spec_authorization_service.md`,
+  This includes `docs/spec_artifact_storage_service.md`,
+  `docs/spec_authorization_service.md`,
   `docs/engineering/authorization_activation_custody.md`,
   `docs/architecture_system_architecture.md`,
   `docs/architecture_brief/workstream_architecture_brief.md` and
@@ -92,6 +93,12 @@ aliases, parallel execution implementations or weakened CI.
    arbitrary messages, visibility, evidence references and metadata with closed
    checker/version/implementation identity, status, code, failure category, severity
    and counters, plus deterministic member order and immutable row ID/timestamps.
+   Current structural results have empty counters and no retained per-file
+   findings, handler text, arbitrary metadata, per-check evidence references or
+   generated outputs. Future reviewer presentation must expose only an authorized
+   bounded subset; richer findings need a typed capability-specific contract and
+   custody tests before they are promised. File inspection belongs to the planned
+   lease-scoped ART review-packet capability, not CHECKERS history.
    History derives its messages and contributor visibility from those closed facts;
    update affected fixtures/privacy assertions and API expectations together. Preserve
    uq_checker_runs_ownership(id, task_id, submission_id), consumed by ART. Remove
@@ -105,6 +112,10 @@ aliases, parallel execution implementations or weakened CI.
    with different envelope is a conflict. PostgreSQL owns unique
    (evaluation_request_id, phase) across all submissions, unique
    (submission_id, phase, evaluation_generation), and composite fence/run ownership.
+   The deferred guard requires each inserted/updated unfinished run to be the
+   exact fence target at commit; a fence for another generation is insufficient.
+   Rejecting an orphan successor must leave its generation available to the
+   legitimate coordinator. Untouched superseded history remains retained.
    It flushes, never commits or executes.
    Future 04E composes this participant with TASK's dispatch outbox atomically.
    No production route/handler receives it in this chunk.
@@ -232,11 +243,12 @@ and fail the discriminating assertion, not a fixture/setup assertion.
 | Exact reserve replay, changed envelope conflict | `test_coordination.py::test_reservation_replay_rejects_changed_envelope` | transaction / real PostgreSQL caller rollback and nested-transaction rejection |
 | Concurrent first reservation converges | `test_concurrency.py::test_concurrent_initial_reservation` | concurrency / independent PostgreSQL sessions |
 | Request ID collision across valid submissions | `test_concurrency.py::test_cross_submission_request_collision` | concurrency / independent sessions, valid foreign lineage |
+| Unfenced successor cannot consume the next generation | `test_storage.py::test_unfenced_successor_cannot_poison_next_generation` | direct_sql / otherwise valid successor fails at commit, rollback preserves fence and legitimate successor succeeds; removing only exact-run equality defeats rejection |
 | Request/phase and submission/phase/generation uniqueness | `test_storage.py::test_duplicate_request_and_generation_rejected` | direct_sql / valid duplicate controls |
 | Default denial precedes repository, provider and scratch | `test_execution.py::test_production_denies_before_access` | composition + negative_structure / actual composition with an unbound session and forbidden materialization |
 | Execute evidence cannot finalize; late denial rolls back | `test_execution.py::test_action_authority_is_not_interchangeable` | transaction / strict phase-specific participants |
 | No CHECKERS lock or PREP crosses materialization | `test_concurrency.py::test_evaluation_releases_transaction_before_materialization` | concurrency / independent lock probes during paused real materialization |
-| Actual stored ZIP, complete ordered members, replay without reinvocation | `test_execution.py::test_verified_material_execution_and_replay` | transaction / real Local and MinIO materialization |
+| Actual stored ZIP, complete ordered members, replay without reinvocation | `test_execution.py::test_verified_material_execution_and_replay` | transaction / real Local and MinIO materialization; complete persisted material custody equals the independently captured ART-authorized selection, including admission/replica/manifest |
 | Completion and infrastructure failure remain atomic with query autoflush enabled | `test_execution.py::test_verified_material_execution_and_replay`, `test_infrastructure_failure_is_terminal` | transaction / real PostgreSQL guards and an ORM-query clock probe force autoflush before each clock read |
 | Zero slots, no output call, unexpected binding rejected | `test_execution.py::test_zero_output_finalization` | service + transaction / canonical catalogue, extra-binding rejection and absent persisted checker binding |
 | Expired takeover retains run; stale worker rejects in both orders | `test_concurrency.py::test_stale_worker_cannot_finalize_after_takeover` | concurrency / independent sessions with database-timed lease |
