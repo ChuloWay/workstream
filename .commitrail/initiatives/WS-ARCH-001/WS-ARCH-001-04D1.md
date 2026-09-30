@@ -69,7 +69,9 @@ compatibility path or alternate history writer is permitted.
   direct-SQL lineage, retained-data migration, rollback and regression proof.
 - `backend/tests/submission_fixtures.py`,
   `backend/tests/post_submit_materialization_helpers.py`,
-  `backend/tests/test_artifact_admission.py` for its shared queued-output fixture, and a cohesive helper
+  `backend/tests/test_artifact_admission.py` for its shared queued-output fixture,
+  `backend/tests/test_artifact_internal_authorization.py` for exact verification-job
+  receipt assertions, and a cohesive helper
   under `backend/tests/` if needed to reuse canonical ART preparation for retained
   Submission fixtures; existing ART fixture helpers only for that traced reuse.
 - Existing affected `backend/tests/authorization/submission_history/`,

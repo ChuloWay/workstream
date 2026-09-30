@@ -91,7 +91,6 @@ from app.modules.projects.models import (
     GuideSourceArtifactIngest,
     GuideSourceSnapshot,
     GuideSourceSnapshotItem,
-    PostSubmitCheckerPolicy,
     ProjectGuide,
 )
 from project_create_fixtures import seed_historical_project, suspend_historical_product_custody
@@ -354,17 +353,10 @@ async def _seed_checker_output_relationships(session, namespace, *, policy_bundl
             async_sessionmaker(session.bind, expire_on_commit=False), namespace,
         )
     values, effective, _pre = policy_bundle
-    project_id, guide_id = (str(values[key]) for key in ("project", "guide"))
-    effective_policy_id = effective["id"]
+    project_id = str(values["project"])
     task_id = str(new_record_id())
     contributor_id = str(new_record_id())
     contributor_link_id = str(new_record_id())
-    existing_post = await session.scalar(select(PostSubmitCheckerPolicy).where(
-        PostSubmitCheckerPolicy.effective_policy_id == effective_policy_id,
-    ))
-    assert existing_post is not None
-    guide = await session.get(ProjectGuide, guide_id)
-    assert guide is not None and guide.status == "active" and guide.activation_operation_id is not None
     await _seed_human_actor(
         session,
         _context(

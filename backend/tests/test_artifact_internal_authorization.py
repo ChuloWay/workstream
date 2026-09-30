@@ -975,9 +975,8 @@ async def test_verification_claim_and_terminal_failures_roll_back_both_sides(
             await session.refresh(job)
             assert job.status == "running"
             assert job.executor_id is not None and job.execution_generation == 1
-            assert await session.scalar(
-                select(ArtifactVerificationReceipt)
-            ) is None
+            assert await session.scalar(select(ArtifactVerificationReceipt).where(
+                ArtifactVerificationReceipt.verification_job_id == str(job_id))) is None
             events = list(
                 await session.scalars(
                     select(AuditEvent).where(
@@ -1009,9 +1008,8 @@ async def test_verification_claim_and_terminal_failures_roll_back_both_sides(
             )
             await session.refresh(job)
             assert job.status == "verified"
-            assert await session.scalar(
-                select(ArtifactVerificationReceipt)
-            ) is not None
+            assert await session.scalar(select(ArtifactVerificationReceipt).where(
+                ArtifactVerificationReceipt.verification_job_id == str(job_id))) is not None
             events = list(
                 await session.scalars(
                     select(AuditEvent)

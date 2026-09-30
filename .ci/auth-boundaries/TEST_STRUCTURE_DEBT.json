@@ -110,11 +110,11 @@
     },
     {
       "capability": "oversized_authorization_structure",
-      "content_sha256": "7908006945fb78f9bbf83fa56bdea39890f671e12fcd7bc88e68955d99c4b385",
-      "end_line": 2812,
+      "content_sha256": "2ab51146df73df9f5d7e04665e25a31a84377fd4c0b372c17a4103c9b0d132e6",
+      "end_line": 2808,
       "hard_limit": 1200,
       "kind": "test_file",
-      "observed_lines": 2812,
+      "observed_lines": 2808,
       "path": "backend/tests/test_artifact_admission.py",
       "qualified_symbol": null,
       "removal_chunk": "WS-AUTH-003-CLOSE",
@@ -171,26 +171,26 @@
     {
       "capability": "oversized_authorization_structure",
       "content_sha256": "2fac78c747fd82908991bde192ba874d3847b3ad105a827575dfc6afd73614be",
-      "end_line": 2246,
+      "end_line": 2240,
       "hard_limit": 120,
       "kind": "test_function",
       "observed_lines": 194,
       "path": "backend/tests/test_artifact_admission.py",
       "qualified_symbol": "test_guide_admission_consumes_real_project_manager_prep_atomically",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 2053
+      "start_line": 2047
     },
     {
       "capability": "oversized_authorization_structure",
       "content_sha256": "12f1dd1e0632ec3e5fb80ea19eb01bcce2b9a14015a04e120fb304f9b343b828",
-      "end_line": 2050,
+      "end_line": 2044,
       "hard_limit": 120,
       "kind": "test_function",
       "observed_lines": 132,
       "path": "backend/tests/test_artifact_admission.py",
       "qualified_symbol": "test_guide_admission_derives_three_scopes_without_provider_evidence",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 1919
+      "start_line": 1913
     },
     {
       "capability": "oversized_authorization_structure",
@@ -206,11 +206,11 @@
     },
     {
       "capability": "oversized_authorization_structure",
-      "content_sha256": "58347bd7407ea72447fea1c271c4b48930e1c2cfb7389eff3ba7481647c58f11",
-      "end_line": 1033,
+      "content_sha256": "877a23bbb4826e2c687da10a476f1e47ca7c1a1148023dd6ea8c853c71a5371e",
+      "end_line": 1031,
       "hard_limit": 120,
       "kind": "test_function",
-      "observed_lines": 141,
+      "observed_lines": 139,
       "path": "backend/tests/test_artifact_internal_authorization.py",
       "qualified_symbol": "test_verification_claim_and_terminal_failures_roll_back_both_sides",
       "removal_chunk": "WS-AUTH-003-CLOSE",
