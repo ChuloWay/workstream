@@ -553,7 +553,7 @@ Derivation, reads, approval and correction creation do not invoke inference or
 post-submit evaluators. A periodic scan recovers publication failures from
 committed approvals; duplicate delivery retains one policy and receipt.
 Hidden post-submission execution and completion custody are implemented; live
-service authority and automatic routing remain pending ARCH-04D/04E.
+service authority and automatic routing remain pending ARCH-04D2/04E.
 The local Celery command above includes Beat; start it before creating guide sources.
 
 The Beat scheduler must run alongside the Celery execution processes so
@@ -569,7 +569,7 @@ pre-submit execution and completed replay use that service, with ART retaining
 canonical evidence ownership. The obsolete checker worker, manual execution and
 submission-finalize repair routes are removed. `evaluate_post_submission` now
 uses hidden durable execution with deny-only production authority; live service
-authority and automatic routing remain ARCH-04D/04E work.
+authority and automatic routing remain ARCH-04D2/04E work.
 Submission and checker history use live exact-project Submitter authority for the
 original contributor. Separate `/projects/{project_id}` reads require a covering
 Project Manager grant and expose fixed management fields. Token roles confer no

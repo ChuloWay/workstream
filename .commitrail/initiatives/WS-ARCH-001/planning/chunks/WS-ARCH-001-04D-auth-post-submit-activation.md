@@ -2,11 +2,11 @@
 
 Status: ARCH-04D1 canonical custody is Complete; ARCH-04D2 authority remains a
 non-executable planning skeleton after exact 04B/04C manifests.
-Risk: L1. Outcome: ARCH-04D activates exact fixed-service materialization,
+Risk: L1. Outcome: ARCH-04D2 activates exact fixed-service materialization,
 checker-output, evaluator execution and finalization boundaries, replacing
 the historical XINT-06B/broad AUTH-14 design.
 
-ARCH-04D is the sole current activation contract; XINT-06B and broad AUTH-14
+ARCH-04D2 is the sole current activation contract; XINT-06B and broad AUTH-14
 are historical custody references, not parallel work. Materialization PREP
 precedes storage access; final-result PREP binds the accepted output after
 I/O. Fixed-service registrations and resource facts must come from the exact

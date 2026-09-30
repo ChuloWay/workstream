@@ -60,7 +60,7 @@ checker-remediation boundary before public Submission cutover.
 | ARCH-04E1B | ARCH-04E1A, CON-02B hidden contract; shared REV-04B + CON-03C/07 + REV-12A shared fence foundation for false | TASK hidden handlers; consume one shared acceptance operation on false/pass |
 | Scoped XINT-003-08B controller activation | Early existing REV-12A foundation and hidden shared acceptance/writer/observation proof | Existing Operator lifecycle-control action for the bounded shared manifest, not human runtime |
 | ARCH-04E2 | ARCH-04E1B; scoped XINT-003-08B controller activation for false | AUTH exact TASK routing authority |
-| ARCH-04E3 | ARCH-04E2, ARCH-04D, AUTH-OUTBOX-02; shared acceptance proof for false | TASK live dispatch/routing composition: true to allow_review, false/pass to shared acceptance when proven |
+| ARCH-04E3 | ARCH-04E2, ARCH-04D2, AUTH-OUTBOX-02; shared acceptance proof for false | TASK live dispatch/routing composition: true to allow_review, false/pass to shared acceptance when proven |
 | ARCH-04E | ARCH-04E3 | Completed coordination boundary consumed by downstream REV |
 | ARCH-04F (later public-cutover prerequisite) | ARCH-04E | CHECKER failure facts and TASK/ART remediation resubmission, not REV |
 
@@ -129,7 +129,7 @@ structural catalogue reserves zero output slots; controlled nonempty fixtures
 prove ART mechanics only. ARCH-04C finalizes only that exact empty output set, using the
 [bounded execution contract](../WS-ARCH-001-04C.md). A future registered
 output-producing capability must add real producer and atomic binding proof
-before activation; controlled nonempty fixtures do not establish that capability. ARCH-04D then activates the exact ART write/binding
+before activation; controlled nonempty fixtures do not establish that capability. ARCH-04D2 then activates the exact ART write/binding
 and CHECKERS completion surfaces. In that planned flow, external byte I/O occurs
 before the final caller transaction; binding publication and final result become
 visible atomically.

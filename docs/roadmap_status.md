@@ -533,7 +533,7 @@ contributor and Project Manager projections. The obsolete token-role dependency,
 compatibility identity writer, manual checker execution, finalize repair and
 fabricated-actor Celery gate are removed. Retained records are preserved;
 ARCH-04C supplies hidden durable execution and unfinished-attempt recovery;
-live authority and automatic routing remain pending ARCH-04D/04E.
+live authority and automatic routing remain pending ARCH-04D2/04E.
 
 ARCH-04B adds hidden exact Submission materialization through TASK's immutable
 read port and ART's consumed admission. Local/MinIO input is independently reread,

@@ -73,7 +73,7 @@ manager proposal review, pre-submit approval and manual correction dispatch.
 
 1. CP07 complete-guide activation/binding and AUTH-12H live authority are delivered.
    ARCH-03A supplies complete internal guide facts before CP08 lineage and minimal writers.
-2. ARCH-03B/03C replace broad AUTH-13 and ARCH-04D replaces AUTH-14/XINT-06B.
+2. ARCH-03B/03C replace broad AUTH-13 and ARCH-04D2 replaces AUTH-14/XINT-06B.
    AUTH-OUTBOX-01/02 bracket hidden CON-02B dispatch; ARCH-04E2 activates only
    the proven TASK routing handler before ARCH-04E3 live composition.
    TASK queue/read exposure is complete through ARCH-03C7. AUTH-18 public

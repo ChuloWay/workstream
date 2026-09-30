@@ -156,7 +156,7 @@ The canonical `policy_hash` binds ordered entries, configuration and exact
 catalogue/implementation identities. Domain project policy versions record
 changes to project rules; they do not select obsolete software implementations.
 ARCH-04C implements hidden phase execution; production authority remains deny-only
-until ARCH-04D. No public execution route or dispatcher is activated.
+until ARCH-04D2. No public execution route or dispatcher is activated.
 POL-04B connects unified guide setup; POL-05B and POL-06B expose separate
 pre-submit and post-submit policy approvals.
 
@@ -177,7 +177,7 @@ recovery retains the attempt; terminal infrastructure failures never restart or
 publish a routable result. No generated outputs or provider inference are enabled.
 The current-result port checks the exact request inside the caller transaction.
 
-Production composition denies execute/finalize and material access until ARCH-04D.
+Production composition denies execute/finalize and material access until ARCH-04D2.
 No new Celery task, delivery handler or public execution endpoint exists. ARCH-04E
 must recheck currentness when consuming a completion event and apply the locked
 ReviewPolicy; CHECKERS never accepts a contribution or mutates TASK state.
@@ -362,7 +362,7 @@ ARCH-04B2 now supplies hidden typed output storage, byte-free recovery and
 flush-only verified binding. The CHECKERS reservation reader now verifies the
 exact current request/run/lease and returns zero slots; ART authority remains
 deny-only. Controlled nonempty slots prove ART mechanics only. ARCH-04C supports
-that exact empty output set and owns durable execution, followed by ARCH-04D authority and
+that exact empty output set and owns durable execution, followed by ARCH-04D2 authority and
 ARCH-04E routing. A returned evaluation value is not a stored
 current result or acceptance.
 Retained run and submission history now use canonical AUTH and separate fixed
@@ -551,7 +551,7 @@ severities.
 The following is the intended end-to-end lifecycle. Pre-submit intake and
 retained-history reads are implemented. Hidden durable post-submit execution is
 implemented; live execution and result routing remain unavailable pending
-ARCH-04D/04E. Known missing or corrupt input after ART authorization records a
+ARCH-04D2/04E. Known missing or corrupt input after ART authorization records a
 terminal infrastructure failure only after cleanup and fresh finalization
 authorization; it does not route the task. Exact replay does not reread storage.
 Denied material access and unexpected failures remain nonterminal. ARCH-04F adds
@@ -597,7 +597,7 @@ mutations. ARCH-04E owns the current `allow_review` manifest and TASK transition
 ARCH-04F owns contributor-readable non-allow remediation before public cutover.
 The direct CHECKERS-to-TASK mutation, fabricated system actor and alternate
 Celery gate are removed. Hidden durable execution is implemented; live authority
-and routing remain unavailable until ARCH-04D/04E.
+and routing remain unavailable until ARCH-04D2/04E.
 
 `review_pending` marks readiness for the separately owned WS-REV lifecycle.
 WS-REV alone creates `ReviewPacketManifest`, review queues, reviewer leases,
@@ -641,7 +641,7 @@ The checker run records:
 - completion timestamp
 
 ARCH-04B input, ARCH-04B2 output custody and ARCH-04C result custody are
-delivered. Reviewers will receive readiness proof after ARCH-04D activation and
+delivered. Reviewers will receive readiness proof after ARCH-04D2 activation and
 ARCH-04E routing integration. That proof must identify the same immutable binding
 and manifest that passed automated checks; caller-owned manifest fields are not
 authority.

@@ -32,7 +32,7 @@ AUTH-13/14 cutovers are not additional implementation work.
   public TASK activation through 03C7, after 03C1 exact feature authority and
   03C2 originating-transaction event production/registration.
   [AUTH-13 is superseded](chunks/WS-AUTH-001-13-task-assignment-cutover.md).
-- ARCH-04D alone activates post-submit materialization/output and CHECKERS
+- ARCH-04D2 alone activates post-submit materialization/output and CHECKERS
   execution/finalization after ARCH-04B/04B2/04C; historical AUTH-14 and XINT-06B
   cannot start in parallel. ARCH-03B/03C explicitly own task queue/read and
   pre-submit invalidation; downstream REV queue/reconciliation remains separate.
