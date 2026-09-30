@@ -1491,8 +1491,8 @@ records remain immutable but cannot supply current guide execution evidence.
 
 The exact post-submit request and persisted verified-material custody retain
 binding/content IDs, outer-ZIP digest/byte count, semantic-manifest hash, locked
-policy/checker identities and checker implementation identity. Pre-submit evidence and post-submit execution name the
-same verified admission and exact binding.
+policy/checker identities and checker implementation identity. Pre-submit evidence
+and post-submit execution name the same verified admission and exact binding.
 For a registered capability that produces logs or output bytes, those outputs
 must become verified artifact bindings through its reserved slots. The current
 structural catalogue produces no such artifacts.
@@ -1510,15 +1510,17 @@ structural catalogue declares zero output slots; controlled nonempty test
 reservations prove ART mechanics only. A future output-producing registered
 capability must compose bindings only for slots actually reserved by its owner.
 Production materialization, output storage, execution and finalization authority
-remain deny-only until ARCH-04D; automatic TASK publication and routing remain ARCH-04E work.
+remain deny-only until ARCH-04D; automatic TASK publication and routing remain
+ARCH-04E work.
 
 Current ARCH-04C behavior records known post-authorization material failures as
 terminal, unroutable `material_unavailable`, after scratch cleanup and fresh
 finalization authority. It records no verified material custody, member results
 or completion event, and exact replay performs no provider I/O. Authority or
 selection denial and late lineage drift remain nonterminal. This hidden executor
-neither changes TASK state nor provides automatic or public retry. Any subsequent
-authorized evaluation requires the coordinator's next generation.
+neither changes TASK state nor provides automatic or public retry. After a terminal
+result, a new authorized evaluation requires the coordinator's next generation.
+Unfinished expired-lease recovery retains the existing attempt and generation.
 
 The target outage policy remains distinct from that current implementation.
 Future bounded retry/continuation must preserve `evaluation_pending` while
