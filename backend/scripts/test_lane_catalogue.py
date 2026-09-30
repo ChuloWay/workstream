@@ -412,6 +412,8 @@ TASK_MODULES = (
     "tests/checkers/execution/test_concurrency.py",
     "tests/checkers/execution/test_storage.py",
     "tests/checkers/execution/test_migration.py",
+    "tests/checkers/execution/test_material_lineage.py",
+    "tests/checkers/execution/test_material_migration.py",
     "tests/checkers/post_submit/test_catalogue.py",
     "tests/checkers/post_submit/test_compiled_policy.py",
     "tests/checkers/post_submit/test_configuration.py",

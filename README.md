@@ -659,7 +659,8 @@ checker-output storage, byte-free recovery and flush-only verified binding over
 the generic ART put/verification path. ARCH-04C supplies hidden durable execution,
 exact request/execution-lease custody, immutable member results and atomic completion events.
 The structural catalogue produces no output files. Production authority remains
-deny-only; ARCH-04D activates exact services before ARCH-04E automatic routing.
+deny-only. ARCH-04D1 validates retained terminal material against canonical ART
+lineage in PostgreSQL; ARCH-04D2 activates exact services before ARCH-04E routing.
 
 ## v0.1 Success Standard
 

@@ -1,10 +1,10 @@
 # ARCH-04D1 — Canonical material custody before service activation
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: All retained CHECKERS terminal material facts require the exact canonical ART material tuple in PostgreSQL; live service authority remains unavailable until ARCH-04D2.
 
-## Intent and current behavior
+## Intent
 
 The product milestone remains claim -> ZIP upload -> pre-submit feedback or
 immutable Submission -> automatic post-submit evaluation -> policy-governed
@@ -58,7 +58,9 @@ from terminal-run fixtures. Tests that need only queued/running or isolated
 value contracts need not execute provider I/O. No fixture-only guard bypass,
 compatibility path or alternate history writer is permitted.
 
-## Allowed files
+## Bounded change
+
+### Allowed files
 
 - `backend/alembic/versions/0009_checker_material_lineage.py` and
   `backend/alembic/env.py` for the new scalar validator, terminal guard,
@@ -79,10 +81,11 @@ compatibility path or alternate history writer is permitted.
   no broader ownership or enforcement changes.
 - This record, current ARCH overview/plan/chunk map and 04D contract, affected
   ART/AUTH/POL navigation, Commitrail index, README, checker/data-model/artifact
-  specifications and `docs/roadmap_status.md` for the exact delivered prerequisite
+  specifications, `docs/engineering/authorization_activation_custody.md` and
+  `docs/roadmap_status.md` for the exact delivered prerequisite
   and remaining 04D2 activation; local exports if present.
 
-## Prohibited changes
+### Prohibited changes
 
 No live service registrations, permissions, AUTH/PREP behavior, public APIs,
 Celery handlers, automatic routing, TASK/REV/CON lifecycle effects, acceptance,
@@ -91,7 +94,7 @@ backfill, compatibility layer, alternate executor, or weaker test/CI gates.
 The real AUTH finalization-evidence rollback proof remains required in 04D2;
 controlled 04D1 phase participants do not constitute that proof.
 
-## Acceptance and proof
+## Acceptance criteria
 
 - Real PostgreSQL rejects each independently substituted `admission_id`,
   `replica_id` and `semantic_manifest_sha256` from a second valid stored lineage.
@@ -116,11 +119,13 @@ controlled 04D1 phase participants do not constitute that proof.
 - Default production composition still denies before protected reads, scratch,
   provider or evaluator access. No 04D2 activation claim follows from this PR.
 
-## Risk, verification and review
+## Risk and review routing
 
 Risk: L1, bounded database/evidence integrity with shared fixture consumers.
 Human focus: exact cross-owner tuple, immutable historical identity, migration
 refusal without data loss, no guard bypass, and no premature activation.
+
+## Evidence
 
 Before implementation, run architecture and security plan review of this scope
 and concrete proof feasibility. Before PR readiness, run real PostgreSQL focused
@@ -136,3 +141,19 @@ The executable 04D2 contract must still enumerate exact service actions, resourc
 facts, PREP transactions, audit custody, revocation races and composition before
 activation. No new human decision is required to enforce this already adopted
 prerequisite; merge remains a separate human action.
+
+
+### Implemented proof map
+
+- `test_material_lineage.py`: valid direct-SQL terminal commits and independent
+  foreign admission/replica/manifest rejection for both supported material-bearing
+  outcomes; terminal/member/event rollback preserves the running attempt.
+- `test_material_migration.py`: valid superseded history and null-material failure
+  survive upgrade, later replica loss preserves identity, invalid retained rows
+  refuse upgrade unchanged, and an independent writer waits across installation.
+- Existing Local/MinIO execution, storage, history/privacy and REV tests retain
+  their distinct assertions with canonical material prerequisites. The shared
+  retained fixture uses actual ART preparation, verification and consumption
+  owners with a scripted provider; it is not live provider or public intake proof.
+- Default composition remains deny-only. Real AUTH evidence atomicity and live
+  service grants remain mandatory ARCH-04D2 work.

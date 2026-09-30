@@ -1,6 +1,7 @@
 # Chunk Contract: WS-ARCH-001-04D AUTH Post-Submit Activation
 
-Status: non-executable planning skeleton after exact 04B/04C manifests.
+Status: ARCH-04D1 canonical custody is Complete; ARCH-04D2 authority remains a
+non-executable planning skeleton after exact 04B/04C manifests.
 Risk: L1. Outcome: ARCH-04D activates exact fixed-service materialization,
 checker-output, evaluator execution and finalization boundaries, replacing
 the historical XINT-06B/broad AUTH-14 design.
@@ -18,32 +19,20 @@ REV actions, TASK transition ownership or serialized prepared handles.
 
 ## Canonical ART lineage activation prerequisite
 
-ARCH-04C persists material facts from ART's authorized selection, but migration
-0008 does not independently compare the stored `admission_id`, `replica_id` and
-`semantic_manifest_sha256` with canonical ART records. Its normal-path
-Local/MinIO proof does not establish rejection of false persisted lineage.
+[ARCH-04D1](../../WS-ARCH-001-04D1.md) delivers this database prerequisite.
+Migration 0009's ART-owned scalar validator compares all nine material facts with
+one consumed Submission admission/binding/content/verified-replica lineage.
+Every terminal run with non-null material is checked, including infrastructure
+failures after materialization. Completed results still require material;
+`material_unavailable` requires null. Current replica health does not rewrite
+historical identity. Upgrade locks out writers across preflight/installation,
+preserves valid retained rows and refuses unprovable rows without backfill.
 
-Live post-submit materialization, execution and finalization authority must not
-be registered or composed until durable finalization enforces one exact canonical
-ART lineage tuple. All three stored fields must belong to the same exact
-Submission/binding/content lineage under ART's canonical selection rules.
-Independent existence, request-copy equality, runtime preflight or a positive
-execution test is insufficient. Require an owner-approved persisted-boundary
-design using existing ART selection semantics; do not add ad hoc CHECKERS runtime
-queries into private ART tables, a parallel validation path or a generic framework.
-The executable 04D contract must enumerate the affected owner/database files.
-
-Required proof before activation:
-
-- Real PostgreSQL substitutes each of the three fields independently using valid
-  foreign, same-shaped ART lineage and rejects at the durable boundary.
-- Each rejection rolls back the terminal result, members, completion event,
-  finalization authority evidence and material custody.
-- The exact canonical tuple commits as the valid control.
-- Removing each comparison makes its corresponding regression fail at the
-  intended rejection assertion, after valid setup.
-- Production AUTH composition remains denied until all three comparisons and
-  the live authorization tests pass. Retain exact replay and immutable history.
+04D1 proves independent foreign admission/replica/manifest substitutions and
+transaction rollback with controlled phase participants. It does not prove real
+AUTH finalization audit custody. ARCH-04D2 must supply that atomicity proof and
+live authorization tests before any service activation. No CHECKERS runtime
+private ART query, alternate store or compatibility path is introduced.
 
 ## Proposed CHECKERS service manifest
 
@@ -84,9 +73,10 @@ PostgreSQL races, boundary validators, Ruff and hosted coverage. Required
 reviews: authorization architecture, security, product/ops, QA, senior, CI and
 test delta.
 
-Before implementation, replace this skeleton with a current-main contract that
+Before ARCH-04D2 implementation, replace its authority skeleton with a current-main contract that
 enumerates exact files, commands, migration head and reviewers.
 
 ## Merge state
 
-- Outcome on merge: `planned`
+- ARCH-04D1: `Complete`.
+- ARCH-04D2: `Planned`.

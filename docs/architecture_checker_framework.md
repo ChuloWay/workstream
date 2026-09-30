@@ -646,13 +646,14 @@ ARCH-04E routing integration. That proof must identify the same immutable bindin
 and manifest that passed automated checks; caller-owned manifest fields are not
 authority.
 
-ARCH-04C persists material facts from ART's authorized selection. Its database
-guard does not independently compare `admission_id`, `replica_id` or
-`semantic_manifest_sha256` with canonical ART records. Production remains
-deny-only until the mandatory
-[ARCH-04D canonical lineage prerequisite](../.commitrail/initiatives/WS-ARCH-001/planning/chunks/WS-ARCH-001-04D-auth-post-submit-activation.md#canonical-art-lineage-activation-prerequisite)
-enforces that exact tuple at durable finalization and proves rejection of false
-lineage. The normal-path Local/MinIO custody assertion is not that negative proof.
+[ARCH-04D1](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04D1.md)
+adds canonical database custody through ART's scalar lineage contract. Every
+terminal run retaining material must match the exact consumed admission,
+Submission binding/content, verified replica and semantic manifest, including
+infrastructure failures after materialization. Migration 0009 preserves valid
+retained history and refuses unprovable rows without rewriting or deleting them.
+Current replica health is separate from immutable evidence identity. Production
+remains deny-only until ARCH-04D2 supplies exact live service authority.
 
 A separate `ReadinessCertificate` record may be added later if reviewer routing needs a dedicated signed handoff object. v0.1 does not require that extra record.
 

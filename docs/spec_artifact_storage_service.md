@@ -1493,13 +1493,13 @@ The exact post-submit request and material facts persisted from ART's authorized
 selection retain binding/content IDs, outer-ZIP digest/byte count,
 semantic-manifest hash, locked policy/checker identities and checker implementation
 identity. The normal service path names the same verified admission and exact
-binding as pre-submit evidence. Migration 0008 does not independently compare
-stored `admission_id`, `replica_id` or `semantic_manifest_sha256` with canonical
-ART records. This database guarantee remains a mandatory
-[ARCH-04D activation prerequisite](../.commitrail/initiatives/WS-ARCH-001/planning/chunks/WS-ARCH-001-04D-auth-post-submit-activation.md#canonical-art-lineage-activation-prerequisite):
-enforce the exact tuple at durable finalization and prove independent substitution
-rejection and rollback before enabling live authority. Positive execution proof
-alone does not close this gap.
+binding as pre-submit evidence. Migration 0009 (ARCH-04D1) enforces the exact nine-field tuple
+through the ART-owned `art_submission_material_matches` SQL function at terminal
+CHECKERS commit. Completed results require material; infrastructure failures with
+material must also match. The comparison uses immutable admission ancestry,
+not the replica's current health. Upgrade excludes writers across preflight and
+installation, preserves valid retained evidence and refuses invalid lineage
+without data repair or deletion. Exact live authority remains ARCH-04D2 work.
 For a registered capability that produces logs or output bytes, those outputs
 must become verified artifact bindings through its reserved slots. The current
 structural catalogue produces no such artifacts.

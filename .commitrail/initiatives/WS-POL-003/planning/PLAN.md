@@ -57,7 +57,7 @@ approval authority. AUTH-12H supplies exact guide activation authority;
 AUTH-18 exposes manager activation and selection discovery publicly.
 ARCH-03D completes hidden approved-guide intake integration. ARCH-04B hidden exact
 post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C
-hidden execution is delivered; ARCH-04D live authority is next; public intake remains deferred to ARCH-02I.
+hidden execution is delivered; ARCH-04D1 canonical custody is delivered; ARCH-04D2 live authority is next; public intake remains deferred to ARCH-02I.
 
 The sequence through POL-04B is complete; POL-04B1 supplies automatic request
 custody for the delivered live cutover:

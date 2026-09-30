@@ -11,7 +11,7 @@ and the [capability ledger](../../../docs/roadmap_status.md).
 - Completed boundary: ARCH-04B hidden input materialization and hidden
   [ARCH-04B2 checker-output custody](../WS-ARCH-001/WS-ARCH-001-04B2.md).
   The CHECKERS zero-slot reservation reader is implemented; production authority remains deny-only.
-- Next usable boundary: ARCH-04D exact service authority after delivered ARCH-04C hidden durable execution.
+- Next usable boundary: ARCH-04D2 exact service authority after delivered ARCH-04D1 canonical material custody and ARCH-04C hidden durable execution.
 - Governing sources: artifact specifications, `ArtifactStore`,
   `ArtifactScratchManager`, code, migrations, and artifact tests.
 - Preserve: SHA-256/byte-count identity, reread verification, isolation,

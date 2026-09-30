@@ -1,14 +1,9 @@
-"""Closed CHECKERS storage prerequisites, not verified ART input or AUTH proof.
-
-Opaque input references belong to this controlled storage fixture. No admission,
-provider receipt or production allow event is fabricated. Real verified input is
-covered separately by test_verified_material_execution_and_replay.
-"""
+"""Closed history with canonical stored ART lineage and controlled phase authority."""
 
 import json
 from uuid import UUID
 
-from app.core.identifiers import new_record_id
+from app.modules.artifacts.models import ArtifactContent, SubmissionBundleAdmission
 from app.modules.checkers.api.execution import FinalizeFacts, VerifiedMaterialFacts
 from app.modules.checkers.api.post_submit import ExpectedPostSubmitContext, PostSubmitMemberResult
 from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPolicy
@@ -28,6 +23,7 @@ async def storage_request(session, submission_id, *, generation=1):
     submission = await session.get(Submission, str(submission_id))
     task = await session.get(WorkstreamTask, submission.task_id)
     source = value_request(project_id=UUID(task.project_id))
+    content = await session.get(ArtifactContent, submission.artifact_content_id)
     context = ExpectedPostSubmitContext.model_validate_json(
         json.dumps(
             dict(
@@ -51,6 +47,8 @@ async def storage_request(session, submission_id, *, generation=1):
         )
     )
     body = source.model_dump(exclude={"request_sha256"})
+    body["content_sha256"], body["byte_count"] = content.sha256, content.byte_count
+    body["structural_input"]["package_hash"] = content.sha256
     body["structural_input"]["summary"] = "PRIVATE_CHECKER_PACKET_SENTINEL"
     body["structural_input"]["observed_context"] = context.model_dump()
     body.update(
@@ -108,17 +106,18 @@ async def seed_storage_run(factory, submission_id, *, failures=(), state="comple
     )
     async with factory() as session:
         submission = await session.get(Submission, str(submission_id))
-        admission_id = UUID(submission.submission_bundle_admission_id)
+        admission = await session.get(SubmissionBundleAdmission, submission.submission_bundle_admission_id)
+        admission_id = UUID(admission.id)
     material = VerifiedMaterialFacts(
         submission_id=request.submission_id,
         submission_version=request.submission_version,
         admission_id=admission_id,
         binding_id=request.binding_id,
         content_id=request.content_id,
-        replica_id=new_record_id(),
+        replica_id=UUID(admission.verified_replica_id),
         content_sha256=request.content_sha256,
         byte_count=request.byte_count,
-        semantic_manifest_sha256="sha256:" + "a" * 64,
+        semantic_manifest_sha256=admission.semantic_manifest_sha256,
     )
     await executor.finalize(
         FinalizeFacts(
