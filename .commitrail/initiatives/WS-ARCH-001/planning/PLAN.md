@@ -51,7 +51,7 @@ checker-remediation boundary before public Submission cutover.
 | ARCH-04B | ARCH-04A, POL-07, ARCH-03C, merged ARCH-02H | Complete: ART hidden verified Submission input; live authority remains deferred |
 | [ARCH-04B2](../WS-ARCH-001-04B2.md) | ARCH-04A and merged ART admission/verification/binding foundations | Complete: hidden bounded checker-output store/recovery and verified binding, no routing or live reservation |
 | ARCH-04C | ARCH-04A, ARCH-04B, delivered ARCH-04B2, POL-07 | Complete hidden CHECKERS execution/result/currentness and worker recovery, including exact empty output sets |
-| ARCH-04D | ARCH-04B, ARCH-04C | AUTH post-submit materialization/result activation |
+| ARCH-04D | ARCH-04B, ARCH-04C | Enforce canonical ART admission/replica/manifest lineage at durable finalization, then activate exact AUTH post-submit services |
 | AUTH-OUTBOX-01 | Merged shared outbox persistence and AUTH service/PREP foundations | Complete: planned dispatcher identity/action/matrix and unavailable typed authority contract |
 | CON-02B | AUTH-OUTBOX-01 | Complete: shared hidden dispatcher/claim fencing, typed handlers and recovery |
 | AUTH-OUTBOX-02 | CON-02B exact hidden manifest | Exact dispatcher mechanics only; no feature authority |
@@ -185,7 +185,10 @@ owning implementation, not with planning prose or fake database claims.
 
 ARCH-04B input proof is delivered in `test_post_submit_materialization.py` and
 `test_post_submit_selection.py`, including deny-before-I/O composition. ARCH-04B2
-delivers output custody proof; ARCH-04C delivers hidden durable execution proof. Live authority proof remains with ARCH-04D.
+delivers output custody proof; ARCH-04C delivers hidden durable execution proof. Live authority proof remains with ARCH-04D, whose mandatory
+[canonical ART lineage prerequisite](chunks/WS-ARCH-001-04D-auth-post-submit-activation.md#canonical-art-lineage-activation-prerequisite)
+requires independent admission/replica/manifest substitution rejection at durable
+finalization before activation.
 
 These are required future implementation tests, not tests claimed present or
 executed by this planning PR. Each owner's bounded record fixes the final

@@ -1489,10 +1489,17 @@ belong to POL-05; post-submit projection belongs to POL-06. No setup finding
 accepts a submission or enables an unregistered evaluator. Retained prior
 records remain immutable but cannot supply current guide execution evidence.
 
-The exact post-submit request and persisted verified-material custody retain
-binding/content IDs, outer-ZIP digest/byte count, semantic-manifest hash, locked
-policy/checker identities and checker implementation identity. Pre-submit evidence
-and post-submit execution name the same verified admission and exact binding.
+The exact post-submit request and material facts persisted from ART's authorized
+selection retain binding/content IDs, outer-ZIP digest/byte count,
+semantic-manifest hash, locked policy/checker identities and checker implementation
+identity. The normal service path names the same verified admission and exact
+binding as pre-submit evidence. Migration 0008 does not independently compare
+stored `admission_id`, `replica_id` or `semantic_manifest_sha256` with canonical
+ART records. This database guarantee remains a mandatory
+[ARCH-04D activation prerequisite](../.commitrail/initiatives/WS-ARCH-001/planning/chunks/WS-ARCH-001-04D-auth-post-submit-activation.md#canonical-art-lineage-activation-prerequisite):
+enforce the exact tuple at durable finalization and prove independent substitution
+rejection and rollback before enabling live authority. Positive execution proof
+alone does not close this gap.
 For a registered capability that produces logs or output bytes, those outputs
 must become verified artifact bindings through its reserved slots. The current
 structural catalogue produces no such artifacts.

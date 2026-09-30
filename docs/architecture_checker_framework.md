@@ -640,11 +640,19 @@ The checker run records:
 - warning count
 - completion timestamp
 
-With ARCH-04B input, ARCH-04B2 output custody and ARCH-04C result custody
-delivered, the remaining ARCH-04D activation and
-ARCH-04E routing integration, this gives reviewers proof that they are reviewing the
-same immutable binding and manifest that passed automated checks; legacy
-caller-owned manifest fields are not authority.
+ARCH-04B input, ARCH-04B2 output custody and ARCH-04C result custody are
+delivered. Reviewers will receive readiness proof after ARCH-04D activation and
+ARCH-04E routing integration. That proof must identify the same immutable binding
+and manifest that passed automated checks; caller-owned manifest fields are not
+authority.
+
+ARCH-04C persists material facts from ART's authorized selection. Its database
+guard does not independently compare `admission_id`, `replica_id` or
+`semantic_manifest_sha256` with canonical ART records. Production remains
+deny-only until the mandatory
+[ARCH-04D canonical lineage prerequisite](../.commitrail/initiatives/WS-ARCH-001/planning/chunks/WS-ARCH-001-04D-auth-post-submit-activation.md#canonical-art-lineage-activation-prerequisite)
+enforces that exact tuple at durable finalization and proves rejection of false
+lineage. The normal-path Local/MinIO custody assertion is not that negative proof.
 
 A separate `ReadinessCertificate` record may be added later if reviewer routing needs a dedicated signed handoff object. v0.1 does not require that extra record.
 

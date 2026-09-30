@@ -15,7 +15,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   per checker ID serve active policy consumers; production post-submit phase
   execution remains unavailable.
 - Delivered storage boundary: hidden [ARCH-04B2 checker-output custody](WS-ARCH-001-04B2.md), following hidden input materialization (ARCH-04B). Typed store, byte-free recovery and flush-only verified binding exist; the CHECKERS zero-slot reservation reader is implemented; production authority remains deny-only.
-- Next usable boundary: ARCH-04D exact service authority after delivered [ARCH-04C durable execution](WS-ARCH-001-04C.md), including the structural catalogue's empty output set.
+- Next usable boundary: ARCH-04D exact service authority after delivered [ARCH-04C durable execution](WS-ARCH-001-04C.md), including the structural catalogue's empty output set. Activation first requires the [canonical ART lineage proof](planning/chunks/WS-ARCH-001-04D-auth-post-submit-activation.md#canonical-art-lineage-activation-prerequisite) absent from 04C's database guard.
   [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers public manager activation
   context and exact guide activation using the existing CP07 operation.
   [CP05A](WS-ARCH-001-CP05A.md) supplies public Finance policy administration and recoverable draft selectors.

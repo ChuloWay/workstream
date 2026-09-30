@@ -195,6 +195,25 @@ aliases, parallel execution implementations or weakened CI.
     This is an explicit deployment limitation of replacing unreleased development
     schema, not a fallback implementation. Test fixtures use canonical new custody.
 
+### Canonical ART lineage activation prerequisite
+
+The normal service path copies all nine persisted material-custody fields from
+ART's exact authorized selection, proven with Local and MinIO. Migration 0008
+independently guards the request-linked Submission/version, binding, content,
+digest and byte count. It does **not** independently compare `admission_id`,
+`replica_id` or `semantic_manifest_sha256` with canonical ART records. ARCH-04C
+does not claim database-enforced canonical ART lineage for those three fields.
+The positive material-custody test proves the service writer, not rejection of
+false persisted lineage. Production remains deny-only.
+
+This gap is explicitly deferred to the mandatory
+[ARCH-04D activation prerequisite](planning/chunks/WS-ARCH-001-04D-auth-post-submit-activation.md#canonical-art-lineage-activation-prerequisite).
+Before live materialization, execution or finalization authority is enabled,
+04D must enforce the exact canonical ART tuple at durable finalization and prove
+independent field-substitution rejection, full rollback and a valid control.
+This is an activation blocker, not a waiver or a claim of current enforcement.
+No runtime, migration or test behavior changes in this documentation correction.
+
 ## Acceptance criteria
 
 - Default composition denies before protected reads, scratch, provider or registry
