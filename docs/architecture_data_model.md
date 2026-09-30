@@ -1663,7 +1663,7 @@ false. No human Review is invented for that branch.
 Migration 0008 refuses nonempty checker history before DDL. It does not invent
 requests or erase retained evidence. Such an environment requires an explicit
 preservation design. Production execute/finalize and ART access remain deny-only
-until ARCH-04D installs real action-specific authority; opaque controlled test
+until ARCH-04D2 installs real action-specific authority; opaque controlled test
 receipts are not AUTH audit evidence.
 
 ## CheckerResult

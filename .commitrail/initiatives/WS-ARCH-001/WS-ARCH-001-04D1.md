@@ -87,8 +87,12 @@ compatibility path or alternate history writer is permitted.
   and their validation tests only where new actual proof files require registration;
   no broader ownership or enforcement changes.
 - This record, current ARCH overview/plan/chunk map and 04D contract, affected
-  ART/AUTH/POL navigation, Commitrail index, README, checker/data-model/artifact
-  specifications, `docs/engineering/authorization_activation_custody.md` and
+  ART/AUTH/POL/CON/XINT navigation, Commitrail index, README, checker/data-model/artifact
+  specifications, `docs/architecture_system_architecture.md`,
+  `docs/spec_authorization_service.md`,
+  `docs/operations_project_operating_manual.md`,
+  `docs/current_system_data_flow.html`,
+  `docs/engineering/authorization_activation_custody.md` and
   `docs/roadmap_status.md` for the exact delivered prerequisite
   and remaining 04D2 activation; local exports if present.
 

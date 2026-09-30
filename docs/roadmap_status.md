@@ -683,7 +683,7 @@ remaining trace sequence is:
   [ARCH-04B input materialization](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04B.md)
   and [ARCH-04B2 output custody](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04B2.md)
   and [ARCH-04C durable execution](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04C.md)
-  lead to `04D -> 04E` for live authority and routing. The mandatory
+  lead to `04D2 -> 04E` for live authority and routing. The mandatory
   [04D1 canonical material custody](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04D1.md)
   closes the three-field ART database guarantee before authority activation.
   ARCH-04C accepts the exact empty output set from the current structural
