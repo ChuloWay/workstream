@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.checker_output_admission_helpers import seed_checker_output_relationships
+
 import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -184,11 +186,12 @@ async def _exhausted_job(session, settings, tmp_path, context):
         total_deadline_seconds=180,
         reservation_ttl_seconds=240,
     )
+    relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
     async with minted_source(
         tmp_path / "checker-output", b"recover checker output", limits=limits,
     ) as source:
         project_id, task_id, _checker_run_id, admission = await _admit_checker_output(
-            session, settings, namespace, source, policy_bundle=policy_bundle)
+            session, settings, namespace, source, relationships=relationships)
         await _seed_recovery_actor(session, context)
         await session.commit()
         orchestrator = ArtifactStorageOrchestrator(

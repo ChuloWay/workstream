@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.checker_output_admission_helpers import seed_checker_output_relationships
+
 
 from dataclasses import replace
 from types import SimpleNamespace
@@ -905,9 +907,10 @@ async def test_verification_claim_and_terminal_failures_roll_back_both_sides(
         async with factory() as session:
             session.add_all((*resolver, *verifier))
             await session.commit()
+            relationships = await seed_checker_output_relationships(session, namespace)
             async with minted_source(tmp_path / "atomic-verify", b"verified") as source:
                 _, _, _, admission = await _admit_checker_output(
-                    session, settings, namespace, source)
+                    session, settings, namespace, source, relationships=relationships)
                 assert (
                     await ArtifactStorageOrchestrator(
                         session,

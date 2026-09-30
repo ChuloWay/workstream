@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from tests.checker_output_admission_helpers import seed_checker_output_relationships
+
 from projects.unified_policy_fixtures import create_standalone_unified_policy
 
 from project_create_fixtures import guide_example_columns, guide_snapshot_columns
@@ -344,49 +346,6 @@ async def _seed_guide(
     return project_id, item_id
 
 
-async def _seed_checker_output_relationships(session, namespace, *, policy_bundle=None) -> tuple[str, str, str]:
-    """Persist one complete checker-run ownership chain for admission proof."""
-
-    if policy_bundle is None:
-        assert not session.in_transaction(), "Arrange canonical setup before staging artifact rows"
-        policy_bundle = await create_standalone_unified_policy(
-            async_sessionmaker(session.bind, expire_on_commit=False), namespace,
-        )
-    values, effective, _pre = policy_bundle
-    project_id = str(values["project"])
-    task_id = str(new_record_id())
-    contributor_id = str(new_record_id())
-    contributor_link_id = str(new_record_id())
-    await _seed_human_actor(
-        session,
-        _context(
-            actor_profile_id=UUID(contributor_id),
-            identity_link_id=UUID(contributor_link_id),
-        ),
-    )
-    from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
-    from tests.submission_preparation_auth_helpers import install_submitter_grant
-    from tests.submission_fixtures import seed_retained_submission
-    from tests.test_tasks import complete_submission_payload
-
-    assignment_id = str(new_record_id())
-    params = {"task": task_id, "assignment": assignment_id, "project": project_id,
-              "actor": contributor_id}
-    connection = await session.connection()
-    await seed_started_task_for_artifact_test(connection, params)
-    await install_submitter_grant(connection, params)
-    await session.commit()
-    payload = complete_submission_payload()
-    payload["worker_attestation"] += " " + " ".join(
-        effective["effective_policy"]["attestation_terms"]
-    )
-    submission_id = await seed_retained_submission(task_id, payload)
-    from tests.checkers.execution.storage_fixture import seed_storage_run
-    checker_run_id = await seed_storage_run(async_sessionmaker(session.bind, expire_on_commit=False),
-                                            submission_id, state="queued")
-    return project_id, task_id, checker_run_id
-
-
 async def _count(session, model: type) -> int:
     value = await session.scalar(select(func.count()).select_from(model))
     assert value is not None
@@ -464,9 +423,9 @@ async def _admit_guide_source(session, settings, namespace, context, source):
     )
 
 
-async def _admit_checker_output(session, settings, namespace, source, *, policy_bundle=None):
+async def _admit_checker_output(session, settings, namespace, source, *, relationships):
     """Create one exact task-scoped checker-output attempt for shared-path tests."""
-    project_id, task_id, checker_run_id = await _seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
+    project_id, task_id, checker_run_id = relationships
     existing = (await session.execute(
         select(ActorProfile.id, ActorIdentityLink.id)
         .join(ActorIdentityLink, ActorIdentityLink.actor_profile_id == ActorProfile.id)
@@ -516,13 +475,14 @@ async def test_committed_put_and_independent_verification_are_fenced(
     policy_bundle = await create_standalone_unified_policy(factory, namespace)
     try:
         async with factory() as session:
+            relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
             async with minted_source(
                 tmp_path / "fenced-checker-output",
                 b"independently verified bytes",
                 media_type="text/plain",
             ) as source:
                 _, _, _, admission = await _admit_checker_output(
-                    session, settings, namespace, source, policy_bundle=policy_bundle)
+                    session, settings, namespace, source, relationships=relationships)
                 orchestrator = ArtifactStorageOrchestrator(
                     session, store, namespace, settings, authority
                 )
@@ -609,9 +569,10 @@ async def test_every_provider_operation_revalidates_namespace_before_io(
     policy_bundle = await create_standalone_unified_policy(factory, namespace)
     try:
         async with factory() as session:
+            relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
             async with minted_source(tmp_path / "namespace-fence", b"fenced") as source:
                 _, _, _, admission = await _admit_checker_output(
-                    session, settings, namespace, source, policy_bundle=policy_bundle)
+                    session, settings, namespace, source, relationships=relationships)
                 drifted = ArtifactStorageOrchestrator(
                     session, DriftStore(), namespace, settings, _AllowArtifactAuthority()
                 )
@@ -1418,9 +1379,10 @@ async def test_verification_resource_drift_after_read_is_stale_without_terminal_
     policy_bundle = await create_standalone_unified_policy(factory, namespace)
     try:
         async with factory() as session:
+            relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
             async with minted_source(tmp_path / "verification-drift", b"expected") as source:
                 _, _, _, admission = await _admit_checker_output(
-                    session, settings, namespace, source, policy_bundle=policy_bundle)
+                    session, settings, namespace, source, relationships=relationships)
                 orchestrator = ArtifactStorageOrchestrator(
                     session, store, namespace, settings, _AllowArtifactAuthority()
                 )
@@ -1494,9 +1456,10 @@ async def test_verification_rechecks_relationship_after_prepare_before_io(
     policy_bundle = await create_standalone_unified_policy(factory, namespace)
     try:
         async with factory() as session:
+            relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
             async with minted_source(tmp_path / "preclaim-drift", b"expected") as source:
                 _, _, _, admission = await _admit_checker_output(
-                    session, settings, namespace, source, policy_bundle=policy_bundle)
+                    session, settings, namespace, source, relationships=relationships)
                 allowing = ArtifactStorageOrchestrator(
                     session, store, namespace, settings, _AllowArtifactAuthority()
                 )
@@ -1586,9 +1549,10 @@ async def test_verification_relationship_conflict_uses_fresh_terminal_authority(
         async with factory() as session:
             attempts: list[ArtifactPutAttempt] = []
             for name, value in (("first", b"first"), ("second", b"second")):
+                relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
                 async with minted_source(tmp_path / name, value) as source:
                     _, _, _, admission = await _admit_checker_output(
-                        session, settings, namespace, source, policy_bundle=policy_bundle
+                        session, settings, namespace, source, relationships=relationships
                     )
                     await ArtifactStorageOrchestrator(
                         session, store, namespace, settings, _AllowArtifactAuthority()
@@ -1643,9 +1607,10 @@ async def test_verification_rechecks_authorized_object_ref_before_io(
     policy_bundle = await create_standalone_unified_policy(factory, namespace)
     try:
         async with factory() as session:
+            relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
             async with minted_source(tmp_path / "preclaim-object-ref-drift", b"expected") as source:
                 _, _, _, admission = await _admit_checker_output(
-                    session, settings, namespace, source, policy_bundle=policy_bundle)
+                    session, settings, namespace, source, relationships=relationships)
                 allowing = ArtifactStorageOrchestrator(
                     session, store, namespace, settings, _AllowArtifactAuthority()
                 )
@@ -1700,9 +1665,10 @@ async def test_verification_rechecks_authorized_object_ref_after_io(
     policy_bundle = await create_standalone_unified_policy(factory, namespace)
     try:
         async with factory() as session:
+            relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
             async with minted_source(tmp_path / "postread-object-ref-drift", b"expected") as source:
                 _, _, _, admission = await _admit_checker_output(
-                    session, settings, namespace, source, policy_bundle=policy_bundle)
+                    session, settings, namespace, source, relationships=relationships)
                 orchestrator = ArtifactStorageOrchestrator(
                     session, store, namespace, settings, _AllowArtifactAuthority()
                 )
@@ -1759,9 +1725,10 @@ async def test_verification_terminal_result_matrix(
     policy_bundle = await create_standalone_unified_policy(factory, namespace)
     try:
         async with factory() as session:
+            relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
             async with minted_source(tmp_path / expected, b"verification matrix") as source:
                 _, _, _, admission = await _admit_checker_output(
-                    session, settings, namespace, source, policy_bundle=policy_bundle)
+                    session, settings, namespace, source, relationships=relationships)
                 orchestrator = ArtifactStorageOrchestrator(
                     session, store, namespace, settings, _AllowArtifactAuthority()
                 )
@@ -1806,11 +1773,12 @@ async def test_verification_terminal_authority_denial_writes_zero_result_facts(
     policy_bundle = await create_standalone_unified_policy(factory, namespace)
     try:
         async with factory() as session:
+            relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
             async with minted_source(
                 tmp_path / f"verify-{denial_reason}", denial_reason.encode()
             ) as source:
                 _, _, _, admission = await _admit_checker_output(
-                    session, settings, namespace, source, policy_bundle=policy_bundle)
+                    session, settings, namespace, source, relationships=relationships)
                 allowing = ArtifactStorageOrchestrator(
                     session, store, namespace, settings, _AllowArtifactAuthority()
                 )
@@ -1862,9 +1830,10 @@ async def test_verification_unavailable_retries_then_exhausts(
     policy_bundle = await create_standalone_unified_policy(factory, namespace)
     try:
         async with factory() as session:
+            relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
             async with minted_source(tmp_path / "unavailable", b"retry") as source:
                 _, _, _, admission = await _admit_checker_output(
-                    session, settings, namespace, source, policy_bundle=policy_bundle)
+                    session, settings, namespace, source, relationships=relationships)
                 orchestrator = ArtifactStorageOrchestrator(
                     session, store, namespace, settings, _AllowArtifactAuthority()
                 )
@@ -2383,7 +2352,7 @@ async def test_checker_output_requires_exact_active_fixed_service_identity(
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with factory() as session:
-            project_id, task_id, checker_run_id = await _seed_checker_output_relationships(session, namespace)
+            project_id, task_id, checker_run_id = await seed_checker_output_relationships(session, namespace)
             _add_checker_output_actor(
                 session, actor_id, link_id, subject="checker-output-service")
             await session.commit()
@@ -2479,11 +2448,12 @@ async def test_checker_output_shared_put_and_verification_lifecycle(
     policy_bundle = await create_standalone_unified_policy(factory, namespace)
     try:
         async with factory() as session:
+            relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
             async with minted_source(
                 tmp_path / f"checker-{expected_outcome}", b"checker lifecycle"
             ) as source:
                 project_id, task_id, checker_run_id, admission = await _admit_checker_output(
-                    session, settings, namespace, source, policy_bundle=policy_bundle)
+                    session, settings, namespace, source, relationships=relationships)
                 orchestrator = ArtifactStorageOrchestrator(
                     session, store, namespace, settings, _AllowArtifactAuthority()
                 )
@@ -2559,11 +2529,12 @@ async def test_checker_output_put_observation_terminal_outcomes(
     policy_bundle = await create_standalone_unified_policy(factory, namespace)
     try:
         async with factory() as session:
+            relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
             async with minted_source(
                 tmp_path / f"checker-observation-{expected_outcome}", b"checker observation"
             ) as source:
                 _project_id, _task_id, checker_run_id, admission = await _admit_checker_output(
-                    session, settings, namespace, source, policy_bundle=policy_bundle)
+                    session, settings, namespace, source, relationships=relationships)
                 attempt = await session.get(ArtifactPutAttempt, str(admission.attempt_id))
                 assert attempt is not None
                 provider_object_ref = attempt.canonical_target
@@ -2657,7 +2628,7 @@ async def test_invalid_checker_slot_precedes_namespace_drift(
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with factory() as session:
-            project_id, task_id, checker_run_id = await _seed_checker_output_relationships(
+            project_id, task_id, checker_run_id = await seed_checker_output_relationships(
                 session, namespace
             )
             del project_id, task_id
@@ -2693,11 +2664,12 @@ async def _seed_verification_scan_jobs(factory, settings, namespace, store, tmp_
             seed_session, store, namespace, settings, _AllowArtifactAuthority()
         )
         for index in range(3):
+            relationships = await seed_checker_output_relationships(seed_session, namespace, policy_bundle=policy_bundle)
             async with minted_source(
                 tmp_path / f"verification-scan-{index}", f"job-{index}".encode()
             ) as source:
                 _, _, _, admission = await _admit_checker_output(
-                    seed_session, settings, namespace, source, policy_bundle=policy_bundle
+                    seed_session, settings, namespace, source, relationships=relationships
                 )
                 await orchestrator.execute_committed_put(
                     attempt_id=admission.attempt_id, source=source

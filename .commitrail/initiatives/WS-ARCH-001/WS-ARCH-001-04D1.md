@@ -71,7 +71,9 @@ compatibility path or alternate history writer is permitted.
   `backend/tests/post_submit_materialization_helpers.py`,
   `backend/tests/test_artifact_admission.py` for its shared queued-output fixture,
   `backend/tests/test_artifact_internal_authorization.py` for exact verification-job
-  receipt assertions, and a cohesive helper
+  receipt assertions, `backend/tests/test_artifact_recovery.py`,
+  `backend/tests/test_checker_output_storage.py` and existing checker-output
+  fixture helpers for shared prerequisite ordering, and a cohesive helper
   under `backend/tests/` if needed to reuse canonical ART preparation for retained
   Submission fixtures; existing ART fixture helpers only for that traced reuse.
 - Existing affected `backend/tests/authorization/submission_history/`,
@@ -160,5 +162,7 @@ prerequisite; merge remains a separate human action.
   their distinct assertions with canonical material prerequisites. The shared
   retained fixture uses actual ART preparation, verification and consumption
   owners with a scripted provider; it is not live provider or public intake proof.
+  Output fixtures prepare those prerequisites before minting their bounded source,
+  preserving the existing scratch deadline and testing receipts for the exact job.
 - Default composition remains deny-only. Real AUTH evidence atomicity and live
   service grants remain mandatory ARCH-04D2 work.
