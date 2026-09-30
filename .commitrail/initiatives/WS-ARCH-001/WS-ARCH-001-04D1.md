@@ -107,6 +107,9 @@ controlled 04D1 phase participants do not constitute that proof.
   upgrade; invalid retained lineage
   refuses migration without deleting or altering rows/schema. Null material on
   infrastructure failure and unfinished reservations remain supported.
+- A real PostgreSQL independent-session writer waits behind the migration table
+  lock across preflight/installation, then meets the installed guard after commit.
+  Removing that lock fails the wait/guard assertion rather than fixture setup.
 - Local/MinIO execution and retained-history, privacy, authorization and REV queue
   tests pass using canonical stored ART prerequisites. Existing lease/currentness,
   replay, rollback and concurrency behavior remains protected.
