@@ -12,7 +12,7 @@ from app.core.identifiers import new_record_id
 import pytest
 
 from app.adapters.artifacts import CheckerPhaseService
-from app.modules.checkers.api import UnavailablePostSubmissionExecution
+from tests.checkers.execution.support import denied_executor
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -194,7 +194,7 @@ async def _configure_participants(
         evidence=evidence_owner,
         checker_service=CheckerPhaseService(
             pre_submission=evidence_owner,
-            post_submission=UnavailablePostSubmissionExecution(),
+            post_submission=denied_executor(),
         ),
         durable_put=object(),
     )

@@ -127,7 +127,7 @@ checker/job boundary.
 | React + Vite operations UI | Planned internal operations dashboard for project, task, submission, review, and compensation fulfillment workflows. Reputation UI remains deferred. |
 | FastAPI backend | API contracts, workflow rules, auth dependency, lifecycle guards, module orchestration, and audit writes. |
 | Celery worker boundary | Durable project setup and registered background jobs; checker execution is a target boundary. FastAPI background tasks are not the Workstream product-job boundary. |
-| CHECKERS | Delivered retained-history reads; durable post-submit execution, routing and recovery remain unavailable. |
+| CHECKERS | Delivered retained-history reads and hidden durable post-submit execution/recovery; live authority and automatic routing remain unavailable. |
 | Storage interface | Keeps file/evidence semantics stable while local storage and the hosted AWS S3 profile implement the same provider-neutral port. |
 | Postgres | Durable record database for the full Workstream lifecycle. |
 
@@ -158,7 +158,8 @@ The backend component view zooms into the FastAPI container. It shows how the mo
 ## Lifecycle Sequence
 
 The sequence below shows the target v0.1 loop. Public manager guide activation is
-delivered; canonical post-submit execution/recovery remains pending. Retained history does not execute
+delivered, as is hidden durable post-submit execution/recovery. Live authority
+and automatic routing remain pending. Retained history does not execute
 checkers or authorize acceptance.
 
 <div class="diagram sequence">

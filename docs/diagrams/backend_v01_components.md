@@ -2,8 +2,8 @@
 
 This is the target component view for the FastAPI modular monolith, not an
 inventory of delivered runtime components. Canonical authorized submission and
-checker history reads are implemented. Durable post-submit execution, the
-pre-review gate and checker recovery are planned and unavailable; the obsolete
+checker history reads and hidden durable post-submit execution/recovery are
+implemented. Live authority and automatic routing remain unavailable; the obsolete
 checker service and Celery worker have been removed. See the
 [current capability ledger](../roadmap_status.md) for delivery status.
 

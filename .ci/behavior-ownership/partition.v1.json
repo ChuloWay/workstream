@@ -730,6 +730,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/execution.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/checkers/api/history.py"
     },
     {
@@ -771,6 +775,26 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/checkers/effective_plan.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/execution.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/execution_authority.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/execution_coordination.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/execution_repository.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/execution_results.py"
     },
     {
       "group": "artifacts",
@@ -1489,7 +1513,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "c836827deba926d6b40689de2d7a723c9640fe209b11edb49d78dacb12b5744e",
+  "authority_digest": "62d3e0889b562d645958338bd0b5cafefadbefaf288d77163076114d768b96d2",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

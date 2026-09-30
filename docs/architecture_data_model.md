@@ -325,9 +325,10 @@ verification job and replica identity. Later replica health changes remain
 possible without rewriting the historical verified ancestry. Its migration
 refuses retained checker attempts or bindings
 whose missing evaluation digest or verified ancestry cannot be proven; it does
-not invent or delete retained data. Durable execution/results (ARCH-04C) remain
-pending, and production access remains deny-only until ARCH-04D. Retained payment columns on Submission and CheckerRun
-are nullable, so new unified-guide work requires no invented economic configuration.
+not invent or delete retained data. ARCH-04C implements hidden durable execution/results;
+production access remains deny-only until ARCH-04D. The superseded CheckerRun
+payment column is removed; retained nullable Submission payment columns require
+no invented economic configuration.
 CP09 owns physical economic-schema removal after its remaining consumers change.
 
 The upgrade refuses before DDL if any non-draft Task, assignment or Submission
@@ -1619,128 +1620,72 @@ Types:
 
 ## CheckerRun
 
-Retained run identity, task/Submission ownership, predecessor, trigger attribution,
-locked policies and artifact inputs are immutable in PostgreSQL. The predecessor
-must belong to the same task and Submission. Status, routing, counts, execution
-timestamps and failure facts cannot change after completed/failed status or a
-completion timestamp. Currentness can retire from true to false and the audit
-reference may be filled once, including after completion. Run deletion and truncation are rejected. These storage guarantees
-do not activate canonical post-submit execution or recovery.
+ARCH-04C uses one run as the logical post-submit attempt. PostgreSQL preserves
+its project/task/Submission ownership, immutable canonical request and digest,
+request ID, generation, result ID, predecessor and locked policy identities.
+The exact request carries the selected ART binding/content and compiled policy;
+it does not create a second artifact manifest authority.
 
-Fields:
+Key custody fields:
 
-- `id`
-- `task_id`
-- `submission_id`
-- `submission_version`
-- `status`
-- `routing_recommendation`
-- `outcome_source`
-- `trigger_source`
-- `attempt_number`
-- `supersedes_checker_run_id`
-- `is_current_for_submission`
-- `started_at`
-- `completed_at`
-- `runner_version`
-- `locked_guide_version`
-- `locked_post_submit_checker_policy_id`
-- `locked_post_submit_checker_policy_version`
-- `locked_post_submit_checker_policy_hash`
-- `locked_post_submit_checker_policy_body`
-- `locked_review_policy_id`
-- `locked_review_policy_generation`
-- `locked_review_policy_hash`
-- `locked_revision_policy_id`
-- `locked_revision_policy_generation`
-- `locked_revision_policy_hash`
-- `artifact_binding_id` (planned canonical input reference; exact 04C shape pending)
-- `submission_bundle_manifest_id` (planned canonical input reference; exact 04C shape pending)
-- `package_hash` (retained current field; 04C must replace its authority use)
-- `artifact_hash_manifest` (retained current field; 04C must replace its authority use)
-- `artifact_manifest_hash` (retained current field; 04C must replace its authority use)
-- `summary`
+- `id`, `project_id`, `task_id`, `submission_id`, `submission_version`
+- `evaluation_request_id`, `phase`, `evaluation_generation`
+- `request_json`, `request_digest`, `result_id`
+- `worker_lease_id`, `worker_lease_generation`, `worker_lease_expires_at`
+- `execute_evidence_id`, `finalize_evidence_id`
+- `supersedes_checker_run_id`, locked guide/post/review/revision identities
+- `status`, `started_at`, `completed_at`, `failure_code`
+- `result_json`, `result_digest`, `material_custody`, `completion_event_id`
+- `routing_recommendation`, member counts and execution provenance
 
-ARCH-04B2 does not populate or authorize this retained run writer. It stores
-checker-output custody in ART attempts and bindings only. ARCH-04C owns the
-current CheckerRun/result schema and must select exact canonical input
-references without treating these retained caller-manifest fields as authority.
+States are `queued -> running -> completed | infrastructure_failed`. An expired
+execution lease can be replaced without changing the request or attempt. Completed
+and infrastructure-failed outcomes cannot be rewritten. Member results, terminal
+facts and the shared-outbox completion event commit together; infrastructure
+failure produces no routable completion event. Deletion and truncation reject.
 
-Status:
+`CheckerSubmissionFence` has one `submission_id` and exact `current_run_id`.
+Only caller-owned coordination advances it, by one evaluation generation.
+History derives `attempt_number` from that generation and
+`is_current_for_submission` from a completed run matching the fence. Neither is
+an independently mutable stored flag. Current-result consumers hold the caller
+transaction while checking this fence; an old event is not perpetual authority.
 
-- queued
-- running
-- completed
-- failed
+Completed routing is `allow_review`, `needs_revision` or `task_setup_blocked`,
+derived from the locked blocking severities and complete member set. Unfinished
+or infrastructure-failed runs use `not_evaluated`. `allow_review` means no
+blocking evaluation finding, never acceptance: later TASK routing follows the
+locked human-review requirement, including shared authorized acceptance when
+false. No human Review is invented for that branch.
 
-Run `passed`/`warning`/`failed` summary is derived from checker result counts, not stored as run status.
-
-Routing recommendation:
-
-- not_evaluated
-- allow_review
-- needs_revision
-- checker_retry
-- task_setup_blocked
-
-`routing_recommendation` is a checker-side workflow hint, not a human review decision. `allow_review` means the automated checker found no blocking issue and the submission may proceed to human review. It must not be stored or reported as `accept`.
-
-`task_setup_blocked` means the task's locked contract or policy context is incomplete, stale, or unsafe to review. It is an internal project-manager route, not a contributor-facing revision outcome.
+Migration 0008 refuses nonempty checker history before DDL. It does not invent
+requests or erase retained evidence. Such an environment requires an explicit
+preservation design. Production execute/finalize and ART access remain deny-only
+until ARCH-04D installs real action-specific authority; opaque controlled test
+receipts are not AUTH audit evidence.
 
 ## CheckerResult
 
-Results may be inserted only while their exact owning run is queued/running and
-has no completion timestamp. Insertion locks that parent to serialize with
-completion. A composite foreign key binds the run, task and Submission together;
-updates, deletion and truncation are rejected. Completed evidence cannot grow.
+A result is one ordered, selected structural member of its exact owning run.
+Insertion locks the running parent; composite ownership binds run/task/Submission.
+The complete selected set must commit with the parent's terminal result. Partial
+members cannot commit, and completion prevents appends. Updates, deletion and
+truncation reject.
 
 Fields:
 
-- `id`
-- `checker_run_id`
-- `checker_name`
-- `dispatch_authority`
-- `definition_id` (stable catalogue definition ID for pre-submit; registry
-  checker ID for durable)
-- `definition_version` (catalogue definition or registry checker version
-  selected by authority; the effective plan separately binds the top-level
-  catalogue ID/version and manifest hash)
-- `result_source`
-- `effective_plan_hash`
-- `rule_instance_id` (nullable only for non-policy/default definitions)
-- `locked_policy_hash` (nullable only when no locked policy produced the result)
-- `status`
-- `severity`
-- `message`
-- `suggested_fix`
-- `contributor_message`
-- `contributor_suggested_fix`
-- `evidence_refs`
-- `contributor_evidence_refs`
-- `contributor_visible`
-- `metadata`
+- `id`, `checker_run_id`, `task_id`, `submission_id`, `member_order`
+- `checker_name`, `definition_version`, `implementation_version`
+- `status`, `severity`, `code`, `failure_category`, bounded `counters`
 - `created_at`
 
-These authority-neutral provenance fields are explicitly typed and persisted.
-`dispatch_authority` discriminates the identity namespace. The API/result
-envelope serializes them under `definition` and `policy_trace`; they are never
-hidden only in the open-ended `metadata` field. Pre-submit evidence uses the
-same typed envelope without creating a durable `CheckerRun`; its immutable
-evidence rows store these fields directly under the 04B3 schema.
-
-Status:
-
-- passed
-- warning
-- failed
-
-Severity:
-
-- info
-- low
-- medium
-- high
-- critical
+Member states are `passed`, `warning` or `failed`, with closed registered outcome
+codes and categories. Policy blocking uses the locked severity selection,
+including a warning if that policy makes its severity blocking. History derives
+bounded messages and contributor visibility from these facts; arbitrary messages,
+metadata and evidence links are not stored on checker results. Private request,
+policy, receipt and material facts are excluded from public history projections.
+Pre-submit evidence remains a separate intake contract and creates no CheckerRun.
 
 ## CheckerDefinition
 

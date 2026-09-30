@@ -143,12 +143,3 @@ class CheckerArtifactOutputPort(Protocol):
         self, selector: CheckerOutputSelector
     ) -> CheckerOutputArtifactResult | None:
         """Recover a lost output response without a byte source or regeneration."""
-
-
-class UnavailableCheckerOutputReservation:
-    """ARCH-04C must install the real reservation producer before activation."""
-
-    async def resolve(self, selector: CheckerOutputSelector) -> CheckerOutputReservation:
-        """Deny without reading protected facts or fabricating a reservation."""
-        del selector
-        raise CheckerOutputUnavailable("checker_output_reservation_unavailable")

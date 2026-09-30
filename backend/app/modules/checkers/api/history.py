@@ -5,10 +5,10 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 
-CheckerStatus = Literal["queued", "running", "completed", "failed"]
+CheckerStatus = Literal["queued", "running", "completed", "infrastructure_failed"]
 CheckerResultStatus = Literal["passed", "warning", "failed"]
 CheckerSeverity = Literal["info", "low", "medium", "high", "critical"]
-CheckerRoutingRecommendation = Literal["not_evaluated", "allow_review", "needs_revision", "checker_retry", "task_setup_blocked"]
+CheckerRoutingRecommendation = Literal["not_evaluated", "allow_review", "needs_revision", "task_setup_blocked"]
 CheckerOutcomeSource = Literal["none", "auto_checker"]
 
 class ContributorCheckerResult(BaseModel):

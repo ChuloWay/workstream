@@ -1,5 +1,9 @@
 """Identity consistency, complete valid denial control, and absence of owner authority."""
 
+from app.modules.checkers.api.execution import CheckerExecutionUnavailable
+
+from tests.checkers.execution.support import denied_executor
+
 from app.core.identifiers import new_record_id
 
 import pytest
@@ -7,8 +11,6 @@ from pydantic import ValidationError
 
 from app.modules.checkers.api import (
     PostSubmissionEvaluationRequest,
-    PostSubmissionExecutionUnavailable,
-    UnavailablePostSubmissionExecution,
 )
 from app.modules.checkers.post_submit_contracts import make_post_submit_request
 from tests.checkers.post_submit.support import OTHER_HASH, change_request, request
@@ -64,9 +66,9 @@ async def test_post_port_unavailable(monkeypatch):
         lambda *args: pytest.fail("unavailable phase executed a member"),
     )
     with pytest.raises(
-        PostSubmissionExecutionUnavailable, match="^post_submit_execution_unavailable$"
+        CheckerExecutionUnavailable, match="^post_submit_execution_unavailable$"
     ):
-        await UnavailablePostSubmissionExecution().evaluate_post_submission(source)
+        await denied_executor().evaluate_post_submission(source)
 
 
 def test_fact_hashes_are_derived_and_nested_values_are_immutable():
@@ -93,4 +95,4 @@ async def test_unavailable_port_revalidates_unsafe_constructed_instances():
     source = request()
     forged = source.model_copy(update={"project_id": new_record_id()})
     with pytest.raises(ValidationError, match="project mismatch"):
-        await UnavailablePostSubmissionExecution().evaluate_post_submission(forged)
+        await denied_executor().evaluate_post_submission(forged)

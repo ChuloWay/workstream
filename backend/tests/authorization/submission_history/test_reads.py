@@ -21,7 +21,7 @@ async def history_case(client, monkeypatch, *, run_status="completed"):
     project = await create_active_project(client)
     task = await create_started_task(client, project["id"], monkeypatch)
     submission = await seed_retained_submission(task["id"], complete_submission_payload())
-    run = await seed_retained_checker_run(submission, status=run_status)
+    run = await seed_retained_checker_run(submission, state=run_status)
     return project["id"], task["id"], submission, run
 
 
@@ -60,6 +60,8 @@ async def test_exact_route_action_and_grant(task_client, monkeypatch, audience):
         original = {column.name: getattr(stored, column.name) for column in Submission.__table__.columns}
         stored_run = await session.get(CheckerRun, run)
         run_original = {column.name: getattr(stored_run, column.name) for column in CheckerRun.__table__.columns}
+        run_original.update(attempt_number=stored_run.evaluation_generation,
+                            is_current_for_submission=stored_run.status == "completed")
         prior_audit = {row.id: {column.name: getattr(row, column.name)
                               for column in AuditEvent.__table__.columns}
                        for row in await session.scalars(select(AuditEvent))}

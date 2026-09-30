@@ -33,7 +33,6 @@ from auth_concurrency_support import wait_for_named_database_lock
 from tests.submission_fixtures import seed_retained_submission
 
 from app.core.config import get_settings
-from app.core.hashing import canonical_json_hash
 from app.db import models as db_models
 from app.db import session as db_session
 from app.db.base import Base
@@ -2399,45 +2398,21 @@ async def test_database_rejects_checker_run_without_post_submit_policy_context(
         f"/api/v1/submissions/{stored_id}", headers=auth_headers(),
     )
     assert stored_response.status_code == 200, stored_response.text
+    from tests.submission_fixtures import seed_retained_checker_run
+    from tests.checkers.post_submit.support import change_request
+    from app.modules.checkers.execution_repository import stored_request, request_text
+    source_id = await seed_retained_checker_run(stored_id, state="queued")
     async with db_session.get_session_factory()() as session:
-        task = await session.get(WorkstreamTask, started_task["id"])
-        submission = await session.get(Submission, stored_response.json()["id"])
-        assert task is not None
-        assert submission is not None
-        checker_run = db_models.CheckerRun(
-            id=str(new_record_id()),
-            task_id=task.id,
-            submission_id=submission.id,
-            submission_version=submission.version,
-            trigger_source="submission_finalized",
-            status="queued",
-            routing_recommendation="not_evaluated",
-            outcome_source="none",
-            triggered_by="project-manager",
-            triggered_by_subject="project-manager-subject",
-            triggered_by_issuer="flow-test",
-            trigger_auth_source="dev_mock",
-            attempt_number=1,
-            is_current_for_submission=True,
-            locked_guide_version=submission.locked_guide_version,
-            locked_post_submit_checker_policy_id=None,
-            locked_post_submit_checker_policy_version=None,
-            locked_post_submit_checker_policy_hash=None,
-            locked_post_submit_checker_policy_body=None,
-            locked_review_policy_id=submission.locked_review_policy_id,
-            locked_review_policy_generation=submission.locked_review_policy_generation,
-            locked_review_policy_hash=submission.locked_review_policy_hash,
-            locked_revision_policy_id=submission.locked_revision_policy_id,
-            locked_revision_policy_generation=submission.locked_revision_policy_generation,
-            locked_revision_policy_hash=submission.locked_revision_policy_hash,
-            locked_payment_policy_version=submission.locked_payment_policy_version,
-            package_hash=submission.package_hash,
-            artifact_hash_manifest=submission.artifact_hash_manifest,
-            artifact_manifest_hash=canonical_json_hash(submission.artifact_hash_manifest),
-        )
-        session.add(checker_run)
-        with pytest.raises(IntegrityError):
-            await session.commit()
+        source = await session.get(db_models.CheckerRun, source_id)
+        values = {column.name: getattr(source,column.name) for column in db_models.CheckerRun.__table__.columns}
+        request = change_request(stored_request(source), evaluation_generation=2, evaluation_request_id=new_record_id())
+        values.update(id=str(new_record_id()), result_id=str(new_record_id()), evaluation_request_id=str(request.evaluation_request_id),
+                      evaluation_generation=2, request_json=request_text(request), request_digest=request.request_sha256,
+                      locked_post_submit_checker_policy_id=None, locked_post_submit_checker_policy_version=None,
+                      locked_post_submit_checker_policy_hash=None)
+        session.add(db_models.CheckerRun(**values))
+        with pytest.raises(IntegrityError, match="checker request ownership or policy mismatch"):
+            await session.flush()
 
 
 async def test_retained_submission_versions_are_readable_without_exposing_packet_hashes(

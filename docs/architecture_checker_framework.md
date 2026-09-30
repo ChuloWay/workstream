@@ -155,9 +155,34 @@ checked by the owning services. Structural consistency grants no authorization.
 The canonical `policy_hash` binds ordered entries, configuration and exact
 catalogue/implementation identities. Domain project policy versions record
 changes to project rules; they do not select obsolete software implementations.
-The public phase execution port remains unavailable pending ARCH-04C/04D.
+ARCH-04C implements hidden phase execution; production authority remains deny-only
+until ARCH-04D. No public execution route or dispatcher is activated.
 POL-04B connects unified guide setup; POL-05B and POL-06B expose separate
 pre-submit and post-submit policy approvals.
+
+## Durable execution custody
+
+ARCH-04C extends the existing CheckerRun/CheckerResult aggregate. A caller-owned
+coordination transaction reserves the exact request and advances one per-Submission
+fence. Global request/phase and submission/phase/generation uniqueness prevent
+split attempts. Replay returns the original identity; it cannot restore an old
+request as current. Execution claims a PostgreSQL-timed execution lease and releases
+all locks and prepared authority before materialization or evaluator work.
+
+The existing registry evaluates exactly the compiled structural entries against
+ART-verified material. Finalization consumes separate action-specific authority,
+checks the current fence and unexpired lease, and commits complete ordered closed
+members, terminal result and shared-outbox completion together. Expired-lease
+recovery retains the attempt; terminal infrastructure failures never restart or
+publish a routable result. No generated outputs or provider inference are enabled.
+The current-result port checks the exact request inside the caller transaction.
+
+Production composition denies execute/finalize and material access until ARCH-04D.
+No new Celery task, delivery handler or public execution endpoint exists. ARCH-04E
+must recheck currentness when consuming a completion event and apply the locked
+ReviewPolicy; CHECKERS never accepts a contribution or mutates TASK state.
+Migration 0008 refuses retained checker history before changing schema rather
+than inventing request lineage or deleting data.
 
 ## Blocking Policy
 
@@ -327,16 +352,17 @@ prepared authorization and opens no transaction before ART's existing executor
 obtains fresh authority. Replay returns ART's canonical result unchanged.
 
 The post command validates and delegates CHECKER's closed value contract.
-Production explicitly uses `UnavailablePostSubmissionExecution`; this does not
-install durable post-submit execution, authorize material reads, or prove attempt and
-currentness ownership. ARCH-04B supplies the hidden ART input port: exact consumed
+Production composes the canonical executor with separate deny-only execute and
+finalize authorities. ARCH-04C reserves the exact request, fences execution attempts and
+atomically persists complete closed member results and a completion event; it
+does not activate material reads or automatic dispatch. ARCH-04B supplies the hidden ART input port: exact consumed
 Submission bytes, rebuilt manifest, async scoped file access and cleanup, followed
 by a fresh material-selection check. Production composition denies materialization.
 ARCH-04B2 now supplies hidden typed output storage, byte-free recovery and
-flush-only verified binding while its CHECKERS reservation and authority adapters
-remain unavailable. The current structural catalogue reserves zero output slots;
-controlled nonempty slots prove ART mechanics only. ARCH-04C must support that
-empty output set and owns durable execution, followed by ARCH-04D authority and
+flush-only verified binding. The CHECKERS reservation reader now verifies the
+exact current request/run/lease and returns zero slots; ART authority remains
+deny-only. Controlled nonempty slots prove ART mechanics only. ARCH-04C supports
+that exact empty output set and owns durable execution, followed by ARCH-04D authority and
 ARCH-04E routing. A returned evaluation value is not a stored
 current result or acceptance.
 Retained run and submission history now use canonical AUTH and separate fixed
@@ -523,8 +549,12 @@ severities.
 ## Checker Run Flow — Target Contract
 
 The following is the intended end-to-end lifecycle. Pre-submit intake and
-retained-history reads are implemented. Canonical durable post-submit execution
-and result routing remain unavailable pending ARCH-04C/04D/04E. ARCH-04F adds
+retained-history reads are implemented. Hidden durable post-submit execution is
+implemented; live execution and result routing remain unavailable pending
+ARCH-04D/04E. Known missing or corrupt input after ART authorization records a
+terminal infrastructure failure only after cleanup and fresh finalization
+authorization; it does not route the task. Exact replay does not reread storage.
+Denied material access and unexpected failures remain nonterminal. ARCH-04F adds
 contributor-correctable remediation and gates public intake and enabling the
 false-policy acceptance path; the true `allow_review` route may ship before
 ARCH-04F. ARCH-04B hidden input and ARCH-04B2 hidden output custody are delivered
@@ -566,7 +596,8 @@ ARCH-04C owns CHECKERS result/currentness and its completion event, not TASK
 mutations. ARCH-04E owns the current `allow_review` manifest and TASK transition;
 ARCH-04F owns contributor-readable non-allow remediation before public cutover.
 The direct CHECKERS-to-TASK mutation, fabricated system actor and alternate
-Celery gate are removed. Canonical durable execution and routing remain unavailable.
+Celery gate are removed. Hidden durable execution is implemented; live authority
+and routing remain unavailable until ARCH-04D/04E.
 
 `review_pending` marks readiness for the separately owned WS-REV lifecycle.
 WS-REV alone creates `ReviewPacketManifest`, review queues, reviewer leases,
@@ -609,11 +640,19 @@ The checker run records:
 - warning count
 - completion timestamp
 
-With ARCH-04B input and ARCH-04B2 output custody delivered, ARCH-04C result
-custody, ARCH-04D activation and
-ARCH-04E routing integration, this gives reviewers proof that they are reviewing the
-same immutable binding and manifest that passed automated checks; legacy
-caller-owned manifest fields are not authority.
+ARCH-04B input, ARCH-04B2 output custody and ARCH-04C result custody are
+delivered. Reviewers will receive readiness proof after ARCH-04D activation and
+ARCH-04E routing integration. That proof must identify the same immutable binding
+and manifest that passed automated checks; caller-owned manifest fields are not
+authority.
+
+ARCH-04C persists material facts from ART's authorized selection. Its database
+guard does not independently compare `admission_id`, `replica_id` or
+`semantic_manifest_sha256` with canonical ART records. Production remains
+deny-only until the mandatory
+[ARCH-04D canonical lineage prerequisite](../.commitrail/initiatives/WS-ARCH-001/planning/chunks/WS-ARCH-001-04D-auth-post-submit-activation.md#canonical-art-lineage-activation-prerequisite)
+enforces that exact tuple at durable finalization and proves rejection of false
+lineage. The normal-path Local/MinIO custody assertion is not that negative proof.
 
 A separate `ReadinessCertificate` record may be added later if reviewer routing needs a dedicated signed handoff object. v0.1 does not require that extra record.
 
@@ -630,19 +669,34 @@ Contributor-facing checker-run responses do not expose `routing_recommendation`,
 `outcome_source`, internal route tokens, post-submit policy provenance fields,
 locked post-submit policy body, or hidden task setup details.
 
-Reviewers see:
+ARCH-04C retains closed, ordered post-submit checker identity and implementation
+version, status, code, failure category, severity and the bounded counter fields
+of `PostSubmitMemberResult`. It also retains exact request/result generation and
+digests, locked policy lineage and verified material custody. Current structural
+handlers emit empty counters. Explanations and suggested fixes in history are
+derived deterministically from the closed code; raw handler messages and arbitrary
+metadata are not retained.
 
-- all checker output
-- evidence references
-- full metadata where allowed
+This is retained proof, not a live reviewer projection. Current contributor and
+Project Manager history reads expose only their fixed, permission-appropriate
+DTO fields. Future REV packet/current-work presentation must expose an authorized
+bounded subset after routing and review integration. The current contract does
+not include per-file findings, per-check evidence references, full logs or generated
+output artifacts. For example, a missing-required-file code identifies the failed
+rule but does not retain which path was missing or a missing-file counter.
 
-Authorized Project Manager, Operator, and Audit projections expose only their
-permission-appropriate fields. Depending on the matched permission they may
-see:
+Reviewer file inspection belongs to the planned lease-scoped ART capability bound
+to the exact `ReviewPacketManifest` and active `ReviewLease`; see
+[reviewer packet access](spec_review_lifecycle.md#review-packet-and-artifact-boundary).
+CHECKERS history does not grant artifact access. A reviewer uses the exact immutable
+Submission and locked context, with checker results as bounded provenance.
 
-- full logs
-- internal rule IDs
-- reasoned retry/repair controls
+A richer finding such as a path, location, excerpt, evidence reference or generated
+output needs a typed capability-specific result/evidence schema, visibility rules,
+immutable custody and regression tests before the reviewer contract may promise
+it. This does not introduce a generic metadata store or another checker path.
+Future Operator and Audit projections likewise require their own authorized fields;
+ARCH-04C adds neither full-log reads nor retry/repair controls.
 
 ## Recovery, Not Checker Override
 

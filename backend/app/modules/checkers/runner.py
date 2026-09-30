@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import hashlib
 import json
 import re
@@ -239,7 +241,11 @@ class CheckerRegistry:
             definition.validate_configuration(entry.configuration)
             seen.add(entry.checker_id)
             registrations.append(registration)
-        return [await registration.checker.run(context) for registration in registrations]
+        outcomes = []
+        for registration in registrations:
+            async with asyncio.timeout(registration.definition.resources.deadline_ms / 1000):
+                outcomes.append(await registration.checker.run(context))
+        return outcomes
 
     def names(self) -> set[str]:
         """Return installed checker IDs."""

@@ -7,18 +7,23 @@ from typing import Protocol
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.cancellation import await_cancellation_resistant
-from app.interfaces.artifacts import ArtifactStore
+from app.interfaces.artifacts import (
+    ArtifactStore, ArtifactObjectMissingError, ArtifactInputMismatchError,
+    ArtifactIntegrityError, ArtifactLimitExceededError, ArtifactStoreUnavailableError,
+)
 from app.modules.checkers.api.materialization import (
     PostSubmissionMaterialConsumer, PostSubmissionMaterializationResult,
-    PostSubmissionMaterializationUnavailable, SubmissionMaterialEntry,
+    PostSubmissionMaterializationUnavailable, PostSubmissionMaterializationFailure,
+    SubmissionMaterialEntry,
 )
 from app.modules.artifacts.post_submit_selection import (
     PostSubmissionMaterialSelection, select_post_submission_material,
 )
-from app.modules.artifacts.preparation import ArtifactPreparationService
+from app.modules.artifacts.preparation import ArtifactPreparationService, ArtifactScratchIntegrityError
 from app.modules.artifacts.service import ArtifactStorageNamespaceError, ArtifactStorageNamespaceSpec
 from app.modules.artifacts.submission_archive import (
     SealedSubmissionTree, SubmissionArchiveInspector, SubmissionArchiveEntryType,
+    SubmissionArchiveRejectedError,
 )
 from app.modules.artifacts.submission_manifest import build_submission_manifest
 from app.modules.checkers.api import PostSubmissionEvaluationRequest, PostSubmissionEvaluationResult
@@ -155,11 +160,12 @@ class PostSubmissionMaterializer:
         await self._authority.preflight(request)
         selected = await self._select(request)
         await self._authority.authorize(request, selected)
-        prepared = await self._preparation.prepare(
-            self._store.open(selected.provider_object_ref), media_type=selected.media_type,
-            expected_sha256=selected.sha256, expected_size=selected.byte_count,
-        )
+        prepared = None
         try:
+            prepared = await self._preparation.prepare(
+                self._store.open(selected.provider_object_ref), media_type=selected.media_type,
+                expected_sha256=selected.sha256, expected_size=selected.byte_count,
+            )
             inspection = await prepared.inspect(self._inspector)
             manifest = build_submission_manifest(inspection)
             expected_files = tuple((entry.normalized_path, entry.sha256, entry.byte_count)
@@ -168,13 +174,22 @@ class PostSubmissionMaterializer:
             supplied_files = tuple(sorted((entry.artifact, entry.hash, entry.size_bytes)
                                           for entry in request.structural_input.manifest))
             if manifest.sha256 != selected.semantic_manifest_sha256 or supplied_files != expected_files:
-                raise PostSubmissionMaterializationUnavailable("post_submit_material_manifest_mismatch")
+                raise PostSubmissionMaterializationFailure("post_submit_material_manifest_mismatch")
             evaluation = await self._preparation._process_prepared_submission(
                 prepared, _MaterialProcessor(self._inspector, inspection, request, consumer),
                 reserved_bytes=manifest.total_expanded_bytes, maximum_entries=manifest.entry_count,
             )
+        except ArtifactScratchIntegrityError:
+            # Unconfirmed cleanup must never become a retained terminal result.
+            raise
+        except (
+            ArtifactObjectMissingError, ArtifactInputMismatchError, ArtifactIntegrityError,
+            ArtifactLimitExceededError, ArtifactStoreUnavailableError, SubmissionArchiveRejectedError,
+        ):
+            raise PostSubmissionMaterializationFailure("post_submit_material_unavailable") from None
         finally:
-            await prepared.close()
+            if prepared is not None:
+                await prepared.close()
         if await self._select(request) != selected:
             raise PostSubmissionMaterializationUnavailable("post_submit_material_changed")
         facts = selected.submission

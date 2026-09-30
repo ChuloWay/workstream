@@ -10,8 +10,8 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   consumption, and binding dependencies are merged through ARCH-02H.
 - Completed boundary: ARCH-04B hidden input materialization and hidden
   [ARCH-04B2 checker-output custody](../WS-ARCH-001/WS-ARCH-001-04B2.md).
-  Production reservation and authority remain unavailable.
-- Next usable boundary: ARCH-04C durable execution and results.
+  The CHECKERS zero-slot reservation reader is implemented; production authority remains deny-only.
+- Next usable boundary: ARCH-04D exact service authority after delivered ARCH-04C hidden durable execution.
 - Governing sources: artifact specifications, `ArtifactStore`,
   `ArtifactScratchManager`, code, migrations, and artifact tests.
 - Preserve: SHA-256/byte-count identity, reread verification, isolation,
@@ -35,7 +35,7 @@ is a facade, not a replacement or second precheck run. New unified generations
 must prove exact approved lineage at preparation, consumption and binding.
 
 1. ARCH-04B hidden exact Submission materialization and ARCH-04B2 hidden output
-   custody are delivered. Continue with ARCH-04C durable execution, then
+   custody are delivered. ARCH-04C hidden durable execution is delivered. Continue with
    fixed-service authority.
 2. ARCH-04F owns checker-remediation resubmission using existing ART ports;
    later reviewer-requested revision remains a separate REV boundary. Add those dependencies before public Submission

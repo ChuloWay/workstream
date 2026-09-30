@@ -1489,11 +1489,20 @@ belong to POL-05; post-submit projection belongs to POL-06. No setup finding
 accepts a submission or enables an unregistered evaluator. Retained prior
 records remain immutable but cannot supply current guide execution evidence.
 
-`CheckerInputSnapshot` references binding/content IDs, outer-ZIP digest/byte
-count, semantic-manifest hash, locked policy/checker identities, and checker
-implementation identity. Pre-submit evidence and post-submit execution name the
-same verified admission and exact binding.
-Checker logs and generated outputs become artifact bindings.
+The exact post-submit request and material facts persisted from ART's authorized
+selection retain binding/content IDs, outer-ZIP digest/byte count,
+semantic-manifest hash, locked policy/checker identities and checker implementation
+identity. The normal service path names the same verified admission and exact
+binding as pre-submit evidence. Migration 0008 does not independently compare
+stored `admission_id`, `replica_id` or `semantic_manifest_sha256` with canonical
+ART records. This database guarantee remains a mandatory
+[ARCH-04D activation prerequisite](../.commitrail/initiatives/WS-ARCH-001/planning/chunks/WS-ARCH-001-04D-auth-post-submit-activation.md#canonical-art-lineage-activation-prerequisite):
+enforce the exact tuple at durable finalization and prove independent substitution
+rejection and rollback before enabling live authority. Positive execution proof
+alone does not close this gap.
+For a registered capability that produces logs or output bytes, those outputs
+must become verified artifact bindings through its reserved slots. The current
+structural catalogue produces no such artifacts.
 
 ARCH-04B2 supplies the hidden checker-output custody boundary. The typed
 `store` and byte-free `recover(selector)` paths enforce one owner-issued slot
@@ -1502,32 +1511,43 @@ only exact verified identities. The flush-only binding participant preserves
 the full verified ancestry and never privately reads CHECKERS rows. Store and
 recovery resolve owner facts only through the typed CHECKERS port; the separate
 Operator resource-to-project lookup remains an explicit read concern and is not
-an output-admission path. Production
-composition remains unavailable because CHECKERS reservation/currentness and
-live output authority are intentionally deferred. The current structural
-catalogue declares zero output slots; controlled nonempty test reservations
-prove ART mechanics only. ARCH-04C must complete a valid evaluation with an
-empty output set and compose bindings only for slots actually reserved by its
-owner.
+an output-admission path. ARCH-04C supplies hidden CHECKERS reservation,
+currentness and durable evaluation with an exact empty output set. The current
+structural catalogue declares zero output slots; controlled nonempty test
+reservations prove ART mechanics only. A future output-producing registered
+capability must compose bindings only for slots actually reserved by its owner.
+Production materialization, output storage, execution and finalization authority
+remain deny-only until ARCH-04D; automatic TASK publication and routing remain
+ARCH-04E work.
 
-Transient post-submit storage unavailability leaves the task in
-`evaluation_pending` and uses checker retry infrastructure. A provider object
-confirmed missing after its content was bound is a terminal artifact incident
-in v0.1: the immutable binding remains, evaluation stays blocked, and no
-contributor, Project Manager, or Operator route may replace or rebind the
-bytes. A future separately approved backup/replica-repair initiative may
-restore the exact content from an independently verified copy. Integrity
-mismatch on an existing content-addressed key is likewise unrecoverable in
-v0.1: the replica remains quarantined, evaluation stays blocked, and a security
-incident is required. Recovery never overwrites the poisoned key.
+Current ARCH-04C behavior records known post-authorization material failures as
+terminal, unroutable `material_unavailable`, after scratch cleanup and fresh
+finalization authority. It records no verified material custody, member results
+or completion event, and exact replay performs no provider I/O. Authority or
+selection denial and late lineage drift remain nonterminal. This hidden executor
+neither changes TASK state nor provides automatic or public retry. After a terminal
+result, a new authorized evaluation requires the coordinator's next generation.
+Unfinished expired-lease recovery retains the existing attempt and generation.
+
+The target outage policy remains distinct from that current implementation.
+Future bounded retry/continuation must preserve `evaluation_pending` while
+storage is transiently unavailable; it is not an active checker retry service.
+A provider object confirmed missing after its content was bound is a terminal
+artifact incident in v0.1: the immutable binding remains, evaluation stays
+blocked, and no contributor, Project Manager, or Operator route may replace or
+rebind the bytes. A future separately approved backup/replica-repair initiative
+may restore exact content from an independently verified copy. Integrity mismatch
+on an existing content-addressed key is likewise unrecoverable in v0.1: the
+replica remains quarantined, evaluation stays blocked, and a security incident
+is required. Recovery never overwrites the poisoned key.
 
 Pre-submit and post-submit outage continuation are distinct contracts. Before
 durable artifact intent, the former cleans scratch, preserves no reusable
 attempt, returns the stable 503 above, and requires reupload after scratch or
-process loss. After durable handoff, existing ART put/verification recovery
-owns ambiguity. Post-submit checker outage preserves `evaluation_pending` and
-uses checker retry infrastructure. No path fabricates `accept`,
-`needs_revision`, or `reject`.
+process loss. After durable handoff, existing ART put/verification recovery owns
+ambiguity. Post-submit continuation must respect retained terminal evidence and
+current-generation custody. No path fabricates `accept`, `needs_revision`, or
+`reject`.
 
 ## Authorization Dependencies
 

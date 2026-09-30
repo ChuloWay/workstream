@@ -8,7 +8,7 @@ from app.core.identifiers import new_record_id
 
 from httpx import ASGITransport, AsyncClient
 import pytest
-from sqlalchemy import func, select, text
+from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.core.config import get_settings
@@ -98,7 +98,7 @@ async def _reviewable_lineage(
         task["id"], complete_submission_payload(),
     )
     set_dev_actor(monkeypatch, roles="project_manager", subject="project-manager-subject")
-    run_id = await seed_retained_checker_run(submission_id, status=checker_status)
+    run_id = await seed_retained_checker_run(submission_id, state=checker_status)
     async with db_session.get_session_factory()() as session:
         stored = await session.get(Submission, submission_id)
         submission = {"id": stored.id, "version": stored.version}
@@ -257,8 +257,12 @@ async def test_database_rejects_invalid_admission_state_and_commit(
         queue = await repository.add_queue_entry(queue_value)
         checker = await session.get(CheckerRun, submission["checker_run_id"])
         assert checker is not None
-        checker.is_current_for_submission = False
-        await session.flush()
+        from app.modules.checkers.execution_coordination import EvaluationCoordinator
+        from app.modules.checkers.execution_repository import stored_request
+        from tests.checkers.post_submit.support import change_request
+        await EvaluationCoordinator(session).reserve_current_evaluation(change_request(
+            stored_request(checker), evaluation_request_id=new_record_id(), evaluation_generation=2,
+        ))
         with pytest.raises(DBAPIError, match="review admission checker is not admissible"):
             await repository.commit_admission(
                 reservation_id=reservation.record.id,
@@ -362,37 +366,27 @@ async def test_database_rejects_non_admissible_checker_and_project_mismatch(
     review_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project, task, submission = await _reviewable_lineage(review_client, monkeypatch, checker_status="running")
-    for field, invalid_value in (
-        ("status", "running"),
-        ("routing_recommendation", "needs_revision"),
-        ("is_current_for_submission", False),
+    project, task, submission = await _reviewable_lineage(review_client, monkeypatch)
+    original_run = submission["checker_run_id"]
+    # Each state rejection uses the current generation. Supersession separately
+    # tests an otherwise admissible completed/allow_review predecessor.
+    for generation, state, failures in (
+        (2, "running", ()), (3, "completed", ("check_submission_packet",)),
     ):
+        current = await seed_retained_checker_run(submission["id"], state=state,
+                                                 failures=failures, generation=generation)
+        invalid = submission | {"checker_run_id": current}
         async with db_session.get_session_factory()() as session:
-            checker = await session.get(CheckerRun, submission["checker_run_id"])
-            assert checker is not None
-            completed_at = await session.scalar(select(func.clock_timestamp()))
-            checker.status = "completed"
-            setattr(checker, field, invalid_value)
-            if checker.status == "completed":
-                checker.completed_at = completed_at
-            await session.flush()
-            session.add(
-                ReviewQueueEntry(
-                    **_queue_input(project, task, submission)
-                    .model_copy(update={"id": new_record_id()})
-                    .model_dump()
-                )
-            )
+            session.add(ReviewQueueEntry(**_queue_input(project, task, invalid).model_dump()))
             with pytest.raises(DBAPIError, match="review queue checker is not admissible"):
                 await session.flush()
             await session.rollback()
-
     async with db_session.get_session_factory()() as session:
-        checker = await session.get(CheckerRun, submission["checker_run_id"])
-        checker.completed_at = await session.scalar(select(func.clock_timestamp()))
-        checker.status = "completed"
-        await session.commit()
+        session.add(ReviewQueueEntry(**_queue_input(project,task,submission | {"checker_run_id":original_run}).model_dump()))
+        with pytest.raises(DBAPIError, match="review queue checker is not admissible"):
+            await session.flush()
+        await session.rollback()
+    submission["checker_run_id"] = await seed_retained_checker_run(submission["id"], generation=4)
 
     other_task, other_submission = await _additional_reviewable_submission(
         review_client, project, monkeypatch
@@ -558,3 +552,77 @@ async def test_preferred_shape_is_storage_only_and_lease_shape_is_impossible(
                 {"id": preferred.id},
             )
         await session.rollback()
+
+
+@pytest.mark.parametrize("boundary", ["queue", "admission"])
+@pytest.mark.parametrize("admission_first", [True, False])
+async def test_review_currentness_serializes_with_successor(
+    review_client, review_database_env, monkeypatch, boundary, admission_first,
+):
+    import asyncio
+    from app.modules.checkers.execution_coordination import EvaluationCoordinator
+    from app.modules.checkers.execution_repository import stored_request
+    from tests.checkers.post_submit.support import change_request
+    from tests.auth_concurrency_support import wait_for_named_database_lock
+
+    project, task, submission = await _reviewable_lineage(review_client, monkeypatch)
+    factory = db_session.get_session_factory()
+    queue_value = _queue_input(project,task,submission)
+    reservation_value = _reservation_input(project,task,submission)
+    async with factory() as session, session.begin():
+        run = await session.get(CheckerRun,submission["checker_run_id"])
+        successor = change_request(stored_request(run),evaluation_request_id=new_record_id(),evaluation_generation=2)
+        if boundary == "admission":
+            repository = ReviewQueueRepository(session)
+            await repository.reserve_admission(reservation_value)
+            await repository.add_queue_entry(queue_value)
+
+    async def admit(session):
+        repository = ReviewQueueRepository(session)
+        if boundary == "queue":
+            await repository.add_queue_entry(queue_value)
+        else:
+            await repository.commit_admission(reservation_id=reservation_value.id,queue_entry_id=queue_value.id)
+
+    waiter_name = "checker-review-race-" + new_record_id().hex
+    async def competing():
+        async with factory() as session, session.begin():
+            await session.execute(text("select set_config('application_name',:name,true)"),{"name":waiter_name})
+            if admission_first:
+                await EvaluationCoordinator(session).reserve_current_evaluation(successor)
+            else:
+                await admit(session)
+
+    contender = None
+    try:
+        async with factory() as session,session.begin():
+            blocker = await session.scalar(text("select pg_backend_pid()"))
+            if admission_first:
+                await admit(session)
+            else:
+                await EvaluationCoordinator(session).reserve_current_evaluation(successor)
+            contender = asyncio.create_task(competing())
+            # Observe a real independent-session lock wait before releasing the
+            # winner, not a sleep that merely assumes the desired ordering.
+            await asyncio.wait_for(wait_for_named_database_lock(
+                review_database_env,waiter_name,expected_blocker_pid=blocker,
+            ),timeout=10)
+            assert not contender.done()
+        if admission_first:
+            await contender
+        else:
+            with pytest.raises(IntegrityError,match=f"review {boundary} checker is not admissible"):
+                await contender
+    finally:
+        if contender is not None:
+            if not contender.done():
+                contender.cancel()
+            await asyncio.gather(contender,return_exceptions=True)
+    async with factory() as session:
+        current = await session.scalar(text("select current_run_id from checker_submission_fences where submission_id=:id"),{"id":submission["id"]})
+        assert str(current) != submission["checker_run_id"]
+        if boundary == "queue":
+            assert (await session.get(ReviewQueueEntry,queue_value.id) is not None) == admission_first
+        else:
+            record = await session.get(ReviewAdmissionIdempotencyRecord,reservation_value.id)
+            assert record.status == ("committed" if admission_first else "pending")

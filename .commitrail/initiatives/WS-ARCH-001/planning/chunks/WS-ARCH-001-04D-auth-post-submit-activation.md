@@ -16,6 +16,35 @@ focused AUTH/XINT tests, boundary ledgers and evidence/status. Not allowed:
 new authorization protocol, human checker authority, generic artifact reads,
 REV actions, TASK transition ownership or serialized prepared handles.
 
+## Canonical ART lineage activation prerequisite
+
+ARCH-04C persists material facts from ART's authorized selection, but migration
+0008 does not independently compare the stored `admission_id`, `replica_id` and
+`semantic_manifest_sha256` with canonical ART records. Its normal-path
+Local/MinIO proof does not establish rejection of false persisted lineage.
+
+Live post-submit materialization, execution and finalization authority must not
+be registered or composed until durable finalization enforces one exact canonical
+ART lineage tuple. All three stored fields must belong to the same exact
+Submission/binding/content lineage under ART's canonical selection rules.
+Independent existence, request-copy equality, runtime preflight or a positive
+execution test is insufficient. Require an owner-approved persisted-boundary
+design using existing ART selection semantics; do not add ad hoc CHECKERS runtime
+queries into private ART tables, a parallel validation path or a generic framework.
+The executable 04D contract must enumerate the affected owner/database files.
+
+Required proof before activation:
+
+- Real PostgreSQL substitutes each of the three fields independently using valid
+  foreign, same-shaped ART lineage and rejects at the durable boundary.
+- Each rejection rolls back the terminal result, members, completion event,
+  finalization authority evidence and material custody.
+- The exact canonical tuple commits as the valid control.
+- Removing each comparison makes its corresponding regression fail at the
+  intended rejection assertion, after valid setup.
+- Production AUTH composition remains denied until all three comparisons and
+  the live authorization tests pass. Retain exact replay and immutable history.
+
 ## Proposed CHECKERS service manifest
 
 ART's three existing actions cover materialization, output ingestion and

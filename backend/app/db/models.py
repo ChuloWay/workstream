@@ -31,7 +31,7 @@ from app.modules.authorization.models import (  # noqa: F401
     ProjectRoleGrant,
     ProjectRoleQualificationSnapshot,
 )
-from app.modules.checkers.models import CheckerResult, CheckerRun  # noqa: F401
+from app.modules.checkers.models import CheckerResult, CheckerRun, CheckerSubmissionFence  # noqa: F401
 from app.modules.compensation.models import (  # noqa: F401
     CompensationAdapterBindingLifecycleEvent,
     ProjectCompensationAdapterBinding,

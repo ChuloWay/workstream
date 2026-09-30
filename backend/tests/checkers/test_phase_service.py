@@ -1,5 +1,9 @@
 """Phase delegation and removed JSON precheck; no fake post execution custody."""
 
+from app.modules.checkers.api.execution import CheckerExecutionUnavailable
+
+from tests.checkers.execution.support import denied_executor
+
 import inspect
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -10,9 +14,6 @@ from pydantic import ValidationError
 
 from app.adapters.artifacts import CheckerPhaseService
 from app.modules.artifacts.pre_submit_evidence import PreSubmitEvidencePersistenceResult
-from app.modules.checkers.api import (
-    PostSubmissionExecutionUnavailable, UnavailablePostSubmissionExecution,
-)
 from tests.checkers.post_submit.support import OTHER_HASH, request
 from tests.checkers.post_submit.test_result_contract import result
 
@@ -20,7 +21,7 @@ from tests.checkers.post_submit.test_result_contract import result
 def phases(pre=None, post=None):
     return CheckerPhaseService(
         pre_submission=pre if pre is not None else SimpleNamespace(execute_reserved=AsyncMock()),
-        post_submission=post if post is not None else UnavailablePostSubmissionExecution(),
+        post_submission=post if post is not None else denied_executor(),
     )
 
 
@@ -67,7 +68,7 @@ async def test_pre_phase_rejects_authorization_handle_and_propagates_owner_failu
 @pytest.mark.asyncio
 async def test_valid_post_phase_stays_unavailable_without_invoking_pre_owner():
     owner = SimpleNamespace(execute_reserved=AsyncMock())
-    with pytest.raises(PostSubmissionExecutionUnavailable, match="^post_submit_execution_unavailable$"):
+    with pytest.raises(CheckerExecutionUnavailable, match="^post_submit_execution_unavailable$"):
         await phases(pre=owner).evaluate_post_submission(request())
     owner.execute_reserved.assert_not_awaited()
 

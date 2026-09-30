@@ -186,7 +186,7 @@ async def test_command_holds_authorized_context_before_final_handoff(tmp_path, i
         PreparedSubmissionBundlePreparationCommand, SubmissionBundlePreparationRuntime,
         SubmissionBundleDurablePutService, SubmissionBundleDurablePutResult,
     )
-    from app.modules.checkers.api import UnavailablePostSubmissionExecution
+    from tests.checkers.execution.support import denied_executor
     from tests.authorization.test_pre_submit_attempt_authority import _seed_materializer
     from tests.test_default_pre_submit_execution import _archive, _bytes
 
@@ -249,7 +249,7 @@ async def test_command_holds_authorized_context_before_final_handoff(tmp_path, i
                     preparation=harness.preparation, inspector=harness.inspector,
                     catalogue=harness.catalogue, materialization=workflow._materialization,
                     evidence=workflow, checker_service=CheckerPhaseService(
-                        pre_submission=workflow, post_submission=UnavailablePostSubmissionExecution()),
+                        pre_submission=workflow, post_submission=denied_executor()),
                     durable_put=SimpleNamespace(admit_in_transaction=final_handoff,
                                                 publish_after_commit=stop_before_provider),
                 )

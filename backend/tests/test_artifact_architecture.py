@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from importlib.util import resolve_name
 from pathlib import Path
 
 import pytest
@@ -581,6 +582,7 @@ def test_checker_materialization_contract_has_one_canonical_consumer_owner() -> 
     }
     assert set(classes) == {
         "PostSubmissionMaterializationUnavailable",
+        "PostSubmissionMaterializationFailure",
         "SubmissionMaterialEntry",
         "SubmissionMaterialView",
         "PostSubmissionMaterialConsumer",
@@ -596,8 +598,8 @@ def test_checker_materialization_contract_has_one_canonical_consumer_owner() -> 
     assert "Materialization" not in artifact_api.read_text(encoding="utf-8")
 
 
-def test_art_implementations_are_the_exact_checker_contract_consumers() -> None:
-    """Prevent a reverse dependency or an extra consumer of CHECKERS custody ports."""
+def test_checker_custody_ports_have_exact_owner_and_art_consumers() -> None:
+    """Allow only named CHECKERS consumers and ART implementations of custody ports."""
     expected = {
         "app.modules.checkers.api.output_custody": {
             "app/adapters/artifacts/__init__.py",
@@ -606,21 +608,27 @@ def test_art_implementations_are_the_exact_checker_contract_consumers() -> None:
             "app/modules/artifacts/checker_outputs.py",
             "app/modules/artifacts/schemas.py",
             "app/modules/artifacts/service.py",
+            "app/modules/checkers/execution_coordination.py",
         },
         "app.modules.checkers.api.materialization": {
             "app/adapters/artifacts/__init__.py",
             "app/modules/artifacts/post_submit_materialization.py",
             "app/modules/artifacts/post_submit_selection.py",
+            "app/modules/checkers/execution.py",
         },
     }
     actual = {module: set() for module in expected}
     for path in _python_files(APP_ROOT):
-        modules = {
-            node.module
-            for node in ast.walk(_tree(path))
-            if isinstance(node, ast.ImportFrom) and node.module in expected
-        }
-        for module in modules:
+        modules: set[str] = set()
+        for node in ast.walk(_tree(path)):
+            if isinstance(node, ast.ImportFrom):
+                package = ".".join(path.parent.relative_to(BACKEND_ROOT).parts)
+                module = resolve_name("." * node.level + (node.module or ""), package)
+                modules.add(module)
+                modules.update(f"{module}.{alias.name}" for alias in node.names)
+            elif isinstance(node, ast.Import):
+                modules.update(alias.name for alias in node.names)
+        for module in modules & expected.keys():
             actual[module].add(path.relative_to(BACKEND_ROOT).as_posix())
     assert actual == expected
 
@@ -640,6 +648,32 @@ def test_art_implementations_are_the_exact_checker_contract_consumers() -> None:
         "checker_output_storage": {"CheckerArtifactOutputPort"},
         "checker_output_binding": {"CheckerOutputBindingPort"},
     }
+
+
+@pytest.mark.parametrize("port", ["output_custody", "materialization"])
+@pytest.mark.parametrize("form", ["symbol", "module", "parent", "relative", "relative_parent"])
+def test_checker_custody_inventory_rejects_unregistered_import(monkeypatch, port, form):
+    """Alternate import spelling must not conceal an additional API consumer."""
+    import sys
+
+    statement = {
+        "symbol": f"from app.modules.checkers.api.{port} import AnyContract",
+        "module": f"import app.modules.checkers.api.{port} as custody",
+        "parent": f"from app.modules.checkers.api import {port} as custody",
+        "relative": f"from .modules.checkers.api.{port} import AnyContract",
+        "relative_parent": f"from .modules.checkers.api import {port} as custody",
+    }[form]
+    original = _tree
+
+    def injected(path):
+        tree = original(path)
+        if path == APP_ROOT / "main.py":
+            tree.body.extend(ast.parse(statement).body)
+        return tree
+
+    monkeypatch.setattr(sys.modules[__name__], "_tree", injected)
+    with pytest.raises(AssertionError):
+        test_checker_custody_ports_have_exact_owner_and_art_consumers()
 
 
 def test_submission_preparation_http_request_never_carries_prepared_authority() -> None:

@@ -73,7 +73,8 @@ storage_adapter --> file_store : store/read
 
 legend bottom
   Canonical retained-history reads are delivered.
-  Durable post-submit execution, routing and recovery are unavailable.
+  Hidden durable checker execution/currentness is delivered.
+  Live authority and automatic routing remain unavailable.
   Checker/job relationships below describe target integration.
 endlegend
 
