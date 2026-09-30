@@ -72,7 +72,9 @@ compatibility path or alternate history writer is permitted.
   `backend/tests/test_artifact_admission.py` for its shared queued-output fixture,
   `backend/tests/test_artifact_internal_authorization.py` for exact verification-job
   receipt assertions, `backend/tests/test_artifact_recovery.py`,
-  `backend/tests/test_checker_output_storage.py` and existing checker-output
+  `backend/tests/test_checker_output_storage.py`,
+  `backend/tests/test_checker_output_custody.py` for exact output-only lineage and
+  binding assertions, and existing checker-output
   fixture helpers for shared prerequisite ordering, and a cohesive helper
   under `backend/tests/` if needed to reuse canonical ART preparation for retained
   Submission fixtures; existing ART fixture helpers only for that traced reuse.
