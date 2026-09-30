@@ -63,3 +63,72 @@ async def test_foreign_canonical_material_is_rejected_at_commit(tmp_path, isolat
             async with h.factory() as session:
                 stored = await session.get(CheckerRun, str(facts.result.attempt_id))
                 assert stored.status == outcome and stored.material_custody == canonical
+
+
+@pytest.mark.parametrize("outcome", ["completed", "infrastructure_failed"])
+@pytest.mark.parametrize("shadow", ["checker_runs", "art_lineage"])
+async def test_temporary_tables_cannot_replace_canonical_material(
+    tmp_path, isolated_database_env, outcome, shadow,
+):
+    from sqlalchemy import text
+
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        await reserve(h)
+        lease, _ = await controlled_executor(h)._claim(h.request)
+        facts = terminal_facts(h, lease, outcome)
+        canonical = facts.material.model_dump(mode="json")
+        digest = canonical["semantic_manifest_sha256"]
+        forged_digest = digest[:-1] + ("0" if digest[-1] != "0" else "1")
+        forged = canonical | {"semantic_manifest_sha256": forged_digest}
+
+        async def stage(session, material):
+            await write_terminal(session, facts, material)
+            # Validate the other deferred constraints against the real rows first.
+            # No guard is disabled: only 0009 remains deferred when the hostile
+            # session changes its name-resolution environment before COMMIT.
+            await session.execute(text(
+                "SET CONSTRAINTS public.checker_terminal_custody, "
+                "public.checker_member_terminal_custody IMMEDIATE"
+            ))
+            if shadow == "checker_runs":
+                await session.execute(text(
+                    "CREATE TEMP TABLE checker_runs ON COMMIT DROP AS "
+                    "SELECT * FROM public.checker_runs WITH NO DATA"
+                ))
+            else:
+                for table in (
+                    "submissions", "workstream_tasks", "submission_bundle_admissions",
+                    "artifact_bindings", "artifact_contents",
+                ):
+                    await session.execute(text(
+                        f"CREATE TEMP TABLE {table} ON COMMIT DROP AS SELECT * FROM public.{table}"
+                    ))
+                await session.execute(text(
+                    "UPDATE pg_temp.submission_bundle_admissions "
+                    "SET semantic_manifest_sha256=:digest WHERE id=:id"
+                ), {"digest": forged_digest, "id": facts.material.admission_id})
+            await session.execute(text("SET LOCAL search_path = pg_temp, public, pg_catalog"))
+
+        async with h.factory() as session:
+            before_events = await session.scalar(select(func.count()).select_from(OutboxEvent))
+        async with h.factory() as session:
+            await stage(session, forged)
+            with pytest.raises(IntegrityError, match="checker material canonical ART lineage mismatch"):
+                await session.commit()
+            await session.rollback()
+        async with h.factory() as session:
+            run = await session.get(CheckerRun, str(facts.result.attempt_id))
+            assert run.status == "running" and run.material_custody is None
+            assert run.result_json is None and run.finalize_evidence_id is None
+            assert run.completion_event_id is None
+            assert await session.scalar(select(func.count()).select_from(CheckerResult)) == 0
+            assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == before_events
+        # The same hostile environment must not prevent valid canonical custody.
+        async with h.factory() as session:
+            await stage(session, canonical)
+            await session.commit()
+        async with h.factory() as session:
+            row = (await session.execute(text(
+                "SELECT status, material_custody FROM public.checker_runs WHERE id=:id"
+            ), {"id": facts.result.attempt_id})).one()
+            assert row.status == outcome and row.material_custody == canonical

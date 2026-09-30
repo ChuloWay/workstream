@@ -51,7 +51,7 @@ checker-remediation boundary before public Submission cutover.
 | ARCH-04B | ARCH-04A, POL-07, ARCH-03C, merged ARCH-02H | Complete: ART hidden verified Submission input; live authority remains deferred |
 | [ARCH-04B2](../WS-ARCH-001-04B2.md) | ARCH-04A and merged ART admission/verification/binding foundations | Complete: hidden bounded checker-output store/recovery and verified binding, no routing or live reservation |
 | ARCH-04C | ARCH-04A, ARCH-04B, delivered ARCH-04B2, POL-07 | Complete hidden CHECKERS execution/result/currentness and worker recovery, including exact empty output sets |
-| [ARCH-04D1](../WS-ARCH-001-04D1.md) | ARCH-04B, ARCH-04C | Complete: canonical ART material custody for all terminal evidence |
+| [ARCH-04D1](../WS-ARCH-001-04D1.md) | ARCH-04B, ARCH-04C | Complete: canonical ART custody for terminal evidence retaining material |
 | ARCH-04D2 | ARCH-04D1 | Activate exact AUTH post-submit services |
 | AUTH-OUTBOX-01 | Merged shared outbox persistence and AUTH service/PREP foundations | Complete: planned dispatcher identity/action/matrix and unavailable typed authority contract |
 | CON-02B | AUTH-OUTBOX-01 | Complete: shared hidden dispatcher/claim fencing, typed handlers and recovery |

@@ -40,6 +40,12 @@ The validator compares all nine material facts with one exact stored lineage,
 not independent existence of each ID. It performs no provider I/O and introduces
 no competing feature-row lock order.
 
+Protected relations and helper calls are schema-qualified. Both new functions
+pin `search_path` to `pg_catalog, pg_temp`; migration execution places temporary
+objects last as well. A caller with temporary-table permission must not replace
+the final CHECKERS row or canonical ART ancestry used by enforcement. This
+repairs the demonstrated session-name-resolution bypass without adding privileges.
+
 Lock `checker_runs` against inserts and updates before preflight and hold that
 migration lock through trigger installation. This closes the scan/install race;
 the runtime scalar validator remains a lock-free read.
@@ -107,6 +113,11 @@ controlled 04D1 phase participants do not constitute that proof.
 
 ## Acceptance criteria
 
+- Direct SQL with hostile temporary CHECKERS or ART shadow tables still rejects
+  forged terminal material at commit for both outcomes, rolls back all terminal
+  facts, and permits an otherwise valid canonical control. The regression must
+  fail on the unqualified implementation; all database guards remain enabled.
+
 - Real PostgreSQL rejects each independently substituted `admission_id`,
   `replica_id` and `semantic_manifest_sha256` from a second valid stored lineage.
   Other facts remain valid so rejection reaches the new canonical comparison.
@@ -159,7 +170,9 @@ prerequisite; merge remains a separate human action.
 - `test_material_lineage.py`: valid direct-SQL terminal commits and independent
   foreign admission/replica/manifest rejection for both supported material-bearing
   outcomes; closed typed material rejects numeric strings and additional keys;
-  terminal/member/event rollback preserves the running attempt.
+  terminal/member/event rollback preserves the running attempt. Temporary-table
+  substitution of the CHECKERS row or ART ancestry is rejected at commit, while
+  valid material commits under the same session environment.
 - `test_material_migration.py`: valid superseded history and null-material failure
   survive upgrade, later replica loss or current replica reassignment preserves
   the immutable admission identity, invalid retained rows
