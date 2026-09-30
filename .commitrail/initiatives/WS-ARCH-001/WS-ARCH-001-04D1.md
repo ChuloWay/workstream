@@ -2,7 +2,7 @@
 
 - Initiative: `WS-ARCH-001`
 - Durable disposition: `Planned`
-- Intended merge outcome: Completed CHECKERS results require the exact canonical ART material tuple in PostgreSQL; live service authority remains unavailable until ARCH-04D2.
+- Intended merge outcome: All retained CHECKERS terminal material facts require the exact canonical ART material tuple in PostgreSQL; live service authority remains unavailable until ARCH-04D2.
 
 ## Intent and current behavior
 
@@ -29,7 +29,10 @@ no new product workflow or parallel implementation.
 
 A fresh migration 0009 adds an ART-owned SQL validator for the exact persisted
 Submission/admission/binding/content/verified-replica/manifest tuple. A CHECKERS
-terminal constraint trigger requires that validator for completed results.
+terminal constraint trigger requires that validator for every terminal result
+with non-null material custody, including infrastructure failures after successful
+materialization. Completed results still require material; `material_unavailable`
+still requires null material.
 Reuse ART's canonical selection semantics and immutable admission custody. Do
 not add CHECKERS runtime imports or private queries into ART, duplicate admission
 validation, a generic validation framework, or another material facts store.
@@ -37,17 +40,21 @@ The validator compares all nine material facts with one exact stored lineage,
 not independent existence of each ID. It performs no provider I/O and introduces
 no competing feature-row lock order.
 
-Preflight every retained completed run before installing enforcement. Refuse the
+Lock `checker_runs` against inserts and updates before preflight and hold that
+migration lock through trigger installation. This closes the scan/install race;
+the runtime scalar validator remains a lock-free read.
+Preflight every retained terminal run with non-null material before enforcement. Refuse the
 upgrade if any row cannot be proven, leaving schema/data and the predecessor
 revision intact. Preserve valid retained results, including superseded history;
-current mutable replica availability is not retrospective evidence identity.
+current mutable replica verification, availability and integrity states are not
+retrospective evidence identity; immutable admission/receipt ancestry supplies it.
 Infrastructure failures without material custody remain valid; queued/running
 reservation and historical replay retain their current semantics. No retained
 row is deleted, backfilled or assigned invented lineage.
 
 Update affected fixtures through existing ART creation/verification and admission
 owners, retaining production database guards. Remove invented material references
-from completed-run fixtures. Tests that need only queued/running or isolated
+from terminal-run fixtures. Tests that need only queued/running or isolated
 value contracts need not execute provider I/O. No fixture-only guard bypass,
 compatibility path or alternate history writer is permitted.
 
@@ -89,13 +96,15 @@ controlled 04D1 phase participants do not constitute that proof.
 - Real PostgreSQL rejects each independently substituted `admission_id`,
   `replica_id` and `semantic_manifest_sha256` from a second valid stored lineage.
   Other facts remain valid so rejection reaches the new canonical comparison.
+  Cover both completed and infrastructure-failed terminal rows with custody.
 - A direct SQL finalization with the exact canonical tuple commits. Rejection
   rolls back terminal result/material, member rows and completion event and
   preserves the running attempt. Finalization receipt references remain unchanged;
   real AUTH audit evidence is not claimed before 04D2.
 - Removing each canonical comparison makes its regression fail at the intended
   rejection assertion, not setup, another guard or an unrelated fixture failure.
-- Valid retained completed history survives upgrade; invalid retained lineage
+- Valid retained completed and infrastructure-failed history with material survives
+  upgrade; invalid retained lineage
   refuses migration without deleting or altering rows/schema. Null material on
   infrastructure failure and unfinished reservations remain supported.
 - Local/MinIO execution and retained-history, privacy, authorization and REV queue
