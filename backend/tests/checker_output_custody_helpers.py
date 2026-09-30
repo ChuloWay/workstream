@@ -296,7 +296,7 @@ class OutputCustodyHarness:
                 )
 
     async def binding_rows(self) -> list[tuple[str, str, str, str, str]]:
-        """Snapshot exact immutable binding identities for denial-side-effect proof."""
+        """Snapshot checker-output bindings across both denial-test lineages."""
         async with self.factory() as session:
             rows = await session.execute(
                 select(
@@ -305,7 +305,7 @@ class OutputCustodyHarness:
                     ArtifactBinding.resource_id,
                     ArtifactBinding.put_attempt_id,
                     ArtifactBinding.verification_receipt_id,
-                ).order_by(ArtifactBinding.id)
+                ).where(ArtifactBinding.resource_type == "checker_run").order_by(ArtifactBinding.id)
             )
             return [tuple(row) for row in rows]
 
