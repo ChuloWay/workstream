@@ -78,8 +78,9 @@ async def test_retained_material_upgrade(tmp_path, isolated_database_env, migrat
                 async with h.factory() as session, session.begin():
                     await write_terminal(session, empty, None)
                     await session.execute(text(
-                        "update artifact_replicas set availability_state='unavailable' where id=:id"
-                    ), {"id": h.replica_id})
+                        "update artifact_replicas set availability_state='unavailable', "
+                        "content_id=(select id from artifact_contents where id<>:content limit 1) where id=:id"
+                    ), {"id": h.replica_id, "content": facts.material.content_id})
             before = await retained_snapshot(h.factory)
             assert before[1] == "0008_checker_execution"
             if valid:

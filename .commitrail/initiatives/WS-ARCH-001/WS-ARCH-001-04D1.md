@@ -68,7 +68,8 @@ compatibility path or alternate history writer is permitted.
 - `backend/tests/checkers/execution/` for exact canonical storage prerequisites,
   direct-SQL lineage, retained-data migration, rollback and regression proof.
 - `backend/tests/submission_fixtures.py`,
-  `backend/tests/post_submit_materialization_helpers.py`, and a cohesive helper
+  `backend/tests/post_submit_materialization_helpers.py`,
+  `backend/tests/test_artifact_admission.py` for its shared queued-output fixture, and a cohesive helper
   under `backend/tests/` if needed to reuse canonical ART preparation for retained
   Submission fixtures; existing ART fixture helpers only for that traced reuse.
 - Existing affected `backend/tests/authorization/submission_history/`,
@@ -147,9 +148,11 @@ prerequisite; merge remains a separate human action.
 
 - `test_material_lineage.py`: valid direct-SQL terminal commits and independent
   foreign admission/replica/manifest rejection for both supported material-bearing
-  outcomes; terminal/member/event rollback preserves the running attempt.
+  outcomes; closed typed material rejects numeric strings and additional keys;
+  terminal/member/event rollback preserves the running attempt.
 - `test_material_migration.py`: valid superseded history and null-material failure
-  survive upgrade, later replica loss preserves identity, invalid retained rows
+  survive upgrade, later replica loss or current replica reassignment preserves
+  the immutable admission identity, invalid retained rows
   refuse upgrade unchanged, and an independent writer waits across installation.
 - Existing Local/MinIO execution, storage, history/privacy and REV tests retain
   their distinct assertions with canonical material prerequisites. The shared

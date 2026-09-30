@@ -357,7 +357,6 @@ async def _seed_checker_output_relationships(session, namespace, *, policy_bundl
     project_id, guide_id = (str(values[key]) for key in ("project", "guide"))
     effective_policy_id = effective["id"]
     task_id = str(new_record_id())
-    submission_id = str(new_record_id())
     contributor_id = str(new_record_id())
     contributor_link_id = str(new_record_id())
     existing_post = await session.scalar(select(PostSubmitCheckerPolicy).where(
@@ -374,27 +373,22 @@ async def _seed_checker_output_relationships(session, namespace, *, policy_bundl
         ),
     )
     from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
-    from app.modules.tasks.submission_composition import build_submission
+    from tests.submission_preparation_auth_helpers import install_submitter_grant
+    from tests.submission_fixtures import seed_retained_submission
+    from tests.test_tasks import complete_submission_payload
 
     assignment_id = str(new_record_id())
-    await seed_started_task_for_artifact_test(await session.connection(), {
-        "task": task_id, "assignment": assignment_id, "project": project_id,
-        "actor": contributor_id,
-    })
-    task = await session.get(WorkstreamTask, task_id)
-    # Stored ownership for ART mechanics, not a verified input materialization proof.
-    submission = build_submission(
-        submission_id=submission_id, task=task, contributor_id=contributor_id,
-        task_assignment_id=assignment_id,
-        contribution_policy_version_id=task.locked_contribution_policy_version_id,
-        version=1, summary="Checker source submission", worker_attestation="complete",
-        supersedes_submission_id=None, package_hash=canonical_json_hash({"submission": submission_id}),
-    )
-    submission.submission_bundle_admission_id = str(new_record_id())
-    submission.artifact_binding_id = str(new_record_id())
-    submission.artifact_content_id = str(new_record_id())
-    session.add(submission)
+    params = {"task": task_id, "assignment": assignment_id, "project": project_id,
+              "actor": contributor_id}
+    connection = await session.connection()
+    await seed_started_task_for_artifact_test(connection, params)
+    await install_submitter_grant(connection, params)
     await session.commit()
+    payload = complete_submission_payload()
+    payload["worker_attestation"] += " " + " ".join(
+        effective["effective_policy"]["attestation_terms"]
+    )
+    submission_id = await seed_retained_submission(task_id, payload)
     from tests.checkers.execution.storage_fixture import seed_storage_run
     checker_run_id = await seed_storage_run(async_sessionmaker(session.bind, expire_on_commit=False),
                                             submission_id, state="queued")
@@ -577,7 +571,8 @@ async def test_committed_put_and_independent_verification_are_fenced(
                 assert await session.scalar(select(func.count()).select_from(ArtifactOperationReceipt).where(
                     ArtifactOperationReceipt.put_attempt_id == str(admission.attempt_id),
                 )) == 1
-                assert await _count(session, ArtifactVerificationReceipt) == 1
+                assert await session.scalar(select(func.count()).select_from(ArtifactVerificationReceipt).where(
+                    ArtifactVerificationReceipt.verification_job_id == str(job_id))) == 1
                 await session.rollback()
                 assert await orchestrator.verify_object(job_id) == "stale"
                 assert authority.prepares == 5
@@ -649,7 +644,8 @@ async def test_every_provider_operation_revalidates_namespace_before_io(
                     await real.verify_object(UUID(job.id))
                 await session.refresh(job)
                 assert job.status == "pending"
-                assert await _count(session, ArtifactVerificationReceipt) == 0
+                assert await session.scalar(select(func.count()).select_from(ArtifactVerificationReceipt).where(
+                    ArtifactVerificationReceipt.verification_job_id == job.id)) == 0
     finally:
         bootstrap.close()
         await engine.dispose()
@@ -1298,7 +1294,8 @@ async def test_verification_claim_takeover_and_scanner_due_order_are_fenced(
                 )
                 == "stale"
             )
-            assert await _count(stale_session, ArtifactVerificationReceipt) == 0
+            assert await stale_session.scalar(select(func.count()).select_from(ArtifactVerificationReceipt).where(
+                ArtifactVerificationReceipt.verification_job_id.in_(job_ids))) == 0
             assert set(await stale_session.scalars(select(AuditEvent.id))) == prior_audit_ids
             await stale_session.rollback()
             due_ids = await ArtifactRepository(stale_session).list_due_verification_job_ids(
@@ -1486,7 +1483,8 @@ async def test_verification_resource_drift_after_read_is_stale_without_terminal_
                 assert job.status == "running"
                 assert unrelated_replica.verification_state == "pending"
                 assert original_replica.verification_state == "pending"
-                assert await _count(session, ArtifactVerificationReceipt) == 0
+                assert await session.scalar(select(func.count()).select_from(ArtifactVerificationReceipt).where(
+                    ArtifactVerificationReceipt.verification_job_id == str(job_id))) == 0
     finally:
         bootstrap.close()
         await engine.dispose()
@@ -1741,7 +1739,8 @@ async def test_verification_rechecks_authorized_object_ref_after_io(
                 assert replica is not None
                 assert job.status == "running"
                 assert replica.verification_state == "pending"
-                assert await _count(session, ArtifactVerificationReceipt) == 0
+                assert await session.scalar(select(func.count()).select_from(ArtifactVerificationReceipt).where(
+                    ArtifactVerificationReceipt.verification_job_id == str(job_id))) == 0
     finally:
         bootstrap.close()
         await engine.dispose()
@@ -1794,7 +1793,8 @@ async def test_verification_terminal_result_matrix(
                 assert replica.verification_state == (
                     "integrity_mismatch" if expected == "integrity_mismatch" else "pending"
                 )
-                assert await _count(session, ArtifactVerificationReceipt) == 1
+                assert await session.scalar(select(func.count()).select_from(ArtifactVerificationReceipt).where(
+                    ArtifactVerificationReceipt.verification_job_id == str(job_id))) == 1
     finally:
         bootstrap.close()
         await engine.dispose()
@@ -1849,7 +1849,8 @@ async def test_verification_terminal_authority_denial_writes_zero_result_facts(
                 replica = await session.get(ArtifactReplica, job.replica_id)
                 assert replica is not None
                 assert replica.verification_state == "pending"
-                assert await _count(session, ArtifactVerificationReceipt) == 0
+                assert await session.scalar(select(func.count()).select_from(ArtifactVerificationReceipt).where(
+                    ArtifactVerificationReceipt.verification_job_id == str(job_id))) == 0
     finally:
         bootstrap.close()
         await engine.dispose()
@@ -1904,7 +1905,8 @@ async def test_verification_unavailable_retries_then_exhausts(
                 assert job.next_run_at is None
                 assert job.terminal_at is not None
                 assert job.terminal_result_code == "provider_unavailable"
-                assert await _count(session, ArtifactVerificationReceipt) == 0
+                assert await session.scalar(select(func.count()).select_from(ArtifactVerificationReceipt).where(
+                    ArtifactVerificationReceipt.verification_job_id == str(job_id))) == 0
     finally:
         bootstrap.close()
         await engine.dispose()
@@ -2711,7 +2713,9 @@ async def _seed_verification_scan_jobs(factory, settings, namespace, store, tmp_
         job_ids = list(
             (
                 await seed_session.execute(
-                    select(ArtifactVerificationJob.id).order_by(
+                    select(ArtifactVerificationJob.id).join(
+                        ArtifactPutAttempt, ArtifactPutAttempt.id == ArtifactVerificationJob.originating_put_attempt_id
+                    ).where(ArtifactPutAttempt.producer_request_type == "checker_output").order_by(
                         ArtifactVerificationJob.created_at,
                         ArtifactVerificationJob.id,
                     )

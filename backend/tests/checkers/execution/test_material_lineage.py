@@ -35,12 +35,16 @@ async def test_foreign_canonical_material_is_rejected_at_commit(tmp_path, isolat
                 "admission_id": str(foreign.created.admission_id),
                 "replica_id": str(foreign.replica_id),
                 "semantic_manifest_sha256": foreign.manifest.sha256,
+                "submission_version": str(canonical["submission_version"]),
+                "byte_count": str(canonical["byte_count"]),
+                "unexpected": "untrusted extra material",
+
             }
             async with h.factory() as session:
                 before_events = await session.scalar(select(func.count()).select_from(OutboxEvent))
                 before = (await session.get(CheckerRun, str(facts.result.attempt_id))).finalize_evidence_id
             for field, value in substitutions.items():
-                assert canonical[field] != value
+                assert canonical.get(field) != value
                 async with h.factory() as session:
                     await write_terminal(session, facts, canonical | {field: value})
                     # Only commit invokes the deferred guard; preceding member and

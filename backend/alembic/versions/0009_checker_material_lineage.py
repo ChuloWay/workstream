@@ -17,15 +17,20 @@ CREATE FUNCTION public.art_submission_material_matches(
     project uuid, task uuid, submission uuid, version integer, material jsonb
 ) RETURNS boolean LANGUAGE sql STABLE AS $$
     -- ART owns this scalar seam. Admission insertion already proves verified
-    -- ancestry and freezes its identity. Current replica health is deliberately
+    -- ancestry and freezes its identity. Current replica state is deliberately
     -- absent: later loss/quarantine must not invalidate retained evidence.
-    SELECT EXISTS (
+    SELECT CASE WHEN jsonb_typeof(material)='object' THEN
+        material - ARRAY['submission_id','submission_version','admission_id','binding_id',
+                         'content_id','replica_id','content_sha256','byte_count',
+                         'semantic_manifest_sha256'] = '{}'::jsonb
+        AND jsonb_typeof(material->'submission_version')='number'
+        AND jsonb_typeof(material->'byte_count')='number'
+        AND EXISTS (
         SELECT 1 FROM submissions s
         JOIN workstream_tasks t ON t.id=s.task_id
         JOIN submission_bundle_admissions a ON a.id=s.submission_bundle_admission_id
         JOIN artifact_bindings b ON b.id=s.artifact_binding_id
         JOIN artifact_contents c ON c.id=s.artifact_content_id
-        JOIN artifact_replicas r ON r.id=a.verified_replica_id
         WHERE s.id=submission AND s.task_id=task AND t.project_id=project
           AND s.version=version
           AND a.status='consumed' AND a.consumed_by_submission_id=s.id
@@ -35,19 +40,19 @@ CREATE FUNCTION public.art_submission_material_matches(
           AND a.predecessor_submission_id IS NOT DISTINCT FROM s.supersedes_submission_id
           AND b.project_id=project AND b.resource_type='submission' AND b.resource_id=s.id::text
           AND b.logical_role='submission_bundle_original' AND b.scope_version=1
-          AND b.content_id=c.id AND a.artifact_content_id=c.id AND r.content_id=c.id
+          AND b.content_id=c.id AND a.artifact_content_id=c.id
           AND c.media_type='application/zip' AND c.sha256=a.archive_sha256
           AND c.byte_count=a.archive_byte_count
-          AND material->>'submission_id'=s.id::text
+          AND material->'submission_id'=to_jsonb(s.id)
           AND material->>'submission_version'=s.version::text
-          AND material->>'admission_id'=a.id::text
-          AND material->>'binding_id'=b.id::text
-          AND material->>'content_id'=c.id::text
-          AND material->>'replica_id'=r.id::text
-          AND material->>'content_sha256'=c.sha256
+          AND material->'admission_id'=to_jsonb(a.id)
+          AND material->'binding_id'=to_jsonb(b.id)
+          AND material->'content_id'=to_jsonb(c.id)
+          AND material->'replica_id'=to_jsonb(a.verified_replica_id)
+          AND material->'content_sha256'=to_jsonb(c.sha256)
           AND material->>'byte_count'=c.byte_count::text
-          AND material->>'semantic_manifest_sha256'=a.semantic_manifest_sha256
-    )
+          AND material->'semantic_manifest_sha256'=to_jsonb(a.semantic_manifest_sha256)
+    ) ELSE false END
 $$;
 """)
     op.execute("""
