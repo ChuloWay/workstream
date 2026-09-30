@@ -925,8 +925,8 @@ async def test_verification_claim_and_terminal_failures_roll_back_both_sides(
                     == "stored_pending_verification"
                 )
 
-            job = await session.scalar(select(ArtifactVerificationJob))
-            assert job is not None
+            job = (await session.scalars(select(ArtifactVerificationJob).where(
+                ArtifactVerificationJob.originating_put_attempt_id == str(admission.attempt_id)))).one()
             job_id = UUID(job.id)
             await session.rollback()
             claim = ArtifactStorageOrchestrator(

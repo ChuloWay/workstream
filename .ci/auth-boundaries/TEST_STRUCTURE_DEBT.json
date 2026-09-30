@@ -110,7 +110,7 @@
     },
     {
       "capability": "oversized_authorization_structure",
-      "content_sha256": "14ea9bb311d76d62748811ce81a3b44e5a458a1ebaa9ba12ae442cf9f329183c",
+      "content_sha256": "83039919be2cab268bb5023481c37e728a70ef0442bb9045a4d7e608209aaa28",
       "end_line": 2780,
       "hard_limit": 1200,
       "kind": "test_file",
@@ -206,7 +206,7 @@
     },
     {
       "capability": "oversized_authorization_structure",
-      "content_sha256": "e7c1bdb273db72b4ab6794ab3267974f15f96b46452205732ba2e1a10a50a824",
+      "content_sha256": "6a1c0791d31f717e7c7cea14c4d106bc2c76ce05a9b456f7f0fd831718f145e8",
       "end_line": 1034,
       "hard_limit": 120,
       "kind": "test_function",

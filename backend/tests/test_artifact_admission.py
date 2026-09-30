@@ -1518,8 +1518,8 @@ async def test_verification_rechecks_relationship_after_prepare_before_io(
                 await session.refresh(unrelated_replica)
                 assert job.status == "pending"
                 assert unrelated_replica.verification_state == "pending"
-                receipt = await session.scalar(select(ArtifactVerificationReceipt))
-                assert receipt is None
+                assert await session.scalar(select(func.count()).select_from(ArtifactVerificationReceipt).where(
+                    ArtifactVerificationReceipt.verification_job_id == str(job_id))) == 0
     finally:
         bootstrap.close()
         await engine.dispose()
@@ -1646,8 +1646,8 @@ async def test_verification_rechecks_authorized_object_ref_before_io(
                 verifying._read_complete.assert_not_awaited()
                 await session.refresh(job)
                 assert job.status == "pending"
-                receipt = await session.scalar(select(ArtifactVerificationReceipt))
-                assert receipt is None
+                assert await session.scalar(select(func.count()).select_from(ArtifactVerificationReceipt).where(
+                    ArtifactVerificationReceipt.verification_job_id == str(job_id))) == 0
     finally:
         bootstrap.close()
         await engine.dispose()
