@@ -56,7 +56,7 @@ checker-remediation boundary before public Submission cutover.
 | AUTH-OUTBOX-01 | Merged shared outbox persistence and AUTH service/PREP foundations | Complete: planned dispatcher identity/action/matrix and unavailable typed authority contract |
 | CON-02B | AUTH-OUTBOX-01 | Complete: shared hidden dispatcher/claim fencing, typed handlers and recovery |
 | AUTH-OUTBOX-02 | CON-02B exact hidden manifest | Exact dispatcher mechanics only; no feature authority |
-| ARCH-04E1A | ARCH-04C | TASK routing-manifest schema/public facts and accepted-effects port, no handlers or REV dependency |
+| [ARCH-04E1A](../WS-ARCH-001-04E1A.md) | ARCH-04C/04D2 | Route-neutral TASK source schema/public facts and source-neutral accepted-effects types; no runtime writer/reader, handlers or REV dependency |
 | ARCH-04E1B | ARCH-04E1A, CON-02B hidden contract; shared REV-04B + CON-03C/07 + REV-12A shared fence foundation for false | TASK hidden handlers; consume one shared acceptance operation on false/pass |
 | Scoped XINT-003-08B controller activation | Early existing REV-12A foundation and hidden shared acceptance/writer/observation proof | Existing Operator lifecycle-control action for the bounded shared manifest, not human runtime |
 | ARCH-04E2 | ARCH-04E1B; scoped XINT-003-08B controller activation for false | AUTH exact TASK routing authority |

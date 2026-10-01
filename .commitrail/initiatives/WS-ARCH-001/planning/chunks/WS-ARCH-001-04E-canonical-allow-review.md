@@ -38,9 +38,15 @@ false. Before its acceptance participant is implemented and activated, false
 has no live success route; an unexpected false attempt fails closed without
 creating human admission, acceptance or contribution effects.
 
-1. **ARCH-04E1A — TASK source foundation.** After 04C, publish the routing
-   manifest persistence/public facts and narrow accepted-effects port described
-   above. No handler, REV source FK or acceptance operation dependency.
+1. **[ARCH-04E1A — TASK source foundation](../../WS-ARCH-001-04E1A.md).**
+   After 04C/04D2, define one route-neutral immutable source schema and detached
+   internal facts, plus source-neutral accepted-effects types. No runtime
+   writer/reader/composition, current pointer, routing allow or accepted effects.
+   Source evidence alone never admits a human or authorizes acceptance.
+   The current true-policy graph supplies real SQL proof; false is value-shape
+   transport only because guide activation still rejects it. Before publication,
+   04E1B/04E2 must harden this same table with mandatory exact route custody and
+   refuse any unprovable retained source rows, without backfill or deletion.
 2. **ARCH-04E1B — hidden TASK handlers.** After 04E1A and
    CON-02B's handler/claim contract (plus shared acceptance foundations for
    false), TASK implements unavailable request/event
@@ -88,6 +94,16 @@ Each child uses a separate implementation record/PR at start with exact files
 and relevant reviewers. The graph does not require live routing to authorize
 its own hidden handler. No extra planning-only approval PR is implied.
 
+The remaining sections specify the final publication boundary after 04E1A;
+its source-only schema does not claim these effects or receipt guarantees.
+04E1B/04E2 must propagate and retain exact decision IDs from `submission.create`,
+ART admission/binding and post-submit materialization owners before publication.
+Current contracts discard those IDs; reverse audit-log search or borrowing a
+checker receipt is prohibited. Execute/finalize IDs already have durable custody.
+For the current zero-output catalogue, the output-binding tuple is empty and no
+output write/bind allows can be required. A future registered output producer
+must implement and authorize those operations before using their evidence.
+
 TASKS owns one evaluation-request/dispatch record and a current routing projection;
 the shared outbox owns its event rows, uniqueness and delivery. CHECKERS
 owns the result and recommendation. The success manifest references the exact
@@ -112,11 +128,10 @@ dispatcher has mechanics-only authority; event payloads confer no permissions.
 No private TASK outbox consumer, dynamic handler loading or second worker
 registry belongs here.
 
-Canonical Submission composition must stop reaching the old direct
-`enqueue_pre_review_gate` scheduling path and CHECKERS
-`_apply_pre_review_gate_result` TASK mutations. The replacement is one durable
-event/handler route, not a second path alongside those calls. Public legacy
-route removal remains 02I, but canonical-path reachability is cut over here.
+The obsolete direct checker scheduling and TASK-mutation paths have already
+been removed. Use the existing shared durable event/handler route when wiring
+canonical Submission composition; do not recreate those removed paths. Public
+intake remains the later 02I boundary.
 
 ## Distinct idempotency and uniqueness custody
 
@@ -218,8 +233,9 @@ contributor-readable checker-remediation lineage for final needs-revision
 checker results without creating Review, ReviewFinding, or
 RevisionContextPreparation records.
 
-Before implementation, replace this skeleton with a current-main contract that
-enumerates exact files, commands, migration head and reviewers.
+This is a coordination contract. Each child record, beginning with
+[04E1A](../../WS-ARCH-001-04E1A.md), supplies its current-main exact files,
+commands, migration head and reviewers before implementation.
 
 ## Merge state
 

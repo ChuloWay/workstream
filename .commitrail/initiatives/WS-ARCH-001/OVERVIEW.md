@@ -15,7 +15,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   per checker ID serve active policy consumers; hidden post-submit execution now
   has exact fixed-service authority. Automatic dispatch/routing remains unavailable.
 - Delivered storage boundary: hidden [ARCH-04B2 checker-output custody](WS-ARCH-001-04B2.md), following hidden input materialization (ARCH-04B). Typed store, byte-free recovery and flush-only verified binding exist; the CHECKERS zero-slot reservation reader is implemented; output write/bind authority remains unavailable.
-- Next usable boundary: ARCH-04E1A routing-source facts after delivered
+- Next usable boundary: [ARCH-04E1A routing-source facts](WS-ARCH-001-04E1A.md) after delivered
   [ARCH-04D2](WS-ARCH-001-04D2.md) exact input, execute and finalize authority.
   Output-file authority remains unavailable for the zero-output catalogue.
   [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers public manager activation
