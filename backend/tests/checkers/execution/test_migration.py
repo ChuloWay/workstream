@@ -144,7 +144,7 @@ async def test_empty_database_installs_execution_custody(isolated_database_env, 
         try:
             assert (
                 await conn.fetchval("select version_num from alembic_version")
-                == "0010_post_submit_authority"
+                == "0011_task_routing_source"
             )
             assert await conn.fetchval("select count(*) from checker_submission_fences") == 0
             columns = set(

@@ -1290,6 +1290,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/accepted_effects.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/assignment_invalidation.py"
     },
     {
@@ -1303,6 +1307,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/management_queue.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/post_submit_routing.py"
     },
     {
       "group": "lifecycle",
@@ -1351,6 +1359,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/post_submit_routing/models.py"
     },
     {
       "group": "lifecycle",
@@ -1521,7 +1533,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "941150a6b283032aefd8f41e1be6d5aaf1113d90349e943a0d2c8d9efe177fb2",
+  "authority_digest": "fa372bfafa2649a9e94a4bea1d1a0009f4734e5073ff1766c41184ebf6da1801",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

@@ -11,9 +11,12 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   immutable ContributionRecords and optional
   project-policy-driven compensation awards without coupling lifecycle truth to
   an economic provider.
-- Next usable boundary: ARCH-04E1A routing-source facts after delivered
-  [ARCH-04D2](../WS-ARCH-001/WS-ARCH-001-04D2.md) exact input, execute and finalize authority.
-  Output-file authority remains unavailable for the zero-output catalogue. [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers
+- Delivered dependent boundary: ARCH-04E1A route-neutral source facts and the
+  source-neutral accepted-effects Protocol follow
+  [ARCH-04D2](../WS-ARCH-001/WS-ARCH-001-04D2.md) exact input, execute and
+  finalize authority. No CON participant, FinalAcceptance, award or runtime
+  effects implementation is included. Output-file authority remains unavailable
+  for the zero-output catalogue. [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers
   public manager activation context and exact guide activation.
   [CP05A](../WS-ARCH-001/WS-ARCH-001-CP05A.md) delivers public Finance
   ContributionPolicy administration and recovery of a draft selector, a published
@@ -29,6 +32,9 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   and minimal writers, ARCH-03A internal guide context,
   [CP07 activation/binding](../WS-ARCH-001/WS-ARCH-001-CP07.md) and
   [AUTH-12H live authority](../WS-AUTH-001/WS-AUTH-001-12H.md), before task readiness.
+- Next usable boundary: REV-04B source/FinalAcceptance persistence, then
+  CON-03C/07 and the existing shared REV-12A/CON fence foundation before one
+  shared acceptance operation serves both the human and automatic triggers.
 - Governing sources: `docs/spec_contribution_compensation.md`,
   [`CONFORMANCE.md`](CONFORMANCE.md), code, migrations, and tests.
 - Preserve: exact policy-version lineage, no claim-time drift, decimal-string

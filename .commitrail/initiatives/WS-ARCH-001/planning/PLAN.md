@@ -44,8 +44,8 @@ checker-remediation boundary before public Submission cutover.
 | [ARCH-03C4](../WS-ARCH-001-03C4.md) | ARCH-03C3 | Complete: exact-authorized contributor, manager and operational public queues |
 | [ARCH-03C5](../WS-ARCH-001-03C5.md) | ARCH-03C4 | Complete: exact-authorized Contributor/Manager detail and requirements |
 | [ARCH-03C6](../WS-ARCH-001-03C6.md) | ARCH-03C5 | Complete: distinct exact-authorized locked-context reads |
-| [ARCH-03C7](../WS-ARCH-001-03C7.md) | ARCH-03C6 and hidden TASK owner contracts | Complete: bounded Audit Authority history access; public guide activation, ARCH-03D hidden intake, hidden post-submit materialization and ARCH-04B2 output custody delivered; ARCH-04C hidden execution delivered; ARCH-04D1 canonical custody delivered; ARCH-04D2 authority delivered; ARCH-04E1A next |
-| [CP05A](../WS-ARCH-001-CP05A.md) | CP05, existing policy owners | Complete: public Finance policy administration and selector recovery; public manager activation, ARCH-03D hidden intake, hidden post-submit materialization and ARCH-04B2 output custody delivered; ARCH-04C hidden execution delivered; ARCH-04D1 canonical custody delivered; ARCH-04D2 authority delivered; ARCH-04E1A next |
+| [ARCH-03C7](../WS-ARCH-001-03C7.md) | ARCH-03C6 and hidden TASK owner contracts | Complete: bounded Audit Authority history access; public guide activation, ARCH-03D hidden intake, hidden post-submit materialization, ARCH-04B2 output custody, ARCH-04C execution, ARCH-04D1/04D2 custody/authority and ARCH-04E1A source-only facts/types delivered |
+| [CP05A](../WS-ARCH-001-CP05A.md) | CP05, existing policy owners | Complete: public Finance policy administration and selector recovery; public manager activation, ARCH-03D hidden intake, hidden post-submit materialization, ARCH-04B2 output custody, ARCH-04C execution, ARCH-04D1/04D2 custody/authority and ARCH-04E1A source-only facts/types delivered |
 | CP09 (later cleanup coordination) | All legacy consumers replaced, including CHECKER and public 02I path | Physical economic deletion; not on the allow_review critical path |
 | [ARCH-03D](../WS-ARCH-001-03D.md) | AUTH-18, ARCH-03A, CP08 and merged ART preparation | Complete: hidden durable intake uses exact historical TASK/PROJECTS ports; public cutover remains ARCH-02I |
 | ARCH-04B | ARCH-04A, POL-07, ARCH-03C, merged ARCH-02H | Complete: ART hidden verified Submission input; exact live authority is delivered by ARCH-04D2 |
@@ -56,7 +56,7 @@ checker-remediation boundary before public Submission cutover.
 | AUTH-OUTBOX-01 | Merged shared outbox persistence and AUTH service/PREP foundations | Complete: planned dispatcher identity/action/matrix and unavailable typed authority contract |
 | CON-02B | AUTH-OUTBOX-01 | Complete: shared hidden dispatcher/claim fencing, typed handlers and recovery |
 | AUTH-OUTBOX-02 | CON-02B exact hidden manifest | Exact dispatcher mechanics only; no feature authority |
-| ARCH-04E1A | ARCH-04C | TASK routing-manifest schema/public facts and accepted-effects port, no handlers or REV dependency |
+| [ARCH-04E1A](../WS-ARCH-001-04E1A.md) | ARCH-04C/04D2 | Complete: route-neutral immutable TASK source schema/detached facts and source-neutral accepted-effects types; no runtime writer/reader, handlers, current pointer, routing authority, acceptance implementation or REV dependency |
 | ARCH-04E1B | ARCH-04E1A, CON-02B hidden contract; shared REV-04B + CON-03C/07 + REV-12A shared fence foundation for false | TASK hidden handlers; consume one shared acceptance operation on false/pass |
 | Scoped XINT-003-08B controller activation | Early existing REV-12A foundation and hidden shared acceptance/writer/observation proof | Existing Operator lifecycle-control action for the bounded shared manifest, not human runtime |
 | ARCH-04E2 | ARCH-04E1B; scoped XINT-003-08B controller activation for false | AUTH exact TASK routing authority |
@@ -88,7 +88,7 @@ ARCH-03C1 completes exact reconciler authority and decision-bound receipts.
 ARCH-03C2 supplies originating-transaction-only per-assignment producer events
 and first handler registration with enforced prefork topology; it must never
 backfill or dispatch retained invalidation rows. Public TASK activation is complete through ARCH-03C7. AUTH-18 delivers public
-manager guide activation/context; ARCH-03D hidden intake, hidden exact post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C hidden execution is delivered; ARCH-04D1 canonical custody is delivered; ARCH-04D2 authority is delivered; ARCH-04E1A routing-source facts are next. Subsequent
+manager guide activation/context; ARCH-03D hidden intake, hidden exact post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C hidden execution is delivered; ARCH-04D1 canonical custody, ARCH-04D2 authority and ARCH-04E1A source-only facts/types are delivered. Subsequent
 PR-sized contracts name exact files, public types, current migration head and
 runnable proof before implementation; they refine this design, not create a
 new permission requirement.
@@ -98,8 +98,10 @@ new permission requirement.
 Delivered supporting foundations are [ARCH-04B2](../WS-ARCH-001-04B2.md),
 [AUTH-OUTBOX-01/02](../../WS-AUTH-001/planning/PLAN.md#ws-auth-001-outbox-01--unavailable-dispatcher-contract),
 and [CON-02B](../../WS-CON-001/OVERVIEW.md#con-02b-current-dispatcher-contract).
-The remaining routing sequence is
-[ARCH-04E1A/04E1B/04E2/04E3](chunks/WS-ARCH-001-04E-canonical-allow-review.md#current-bounded-sequence).
+The remaining routing sequence starts with shared REV-04B/CON-03C/07 and the
+existing REV-12A/CON fence foundation before shared acceptance composition,
+then [ARCH-04E1B/04E2/04E3](chunks/WS-ARCH-001-04E-canonical-allow-review.md#current-bounded-sequence)
+and ARCH-04F. ARCH-04E1A is delivered as the source-only predecessor.
 Each numbered section is a current bounded design, expanded into its own change
 record on implementation; the parent is not a multi-owner implementation PR.
 

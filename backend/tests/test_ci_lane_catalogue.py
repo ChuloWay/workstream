@@ -178,6 +178,9 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/authorization/submission_history/test_migration.py",
             "tests/authorization/submission_history/test_absence.py",
             "tests/authorization/submission_history/test_failures.py",
+            "tests/tasks/post_submit_routing/test_contracts.py",
+            "tests/tasks/post_submit_routing/test_storage.py",
+            "tests/tasks/post_submit_routing/test_migration.py",
             "tests/tasks/test_contribution_lineage.py",
             "tests/tasks/test_project_display.py",
             "tests/tasks/test_ready_queue.py",
@@ -281,11 +284,24 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/authorization/setup_finalization/test_resource_context.py",
         "tests/authorization/setup_finalization/test_structure.py",
     }.issubset(shared_a)
+    static_contracts = {
+        "tests/test_artifact_architecture.py",
+        "tests/architecture/test_module_boundaries.py",
+        "tests/architecture/test_authorization_boundary.py",
+        "tests/architecture/test_test_structure_boundary.py",
+        "tests/test_identifier_inventory.py",
+        "tests/test_record_id_collection.py",
+        "tests/test_ci_lane_catalogue.py",
+        "tests/test_ci_test_lanes.py",
+        "tests/test_test_lane_evidence.py",
+        "tests/test_merge_test_lane_evidence.py",
+    }
+    assert static_contracts.isdisjoint(shared_a | shared_b)
     assert {
         "tests/test_alembic.py",
         "tests/test_database_reset.py",
         runner.ADMIN_RUNNER_MODULE,
-    } == modules_by_lane["schema_contracts"]
+    } | static_contracts == modules_by_lane["schema_contracts"]
     assert {
         "tests/authorization/admin_access/test_bootstrap_cli.py",
         "tests/authorization/admin_access/test_api_journey.py",

@@ -49,6 +49,9 @@ The false branch requires the exact current successful routing manifest, locked
 `human_review_required=false` policy and originating AUTH decision event under
 the [shared acceptance contract](spec_review_lifecycle.md#finalacceptance).
 Required-check success or raw checker output alone cannot create FinalAcceptance.
+The delivered ARCH-04E1A route-neutral source row alone also cannot satisfy this
+boundary; later publication must add mandatory exact routing/owner-receipt
+custody to that same table before CON consumes the REV-owned acceptance fact.
 
 The boundary MUST preserve four distinct facts:
 
@@ -1134,8 +1137,8 @@ The core dependency order is a partial order. Persistence and flush-only
 transaction participants do not wait for generic dispatch:
 
 The [shared acceptance order](spec_review_lifecycle.md#implementation-order-and-required-proof)
-governs the false branch: TASK ARCH-04E1A source schema/public facts precede
-REV-04B acceptance persistence, then CON-03C/07 plus the existing shared fence
+governs the false branch: delivered TASK ARCH-04E1A source schema/detached facts
+precede REV-04B acceptance persistence, then CON-03C/07 plus the existing shared fence
 foundation, then the shared operation and ARCH-04E1B/AUTH routing composition.
 False guide activation follows joint proof. A stable Review FK target is
 not live ReviewLease/queue/decision behavior. The shared lifecycle/obligation

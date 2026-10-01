@@ -28,9 +28,12 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   and routing remain unavailable.
 - Intent: compile one locked guide and its policies into authoritative,
   versioned project behavior without circular subsystem authority.
-- Next usable boundary: ARCH-04E1A routing-source facts after delivered
-  [ARCH-04D2](../WS-ARCH-001/WS-ARCH-001-04D2.md) exact input, execute and finalize authority.
-  Output-file authority remains unavailable for the zero-output catalogue. [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers
+- Delivered dependent boundary: ARCH-04E1A route-neutral source facts and
+  type-only accepted-effects contracts follow
+  [ARCH-04D2](../WS-ARCH-001/WS-ARCH-001-04D2.md) exact input, execute and
+  finalize authority. They add no route, acceptance path or activation support.
+  Output-file authority remains unavailable for the zero-output catalogue.
+  [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers
   public manager activation context and exact guide activation.
   [CP05A](../WS-ARCH-001/WS-ARCH-001-CP05A.md) delivers public Finance
   ContributionPolicy administration and recovery of a draft selector, a published
@@ -52,7 +55,11 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   Live setup consumes the [consolidated catalogue](../WS-ARCH-001/WS-ARCH-001-04A.md)
   and completed AUTH-12B2.
   Earlier development schemas require no backward-compatibility paths.
-  The existing ReviewPolicy boolean is delivered; automated acceptance remains unavailable.
+  The existing ReviewPolicy boolean is delivered; false has scalar DTO proof
+  only and automated acceptance remains unavailable.
+- Next usable boundary: shared REV-04B/CON-03C/07 and REV-12A/CON fence
+  foundations, then shared acceptance composition and ARCH-04E1B/04E2/04E3.
+  ARCH-04F remediation still precedes enabling false.
 - Governing sources: project-guide specifications, authorization and
   contribution-policy specifications, code, migrations, and tests.
 - Preserve: trusted policy compilation, explicit ownership, atomic persistence,
