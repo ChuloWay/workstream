@@ -34,7 +34,7 @@ from app.modules.checkers.catalogue import build_pre_submission_checker_catalogu
 from app.modules.projects.locked_policy_repository import ProjectLockedPolicyRepository
 from app.modules.projects.models import EffectiveProjectSubmissionArtifactPolicy
 from app.modules.tasks.repository import TaskRepository
-from tests.checkers.execution.support import denied_executor
+from tests.checkers.execution.support import forbidden_post_submission
 from tests.pre_submit_test_helpers import evidence_workflow
 from tests.test_artifact_admission import _AllowArtifactAuthority, _context, _settings
 from tests.test_checker_materialization import _limits
@@ -128,7 +128,7 @@ async def retained_admission(factory, task, assignment, link, packet, predecesso
                 async def runtime():
                     yield SubmissionBundlePreparationRuntime(
                         preparation, inspector, catalogue, evidence._materialization, evidence,
-                        CheckerPhaseService(pre_submission=evidence, post_submission=denied_executor()),
+                        CheckerPhaseService(pre_submission=evidence, post_submission=forbidden_post_submission()),
                         SubmissionBundleDurablePutService(
                             session=session, admission=ArtifactAdmissionService(session, settings, namespace),
                             storage=storage, authorization=authority, task_contexts=tasks, project_contexts=projects,

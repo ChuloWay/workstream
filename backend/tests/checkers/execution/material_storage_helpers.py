@@ -1,6 +1,9 @@
 """Direct SQL terminal writes, deliberately bypassing the executor's validation."""
 
 from uuid import UUID
+import json
+from app.adapters.auth import post_submit_execution_authority
+from app.modules.checkers.api.execution import FinalizeAuthorityFacts, VerifiedMaterialFacts
 
 from sqlalchemy import func, insert, update
 
@@ -18,8 +21,21 @@ async def write_terminal(session, facts, material):
     """Stage all otherwise valid members/event/terminal fields in the caller transaction."""
     request, result = facts.request, facts.result
     run = await session.get(CheckerRun, str(result.attempt_id))
+    authority_facts = FinalizeAuthorityFacts(
+        **facts.model_dump(exclude={"material"}),
+        material=VerifiedMaterialFacts.model_validate_json(json.dumps(material)) if material is not None else None,
+        execute_evidence_id=UUID(run.execute_evidence_id),
+    )
+    async with post_submit_execution_authority(session).prepare_finalization(request) as prepared:
+        evidence_id = (await prepared.consume(authority_facts)).evidence_id
+    await stage_terminal(session, facts, material, evidence_id)
+
+
+async def stage_terminal(session, facts, material, evidence_id):
+    """One direct SQL writer, with the caller's explicit receipt and all guards enabled."""
+    request, result = facts.request, facts.result
+    run = await session.get(CheckerRun, str(result.attempt_id))
     classification = classify_result(request, result)
-    evidence_id = new_record_id()
     for order, member in enumerate(result.member_results):
         await session.execute(insert(CheckerResult).values(
             id=str(new_record_id()), checker_run_id=run.id, task_id=run.task_id,

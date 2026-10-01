@@ -2,7 +2,7 @@
 
 from app.modules.checkers.api.execution import CheckerExecutionUnavailable
 
-from tests.checkers.execution.support import denied_executor
+from tests.checkers.execution.support import forbidden_post_submission
 
 import inspect
 from types import SimpleNamespace
@@ -21,7 +21,7 @@ from tests.checkers.post_submit.test_result_contract import result
 def phases(pre=None, post=None):
     return CheckerPhaseService(
         pre_submission=pre if pre is not None else SimpleNamespace(execute_reserved=AsyncMock()),
-        post_submission=post if post is not None else denied_executor(),
+        post_submission=post if post is not None else forbidden_post_submission(),
     )
 
 

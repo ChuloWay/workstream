@@ -1,17 +1,17 @@
 # ARCH-04D2 — Exact post-submit service authority
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Risk: L1 (fixed-service authorization, retained evidence and concurrent execution).
 - Intended merge outcome: existing post-submit materialization, execution and finalization use live AUTH/PREP with exact current execution custody; automatic dispatch, routing, recovery and public intake remain subsequent boundaries.
 
-## Intent and current-code findings
+## Intent
 
 Continue the contribution milestone: claim -> ZIP upload -> intake feedback or
 immutable Submission -> automatic post-submit evaluation -> governed outcome.
-Main includes 04D1's canonical ART material validator through migration
+The input baseline includes 04D1's canonical ART material validator through migration
 `0009_checker_material_lineage`. CHECKERS already owns reservations, worker
-leases, execution, retained results and completion events. Production composition
+leases, execution, retained results and completion events. Before this change, production composition
 still denies materialization, execution and finalization.
 
 The current catalogue produces no output files. Output reservation slots and
@@ -137,11 +137,13 @@ revision rather than implicitly upgrading through unrelated later migrations.
 This affected-consumer conversion is part of this one authority change; it adds
 no production compatibility path or repository-wide cleanup prerequisite.
 
-## Allowed files
+## Bounded change
+
+### Allowed files
 
 - `backend/app/modules/actors/api/service_identities.py` and
   `backend/app/modules/actors/models.py` for the one fixed identity.
-- `backend/app/modules/authorization/catalogue.py`, `runtime.py`, `prepared.py`,
+- `backend/app/modules/authorization/catalogue.py`, `admin_schemas.py`, `runtime.py`, `prepared.py`,
   `kernel.py`, `domain/prepared_service.py`, `domain/resource_digest.py`,
   `domain/action_groups.py`, `domain/audit.py`, `domain/audit_targets.py`, and existing prepared replay
   helpers; cohesive new `domain/post_submit.py`, `post_submit_authorization.py`
@@ -175,7 +177,7 @@ no production compatibility path or repository-wide cleanup prerequisite.
   current system data-flow HTML and roadmap for affected capability claims.
   Local roadmap exports only if present.
 
-## Prohibited changes
+### Prohibited changes
 
 No public routes, automatic dispatcher handlers, routing or TASK/REV/CON
 transitions, final acceptance, reviewer fabrication, compensation changes,
@@ -185,17 +187,16 @@ data deletion, compatibility aliases or parallel implementation. Do not weaken
 module boundaries, test selection, timeouts or completeness checks. The separate
 CI impact-reporting and service-provisioning-test PRs are not this scope.
 
-## Acceptance and discriminating proof
+## Acceptance criteria
 
 Use existing real PostgreSQL `material_fixture` canonical Submission/ART lineage,
-existing fixed-service provisioning and Local/MinIO stores. Future tests below
+existing fixed-service provisioning and Local/MinIO stores. The tests below
 must reach the named assertion with real guards enabled, not permissive AUTH
 participants or a fictitious output producer. The live fixture explicitly
 provisions checker/materializer principals and composes the production
-AUTH/CHECKERS/ART adapters. Existing material_fixture's controlled authority is
-not evidence of live authorization.
+AUTH/CHECKERS/ART adapters. The former controlled materialization authority is removed.
 
-Named future proof atoms in `tests/authorization/post_submit/`:
+Named proof atoms in `tests/authorization/post_submit/`:
 
 - `test_terminal_replay_validates_both_stored_receipts_without_side_effects`:
   canonical success, invalid final receipt with a valid execute receipt denies,
@@ -205,21 +206,18 @@ Named future proof atoms in `tests/authorization/post_submit/`:
   access; canonical control succeeds.
 - `test_materialization_rejects_mixed_valid_stored_lineage_before_io`: two valid
   graphs with shared service actors; mixed selectors deny without side effects.
-- `test_materializer_revoked_after_consumer_denies_post_io_replay`: paused consumer
+- `test_revoked_after_consumer_cannot_publish[workstream.artifact.materializer]`: paused consumer
   and one provider read; materializer revocation denies its post-I/O receipt check.
-- `test_checker_revoked_after_consumer_denies_finalization`: materializer remains
+- `test_revoked_after_consumer_cannot_publish[workstream.checker.post_submit]`: materializer remains
   active and completes revalidation; checker revocation denies finalization.
-- `test_finalization_and_checker_revocation_serialize`: independent sessions and
+- `test_revocation_and_finalization_serialize`: independent sessions and
   observed lock waiting prove both valid commit/denial orderings.
-- `test_execute_audit_insert_failure_preserves_queued`,
-  `test_materialization_audit_insert_failure_prevents_io`, and
-  `test_finalize_audit_insert_failure_preserves_running`: action-filtered real
+- `test_real_audit_insert_failure_rolls_back[execute/materialize/finalize]`: action-filtered real
   insert failures, observed trigger execution, exact rollback and valid control
   after trigger cleanup.
 - Convert `test_finalization_outbox_failure_rolls_back` to real AUTH and inspect
   staged final audit/member rows before failing the actual completion insert.
-- `test_receipt_upgrade_preserves_queued` and
-  `test_receipt_upgrade_refuses_unprovable_evidence`: 0009 -> 0010 migration
+- `test_actual_upgrade_preserves_or_refuses_without_repair[False/True]`: 0009 -> 0010 migration
   snapshot preservation/refusal. Pin the existing 0008 -> 0009 material tests to
   `0009_checker_material_lineage`, keeping their distinct preservation proof.
 
@@ -270,11 +268,10 @@ below; fixture or unrelated type-validation failures do not count.
    check and fail at the intended behavioral assertion. Do not count fixture,
    missing-field or unrelated guard failures as regression proof.
 
-## Verification and reviews
+## Evidence
 
 Base for the reviewed plan: main `39a6b827`; installed migration head 0009.
-New proof modules under `tests/authorization/post_submit/` are planned files,
-not evidence already executed. Run focused PostgreSQL cases via the existing
+The focused proof modules are under `tests/authorization/post_submit/`. Run focused PostgreSQL cases via the existing
 `backend/scripts/run_isolated_tests.py` isolated database runner, including the
 new AUTH suite, `tests/checkers/execution/`,
 `tests/test_post_submit_materialization.py`, and affected catalogue/PREP/schema
@@ -283,6 +280,8 @@ suites. Real MinIO cases use the existing service fixture. Run affected Ruff,
 markdown links, stale Workstream/authorization/artifact wording and Commitrail
 validation. Complete hosted backend lanes and aggregate manifest with no skipped
 or deselected tests; coverage remains diagnostic.
+
+## Risk and review routing
 
 Required focused plan and candidate tracks: security; architecture/reuse;
 QA/test delta; documentation/product operations; CI integrity; senior engineering

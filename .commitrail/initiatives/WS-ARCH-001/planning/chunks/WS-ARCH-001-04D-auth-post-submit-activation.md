@@ -1,6 +1,6 @@
 # Chunk Contract: WS-ARCH-001-04D AUTH Post-Submit Activation
 
-Status: ARCH-04D1 canonical custody is Complete; ARCH-04D2 is Planned under
+Status: ARCH-04D1 canonical custody is Complete; ARCH-04D2 is Complete under
 the [bounded authority record](../../WS-ARCH-001-04D2.md).
 Risk: L1. Outcome: ARCH-04D2 activates exact fixed-service materialization,
 evaluator execution and finalization boundaries, replacing the historical
@@ -31,11 +31,11 @@ preserves valid retained rows and refuses unprovable rows without backfill.
 
 04D1 proves independent foreign admission/replica/manifest substitutions and
 transaction rollback with controlled phase participants. It does not prove real
-AUTH finalization audit custody. ARCH-04D2 must supply that atomicity proof and
-live authorization tests before any service activation. No CHECKERS runtime
+AUTH finalization audit custody. ARCH-04D2 supplies that atomicity proof and
+real authorization tests for exact service activation. No CHECKERS runtime
 private ART query, alternate store or compatibility path is introduced.
 
-## Proposed CHECKERS service manifest
+## CHECKERS service manifest
 
 ART's existing actions cover materialization, output ingestion and binding;
 none authorizes a CHECKERS run/result write. Only materialization is needed by
@@ -43,8 +43,8 @@ the current zero-output catalogue. Register one exact
 fixed identity `workstream.checker.post_submit` with two action/permission
 pairs: `checker.post_submit.execute` for attempt execution/pre-I/O admission
 and `checker.post_submit.finalize` for final-result persistence. Register their
-typed contexts, static matrix, admission and unavailable seams explicitly;
-activate only after the hidden 04C behavior manifest. No human or outbox
+typed contexts, static matrix and exact admitted phases through the existing
+AUTH/PREP service after the hidden 04C behavior manifest. No human or outbox
 dispatcher receives these service-only permissions. The existing ART
 materializer/output identities retain their separate actions; do not collapse
 them into this evaluator identity.
@@ -86,4 +86,4 @@ fresh currentness and authority prevent the stale worker publishing a result.
 ## Merge state
 
 - ARCH-04D1: `Complete`.
-- ARCH-04D2: `Planned`.
+- ARCH-04D2: `Complete`.

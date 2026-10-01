@@ -1,4 +1,4 @@
-"""Closed history with canonical stored ART lineage and controlled phase authority."""
+"""Closed history with canonical stored ART lineage and real fixed-service phase authority."""
 
 import json
 from uuid import UUID
@@ -15,7 +15,7 @@ from app.modules.checkers.post_submit_contracts import (
 from app.modules.tasks.models import Submission, WorkstreamTask
 from tests.checkers.post_submit.support import request as value_request
 from tests.checkers.post_submit.test_result_contract import result as value_result
-from tests.checkers.execution.support import controlled_executor
+from tests.checkers.execution.support import live_executor, provision_checker_service
 from types import SimpleNamespace
 
 
@@ -73,7 +73,8 @@ async def seed_storage_run(factory, submission_id, *, failures=(), state="comple
         receipt = await EvaluationCoordinator(session).reserve_current_evaluation(request)
     if state == "queued":
         return str(receipt.attempt_id)
-    executor = controlled_executor(SimpleNamespace(factory=factory, service=None))
+    await provision_checker_service(factory)
+    executor = live_executor(SimpleNamespace(factory=factory, service=None))
     lease, replay = await executor._claim(request)
     assert replay is None
     if state == "running":

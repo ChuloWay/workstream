@@ -11,7 +11,7 @@ from app.modules.checkers.models import CheckerRun, CheckerResult
 from app.modules.checkers.execution_repository import request_text
 from tests.checkers.post_submit.support import change_request
 from tests.post_submit_materialization_helpers import material_fixture
-from .support import reserve, controlled_executor
+from .support import reserve, live_executor
 from .test_concurrency import final_facts
 
 
@@ -61,7 +61,7 @@ async def test_terminal_member_and_routing_custody(tmp_path, isolated_database_e
 
     async with material_fixture(tmp_path, isolated_database_env) as h:
         await reserve(h)
-        executor = controlled_executor(h)
+        executor = live_executor(h)
         lease, _ = await executor._claim(h.request)
         facts = final_facts(h, lease)
         members = list(facts.result.member_results)
@@ -124,7 +124,7 @@ async def test_execution_custody_rejects_mutation(tmp_path, isolated_database_en
 async def test_unfinished_members_cannot_commit(tmp_path, isolated_database_env):
     async with material_fixture(tmp_path, isolated_database_env) as h:
         await reserve(h)
-        lease, _ = await controlled_executor(h)._claim(h.request)
+        lease, _ = await live_executor(h)._claim(h.request)
         async with h.factory() as session:
             from app.modules.checkers.execution_repository import ExecutionRepository
 
@@ -145,7 +145,7 @@ async def test_member_shape_and_complete_set_enforced_in_database(
 
     async with material_fixture(tmp_path, isolated_database_env) as h:
         await reserve(h)
-        executor = controlled_executor(h)
+        executor = live_executor(h)
         lease, _ = await executor._claim(h.request)
         facts = final_facts(h, lease)
         first = facts.result.member_results[0]
@@ -215,7 +215,7 @@ async def test_consistently_short_result_cannot_omit_selected_policy_member(
 
     async with material_fixture(tmp_path, isolated_database_env) as h:
         await reserve(h)
-        executor = controlled_executor(h)
+        executor = live_executor(h)
         lease, _ = await executor._claim(h.request)
         valid = final_facts(h, lease)
         assert len(valid.result.member_results) > 1
@@ -261,7 +261,7 @@ async def test_infrastructure_failure_code_is_closed_in_database(tmp_path, isola
 
     async with material_fixture(tmp_path, isolated_database_env) as h:
         await reserve(h)
-        lease, _ = await controlled_executor(h)._claim(h.request)
+        lease, _ = await live_executor(h)._claim(h.request)
         result = make_post_submit_result(
             request_id=h.request.evaluation_request_id, request_digest=h.request.request_sha256,
             attempt_id=lease.reservation.attempt_id, result_id=lease.reservation.result_id,
@@ -275,7 +275,6 @@ async def test_infrastructure_failure_code_is_closed_in_database(tmp_path, isola
                 # Valid ART lineage isolates the terminal-shape guard: material
                 # must be absent when the declared failure is material_unavailable.
                 ("material_unavailable", final_facts(h, lease).material.model_dump(mode="json")),
-                ("material_unavailable", None),
             ):
                 candidate = body | {"infrastructure_failure_code": code}
                 statement = update(CheckerRun).where(CheckerRun.id == str(result.attempt_id)).values(
@@ -285,16 +284,13 @@ async def test_infrastructure_failure_code_is_closed_in_database(tmp_path, isola
                     finalize_evidence_id=str(new_record_id()), completed_at=func.clock_timestamp(),
                     outcome_source="auto_checker", routing_recommendation="not_evaluated",
                 )
-                if code == "invented_failure" or custody is not None:
-                    with pytest.raises(IntegrityError, match="infrastructure terminal shape invalid"):
-                        await session.execute(statement)
-                        await session.commit()
-                    await session.rollback()
-                    run = await session.get(CheckerRun, str(result.attempt_id))
-                    assert run.status == "running" and run.result_json is None
-                else:
+                with pytest.raises(IntegrityError, match="infrastructure terminal shape invalid"):
                     await session.execute(statement)
-                    await session.commit()
+                await session.rollback()
+                run = await session.get(CheckerRun, str(result.attempt_id))
+                assert run.status == "running" and run.result_json is None
+        valid = final_facts(h, lease).model_copy(update={"result": result, "material": None})
+        assert await live_executor(h).finalize(valid) == result
         async with h.factory() as session:
             run = await session.get(CheckerRun, str(result.attempt_id))
             assert run.failure_code == "material_unavailable" and run.status == "infrastructure_failed"

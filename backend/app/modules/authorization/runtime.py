@@ -32,6 +32,7 @@ from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
 from app.modules.authorization.domain.assignment_invalidation import AssignmentInvalidationResourceContext
 from app.modules.authorization.domain.outbox_dispatch import OutboxDispatchResourceContext
+from app.modules.authorization.domain.post_submit import PostSubmitResourceContext
 from app.modules.authorization.domain.guide_activation import ProjectGuideActivationResourceContext
 from app.modules.authorization.service_actor_schemas import ServiceActorProvisionResourceContext
 from app.modules.authorization.catalogue import ActionId
@@ -1207,6 +1208,7 @@ AuthorizationResourceContext = (
     | PostPolicyResourceContext
     | AssignmentInvalidationResourceContext
     | OutboxDispatchResourceContext
+    | PostSubmitResourceContext
     | ProjectSetupRunMutationResourceContext
     | ProjectGuideActivationResourceContext
     | ProjectGuideCompilationRequestResourceContext
