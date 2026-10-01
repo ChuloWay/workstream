@@ -5,6 +5,10 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 [`planning/chunk contracts`](pre-cutover/chunks/).
 
 - Disposition: Planned
+- Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
+  metadata-only packet types; REV-03B packet storage and REV-04A Review storage
+  precede shared FinalAcceptance. No packet resolver or human runtime is live.
+
 - Completed boundary: recovery foundation and [TASK/checker authorization cleanup](WS-AUTH-003-TASKCHECKER.md).
 - Intent: route public authorization capability through `authorization.api`
   and remove cross-module repository/model coupling.

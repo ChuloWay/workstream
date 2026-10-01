@@ -17,9 +17,11 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [ARCH-04D2](../WS-ARCH-001/WS-ARCH-001-04D2.md), without a runtime reader,
   writer or published route. Output-file authority remains unavailable for the
   zero-output catalogue.
-- Next usable boundary: ARCH-04F checker remediation through existing ART ports,
-  after the shared acceptance and 04E routing sequence; public intake remains a
-  later cutover.
+- Delivered contract: [ART-07A1](WS-ART-001-07A1.md) defines exact, metadata-only
+  reviewer packet membership. It supplies no resolver or byte authority.
+- Next usable boundary: REV-03B normalized packet persistence, then REV-04A
+  Review storage before shared acceptance. ARCH-04F remediation and public
+  intake follow acceptance and routing composition.
 - Governing sources: artifact specifications, `ArtifactStore`,
   `ArtifactScratchManager`, code, migrations, and artifact tests.
 - Preserve: SHA-256/byte-count identity, reread verification, isolation,

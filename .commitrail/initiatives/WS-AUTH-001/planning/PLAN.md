@@ -1,5 +1,10 @@
 # WS-AUTH-001 — Current pre-review activation plan
 
+The delivered [ART-07A1 metadata contract](../../WS-ART-001/WS-ART-001-07A1.md)
+now precedes REV-03B packet persistence and complete REV-04A Review storage,
+then shared REV-04B/CON acceptance foundations. These are storage prerequisites;
+no live human-review queue or endpoint is required for automated acceptance.
+
 The [cross-owner dependency contract](../../WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
 owns current delivery order through `allow_review`. The
 [preserved plan](../pre-cutover/PLAN.md) retains completed history; its broad

@@ -23,6 +23,7 @@ class TestLane:
 
 
 SHARED_FOUNDATION_MODULES = (
+    "tests/artifacts/test_review_packet_contract.py",
     "tests/authorization/post_submit/test_atomicity.py",
     "tests/authorization/post_submit/test_concurrency.py",
     "tests/authorization/post_submit/test_live_authority.py",

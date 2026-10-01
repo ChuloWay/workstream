@@ -26,7 +26,10 @@ current TASK children do not implement REV/CON internals: consume the
 [canonical shared participants and authority contract](../../../../../docs/spec_review_lifecycle.md#finalacceptance).
 04E1A's TASK manifest schema/detached facts and narrow accepted-effects Protocol
 are delivered after 04C, without REV dependency, runtime participant or handlers.
-REV-04B can now reference that schema. Shared REV-04B/CON-03C/07 and the early
+REV-04B can reference that schema only after its other source prerequisites:
+[ART-07A1 packet types](../../../WS-ART-001/WS-ART-001-07A1.md) are delivered;
+REV-03B normalized packet storage and complete REV-04A Review storage follow.
+Shared REV-04B/CON-03C/07 and the early
 existing REV-12A/CON fence
 foundation are hard dependencies of false handler composition, not of this
 early schema or true admission. This breaks the source-FK dependency cycle.

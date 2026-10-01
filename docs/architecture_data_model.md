@@ -1835,6 +1835,12 @@ REV's database guard rejects a draft, crossed-project, or lineage-mismatched
 identity. Reviewer and preferred-reviewer FKs accept only canonical human
 ActorProfiles.
 
+`ReviewPacketManifest` remains planned REV persistence. The delivered
+[ART-07A1 contract](../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md)
+provides metadata-only types with distinct Submission and guide binding IDs,
+not a packet table, resolver or byte capability. REV-03B will normalize those
+members before complete REV-04A Review storage and shared FinalAcceptance.
+
 `ReviewPacketManifest` is an immutable REV semantic projection over the exact
 lease, Submission, admitting CheckerRun/results, stamped context, response
 evidence, and ART binding IDs. It contains no bytes, digest, provider locator,

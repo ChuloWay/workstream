@@ -132,6 +132,7 @@ CI_LANE_CATALOGUE_TARGETS = frozenset({"backend/scripts/test_lane_catalogue.py"}
 MODULE_PUBLIC_API_FOUNDATION_TARGETS = frozenset(
     {
         "backend/app/api/routes/artifact_submissions.py",
+        "backend/app/modules/artifacts/api/review_packet.py",
         "backend/app/modules/artifacts/api/submission_admission.py",
         "backend/app/modules/artifacts/api/submission_preparation.py",
         "backend/app/modules/artifacts/submission_bindings.py",

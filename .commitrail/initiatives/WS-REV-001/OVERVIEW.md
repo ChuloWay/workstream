@@ -5,6 +5,10 @@ This is the pre-review admission fact, not REV activation or implementation
 of review/revision behavior. The downstream owner contracts remain separate.
 
 - Disposition: Planned
+- Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
+  metadata-only packet types; REV-03B packet storage and REV-04A Review storage
+  precede shared FinalAcceptance. No packet resolver or human runtime is live.
+
 - Completed boundary: queue admission and ReviewLease persistence through 03A2.
 - Intent: ensure the authorized reviewer evaluates the exact verified artifact
   under the locked policy version and produces attributable outcomes.
@@ -12,7 +16,8 @@ of review/revision behavior. The downstream owner contracts remain separate.
   source storage, detached source facts and the type-only accepted-effects
   Protocol. It provides no writer, reader, handler, routing authority, current
   pointer or acceptance implementation.
-- Next usable boundary: REV-04B shared source/FinalAcceptance persistence,
+- Next usable boundary: REV-03B normalized packet persistence, then complete
+  REV-04A Review storage and REV-04B shared FinalAcceptance persistence,
   CON-03C/07 and the existing REV-12A/CON fence foundation under the canonical
   order; human hidden behavior may continue independently behind exact AUTH,
   ART and CON prerequisites.
@@ -57,13 +62,14 @@ live human queues, ReviewLeases or decision endpoints. Human lifecycle work
 remains required for v0.1, but need not delay the first automated end-to-end
 proof. No adjudication setting or behavior is included.
 
-1. `03B`: normalized reviewer packet manifest after ART publishes the exact
-   packet-membership contract.
+1. `03B`: normalized reviewer packet persistence consumes the delivered
+   [ART-07A1 exact membership contract](../WS-ART-001/WS-ART-001-07A1.md).
+   Next complete REV-04A Review-source storage; neither step activates human review.
 2. Continue hidden claim/revision behavior against canonical `allow_review`,
    copying the Submission policy version without a current-policy lookup.
 3. TASK's early 04E1A source schema/detached facts and source-neutral accepted-
-   effects types are delivered. Implement the REV-04B shared
-   source/FinalAcceptance persistence foundation next,
+   effects types are delivered. After REV-03B and complete REV-04A source
+   storage, implement the REV-04B shared FinalAcceptance persistence foundation,
    then CON-03C/CON-07 persistence and submitter participation. This foundation
    can precede human runtime: ARCH-04E uses it for false/pass acceptance without
    live queues, leases or decisions. Pull the existing REV-12A/CON shared

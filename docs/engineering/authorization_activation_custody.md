@@ -66,6 +66,11 @@ The CHECKERS zero-slot reservation reader is implemented. Output authority remai
 fixed-service AUTH/PREP and an exact current execution lease. Execute/finalize
 use the fixed `workstream.checker.post_submit` identity and phase-specific receipts. Do not implement an additional XINT-06B lane.
 
+[ART-07A1](../../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) delivers
+metadata-only packet types without authority or a resolver. REV-03B packet
+storage and complete REV-04A Review storage precede shared FinalAcceptance;
+hidden composition proof precedes exact activation.
+
 Runtime owner `WS-XINT-002-07` retains catalogue custody. The only approved
 v0.1 availability transition is 07A packet materialization. Evidence binding
 remains planned and unavailable pending a separate REV-owned intent.
