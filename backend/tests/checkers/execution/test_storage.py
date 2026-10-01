@@ -272,7 +272,9 @@ async def test_infrastructure_failure_code_is_closed_in_database(tmp_path, isola
         async with h.factory() as session:
             for code, custody in (
                 ("invented_failure", None),
-                ("material_unavailable", {"fabricated": True}),
+                # Valid ART lineage isolates the terminal-shape guard: material
+                # must be absent when the declared failure is material_unavailable.
+                ("material_unavailable", final_facts(h, lease).material.model_dump(mode="json")),
                 ("material_unavailable", None),
             ):
                 candidate = body | {"infrastructure_failure_code": code}

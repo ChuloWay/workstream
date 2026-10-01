@@ -36,7 +36,7 @@ def final_facts(h, lease):
             admission_id=h.created.admission_id,
             binding_id=h.request.binding_id,
             content_id=h.request.content_id,
-            replica_id=new_record_id(),
+            replica_id=h.replica_id,
             content_sha256=h.request.content_sha256,
             byte_count=h.request.byte_count,
             semantic_manifest_sha256=h.manifest.sha256,
