@@ -287,6 +287,14 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     static_contracts = {
         "tests/test_artifact_architecture.py",
         "tests/architecture/test_module_boundaries.py",
+        "tests/architecture/test_authorization_boundary.py",
+        "tests/architecture/test_test_structure_boundary.py",
+        "tests/test_identifier_inventory.py",
+        "tests/test_record_id_collection.py",
+        "tests/test_ci_lane_catalogue.py",
+        "tests/test_ci_test_lanes.py",
+        "tests/test_test_lane_evidence.py",
+        "tests/test_merge_test_lane_evidence.py",
     }
     assert static_contracts.isdisjoint(shared_a | shared_b)
     assert {

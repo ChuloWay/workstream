@@ -15,7 +15,7 @@ def upgrade() -> None:
     op.execute("SET LOCAL search_path = pg_catalog, public, pg_temp")
     op.create_table(
         "task_post_submit_routing_manifests",
-        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("id", sa.Uuid(), nullable=False, primary_key=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -122,7 +122,6 @@ def upgrade() -> None:
             name="fk_task_routing_manifest_replica",
             ondelete="RESTRICT",
         ),
-        sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
             "submission_id",
             "checker_run_id",

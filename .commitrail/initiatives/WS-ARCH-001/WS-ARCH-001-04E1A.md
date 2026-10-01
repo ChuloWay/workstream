@@ -143,6 +143,10 @@ same detached fields only after owner-qualified reads and live currentness check
 
 ### Database custody
 
+Declare the single `id` primary key on its Alembic column, matching the existing
+identifier inventory reader. Preserve byte-identical PostgreSQL DDL and the
+existing schema fingerprint; do not add an inventory exception or parser path.
+
 Composite FKs anchor source project/task/Submission/version, exact assignment/
 contributor, CHECKERS ownership and frozen contribution-policy project. Other
 retained record refs use restrictive FKs. A schema-qualified insert guard validates
@@ -220,29 +224,48 @@ proof names their own boundary; it must not be mislabeled as semantic-trigger pr
 
 ## Complete-suite scheduling
 
-Place the static repository architecture/ownership contracts in
-`tests/test_artifact_architecture.py` and
-`tests/architecture/test_module_boundaries.py` once in the existing
-`schema_contracts` lane. They require no product database fixtures and retain
-the lane's existing coverage, PostgreSQL and MinIO execution custody. Do not add
-a lane, change the 1,200-second execution limit, alter node hashing, change
-services, weaken aggregation, or remove/skip any test.
+Place these static contracts once in the existing `schema_contracts` lane:
 
-Coverage-enabled development profiles executed 35 artifact-architecture tests in
-417.36 seconds and 39 module-boundary tests in 250.06 seconds. These profiles
-were CPU-contended; their combined 667.42 seconds plus the observed schema-lane
-baseline of 148.18 seconds estimates 815.60 seconds, leaving 384.40 seconds below
-the unchanged limit. This supports the placement, not a hosted-runtime guarantee.
-The executed outputs were retained in the profiling session rather than raw log
-files; the final hosted artifacts must establish actual complete execution.
+- `tests/test_artifact_architecture.py`
+- `tests/architecture/test_module_boundaries.py`
+- `tests/architecture/test_authorization_boundary.py`
+- `tests/architecture/test_test_structure_boundary.py`
+- `tests/test_identifier_inventory.py`
+- `tests/test_record_id_collection.py`
+- `tests/test_ci_lane_catalogue.py`
+- `tests/test_ci_test_lanes.py`
+- `tests/test_test_lane_evidence.py`
+- `tests/test_merge_test_lane_evidence.py`
 
-Extend `test_measured_hotspots_have_explicit_semantic_owners` to require both
-modules in schema and neither shared partition. Retain
+These cover repository boundaries, schema identifiers and CI collection/evidence
+custody. Reuse the lane's existing coverage, PostgreSQL and MinIO execution
+custody. Do not add a lane, change the 1,200-second execution limit, alter node
+hashing, change services, weaken aggregation, or remove/skip any test.
+
+With the first two modules included, the hosted schema lane completed 169 tests
+in 343.189 seconds. Coverage-enabled profiles of the remaining boundary pair
+completed 84 tests in 87.44 seconds. The identifier/collection/evidence profile
+completed 66 tests in 42.48 seconds, exposing the identifier inventory mismatch
+repaired by the equivalent column-level primary-key declaration. The existing
+catalogue/runner/evidence suite completed 113 tests in 27.16 seconds. Summing
+these overlapping measurements conservatively estimates less than 510 seconds
+for the schema lane, leaving more than 690 seconds below the unchanged limit.
+This supports placement, not a guarantee of final hosted runtime.
+
+The original artifact/module-boundary profiles were retained in tool-session
+output, not raw log files. The subsequent profiles and canonical collection
+comparisons have saved local logs; final hosted artifacts remain authoritative
+for complete execution.
+
+Extend `test_measured_hotspots_have_explicit_semantic_owners` to require the
+exact static module set in schema and neither shared partition. Retain
 `test_committed_lanes_cover_recursive_inventory_exactly_once`. Compare canonical
-collection before and after reassignment: all 8,047 nodes and execution kinds
-must remain identical, exactly 74 nodes move to schema (41 from shared A and 33
-from shared B), and every other node keeps its lane. The resulting schema lane
-has 169 nodes. Final acceptance still requires the complete nine-lane hosted run.
+collection before and after the additional eight-module reassignment: all 8,047
+nodes and execution kinds must remain identical, exactly 207 nodes move to
+schema, and every other node keeps its lane. Shared partition counts may vary
+with head-seeded parameter IDs; compare assignments using one collection head.
+The resulting schema lane has 376 nodes. Final acceptance requires the complete
+nine-lane hosted run with no skips or deselections.
 
 ## Risk and review routing
 
@@ -263,9 +286,9 @@ never commit credentials. From `backend/`:
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python -m pytest -q -p pytest_asyncio.plugin -p pytest_cov.plugin --cov=app --cov-report= --durations=0 tests/test_artifact_architecture.py
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python -m pytest -q -p pytest_asyncio.plugin -p pytest_cov.plugin --cov=app --cov-report= --durations=0 tests/architecture/test_module_boundaries.py
 .venv/bin/python -m pytest tests/test_ci_lane_catalogue.py tests/test_ci_test_lanes.py tests/test_test_lane_evidence.py tests/test_merge_test_lane_evidence.py -q
-.venv/bin/python -m scripts.run_test_lanes --collect-only --metadata-dir /tmp/arch04e1a-lane-before --summary-json /tmp/arch04e1a-lane-before-summary.json
+.venv/bin/python -m scripts.run_test_lanes --collect-only --metadata-dir /tmp/arch04e1a-governance-before --summary-json /tmp/arch04e1a-governance-before-summary.json
 # Repeat after catalogue reassignment, before changing the collection's Git head:
-.venv/bin/python -m scripts.run_test_lanes --collect-only --metadata-dir /tmp/arch04e1a-lane-after --summary-json /tmp/arch04e1a-lane-after-summary.json
+.venv/bin/python -m scripts.run_test_lanes --collect-only --metadata-dir /tmp/arch04e1a-governance-after --summary-json /tmp/arch04e1a-governance-after-summary.json
 .venv/bin/python -m scripts.module_boundaries validate --protected-base origin/main
 .venv/bin/python -m scripts.behavior_ownership validate
 .venv/bin/python -m scripts.test_structure_boundary validate --policy ../.ci/auth-boundaries/TEST_STRUCTURE_POLICY.md --ledger ../.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json
@@ -278,8 +301,17 @@ Compare the two manifests from `backend/`:
 import json
 from collections import Counter
 from pathlib import Path
-moved = {"tests/test_artifact_architecture.py", "tests/architecture/test_module_boundaries.py"}
-read = lambda side: json.loads(Path(f"/tmp/arch04e1a-lane-{side}/manifest.json").read_text())["nodes"]
+moved = {
+    "tests/architecture/test_authorization_boundary.py",
+    "tests/architecture/test_test_structure_boundary.py",
+    "tests/test_identifier_inventory.py",
+    "tests/test_record_id_collection.py",
+    "tests/test_ci_lane_catalogue.py",
+    "tests/test_ci_test_lanes.py",
+    "tests/test_test_lane_evidence.py",
+    "tests/test_merge_test_lane_evidence.py",
+}
+read = lambda side: json.loads(Path(f"/tmp/arch04e1a-governance-{side}/manifest.json").read_text())["nodes"]
 before, after = read("before"), read("after")
 assert len(before) == len(after) == 8047
 old, new = ({row["nodeid"]: row for row in rows} for rows in (before, after))
@@ -290,8 +322,9 @@ for node, row in old.items():
     assert new[node] == expected
     if new[node] != row:
         changes[row["lane"]] += 1
-assert changes == {"shared_foundations_a": 41, "shared_foundations_b": 33}
-assert sum(row["lane"] == "schema_contracts" for row in after) == 169
+assert sum(changes.values()) == 207
+assert set(changes) == {"shared_foundations_a", "shared_foundations_b"}
+assert sum(row["lane"] == "schema_contracts" for row in after) == 376
 PY
 ```
 
