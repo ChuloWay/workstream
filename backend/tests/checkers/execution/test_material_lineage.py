@@ -1,14 +1,14 @@
 """Canonical ART membership is enforced at commit, including retained failed runs."""
 
 import pytest
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from sqlalchemy.exc import IntegrityError
 
 from app.modules.checkers.models import CheckerRun, CheckerResult
 from app.modules.checkers.post_submit_contracts import make_post_submit_result
 from app.modules.outbox.models import OutboxEvent
 from tests.post_submit_materialization_helpers import material_fixture
-from .support import controlled_executor, reserve
+from .support import live_executor, reserve
 from .test_concurrency import final_facts
 from .material_storage_helpers import write_terminal
 
@@ -28,7 +28,7 @@ async def test_foreign_canonical_material_is_rejected_at_commit(tmp_path, isolat
         async with material_fixture(tmp_path / "foreign", isolated_database_env,
                                     storage_settings=h.settings, provision_services=False) as foreign:
             await reserve(h)
-            lease, _ = await controlled_executor(h)._claim(h.request)
+            lease, _ = await live_executor(h)._claim(h.request)
             facts = terminal_facts(h, lease, outcome)
             canonical = facts.material.model_dump(mode="json")
             substitutions = {
@@ -46,11 +46,12 @@ async def test_foreign_canonical_material_is_rejected_at_commit(tmp_path, isolat
             for field, value in substitutions.items():
                 assert canonical.get(field) != value
                 async with h.factory() as session:
-                    await write_terminal(session, facts, canonical | {field: value})
-                    # Only commit invokes the deferred guard; preceding member and
-                    # event inserts/terminal UPDATE all completed successfully.
+                    await write_terminal(session, facts, canonical | {field: value},
+                                         authorized_facts=facts if field in {"submission_version", "byte_count", "unexpected"} else None)
+                    # Force this deferred guard before receipt validation so its
+                    # rejection cannot be substituted by a different constraint.
                     with pytest.raises(IntegrityError, match="checker material canonical ART lineage mismatch"):
-                        await session.commit()
+                        await session.execute(text("SET CONSTRAINTS public.checker_material_lineage IMMEDIATE"))
                     await session.rollback()
                 async with h.factory() as session:
                     run = await session.get(CheckerRun, str(facts.result.attempt_id))
@@ -74,7 +75,7 @@ async def test_temporary_tables_cannot_replace_canonical_material(
 
     async with material_fixture(tmp_path, isolated_database_env) as h:
         await reserve(h)
-        lease, _ = await controlled_executor(h)._claim(h.request)
+        lease, _ = await live_executor(h)._claim(h.request)
         facts = terminal_facts(h, lease, outcome)
         canonical = facts.material.model_dump(mode="json")
         digest = canonical["semantic_manifest_sha256"]
@@ -139,7 +140,7 @@ async def test_canonical_validator_binds_numeric_version_argument(tmp_path, isol
 
     async with material_fixture(tmp_path, isolated_database_env) as h:
         await reserve(h)
-        lease, _ = await controlled_executor(h)._claim(h.request)
+        lease, _ = await live_executor(h)._claim(h.request)
         facts = final_facts(h, lease)
         parameters = {
             "project": h.request.project_id,

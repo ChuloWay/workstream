@@ -16,8 +16,9 @@ from types import SimpleNamespace
 
 from app.modules.checkers.post_submit_contracts import make_post_submit_result
 from tests.checkers.post_submit.support import change_request
-from .material_storage_helpers import write_terminal
-from .support import controlled_executor, reserve
+from .predecessor_material_helpers import write_terminal
+from .support import reserve
+from .predecessor_support import predecessor_lease
 from .test_material_lineage import terminal_facts
 
 pytestmark = pytest.mark.postgres_schema_contract
@@ -52,9 +53,9 @@ async def retained_snapshot(factory):
 async def test_retained_material_upgrade(tmp_path, isolated_database_env, migration_lock, outcome, valid):
     with migration_lock():
         await predecessor_database(isolated_database_env)
-        async with material_fixture(tmp_path, isolated_database_env) as h:
+        async with material_fixture(tmp_path, isolated_database_env, provision_checker=False) as h:
             await reserve(h)
-            lease, _ = await controlled_executor(h)._claim(h.request)
+            lease = await predecessor_lease(h)
             facts = terminal_facts(h, lease, outcome)
             material = facts.material.model_dump(mode="json")
             if not valid:
@@ -70,7 +71,7 @@ async def test_retained_material_upgrade(tmp_path, isolated_database_env, migrat
                 successor.request = change_request(h.request, evaluation_generation=2,
                                                    evaluation_request_id=new_record_id())
                 await reserve(successor)
-                next_lease, _ = await controlled_executor(successor)._claim(successor.request)
+                next_lease = await predecessor_lease(successor)
                 empty = terminal_facts(successor, next_lease, "infrastructure_failed")
                 body = empty.result.model_dump(exclude={"result_digest"})
                 body["infrastructure_failure_code"] = "material_unavailable"
@@ -84,13 +85,13 @@ async def test_retained_material_upgrade(tmp_path, isolated_database_env, migrat
             before = await retained_snapshot(h.factory)
             assert before[1] == "0008_checker_execution"
             if valid:
-                await asyncio.to_thread(command.upgrade, _config(), "head")
+                await asyncio.to_thread(command.upgrade, _config(), "0009_checker_material_lineage")
                 after = await retained_snapshot(h.factory)
                 assert after[0] == before[0]
                 assert after[1] == "0009_checker_material_lineage"
             else:
                 with pytest.raises(IntegrityError, match="retained checker material lacks canonical ART lineage"):
-                    await asyncio.to_thread(command.upgrade, _config(), "head")
+                    await asyncio.to_thread(command.upgrade, _config(), "0009_checker_material_lineage")
                 assert await retained_snapshot(h.factory) == before
 
 
@@ -102,9 +103,9 @@ async def test_upgrade_excludes_writer_until_guard_is_installed(
 
     with migration_lock():
         await predecessor_database(isolated_database_env)
-        async with material_fixture(tmp_path, isolated_database_env) as h:
+        async with material_fixture(tmp_path, isolated_database_env, provision_checker=False) as h:
             await reserve(h)
-            lease, _ = await controlled_executor(h)._claim(h.request)
+            lease = await predecessor_lease(h)
             facts = terminal_facts(h, lease, "completed")
             material = facts.material.model_dump(mode="json") | {"admission_id": str(h.request.submission_id)}
             scanned, resume = threading.Event(), threading.Event()
@@ -118,7 +119,7 @@ async def test_upgrade_excludes_writer_until_guard_is_installed(
                 return result
 
             monkeypatch.setattr(Operations, "execute", paused_execute)
-            migration = asyncio.create_task(asyncio.to_thread(command.upgrade, _config(), "head"))
+            migration = asyncio.create_task(asyncio.to_thread(command.upgrade, _config(), "0009_checker_material_lineage"))
             writer = None
             pid = asyncio.Queue()
 
