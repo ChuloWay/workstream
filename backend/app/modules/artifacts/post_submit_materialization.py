@@ -101,7 +101,12 @@ class _MaterialProcessor:
         finally:
             if self._view is not None:
                 self._view.close()
-            await await_cancellation_resistant(asyncio.to_thread(projection.__exit__, None, None, None))
+            try:
+                await await_cancellation_resistant(asyncio.to_thread(projection.__exit__, None, None, None))
+            except ArtifactScratchIntegrityError:
+                raise
+            except Exception:
+                raise ArtifactScratchIntegrityError("post_submit_projection_cleanup_unconfirmed") from None
 
 
 class PostSubmissionMaterializer:
@@ -194,7 +199,12 @@ class PostSubmissionMaterializer:
                 )
             finally:
                 if prepared is not None:
-                    await prepared.close()
+                    try:
+                        await prepared.close()
+                    except ArtifactScratchIntegrityError:
+                        raise
+                    except Exception:
+                        raise ArtifactScratchIntegrityError("post_submit_source_cleanup_unconfirmed") from None
         except asyncio.CancelledError:
             # The executor may convert its deadline cancellation into a terminal
             # timeout. Validate the completed read before allowing that conversion.

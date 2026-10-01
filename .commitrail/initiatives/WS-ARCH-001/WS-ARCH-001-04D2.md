@@ -224,9 +224,16 @@ Named proof atoms in `tests/authorization/post_submit/`:
   after consumer entry; revoked authority or changed replica denies after cleanup,
   while unchanged custody permits the existing infrastructure-failure outcome.
 - `test_outer_deadline_cannot_hide_failed_scratch_cleanup`: cancellation during
-  prepared release or extraction cleanup propagates the integrity failure, retains
+  prepared release, extraction-workspace or projection cleanup propagates the
+  integrity failure, retains
   cleanup ownership and the running attempt, and publishes no terminal evidence.
-  The same retained cleanup can succeed afterward.
+  The same retained cleanup can succeed afterward. Ordinary callback errors
+  after abort remain distinct: successful cleanup preserves cancellation or the
+  preparation deadline, so post-I/O material authority is still revalidated.
+  `test_submission_processing_preserves_cancellation_over_aborted_callback_error`
+  protects that shared pre/post owner contract. Cleanup lock deadlines are
+  sanitized as scratch-integrity failures, not recordable provider failures;
+  callback, projection, workspace and prepared-source ownership remain distinct.
 - `test_revocation_and_finalization_serialize`: independent sessions and
   observed lock waiting prove both valid commit/denial orderings.
 - `test_real_audit_insert_failure_rolls_back[execute/materialize/finalize]`: action-filtered real

@@ -12,15 +12,23 @@ from tests.post_submit_materialization_helpers import material_fixture
 from .test_receipt_custody import snapshot
 
 
+@pytest.mark.parametrize("consumer_failure", ["cancel", "runtime_error", "timeout_error"])
 @pytest.mark.parametrize("change", ["revoked", "replica_unavailable", "unchanged"])
-async def test_outer_deadline_revalidates_material_after_cleanup(tmp_path, isolated_database_env, monkeypatch, change):
+async def test_outer_deadline_revalidates_material_after_cleanup(tmp_path, isolated_database_env, monkeypatch, change, consumer_failure):
     import app.modules.checkers.execution as execution
     async with material_fixture(tmp_path, isolated_database_env) as h:
         await reserve(h)
-        entered = asyncio.Event()
+        entered, aborted = asyncio.Event(), []
         async def paused(consumer, request, material):
             entered.set()
-            await asyncio.Event().wait()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                aborted.append(True)
+                if consumer_failure != "cancel":
+                    error = RuntimeError if consumer_failure == "runtime_error" else TimeoutError
+                    raise error("consumer failed after abort") from None
+                raise
         monkeypatch.setattr(execution._StructuralConsumer, "evaluate", paused)
         # Arm the actual asyncio deadline after the consumer enters, avoiding a
         # machine-speed race between setup queries and the short test deadline.
@@ -49,6 +57,7 @@ async def test_outer_deadline_revalidates_material_after_cleanup(tmp_path, isola
                 with pytest.raises(PostSubmissionMaterializationUnavailable):
                     await asyncio.wait_for(task, 10)
                 assert await snapshot(h) == before
+            assert aborted == [True]
             assert len(h.store.opens) == 1 and not h.preparation._active
             assert list((h.scratch / "workspaces").iterdir()) == []
         finally:
@@ -70,30 +79,42 @@ def controlled_deadline(monkeypatch, execution):
     return deadlines
 
 
-@pytest.mark.parametrize("failure", ["release", "workspace"])
-async def test_outer_deadline_cannot_hide_failed_scratch_cleanup(tmp_path, isolated_database_env, monkeypatch, failure):
+@pytest.mark.parametrize("cleanup_error", ["integrity", "deadline"])
+@pytest.mark.parametrize("failure", ["release", "workspace", "projection"])
+async def test_outer_deadline_cannot_hide_failed_scratch_cleanup(tmp_path, isolated_database_env, monkeypatch, failure, cleanup_error):
     import app.modules.checkers.execution as execution
-    from app.modules.artifacts.preparation import ArtifactScratchIntegrityError
+    from app.modules.artifacts.preparation import ArtifactScratchIntegrityError, ArtifactPreparationDeadlineError
 
     async with material_fixture(tmp_path, isolated_database_env) as h:
         await reserve(h)
         entered, finish = asyncio.Event(), asyncio.Event()
+        error_type = ArtifactScratchIntegrityError if cleanup_error == "integrity" else ArtifactPreparationDeadlineError
         original_release = h.manager.release
         original_workspace = h.manager._cleanup_workspace_sync
+        original_projection = h.inspector._projected_tree
         async def failed_release(reservation):
             entered.set()
             await finish.wait()
-            raise ArtifactScratchIntegrityError("controlled release failure")
+            raise error_type("controlled release failure")
         async def paused_consumer(consumer, request, material):
             entered.set()
             await asyncio.Event().wait()
+        from contextlib import contextmanager
+        @contextmanager
+        def failed_projection(*args, **kwargs):
+            with original_projection(*args, **kwargs) as tree:
+                yield tree
+            raise (OSError if cleanup_error == "integrity" else TimeoutError)("controlled projection cleanup failure")
         def failed_workspace(name):
-            raise ArtifactScratchIntegrityError("controlled workspace failure")
+            raise error_type("controlled workspace failure")
         if failure == "release":
             monkeypatch.setattr(h.manager, "release", failed_release)
         else:
             monkeypatch.setattr(execution._StructuralConsumer, "evaluate", paused_consumer)
-            monkeypatch.setattr(h.manager, "_cleanup_workspace_sync", failed_workspace)
+            if failure == "workspace":
+                monkeypatch.setattr(h.manager, "_cleanup_workspace_sync", failed_workspace)
+            else:
+                monkeypatch.setattr(h.inspector, "_projected_tree", failed_projection)
         deadlines = controlled_deadline(monkeypatch, execution)
         task = asyncio.create_task(live_executor(h).evaluate_post_submission(h.request))
         try:
@@ -106,15 +127,21 @@ async def test_outer_deadline_cannot_hide_failed_scratch_cleanup(tmp_path, isola
                     break
             assert task.cancelling(), "executor deadline did not cancel the protected operation"
             finish.set()
-            with pytest.raises(ArtifactScratchIntegrityError, match=f"controlled {failure} failure"):
+            expected = ("post_submit_projection_cleanup_unconfirmed" if failure == "projection" else
+                        f"controlled {failure} failure" if cleanup_error == "integrity" else
+                        "post_submit_source_cleanup_unconfirmed" if failure == "release" else
+                        "submission_workspace_cleanup_unconfirmed")
+            with pytest.raises(ArtifactScratchIntegrityError, match=expected):
                 await asyncio.wait_for(task, 10)
             assert await snapshot(h) == before  # running, no final receipt/result/event
             assert len(h.store.opens) == 1
             if failure == "release":
                 assert len(h.preparation._active) == 1
                 assert (await h.manager.usage()).reservation_count == 1
-            else:
+            elif failure == "workspace":
                 assert not h.preparation._active and h.manager._pending_workspaces
+            else:
+                assert not h.preparation._active and not h.manager._pending_workspaces
         finally:
             finish.set()
             if not task.done():
@@ -122,6 +149,7 @@ async def test_outer_deadline_cannot_hide_failed_scratch_cleanup(tmp_path, isola
             await asyncio.gather(task, return_exceptions=True)
             monkeypatch.setattr(h.manager, "release", original_release)
             monkeypatch.setattr(h.manager, "_cleanup_workspace_sync", original_workspace)
+            monkeypatch.setattr(h.inspector, "_projected_tree", original_projection)
             for binding in list(h.preparation._active):
                 await h.preparation.release_prepared_artifact(binding)
             await h.preparation.retry_pending_cleanup()
