@@ -129,8 +129,10 @@ structural catalogue reserves zero output slots; controlled nonempty fixtures
 prove ART mechanics only. ARCH-04C finalizes only that exact empty output set, using the
 [bounded execution contract](../WS-ARCH-001-04C.md). A future registered
 output-producing capability must add real producer and atomic binding proof
-before activation; controlled nonempty fixtures do not establish that capability. ARCH-04D2 then activates the exact ART write/binding
-and CHECKERS completion surfaces. In that planned flow, external byte I/O occurs
+before output authority activation; controlled nonempty fixtures do not establish
+that capability. [ARCH-04D2](../WS-ARCH-001-04D2.md) activates only current
+materialization, execution and finalization authority. A later real output
+producer owns write/binding activation. In that planned output flow, external byte I/O occurs
 before the final caller transaction; binding publication and final result become
 visible atomically.
 Failed storage never becomes contributor blame or an `allow_review` result.

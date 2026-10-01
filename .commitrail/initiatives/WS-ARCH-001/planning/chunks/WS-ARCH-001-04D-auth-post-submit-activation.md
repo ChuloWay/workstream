@@ -1,10 +1,11 @@
 # Chunk Contract: WS-ARCH-001-04D AUTH Post-Submit Activation
 
-Status: ARCH-04D1 canonical custody is Complete; ARCH-04D2 authority remains a
-non-executable planning skeleton after exact 04B/04C manifests.
+Status: ARCH-04D1 canonical custody is Complete; ARCH-04D2 is Planned under
+the [bounded authority record](../../WS-ARCH-001-04D2.md).
 Risk: L1. Outcome: ARCH-04D2 activates exact fixed-service materialization,
-checker-output, evaluator execution and finalization boundaries, replacing
-the historical XINT-06B/broad AUTH-14 design.
+evaluator execution and finalization boundaries, replacing the historical
+XINT-06B/broad AUTH-14 design. Output ingestion and binding remain unavailable
+until a real registered checker produces output files.
 
 ARCH-04D2 is the sole current activation contract; XINT-06B and broad AUTH-14
 are historical custody references, not parallel work. Materialization PREP
@@ -36,8 +37,9 @@ private ART query, alternate store or compatibility path is introduced.
 
 ## Proposed CHECKERS service manifest
 
-ART's three existing actions cover materialization, output ingestion and
-binding only; none authorizes a CHECKERS run/result write. Propose one exact
+ART's existing actions cover materialization, output ingestion and binding;
+none authorizes a CHECKERS run/result write. Only materialization is needed by
+the current zero-output catalogue. Register one exact
 fixed identity `workstream.checker.post_submit` with two action/permission
 pairs: `checker.post_submit.execute` for attempt execution/pre-I/O admission
 and `checker.post_submit.finalize` for final-result persistence. Register their
@@ -48,7 +50,7 @@ materializer/output identities retain their separate actions; do not collapse
 them into this evaluator identity.
 
 Finalization requires fresh authority after I/O, exact current request/fence,
-accepted-result digest and verified declared output bindings. The preflight
+accepted-result digest, canonical material and the current empty output tuple. The preflight
 allow does not authorize final persistence. Operator terminal retry retains
 its separately governed recovery action and cannot impersonate ordinary
 execution. Negative proof covers each service attempting the other's actions,
@@ -66,15 +68,20 @@ cross-resource, mismatched replay, copied-handle or revoked requests detected
 before I/O deny before protected side effects. Fresh validation after I/O
 suppresses final-current result and routing writes if authority or lineage
 changed; it cannot undo earlier authorized reads/evaluator calls. Exact valid
-replay returns the same stored identity with no duplicate effects; it never
-borrows an earlier allow in place of current authority. Evidence commits
-atomically with its protected write. Verify catalogue/database parity,
+replay validates the stored phase-specific authorization receipt under fresh
+authority and returns the same identity without duplicate audit or product
+effects; it never borrows an earlier allow in place of current authority. Execute/finalize evidence commits
+atomically with its protected write. Materialization evidence commits before
+provider access and may remain after a subsequently failed authorized read. Verify catalogue/database parity,
 PostgreSQL races, boundary validators, Ruff and hosted coverage. Required
 reviews: authorization architecture, security, product/ops, QA, senior, CI and
 test delta.
 
-Before ARCH-04D2 implementation, replace its authority skeleton with a current-main contract that
-enumerates exact files, commands, migration head and reviewers.
+The [04D2 record](../../WS-ARCH-001-04D2.md) defines current files, strict
+execution/materialization facts, lock ordering, stored-receipt replay, migration
+head, commands and reviewers. No database transaction or PREP handle crosses
+provider/evaluator I/O. A race after an authorized read cannot undo that read;
+fresh currentness and authority prevent the stale worker publishing a result.
 
 ## Merge state
 
