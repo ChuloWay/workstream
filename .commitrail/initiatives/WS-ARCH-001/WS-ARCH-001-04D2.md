@@ -114,7 +114,7 @@ Deferrable evidence foreign keys and a semantic constraint trigger validate each
 non-null execute/finalize receipt against the immutable authority event: allow
 kind/domain, exact action/permission, fixed checker service principal, no denial
 or grant, exact project/attempt resource, and recomputed context digest. Finalize
-must chain the stored execute receipt and use a distinct event. Existing run
+must chain a non-null stored execute receipt and use a distinct event. Existing run
 custody alone permits replacement only with the valid next lease; terminal
 receipt identities stay immutable. Attaching a new receipt requires the active
 fixed actor and identity link; unchanged historical references and migration
@@ -302,6 +302,13 @@ below; fixture or unrelated type-validation failures do not count.
 9. Mutation probes must disable the specific request/lease/replay/revocation
    check and fail at the intended behavioral assertion. Do not count fixture,
    missing-field or unrelated guard failures as regression proof.
+
+The final-receipt validator independently rejects a missing execute receipt.
+Its direct-SQL regression isolates that semantic guard from the earlier run-state
+trigger, supplies an otherwise matching finalize event/digest, and proves commit
+rejection and rollback. A positive receipt-chain control commits; restoring the
+old nullable comparison must make the negative assertion fail. This strengthens
+receipt custody without changing the roadmap's exposure or next boundary.
 
 ## Evidence
 

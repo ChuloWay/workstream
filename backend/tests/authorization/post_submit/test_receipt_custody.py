@@ -1,5 +1,6 @@
 """Real AUTH receipts cannot be borrowed for another run, lease or terminal outcome."""
 
+from contextlib import nullcontext
 from datetime import timedelta
 from uuid import UUID
 
@@ -181,3 +182,61 @@ async def test_terminal_receipt_digest_matches_database(tmp_path, isolated_datab
             assert await session.scalar(text(
                 "select public.checker_post_submit_authority_digest(r,'finalize') from public.checker_runs r where r.id=:id"
             ), {"id": run.id}) == execution_authority_digest(expected)
+
+
+@pytest.mark.parametrize("missing_execute", [True, False])
+async def test_final_receipt_independently_requires_execute_receipt(
+    tmp_path, isolated_database_env, missing_execute,
+):
+    """Isolate semantic receipt custody from the earlier run-state/immutability guard."""
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        await reserve(h)
+        executor = live_executor(h)
+        lease, _ = await executor._claim(h.request)
+        facts = final_facts(h, lease)
+        facts = facts.model_copy(update={"material": None, "result": make_post_submit_result(
+            request_id=h.request.evaluation_request_id, request_digest=h.request.request_sha256,
+            attempt_id=lease.reservation.attempt_id, result_id=lease.reservation.result_id,
+            evaluation_generation=h.request.evaluation_generation, outcome="infrastructure_failed",
+            member_results=(), infrastructure_failure_code="material_unavailable",
+        )})
+        await executor.finalize(facts)
+        before = await snapshot(h)
+        replacement = new_record_id()
+        expected = pytest.raises(IntegrityError, match="checker authorization receipt custody mismatch")
+        with expected if missing_execute else nullcontext():
+            async with h.factory() as session, session.begin():
+                run = await session.get(CheckerRun, str(lease.reservation.attempt_id))
+                original_final = run.finalize_evidence_id
+                original_execute = run.execute_evidence_id
+                # Disable only the earlier immediate state guard. All deferred
+                # receipt, foreign-key, material and terminal guards remain live.
+                # Transactional DDL rolls back with the rejected write.
+                await session.execute(text("ALTER TABLE public.checker_runs DISABLE TRIGGER checker_run_custody"))
+                await session.execute(text("""
+                    UPDATE public.checker_runs SET execute_evidence_id=:execute,
+                      finalize_evidence_id=:final WHERE id=:id
+                """), {"execute": None if missing_execute else original_execute,
+                       "final": replacement, "id": run.id})
+                # Keep real service/action provenance and every other audit fact;
+                # only the event ID and digest follow the staged receipt chain.
+                await session.execute(text("""
+                    INSERT INTO public.audit_events
+                    SELECT (jsonb_populate_record(NULL::public.audit_events,
+                      to_jsonb(a) || jsonb_build_object('id',cast(:final AS text),
+                        'entity_id',cast(:final AS text),
+                        'after_facts',jsonb_build_object('allowed',true,
+                          'resource_context_digest',
+                          public.checker_post_submit_authority_digest(r,'finalize'))))).*
+                    FROM public.audit_events a CROSS JOIN public.checker_runs r
+                    WHERE a.id=:original AND r.id=:id
+                """), {"final": str(replacement), "original": original_final, "id": run.id})
+                await session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+                await session.execute(text("ALTER TABLE public.checker_runs ENABLE TRIGGER checker_run_custody"))
+        if missing_execute:
+            assert await snapshot(h) == before
+        else:
+            async with h.factory() as session:
+                run = await session.get(CheckerRun, str(lease.reservation.attempt_id))
+                assert run.execute_evidence_id == original_execute
+                assert run.finalize_evidence_id == str(replacement)

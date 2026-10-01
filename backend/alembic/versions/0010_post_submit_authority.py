@@ -121,7 +121,8 @@ def _functions():
             AND a.after_facts::jsonb=jsonb_build_object(
               'allowed',true,'resource_context_digest',public.checker_post_submit_authority_digest(r,$2)
             )
-            AND ($2='execute' OR (r.finalize_evidence_id IS DISTINCT FROM r.execute_evidence_id
+            AND ($2='execute' OR (r.execute_evidence_id IS NOT NULL
+                                 AND r.finalize_evidence_id IS DISTINCT FROM r.execute_evidence_id
                                  AND r.status IN ('completed','infrastructure_failed')))
         ),false)
       $$
