@@ -377,6 +377,9 @@ PROJECT_MODULES = (
 )
 
 TASK_MODULES = (
+    "tests/tasks/post_submit_routing/test_contracts.py",
+    "tests/tasks/post_submit_routing/test_storage.py",
+    "tests/tasks/post_submit_routing/test_migration.py",
     "tests/tasks/test_public_queues.py",
     "tests/authorization/task_reads/test_authority.py",
     "tests/authorization/task_reads/test_contracts.py",

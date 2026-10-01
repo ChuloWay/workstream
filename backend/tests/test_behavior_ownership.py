@@ -2188,3 +2188,25 @@ def test_post_submit_authority_partition_replacement_is_exact() -> None:
         )
     with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
         ownership._validate_additive_partition_transition(_partition(sorted(additions)), trusted)
+
+
+def test_routing_source_registration_rejects_adjacent_runtime_targets():
+    expected = {
+        "backend/app/modules/tasks/api/accepted_effects.py",
+        "backend/app/modules/tasks/api/post_submit_routing.py",
+        "backend/app/modules/tasks/post_submit_routing/models.py",
+    }
+    assert ownership.ARCH_04E1A_SOURCE_TARGETS == expected
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *expected})), trusted
+    )
+    for neighbor in (
+        "backend/app/modules/tasks/post_submit_routing/service.py",
+        "backend/app/modules/tasks/api/routing_authority.py",
+    ):
+        with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+            ownership._validate_additive_partition_transition(
+                _partition(sorted({retained, *expected, neighbor})), trusted
+            )

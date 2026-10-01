@@ -1,6 +1,18 @@
 """Dependency-safe public API for the TASKS business module."""
 
-from app.modules.tasks.api.transition_audit import TaskTransitionAuditPort, TaskTransitionFacts
+from app.modules.tasks.api.accepted_effects import (
+    TaskAcceptedEffectsPort,
+    TaskAcceptedEffectsRequest,
+    TaskAcceptedEffectsResult,
+    TaskAcceptedEffectsUnavailable,
+)
+from app.modules.tasks.api.post_submit_routing import TaskPostSubmitManifestFacts
+
+from app.modules.tasks.api.transition_audit import (
+    TaskPolicyLineage,
+    TaskTransitionAuditPort,
+    TaskTransitionFacts,
+)
 
 from app.modules.tasks.api.authorization import (
     TaskAuthorizationPort,
@@ -34,7 +46,11 @@ from app.modules.tasks.api.submission_command import (
 )
 
 from app.modules.tasks.api.ready_queue import (
-    TaskQueueCursor, ReadyTaskPage, ReadyTaskQueuePort, TaskQueueRequest, ReadyTaskSummary,
+    TaskQueueCursor,
+    ReadyTaskPage,
+    ReadyTaskQueuePort,
+    TaskQueueRequest,
+    ReadyTaskSummary,
 )
 
 from app.modules.tasks.api.management_queue import (
@@ -47,32 +63,53 @@ from app.modules.tasks.api.management_queue import (
 )
 
 from app.modules.tasks.api.task_detail import (
-    ContributorTaskDetail, ContributorTaskDetailRequest, ContributorTaskDetailPort,
-    ManagementTaskDetail, ManagementTaskDetailRequest, ManagementTaskDetailPort,
+    ContributorTaskDetail,
+    ContributorTaskDetailRequest,
+    ContributorTaskDetailPort,
+    ManagementTaskDetail,
+    ManagementTaskDetailRequest,
+    ManagementTaskDetailPort,
 )
 
 from app.modules.tasks.api.audit_evidence import (
-    AuditTaskEvidence, AuditTaskEvidencePage, AuditTaskEvidencePort,
-    AuditTaskEvidenceRequest, TaskEvidenceCursor, TaskEvidenceInvalid,
+    AuditTaskEvidence,
+    AuditTaskEvidencePage,
+    AuditTaskEvidencePort,
+    AuditTaskEvidenceRequest,
+    TaskEvidenceCursor,
+    TaskEvidenceInvalid,
 )
 
 __all__ = (
-    "AuditTaskEvidence", "AuditTaskEvidencePage", "AuditTaskEvidencePort",
-    "AuditTaskEvidenceRequest", "TaskEvidenceCursor", "TaskEvidenceInvalid",
+    "AuditTaskEvidence",
+    "AuditTaskEvidencePage",
+    "AuditTaskEvidencePort",
+    "AuditTaskEvidenceRequest",
+    "TaskEvidenceCursor",
+    "TaskEvidenceInvalid",
     "ContributorTaskDetail",
     "ContributorTaskDetailRequest",
     "ContributorTaskDetailPort",
     "ManagementTaskDetail",
     "ManagementTaskDetailRequest",
     "ManagementTaskDetailPort",
-
     "ManagementTaskPage",
     "ManagementTaskQueuePort",
     "ManagementTaskSummary",
     "OperationalTaskPage",
     "OperationalTaskQueuePort",
     "OperationalTaskSummary",
-    "TaskQueueCursor", "ReadyTaskPage", "ReadyTaskQueuePort", "TaskQueueRequest", "ReadyTaskSummary",
+    "TaskAcceptedEffectsPort",
+    "TaskAcceptedEffectsRequest",
+    "TaskAcceptedEffectsResult",
+    "TaskAcceptedEffectsUnavailable",
+    "TaskPolicyLineage",
+    "TaskPostSubmitManifestFacts",
+    "TaskQueueCursor",
+    "ReadyTaskPage",
+    "ReadyTaskQueuePort",
+    "TaskQueueRequest",
+    "ReadyTaskSummary",
     "TaskTransitionAuditPort",
     "TaskTransitionFacts",
     "TaskAuthorizationPort",

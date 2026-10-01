@@ -12,12 +12,20 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   [ARCH-04A consolidation](WS-ARCH-001-04A.md) canonical post-submit contracts/conformance.
 - Intent: keep product modules behind explicit ports and composition roots.
 - Current boundary: one CHECKERS catalogue, compiler/parser and implementation
-  per checker ID serve active policy consumers; hidden post-submit execution now
-  has exact fixed-service authority. Automatic dispatch/routing remains unavailable.
+  per checker ID serve active policy consumers; hidden post-submit execution has
+  exact fixed-service authority. ARCH-04E1A adds immutable route-neutral TASK
+  source storage, detached facts and source-neutral accepted-effects types.
+  Automatic dispatch/routing and acceptance remain unavailable.
 - Delivered storage boundary: hidden [ARCH-04B2 checker-output custody](WS-ARCH-001-04B2.md), following hidden input materialization (ARCH-04B). Typed store, byte-free recovery and flush-only verified binding exist; the CHECKERS zero-slot reservation reader is implemented; output write/bind authority remains unavailable.
-- Next usable boundary: [ARCH-04E1A routing-source facts](WS-ARCH-001-04E1A.md) after delivered
-  [ARCH-04D2](WS-ARCH-001-04D2.md) exact input, execute and finalize authority.
-  Output-file authority remains unavailable for the zero-output catalogue.
+- Delivered source boundary: [ARCH-04E1A routing-source facts](WS-ARCH-001-04E1A.md)
+  follow [ARCH-04D2](WS-ARCH-001-04D2.md) exact input, execute and finalize
+  authority. The source table has no writer, reader, handler, current pointer,
+  routing authority or acceptance effect implementation. False is proven only as
+  a scalar DTO value because activation still rejects it.
+- Next usable boundary: shared REV-04B source/FinalAcceptance persistence,
+  CON-03C/07 and the existing REV-12A/CON fence foundation before shared
+  acceptance composition, then ARCH-04E1B/04E2/04E3 and ARCH-04F. Output-file
+  authority remains unavailable for the zero-output catalogue.
   [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers public manager activation
   context and exact guide activation using the existing CP07 operation.
   [CP05A](WS-ARCH-001-CP05A.md) supplies public Finance policy administration and recoverable draft selectors.

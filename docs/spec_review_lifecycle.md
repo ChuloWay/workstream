@@ -266,8 +266,9 @@ earlier Submission and ReviewLease lineage remains immutable.
 
 Only a durable, final, current post-submit CheckerRun outcome of `allow_review`
 may admit the exact immutable Submission to human review. Admission records the
-exact CheckerRun ID and verified binding facts through the TASK-owned canonical
-`allow_review` routing manifest delivered by ARCH-04E. The manifest binds the
+exact CheckerRun ID and verified binding facts through the later authority-
+hardened TASK-owned canonical `allow_review` routing manifest delivered by the
+remaining ARCH-04E sequence. The manifest binds the
 current evaluation generation/result and immutable Submission; it does not
 replace CHECKERS truth or grant review authority. REV validates the current
 TASK handoff through its public port before recording admission. A retry, supersession, or
@@ -483,10 +484,13 @@ ReviewPolicy governing that Submission.
 `acceptance_source` is provenance, not a configurable policy or workflow mode:
 `human_review` requires `source_review_id` and forbids
 `source_routing_manifest_id`; `task_post_submit_route` requires
-`source_routing_manifest_id` and forbids `source_review_id`. The existing TASK
-manifest identifies the exact Submission, run, request/generation, final-result
-hash, output bindings and persisted authority-event references. Do not create
-an AutomatedDecision table or copy checker results into REV. The AUTH event
+`source_routing_manifest_id` and forbids `source_review_id`. The delivered
+ARCH-04E1A TASK source identifies the exact Submission, run,
+request/generation, final-result and canonical material lineage, but it is not
+routing authority. Before runtime REV acceptance may consume it, ARCH-04E1B/04E2 must harden the
+same table with mandatory exact route and owner-receipt custody and refuse
+retained pre-authority rows. Do not create a second manifest, an
+AutomatedDecision table or copied checker results in REV. The later AUTH event
 reference binds the exact source, operation, actor and resource; a checker
 finalization allow cannot substitute for routing authority.
 
@@ -546,10 +550,12 @@ the same outcome; a changed envelope under the same identity denies.
 
 Extract foundations from existing owner work, not a new initiative:
 
-1. ARCH-04E1A's TASK manifest persistence/public scalar facts and narrow accepted
-   effects port follow CHECKERS-04C facts, without routing handlers or REV FKs.
-   One manifest stores the locked `human_review_required` branch; it is not
-   restricted to human admission. This schema precedes the REV source FK.
+1. ARCH-04E1A's TASK manifest persistence/detached scalar facts and narrow
+   accepted-effects Protocol are delivered after CHECKERS-04C facts, without a
+   writer, reader, current pointer, routing handler, effects implementation or
+   REV FK. One manifest stores the locked `human_review_required` branch; it is
+   not restricted to human admission. False proof is scalar transport only
+   while activation remains unavailable. This schema precedes the REV source FK.
 2. REV-04B shared source/FinalAcceptance persistence follows that schema, then
    CON-03C contribution/award persistence and CON-07 submitter participation.
    A Review FK target may require a table, not live claim or review endpoints.
@@ -571,7 +577,7 @@ manifest schema depend on its later handler or the early shared fence depend
 on live human review. Human runtime later adds its decision/lease proof and
 reuses the same operation. Fulfillment/read endpoints remain downstream.
 
-Future implementation tests (not executed by this planning change):
+Remaining implementation tests:
 
 | Owner / future test | Required discriminating proof |
 |---|---|

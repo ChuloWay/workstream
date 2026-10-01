@@ -539,7 +539,9 @@ In particular, the XINT-06B grouping corresponds to runtime
 `WS-AUTH-001-ART-06B` for checker-output write/binding. The current replacement
 activation contract is ARCH-04D2. Exact post-submit input, execute and finalize
 authority is delivered; checker-output write/bind remains planned because the
-current catalogue produces no output files. ARCH-04E1A routing-source facts are next. This does not reopen XINT-06B as a parallel implementation lane. Likewise ARCH-02G/02H
+current catalogue produces no output files. ARCH-04E1A route-neutral source
+facts and type-only accepted-effects contracts are delivered without an action,
+handler, current pointer or runtime composition. This does not reopen XINT-06B as a parallel implementation lane. Likewise ARCH-02G/02H
 are replacement implementation boundaries, not automatic registry renames.
 Read exact runtime ownership from the typed catalogue. No planning-only
 change may promote or reassign an action.

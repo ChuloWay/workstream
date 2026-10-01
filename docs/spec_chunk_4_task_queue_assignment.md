@@ -136,6 +136,14 @@ Pre-submission intake failures prevent Submission creation. Post-submission
 evaluation concerns the submitted work and supplies evidence for
 policy-governed routing; it does not own final acceptance.
 
+ARCH-04E1A persists that successful evidence in one immutable route-neutral
+TASK source table and exposes detached source facts plus a source-neutral,
+type-only accepted-effects Protocol. It installs no writer, reader, handler,
+current pointer, routing authority, TASK transition or acceptance participant.
+Before either true human admission or false automatic acceptance is published,
+the remaining ARCH-04E work must harden the same table with mandatory exact
+routing and owner-receipt custody and reject retained pre-authority rows.
+
 ## Required verification
 
 - Real exact-project grants permit the supported commands without a worker

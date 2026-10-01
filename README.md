@@ -162,8 +162,10 @@ Implemented foundations on `main` include external Flow-token verification,
 canonical local actors and authorization, project guides and task records,
 submission packets, immutable artifact storage, pre-submit intake checks,
 and authorized retained submission/checker history. ARCH-04C implements hidden
-durable post-submit execution and unfinished-attempt recovery. ARCH-04D2 supplies exact service authority;
-automatic dispatch and routing remain unavailable. Project-guide ingestion stores original documents,
+durable post-submit execution and unfinished-attempt recovery. ARCH-04D2 supplies
+exact service authority. ARCH-04E1A adds immutable route-neutral TASK source
+storage, detached source facts and a type-only accepted-effects Protocol;
+automatic dispatch, routing and acceptance remain unavailable. Project-guide ingestion stores original documents,
 records immutable metadata and provides authorized exact-file reads to the
 unified setup agent. Guide metadata in PostgreSQL also holds at least one required
 task example; the agent assesses the examples with the uploaded guide documents.
@@ -552,8 +554,9 @@ correction. Both correction origins use the same explicit manual dispatch.
 Derivation, reads, approval and correction creation do not invoke inference or
 post-submit evaluators. A periodic scan recovers publication failures from
 committed approvals; duplicate delivery retains one policy and receipt.
-Hidden post-submission execution and completion custody are implemented; live
-ARCH-04D2 supplies exact service authority; automatic routing remains ARCH-04E work.
+Hidden post-submission execution and completion custody are implemented.
+ARCH-04D2 supplies exact service authority and ARCH-04E1A supplies source-only
+facts/types without a runtime entry. Automatic routing remains ARCH-04E work.
 The local Celery command above includes Beat; start it before creating guide sources.
 
 The Beat scheduler must run alongside the Celery execution processes so
@@ -568,8 +571,9 @@ checker phase service and removes the standalone JSON precheck. Both fresh
 pre-submit execution and completed replay use that service, with ART retaining
 canonical evidence ownership. The obsolete checker worker, manual execution and
 submission-finalize repair routes are removed. `evaluate_post_submission` now
-uses hidden durable execution with exact ARCH-04D2 service authority; automatic
-dispatch and routing remain ARCH-04E work.
+uses hidden durable execution with exact ARCH-04D2 service authority. ARCH-04E1A
+retains route-neutral source evidence without a writer, reader, handler or
+current pointer; automatic dispatch and routing remain ARCH-04E work.
 Submission and checker history use live exact-project Submitter authority for the
 original contributor. Separate `/projects/{project_id}` reads require a covering
 Project Manager grant and expose fixed management fields. Token roles confer no
@@ -661,8 +665,9 @@ exact request/execution-lease custody, immutable member results and atomic compl
 The structural catalogue produces no output files, so output write/bind authority
 remains unavailable. ARCH-04D1 validates retained terminal material against canonical
 ART lineage. ARCH-04D2 supplies fixed-service input, execute and finalize authority,
-with PostgreSQL enforcement of exact execution/finalization receipts. Automatic
-dispatch and routing remain ARCH-04E work.
+with PostgreSQL enforcement of exact execution/finalization receipts. ARCH-04E1A
+adds immutable source storage and detached contracts only. Automatic dispatch,
+routing and acceptance remain ARCH-04E work.
 
 ## v0.1 Success Standard
 

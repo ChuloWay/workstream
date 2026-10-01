@@ -24,9 +24,10 @@ false uses the same shared FinalAcceptance/CON operation as human accept, not
 enqueue human review or treat `allow_review` as acceptance authority. The
 current TASK children do not implement REV/CON internals: consume the
 [canonical shared participants and authority contract](../../../../../docs/spec_review_lifecycle.md#finalacceptance).
-First deliver 04E1A's TASK manifest schema/public facts and narrow accepted-effects
-port after 04C, without REV dependency or handlers. REV-04B can then reference
-that schema. Shared REV-04B/CON-03C/07 and the early existing REV-12A/CON fence
+04E1A's TASK manifest schema/detached facts and narrow accepted-effects Protocol
+are delivered after 04C, without REV dependency, runtime participant or handlers.
+REV-04B can now reference that schema. Shared REV-04B/CON-03C/07 and the early
+existing REV-12A/CON fence
 foundation are hard dependencies of false handler composition, not of this
 early schema or true admission. This breaks the source-FK dependency cycle.
 False guide activation stays unavailable until that path is proven. Avoid
@@ -38,15 +39,16 @@ false. Before its acceptance participant is implemented and activated, false
 has no live success route; an unexpected false attempt fails closed without
 creating human admission, acceptance or contribution effects.
 
-1. **[ARCH-04E1A — TASK source foundation](../../WS-ARCH-001-04E1A.md).**
-   After 04C/04D2, define one route-neutral immutable source schema and detached
-   internal facts, plus source-neutral accepted-effects types. No runtime
+1. **[ARCH-04E1A — TASK source foundation](../../WS-ARCH-001-04E1A.md) — Complete.**
+   One route-neutral immutable source schema and detached internal facts, plus
+   source-neutral accepted-effects types, follow 04C/04D2. There is no runtime
    writer/reader/composition, current pointer, routing allow or accepted effects.
    Source evidence alone never admits a human or authorizes acceptance.
    The current true-policy graph supplies real SQL proof; false is value-shape
    transport only because guide activation still rejects it. Before publication,
-   04E1B/04E2 must harden this same table with mandatory exact route custody and
-   refuse any unprovable retained source rows, without backfill or deletion.
+   04E1B/04E2 must harden this same table with mandatory exact route and
+   owner-receipt custody and refuse every retained pre-authority source row,
+   without backfill, mutation, deletion or a parallel table.
 2. **ARCH-04E1B — hidden TASK handlers.** After 04E1A and
    CON-02B's handler/claim contract (plus shared acceptance foundations for
    false), TASK implements unavailable request/event
@@ -233,9 +235,9 @@ contributor-readable checker-remediation lineage for final needs-revision
 checker results without creating Review, ReviewFinding, or
 RevisionContextPreparation records.
 
-This is a coordination contract. Each child record, beginning with
-[04E1A](../../WS-ARCH-001-04E1A.md), supplies its current-main exact files,
-commands, migration head and reviewers before implementation.
+This is a coordination contract. Each remaining child record, beginning with
+04E1B after the shared acceptance foundations, supplies its current-main exact
+files, commands, migration head and reviewers before implementation.
 
 ## Merge state
 

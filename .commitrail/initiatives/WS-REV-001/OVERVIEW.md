@@ -8,9 +8,14 @@ of review/revision behavior. The downstream owner contracts remain separate.
 - Completed boundary: queue admission and ReviewLease persistence through 03A2.
 - Intent: ensure the authorized reviewer evaluates the exact verified artifact
   under the locked policy version and produces attributable outcomes.
-- Next usable boundary: prepare shared acceptance/source and existing fence
-  foundations under the canonical order; human hidden behavior may continue
-  independently behind exact AUTH, ART and CON prerequisites.
+- Delivered upstream boundary: ARCH-04E1A provides immutable route-neutral TASK
+  source storage, detached source facts and the type-only accepted-effects
+  Protocol. It provides no writer, reader, handler, routing authority, current
+  pointer or acceptance implementation.
+- Next usable boundary: REV-04B shared source/FinalAcceptance persistence,
+  CON-03C/07 and the existing REV-12A/CON fence foundation under the canonical
+  order; human hidden behavior may continue independently behind exact AUTH,
+  ART and CON prerequisites.
 - Governing sources: `docs/spec_review_lifecycle.md`,
   `docs/engineering/review_authorization_action_custody.md`, code, migrations,
   and tests.
@@ -56,8 +61,9 @@ proof. No adjudication setting or behavior is included.
    packet-membership contract.
 2. Continue hidden claim/revision behavior against canonical `allow_review`,
    copying the Submission policy version without a current-policy lookup.
-3. After TASK's early 04E1A source schema/public port, implement the REV-04B
-   shared source/FinalAcceptance persistence foundation,
+3. TASK's early 04E1A source schema/detached facts and source-neutral accepted-
+   effects types are delivered. Implement the REV-04B shared
+   source/FinalAcceptance persistence foundation next,
    then CON-03C/CON-07 persistence and submitter participation. This foundation
    can precede human runtime: ARCH-04E uses it for false/pass acceptance without
    live queues, leases or decisions. Pull the existing REV-12A/CON shared

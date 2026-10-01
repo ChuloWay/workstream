@@ -1,7 +1,7 @@
 # ARCH-04E1A — Immutable post-submit routing source foundation
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Risk: L1 (retained lineage and schema).
 - Intended merge outcome: one TASK source schema and detached internal contracts support the later shared acceptance source FK; routing, acceptance and public intake remain unavailable.
 
@@ -11,7 +11,7 @@ Continue claim -> ZIP intake -> immutable Submission -> automatic checking ->
 policy-governed outcome. Establish the source identity needed by REV without
 making that identity an authorization token or adding a second acceptance path.
 
-## Current behavior
+## Starting point
 
 Main `d5bf3460` includes ARCH-04D2. CHECKERS owns immutable completed results,
 material custody, completion events, execute/finalize receipts and currentness.
@@ -31,7 +31,8 @@ remain distinct and cannot authorize routing.
 
 ### Allowed implementation and proof files
 
-- `backend/app/modules/tasks/routing_models.py`
+- `backend/app/modules/tasks/post_submit_routing/models.py`
+- `backend/app/modules/tasks/post_submit_routing/__init__.py`
 - `backend/app/modules/tasks/api/post_submit_routing.py`
 - `backend/app/modules/tasks/api/accepted_effects.py`
 - `backend/app/modules/tasks/api/__init__.py`
@@ -48,6 +49,8 @@ remain distinct and cannot authorize routing.
 - `backend/tests/checkers/execution/test_migration.py` (current-head assertion)
 - `backend/tests/authorization/post_submit/test_migration.py` (pin 0009 -> 0010 proof to its actual target)
 - `backend/scripts/test_lane_catalogue.py`
+- `backend/scripts/behavior_ownership.py` (exact three-file additive registration)
+- `backend/tests/test_behavior_ownership.py` (closed registration and neighbor rejection)
 - `backend/tests/test_ci_lane_catalogue.py` (exact inventory only if required)
 - `.ci/behavior-ownership/partition.v1.json` (three additive TASK module registrations and digest)
 
@@ -181,20 +184,22 @@ claim of terminal state support is included in 04E1A.
 
 ## Acceptance criteria
 
-Future tests are named now; none is claimed executed by this plan.
+Named tests below cover independent labeled cases. Related SQL rejection cases
+reuse a genuine parent graph with separate rolled-back transactions, avoiding a
+full project setup per scalar without losing valid controls or failure attribution.
 
 | Exact future test | Boundary and discriminating proof |
 |---|---|
 | `test_source_matches_real_completed_run` | Real `material_fixture` + live execution + stored true-policy source; compare every source scalar and join-only public fact with its canonical parent |
-| `test_source_rejects_null_scalar[field]` | Each required stored column independently NULL; non-null constraint denies while otherwise valid row rolls back |
-| `test_source_rejects_scalar_substitution[field]` | Separate well-shaped request ID/digest/generation/result ID/digest, content hash/bytes/semantic hash, replica and review-boolean substitutions reach the named semantic guard |
-| `test_source_rejects_foreign_lineage[field]` | Two real stored graphs: independent project/task/Submission/version/assignment/contributor/contribution-policy swaps reject, including coherent same-project sibling ownership |
+| `test_source_rejects_null_scalar` | Each required stored column independently NULL; non-null constraint denies while otherwise valid row rolls back |
+| `test_source_rejects_scalar_substitution` | Separate well-shaped request ID/digest/generation/result ID/digest, content hash/bytes/semantic hash, replica and review-boolean substitutions reach the named semantic guard |
+| `test_source_rejects_foreign_lineage` | Two real stored graphs: independent project/task/Submission/version/assignment/contributor/contribution-policy swaps reject, including coherent same-project sibling ownership |
 | `test_source_rejects_sibling_completion_event` | Real same-project sibling completion event, all other facts valid, rejects at source guard |
-| `test_source_rejects_phase_receipt[substitution]` | Separate execute substitution, finalize substitution and execute/finalize swap using existing real stored allow IDs; no invented/missing event |
-| `test_source_rejects_ineligible_checker_source[state]` | Real queued/running/infrastructure-failed or blocking completed evidence cannot become successful source; select a registered failing-check fixture for the blocking case |
+| `test_source_rejects_phase_receipt` | Separate execute substitution, finalize substitution and execute/finalize swap using existing real stored allow IDs; no invented/missing event |
+| `test_source_rejects_ineligible_checker_source` | Real queued/running/infrastructure-failed or blocking completed evidence cannot become successful source; select a registered failing-check fixture for the blocking case |
 | `test_source_rejects_unactivated_guide` | Deliberately inconsistent storage fixture isolates source activation guard, not a claim of a valid false-policy product graph; restoring real activation permits the same source |
 | `test_source_retains_historical_guide_and_generation` | Real successor activation/generation leaves original source IDs and policy tuple intact; no currentness claim or effects |
-| `test_source_is_immutable[update/delete/truncate]` | Each direct-SQL mutation denied with exact row preserved |
+| `test_source_is_immutable` | Each direct-SQL mutation denied with exact row preserved |
 | `test_source_uniqueness_and_caller_rollback` | Duplicate exact source rejected; failed enclosing transaction leaves source/effect counts unchanged and valid insertion remains possible |
 | `test_source_contract_is_strict_and_detached` | Strict UUID/hash/version/boolean, unknown/private fields, nested lineage mismatch, predecessor shape; exact frozen value |
 | `test_false_source_value_is_transport_only` | False scalar transports without coercion; no claim of activated false storage/routing. Real false proof remains 04E2/04E3 after activation becomes reachable |
@@ -223,7 +228,7 @@ never commit credentials. From `backend/`:
 
 ```sh
 .venv/bin/python scripts/run_isolated_tests.py --metadata-json /tmp/arch04e1a-tests.json --timeout-seconds 1200 -- .venv/bin/python -m pytest tests/tasks/post_submit_routing -q --tb=short
-.venv/bin/ruff check app/modules/tasks/api/post_submit_routing.py app/modules/tasks/api/accepted_effects.py app/modules/tasks/routing_models.py tests/tasks/post_submit_routing alembic/versions/0011_task_routing_source.py
+.venv/bin/ruff check app/modules/tasks/api/post_submit_routing.py app/modules/tasks/api/accepted_effects.py app/modules/tasks/post_submit_routing/models.py tests/tasks/post_submit_routing alembic/versions/0011_task_routing_source.py
 .venv/bin/python -m scripts.module_boundaries validate --protected-base origin/main
 .venv/bin/python -m scripts.behavior_ownership validate
 .venv/bin/python -m scripts.test_structure_boundary validate --policy ../.ci/auth-boundaries/TEST_STRUCTURE_POLICY.md --ledger ../.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json
@@ -241,6 +246,10 @@ Run affected schema/head, catalogue and retained activation-denial tests through
 the same isolated runner. Full hosted semantic lanes and aggregate reconcile
 all collected nodes with zero skips/deselections; coverage is diagnostic. Run
 stale-wording scans against changed current records. No new percentage gate.
+
+The metadata registry consumes the canonical `post_submit_routing/models.py`
+module; no boundary exception or debt entry is added. The ownership validator
+registers only the three new TASK modules and rejects adjacent unapproved files.
 
 ## Plan-review reconciliation
 

@@ -23,9 +23,12 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Public post-policy composition: POL-06B delivered using existing AUTH-12G.
 - Completed activation boundary: AUTH-12H exact-project manager authority for
   CP07 complete-guide activation/binding, with live-authority replay.
-- Next usable boundary: ARCH-04E1A routing-source facts after delivered
-  [ARCH-04D2](../WS-ARCH-001/WS-ARCH-001-04D2.md) exact input, execute and finalize authority.
-  Output-file authority remains unavailable for the zero-output catalogue. [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers
+- Delivered dependent boundary: ARCH-04E1A immutable route-neutral source facts
+  and type-only accepted-effects contracts follow
+  [ARCH-04D2](../WS-ARCH-001/WS-ARCH-001-04D2.md) exact input, execute and
+  finalize authority. They add no routing action, handler or deployable effects
+  participant. Output-file authority remains unavailable for the zero-output
+  catalogue. [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers
   public manager activation context and exact guide activation.
   [CP05A](../WS-ARCH-001/WS-ARCH-001-CP05A.md) delivers public Finance
   ContributionPolicy administration and recovery of a draft selector, a published
@@ -42,6 +45,9 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
   and minimal writers and ARCH-03A internal guide context. POL-07B internal phase composition is delivered.
   The dispatcher registers only exact assignment invalidation. Future checker
   routing still requires its separate exact authority and handler.
+- Next usable boundary: shared REV-04B/CON-03C/07 and REV-12A/CON fence
+  foundations precede shared acceptance composition and hidden ARCH-04E1B;
+  ARCH-04E2 then owns exact routing activation before 04E3 live composition.
 - Governing source: `docs/spec_authorization_service.md`, authorization code,
   migrations, and tests.
 - Preserve: Flow token verification only, no Workstream login/session system,
@@ -78,5 +84,5 @@ manager proposal review, pre-submit approval and manual correction dispatch.
    AUTH-OUTBOX-01/02 bracket hidden CON-02B dispatch; ARCH-04E2 activates only
    the proven TASK routing handler before ARCH-04E3 live composition.
    TASK queue/read exposure is complete through ARCH-03C7. AUTH-18 public
-   manager guide activation/context is delivered; ARCH-03D hidden intake, hidden exact post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C hidden execution is delivered; ARCH-04D1 canonical material custody is delivered; ARCH-04D2 exact input/execution/finalization authority is delivered; ARCH-04E1A routing-source facts are next.
+   manager guide activation/context is delivered; ARCH-03D hidden intake, hidden exact post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C hidden execution is delivered; ARCH-04D1 canonical material custody is delivered; ARCH-04D2 exact input/execution/finalization authority and ARCH-04E1A source-only facts/types are delivered. Routing authority remains ARCH-04E2 after hidden 04E1B proof and the shared acceptance foundations.
    Remaining work must use its exact owner, not the superseded broad designs.

@@ -12,9 +12,14 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [ARCH-04B2 checker-output custody](../WS-ARCH-001/WS-ARCH-001-04B2.md).
   The CHECKERS zero-slot reservation reader is implemented; checker-output
   write/bind authority remains deny-only.
-- Next usable boundary: ARCH-04E1A routing-source facts after delivered
-  [ARCH-04D2](../WS-ARCH-001/WS-ARCH-001-04D2.md) exact input, execute and finalize authority.
-  Output-file authority remains unavailable for the zero-output catalogue.
+- Delivered dependent boundary: ARCH-04E1A route-neutral source facts retain the
+  exact canonical material lineage supplied after
+  [ARCH-04D2](../WS-ARCH-001/WS-ARCH-001-04D2.md), without a runtime reader,
+  writer or published route. Output-file authority remains unavailable for the
+  zero-output catalogue.
+- Next usable boundary: ARCH-04F checker remediation through existing ART ports,
+  after the shared acceptance and 04E routing sequence; public intake remains a
+  later cutover.
 - Governing sources: artifact specifications, `ArtifactStore`,
   `ArtifactScratchManager`, code, migrations, and artifact tests.
 - Preserve: SHA-256/byte-count identity, reread verification, isolation,
@@ -37,9 +42,9 @@ ART retains the merged default-plus-project intake compiler/executor; POL-07
 is a facade, not a replacement or second precheck run. New unified generations
 must prove exact approved lineage at preparation, consumption and binding.
 
-1. ARCH-04B hidden exact Submission materialization and ARCH-04B2 hidden output
-   custody are delivered. ARCH-04C hidden durable execution is delivered. Continue with
-   fixed-service authority.
+1. ARCH-04B hidden exact Submission materialization, ARCH-04B2 hidden output
+   custody, ARCH-04C hidden durable execution, ARCH-04D2 fixed-service authority
+   and ARCH-04E1A source-only material lineage are delivered.
 2. ARCH-04F owns checker-remediation resubmission using existing ART ports;
    later reviewer-requested revision remains a separate REV boundary. Add those dependencies before public Submission
    cutover.

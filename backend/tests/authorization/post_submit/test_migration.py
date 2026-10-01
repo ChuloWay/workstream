@@ -34,10 +34,10 @@ async def test_actual_upgrade_preserves_or_refuses_without_repair(tmp_path, isol
             before = await retained_snapshot(h.factory)
             if unprovable_receipt:
                 with pytest.raises(IntegrityError, match="retained checker authorization receipts are unprovable"):
-                    await asyncio.to_thread(command.upgrade, _config(), "head")
+                    await asyncio.to_thread(command.upgrade, _config(), "0010_post_submit_authority")
                 assert await retained_snapshot(h.factory) == before
             else:
-                await asyncio.to_thread(command.upgrade, _config(), "head")
+                await asyncio.to_thread(command.upgrade, _config(), "0010_post_submit_authority")
                 after = await retained_snapshot(h.factory)
                 assert after[0] == before[0]
                 assert after[1] == "0010_post_submit_authority"
@@ -67,7 +67,7 @@ async def test_upgrade_excludes_writer_across_receipt_preflight(tmp_path, isolat
                     assert resume.wait(20), "receipt migration scan was not released"
                 return result
             monkeypatch.setattr(Operations, "execute", pause_after_scan)
-            migration = asyncio.create_task(asyncio.to_thread(command.upgrade, _config(), "head"))
+            migration = asyncio.create_task(asyncio.to_thread(command.upgrade, _config(), "0010_post_submit_authority"))
             writer = None
             writer_pid = asyncio.Queue()
             async def write_predecessor_receipt():

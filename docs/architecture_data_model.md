@@ -1745,22 +1745,38 @@ If added later, the readiness certificate records the exact checker run and
 server-generated manifest/binding identity that allowed a submission to enter
 human review.
 
-For v0.1, the final current `CheckerRun` is the checker proof. Planned ARCH-04E
-adds the TASK-owned immutable routing manifest that binds that result, exact
-Submission/binding/policy/authority lineage and evaluation generation, plus a
-separate current routing pointer. TASK publishes manifest, pointer and
-`review_pending` atomically after consuming CHECKERS facts. This is the canonical
-handoff to REV, not an optional signed ReadinessCertificate or a replacement
-authorization system. Its implementation remains planned. Any submitted
-artifact change requires a new Submission and checker run.
+For v0.1, the final current `CheckerRun` is the checker proof. ARCH-04E1A adds
+the TASK-owned immutable `task_post_submit_routing_manifests` table as
+route-neutral source evidence. It binds the exact Submission/assignment/
+contributor/contribution-policy lineage, CHECKERS run/request/generation/result,
+completion event and execute/finalize receipts, locked
+`human_review_required` scalar, and canonical ART material identity. Detached
+`TaskPostSubmitManifestFacts` additionally joins the predecessor, ART admission/
+binding/content anchors and complete locked policy lineage; its sole
+recommendation is `allow_review`, which is evidence rather than permission.
+
+The table has no deployable writer or reader, current pointer, handler, routing
+authority, TASK transition or acceptance effect. `TaskAcceptedEffectsPort` is a
+source-neutral type-only Protocol for a later REV-owned shared acceptance
+operation; no adapter or participant exists yet. The valid storage graph is
+currently limited to true policy. False is proven only as a strict scalar DTO
+value because guide activation still rejects it.
+
+Before publication, ARCH-04E1B/04E2 must harden this same table with mandatory
+exact routing and owner-receipt custody. The migration must refuse every retained
+pre-authority row; it may not backfill, mutate or delete one, and no parallel
+manifest table is allowed. Later routing will publish the hardened source,
+current pointer and `review_pending` transition atomically after currentness and
+authority checks. Any submitted artifact change requires a new Submission and
+checker run.
 
 ## ReviewQueueEntry And ReviewLease
 
 `ReviewQueueEntry` immutably anchors one exact finalized Submission/version,
 Task, project, and its current successful `allow_review` CheckerRun. The 03A1
-foundation does not yet implement the later ARCH-04E routing-manifest input;
-live admission must consume that exact TASK handoff while retaining these
-immutable CheckerRun/binding anchors. This adoption is an upstream dependency,
+foundation does not yet consume the delivered ARCH-04E1A source table;
+live admission must consume its later authority-hardened TASK handoff while
+retaining these immutable CheckerRun/binding anchors. This adoption is an upstream dependency,
 not activation of REV behavior. The 03A1
 foundation persists only `pending` and `closed` queue state plus open/preferred
 routing metadata; it exposes no route, selection behavior, or lease shape.

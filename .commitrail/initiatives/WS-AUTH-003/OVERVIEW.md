@@ -8,9 +8,14 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Completed boundary: recovery foundation and [TASK/checker authorization cleanup](WS-AUTH-003-TASKCHECKER.md).
 - Intent: route public authorization capability through `authorization.api`
   and remove cross-module repository/model coupling.
-- Next usable boundary: ARCH-04E1A routing-source facts after delivered ARCH-04D2 exact service authority, ARCH-04C hidden execution and ARCH-04B
-  hidden input, [ARCH-04B2 output custody](../WS-ARCH-001/WS-ARCH-001-04B2.md), ARCH-03D hidden intake and
-  [AUTH-18 public manager activation](../WS-AUTH-001/WS-AUTH-001-18.md).
+- Delivered dependent boundary: ARCH-04E1A route-neutral source facts and
+  source-neutral accepted-effects types follow ARCH-04D2 exact service authority,
+  ARCH-04C hidden execution, ARCH-04B hidden input,
+  [ARCH-04B2 output custody](../WS-ARCH-001/WS-ARCH-001-04B2.md), ARCH-03D hidden
+  intake and [AUTH-18 public manager activation](../WS-AUTH-001/WS-AUTH-001-18.md).
+  They install no routing action, handler or runtime composition.
+- Next usable boundary: continue canonical boundary recovery through the shared
+  REV/CON/fence foundations and later ARCH-04E1B/04E2/04E3 routing sequence.
   Submission/checker history uses canonical authority; the alternate gate lifecycle
   is removed. Continue shrinking the canonical import ledger as implementation
   reaches each remaining consumer.
