@@ -337,36 +337,45 @@ async def test_source_rejects_ineligible_checker_source(tmp_path, isolated_datab
 async def test_source_rejects_unactivated_guide(tmp_path, isolated_database_env):
     async with completed_source(tmp_path, isolated_database_env) as h:
         async with h.factory() as session:
-            guide = await session.scalar(
-                select(ProjectGuide).where(
-                    ProjectGuide.project_id == str(h.source["project_id"]),
-                    ProjectGuide.version == h.request.expected_context.guide_version,
+            transaction = await session.begin()
+            try:
+                guide = await session.scalar(
+                    select(ProjectGuide).where(
+                        ProjectGuide.project_id == str(h.source["project_id"]),
+                        ProjectGuide.version == h.request.expected_context.guide_version,
+                    )
                 )
-            )
-            assert guide.status == "active"
-            await session.execute(
+                guide_id = guide.id
+                activation_operation_id = guide.activation_operation_id
+                assert guide.status == "active"
+                await session.execute(
+                    text(
+                        "ALTER TABLE public.project_guides "
+                        "DISABLE TRIGGER guide_lineage_lifecycle_guard"
+                    )
+                )
+                await session.execute(
+                    text("UPDATE public.project_guides SET status='draft' WHERE id=:id"),
+                    {"id": guide.id},
+                )
+                await _reject(session, h.source, "guide activation mismatch")
+                assert await source_count(session) == 0
+            finally:
+                await transaction.rollback()
+
+        async with h.factory() as session, session.begin():
+            restored = await session.get(ProjectGuide, guide_id)
+            trigger_enabled = await session.scalar(
                 text(
-                    "ALTER TABLE public.project_guides "
-                    "DISABLE TRIGGER guide_lineage_lifecycle_guard"
+                    "SELECT tgenabled='O' FROM pg_trigger "
+                    "WHERE tgrelid='public.project_guides'::regclass "
+                    "AND tgname='guide_lineage_lifecycle_guard'"
                 )
             )
-            await session.execute(
-                text("UPDATE public.project_guides SET status='draft' WHERE id=:id"),
-                {"id": guide.id},
-            )
-            await _reject(session, h.source, "guide activation mismatch")
-            await session.execute(
-                text("UPDATE public.project_guides SET status='active' WHERE id=:id"),
-                {"id": guide.id},
-            )
+            assert trigger_enabled is True
+            assert restored.status == "active"
+            assert restored.activation_operation_id == activation_operation_id
             await insert_source(session, h.source)
-            await session.execute(
-                text(
-                    "ALTER TABLE public.project_guides "
-                    "ENABLE TRIGGER guide_lineage_lifecycle_guard"
-                )
-            )
-            await session.commit()
         async with h.factory() as session:
             assert await source_count(session) == 1
 

@@ -38,6 +38,7 @@ remain distinct and cannot authorize routing.
 - `backend/app/modules/tasks/api/__init__.py`
 - `backend/app/db/models.py`
 - `backend/alembic/versions/0011_task_routing_source.py`
+- `backend/alembic/env.py` (advance the exact accepted migration-head inventory)
 - `backend/tests/tasks/post_submit_routing/__init__.py`
 - `backend/tests/tasks/post_submit_routing/support.py`
 - `backend/tests/tasks/post_submit_routing/test_contracts.py`
