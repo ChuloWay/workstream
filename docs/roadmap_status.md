@@ -494,8 +494,9 @@ The next dependency-safe product sequence is:
    correction feedback for blocking intake failures and publishes ready admission
    only after the required preparation/custody checks; the existing TASK creation
    operation consumes that admission with the assignment's locked lineage.
-4. **Start the live REV path.** Complete packet, Review, and FinalAcceptance
-   persistence; admit only canonical `allow_review`; claim a bounded lease and
+4. **Start the live REV path.** Reuse the packet, Review and FinalAcceptance
+   storage completed before the automated path. Admit only canonical
+   `allow_review`; claim a bounded lease and
    exact packet using the Submission-stamped ContributionPolicyVersion.
 5. **Make human review decisions economically complete.** Before the first live
    Review commit, add the reviewer CON operation and reuse the shared acceptance

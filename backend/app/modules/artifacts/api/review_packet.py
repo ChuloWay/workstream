@@ -20,7 +20,7 @@ class ReviewPacketMembershipUnavailable(RuntimeError):
 class ReviewPacketMembershipRequest(BaseModel):
     """Locked scope; result_id names CheckerRun.result_id, not CheckerResult.id."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     project_id: UUID
     task_id: UUID
@@ -45,7 +45,7 @@ class ReviewPacketMembershipRequest(BaseModel):
 class ReviewSubmissionMember(BaseModel):
     """Required original ZIP; binding_id identifies ART's artifact_bindings row."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     binding_id: UUID
     logical_role: Literal["submission_bundle_original"]
@@ -55,7 +55,7 @@ class ReviewSubmissionMember(BaseModel):
 class ReviewGuideMember(BaseModel):
     """Required original document from ART's guide_source_artifact_bindings."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     guide_binding_id: UUID
     source_item_id: UUID
@@ -67,7 +67,7 @@ class ReviewGuideMember(BaseModel):
 class ReviewPacketMembership(BaseModel):
     """Complete metadata shape; stored ownership/completeness need owner resolution."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     request: ReviewPacketMembershipRequest
     submission: ReviewSubmissionMember

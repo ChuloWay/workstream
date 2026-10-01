@@ -30,7 +30,7 @@ def packet() -> dict:
             "binding_id": UUID(int=9), "logical_role": "submission_bundle_original",
             "media_type": "application/zip",
         },
-        "guide_documents": [guide(0), guide(2)],
+        "guide_documents": (guide(0), guide(2)),
     }
 
 
@@ -162,9 +162,31 @@ def test_independent_duplicate_membership_rejected(attribute: str) -> None:
 def test_canonical_order_and_document_count_bounds() -> None:
     raw = packet()
     with pytest.raises(ValidationError, match="source order"):
-        ReviewPacketMembership.model_validate({**raw, "guide_documents": list(reversed(raw["guide_documents"]))})
+        ReviewPacketMembership.model_validate({**raw, "guide_documents": tuple(reversed(raw["guide_documents"]))})
     for count in (1, 100):
-        assert len(ReviewPacketMembership.model_validate({**raw, "guide_documents": [guide(i) for i in range(count)]}).guide_documents) == count
+        assert len(ReviewPacketMembership.model_validate({**raw, "guide_documents": tuple(guide(i) for i in range(count))}).guide_documents) == count
     for count in (0, 101):
         with pytest.raises(ValidationError):
-            ReviewPacketMembership.model_validate({**raw, "guide_documents": [guide(i) for i in range(count)]})
+            ReviewPacketMembership.model_validate({**raw, "guide_documents": tuple(guide(i) for i in range(count))})
+
+
+def test_python_uuid_strings_rejected_at_each_nested_boundary() -> None:
+    """JSON is decoded at its boundary; Python callers must supply native UUIDs."""
+    raw = packet()
+    ReviewPacketMembership.model_validate(raw)
+    for scope, fields in (
+        ("request", ("project_id", "task_id", "submission_id", "checker_run_id",
+                     "result_id", "guide_id", "source_snapshot_id", "project_setup_run_id")),
+        ("submission", ("binding_id",)),
+        ("guide", ("guide_binding_id", "source_item_id")),
+    ):
+        for field in fields:
+            changed = deepcopy(raw)
+            nested = changed["guide_documents"][0] if scope == "guide" else changed[scope]
+            nested[field] = str(nested[field])
+            with pytest.raises(ValidationError) as caught:
+                ReviewPacketMembership.model_validate(changed)
+            assert len(caught.value.errors()) == 1
+            assert caught.value.errors()[0]["type"] == "is_instance_of"
+            expected_location = ("guide_documents", 0, field) if scope == "guide" else (scope, field)
+            assert caught.value.errors()[0]["loc"] == expected_location
