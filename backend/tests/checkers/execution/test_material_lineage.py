@@ -132,3 +132,33 @@ async def test_temporary_tables_cannot_replace_canonical_material(
                 "SELECT status, material_custody FROM public.checker_runs WHERE id=:id"
             ), {"id": facts.result.attempt_id})).one()
             assert row.status == outcome and row.material_custody == canonical
+
+
+async def test_canonical_validator_binds_numeric_version_argument(tmp_path, isolated_database_env):
+    from sqlalchemy import text
+
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        await reserve(h)
+        lease, _ = await controlled_executor(h)._claim(h.request)
+        facts = final_facts(h, lease)
+        parameters = {
+            "project": h.request.project_id,
+            "task": h.request.task_id,
+            "submission": h.request.submission_id,
+            "version": facts.material.submission_version,
+            "material": facts.material.model_dump_json(),
+        }
+        query = text(
+            "SELECT public.art_submission_material_matches("
+            ":project, :task, :submission, :version, CAST(:material AS jsonb))"
+        )
+        async with h.factory() as session:
+            assert await session.scalar(query, parameters) is True
+            # Preserve every canonical material fact; only the scalar input differs.
+            wrong_version = parameters["version"] + 1
+            assert await session.scalar(query, parameters | {"version": wrong_version}) is False
+            # The JSON version is independently bound to the same canonical row.
+            wrong_material = facts.material.model_copy(update={"submission_version": wrong_version})
+            assert await session.scalar(query, parameters | {
+                "material": wrong_material.model_dump_json(),
+            }) is False

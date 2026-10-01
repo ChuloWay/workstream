@@ -113,6 +113,11 @@ controlled 04D1 phase participants do not constitute that proof.
 
 ## Acceptance criteria
 
+- A direct call to the canonical SQL validator rejects a different numeric
+  version argument even when all material facts are valid, and independently
+  rejects a substituted material version. The exact canonical control succeeds.
+  Bind the scalar version argument explicitly to avoid column-name precedence.
+
 - Direct SQL with hostile temporary CHECKERS or ART shadow tables still rejects
   forged terminal material at commit for both outcomes, rolls back all terminal
   facts, and permits an otherwise valid canonical control. The regression must
@@ -172,7 +177,9 @@ prerequisite; merge remains a separate human action.
   outcomes; closed typed material rejects numeric strings and additional keys;
   terminal/member/event rollback preserves the running attempt. Temporary-table
   substitution of the CHECKERS row or ART ancestry is rejected at commit, while
-  valid material commits under the same session environment.
+  valid material commits under the same session environment. A direct scalar call
+  rejects a different numeric version argument independently of the material
+  version and the checker row’s composite foreign key.
 - `test_material_migration.py`: valid superseded history and null-material failure
   survive upgrade, later replica loss or current replica reassignment preserves
   the immutable admission identity, invalid retained rows

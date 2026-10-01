@@ -34,7 +34,8 @@ SET search_path = pg_catalog, pg_temp AS $$
         JOIN public.artifact_bindings b ON b.id=s.artifact_binding_id
         JOIN public.artifact_contents c ON c.id=s.artifact_content_id
         WHERE s.id=submission AND s.task_id=task AND t.project_id=project
-          AND s.version=version
+          -- Bind the argument explicitly; an unqualified version names s.version.
+          AND s.version=$4
           AND a.status='consumed' AND a.consumed_by_submission_id=s.id
           AND a.consumed_by_submission_version=s.version
           AND a.project_id=project AND a.task_id=s.task_id
