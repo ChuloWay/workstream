@@ -273,7 +273,10 @@ async def joined_source_facts(h, stored: dict) -> TaskPostSubmitManifestFacts:
         ),
     )
     return TaskPostSubmitManifestFacts(
-        **{column: stored[column] for column in SOURCE_COLUMNS},
+        **{
+            column: as_uuid(stored[column]) if column.endswith("_id") else stored[column]
+            for column in SOURCE_COLUMNS
+        },
         predecessor_submission_id=(
             as_uuid(submission.supersedes_submission_id)
             if submission.supersedes_submission_id

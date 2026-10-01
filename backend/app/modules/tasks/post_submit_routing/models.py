@@ -84,14 +84,14 @@ class TaskPostSubmitRoutingManifest(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.clock_timestamp()
     )
-    project_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
-    task_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
-    submission_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
+    project_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    task_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    submission_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     submission_version: Mapped[int] = mapped_column(Integer, nullable=False)
-    assignment_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
-    contributor_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
+    assignment_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    contributor_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     contribution_policy_version_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
-    checker_run_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
+    checker_run_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     evaluation_request_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
     request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
     evaluation_generation: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -106,8 +106,8 @@ class TaskPostSubmitRoutingManifest(Base):
         ),
         nullable=False,
     )
-    execute_evidence_id: Mapped[UUID] = mapped_column(
-        Uuid(),
+    execute_evidence_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False),
         ForeignKey(
             "audit_events.id",
             name="fk_task_routing_manifest_execute_evidence",
@@ -115,8 +115,8 @@ class TaskPostSubmitRoutingManifest(Base):
         ),
         nullable=False,
     )
-    finalize_evidence_id: Mapped[UUID] = mapped_column(
-        Uuid(),
+    finalize_evidence_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False),
         ForeignKey(
             "audit_events.id",
             name="fk_task_routing_manifest_finalize_evidence",
@@ -125,8 +125,8 @@ class TaskPostSubmitRoutingManifest(Base):
         nullable=False,
     )
     human_review_required: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    replica_id: Mapped[UUID] = mapped_column(
-        Uuid(),
+    replica_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False),
         ForeignKey(
             "artifact_replicas.id",
             name="fk_task_routing_manifest_replica",

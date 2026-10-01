@@ -98,7 +98,10 @@ async def test_source_matches_real_completed_run(tmp_path, isolated_database_env
 
         assert set(values) == set(SOURCE_COLUMNS)
         assert before <= values["created_at"] <= after
-        assert facts.model_dump(include=set(SOURCE_COLUMNS)) == values
+        assert facts.model_dump(include=set(SOURCE_COLUMNS)) == {
+            column: as_uuid(value) if column.endswith("_id") else value
+            for column, value in values.items()
+        }
         assert facts.project_id == h.request.project_id
         assert facts.task_id == h.request.task_id
         assert facts.assignment_id == h.request.assignment_id

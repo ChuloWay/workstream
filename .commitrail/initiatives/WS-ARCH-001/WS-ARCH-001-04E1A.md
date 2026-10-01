@@ -108,7 +108,8 @@ than backfill, mutate or delete them. No pending state or nullable future receip
 Every persisted column below is non-null. `id` uses UUIDv7; creation time is
 PostgreSQL insertion time, unconditionally stamped by the insert guard even
 when the caller supplies a past, future or null timestamp. All record
-keys/references are native UUID.
+keys/references are native UUID. ORM references preserve each existing owner's
+string or Python UUID representation; the detached API uses strict Python UUIDs.
 
 | Persisted fields | Canonical equality |
 |---|---|
@@ -231,7 +232,7 @@ Use the existing isolated runner with locally configured test PostgreSQL/MinIO;
 never commit credentials. From `backend/`:
 
 ```sh
-.venv/bin/python scripts/run_isolated_tests.py --metadata-json /tmp/arch04e1a-tests.json --timeout-seconds 1200 -- .venv/bin/python -m pytest tests/tasks/post_submit_routing -q --tb=short
+.venv/bin/python scripts/run_isolated_tests.py --metadata-json /tmp/arch04e1a-tests.json --timeout-seconds 1200 -- .venv/bin/python -m pytest tests/tasks/post_submit_routing tests/test_identifier_schema.py -q --tb=short
 .venv/bin/ruff check app/modules/tasks/api/post_submit_routing.py app/modules/tasks/api/accepted_effects.py app/modules/tasks/post_submit_routing/models.py tests/tasks/post_submit_routing alembic/versions/0011_task_routing_source.py
 .venv/bin/python -m scripts.module_boundaries validate --protected-base origin/main
 .venv/bin/python -m scripts.behavior_ownership validate
