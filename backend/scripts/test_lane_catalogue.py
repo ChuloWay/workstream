@@ -67,9 +67,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_identifier_schema_postgresql.py",
     "tests/test_record_id_collection.py",
     "tests/test_app.py",
-    "tests/test_artifact_architecture.py",
     "tests/architecture/test_authorization_boundary.py",
-    "tests/architecture/test_module_boundaries.py",
     "tests/architecture/test_cp04a_file_structure.py",
     "tests/architecture/test_test_structure_boundary.py",
     "tests/test_artifact_authorization.py",
@@ -481,6 +479,8 @@ LANES = (
         (
             SCHEMA_MODULE,
             "tests/test_database_reset.py",
+            "tests/test_artifact_architecture.py",
+            "tests/architecture/test_module_boundaries.py",
             ADMIN_RUNNER_MODULE,
         ),
     ),

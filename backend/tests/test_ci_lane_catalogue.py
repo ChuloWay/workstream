@@ -284,11 +284,16 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/authorization/setup_finalization/test_resource_context.py",
         "tests/authorization/setup_finalization/test_structure.py",
     }.issubset(shared_a)
+    static_contracts = {
+        "tests/test_artifact_architecture.py",
+        "tests/architecture/test_module_boundaries.py",
+    }
+    assert static_contracts.isdisjoint(shared_a | shared_b)
     assert {
         "tests/test_alembic.py",
         "tests/test_database_reset.py",
         runner.ADMIN_RUNNER_MODULE,
-    } == modules_by_lane["schema_contracts"]
+    } | static_contracts == modules_by_lane["schema_contracts"]
     assert {
         "tests/authorization/admin_access/test_bootstrap_cli.py",
         "tests/authorization/admin_access/test_api_journey.py",
