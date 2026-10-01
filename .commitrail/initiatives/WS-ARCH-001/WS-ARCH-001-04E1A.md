@@ -52,8 +52,15 @@ remain distinct and cannot authorize routing.
 - `.ci/behavior-ownership/partition.v1.json` (three additive TASK module registrations and digest)
 
 Reuse `tests/post_submit_materialization_helpers.py`, the real live executor and
-existing guide/policy fixtures without changing their behavior. No false-policy
-fixture extension is allowed; current activation forbids that graph.
+existing guide/policy fixtures without changing their behavior. In the new local
+`support.py`, replace the helper's default request before reservation using
+`make_post_submit_request`: retain its exact project/task/assignment/Submission,
+content/binding and verified bytes, and supply archive-backed
+`PostSubmitEvidenceEntry` values plus matching required-evidence policy inputs
+derived from the locked effective policy. Reserve and execute that canonically
+rehashed request; require `allow_review` explicitly in the valid control. The
+helper's empty evidence/default policy inputs are not a success fixture. No
+false-policy fixture extension is allowed; current activation forbids that graph.
 
 ### Allowed documentation and navigation files
 
