@@ -161,6 +161,12 @@ def test_independent_duplicate_membership_rejected(attribute: str) -> None:
 
 def test_canonical_order_and_document_count_bounds() -> None:
     raw = packet()
+    ReviewPacketMembership.model_validate(raw)
+    with pytest.raises(ValidationError) as caught:
+        ReviewPacketMembership.model_validate({**raw, "guide_documents": list(raw["guide_documents"])})
+    assert len(caught.value.errors()) == 1
+    assert caught.value.errors()[0]["type"] == "tuple_type"
+    assert caught.value.errors()[0]["loc"] == ("guide_documents",)
     with pytest.raises(ValidationError, match="source order"):
         ReviewPacketMembership.model_validate({**raw, "guide_documents": tuple(reversed(raw["guide_documents"]))})
     for count in (1, 100):
