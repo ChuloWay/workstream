@@ -132,3 +132,36 @@ async def test_revoked_after_consumer_cannot_publish(tmp_path, isolated_database
         finally:
             release.set()
             await asyncio.gather(operation, return_exceptions=True)
+
+
+@pytest.mark.parametrize("field", ["attempt_id", "result_id", "evaluation_request_id", "evaluation_generation", "project_id"])
+async def test_execution_identity_substitution_denies_before_material_access(tmp_path, isolated_database_env, field):
+    async with material_fixture(tmp_path / "one", isolated_database_env) as h:
+        async with material_fixture(tmp_path / "two", isolated_database_env,
+                                    provision_services=False, storage_settings=h.settings) as other:
+            facts = await material_execution(h)
+            foreign = await material_execution(other)
+            request, reservation = facts.request, facts.lease.reservation
+            if field in {"attempt_id", "result_id"}:
+                reservation = reservation.model_copy(update={field: getattr(foreign.lease.reservation, field)})
+            elif field == "project_id":
+                request = change_request(request, project_id=other.request.project_id,
+                    policy=other.request.policy, expected_context=other.request.expected_context,
+                    structural_input=other.request.structural_input)
+            elif field == "evaluation_request_id":
+                request = change_request(request, evaluation_request_id=other.request.evaluation_request_id)
+            else:
+                request = change_request(request, evaluation_generation=request.evaluation_generation + 1)
+            reservation = reservation.model_copy(update={
+                "request_digest": request.request_sha256, "request_id": request.evaluation_request_id,
+                "evaluation_generation": request.evaluation_generation,
+            })
+            mixed = ExecuteFacts(request=request, lease=facts.lease.model_copy(update={"reservation": reservation}))
+            before = await snapshot(h)
+            consumer = Consumer(h.files)
+            with pytest.raises(PostSubmissionMaterializationUnavailable):
+                await h.service.materialize(mixed, consumer)
+            assert await snapshot(h) == before
+            assert not h.store.opens and consumer.calls == 0 and not h.preparation._active
+            await h.service.materialize(facts, consumer)
+            assert consumer.calls == 1

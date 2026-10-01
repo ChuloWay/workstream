@@ -1,7 +1,7 @@
 """Canonical ART membership is enforced at commit, including retained failed runs."""
 
 import pytest
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from sqlalchemy.exc import IntegrityError
 
 from app.modules.checkers.models import CheckerRun, CheckerResult
@@ -46,11 +46,12 @@ async def test_foreign_canonical_material_is_rejected_at_commit(tmp_path, isolat
             for field, value in substitutions.items():
                 assert canonical.get(field) != value
                 async with h.factory() as session:
-                    await write_terminal(session, facts, canonical | {field: value})
-                    # Only commit invokes the deferred guard; preceding member and
-                    # event inserts/terminal UPDATE all completed successfully.
+                    await write_terminal(session, facts, canonical | {field: value},
+                                         authorized_facts=facts if field in {"submission_version", "byte_count", "unexpected"} else None)
+                    # Force this deferred guard before receipt validation so its
+                    # rejection cannot be substituted by a different constraint.
                     with pytest.raises(IntegrityError, match="checker material canonical ART lineage mismatch"):
-                        await session.commit()
+                        await session.execute(text("SET CONSTRAINTS public.checker_material_lineage IMMEDIATE"))
                     await session.rollback()
                 async with h.factory() as session:
                     run = await session.get(CheckerRun, str(facts.result.attempt_id))

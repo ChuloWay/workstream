@@ -24,7 +24,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   post-policy derivation, public complete policy read, separate approval and correction;
   ART-owned pre-submit reservation and completed evidence recovery without rerunning checks;
   one internal command per phase and removal of the standalone JSON precheck.
-  Production post-submit phase execution remains unavailable.
+  Exact hidden post-submit execution authority is delivered; automatic dispatch
+  and routing remain unavailable.
 - Intent: compile one locked guide and its policies into authoritative,
   versioned project behavior without circular subsystem authority.
 - Next usable boundary: ARCH-04E1A routing-source facts after delivered

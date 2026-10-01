@@ -3,7 +3,7 @@
 import asyncio
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.post_submit_authorization import _PreparedFinalize
@@ -46,19 +46,24 @@ async def test_revocation_and_finalization_serialize(tmp_path, isolated_database
         else:
             first = asyncio.create_task(revoke_while_held())
         second = None
+        waiting_pid = asyncio.Queue()
+        def capture_waiter(connection, cursor, statement, parameters, context, executemany):
+            if asyncio.current_task() is second and ("FOR UPDATE" in statement or statement.lstrip().lower().startswith("update actor_identity_links")):
+                waiting_pid.put_nowait(connection.connection.driver_connection.get_server_pid())
+        event.listen(h.engine.sync_engine, "before_cursor_execute", capture_waiter)
         try:
             await asyncio.wait_for(held.wait(), 10)
             second = asyncio.create_task(
                 service_link_state(h.factory, ServiceIdentity.CHECKER_POST_SUBMIT, active=False)
                 if finalization_first else executor.finalize(facts)
             )
+            pid = await asyncio.wait_for(waiting_pid.get(), 5)
             blocked = False
             async with h.factory() as observer:
                 for _ in range(100):
-                    blocked = bool(await observer.scalar(text("""SELECT EXISTS (
-                        SELECT 1 FROM pg_stat_activity WHERE datname=current_database()
-                          AND pid<>pg_backend_pid() AND cardinality(pg_blocking_pids(pid))>0
-                          AND query ILIKE '%actor_identity_links%')""")))
+                    blocked = bool(await observer.scalar(text(
+                        "SELECT cardinality(pg_blocking_pids(:pid))>0"
+                    ), {"pid": pid}))
                     if blocked or second.done():
                         break
                     await asyncio.sleep(0.02)
@@ -81,3 +86,4 @@ async def test_revocation_and_finalization_serialize(tmp_path, isolated_database
         finally:
             release.set()
             await asyncio.gather(first, *([second] if second else []), return_exceptions=True)
+            event.remove(h.engine.sync_engine, "before_cursor_execute", capture_waiter)

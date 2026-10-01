@@ -436,6 +436,9 @@ expected = {
 
 
 AUDIT_ALLOWED_ACTION_VALUES = {
+    "checker.post_submit.execute",
+    "checker.post_submit.finalize",
+    "artifact.post_submit.checker_input.materialize",
     "task.submission.list",
     "submission.read",
     "submission.checker_run.list",

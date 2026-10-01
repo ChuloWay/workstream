@@ -211,7 +211,8 @@ async def test_consistently_short_result_cannot_omit_selected_policy_member(
     from app.modules.outbox.models import OutboxEvent
     from app.modules.checkers.api.execution import COMPLETION_EVENT
     from sqlalchemy import func
-    import app.modules.checkers.execution as execution
+    from sqlalchemy import text
+    from . import material_storage_helpers
 
     async with material_fixture(tmp_path, isolated_database_env) as h:
         await reserve(h)
@@ -227,15 +228,20 @@ async def test_consistently_short_result_cannot_omit_selected_policy_member(
         # Simulate a faulty validator/compiler accepting a self-consistent short
         # result. Persisted members, counts, result digest and event all agree;
         # only comparison with the locked policy's selected set can reject it.
-        canonical = execution.classify_result
+        canonical = material_storage_helpers.classify_result
 
         def faulty_classifier(request, result):
             assert request == h.request and result == short
             return ResultClassification("allow_review", len(short.member_results), 0, 0, 0)
 
-        monkeypatch.setattr(execution, "classify_result", faulty_classifier)
-        with pytest.raises(IntegrityError, match="checker completed custody or routing invalid"):
-            await executor.finalize(facts)
+        monkeypatch.setattr(material_storage_helpers, "classify_result", faulty_classifier)
+        async with h.factory() as session:
+            await material_storage_helpers.write_terminal(
+                session, facts, facts.material.model_dump(mode="json"), authorized_facts=valid,
+            )
+            with pytest.raises(IntegrityError, match="checker completed custody or routing invalid"):
+                await session.execute(text("SET CONSTRAINTS public.checker_terminal_custody IMMEDIATE"))
+            await session.rollback()
         async with h.factory() as session:
             assert (
                 await session.get(CheckerRun, str(lease.reservation.attempt_id))
@@ -249,13 +255,13 @@ async def test_consistently_short_result_cannot_omit_selected_policy_member(
                 )
                 == 0
             )
-        monkeypatch.setattr(execution, "classify_result", canonical)
+        monkeypatch.setattr(material_storage_helpers, "classify_result", canonical)
         assert await executor.finalize(valid) == valid.result
 
 
 async def test_infrastructure_failure_code_is_closed_in_database(tmp_path, isolated_database_env):
     import json
-    from sqlalchemy import update, func
+    from sqlalchemy import update, func, text
     from app.core.hashing import canonical_json_hash
     from app.modules.checkers.post_submit_contracts import make_post_submit_result
 
@@ -286,6 +292,7 @@ async def test_infrastructure_failure_code_is_closed_in_database(tmp_path, isola
                 )
                 with pytest.raises(IntegrityError, match="infrastructure terminal shape invalid"):
                     await session.execute(statement)
+                    await session.execute(text("SET CONSTRAINTS public.checker_terminal_custody IMMEDIATE"))
                 await session.rollback()
                 run = await session.get(CheckerRun, str(result.attempt_id))
                 assert run.status == "running" and run.result_json is None

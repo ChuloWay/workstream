@@ -264,6 +264,8 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/authorization/post_submit/test_live_authority.py",
         "tests/authorization/post_submit/test_migration.py",
         "tests/authorization/post_submit/test_receipt_custody.py",
+        "tests/authorization/post_submit/test_principals.py",
+        "tests/authorization/post_submit/test_timeout.py",
         "tests/authorization/post_policy/test_concurrency.py",
         "tests/authorization/post_policy/test_context.py",
         "tests/authorization/post_policy/test_prepared.py",

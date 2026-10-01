@@ -193,10 +193,9 @@ delivers output custody proof; ARCH-04C delivers hidden durable execution proof.
 requires independent admission/replica/manifest substitution rejection at durable
 finalization before activation.
 
-These are required future implementation tests, not tests claimed present or
-executed by this planning PR. Each owner's bounded record fixes the final
-module path alongside implementation; the symbols preserve the behavioral
-obligation. Run them through `cd backend && uv run pytest <owner-test-file>`
+The delivered 04C/04D2 row names implemented proof. Other rows retain future
+implementation obligations; each owner's bounded record fixes its final module
+path and compatible execution evidence. Run them through `cd backend && uv run pytest <owner-test-file>`
 and the unchanged hosted suite/coverage gates. Database, I/O and concurrency
 claims require their real custody, not unit substitutes.
 
@@ -208,7 +207,7 @@ claims require their real custody, not unit substitutes.
 | ARCH-04A/POL-07 | `test_registered_evaluator_rejects_invalid_work`, `test_checker_facade_delegates_once` | Actual registered evaluator fixtures and typed composition; presence-only mutant must fail |
 | CP06/CP07/AUTH-12H | `test_activate_without_legacy_payment_or_task`, `test_activation_requires_exact_selected_policy`, `test_activation_rejects_missing_review_revision_config` | PostgreSQL atomic command plus full response serialization; foreign/retired/incomplete new binding denies |
 | CP08/ARCH-03A/03B/03C | `test_ready_preserves_screening_policy_lock`, `test_claim_copies_policy_without_current_lookup` | PostgreSQL and actual AUTH/owner composition; later publication leaves existing attempt unchanged |
-| ARCH-04C/04D2 | `test_late_revocation_cannot_publish_result`, `test_unfinished_checker_recovery_reuses_attempt`, `test_terminal_retry_requires_operator_and_new_attempt` | Consume delivered 04B2 custody; Local/MinIO, real worker/provider contract and PostgreSQL races; independent sessions and staged/final state |
+| ARCH-04C/04D2 | `test_revoked_after_consumer_cannot_publish`, `test_outer_deadline_revalidates_material_after_cleanup`, `test_terminal_replay_validates_both_stored_receipts_without_side_effects`, `test_stale_worker_cannot_finalize_after_takeover` | Consume delivered 04B2 custody; Local/MinIO, real worker/provider contract and PostgreSQL races; independent sessions and staged/final state |
 | ARCH-04E | `test_submission_to_current_allow_review`, `test_superseded_run_cannot_route`, `test_duplicate_dispatch_has_one_manifest`; false tests in the shared acceptance contract | Real DB/worker/storage path, exact authority-event references; true creates no acceptance, false creates the shared atomic acceptance with no human Review |
 
 Owner-local schema names and migrations are chosen from the then-current

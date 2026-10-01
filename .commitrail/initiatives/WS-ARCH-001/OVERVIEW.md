@@ -12,9 +12,9 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   [ARCH-04A consolidation](WS-ARCH-001-04A.md) canonical post-submit contracts/conformance.
 - Intent: keep product modules behind explicit ports and composition roots.
 - Current boundary: one CHECKERS catalogue, compiler/parser and implementation
-  per checker ID serve active policy consumers; production post-submit phase
-  execution remains unavailable.
-- Delivered storage boundary: hidden [ARCH-04B2 checker-output custody](WS-ARCH-001-04B2.md), following hidden input materialization (ARCH-04B). Typed store, byte-free recovery and flush-only verified binding exist; the CHECKERS zero-slot reservation reader is implemented; production authority remains deny-only.
+  per checker ID serve active policy consumers; hidden post-submit execution now
+  has exact fixed-service authority. Automatic dispatch/routing remains unavailable.
+- Delivered storage boundary: hidden [ARCH-04B2 checker-output custody](WS-ARCH-001-04B2.md), following hidden input materialization (ARCH-04B). Typed store, byte-free recovery and flush-only verified binding exist; the CHECKERS zero-slot reservation reader is implemented; output write/bind authority remains unavailable.
 - Next usable boundary: ARCH-04E1A routing-source facts after delivered
   [ARCH-04D2](WS-ARCH-001-04D2.md) exact input, execute and finalize authority.
   Output-file authority remains unavailable for the zero-output catalogue.
@@ -36,8 +36,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   completed [ARCH-03B8](WS-ARCH-001-03B8.md) hidden task audit evidence and [ARCH-03B7](WS-ARCH-001-03B7.md) requirements projections and [ARCH-03B6](WS-ARCH-001-03B6.md) locked-context projections and [ARCH-03B5](WS-ARCH-001-03B5.md) current contributor/manager work context and ARCH-03B4 hidden contributor/management task detail, ARCH-03B3 hidden management/operational queues and ARCH-03B2 contributor-ready queue facts, ARCH-03B1 detached metadata and CP08 lineage
   and minimal writers and ARCH-03A internal guide context, following delivered CP07 activation and AUTH-12H live manager authority. POL-04B unified setup, POL-05/06
   manager operations and POL-07B internal phase composition are delivered.
-  The production post-submit phase remains unavailable until its separately
-  sequenced ART/CHECKER/AUTH execution boundaries land.
+  Exact hidden post-submit execution authority is delivered; automatic dispatch,
+  routing and public intake remain subsequent boundaries.
 - Governing sources: `docs/architecture_lockdown.md`, accepted ADRs, code, and
   architecture tests.
 - Preserve: no concrete-adapter imports in product services and no duplicate

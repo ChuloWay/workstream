@@ -406,6 +406,7 @@ async def delete_audit_fixture_as_owner(session: AsyncSession, event_id: str) ->
         text("delete from audit_events where id = :event_id"),
         {"event_id": event_id},
     )
+    await session.execute(text("set constraints all immediate"))
     await session.execute(
         text("alter table audit_events enable trigger audit_events_reject_update_delete")
     )

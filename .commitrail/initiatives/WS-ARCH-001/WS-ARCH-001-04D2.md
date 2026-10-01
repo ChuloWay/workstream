@@ -168,6 +168,8 @@ no production compatibility path or repository-wide cleanup prerequisite.
   helpers, and their retained-history/task/review-queue consumers for real
   authority receipt custody and required leased-materialization calls. Preserve
   every distinct isolation, privacy, lineage and historical-material assertion.
+- `mcp_server/contracts/authorization_context_get.json` for the existing MCP
+  consumer's exact action-enum snapshot; no MCP tool or permission expansion.
 - Existing behavior-ownership, module-boundary, lane catalogue and test-structure
   inventories/tests only to register real changed owners and proof; no gate
   weakening or unrelated CI refactoring.
@@ -175,6 +177,8 @@ no production compatibility path or repository-wide cleanup prerequisite.
   navigation, Commitrail index, README, checker/artifact/authorization/data-model
   specifications, architecture/operating documents, authorization custody page,
   current system data-flow HTML and roadmap for affected capability claims.
+  Include the architecture brief source diagrams and their rendered SVG/PNG/PDF
+  exports so current diagrams agree with the same authority boundary.
   Local roadmap exports only if present.
 
 ### Prohibited changes
@@ -210,6 +214,11 @@ Named proof atoms in `tests/authorization/post_submit/`:
   and one provider read; materializer revocation denies its post-I/O receipt check.
 - `test_revoked_after_consumer_cannot_publish[workstream.checker.post_submit]`: materializer remains
   active and completes revalidation; checker revocation denies finalization.
+- `test_execution_identity_substitution_denies_before_material_access`: typed
+  request, project, attempt, result and generation substitution with valid controls.
+- `test_outer_deadline_revalidates_material_after_cleanup`: actual executor deadline
+  after consumer entry; revoked authority or changed replica denies after cleanup,
+  while unchanged custody permits the existing infrastructure-failure outcome.
 - `test_revocation_and_finalization_serialize`: independent sessions and
   observed lock waiting prove both valid commit/denial orderings.
 - `test_real_audit_insert_failure_rolls_back[execute/materialize/finalize]`: action-filtered real
@@ -220,6 +229,17 @@ Named proof atoms in `tests/authorization/post_submit/`:
 - `test_actual_upgrade_preserves_or_refuses_without_repair[False/True]`: 0009 -> 0010 migration
   snapshot preservation/refusal. Pin the existing 0008 -> 0009 material tests to
   `0009_checker_material_lineage`, keeping their distinct preservation proof.
+
+The 0010 writer-exclusion regression pauses the real migration after preflight,
+observes an independent old-schema writer waiting on its table lock, then proves
+that writer cannot commit an unproven receipt after upgrade. A real authorized
+claim remains usable afterward. Earlier material-selection tests call the ART
+selection owner directly when proving ART rejection, so a prior CHECKERS lease
+guard cannot mask the intended assertion.
+
+The shared scope validator factors the existing non-artifact selector rejection
+once, preserving its error and allowed combinations without growing the large
+runtime module. Catalogue and migration-graph assertions remain exact.
 
 Each boundary receives a discriminating removal/substitution probe as described
 below; fixture or unrelated type-validation failures do not count.

@@ -23,7 +23,8 @@ async def test_real_audit_insert_failure_rolls_back(tmp_path, isolated_database_
         action = ("artifact.post_submit.checker_input.materialize" if phase == "materialize"
                   else "checker.post_submit." + phase)
         before = await snapshot(h)
-        opens = h.store.opens
+        opened = len(h.store.opens)
+        consumer = Consumer(h.files)
         async with h.factory() as session, session.begin():
             await session.execute(text("CREATE SEQUENCE test_post_submit_audit_attempt"))
             await session.execute(text("""CREATE FUNCTION test_post_submit_audit_failure() RETURNS trigger
@@ -40,7 +41,7 @@ async def test_real_audit_insert_failure_rolls_back(tmp_path, isolated_database_
             if phase == "execute":
                 return await executor._claim(h.request)
             if phase == "materialize":
-                return await h.service.materialize(ExecuteFacts(request=h.request, lease=lease), Consumer(h.files))
+                return await h.service.materialize(ExecuteFacts(request=h.request, lease=lease), consumer)
             return await executor.finalize(final_facts(h, lease))
 
         try:
@@ -48,7 +49,9 @@ async def test_real_audit_insert_failure_rolls_back(tmp_path, isolated_database_
             with pytest.raises(error, match="authority_unavailable"):
                 await invoke()
             assert await snapshot(h) == before
-            assert h.store.opens == opens
+            assert len(h.store.opens) == opened
+            assert consumer.calls == 0 and not h.preparation._active
+            assert list((h.scratch / "workspaces").iterdir()) == []
             async with h.factory() as session:
                 # Sequence effects survive rollback: the real INSERT trigger ran.
                 assert (await session.execute(text(

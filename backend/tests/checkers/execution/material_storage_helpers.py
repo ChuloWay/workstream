@@ -17,13 +17,17 @@ from app.modules.checkers.models import CheckerResult, CheckerRun
 from app.modules.outbox.api import OutboxAppendInput
 
 
-async def write_terminal(session, facts, material):
+async def write_terminal(session, facts, material, *, authorized_facts=None):
     """Stage all otherwise valid members/event/terminal fields in the caller transaction."""
     request, result = facts.request, facts.result
     run = await session.get(CheckerRun, str(result.attempt_id))
+    # An explicit earlier valid receipt can accompany deliberately malformed SQL
+    # in database-guard tests; production never accepts the malformed payload.
+    authorized = authorized_facts if authorized_facts is not None else facts.model_copy(update={
+        "material": VerifiedMaterialFacts.model_validate_json(json.dumps(material)) if material is not None else None,
+    })
     authority_facts = FinalizeAuthorityFacts(
-        **facts.model_dump(exclude={"material"}),
-        material=VerifiedMaterialFacts.model_validate_json(json.dumps(material)) if material is not None else None,
+        **authorized.model_dump(),
         execute_evidence_id=UUID(run.execute_evidence_id),
     )
     async with post_submit_execution_authority(session).prepare_finalization(request) as prepared:

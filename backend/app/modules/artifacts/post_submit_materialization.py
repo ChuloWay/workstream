@@ -195,6 +195,14 @@ class PostSubmissionMaterializer:
             finally:
                 if prepared is not None:
                     await prepared.close()
+        except asyncio.CancelledError:
+            # The executor may convert its deadline cancellation into a terminal
+            # timeout. Validate the completed read before allowing that conversion.
+            # Denial/drift must win over cancellation; cleanup has already finished.
+            await await_cancellation_resistant(
+                self._select(facts, original=selected, evidence_id=evidence_id)
+            )
+            raise
         except ArtifactScratchIntegrityError:
             # Unconfirmed cleanup must never become a retained terminal result.
             raise
