@@ -2447,11 +2447,11 @@ async def test_cancelled_close_finishes_cleanup_and_closes_handle(
 
 
 @pytest.mark.asyncio
-async def test_cancelled_close_preserves_cancellation_when_cleanup_fails(
+async def test_cancelled_close_propagates_cleanup_failure_for_retry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Keep retryable ownership while cancellation remains the caller result."""
+    """Keep retryable ownership and expose the cleanup failure despite cancellation."""
     manager = ArtifactScratchManager(root=tmp_path / "scratch", limits=preparation_limits())
     service = ArtifactPreparationService(manager)
     prepared = await service.prepare(byte_stream(b"data"), media_type="text/plain")
@@ -2471,7 +2471,7 @@ async def test_cancelled_close_preserves_cancellation_when_cleanup_fails(
     await asyncio.sleep(0)
     close_task.cancel()
     finish_release.set()
-    with pytest.raises(asyncio.CancelledError):
+    with pytest.raises(OSError, match="injected release failure"):
         await close_task
 
     assert not prepared._closed

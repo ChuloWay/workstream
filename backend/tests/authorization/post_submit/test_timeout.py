@@ -24,14 +24,7 @@ async def test_outer_deadline_revalidates_material_after_cleanup(tmp_path, isola
         monkeypatch.setattr(execution._StructuralConsumer, "evaluate", paused)
         # Arm the actual asyncio deadline after the consumer enters, avoiding a
         # machine-speed race between setup queries and the short test deadline.
-        original_timeout, deadlines = asyncio.timeout, []
-        def controlled_timeout(seconds):
-            timer = original_timeout(None if seconds == 12345 else seconds)
-            if seconds == 12345:
-                deadlines.append(timer)
-            return timer
-        monkeypatch.setattr(execution, "EXECUTION_TIMEOUT_SECONDS", 12345)
-        monkeypatch.setattr(asyncio, "timeout", controlled_timeout)
+        deadlines = controlled_deadline(monkeypatch, execution)
         task = asyncio.create_task(live_executor(h).evaluate_post_submission(h.request))
         try:
             await asyncio.wait_for(entered.wait(), 10)
@@ -62,3 +55,76 @@ async def test_outer_deadline_revalidates_material_after_cleanup(tmp_path, isola
             if not task.done():
                 task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+
+
+def controlled_deadline(monkeypatch, execution):
+    """Use the real timeout, armed only after the boundary under test is reached."""
+    original_timeout, deadlines = asyncio.timeout, []
+    def timeout(seconds):
+        timer = original_timeout(None if seconds == 12345 else seconds)
+        if seconds == 12345:
+            deadlines.append(timer)
+        return timer
+    monkeypatch.setattr(execution, "EXECUTION_TIMEOUT_SECONDS", 12345)
+    monkeypatch.setattr(asyncio, "timeout", timeout)
+    return deadlines
+
+
+@pytest.mark.parametrize("failure", ["release", "workspace"])
+async def test_outer_deadline_cannot_hide_failed_scratch_cleanup(tmp_path, isolated_database_env, monkeypatch, failure):
+    import app.modules.checkers.execution as execution
+    from app.modules.artifacts.preparation import ArtifactScratchIntegrityError
+
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        await reserve(h)
+        entered, finish = asyncio.Event(), asyncio.Event()
+        original_release = h.manager.release
+        original_workspace = h.manager._cleanup_workspace_sync
+        async def failed_release(reservation):
+            entered.set()
+            await finish.wait()
+            raise ArtifactScratchIntegrityError("controlled release failure")
+        async def paused_consumer(consumer, request, material):
+            entered.set()
+            await asyncio.Event().wait()
+        def failed_workspace(name):
+            raise ArtifactScratchIntegrityError("controlled workspace failure")
+        if failure == "release":
+            monkeypatch.setattr(h.manager, "release", failed_release)
+        else:
+            monkeypatch.setattr(execution._StructuralConsumer, "evaluate", paused_consumer)
+            monkeypatch.setattr(h.manager, "_cleanup_workspace_sync", failed_workspace)
+        deadlines = controlled_deadline(monkeypatch, execution)
+        task = asyncio.create_task(live_executor(h).evaluate_post_submission(h.request))
+        try:
+            await asyncio.wait_for(entered.wait(), 10)
+            before = await snapshot(h)
+            deadlines[0].reschedule(asyncio.get_running_loop().time())
+            for _ in range(10):
+                await asyncio.sleep(0)
+                if task.cancelling():
+                    break
+            assert task.cancelling(), "executor deadline did not cancel the protected operation"
+            finish.set()
+            with pytest.raises(ArtifactScratchIntegrityError, match=f"controlled {failure} failure"):
+                await asyncio.wait_for(task, 10)
+            assert await snapshot(h) == before  # running, no final receipt/result/event
+            assert len(h.store.opens) == 1
+            if failure == "release":
+                assert len(h.preparation._active) == 1
+                assert (await h.manager.usage()).reservation_count == 1
+            else:
+                assert not h.preparation._active and h.manager._pending_workspaces
+        finally:
+            finish.set()
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            monkeypatch.setattr(h.manager, "release", original_release)
+            monkeypatch.setattr(h.manager, "_cleanup_workspace_sync", original_workspace)
+            for binding in list(h.preparation._active):
+                await h.preparation.release_prepared_artifact(binding)
+            await h.preparation.retry_pending_cleanup()
+        assert not h.preparation._active and not h.manager._pending_workspaces
+        assert (await h.manager.usage()).reservation_count == 0
+        assert list((h.scratch / "workspaces").iterdir()) == []

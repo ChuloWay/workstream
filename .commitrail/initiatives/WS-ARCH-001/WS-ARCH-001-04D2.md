@@ -156,12 +156,16 @@ no production compatibility path or repository-wide cleanup prerequisite.
 - `backend/app/adapters/auth/__init__.py` for AUTH-owned concrete composition
   consumed by the CHECKERS/ART composition roots.
 - `backend/app/modules/artifacts/post_submit_materialization.py`,
-  `post_submit_selection.py` and `backend/app/adapters/artifacts/__init__.py`.
+  `post_submit_selection.py`, `sources.py`, `preparation.py` and
+  `backend/app/adapters/artifacts/__init__.py`. The existing scratch-close and
+  processing owners must preserve cleanup errors during cancellation.
 - `backend/alembic/versions/0010_post_submit_authority.py`,
   `backend/alembic/env.py` and existing schema/head verification fixtures.
 - New focused `backend/tests/authorization/post_submit/` tests and helpers;
   existing CHECKERS execution/currentness, materialization and service catalogue,
-  provisioning, PREP, schema and audit-contract tests whose expectations change.
+  provisioning, PREP, schema and audit-contract tests whose expectations change;
+  `backend/tests/test_artifact_preparation.py` retains retryable scratch ownership
+  proof while replacing obsolete cancellation-masks-cleanup expectations.
   Shared `backend/tests/post_submit_materialization_helpers.py`,
   `backend/tests/tasks/submission_lineage_support.py`,
   `backend/tests/submission_fixtures.py`, CHECKERS storage/material/migration
@@ -219,6 +223,10 @@ Named proof atoms in `tests/authorization/post_submit/`:
 - `test_outer_deadline_revalidates_material_after_cleanup`: actual executor deadline
   after consumer entry; revoked authority or changed replica denies after cleanup,
   while unchanged custody permits the existing infrastructure-failure outcome.
+- `test_outer_deadline_cannot_hide_failed_scratch_cleanup`: cancellation during
+  prepared release or extraction cleanup propagates the integrity failure, retains
+  cleanup ownership and the running attempt, and publishes no terminal evidence.
+  The same retained cleanup can succeed afterward.
 - `test_revocation_and_finalization_serialize`: independent sessions and
   observed lock waiting prove both valid commit/denial orderings.
 - `test_real_audit_insert_failure_rolls_back[execute/materialize/finalize]`: action-filtered real

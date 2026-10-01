@@ -1717,7 +1717,7 @@ class ArtifactPreparationService:
             processor.abort()
             try:
                 await await_cancellation_resistant(operation)
-            except BaseException:
+            except asyncio.CancelledError:
                 pass
             raise ArtifactPreparationDeadlineError(
                 "artifact preparation deadline exceeded"
@@ -1726,7 +1726,7 @@ class ArtifactPreparationService:
             processor.abort()
             try:
                 await await_cancellation_resistant(operation)
-            except BaseException:
+            except asyncio.CancelledError:
                 pass
             raise cancellation from None
 
