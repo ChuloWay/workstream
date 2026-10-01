@@ -317,33 +317,8 @@ async def completed_source(
         yield h
 
 
-async def completed_sibling_source(h):
-    """Build a real allow-review source for another task in the same project."""
-    task_id, assignment_id = new_record_id(), new_record_id()
-    async with h.factory() as session:
-        original = await session.get(Submission, str(h.request.submission_id))
-        identity_link_id = await session.scalar(
-            select(ActorIdentityLink.id).where(
-                ActorIdentityLink.actor_profile_id == original.contributor_id,
-                ActorIdentityLink.status == "active",
-            )
-        )
-        assert identity_link_id is not None
-    context = _context(
-        actor_profile_id=as_uuid(original.contributor_id),
-        identity_link_id=as_uuid(identity_link_id),
-    )
-    async with h.engine.begin() as connection:
-        await seed_started_task_for_artifact_test(
-            connection,
-            {
-                "task": str(task_id),
-                "assignment": str(assignment_id),
-                "project": str(h.request.project_id),
-                "actor": str(context.actor_profile_id),
-            },
-        )
-
+async def _create_sibling_submission(h, context, task_id, assignment_id):
+    """Admit the ZIP and create its exact sibling Submission through owner services."""
     preparation = SubmissionBundlePreparationRequest(
         actor=ActorIdentityFacts(
             context.actor_profile_id,
@@ -386,6 +361,37 @@ async def completed_sibling_source(h):
                 contributor_attestation=preparation.contributor_attestation,
             )
         )
+    return created
+
+
+async def completed_sibling_source(h):
+    """Build a real allow-review source for another task in the same project."""
+    task_id, assignment_id = new_record_id(), new_record_id()
+    async with h.factory() as session:
+        original = await session.get(Submission, str(h.request.submission_id))
+        identity_link_id = await session.scalar(
+            select(ActorIdentityLink.id).where(
+                ActorIdentityLink.actor_profile_id == original.contributor_id,
+                ActorIdentityLink.status == "active",
+            )
+        )
+        assert identity_link_id is not None
+    context = _context(
+        actor_profile_id=as_uuid(original.contributor_id),
+        identity_link_id=as_uuid(identity_link_id),
+    )
+    async with h.engine.begin() as connection:
+        await seed_started_task_for_artifact_test(
+            connection,
+            {
+                "task": str(task_id),
+                "assignment": str(assignment_id),
+                "project": str(h.request.project_id),
+                "actor": str(context.actor_profile_id),
+            },
+        )
+
+    created = await _create_sibling_submission(h, context, task_id, assignment_id)
     async with h.factory() as session:
         facts = await submitted_bundle_port(session).read(
             SubmittedBundleRequest(
