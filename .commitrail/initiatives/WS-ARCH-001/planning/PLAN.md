@@ -95,9 +95,10 @@ new permission requirement.
 
 ### Supporting foundations required by automatic routing
 
-Current supporting contracts are delivered [ARCH-04B2](../WS-ARCH-001-04B2.md),
+Delivered supporting foundations are [ARCH-04B2](../WS-ARCH-001-04B2.md),
 [AUTH-OUTBOX-01/02](../../WS-AUTH-001/planning/PLAN.md#ws-auth-001-outbox-01--unavailable-dispatcher-contract),
-[CON-02B](../../WS-CON-001/OVERVIEW.md#con-02b-current-dispatcher-contract), and
+and [CON-02B](../../WS-CON-001/OVERVIEW.md#con-02b-current-dispatcher-contract).
+The remaining routing sequence is
 [ARCH-04E1A/04E1B/04E2/04E3](chunks/WS-ARCH-001-04E-canonical-allow-review.md#current-bounded-sequence).
 Each numbered section is a current bounded design, expanded into its own change
 record on implementation; the parent is not a multi-owner implementation PR.
