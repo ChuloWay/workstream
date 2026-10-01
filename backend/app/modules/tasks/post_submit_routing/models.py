@@ -82,7 +82,7 @@ class TaskPostSubmitRoutingManifest(Base):
 
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        DateTime(timezone=True), nullable=False, server_default=func.clock_timestamp()
     )
     project_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
     task_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)

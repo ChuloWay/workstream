@@ -1,5 +1,7 @@
 """PostgreSQL proof for immutable route-neutral TASK source custody."""
 
+from datetime import UTC, datetime
+
 import pytest
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -20,6 +22,7 @@ from .support import (
     SOURCE_COLUMNS,
     activate_successor_guide,
     as_uuid,
+    completed_sibling_source,
     completed_source,
     insert_source,
     joined_source_facts,
@@ -43,8 +46,9 @@ async def _reject(session, values, message: str) -> None:
 async def test_source_matches_real_completed_run(tmp_path, isolated_database_env):
     async with completed_source(tmp_path, isolated_database_env) as h:
         async with h.factory() as session, session.begin():
-            database_created_at = await session.scalar(select(func.now()))
+            before = await session.scalar(select(func.clock_timestamp()))
             await insert_source(session, h.source)
+            after = await session.scalar(select(func.clock_timestamp()))
         async with h.factory() as session:
             stored = await session.get(TaskPostSubmitRoutingManifest, h.source["id"])
             assert stored is not None
@@ -93,7 +97,7 @@ async def test_source_matches_real_completed_run(tmp_path, isolated_database_env
         )
 
         assert set(values) == set(SOURCE_COLUMNS)
-        assert values["created_at"] == database_created_at
+        assert before <= values["created_at"] <= after
         assert facts.model_dump(include=set(SOURCE_COLUMNS)) == values
         assert facts.project_id == h.request.project_id
         assert facts.task_id == h.request.task_id
@@ -117,7 +121,7 @@ async def test_source_matches_real_completed_run(tmp_path, isolated_database_env
 async def test_source_rejects_null_scalar(tmp_path, isolated_database_env):
     async with completed_source(tmp_path, isolated_database_env) as h:
         async with h.factory() as session:
-            for field in SOURCE_COLUMNS:
+            for field in (column for column in SOURCE_COLUMNS if column != "created_at"):
                 bad = h.source | {"id": new_record_id(), field: None}
                 await _reject(session, bad, f'null value in column "{field}"')
                 assert await source_count(session) == 0, field
@@ -125,6 +129,35 @@ async def test_source_rejects_null_scalar(tmp_path, isolated_database_env):
             await session.commit()
         async with h.factory() as session:
             assert await source_count(session) == 1
+
+
+async def test_source_creation_time_is_database_owned(
+    tmp_path, isolated_database_env
+):
+    async with completed_source(tmp_path, isolated_database_env) as h:
+        supplied_values = (
+            ("past", datetime(2000, 1, 1, tzinfo=UTC)),
+            ("future", datetime(2100, 1, 1, tzinfo=UTC)),
+            ("null", None),
+        )
+        for label, supplied in supplied_values:
+            async with h.factory() as session:
+                transaction = await session.begin()
+                try:
+                    before = await session.scalar(select(func.clock_timestamp()))
+                    source_id = new_record_id()
+                    await insert_source(
+                        session,
+                        h.source | {"id": source_id, "created_at": supplied},
+                    )
+                    stored = await session.get(TaskPostSubmitRoutingManifest, source_id)
+                    after = await session.scalar(select(func.clock_timestamp()))
+                    assert before <= stored.created_at <= after, label
+                    assert stored.created_at != supplied, label
+                finally:
+                    await transaction.rollback()
+            async with h.factory() as session:
+                assert await source_count(session) == 0, label
 
 
 async def test_source_rejects_scalar_substitution(tmp_path, isolated_database_env):
@@ -162,6 +195,7 @@ async def test_source_rejects_scalar_substitution(tmp_path, isolated_database_en
 
 async def test_source_rejects_foreign_lineage(tmp_path, isolated_database_env):
     async with completed_source(tmp_path / "one", isolated_database_env) as first:
+        sibling = await completed_sibling_source(first)
         async with completed_source(
             tmp_path / "two",
             isolated_database_env,
@@ -171,10 +205,10 @@ async def test_source_rejects_foreign_lineage(tmp_path, isolated_database_env):
             async with first.factory() as session:
                 cases = (
                     ("project_id", other.source["project_id"]),
-                    ("task_id", other.source["task_id"]),
-                    ("submission_id", other.source["submission_id"]),
+                    ("task_id", sibling.source["task_id"]),
+                    ("submission_id", sibling.source["submission_id"]),
                     ("submission_version", first.source["submission_version"] + 1),
-                    ("assignment_id", other.source["assignment_id"]),
+                    ("assignment_id", sibling.source["assignment_id"]),
                     ("contributor_id", other.source["contributor_id"]),
                     (
                         "contribution_policy_version_id",
@@ -186,24 +220,33 @@ async def test_source_rejects_foreign_lineage(tmp_path, isolated_database_env):
                     await _reject(session, bad, "source lineage mismatch")
                     assert await source_count(session) == 0, field
 
-                coherent = first.source | {
-                    "id": new_record_id(),
-                    **{
-                        field: other.source[field]
-                        for field in (
-                            "project_id",
-                            "task_id",
-                            "submission_id",
-                            "submission_version",
-                            "assignment_id",
-                            "contributor_id",
-                            "contribution_policy_version_id",
-                        )
-                    },
-                }
-                await _reject(session, coherent, "checker source mismatch")
+                await insert_source(session, sibling.source)
+                assert await source_count(session) == 1
+                for label, ownership in (
+                    ("other_project", other.source),
+                    ("same_project_sibling", sibling.source),
+                ):
+                    coherent = first.source | {
+                        "id": new_record_id(),
+                        **{
+                            field: ownership[field]
+                            for field in (
+                                "project_id",
+                                "task_id",
+                                "submission_id",
+                                "submission_version",
+                                "assignment_id",
+                                "contributor_id",
+                                "contribution_policy_version_id",
+                            )
+                        },
+                    }
+                    await _reject(session, coherent, "checker source mismatch")
+                    assert await source_count(session) == 1, label
                 await insert_source(session, first.source)
                 await session.commit()
+            async with first.factory() as session:
+                assert await source_count(session) == 2
 
 
 async def _completed_successor(h):
@@ -221,15 +264,19 @@ async def _completed_successor(h):
 async def test_source_rejects_sibling_completion_event(tmp_path, isolated_database_env):
     async with completed_source(tmp_path, isolated_database_env) as h:
         original = dict(h.source)
-        successor = await _completed_successor(h)
+        sibling = await completed_sibling_source(h)
         async with h.factory() as session:
+            await insert_source(session, sibling.source)
             bad = original | {
                 "id": new_record_id(),
-                "completion_event_id": successor["completion_event_id"],
+                "completion_event_id": sibling.source["completion_event_id"],
             }
             await _reject(session, bad, "checker source mismatch")
+            assert await source_count(session) == 1
             await insert_source(session, original)
             await session.commit()
+        async with h.factory() as session:
+            assert await source_count(session) == 2
 
 
 async def test_source_rejects_phase_receipt(tmp_path, isolated_database_env):
@@ -392,26 +439,47 @@ async def test_source_retains_historical_guide_and_generation(
                     ProjectGuide.version == h.request.expected_context.guide_version,
                 )
             )
+            guide_id = guide.id
             activation = guide.activation_operation_id
 
-        successor_guide = await activate_successor_guide(h)
         async with h.factory() as session, session.begin():
             await insert_source(session, original)
         async with h.factory() as session:
-            before = await source_rows(session)
-            retained = await session.get(ProjectGuide, guide.id)
-            assert retained.activation_operation_id == activation
-            assert retained.status == "superseded"
+            stored = await session.get(TaskPostSubmitRoutingManifest, original["id"])
+            before_values = {
+                column: getattr(stored, column) for column in SOURCE_COLUMNS
+            }
+        before_facts = await joined_source_facts(h, before_values)
 
+        successor_guide = await activate_successor_guide(h)
         successor_run = await _completed_successor(h)
+        async with h.factory() as session, session.begin():
+            await insert_source(session, successor_run)
+
         assert successor_guide.command.target.proposal.guide_version == "v2"
         assert successor_run["evaluation_generation"] == original["evaluation_generation"] + 1
         assert successor_run["checker_run_id"] != original["checker_run_id"]
         async with h.factory() as session:
-            assert await source_rows(session) == before
-            retained = await session.get(ProjectGuide, guide.id)
+            stored = await session.get(TaskPostSubmitRoutingManifest, original["id"])
+            after_values = {
+                column: getattr(stored, column) for column in SOURCE_COLUMNS
+            }
+            successor_stored = await session.get(
+                TaskPostSubmitRoutingManifest, successor_run["id"]
+            )
+            successor_values = {
+                column: getattr(successor_stored, column) for column in SOURCE_COLUMNS
+            }
+            retained = await session.get(ProjectGuide, guide_id)
             assert retained.activation_operation_id == activation
             assert retained.status == "superseded"
+            assert await source_count(session) == 2
+        after_facts = await joined_source_facts(h, after_values)
+        successor_facts = await joined_source_facts(h, successor_values)
+        assert after_values == before_values
+        assert after_facts.model_dump() == before_facts.model_dump()
+        assert after_facts.locked_policy == before_facts.locked_policy
+        assert successor_facts.locked_policy == before_facts.locked_policy
 
 
 async def test_source_is_immutable(tmp_path, isolated_database_env):

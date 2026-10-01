@@ -19,7 +19,7 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text("clock_timestamp()"),
             nullable=False,
         ),
         sa.Column("project_id", sa.Uuid(), nullable=False),
@@ -145,8 +145,10 @@ DECLARE
     run public.checker_runs%ROWTYPE;
     expected_material jsonb;
 BEGIN
-    -- Preserve NOT NULL as the sole owner of missing-scalar rejection.
-    IF NEW.id IS NULL OR NEW.created_at IS NULL OR NEW.project_id IS NULL
+    -- The database owns creation time even when an insert supplies a value.
+    NEW.created_at := pg_catalog.clock_timestamp();
+    -- Preserve NOT NULL as the owner of missing caller-supplied scalars.
+    IF NEW.id IS NULL OR NEW.project_id IS NULL
        OR NEW.task_id IS NULL OR NEW.submission_id IS NULL
        OR NEW.submission_version IS NULL OR NEW.assignment_id IS NULL
        OR NEW.contributor_id IS NULL OR NEW.contribution_policy_version_id IS NULL

@@ -106,7 +106,9 @@ than backfill, mutate or delete them. No pending state or nullable future receip
 ### Exact field ownership
 
 Every persisted column below is non-null. `id` uses UUIDv7; creation time is
-PostgreSQL time. All record keys/references are native UUID.
+PostgreSQL insertion time, unconditionally stamped by the insert guard even
+when the caller supplies a past, future or null timestamp. All record
+keys/references are native UUID.
 
 | Persisted fields | Canonical equality |
 |---|---|
@@ -192,7 +194,8 @@ full project setup per scalar without losing valid controls or failure attributi
 | Exact future test | Boundary and discriminating proof |
 |---|---|
 | `test_source_matches_real_completed_run` | Real `material_fixture` + live execution + stored true-policy source; compare every source scalar and join-only public fact with its canonical parent |
-| `test_source_rejects_null_scalar` | Each required stored column independently NULL; non-null constraint denies while otherwise valid row rolls back |
+| `test_source_creation_time_is_database_owned` | Explicit past/future/null timestamps are overwritten and bounded by database-clock samples; an omitted timestamp follows the same rule |
+| `test_source_rejects_null_scalar` | Each required caller-supplied column independently NULL; non-null constraint denies while otherwise valid row rolls back. The generated timestamp has separate overwrite proof |
 | `test_source_rejects_scalar_substitution` | Separate well-shaped request ID/digest/generation/result ID/digest, content hash/bytes/semantic hash, replica and review-boolean substitutions reach the named semantic guard |
 | `test_source_rejects_foreign_lineage` | Two real stored graphs: independent project/task/Submission/version/assignment/contributor/contribution-policy swaps reject, including coherent same-project sibling ownership |
 | `test_source_rejects_sibling_completion_event` | Real same-project sibling completion event, all other facts valid, rejects at source guard |
@@ -209,7 +212,7 @@ full project setup per scalar without losing valid controls or failure attributi
 | `test_upgrade_preserves_existing_sources_without_publishing` | Actual 0010 -> 0011 upgrade retains prior Submission/checker/AUTH bytes and adds an empty source table; no routing/review/acceptance effects |
 
 Guard-removal probes: remove only source scalar equality, phase-receipt equality,
-historical activation check or immutable trigger in an isolated test database;
+historical activation check, database timestamp stamping or immutable trigger in an isolated test database;
 its corresponding named regression must fail at the intended assertion. Keep
 valid controls enabled and exclude fixture/setup errors from proof. FK/NOT NULL
 proof names their own boundary; it must not be mislabeled as semantic-trigger proof.

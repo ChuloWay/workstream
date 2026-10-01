@@ -1,23 +1,41 @@
 """Real completed checker sources and direct-SQL routing-source helpers."""
 
 from contextlib import asynccontextmanager
+from dataclasses import asdict
+from types import SimpleNamespace
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 
+from app.adapters.tasks import submitted_bundle_port
+from app.api.deps.authorization import compose_hidden_submission_creation_command
 from app.core.identifiers import new_record_id
-from app.modules.checkers.api import PostSubmitEvidenceEntry, PostSubmitPolicyInputs
+from app.modules.actors.models import ActorIdentityLink
+from app.modules.artifacts.api import SubmissionBundlePreparationRequest
+from app.modules.authorization.api import ActorIdentityFacts, ActorKind
+from app.modules.checkers.api import (
+    ExpectedPostSubmitContext,
+    ObservedPostSubmitContext,
+    PostSubmitEvidenceEntry,
+    PostSubmitPolicyInputs,
+)
 from app.modules.checkers.models import CheckerRun
 from app.modules.projects.models import (
     EffectiveProjectSubmissionArtifactPolicy,
     ReviewPolicy,
 )
+from app.modules.tasks.api import SubmissionCreationRequest
 from app.modules.tasks.api.post_submit_routing import TaskPostSubmitManifestFacts
+from app.modules.tasks.api.submitted_bundle import SubmittedBundleRequest
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 from app.modules.tasks.models import Submission, TaskAssignment, WorkstreamTask
 from tests.checkers.execution.support import live_executor, reserve
 from tests.checkers.post_submit.support import change_request
 from tests.post_submit_materialization_helpers import material_fixture
+from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
+from tests.tasks.submission_lineage_support import _verified_admission
+from tests.test_artifact_admission import _context
+from tests.test_default_pre_submit_execution import _bytes
 
 
 SOURCE_COLUMNS = (
@@ -297,6 +315,119 @@ async def completed_source(
         h.source = {}
         h.source = await source_values(h)
         yield h
+
+
+async def completed_sibling_source(h):
+    """Build a real allow-review source for another task in the same project."""
+    task_id, assignment_id = new_record_id(), new_record_id()
+    async with h.factory() as session:
+        original = await session.get(Submission, str(h.request.submission_id))
+        identity_link_id = await session.scalar(
+            select(ActorIdentityLink.id).where(
+                ActorIdentityLink.actor_profile_id == original.contributor_id,
+                ActorIdentityLink.status == "active",
+            )
+        )
+        assert identity_link_id is not None
+    context = _context(
+        actor_profile_id=as_uuid(original.contributor_id),
+        identity_link_id=as_uuid(identity_link_id),
+    )
+    async with h.engine.begin() as connection:
+        await seed_started_task_for_artifact_test(
+            connection,
+            {
+                "task": str(task_id),
+                "assignment": str(assignment_id),
+                "project": str(h.request.project_id),
+                "actor": str(context.actor_profile_id),
+            },
+        )
+
+    preparation = SubmissionBundlePreparationRequest(
+        actor=ActorIdentityFacts(
+            context.actor_profile_id,
+            context.identity_link_id,
+            ActorKind.HUMAN,
+        ),
+        request_id=context.request_id,
+        correlation_id=context.correlation_id,
+        task_id=task_id,
+        assignment_id=assignment_id,
+        predecessor_submission_id=None,
+        idempotency_key=new_record_id(),
+        summary=h.request.structural_input.summary,
+        contributor_attestation=h.request.structural_input.worker_attestation,
+        media_type="application/zip",
+        byte_source=_bytes(h.data),
+    )
+    admission_id = await _verified_admission(
+        h.factory,
+        h.store,
+        h.namespace,
+        h.settings,
+        context,
+        preparation,
+    )
+    async with h.factory() as session:
+        created = await compose_hidden_submission_creation_command(
+            session,
+            context,
+            request_id=new_record_id(),
+            correlation_id=new_record_id(),
+        ).create(
+            SubmissionCreationRequest(
+                task_id=task_id,
+                assignment_id=assignment_id,
+                contributor_id=context.actor_profile_id,
+                predecessor_submission_id=None,
+                admission_id=admission_id,
+                summary=preparation.summary,
+                contributor_attestation=preparation.contributor_attestation,
+            )
+        )
+    async with h.factory() as session:
+        facts = await submitted_bundle_port(session).read(
+            SubmittedBundleRequest(
+                h.request.project_id,
+                task_id,
+                created.submission_id,
+            )
+        )
+    expected = ExpectedPostSubmitContext(**asdict(facts.context))
+    structural_input = h.request.structural_input.model_copy(
+        update={"observed_context": ObservedPostSubmitContext(**asdict(facts.context))}
+    )
+    request = change_request(
+        h.request,
+        evaluation_request_id=new_record_id(),
+        evaluation_generation=1,
+        project_id=facts.project_id,
+        task_id=facts.task_id,
+        assignment_id=facts.assignment_id,
+        submission_id=facts.submission_id,
+        submission_version=facts.submission_version,
+        content_id=facts.content_id,
+        binding_id=facts.binding_id,
+        expected_context=expected,
+        structural_input=structural_input,
+    )
+    sibling = SimpleNamespace(
+        factory=h.factory,
+        service=h.service,
+        request=request,
+        source={},
+    )
+    await reserve(sibling)
+    result = await live_executor(sibling).evaluate_post_submission(request)
+    async with h.factory() as session:
+        run = await session.get(CheckerRun, str(result.attempt_id))
+        assert result.outcome == "completed"
+        assert run.routing_recommendation == "allow_review"
+        sibling.material = dict(run.material_custody)
+    sibling.result = result
+    sibling.source = await source_values(sibling)
+    return sibling
 
 
 async def source_count(session) -> int:
