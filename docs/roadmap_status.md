@@ -120,8 +120,9 @@ authority. REV-03B packets and REV-04A immutable Review source storage are deliv
 are delivered; mandatory acceptance-source AUTH custody precedes atomic participation. Human review/revision, contribution and conditional
 compensation effects, operations and release proof complete v0.1.
 
-The [independent MCP package](../mcp_server/README.md) implements one profile
-tool. It is not a deployed service or the complete proposed tool catalogue.
+The [independent MCP package](../mcp_server/README.md) implements nine self-service
+and administrative read tools through WS-MCP-002-03. It is not a deployed service
+or the complete proposed tool catalogue.
 
 ## Pre-Submission And Post-Submission Checking
 
@@ -247,8 +248,10 @@ cannot be reused as post-submission review-gate evidence. See the
   15 real-process checks and 24 focused tests, including first admission and
   caller isolation. Independent packaging and the three bounded self-service
   tools are delivered through WS-MCP-002-02: profile read, profile update and
-  exact-project authorization context. Twenty-four proposed tools remain;
-  WS-MCP-002-03 administrative reads are next. This remains a custom
+  exact-project authorization context. WS-MCP-002-03 adds six administrative
+  reads for permission/role definitions, grants and actor/identity projections.
+  Eighteen proposed tools remain; WS-MCP-002-04 administrative grant mutations
+  are next. This remains a custom
   authentication adapter, not a public deployment or a 27-tool release.
   The public-client drill targets currently usable APIs only; hidden and
   unfinished lifecycle routes are not completion targets. Draft-guide policy
