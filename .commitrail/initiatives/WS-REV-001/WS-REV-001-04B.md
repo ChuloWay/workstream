@@ -31,7 +31,8 @@ obligation fence exists. The canonical final runtime contract is
 - `backend/tests/reviews/acceptance/{__init__,support,test_contracts,test_storage,test_migration}.py`.
 - `backend/tests/conftest.py`, `backend/tests/test_alembic.py`: exact migration,
   reset/immutability inventory and measured fingerprint changes only.
-- `backend/scripts/test_lane_catalogue.py`, `backend/tests/test_ci_lane_catalogue.py`.
+- `backend/scripts/test_lane_catalogue.py`, `backend/tests/test_ci_lane_catalogue.py`: acceptance foundation proof belongs to the existing schema lane; preserve every canonical node, execution kind and timeout.
+- `backend/tests/tasks/post_submit_routing/test_storage.py`: retain source-trigger proof after adding the acceptance foreign key by using TRUNCATE CASCADE; keep the exact error and unchanged-row assertions.
 - `backend/scripts/behavior_ownership.py`, `backend/tests/test_behavior_ownership.py`,
   `.ci/behavior-ownership/partition.v1.json`: exact declaration-only registration.
 - This record; `.commitrail/INDEX.md`; current REV/CON/ART/AUTH-001/AUTH-003/POL/ARCH
@@ -176,3 +177,18 @@ above; generic service-kind transport is never treated as canonical provenance.
 - Remaining risks: no current row conveys acceptance authority; before runtime,
   require exact mandatory AUTH receipts, currentness/fence serialization, atomic
   CON/TASK/audit/outbox effects and real positive false-policy composition proof.
+
+## Verification repair rationale
+
+The new acceptance foreign key makes PostgreSQL reject plain source TRUNCATE
+before reaching its immutability trigger. The existing test must use CASCADE,
+as other immutable-parent tests do, retaining the exact trigger error and row
+preservation assertions. No production guard changes.
+
+Hosted task lane B exhausted its unchanged 1200-second budget after 409 of 420
+nodes. Move the three new acceptance foundation modules to the existing schema
+lane: they test input schemas, SQL custody and migration preservation, with no
+runtime operation. The schema job took 9m40s and the focused foundation suite
+6m04s; this placement has measured capacity. Preserve all 8166 canonical nodes,
+execution kinds, nine lanes, coverage collection and timeout bounds. Verify
+manifest conservation, then rerun all hosted lanes.
