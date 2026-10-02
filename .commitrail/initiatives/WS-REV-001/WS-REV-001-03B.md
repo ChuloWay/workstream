@@ -246,7 +246,11 @@ These are implementation obligations, not claims of executed tests:
 - `test_packet_rejects_null_source_fields`: each nonnullable source independently.
 - `test_packet_creation_time_is_database_owned`: supplied NULL/past/future times.
 - `test_packet_requires_active_exact_lease`: terminal and sibling lease insertions.
-- `test_packet_requires_committed_guide_upload`: prepared-only ingest cannot pass.
+- `test_packet_requires_committed_guide_upload`: prepared-only ingest cannot pass;
+  independently crossed content, replica, namespace, receipt, ingest byte and
+  media identities fail after a valid operation-receipt control.
+- `test_packet_accepts_observed_confirmed_upload`: genuine observed-confirmed
+  recovery receipt is accepted; crossed generation and observed byte facts fail.
 - `test_packet_requires_complete_canonical_guide_set`: omission, extra, swapped
   ingest/source, order and media; valid control before each negative commit.
 - `test_packet_and_ingest_facts_are_immutable`: direct UPDATE/DELETE/TRUNCATE for
