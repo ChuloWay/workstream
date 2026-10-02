@@ -77,7 +77,11 @@ ReviewPolicy selectors. Human source requires immutable Review decision accept,
 matching complete source tuple, reviewer as recorded_by, and locked true policy.
 Automated source requires exact successful TASK manifest with locked false policy,
 matching Submission/assignment/contributor plus a service actor; live exact routing
-service/action/currentness receipt custody remains explicitly unavailable.
+service/action/currentness receipt custody remains explicitly unavailable. Actor kind
+is transport shape only: later hardening must bind recorded_by to the exact fixed
+`workstream.task.post_submit_router` identity and `task.post_submit.route` allow,
+never an arbitrary service. No automated positive row using a substitute service
+may be committed in these tests.
 No latest-policy lookup. SQL functions pin `pg_catalog,public,pg_temp` and protect
 all referenced names. Source parents are immutable; deferred checks must reject
 missing parents and preserve caller rollback. PostgreSQL stamps accepted_at.
@@ -119,11 +123,21 @@ The historical split record does not authorize unused duplicate persistence.
 Planned focused proof under `tests/reviews/acceptance/`:
 
 - `test_contracts.py`: closed source shapes and native immutable input.
-- `test_storage.py`: actual stored Review positive control, coherent owner
-  substitutions, non-accept denial, branch polarity probes reaching intended
-  assertion, missing parent, independent-session uniqueness/rollback,
-  database clock, mutation/truncate denial. Remove one exact owner predicate
-  and prove the named negative assertion fails rather than fixture setup.
+- `test_storage.py::test_human_acceptance_source`: actual stored accept Review, exact fields.
+- `test_non_accept_review_denied`: real needs_revision/reject source controls.
+- `test_exclusive_source_shape`: mixed/missing sources and invalid discriminator.
+- `test_acceptance_owner_substitution`: coherent same-project and foreign-project
+  submitter/reviewer/Submission/policy/source substitutions; remove one exact owner
+  predicate and prove the named rejection reaches DID NOT RAISE.
+- `test_automated_branch_polarity`: real true-policy TASK manifest plus matching
+  true ReviewPolicy and an existing service-kind actor; ordinary insertion denies.
+  Replace only `(manifest,policy)=(false,false)` with `(true,true)` transactionally;
+  the same negative assertion must reach DID NOT RAISE. Roll back all synthetic
+  acceptance state; do not fabricate false activation or canonical router evidence.
+- `test_acceptance_unique_and_rollback`: independent-session uniqueness and
+  rollback, no second acceptance and unchanged source history.
+- `test_acceptance_clock_and_immutability`: database-owned time, update/delete/truncate denial.
+- `test_missing_acceptance_source`: missing parent and concurrent parent rollback.
 - `test_migration.py`: real populated predecessor upgrade plus refusal.
 - Existing `test_identifier_schema.py`, complete `test_alembic.py`, lane catalogue,
   owner inventory and affected Review/TASK tests retained.
@@ -132,6 +146,23 @@ Run focused tests against isolated PostgreSQL/MinIO, Ruff, module boundaries,
 structural/ownership checks, Commitrail, Markdown links and all stale wording
 scans. Full hosted nine-lane completeness and real API contract remain required;
 coverage is diagnostic. Freeze clean review target and reconcile current main.
+
+## Required later activation proof
+
+The same-table authority hardening must deliver
+`test_acceptance_authority_upgrade_refuses_retained_foundation`: a nonempty
+foundation table aborts upgrade with all rows unchanged and no backfill or deletion.
+`test_acceptance_authority_upgrade_empty` must prove an empty table gains a
+NOT NULL AUTH event relationship and exact action/source/actor/request/resource
+and fixed TASK-router predicates. No production writer, CON consumer or accepted
+TASK effect may activate before this hardening. These named future tests are
+activation requirements, not execution evidence delivered by REV-04B.
+
+## Review findings
+
+Plan review required explicit future authority-upgrade refusal/empty-upgrade
+proof and a discriminating automated-branch predicate probe. Both are named
+above; generic service-kind transport is never treated as canonical provenance.
 
 ## Reconciliation
 
