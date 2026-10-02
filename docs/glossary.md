@@ -44,6 +44,9 @@ owners provide business terms but do not author the machine policy directly.
 
 ## CompensationAward
 
+CON-03C supplies immutable storage; live award creation and fulfillment remain
+separate, unavailable operations.
+
 The immutable result of evaluating one `ContributionRecord` against its frozen
 `ContributionPolicyVersion`. Its instrument is `money` or `project_points`.
 Money awards route downstream to payment-request/settlement adapters; points

@@ -2255,3 +2255,18 @@ def test_acceptance_storage_addition_preserves_existing_ownership() -> None:
     for neighbor in ("backend/app/modules/reviews/acceptance/service.py", "backend/app/modules/reviews/acceptance/authority.py"):
         with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
             ownership._validate_additive_partition_transition(_partition(sorted({retained, *expected, neighbor})), trusted)
+
+
+def test_contribution_award_storage_has_exact_ownership() -> None:
+    expected = {
+        "backend/app/modules/contributions/records/models.py",
+        "backend/app/modules/contributions/records/schemas.py",
+        "backend/app/modules/compensation/awards/models.py",
+    }
+    assert ownership.CON_03C_STORAGE_TARGETS == expected
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(_partition(sorted({retained, *expected})), trusted)
+    for neighbor in ("backend/app/modules/contributions/records/service.py", "backend/app/modules/compensation/awards/service.py"):
+        with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+            ownership._validate_additive_partition_transition(_partition(sorted({retained, *expected, neighbor})), trusted)

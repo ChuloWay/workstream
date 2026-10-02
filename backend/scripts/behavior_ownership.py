@@ -147,6 +147,7 @@ MODULE_PUBLIC_API_FOUNDATION_TARGETS = frozenset(
         "backend/app/modules/authorization/api/outbox_dispatch.py",
     }
 )
+CON_03C_STORAGE_TARGETS = frozenset({"backend/app/modules/contributions/records/models.py", "backend/app/modules/contributions/records/schemas.py", "backend/app/modules/compensation/awards/models.py"})
 REV_04B_ACCEPTANCE_TARGETS = frozenset({"backend/app/modules/reviews/acceptance/models.py", "backend/app/modules/reviews/acceptance/schemas.py"})
 REV_04A_SOURCE_TARGETS = frozenset({"backend/app/modules/reviews/decision/models.py", "backend/app/modules/reviews/decision/schemas.py"})
 REV_03B_PACKET_TARGETS = frozenset({'backend/app/modules/reviews/packet/models.py', 'backend/app/modules/reviews/packet/repository.py', 'backend/app/modules/reviews/packet/schemas.py'})
@@ -603,7 +604,7 @@ def changed_callable_names(root: Path, base_sha: str, head_sha: str, target: str
 
 def group_for_target(target: str) -> str:
     """Assign one exact population group without wildcard authority."""
-    if target in ARCH_CP02_CON_LIFECYCLE_TARGETS:
+    if target in ARCH_CP02_CON_LIFECYCLE_TARGETS | CON_03C_STORAGE_TARGETS:
         return "lifecycle"
     if "/authorization/" in target or target.endswith("/auth.py"):
         return "auth"
@@ -741,6 +742,7 @@ def _validate_additive_partition_transition(
         | ARCH_CP03B_ADAPTER_BINDING_AUTH_TARGETS
             | ARCH_CP04A_CONTRIBUTION_POLICY_TARGETS
             | ARCH_CP04B_CONTRIBUTION_POLICY_TARGETS
+        | CON_03C_STORAGE_TARGETS
         | REV_04B_ACCEPTANCE_TARGETS
         | REV_04A_SOURCE_TARGETS
         | REV_03B_PACKET_TARGETS

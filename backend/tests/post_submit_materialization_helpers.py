@@ -77,9 +77,21 @@ async def provision_material_services(factory, *, artifacts, checker):
         await provision_checker_service(factory)
 
 
+def _archive_facts(data):
+    """Inspect the exact admitted ZIP used by the execution fixture."""
+    inspector = SubmissionArchiveInspector(SubmissionArchiveLimits())
+    manifest = build_submission_manifest(inspector.inspect(BytesIO(data)))
+    with zipfile.ZipFile(BytesIO(data)) as archive:
+        files = {name: archive.read(name) for name in archive.namelist() if not name.endswith("/")}
+    import hashlib
+    digest = "sha256:" + hashlib.sha256(data).hexdigest()
+    return inspector, manifest, files, digest
+
+
 @asynccontextmanager
 async def material_fixture(tmp_path, database_url, *, provider="local", scratch_limits=None,
-                           storage_settings=None, provision_services=True, provision_checker=True):
+                           storage_settings=None, provision_services=True, provision_checker=True,
+                           contribution_awards=()):
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     if storage_settings is not None:
@@ -100,7 +112,9 @@ async def material_fixture(tmp_path, database_url, *, provider="local", scratch_
     ))
     manager = ArtifactScratchManager(root=tmp_path / "post-scratch", limits=scratch_limits if scratch_limits is not None else _limits())
     try:
-        plan, policy = await approved_pre_submit_fixture(factory, namespace, guide_version="v1")
+        plan, policy = await approved_pre_submit_fixture(
+            factory, namespace, guide_version="v1", contribution_awards=contribution_awards
+        )
         context = _context()
         await provision_material_services(factory, artifacts=provision_services, checker=provision_checker)
         task_id, assignment_id = new_record_id(), new_record_id()
@@ -138,12 +152,7 @@ async def material_fixture(tmp_path, database_url, *, provider="local", scratch_
             admission = await session.get(SubmissionBundleAdmission, str(admission_id))
             replica_id = UUID(admission.verified_replica_id)
             compiled = CompiledPostSubmitPolicy.model_validate_json(json.dumps(submission.locked_post_submit_checker_policy_body))
-        inspector = SubmissionArchiveInspector(SubmissionArchiveLimits())
-        manifest = build_submission_manifest(inspector.inspect(BytesIO(data)))
-        with zipfile.ZipFile(BytesIO(data)) as archive:
-            files = {name: archive.read(name) for name in archive.namelist() if not name.endswith("/")}
-        import hashlib
-        digest = "sha256:" + hashlib.sha256(data).hexdigest()
+        inspector, manifest, files, digest = _archive_facts(data)
         request = make_post_submit_request(
             evaluation_request_id=new_record_id(), evaluation_generation=1,
             project_id=facts.project_id, task_id=task_id, assignment_id=assignment_id,

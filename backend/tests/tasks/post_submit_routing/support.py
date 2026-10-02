@@ -298,6 +298,7 @@ async def completed_source(
     *,
     provision_services=True,
     storage_settings=None,
+    contribution_awards=(),
 ):
     """Yield one real authorized allow-review run and its valid source scalars."""
     async with material_fixture(
@@ -305,6 +306,7 @@ async def completed_source(
         database_url,
         provision_services=provision_services,
         storage_settings=storage_settings,
+        contribution_awards=contribution_awards,
     ) as h:
         await rebuild_real_request(h)
         await reserve(h)

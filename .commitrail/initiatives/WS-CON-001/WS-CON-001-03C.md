@@ -1,7 +1,7 @@
 # CON-03C — Immutable contribution and award storage
 
 - Initiative: `WS-CON-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: Store exact contribution sources and fixed awards without activating contribution creation, acceptance or fulfillment.
 
 ## Intent and current behavior
@@ -173,7 +173,7 @@ fence/ordinal and source-authority prerequisites are reviewed against code.
 
 ## Focused verification map
 
-These are future implementation test nodes, not claims of executed proof:
+The following nodes protect the storage contracts; execution evidence belongs in the PR:
 
 | Required behavior | Node under `tests/contributions/records/` |
 | --- | --- |

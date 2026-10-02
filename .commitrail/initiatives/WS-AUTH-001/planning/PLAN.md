@@ -1,7 +1,7 @@
 # WS-AUTH-001 — Current pre-review activation plan
 
 The delivered [ART-07A1 metadata contract](../../WS-ART-001/WS-ART-001-07A1.md)
-and REV-03B normalized packet persistence are delivered. REV-04A Review source storage is also delivered; REV-04B shared acceptance storage is delivered; CON persistence and participation are next. These are storage prerequisites;
+and REV-03B normalized packet persistence are delivered. REV-04A Review source storage is also delivered; REV-04B shared acceptance storage is delivered; CON-03C contribution/award storage is delivered; atomic participation remains next. These are storage prerequisites;
 no live human-review queue or endpoint is required for automated acceptance.
 
 The [cross-owner dependency contract](../../WS-ARCH-001/planning/PLAN.md#current-dependency-contract)

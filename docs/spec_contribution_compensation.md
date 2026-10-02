@@ -262,6 +262,13 @@ depends on the binding.
 
 ### ContributionRecord
 
+CON-03C delivers immutable source and award storage only. No production writer,
+reader, participant or fulfillment consumer is registered. Before activation,
+originating Review/FinalAcceptance authority and the shared fence/ordinal must
+be installed; retained pre-authority sources and dependent contribution/award
+rows must cause refusal unchanged, never receipt backfill or deletion. CON-07
+must prove complete compensated award sets and whole-transaction rollback.
+
 Canonical fields:
 
 ```text
@@ -654,14 +661,15 @@ no Review or reviewer operation; external delivery remains after commit.
 
 The core transaction makes zero ART capability calls. The shared acceptance
 operation (or human reviewer operation) supplies the exact server-derived
-stabilized `Submission.artifact_hash` from the initiating locked context; CON copies it to the
+verified Submission artifact digest from the initiating locked context; CON copies it to the
 ContributionRecord without loading bytes, rehashing, verifying, binding, or
 calling a provider.
 
-The current caller-supplied `Submission.package_hash` MUST NOT be silently
-treated as the stabilized digest. The owning ART/task/REV cutover must provide
-the verified field and database lineage before the first canonical Review
-commit.
+`Submission.package_hash` MUST NOT be used as that digest. Storage validates
+Submission.artifact_binding_id = ArtifactBinding.id, Submission.artifact_content_id
+= ArtifactContent.id, ArtifactBinding.content_id = ArtifactContent.id and the
+record hash = ArtifactContent.sha256; reviewer records also equal Review.artifact_hash.
+No new Submission hash alias or artifact byte read is needed.
 
 An optional contribution-evidence document is deferred. If separately
 approved, it is an asynchronous projection with independent status and failure
