@@ -372,7 +372,6 @@ TASK_MODULES = (
     "tests/reviews/decision/test_storage.py",
     "tests/reviews/decision/test_migration.py",
     "tests/reviews/packet/test_repository.py",
-    "tests/reviews/packet/test_storage.py",
     "tests/reviews/packet/test_migration.py",
 
     "tests/tasks/post_submit_routing/test_contracts.py",
@@ -478,6 +477,7 @@ LANES = (
         "schema_contracts",
         (
             SCHEMA_MODULE,
+            "tests/reviews/packet/test_storage.py",
             "tests/reviews/lifecycle/test_contracts.py",
             "tests/reviews/lifecycle/test_storage.py",
             "tests/reviews/lifecycle/test_fence.py",
