@@ -4,12 +4,16 @@
 - Durable disposition: `Complete`
 - Intended merge outcome: Store exact contribution sources and fixed awards without activating contribution creation, acceptance or fulfillment.
 
-## Intent and current behavior
+## Intent
 
 The human wants the complete claim/upload/check/outcome path, including automatic
 acceptance when the locked policy permits it, followed by human review/revision.
 CON needs immutable contribution and award storage before its shared transaction
-participant. The merged Review and FinalAcceptance sources now exist. They remain
+participant.
+
+## Current behavior
+
+The merged Review and FinalAcceptance sources now exist. They remain
 storage foundations without originating decision/acceptance authority custody.
 Policy versions, rules, definitions and adapter bindings are already persisted.
 
@@ -61,7 +65,7 @@ composition, task effects, provider calls, outbox or obligation allocation.
 No compatibility path, new source entity, retained-data deletion, fake authority
 receipt, award adjustment/deletion, reputation or payment activation.
 
-## Design
+## Design and decisions
 
 Two tables use native UUID keys and UUIDv7 record IDs, restrictive FKs, PostgreSQL
 creation times and UPDATE/DELETE/TRUNCATE immutability. No new framework.
@@ -107,7 +111,7 @@ requirement, not a second authority system. Automated source polarity retains
 REV's current limitation: do not fabricate an activated false-policy guide to
 claim positive runtime proof. Both eventual triggers use the same participant.
 
-## Acceptance criteria and proof
+## Acceptance criteria
 
 - Closed immutable contribution input rejects missing/mixed/wrong source shapes,
   extra fields, non-native UUIDs and malformed digest.
@@ -171,7 +175,7 @@ hardening. Current capability and next-boundary claims will advance together
 with this intended merge outcome. Next: CON-07 participant after required shared
 fence/ordinal and source-authority prerequisites are reviewed against code.
 
-## Focused verification map
+## Evidence
 
 The following nodes protect the storage contracts; execution evidence belongs in the PR:
 
@@ -199,7 +203,7 @@ Lead runs shared boundary/structure/Commitrail/link/wording checks and hosted
 full-suite evidence. No submitter claim lease or automatic expiry is introduced;
 that remains deferred, independently of existing reviewer lease storage.
 
-## Plan review dispositions
+## Review findings
 
 Security review required reachable paid fixtures, independent source/economic
 mutation proof, and named later activation/refusal/complete-award tests; those
