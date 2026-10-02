@@ -440,6 +440,9 @@ It is not a v0.1 review-transaction side effect.
 
 ## Contribution Record
 
+CON-03C supplies immutable storage only; live recognition and atomic
+contribution creation remain unavailable until the shared participant is implemented.
+
 The immutable, evidence-backed record of one completed contribution under locked
 project context. `completed_review` is created for every valid recorded human
 Review and binds directly to that Review and ReviewLease.

@@ -629,10 +629,11 @@ Extract foundations from existing owner work, not a new initiative:
 2. [ART-07A1](../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) supplies
    the metadata-only packet contract. REV-03B normalized packet persistence is
    delivered. REV-04A immutable Review-source storage and REV-04B shared FinalAcceptance
-   storage are delivered. Do not create an incomplete Review solely as
-   an FK target. CON-03C contribution/award persistence and CON-07 submitter
-   participation follow. These storage prerequisites require no live human
-   claim or decision endpoint. Hidden composition proof precedes exact AUTH
+   storage and CON-03C contribution/award persistence are delivered. Do not create
+   an incomplete Review solely as an FK target. CON-07 atomic participation,
+   the shared fence/ordinal below and exact source AUTH custody remain required
+   before shared acceptance. These foundations require no live human claim or
+   decision endpoint. Hidden composition proof precedes exact AUTH
    activation; unavailable authority must not be replaced with fabricated allow evidence.
 3. Pull the existing [REV-12A shared fence foundation](#rev-12a-shared-fence-foundation)
    (controller/fence persistence, mutation-fence port

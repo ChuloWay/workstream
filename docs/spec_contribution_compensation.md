@@ -1146,8 +1146,10 @@ transaction participants do not wait for generic dispatch:
 
 The [shared acceptance order](spec_review_lifecycle.md#implementation-order-and-required-proof)
 governs the false branch: delivered TASK ARCH-04E1A source schema/detached facts
-precede REV-04B acceptance persistence, then CON-03C/07 plus the existing shared fence
-foundation, then the shared operation and ARCH-04E1B/AUTH routing composition.
+precede the delivered REV-04B acceptance and CON-03C contribution/award storage.
+CON-07 atomic participation, the existing shared fence/ordinal and exact source
+AUTH custody remain required before the shared operation and ARCH-04E1B/AUTH
+routing composition.
 False guide activation follows joint proof. A stable Review FK target is
 not live ReviewLease/queue/decision behavior. The shared lifecycle/obligation
 fence is required for either trigger; human runtime and fulfillment endpoints

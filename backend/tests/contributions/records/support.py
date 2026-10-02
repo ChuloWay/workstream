@@ -126,7 +126,7 @@ async def retire_policy_and_suspend_bindings(h):
             )
             await service.suspend(AdapterBindingSuspendRequest(
                 operation_id=new_record_id(), actor_profile_id=context.actor_profile_id,
-                project_id=h.review.project_id, adapter_binding_id=binding, expected_lifecycle_version=1,
+                project_id=h.review.project_id, adapter_binding_id=UUID(str(binding)), expected_lifecycle_version=1,
             ))
     async with h.factory() as session:
         assert await session.scalar(text(

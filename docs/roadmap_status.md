@@ -715,7 +715,8 @@ remaining trace sequence is:
   [ARCH-04E1A source facts](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E1A.md).
   Delivered [ART-07A1 packet types](../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md), [REV-03B packet persistence](../.commitrail/initiatives/WS-REV-001/WS-REV-001-03B.md),
   [REV-04A Review source storage](../.commitrail/initiatives/WS-REV-001/WS-REV-001-04A.md)
-  and [REV-04B acceptance storage](../.commitrail/initiatives/WS-REV-001/WS-REV-001-04B.md)
+  and [REV-04B acceptance storage](../.commitrail/initiatives/WS-REV-001/WS-REV-001-04B.md),
+  followed by delivered [CON-03C contribution/award storage](../.commitrail/initiatives/WS-CON-001/WS-CON-001-03C.md),
   precede CON-07 and the REV-12A/CON fence foundation before
   `04E1B -> 04E2 -> 04E3` dispatch and routing; 04F supplies remediation. The mandatory
   [04D1 canonical material custody](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04D1.md)

@@ -210,3 +210,9 @@ mutation proof, and named later activation/refusal/complete-award tests; those
 are now explicit. Architecture/reuse review additionally required extending the
 existing PolicyWorld owner, all ART identity equalities, and this concrete test
 map. No production behavior was changed to evade these planning findings.
+
+Implementation review caught a strict UUID fixture-boundary mismatch before
+the historical-policy assertion; normalize the queried binding ID at its typed
+request boundary and retain the historical proof. Current canonical CON/REV
+sequencing, roadmap trace and glossary availability now distinguish delivered
+storage from the remaining atomic participant and authority/fence prerequisites.
