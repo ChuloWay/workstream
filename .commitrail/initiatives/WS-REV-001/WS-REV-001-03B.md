@@ -19,7 +19,9 @@ upload and guide manifest use `GuideSourceArtifactIngest.id`, exposed as
 `ingest_id` by the PROJECTS public guide document contract. Replace the mistaken
 field with that live identity in this affected scope; do not activate the old
 table, add an alias, or delete retained data. Existing extraction evidence stays
-read-only. The complete packet remains metadata-only.
+read-only. The complete packet remains metadata-only. The completed ART-07A1
+record remains unchanged as delivery history; this record and the ART overview
+carry the owner correction, preserving one change record per implementation PR.
 
 ## Bounded change
 
@@ -49,7 +51,6 @@ read-only. The complete packet remains metadata-only.
 ### Allowed current documentation
 
 - This record; `.commitrail/INDEX.md`.
-- `.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md`: document the current corrected guide identity and link this repair, preserving its original delivery history.
 - `.commitrail/initiatives/WS-ART-001/OVERVIEW.md`
 - `.commitrail/initiatives/WS-REV-001/OVERVIEW.md`
 - `.commitrail/initiatives/WS-ARCH-001/OVERVIEW.md`
