@@ -300,3 +300,14 @@ edits; do not impose a global single-active AUTH chunk rule. Hidden feature
 behavior stays unavailable until its exact activation is implemented and
 verified. Each PR uses the normal evidence, review and human merge workflow;
 planning records do not introduce an additional administrator checkpoint.
+
+### Disabled shared lifecycle foundation
+
+[REV-12A1](../../.commitrail/initiatives/WS-REV-001/WS-REV-001-12A1.md) provides
+immutable disabled generation-zero storage and caller-root transaction locking.
+It does not activate `review.lifecycle.activation.manage` or an acceptance writer.
+AUTH's scalar activation contract binds its inherited phase to current_phase;
+generation zero requires disabled. Those facts do not prove adjacency or grant
+authority. Mandatory source AUTH custody precedes CON-07 consumption; authorized
+REV transitions and real obligation/cutoff proof remain required before live
+shared acceptance, without requiring live human-review queues first.

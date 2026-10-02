@@ -133,3 +133,14 @@ legal phase adjacency, manifest/observation binding, real cutoff races and
 safe stop before admitting work. Unsupported resources/transitions deny.
 Later REV-12A4/13C work extends the same action only after successor parity and
 activation evidence, not by handler-only widening or an extra controller.
+
+### Disabled shared lifecycle foundation
+
+[REV-12A1](../../.commitrail/initiatives/WS-REV-001/WS-REV-001-12A1.md) provides
+immutable disabled generation-zero storage and caller-root transaction locking.
+It does not activate `review.lifecycle.activation.manage` or an acceptance writer.
+AUTH's scalar activation contract binds its inherited phase to current_phase;
+generation zero requires disabled. Those facts do not prove adjacency or grant
+authority. Mandatory source AUTH custody precedes CON-07 consumption; authorized
+REV transitions and real obligation/cutoff proof remain required before live
+shared acceptance, without requiring live human-review queues first.

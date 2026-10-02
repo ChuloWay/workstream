@@ -26,13 +26,17 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
   [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
   storage, without AUTH receipt custody or runtime consumers.
-- Next usable boundary: CON-07, the REV-12A/CON fence foundation and mandatory
-  acceptance authority hardening. ARCH-04F remediation and public intake follow
+- Next usable boundary: mandatory source authority hardening, then CON-07 using the delivered
+  REV-12A1 disabled controller/fence. ARCH-04F remediation and public intake follow
   acceptance and routing composition.
 - Governing sources: artifact specifications, `ArtifactStore`,
   `ArtifactScratchManager`, code, migrations, and artifact tests.
 - Preserve: SHA-256/byte-count identity, reread verification, isolation,
   idempotency, and no local-filesystem provider coupling.
+
+Delivered [REV-12A1](../WS-REV-001/WS-REV-001-12A1.md) supplies only disabled
+generation-zero controller storage and transaction locking. Source AUTH custody,
+CON participation and authorized activation remain separate required work.
 
 ## Delivered
 
@@ -56,8 +60,8 @@ must prove exact approved lineage at preparation, consumption and binding.
    and ARCH-04E1A source-only material lineage are delivered.
 2. ART-07A1 metadata-only membership types are delivered. REV-03B packet
    storage, REV-04A Review sources and REV-04B shared FinalAcceptance storage are
-   delivered. CON-03C contribution/award storage is delivered. CON-07 participation, the shared fence and mandatory
-   acceptance authority hardening precede acceptance/routing composition.
+   delivered. CON-03C contribution/award storage is delivered. REV-12A1 disabled fencing is delivered. Mandatory
+   source authority hardening comes next, then CON-07 before acceptance/routing composition.
 3. ARCH-04F owns checker-remediation resubmission using existing ART ports;
    later reviewer-requested revision remains a separate REV boundary. Add those dependencies before public Submission
    cutover.

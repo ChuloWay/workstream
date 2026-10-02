@@ -307,6 +307,10 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     assert {
         "tests/test_alembic.py",
         "tests/test_database_reset.py",
+        "tests/reviews/lifecycle/test_contracts.py",
+        "tests/reviews/lifecycle/test_storage.py",
+        "tests/reviews/lifecycle/test_fence.py",
+        "tests/reviews/lifecycle/test_migration.py",
         "tests/reviews/acceptance/test_contracts.py",
         "tests/reviews/acceptance/test_storage.py",
         "tests/reviews/acceptance/test_migration.py",

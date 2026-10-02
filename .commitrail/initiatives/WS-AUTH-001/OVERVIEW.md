@@ -11,7 +11,7 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 
 - Disposition: Planned
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
-  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage is delivered; atomic participation remains next. No packet resolver or human runtime is live.
+  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; mandatory source AUTH custody precedes atomic participation. No packet resolver or human runtime is live.
 
 - Intent: provide deny-default, project-scoped authority with canonical human
   and service identities and attributable audit evidence.
@@ -51,14 +51,17 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: CON-07 and REV-12A/CON fence
-  foundations precede shared acceptance composition and hidden ARCH-04E1B;
+- Next usable boundary: mandatory source AUTH custody, then CON-07 using the delivered REV-12A1 disabled fence, before shared acceptance composition and hidden ARCH-04E1B;
   ARCH-04E2 then owns exact routing activation before 04E3 live composition.
 - Governing source: `docs/spec_authorization_service.md`, authorization code,
   migrations, and tests.
 - Preserve: Flow token verification only, no Workstream login/session system,
   exact action/permission catalogues, prepared mutation protocol, and
   fail-closed action availability.
+
+Delivered [REV-12A1](../WS-REV-001/WS-REV-001-12A1.md) supplies only disabled
+generation-zero controller storage and transaction locking. Source AUTH custody,
+CON participation and authorized activation remain separate required work.
 
 ## Delivered
 

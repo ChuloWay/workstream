@@ -9,7 +9,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 
 - Disposition: Planned
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
-  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage is delivered; atomic participation remains next. No packet resolver or human runtime is live.
+  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; mandatory source AUTH custody precedes atomic participation. No packet resolver or human runtime is live.
 
 - Completed boundary: through 02H, [CP05](WS-ARCH-001-CP05.md), [CP06](WS-ARCH-001-CP06.md), [CP07](WS-ARCH-001-CP07.md), [ARCH-03A](WS-ARCH-001-03A.md), and
   [ARCH-04A consolidation](WS-ARCH-001-04A.md) canonical post-submit contracts/conformance.
@@ -30,7 +30,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
   [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
   storage, without AUTH receipt custody or runtime consumers.
-- Next usable boundary: CON-07 and the existing REV-12A/CON fence foundation,
+- Next usable boundary: mandatory source AUTH custody, then CON-07 using the delivered REV-12A1 disabled fence,
   plus mandatory same-table acceptance authority hardening before shared
   acceptance composition, then ARCH-04E1B/04E2/04E3 and ARCH-04F. Output-file
   authority remains unavailable for the zero-output catalogue.
@@ -58,6 +58,10 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   architecture tests.
 - Preserve: no concrete-adapter imports in product services and no duplicate
   factory or authorization paths.
+
+Delivered [REV-12A1](../WS-REV-001/WS-REV-001-12A1.md) supplies only disabled
+generation-zero controller storage and transaction locking. Source AUTH custody,
+CON participation and authorized activation remain separate required work.
 
 ## Delivered and remaining
 

@@ -550,7 +550,7 @@ class ReviewLifecycleActivationContract(_ReviewContract):
     action_id: Literal[ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE]
     singleton_id: UUID
     operation_id: UUID
-    expected_generation: int = Field(ge=1)
+    expected_generation: int = Field(ge=0, le=9_223_372_036_854_775_807)
     current_phase: ReviewLifecyclePhase
     target_phase: ReviewLifecyclePhase
     adjacent_transition_confirmed: Literal[True]
@@ -563,6 +563,10 @@ class ReviewLifecycleActivationContract(_ReviewContract):
     @model_validator(mode="after")
     def require_phase_change(self):
         """Reject same-phase requests; legal adjacency remains REV-owned."""
+        if self.lifecycle_phase is not self.current_phase:
+            raise ValueError("lifecycle phase must match current phase")
+        if self.expected_generation == 0 and self.current_phase is not ReviewLifecyclePhase.DISABLED:
+            raise ValueError("lifecycle generation zero must be disabled")
         if self.current_phase is self.target_phase:
             raise ValueError("lifecycle activation must change phase")
         return self

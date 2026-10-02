@@ -525,6 +525,23 @@ def test_lifecycle_activation_rejects_same_phase_and_stays_scalar_serializable()
     }
     ReviewLifecycleActivationContract.model_validate(values)
     _assert_inert_contract_model(ReviewLifecycleActivationContract)
+    genesis = values | {
+        "expected_generation": 0,
+        "current_phase": ReviewLifecyclePhase.DISABLED,
+        "lifecycle_phase": ReviewLifecyclePhase.DISABLED,
+        "target_phase": ReviewLifecyclePhase.SHADOW,
+    }
+    assert ReviewLifecycleActivationContract.model_validate(genesis).expected_generation == 0
+    for invalid in (
+        values | {"expected_generation": 0},
+        genesis | {"lifecycle_phase": ReviewLifecyclePhase.SHADOW},
+        values | {"lifecycle_phase": ReviewLifecyclePhase.LIVE},
+        genesis | {"expected_generation": True},
+        genesis | {"expected_generation": -1},
+        genesis | {"expected_generation": 2**63},
+    ):
+        with pytest.raises(ValidationError):
+            ReviewLifecycleActivationContract.model_validate(invalid)
     with pytest.raises(ValidationError):
         ReviewLifecycleActivationContract.model_validate(
             values | {"target_phase": ReviewLifecyclePhase.SHADOW}
