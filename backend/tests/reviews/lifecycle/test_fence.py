@@ -114,6 +114,12 @@ async def test_caller_transaction_holds_and_releases_locks(clean_postgres_databa
     async with factory() as owner:
         await owner.begin()
         facts = await PostgresJointLifecycleMutationFence(owner).acquire(0)
+        # A later raw savepoint cannot release locks acquired at the root.
+        await owner.execute(text("SAVEPOINT after_fence"))
+        await owner.execute(text("SELECT 1"))
+        await owner.execute(text("ROLLBACK TO SAVEPOINT after_fence"))
+        await owner.execute(text("RELEASE SAVEPOINT after_fence"))
+        assert owner.get_transaction().is_active
         # A detached return neither commits nor releases either lock.
         async with factory() as probe:
             assert not await probe.scalar(
@@ -249,3 +255,63 @@ async def test_externally_bound_root_retains_fence_until_outer_rollback(clean_po
         finally:
             if outer.is_active:
                 await outer.rollback()
+
+
+@pytest.mark.parametrize("sql_path", ["session", "connection", "driver"])
+async def test_raw_savepoint_rejected_before_locks(clean_postgres_database, sql_path):
+    factory = get_session_factory()
+    async with factory() as owner:
+        await owner.begin()
+        connection = await owner.connection()
+        # Begin the physical driver transaction as well as SQLAlchemy's logical one.
+        await owner.execute(text("SELECT 1"))
+        if sql_path == "session":
+            await owner.execute(text("SAVEPOINT raw_fence_probe"))
+        elif sql_path == "connection":
+            await connection.exec_driver_sql("SAVEPOINT raw_fence_probe")
+        else:
+            raw = await connection.get_raw_connection()
+            await raw.driver_connection.execute("SAVEPOINT raw_fence_probe")
+        assert not owner.in_nested_transaction()
+        assert not connection.in_nested_transaction()
+        try:
+            with pytest.raises(
+                JointLifecycleUnavailable, match="root database transaction"
+            ) as caught:
+                await PostgresJointLifecycleMutationFence(owner).acquire(0)
+            assert isinstance(caught.value.__cause__, DBAPIError)
+            assert caught.value.__cause__.orig.sqlstate == "25001"
+            # The native guard fails before either lock, not after rollback releases them.
+            async with factory() as observer:
+                assert await observer.scalar(
+                    text("SELECT pg_catalog.pg_try_advisory_xact_lock(:key)"),
+                    {"key": JOINT_LIFECYCLE_LOCK_KEY},
+                )
+                await observer.execute(
+                    text("SELECT id FROM public.joint_lifecycle_release_control FOR UPDATE NOWAIT")
+                )
+            assert owner.get_transaction().is_active
+        finally:
+            await owner.rollback()
+        # A fresh root supports prior AUTH/idempotency queries and still acquires.
+        async with owner.begin():
+            await owner.execute(text("SELECT 1"))
+            facts = await PostgresJointLifecycleMutationFence(owner).acquire(0)
+            assert facts.generation == 0
+
+
+async def test_root_probe_preserves_other_database_errors(clean_postgres_database, monkeypatch):
+    async with get_session_factory()() as owner:
+        await owner.begin()
+        execute = owner.execute
+
+        async def fail_probe(statement, *args, **kwargs):
+            if str(statement) == "SELECT pg_catalog.pg_export_snapshot()":
+                statement = text("SELECT * FROM public.lifecycle_absent_probe_relation")
+            return await execute(statement, *args, **kwargs)
+
+        monkeypatch.setattr(owner, "execute", fail_probe)
+        with pytest.raises(DBAPIError) as caught:
+            await PostgresJointLifecycleMutationFence(owner).acquire(0)
+        assert caught.value.orig.sqlstate == "42P01"
+        await owner.rollback()

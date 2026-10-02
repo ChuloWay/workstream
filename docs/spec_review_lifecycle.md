@@ -1041,7 +1041,14 @@ authority-loss replacement, CON fulfillment-obligation writers, dispatch, and
 callbacks.
 
 REV-12A1 stores one immutable disabled generation-zero controller and supplies
-an advisory-before-row fence within the caller's active root transaction. Its
+an advisory-before-row fence within the caller's active root transaction.
+Before either lock, a native `pg_catalog.pg_export_snapshot()` call rejects
+raw-SQL savepoints as well as managed subtransactions, while permitting prior
+AUTH/idempotency queries. Its identifier is discarded, never exposed or retained
+as product data; PostgreSQL holds the temporary snapshot (including xmin) until
+transaction end. Callers keep transactions short, retain commit/rollback ownership
+and roll back after acquisition failure. PostgreSQL two-phase prepare is unsupported.
+Savepoints established after acquisition cannot release the earlier root locks. Its
 public scalar facts are not authority. AUTH retains an independent scalar phase
 projection; lifecycle_phase must equal current_phase, and generation zero must
 be disabled. The four phases are disabled, shadow, live and draining. Detailed

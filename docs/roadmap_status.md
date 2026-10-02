@@ -466,7 +466,7 @@ The next dependency-safe product sequence is:
    ARCH-04D2 supplies exact input/execute/finalize service authority and durable
    receipt custody. ARCH-04E1A supplies one immutable route-neutral source table,
    detached facts and source-neutral accepted-effects types. It has no runtime
-   entry. CON-03C adds immutable contribution/award storage without runtime writers or consumers. REV-12A1 supplies disabled controller/fence mechanics.
+   entry. CON-03C adds immutable contribution/award storage without runtime writers or consumers. REV-12A1 supplies disabled controller/fence mechanics with PostgreSQL-enforced root-transaction checks, including raw-SQL savepoint rejection.
    Both branches require hidden ARCH-04E1B before AUTH 04E2 and live 04E3.
    True routing may proceed after its own prerequisites to publish exact human
    `allow_review` when no blocking failure exists; CON-07 and shared acceptance

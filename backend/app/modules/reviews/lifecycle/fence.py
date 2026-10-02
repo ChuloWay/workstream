@@ -4,6 +4,7 @@ import hashlib
 
 from pydantic import ValidationError
 from sqlalchemy import select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.reviews.api.lifecycle import (
@@ -44,6 +45,15 @@ class PostgresJointLifecycleMutationFence:
         connection = await self._session.connection()
         if connection.in_nested_transaction():
             raise JointLifecycleUnavailable("lifecycle requires a root database transaction")
+        # SQLAlchemy cannot observe raw-SQL savepoints. PostgreSQL only exports
+        # snapshots at the root, even after prior AUTH/idempotency queries.
+        # Discard the token; PostgreSQL owns cleanup at caller transaction end.
+        try:
+            await self._session.execute(text("SELECT pg_catalog.pg_export_snapshot()"))
+        except DBAPIError as exc:
+            if getattr(exc.orig, "sqlstate", None) != "25001":
+                raise
+            raise JointLifecycleUnavailable("lifecycle requires a root database transaction") from exc
         await self._session.execute(
             text("SELECT pg_catalog.pg_advisory_xact_lock(:key)"),
             {"key": JOINT_LIFECYCLE_LOCK_KEY},

@@ -44,7 +44,11 @@ class JointLifecycleMutationFence(Protocol):
     """Serialize through the caller's active root transaction, without committing.
 
     Facts are mechanical custody, not AUTH or permission to write. The caller
-    must retain the transaction through every protected operation.
+    must retain the transaction through every protected operation and roll back
+    after acquisition fails. PostgreSQL rejects managed and raw-SQL savepoints;
+    prior root-level queries remain permitted. The native root check retains a
+    discarded export snapshot until transaction end, so keep transactions short.
+    PostgreSQL two-phase prepare is unsupported.
     """
 
     async def acquire(self, expected_generation: int) -> JointLifecycleControlFacts:
