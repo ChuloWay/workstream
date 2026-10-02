@@ -631,13 +631,13 @@ Extract foundations from existing owner work, not a new initiative:
    delivered. REV-04A immutable Review-source storage and REV-04B shared FinalAcceptance
    storage and CON-03C contribution/award persistence are delivered. Do not create
    an incomplete Review solely as an FK target. REV-12A1 supplies the disabled
-   controller and transaction fence. Mandatory exact source AUTH custody must
+   controller and transaction fence. Mandatory exact acceptance-source AUTH custody must
    precede CON-07 consumption and shared acceptance. These foundations require no live human claim or
    decision endpoint. Hidden composition proof precedes exact AUTH
    activation; unavailable authority must not be replaced with fabricated allow evidence.
 3. [REV-12A1](../.commitrail/initiatives/WS-REV-001/WS-REV-001-12A1.md)
    delivers disabled generation-zero controller storage and the caller-root
-   transaction fence. Complete same-table source AUTH custody, then CON-07.
+   transaction fence. Complete same-table acceptance-source AUTH custody, then CON-07.
    Actual CON fulfillment roots own immutable ordinal allocation; no award or
    outbox row substitutes for a root. Authorized transition/drain composition
    and real root/cutoff proof extend this fence before activation, independently

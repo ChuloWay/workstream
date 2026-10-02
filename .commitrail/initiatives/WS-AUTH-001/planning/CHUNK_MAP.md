@@ -1,7 +1,7 @@
 # WS-AUTH-001 — Current pre-review activation map
 
 The delivered [ART-07A1 metadata contract](../../WS-ART-001/WS-ART-001-07A1.md)
-and REV-03B normalized packet persistence are delivered. REV-04A Review source storage is also delivered; REV-04B shared acceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; mandatory source AUTH custody precedes atomic participation. These are storage prerequisites;
+and REV-03B normalized packet persistence are delivered. REV-04A Review source storage is also delivered; REV-04B shared acceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; mandatory acceptance-source AUTH custody precedes atomic participation. These are storage prerequisites;
 no live human-review queue or endpoint is required for automated acceptance.
 
 Use the [current plan](PLAN.md) and
@@ -21,7 +21,7 @@ work and historical proposals.
 | [ARCH-04D2](../../WS-ARCH-001/WS-ARCH-001-04D2.md) | Complete: exact materialization and execute/finalize authority; output write/bind unavailable; replaces AUTH-14/XINT-06B |
 | [AUTH-OUTBOX-01](PLAN.md#ws-auth-001-outbox-01--unavailable-dispatcher-contract) | Complete: unavailable exact dispatcher identity/action/phase contract; CON-02B and AUTH-OUTBOX-02 mechanics complete; feature authority/registration remain separate |
 | [AUTH-OUTBOX-02](PLAN.md#ws-auth-001-outbox-02--exact-dispatcher-activation) | Complete: exact dispatcher mechanics activation, phase audit custody and bounded prefork delivery; ARCH-03C2 subsequently registers assignment invalidation, while future handlers require their own exact authority |
-| [ARCH-04E2](../../WS-ARCH-001/planning/chunks/WS-ARCH-001-04E-canonical-allow-review.md#current-bounded-sequence) | Both branches: delivered source-only 04E1A -> hidden 04E1B -> exact routing authority 04E2 -> live 04E3. True uses its own prerequisites; false additionally requires source AUTH custody, CON-07/shared acceptance, actual obligation custody and scoped lifecycle activation |
+| [ARCH-04E2](../../WS-ARCH-001/planning/chunks/WS-ARCH-001-04E-canonical-allow-review.md#current-bounded-sequence) | Both branches: delivered source-only 04E1A -> hidden 04E1B -> exact routing authority 04E2 -> live 04E3. True uses its own prerequisites; false additionally requires acceptance-source AUTH custody, CON-07/shared acceptance, actual obligation custody and scoped lifecycle activation |
 
 Guide activation needs CP05 -> CP06 -> hidden CP07 and POL-07, which also
 requires independent ARCH-04A registered-capability proof. It does not need

@@ -308,6 +308,6 @@ immutable disabled generation-zero storage and caller-root transaction locking.
 It does not activate `review.lifecycle.activation.manage` or an acceptance writer.
 AUTH's scalar activation contract binds its inherited phase to current_phase;
 generation zero requires disabled. Those facts do not prove adjacency or grant
-authority. Mandatory source AUTH custody precedes CON-07 consumption; authorized
+authority. Mandatory acceptance-source AUTH custody precedes CON-07 consumption; authorized
 REV transitions and real obligation/cutoff proof remain required before live
 shared acceptance, without requiring live human-review queues first.

@@ -1022,7 +1022,7 @@ REV-12A owns the only `JointLifecycleReleaseControl` and
 generation, or availability writer.
 REV-12A1 delivers its disabled generation-zero persistence and caller-root
 mutation fence. The [shared acceptance order](spec_review_lifecycle.md#implementation-order-and-required-proof)
-requires exact source AUTH custody before CON-07 consumption. Actual CON root
+requires exact acceptance-source AUTH custody before CON-07 consumption. Actual CON root
 storage and ordinal allocation remain required before either trigger creates
 fulfillment obligations; neither awards nor generic outbox rows substitute. Later REV-12A drain/operator
 work extends this same controller; it is not a prerequisite on live human
@@ -1152,7 +1152,7 @@ The [shared acceptance order](spec_review_lifecycle.md#implementation-order-and-
 governs the false branch: delivered TASK ARCH-04E1A source schema/detached facts
 precede the delivered REV-04B acceptance and CON-03C contribution/award storage.
 REV-12A1 delivers disabled controller/fence mechanics. Mandatory same-table
-source AUTH custody comes next, then CON-07 atomic participation and the shared
+acceptance-source AUTH custody comes next, then CON-07 atomic participation and the shared
 operation/ARCH-04E1B. Actual root ordinal custody and authorized lifecycle
 transition/drain proof precede live AUTH routing composition.
 False guide activation follows joint proof. A stable Review FK target is

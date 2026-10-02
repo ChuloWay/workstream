@@ -5,7 +5,7 @@ and the [capability ledger](../../../docs/roadmap_status.md).
 
 - Disposition: Planned
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
-  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; mandatory source AUTH custody precedes atomic participation. No packet resolver or human runtime is live.
+  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; mandatory acceptance-source AUTH custody precedes atomic participation. No packet resolver or human runtime is live.
 
 - Completed boundary: public Finance ContributionPolicy administration, exact
   Finance Authority, CP06 selected-policy validation and CP07 internal guide
@@ -41,7 +41,7 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
   storage, without AUTH receipt custody or runtime consumers.
   [CON-03C](WS-CON-001-03C.md) adds exact contribution sources and fixed awards; no recognition or fulfillment operation is live.
-- Next usable boundary: for the selected automated-acceptance delivery sequence, mandatory source AUTH custody, then CON-07 using the delivered REV-12A1 disabled fence,
+- Next usable boundary: for the selected automated-acceptance delivery sequence, mandatory acceptance-source AUTH custody, then CON-07 using the delivered REV-12A1 disabled fence,
   plus mandatory same-table acceptance authority hardening before one shared
   acceptance operation serves both human and automatic triggers.
 - Governing sources: `docs/spec_contribution_compensation.md`,
@@ -92,7 +92,7 @@ the internal policy operations; CP05A exposes their public Finance routes.
    CP09 removes the replaced legacy
    economic path only after all consumers are replaced, including CHECKERS and
    public Submission cutover; it does not block canonical `allow_review`.
-2. [CON-03C](WS-CON-001-03C.md) delivers immutable ContributionRecord/CompensationAward storage after REV-04B. The disabled REV-12A1 fence is delivered; mandatory source AUTH custody
+2. [CON-03C](WS-CON-001-03C.md) delivers immutable ContributionRecord/CompensationAward storage after REV-04B. The disabled REV-12A1 fence is delivered; mandatory acceptance-source AUTH custody
    must precede the CON-07 atomic submitter participant. These shared pieces do not require live human
    decision/queue/lease behavior. The locked ReviewPolicy boolean
    `human_review_required` defaults true; false permits authorized automated
