@@ -108,7 +108,7 @@ Four tables, no mutable reservation state or unfinished Review:
   item_order (0–99), result resolved/unresolved/not_applicable and nonblank
   rationale (1–4000). Unique Review/finding and Review/order.
 - `review_decision_requests`: UUIDv7 id and operation_id, project/reviewer,
-  caller UUID idempotency_key, non-null Review id, exact request digest.
+  caller UUID idempotency_key, non-null Review id, stable request digest, independently recomputed from retained content.
   Unique project/reviewer/key, operation and Review. Deferred Review FK allows
   one complete request and Review to be staged in either order; rollback removes
   both. No status, pending row, unvalidated AUTH receipt or nullable source.
@@ -116,9 +116,14 @@ Four tables, no mutable reservation state or unfinished Review:
 The semantic digest uses canonical JSON with domain
 `workstream.review_source.v0.1`, all immutable Review source selectors, decision,
 summary, counts and ordered complete findings/resolutions (including their IDs).
-The request digest binds the same full aggregate. Future commands must recover
-existing generated IDs before recomputing replay, never derive record IDs from
-keys. IDs and times are not authority. Every protected SQL name is qualified and
+The separate request digest uses domain `workstream.review_decision_request.v0.1`
+and stable action `review.decision`, actor/source selectors, decision, summary,
+counts, ordered finding contents and ordered source-finding resolution facts.
+It excludes all newly generated Review/finding/resolution/request/operation IDs
+and timestamps. Thus two exact first deliveries have the same request digest
+before either allocates records. After exact key/digest match, the later command
+recovers the winner's stored IDs; changed content conflicts. Never derive record
+IDs from request keys. IDs and times are not authority. Every protected SQL name is qualified and
 functions pin `pg_catalog, public, pg_temp`.
 
 Before Review insert, lock lease -> queue -> task; check active, unexpired lease
@@ -189,7 +194,7 @@ New tests under `backend/tests/reviews/decision/`:
 - `test_storage.py::test_request_custody`: missing/mismatched request, exact
   stored association and key/digest conflict; caller rollback.
 - `test_storage.py::test_concurrent_request_and_child`: separate PostgreSQL
-  sessions observe real conflicts/parent visibility, not mocked scheduling.
+  sessions observe real conflicts/parent visibility, not mocked scheduling. Two first identical requests with distinct generated IDs retain identical request digests; changing the digest to include generated IDs must fail this proof.
 - `test_migration.py::test_review_upgrade_preserves_owners`: populated predecessor
   upgrade, exact new schema and non-destructive downgrade rejection.
 
