@@ -1282,6 +1282,14 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/reviews/acceptance/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/acceptance/schemas.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/reviews/decision/models.py"
     },
     {
@@ -1557,7 +1565,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "06defd3ec673660f8111c9cc7e7fd90ec29a4ea1ee51977b761a48b33083a62f",
+  "authority_digest": "590ea9d8199ebd88a72d8693ef503da6537c7212d112a5cc7d65d0ed03e5bef4",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

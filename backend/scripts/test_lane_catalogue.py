@@ -368,6 +368,9 @@ PROJECT_MODULES = (
 )
 
 TASK_MODULES = (
+    "tests/reviews/acceptance/test_contracts.py",
+    "tests/reviews/acceptance/test_storage.py",
+    "tests/reviews/acceptance/test_migration.py",
     "tests/reviews/decision/test_contracts.py",
     "tests/reviews/decision/test_storage.py",
     "tests/reviews/decision/test_migration.py",

@@ -550,6 +550,31 @@ proof must reject direct-SQL crossed sources, not merely nullable fields.
 AUTH admission and currentness remain transaction-time checks, not authority
 inferred from a FK. v0.1 has no reopen or replacement acceptance.
 
+### Delivered storage foundation and required authority hardening
+
+[REV-04B](../.commitrail/initiatives/WS-REV-001/WS-REV-001-04B.md) delivers one
+immutable `final_acceptances` table and closed metadata inputs, with exclusive
+Review/TASK source lineage, exact locked policy and submitter, database-owned
+time and unique terminal source identities. It adds no writer, reader, shared
+operation, CON consumer or TASK effect. Direct SQL fixture rows prove relational
+custody only; they are not authorized acceptance.
+
+`authorization_decision_event_id` above remains a required runtime field, absent
+from this foundation because neither originating authority is live. Before any
+production consumer, harden this same table with a NOT NULL exact AUTH event and
+source/action/actor/request/resource checks. Human authority is the exact
+`review.decision` allow; automated authority is the exact fixed
+`workstream.task.post_submit_router` actor and `task.post_submit.route` allow.
+Service actor kind alone is not provenance. The migration must refuse any
+retained pre-authority rows unchanged, never backfill or delete them.
+`test_acceptance_authority_upgrade_refuses_retained_foundation` and
+`test_acceptance_authority_upgrade_empty` are mandatory future activation proof.
+
+Current automated proof covers closed metadata and a transactionally rolled-back
+branch-predicate probe over real true-policy sources. It does not fabricate a
+false-policy activation, a router identity or a Review. Positive false-policy
+ancestry and the full authorized transaction remain required before activation.
+
 ### Shared transaction and dependency direction
 
 The application composition root injects public caller-session ports into one
@@ -603,8 +628,8 @@ Extract foundations from existing owner work, not a new initiative:
    while activation remains unavailable. This schema precedes the REV source FK.
 2. [ART-07A1](../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) supplies
    the metadata-only packet contract. REV-03B normalized packet persistence is
-   delivered. REV-04A immutable Review-source storage is also delivered; next implement REV-04B
-   shared FinalAcceptance storage. Do not create an incomplete Review solely as
+   delivered. REV-04A immutable Review-source storage and REV-04B shared FinalAcceptance
+   storage are delivered. Do not create an incomplete Review solely as
    an FK target. CON-03C contribution/award persistence and CON-07 submitter
    participation follow. These storage prerequisites require no live human
    claim or decision endpoint. Hidden composition proof precedes exact AUTH

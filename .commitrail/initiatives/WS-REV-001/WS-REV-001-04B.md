@@ -1,7 +1,7 @@
 # REV-04B — Shared FinalAcceptance storage foundation
 
 - Initiative: `WS-REV-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: one immutable REV FinalAcceptance source table supports later shared human/automated acceptance; no acceptance runtime or authority is activated.
 
 ## Intent
@@ -83,8 +83,9 @@ is transport shape only: later hardening must bind recorded_by to the exact fixe
 never an arbitrary service. No automated positive row using a substitute service
 may be committed in these tests.
 No latest-policy lookup. SQL functions pin `pg_catalog,public,pg_temp` and protect
-all referenced names. Source parents are immutable; deferred checks must reject
-missing parents and preserve caller rollback. PostgreSQL stamps accepted_at.
+all referenced names. Source parents are immutable; insertion checks reject missing parents and
+preserve caller rollback. The source must be inserted before its acceptance in
+the same caller transaction. PostgreSQL stamps accepted_at.
 
 No reject-link or audit/outbox extension is needed: Review already stores exact
 Submission/assignment, and canonical decision effects remain later composition.
@@ -120,7 +121,7 @@ The historical split record does not authorize unused duplicate persistence.
 
 ## Evidence
 
-Planned focused proof under `tests/reviews/acceptance/`:
+Focused proof under `tests/reviews/acceptance/`:
 
 - `test_contracts.py`: closed source shapes and native immutable input.
 - `test_storage.py::test_human_acceptance_source`: actual stored accept Review, exact fields.

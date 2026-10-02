@@ -17,7 +17,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 
 - Disposition: Planned
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
-  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; shared FinalAcceptance persistence is next. No packet resolver or human runtime is live.
+  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON persistence and participation are next. No packet resolver or human runtime is live.
 
 - Completed boundary: automatic unified execution, deterministic projections,
   immutable setup finalization, current-authority replay and one public guide
@@ -58,12 +58,12 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   Live setup consumes the [consolidated catalogue](../WS-ARCH-001/WS-ARCH-001-04A.md)
   and completed AUTH-12B2.
   Earlier development schemas require no backward-compatibility paths.
-  The existing ReviewPolicy boolean is delivered; false has scalar DTO proof
+  The existing ReviewPolicy boolean is delivered; false has metadata and guard-reachability proof
   only and automated acceptance remains unavailable.
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: shared REV-04B/CON-03C/07 and REV-12A/CON fence
+- Next usable boundary: CON-03C/07 and REV-12A/CON fence
   foundations, then shared acceptance composition and ARCH-04E1B/04E2/04E3.
   ARCH-04F remediation still precedes enabling false.
 - Governing sources: project-guide specifications, authorization and

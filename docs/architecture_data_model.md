@@ -1997,8 +1997,8 @@ direction, reason, and change summary.
 ## FinalAcceptance
 
 The [shared acceptance contract](spec_review_lifecycle.md#finalacceptance)
-defines both sources for this planned REV-owned fact. One schema and atomic
-operation serve human accept and authorized `task.post_submit.route` with the
+defines both sources for this REV-owned fact. REV-04B delivers its immutable
+storage foundation; the shared authorized operation remains planned. One schema and operation serve human accept and authorized `task.post_submit.route` with the
 exact current successful routing manifest, locked `human_review_required=false`
 policy and originating AUTH decision event. Required-check success or raw checker
 output alone cannot create FinalAcceptance. No separate automated decision entity
@@ -2013,7 +2013,7 @@ Fields:
 - `source_review_id`
 - `acceptance_source`: `human_review | task_post_submit_route`
 - `source_routing_manifest_id`
-- `authorization_decision_event_id`
+- `authorization_decision_event_id` — mandatory future runtime custody, not yet in the storage foundation
 - `accepted_submitter_id`
 - `accepted_at`
 - `recorded_by`
@@ -2021,8 +2021,11 @@ Fields:
 
 Purpose:
 
-This immutable REV-owned internal fact is created inside either authorized
-trigger's shared acceptance transaction. Existing `Submission` is already the version
+The future canonical operation creates this immutable REV-owned fact inside either
+authorized trigger's shared transaction. Current raw storage has no production
+writer or authority receipt: it cannot be consumed as canonical acceptance.
+Before runtime, a same-table hardening migration must add exact mandatory AUTH
+custody and refuse retained pre-authority rows without backfill or deletion. Existing `Submission` is already the version
 identity, so the stored FK is `submission_id`; no SubmissionVersion entity or
 `submission_version_id` alias is introduced. `recorded_by` is the originating
 AUTH actor: the actual reviewer or the admitted fixed TASK routing service.
