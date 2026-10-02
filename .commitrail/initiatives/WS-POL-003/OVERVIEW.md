@@ -16,6 +16,10 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 [`planning/chunk contracts`](pre-cutover/chunks/).
 
 - Disposition: Planned
+- Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
+  metadata-only packet types; REV-03B packet storage and REV-04A Review storage
+  precede shared FinalAcceptance. No packet resolver or human runtime is live.
+
 - Completed boundary: automatic unified execution, deterministic projections,
   immutable setup finalization, current-authority replay and one public guide
   creation/document-upload flow; hidden complete-proposal review, pre-submission
@@ -57,7 +61,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   Earlier development schemas require no backward-compatibility paths.
   The existing ReviewPolicy boolean is delivered; false has scalar DTO proof
   only and automated acceptance remains unavailable.
-- Next usable boundary: shared REV-04B/CON-03C/07 and REV-12A/CON fence
+- Next usable boundary: REV-03B packet and REV-04A Review storage, then shared REV-04B/CON-03C/07 and REV-12A/CON fence
   foundations, then shared acceptance composition and ARCH-04E1B/04E2/04E3.
   ARCH-04F remediation still precedes enabling false.
 - Governing sources: project-guide specifications, authorization and

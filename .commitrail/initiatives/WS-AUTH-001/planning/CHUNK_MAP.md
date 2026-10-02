@@ -1,5 +1,10 @@
 # WS-AUTH-001 — Current pre-review activation map
 
+The delivered [ART-07A1 metadata contract](../../WS-ART-001/WS-ART-001-07A1.md)
+now precedes REV-03B packet persistence and complete REV-04A Review storage,
+then shared REV-04B/CON acceptance foundations. These are storage prerequisites;
+no live human-review queue or endpoint is required for automated acceptance.
+
 Use the [current plan](PLAN.md) and
 [cross-owner order](../../WS-ARCH-001/planning/PLAN.md#current-dependency-contract).
 The [verbatim former map](../pre-cutover/CHUNK_MAP.md) preserves all completed

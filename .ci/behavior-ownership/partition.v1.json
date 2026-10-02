@@ -254,6 +254,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/artifacts/api/review_packet.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/artifacts/api/submission_admission.py"
     },
     {
@@ -1533,7 +1537,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "fa372bfafa2649a9e94a4bea1d1a0009f4734e5073ff1766c41184ebf6da1801",
+  "authority_digest": "7ac9e6bbb24c63ce9cbef90541f4c0025ee8a0ebad01caf02f288ea047bff52f",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

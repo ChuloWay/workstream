@@ -17,9 +17,11 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [ARCH-04D2](../WS-ARCH-001/WS-ARCH-001-04D2.md), without a runtime reader,
   writer or published route. Output-file authority remains unavailable for the
   zero-output catalogue.
-- Next usable boundary: ARCH-04F checker remediation through existing ART ports,
-  after the shared acceptance and 04E routing sequence; public intake remains a
-  later cutover.
+- Delivered contract: [ART-07A1](WS-ART-001-07A1.md) defines exact, metadata-only
+  reviewer packet membership. It supplies no resolver or byte authority.
+- Next usable boundary: REV-03B normalized packet persistence, then REV-04A
+  Review storage before shared acceptance. ARCH-04F remediation and public
+  intake follow acceptance and routing composition.
 - Governing sources: artifact specifications, `ArtifactStore`,
   `ArtifactScratchManager`, code, migrations, and artifact tests.
 - Preserve: SHA-256/byte-count identity, reread verification, isolation,
@@ -45,10 +47,13 @@ must prove exact approved lineage at preparation, consumption and binding.
 1. ARCH-04B hidden exact Submission materialization, ARCH-04B2 hidden output
    custody, ARCH-04C hidden durable execution, ARCH-04D2 fixed-service authority
    and ARCH-04E1A source-only material lineage are delivered.
-2. ARCH-04F owns checker-remediation resubmission using existing ART ports;
+2. ART-07A1 metadata-only membership types are delivered. REV-03B packet
+   storage and complete REV-04A Review storage precede shared FinalAcceptance,
+   CON participation and the shared fence, then acceptance/routing composition.
+3. ARCH-04F owns checker-remediation resubmission using existing ART ports;
    later reviewer-requested revision remains a separate REV boundary. Add those dependencies before public Submission
    cutover.
-3. Perform ARCH-02I only after those replacement paths exist; historical
+4. Perform ARCH-02I only after those replacement paths exist; historical
    ART-05/06 and XINT-05 designs remain non-executable.
 
 ## Preserved history

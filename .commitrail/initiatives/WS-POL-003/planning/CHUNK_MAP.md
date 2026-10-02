@@ -1,5 +1,10 @@
 # Chunk Map: WS-POL-003 - Unified Project Guide Compilation
 
+The delivered [ART-07A1 metadata contract](../../WS-ART-001/WS-ART-001-07A1.md)
+now precedes REV-03B packet persistence and complete REV-04A Review storage,
+then shared REV-04B/CON acceptance foundations. These are storage prerequisites;
+no live human-review queue or endpoint is required for automated acceptance.
+
 All chunks are L1 and one PR each. Product behavior is built hidden before AUTH
 activation; only a later live-cutover chunk exposes it. Open pull requests show
 transient work, and no chunk starts automatically.

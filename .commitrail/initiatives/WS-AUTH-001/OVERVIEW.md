@@ -10,6 +10,10 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 [`planning/chunk contracts`](pre-cutover/chunks/).
 
 - Disposition: Planned
+- Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
+  metadata-only packet types; REV-03B packet storage and REV-04A Review storage
+  precede shared FinalAcceptance. No packet resolver or human runtime is live.
+
 - Intent: provide deny-default, project-scoped authority with canonical human
   and service identities and attributable audit evidence.
 - Current boundary: hidden projections and atomic setup finalization have exact
@@ -45,7 +49,7 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
   and minimal writers and ARCH-03A internal guide context. POL-07B internal phase composition is delivered.
   The dispatcher registers only exact assignment invalidation. Future checker
   routing still requires its separate exact authority and handler.
-- Next usable boundary: shared REV-04B/CON-03C/07 and REV-12A/CON fence
+- Next usable boundary: REV-03B packet and REV-04A Review storage, then shared REV-04B/CON-03C/07 and REV-12A/CON fence
   foundations precede shared acceptance composition and hidden ARCH-04E1B;
   ARCH-04E2 then owns exact routing activation before 04E3 live composition.
 - Governing source: `docs/spec_authorization_service.md`, authorization code,

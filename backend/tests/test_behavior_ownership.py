@@ -2210,3 +2210,15 @@ def test_routing_source_registration_rejects_adjacent_runtime_targets():
             ownership._validate_additive_partition_transition(
                 _partition(sorted({retained, *expected, neighbor})), trusted
             )
+
+
+def test_review_packet_contract_addition_preserves_existing_ownership() -> None:
+    retained = "backend/app/core/config.py"
+    addition = "backend/app/modules/artifacts/api/review_packet.py"
+    trusted = _partition([retained])
+    current = _partition(sorted([retained, addition]))
+    ownership._validate_additive_partition_transition(current, trusted)
+    assert ownership.group_for_target(addition) == "artifacts"
+    for targets in ([addition], [retained, addition, "backend/app/modules/artifacts/api/packet_reader.py"]):
+        with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+            ownership._validate_additive_partition_transition(_partition(sorted(targets)), trusted)

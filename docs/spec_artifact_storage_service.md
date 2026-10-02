@@ -1622,6 +1622,10 @@ ARCH-04E separately owns TASK routing. Historical ART-06A/06B labels do not
 open duplicate implementation lanes. This ordering
 prevents a live contributor route whose mandatory checker read is unavailable.
 
+[ART-07A1](../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) supplies
+metadata-only packet membership types and a type-only port. It implements no
+resolver, guide-binding writer or byte access. REV-03B normalized packet storage
+and complete REV-04A Review storage precede shared FinalAcceptance.
 ART later supplies an exact, authorized reviewer-packet byte capability, while
 REV owns queueing, leases, decisions, and the reviewer note/findings. The
 approved v0.1 review flow does not upload a reviewer revision artifact. CON owns

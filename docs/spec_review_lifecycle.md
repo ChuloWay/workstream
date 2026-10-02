@@ -22,8 +22,8 @@ and decision evidence. ReviewPolicy and RevisionPolicy use immutable,
 append-only identities installed by XINT-003-02A; their only writer is the
 guide-bound PREP mutation surface activated by XINT-003-02B. This configuration
 surface does not activate review queues, leases, findings, decisions, or
-revision execution. XINT-002-07A activates reviewer packet materialization
-only. ART review-evidence binding remains planned/unavailable and 07B is
+revision execution. XINT-002-07A is planned to activate reviewer packet
+materialization only; it is not live. ART review-evidence binding remains planned/unavailable and 07B is
 reserved pending separate REV-owned intent.
 
 ## Precedence And Archival Inputs
@@ -320,7 +320,7 @@ LocalStorage is development-only. MinIO proves the S3-compatible protocol in
 local/CI. AWS S3 is the v0.1 hosted provider behind the provider-neutral
 `S3CompatibleArtifactStore`. Cloudflare R2 and Flow Node remain deferred.
 
-REV consumes only narrow ART v2 typed product capabilities. It never imports
+REV consumes only narrow ART-owned typed product capabilities. It never imports
 the raw byte-only `ArtifactStore`, a concrete provider, ART repositories,
 `ArtifactScratchManager`, `PreparedArtifact`, `CommittedArtifactSource`, object
 keys, provider URIs, scratch paths, receipts, or credentials.
@@ -344,6 +344,21 @@ chain, the current leased reviewer, a prior reviewer who authored a Review and
 still holds the exact project reviewer grant, or an explicitly authorized
 Project Manager/Operator. Prior participation grants metadata history only;
 artifact bytes still require the current active lease for the exact packet.
+
+
+The delivered [ART-07A1 membership contract](../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md)
+provides strict detached types and a type-only async port, not a resolver. Its
+scope includes exact Submission/version, aggregate CheckerRun result identity,
+locked guide/snapshot and activated setup run/generation. It names one required
+original ZIP binding and 1–100 ordered original guide bindings using their
+separate ART owners. Both member kinds are always required. The guide binding
+table exists, but its packet writer/resolver is not implemented. Shape and echoed
+request validation prove neither stored ownership nor complete membership;
+future canonical-owner reads must establish both within the caller transaction.
+REV-03B must retain normalized members; no opaque JSON binding set. Byte access
+still requires separate exact lease/packet authorization. The current catalogue
+has no output files; adding those later requires an explicit owner-custody
+contract, not arbitrary additional packet members.
 
 ## Review Notes, Findings, And Revision Responses
 
@@ -556,9 +571,14 @@ Extract foundations from existing owner work, not a new initiative:
    REV FK. One manifest stores the locked `human_review_required` branch; it is
    not restricted to human admission. False proof is scalar transport only
    while activation remains unavailable. This schema precedes the REV source FK.
-2. REV-04B shared source/FinalAcceptance persistence follows that schema, then
-   CON-03C contribution/award persistence and CON-07 submitter participation.
-   A Review FK target may require a table, not live claim or review endpoints.
+2. [ART-07A1](../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) supplies
+   the metadata-only packet contract. Next implement REV-03B normalized packet
+   persistence, then complete REV-04A Review-source storage before REV-04B
+   shared FinalAcceptance storage. Do not create an incomplete Review solely as
+   an FK target. CON-03C contribution/award persistence and CON-07 submitter
+   participation follow. These storage prerequisites require no live human
+   claim or decision endpoint. Hidden composition proof precedes exact AUTH
+   activation; unavailable authority must not be replaced with fabricated allow evidence.
 3. Pull the existing [REV-12A shared fence foundation](#rev-12a-shared-fence-foundation)
    (controller/fence persistence, mutation-fence port
    and CON obligation-ordinal hooks) forward before shared acceptance.

@@ -1,5 +1,10 @@
 # Plan: WS-POL-003 - Unified Project Guide Compilation
 
+The delivered [ART-07A1 metadata contract](../../WS-ART-001/WS-ART-001-07A1.md)
+now precedes REV-03B packet persistence and complete REV-04A Review storage,
+then shared REV-04B/CON acceptance foundations. These are storage prerequisites;
+no live human-review queue or endpoint is required for automated acceptance.
+
 ## Objective
 
 The delivered setup replaces the former three complete project-guide inference passes with one
