@@ -1,7 +1,7 @@
 # WS-AUTH-001-19A — Exact acceptance-source commitments
 
 - Initiative: WS-AUTH-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: exact, inert source commitments for human Review and
   post-submit routing, with the router registered as planned and unavailable.
 
@@ -78,7 +78,8 @@ lowercase form. Models are strict, frozen and reject extra fields.
   generation/hash, content_id/hash, semantic_manifest_sha256,
   routing_source_digest, route_operation_id, route_request_digest. Both policy
   branches remain represented. The route operation must differ from the checker
-  evaluation request; its request digest has distinct caller-owned semantics.
+  evaluation request; projection also rejects reuse of the checker request digest.
+  Routing request content has distinct caller-owned semantics.
 - Detached receipt: authorization_decision_event_id, action_id, permission_id,
   actor_profile_id, actor_identity_link_id, nullable service_identity and
   matched_grant_id, project_id, resource_type/id, request_id, correlation_id,
@@ -112,7 +113,7 @@ and never exceeds the retained storage limit of 100.
 ### Allowed files
 
 - `backend/app/modules/actors/api/service_identities.py`.
-- `backend/app/modules/authorization/catalogue.py`, `review_contracts.py`, and
+- `backend/app/modules/authorization/catalogue.py`, `review_contracts.py`, `admin_schemas.py` permission count, and
   new `api/acceptance_source.py` and private `acceptance_source_contracts.py`
   (package exports only if needed).
 - `backend/app/modules/tasks/api/post_submit_routing.py` and its existing export.
@@ -123,7 +124,7 @@ and never exceeds the retained storage limit of 100.
 - Alembic/schema-head, CI lane and behavior-ownership inventories only as required
   by added paths or canonical identifiers; do not weaken boundaries or gates.
 - This record, current AUTH/REV/CON/POL/ARCH overview/plan/chunk-map navigation,
-  Commitrail index, roadmap and canonical authorization/review specifications;
+  Commitrail index, current ARCH-04E contract, roadmap and canonical authorization/review specifications;
   README and ignored roadmap spreadsheet exports if affected/present.
 
 ### Prohibited changes
@@ -151,7 +152,8 @@ retained-data deletion, unrelated cleanup, test skipping or gate relaxation.
    preserve existing actor rows and create no new actor. A direct-SQL authority
    event control establishes valid audit input; changing it to the planned route
    action is rejected by the unchanged closed authority constraints, expected
-   ck_audit_events_authorization_action_evidence, with audit rows unchanged.
+   ck_audit_events_authority_registries (observed PostgreSQL constraint),
+   with audit rows unchanged.
    The control uses the real contribution-policy authorization operation and
    unchanged clone_decision(event, {}); only action/permission change for denial.
    Prove a provisioned router still cannot resolve the planned action.
@@ -189,5 +191,9 @@ artifact/review scans. Hosted CI must complete all collected nodes.
 
 ## Evidence
 
-Plan feasibility inspected at clean main `04bf8b76`; no runtime custody claim.
-Exact command and reviewer evidence will accompany the implementation PR.
+Plan review repaired the public dependency direction, removed speculative reviewer
+policy selectors, and fixed exact request/correlation bindings before implementation.
+PostgreSQL proves the migration preserves source rows and rejects the planned route
+through its unchanged closed audit registry. The receipt values remain untrusted;
+there is no runtime source custody claim. Exact command and reviewer evidence
+belong to the implementation PR.

@@ -23,6 +23,7 @@ class PermissionId(StrEnum):
     ACTOR_IDENTITY_LINK_REVOKE = "actor.identity_link.revoke"
     ACTOR_IDENTITY_LINK_REACTIVATE = "actor.identity_link.reactivate"
     TASK_ASSIGNMENT_AUTHORITY_RECONCILE = "task.assignment.authority_reconcile"
+    TASK_POST_SUBMIT_ROUTE = "task.post_submit.route"
     CHECKER_POST_SUBMIT_EXECUTE = "checker.post_submit.execute"
     CHECKER_POST_SUBMIT_FINALIZE = "checker.post_submit.finalize"
     OUTBOX_DISPATCH = "outbox.dispatch"
@@ -140,6 +141,7 @@ class ActionId(StrEnum):
     ACTOR_IDENTITY_LINK_REVOKE = "actor.identity_link.revoke"
     ACTOR_IDENTITY_LINK_REACTIVATE = "actor.identity_link.reactivate"
     TASK_ASSIGNMENT_AUTHORITY_RECONCILE = "task.assignment.authority_reconcile"
+    TASK_POST_SUBMIT_ROUTE = "task.post_submit.route"
     CHECKER_POST_SUBMIT_EXECUTE = "checker.post_submit.execute"
     CHECKER_POST_SUBMIT_FINALIZE = "checker.post_submit.finalize"
     OUTBOX_DISPATCH = "outbox.dispatch"
@@ -307,6 +309,7 @@ class ActionOwner(StrEnum):
     ARCH_03C5 = "WS-ARCH-001-03C5"
     ARCH_03C6 = "WS-ARCH-001-03C6"
     ARCH_03C7 = "WS-ARCH-001-03C7"
+    ARCH_04E2 = "WS-ARCH-001-04E2"
     ARCH_04D2 = "WS-ARCH-001-04D2"
     ARCH_03C1 = "WS-ARCH-001-03C1"
     AUTH_OUTBOX_01 = "WS-AUTH-001-OUTBOX-01"
@@ -377,6 +380,7 @@ _CONTRIBUTION_POLICY_ACTION_IDS = (
 
 
 ACTION_DEFINITIONS = (
+    _planned(ActionId.TASK_POST_SUBMIT_ROUTE, PermissionId.TASK_POST_SUBMIT_ROUTE, ActionOwner.ARCH_04E2),
     _active(ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE, PermissionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE, ActionOwner.ARCH_03C1),
     _active(ActionId.OUTBOX_DISPATCH, PermissionId.OUTBOX_DISPATCH, ActionOwner.AUTH_OUTBOX_01),
     _active(
@@ -727,6 +731,7 @@ NEW_PERMISSION_IDS = frozenset(
         PermissionId.ARTIFACT_VERIFICATION_JOB_RETRY,
         PermissionId.ARTIFACT_RECOVERY_ATTEMPT_READ,
         PermissionId.ARTIFACT_AUDIT_READ,
+        PermissionId.TASK_POST_SUBMIT_ROUTE,
         PermissionId.ARTIFACT_GUIDE_SOURCE_INGEST,
         PermissionId.ARTIFACT_BINDING_CREATE,
         PermissionId.ARTIFACT_VERIFICATION_EXECUTE,
@@ -743,9 +748,9 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 77 or len(ACTION_IDS) != 142:
+    if len(PERMISSION_IDS) != 78 or len(ACTION_IDS) != 143:
         raise RuntimeError("authorization catalogue count mismatch")
-    if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 28:
+    if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 29:
         raise RuntimeError("authorization permission boundary mismatch")
 
 
@@ -894,6 +899,7 @@ ACTION_BY_ID = _index_actions(ACTION_DEFINITIONS)
 
 
 _SERVICE_ACTIONS = {
+    ServiceIdentity.TASK_POST_SUBMIT_ROUTER: frozenset({ActionId.TASK_POST_SUBMIT_ROUTE}),
     ServiceIdentity.CHECKER_POST_SUBMIT: frozenset({ActionId.CHECKER_POST_SUBMIT_EXECUTE, ActionId.CHECKER_POST_SUBMIT_FINALIZE}),
     ServiceIdentity.TASK_ASSIGNMENT_RECONCILER: frozenset({ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE}),
     ServiceIdentity.OUTBOX_DISPATCHER: frozenset({ActionId.OUTBOX_DISPATCH}),
@@ -945,6 +951,7 @@ ACTION_BEARING_SERVICE_IDENTITIES = SERVICE_IDENTITIES - {
 _EXPECTED_SERVICE_ACTION_MEMBERSHIPS = frozenset(
     (identity, action)
     for identity, action in (
+        (ServiceIdentity.TASK_POST_SUBMIT_ROUTER, ActionId.TASK_POST_SUBMIT_ROUTE),
         (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_POST_SUBMIT_EXECUTE),
         (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_POST_SUBMIT_FINALIZE),
         (ServiceIdentity.TASK_ASSIGNMENT_RECONCILER, ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE),
@@ -1013,6 +1020,7 @@ def _index_service_actions(
     rows: dict[ServiceIdentity, frozenset[ActionId]],
 ) -> MappingProxyType[ServiceIdentity, frozenset[ActionId]]:
     expected_metadata = {
+        ActionId.TASK_POST_SUBMIT_ROUTE: (PermissionId.TASK_POST_SUBMIT_ROUTE, ActionOwner.ARCH_04E2),
         ActionId.CHECKER_POST_SUBMIT_EXECUTE: (PermissionId.CHECKER_POST_SUBMIT_EXECUTE, ActionOwner.ARCH_04D2),
         ActionId.CHECKER_POST_SUBMIT_FINALIZE: (PermissionId.CHECKER_POST_SUBMIT_FINALIZE, ActionOwner.ARCH_04D2),
         ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE: (PermissionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE, ActionOwner.ARCH_03C1),

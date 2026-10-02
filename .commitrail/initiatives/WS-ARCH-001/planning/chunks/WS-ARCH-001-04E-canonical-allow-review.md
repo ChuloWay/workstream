@@ -15,6 +15,13 @@ the separately named AUTH child owns only its authorization changes.
 
 ## Current bounded sequence
 
+AUTH-19A delivers inert source commitments and planned router registration. The
+source-preparation portion must persist route_operation_id and route_request_digest
+and establish genuine originating AUTH/receipt custody before CON-07/shared
+acceptance. This prerequisite does not invoke the acceptance-consuming handler;
+complete hidden effects, exact activation and live composition remain below.
+
+
 Policy-switch integration dependency: these handlers consume the merged
 ReviewPolicy boolean schema and immutable lineage behavior specified in the
 [product-builder handoff](../../../../changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).

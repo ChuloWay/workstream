@@ -1,5 +1,12 @@
 # WS-CON-001 — Contribution and conditional compensation
 
+[AUTH-19A](../WS-AUTH-001/WS-AUTH-001-19A.md) delivers inert exact source/receipt contracts and the
+planned router identity. Next, persist the distinct routing request and implement
+genuine originating authorization with same-table receipt custody before CON-07.
+Contract construction grants no authority; live routing and acceptance remain
+unavailable. Source preparation must precede the hidden handler that consumes
+shared acceptance; true-policy admission keeps its independent prerequisites.
+
 Current pre-review work follows the [cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
 and the [capability ledger](../../../docs/roadmap_status.md).
 
@@ -41,7 +48,7 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
   storage, without AUTH receipt custody or runtime consumers.
   [CON-03C](WS-CON-001-03C.md) adds exact contribution sources and fixed awards; no recognition or fulfillment operation is live.
-- Next usable boundary: for the selected automated-acceptance delivery sequence, mandatory acceptance-source AUTH custody, then CON-07 using the delivered REV-12A1 disabled fence,
+- Next usable boundary: for the selected automated-acceptance delivery sequence, originating AUTH execution and same-table source receipt custody, then CON-07 using the delivered REV-12A1 disabled fence,
   plus mandatory same-table acceptance authority hardening before one shared
   acceptance operation serves both human and automatic triggers.
 - Governing sources: `docs/spec_contribution_compensation.md`,

@@ -105,7 +105,14 @@ def _decision_values() -> dict[str, object]:
         "packet_manifest_digest": SHA,
         "artifact_binding_id": new_record_id(),
         "chain_digest": SHA,
+        "review_id": new_record_id(),
+        "review_decision_request_id": new_record_id(),
         "review_operation_id": new_record_id(),
+        "idempotency_key": new_record_id(),
+        "request_digest": SHA,
+        "review_aggregate_digest": SHA,
+        "submission_version": 1,
+        "inherited_unresolved_blocking_count": 0,
         "decision_shape": "initial",
         "decision": ReviewDecisionValue.ACCEPT,
         "finding_count": 0,
@@ -114,9 +121,7 @@ def _decision_values() -> dict[str, object]:
         "review_policy_id": new_record_id(),
         "review_policy_generation": 1,
         "review_policy_digest": SHA,
-        "reviewer_contribution_policy_id": new_record_id(),
-        "reviewer_contribution_policy_generation": 1,
-        "reviewer_contribution_policy_digest": SHA,
+        "reviewer_contribution_policy_version_id": new_record_id(),
         "artifact_hash": SHA,
     }
 
@@ -563,3 +568,35 @@ def test_contract_module_has_no_rev_import_and_workers_carry_no_prepared_handle(
     ]
     assert worker_sources
     assert all("PreparedAuthorizationHandle" not in source for source in worker_sources)
+
+
+@pytest.mark.parametrize("decision,new_blockers,inherited,valid", (
+    (ReviewDecisionValue.NEEDS_REVISION, 0, 1, True),
+    (ReviewDecisionValue.NEEDS_REVISION, 0, 0, False),
+    (ReviewDecisionValue.ACCEPT, 0, 1, False),
+    (ReviewDecisionValue.ACCEPT, 1, 0, False),
+    (ReviewDecisionValue.ACCEPT, 0, 0, True),
+    (ReviewDecisionValue.NEEDS_REVISION, 100, 1, False),
+    (ReviewDecisionValue.NEEDS_REVISION, 99, 1, True),
+))
+def test_revision_decision_counts_inherited_open_blockers(decision, new_blockers, inherited, valid):
+    values = _decision_values() | {
+        "decision_shape": "revision", "submission_version": 2,
+        "predecessor_review_id": new_record_id(), "predecessor_submission_id": new_record_id(),
+        "revision_episode_id": new_record_id(), "preparation_head_id": new_record_id(),
+        "preparation_head_generation": 1, "preparation_head_digest": SHA,
+        "finding_response_count": inherited, "finding_response_lineage_digest": SHA,
+        "decision": decision, "finding_count": new_blockers, "blocking_finding_count": new_blockers,
+        "inherited_unresolved_blocking_count": inherited,
+    }
+    if valid:
+        assert ReviewRevisionDecisionContract(**values).decision is decision
+    else:
+        with pytest.raises(ValidationError, match="blocking finding"):
+            ReviewRevisionDecisionContract(**values)
+
+
+def test_initial_decision_cannot_claim_inherited_blockers():
+    values = _decision_values() | {"decision": ReviewDecisionValue.NEEDS_REVISION, "inherited_unresolved_blocking_count": 1}
+    with pytest.raises(ValidationError, match="initial decision has inherited blockers"):
+        ReviewDecisionContract(**values)

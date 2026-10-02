@@ -1,5 +1,12 @@
 # WS-POL-003 — Unified project-guide compilation
 
+[AUTH-19A](../WS-AUTH-001/WS-AUTH-001-19A.md) delivers inert exact source/receipt contracts and the
+planned router identity. Next, persist the distinct routing request and implement
+genuine originating authorization with same-table receipt custody before CON-07.
+Contract construction grants no authority; live routing and acceptance remain
+unavailable. Source preparation must precede the hidden handler that consumes
+shared acceptance; true-policy admission keeps its independent prerequisites.
+
 Latest completed POL behavior: [POL-07B checker phase service](WS-POL-003-07B.md),
 building on [POL-07A pre-submit attempt recovery](WS-POL-003-07A.md),
 building on [POL-06B public post-policy review](WS-POL-003-06B.md),
@@ -63,7 +70,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: for the selected automated-acceptance delivery sequence, mandatory acceptance-source AUTH custody, then CON-07 using the delivered REV-12A1 disabled fence, then shared acceptance composition and ARCH-04E1B/04E2/04E3.
+- Next usable boundary: for the selected automated-acceptance delivery sequence, originating AUTH execution and same-table source receipt custody, then CON-07 using the delivered REV-12A1 disabled fence, then shared acceptance composition and ARCH-04E1B/04E2/04E3.
   ARCH-04F remediation still precedes enabling false.
 - Governing sources: project-guide specifications, authorization and
   contribution-policy specifications, code, migrations, and tests.

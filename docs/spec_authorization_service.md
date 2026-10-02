@@ -680,9 +680,9 @@ Routers cannot invent identifiers or evaluate grant unions.
 `outbox.dispatch` and `task.assignment.authority_reconcile` are active for their
 separate fixed services and included in current catalogue counts. The dispatcher
 authorizes shared delivery mechanics; the reconciler authorizes the hidden
-assignment effect. The remaining checker/router rows are proposed specification
-amendments for human design review: they are not registered or active and are
-excluded from those counts. The named implementation boundaries must register
+assignment effect. Checker execute/finalize authority is implemented by ARCH-04D2. AUTH-19A
+registers task.post_submit.route and its fixed identity as planned and unavailable;
+registration is included in the catalogue counts but grants no authority. The named implementation boundaries must register
 typed parity, prove hidden behavior and activate only their exact manifests;
 a planning document does not grant a service permission.
 
@@ -692,7 +692,7 @@ a planning document does not grant a service permission.
 | `task.assignment.authority_reconcile` | `workstream.task.assignment_reconciler` | Committed exact AUTH invalidation event, project/actor/grant-or-link, active pre-submit assignment; no wrong-role or submitted-history mutation | ARCH-03B9 hidden handler/fence and ARCH-03C1 real feature authority/decision receipts complete; ARCH-03C2 atomic producer wiring and registration |
 | `checker.post_submit.execute` | `workstream.checker.post_submit` | Immutable Submission/request/generation, locked compiled policy, attempt and admitted service; exact pre-I/O authority | Implemented by ARCH-04C/04D2; no dispatcher registration |
 | `checker.post_submit.finalize` | `workstream.checker.post_submit` | Exact execution request/fence, accepted result digest, retained material and original execute receipt; fresh post-I/O authority and atomic evidence; current outputs are empty | Implemented by ARCH-04C/04D2; no dispatcher registration |
-| `task.post_submit.route` | `workstream.task.post_submit_router` | Committed completion event/claim, exact current CHECKER result/fence, immutable Submission, locked ReviewPolicy and TASK pre-review state; true permits admission, false/pass permits the shared acceptance consequence after its proof; never a human review decision or generic CON write | ARCH-04E1B hidden handler plus shared REV/CON proof for false, ARCH-04E2 activation, ARCH-04E3 live composition |
+| `task.post_submit.route` | `workstream.task.post_submit_router` | Committed completion event/claim, exact current CHECKER result/fence, immutable Submission, locked ReviewPolicy and TASK pre-review state; true permits admission, false/pass permits the shared acceptance consequence after its proof; never a human review decision or generic CON write | AUTH-19A inert source/request commitments and planned identity delivered; originating receipt persistence remains required. ARCH-04E1B hidden handler plus shared REV/CON proof for false, ARCH-04E2 activation, ARCH-04E3 live composition |
 
 Each action maps to the identically named permission in this table and only
 its singleton fixed-service row. Humans, dispatchers and unrelated services
@@ -1622,3 +1622,36 @@ AUTH stages a fresh matched-grant decision; the caller commits it only with a
 validated response. Authentication has no token-role compatibility projection or
 identity-observation writer. Retained actor classification data remains evidence,
 never an authority source. No manual checker or finalize-repair route survives.
+
+### Acceptance-source commitments (AUTH-19A)
+
+The dependency-free AUTH source/receipt value contracts do not verify stored
+records or grant permissions. The human contract binds the allocated Review and
+ReviewDecisionRequest, the caller key and request/aggregate digests, exact packet
+and policy lineage, and the delivered reviewer ContributionPolicyVersion ID.
+Initial decisions have no inherited blockers. Accept requires zero new or inherited
+open blockers; needs_revision requires at least one, with at most 100 combined.
+
+The TASK-owned routing digest commits every revalidated manifest fact except
+PostgreSQL-owned created_at. Private AUTH projects those public facts into the
+routing source commitment, adding a distinct route_operation_id and
+route_request_digest. These never reuse checker evaluation authority. Both locked
+ReviewPolicy branches remain representable; construction does not enable either.
+
+Human receipt request/correlation identify its operation; idempotency_reference
+identifies its ReviewDecisionRequest, separately from the committed caller key.
+Routing receipt request/correlation/idempotency all identify the routing operation.
+The receipt binds exact action/permission, actor and identity link, project,
+resource, source commitment and full resource digest. Human facts require the
+reviewer and a matched grant, with no service identity; routing facts require the
+fixed router identity and no grant. The resource types are review and
+task_post_submit_routing_manifest respectively. Detached values are untrusted:
+future consumers must compare the actual immutable event and stored source.
+
+Domains workstream.task_post_submit_source.v0.1 and
+workstream.authorization.acceptance_source.v0.1 separate retained source facts
+from the opaque full runtime resource digest. Current audit events do not yet
+persist this new source commitment. ARCH-04E1B must persist routing request facts;
+originating AUTH execution and same-table source receipt custody must exist before
+CON-07/shared acceptance consumes them. The actor-vocabulary migration provisions
+nothing, and existing closed audit constraints still reject a route allow.

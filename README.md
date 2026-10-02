@@ -675,7 +675,10 @@ remains unavailable. ARCH-04D1 validates retained terminal material against cano
 ART lineage. ARCH-04D2 supplies fixed-service input, execute and finalize authority,
 with PostgreSQL enforcement of exact execution/finalization receipts. ARCH-04E1A
 adds immutable source storage and detached contracts only. Automatic dispatch,
-routing and acceptance remain ARCH-04E work.
+routing and acceptance remain ARCH-04E work. AUTH-19A defines inert exact
+Review/routing source commitments and registers the router as planned. It does not
+issue or persist source authorization receipts; those remain prerequisites to
+shared acceptance and contribution creation.
 
 ## v0.1 Success Standard
 

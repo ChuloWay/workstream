@@ -1,5 +1,12 @@
 # WS-REV-001 — Review and revision lifecycle
 
+[AUTH-19A](../WS-AUTH-001/WS-AUTH-001-19A.md) delivers inert exact source/receipt contracts and the
+planned router identity. Next, persist the distinct routing request and implement
+genuine originating authorization with same-table receipt custody before CON-07.
+Contract construction grants no authority; live routing and acceptance remain
+unavailable. Source preparation must precede the hidden handler that consumes
+shared acceptance; true-policy admission keeps its independent prerequisites.
+
 Current upstream dependency: [ARCH-04E canonical `allow_review`](../WS-ARCH-001/planning/chunks/WS-ARCH-001-04E-canonical-allow-review.md).
 This is the pre-review admission fact, not REV activation or implementation
 of review/revision behavior. The downstream owner contracts remain separate.
@@ -20,7 +27,7 @@ of review/revision behavior. The downstream owner contracts remain separate.
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: for the selected automated-acceptance delivery sequence, mandatory acceptance-source AUTH custody, then CON-07 using the delivered
+- Next usable boundary: for the selected automated-acceptance delivery sequence, originating AUTH execution and same-table source receipt custody, then CON-07 using the delivered
   REV-12A1 disabled controller/fence under the canonical order; human hidden behavior may continue independently behind exact AUTH,
   ART and CON prerequisites.
 - Governing sources: `docs/spec_review_lifecycle.md`,

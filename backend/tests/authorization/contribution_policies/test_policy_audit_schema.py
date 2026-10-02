@@ -20,6 +20,7 @@ from .audit_schema_support import clone_decision
         ("unknown_action", "ck_audit_events_authorization_action_evidence"),
         ("wrong_permission", "ck_audit_events_authorization_action_evidence"),
         ("wrong_action", "ck_audit_events_authorization_action_evidence"),
+        ("planned_route", "ck_audit_events_authority_registries"),
     ),
 )
 async def test_policy_audit_sql_retains_resource_and_private_fact_guards(
@@ -38,6 +39,7 @@ async def test_policy_audit_sql_retains_resource_and_private_fact_guards(
     async with db_session.get_session_factory()() as session:
         assert (await session.get(AuditEvent, control)).resource_type == "contribution_policy"
     changes = {
+        "planned_route": {"action_id": "task.post_submit.route", "permission_id": "task.post_submit.route"},
         "resource": {"resource_type": "unregistered_policy_resource"},
         "private_fact": {
             "after_facts": {**event.after_facts, "private_material": "must-not-persist"}

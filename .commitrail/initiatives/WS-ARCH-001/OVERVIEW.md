@@ -1,5 +1,12 @@
 # WS-ARCH-001 — Modular monolith boundaries
 
+[AUTH-19A](../WS-AUTH-001/WS-AUTH-001-19A.md) delivers inert exact source/receipt contracts and the
+planned router identity. Next, persist the distinct routing request and implement
+genuine originating authorization with same-table receipt custody before CON-07.
+Contract construction grants no authority; live routing and acceptance remain
+unavailable. Source preparation must precede the hidden handler that consumes
+shared acceptance; true-policy admission keeps its independent prerequisites.
+
 Current remaining design: [acyclic dependency and ownership contract through
 allow_review](planning/PLAN.md#current-dependency-contract).
 
@@ -30,7 +37,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
   [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
   storage, without AUTH receipt custody or runtime consumers.
-- Next usable boundary: for the selected automated-acceptance delivery sequence, mandatory acceptance-source AUTH custody, then CON-07 using the delivered REV-12A1 disabled fence,
+- Next usable boundary: for the selected automated-acceptance delivery sequence, originating AUTH execution and same-table source receipt custody, then CON-07 using the delivered REV-12A1 disabled fence,
   plus mandatory same-table acceptance authority hardening before shared
   acceptance composition, then ARCH-04E1B/04E2/04E3 and ARCH-04F. Output-file
   authority remains unavailable for the zero-output catalogue.

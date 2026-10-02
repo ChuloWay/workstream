@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from app.core.identifiers import new_record_id
 from app.modules.actors.api import ServiceIdentity
-from app.modules.authorization.catalogue import ActionId, PermissionId
+from app.modules.authorization.catalogue import (ActionId, PermissionId, ActionAvailability, ACTION_BY_ID, SERVICE_ACTIONS_BY_IDENTITY, resolve_executable_action)
 from app.modules.tasks import api as task_api
 from app.modules.tasks.api import accepted_effects, post_submit_routing
 from app.modules.tasks.api.accepted_effects import (
@@ -307,7 +307,7 @@ def test_accepted_effects_contract_is_source_neutral() -> None:
 
 
 def test_source_foundation_has_no_runtime_entry() -> None:
-    assert post_submit_routing.__all__ == ("TaskPostSubmitManifestFacts",)
+    assert post_submit_routing.__all__ == ("TaskPostSubmitManifestFacts", "task_post_submit_source_digest")
     assert accepted_effects.__all__ == (
         "TaskAcceptedEffectsPort",
         "TaskAcceptedEffectsRequest",
@@ -316,7 +316,7 @@ def test_source_foundation_has_no_runtime_entry() -> None:
     )
     for name in post_submit_routing.__all__ + accepted_effects.__all__:
         assert getattr(task_api, name) is getattr(
-            post_submit_routing if name.startswith("TaskPostSubmit") else accepted_effects,
+            post_submit_routing if name in post_submit_routing.__all__ else accepted_effects,
             name,
         )
 
@@ -335,10 +335,9 @@ def test_source_foundation_has_no_runtime_entry() -> None:
         "TaskAcceptedEffectsResult",
         "TaskAcceptedEffectsUnavailable",
     }
-    for closed_enum, proposed_identifier in (
-        (ActionId, "task.post_submit.route"),
-        (PermissionId, "task.post_submit.route"),
-        (ServiceIdentity, "workstream.task.post_submit_router"),
-    ):
-        with pytest.raises(ValueError):
-            closed_enum(proposed_identifier)
+    action = ActionId.TASK_POST_SUBMIT_ROUTE
+    assert ACTION_BY_ID[action].permission_id is PermissionId.TASK_POST_SUBMIT_ROUTE
+    assert ACTION_BY_ID[action].availability is ActionAvailability.PLANNED
+    assert SERVICE_ACTIONS_BY_IDENTITY[ServiceIdentity.TASK_POST_SUBMIT_ROUTER] == {action}
+    with pytest.raises(ValueError, match="authorization action is not active"):
+        resolve_executable_action(action)

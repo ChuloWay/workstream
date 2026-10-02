@@ -3,6 +3,7 @@
 from app.modules.actors.api import ServiceIdentity
 
 FIXED_SERVICE_ACTION_EXPECTATIONS = {
+    ServiceIdentity.TASK_POST_SUBMIT_ROUTER: {"task.post_submit.route"},
     ServiceIdentity.TASK_ASSIGNMENT_RECONCILER: {"task.assignment.authority_reconcile"},
     ServiceIdentity.OUTBOX_DISPATCHER: {"outbox.dispatch"},
     ServiceIdentity.ARTIFACT_VERIFIER: {"artifact.verification.execute"},
@@ -252,7 +253,7 @@ historical_permissions = frozenset("""actor.profile.read_self actor.profile.upda
 
 new_permissions = frozenset(
     """
-    checker.post_submit.execute checker.post_submit.finalize task.assignment.authority_reconcile outbox.dispatch project.setup_diagnostic.read project.effective_policy.read
+    task.post_submit.route checker.post_submit.execute checker.post_submit.finalize task.assignment.authority_reconcile outbox.dispatch project.setup_diagnostic.read project.effective_policy.read
     operations.task.start_override operations.submission_gate.repair
     operations.checker.retry artifact.binding.read artifact.replica.read
     artifact.receipt.read artifact.verification_job.read
@@ -265,6 +266,7 @@ new_permissions = frozenset(
 )
 
 expected = {
+    "task.post_submit.route": ("task.post_submit.route", "WS-ARCH-001-04E2"),
     "checker.post_submit.execute": ("checker.post_submit.execute", "WS-ARCH-001-04D2"),
     "checker.post_submit.finalize": ("checker.post_submit.finalize", "WS-ARCH-001-04D2"),
     "task.submission.list": ("submission.read_own", "task-checker-auth-cleanup"),

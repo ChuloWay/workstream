@@ -1,5 +1,12 @@
 # WS-AUTH-001 — Workstream authorization service
 
+[AUTH-19A](../WS-AUTH-001/WS-AUTH-001-19A.md) delivers inert exact source/receipt contracts and the
+planned router identity. Next, persist the distinct routing request and implement
+genuine originating authorization with same-table receipt custody before CON-07.
+Contract construction grants no authority; live routing and acceptance remain
+unavailable. Source preparation must precede the hidden handler that consumes
+shared acceptance; true-policy admission keeps its independent prerequisites.
+
 Latest completed activation: [AUTH-18 public manager activation](WS-AUTH-001-18.md),
 using [AUTH-12H complete-guide authority](WS-AUTH-001-12H.md),
 following [AUTH-12G post-policy authority](WS-AUTH-001-12G.md).
@@ -51,7 +58,7 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: for the selected automated-acceptance delivery sequence, mandatory acceptance-source AUTH custody, then CON-07 using the delivered REV-12A1 disabled fence, before shared acceptance composition and hidden ARCH-04E1B;
+- Next usable boundary: for the selected automated-acceptance delivery sequence, originating AUTH execution and same-table source receipt custody, then CON-07 using the delivered REV-12A1 disabled fence, before shared acceptance composition and hidden ARCH-04E1B;
   ARCH-04E2 then owns exact routing activation before 04E3 live composition.
 - Governing source: `docs/spec_authorization_service.md`, authorization code,
   migrations, and tests.

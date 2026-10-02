@@ -1,5 +1,12 @@
 # WS-ARCH-001 — Current remaining change map
 
+[AUTH-19A](../../WS-AUTH-001/WS-AUTH-001-19A.md) delivers inert exact source/receipt contracts and the
+planned router identity. Next, persist the distinct routing request and implement
+genuine originating authorization with same-table receipt custody before CON-07.
+Contract construction grants no authority; live routing and acceptance remain
+unavailable. Source preparation must precede the hidden handler that consumes
+shared acceptance; true-policy admission keeps its independent prerequisites.
+
 Use the [current dependency contract](PLAN.md#current-dependency-contract).
 The [preserved map](../pre-cutover/CHUNK_MAP.md) retains the complete original
 work accounting. Foundations through 02H and CP04B are complete; none restart.

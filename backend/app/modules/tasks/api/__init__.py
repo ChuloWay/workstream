@@ -6,7 +6,7 @@ from app.modules.tasks.api.accepted_effects import (
     TaskAcceptedEffectsResult,
     TaskAcceptedEffectsUnavailable,
 )
-from app.modules.tasks.api.post_submit_routing import TaskPostSubmitManifestFacts
+from app.modules.tasks.api.post_submit_routing import (TaskPostSubmitManifestFacts, task_post_submit_source_digest)
 
 from app.modules.tasks.api.transition_audit import (
     TaskPolicyLineage,
@@ -105,6 +105,7 @@ __all__ = (
     "TaskAcceptedEffectsUnavailable",
     "TaskPolicyLineage",
     "TaskPostSubmitManifestFacts",
+    "task_post_submit_source_digest",
     "TaskQueueCursor",
     "ReadyTaskPage",
     "ReadyTaskQueuePort",

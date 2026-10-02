@@ -637,7 +637,9 @@ Extract foundations from existing owner work, not a new initiative:
    activation; unavailable authority must not be replaced with fabricated allow evidence.
 3. [REV-12A1](../.commitrail/initiatives/WS-REV-001/WS-REV-001-12A1.md)
    delivers disabled generation-zero controller storage and the caller-root
-   transaction fence. Complete same-table acceptance-source AUTH custody, then CON-07.
+   transaction fence. AUTH-19A supplies inert exact source/request and detached receipt contracts.
+   Persist the distinct routing request and implement genuine originating AUTH
+   execution plus same-table receipt custody, then CON-07.
    Actual CON fulfillment roots own immutable ordinal allocation; no award or
    outbox row substitutes for a root. Authorized transition/drain composition
    and real root/cutoff proof extend this fence before activation, independently

@@ -14,6 +14,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.core.hashing import canonical_json_hash
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 
 _Sha256 = Annotated[StrictStr, Field(pattern=r"^sha256:[0-9a-f]{64}$")]
@@ -86,4 +87,15 @@ class TaskPostSubmitManifestFacts(BaseModel):
         return self
 
 
-__all__ = ("TaskPostSubmitManifestFacts",)
+def task_post_submit_source_digest(source: TaskPostSubmitManifestFacts) -> str:
+    """Commit exact source facts except the database-assigned creation time."""
+    if type(source) is not TaskPostSubmitManifestFacts:
+        raise ValueError("routing source facts are invalid")
+    checked = TaskPostSubmitManifestFacts.model_validate(source.model_dump(mode="python"))
+    return canonical_json_hash({
+        "domain": "workstream.task_post_submit_source.v0.1",
+        "source": checked.model_dump(mode="json", exclude={"created_at"}),
+    })
+
+
+__all__ = ("TaskPostSubmitManifestFacts", "task_post_submit_source_digest")
