@@ -494,7 +494,7 @@ async def test_source_is_immutable(tmp_path, isolated_database_env):
         statements = (
             "UPDATE public.task_post_submit_routing_manifests SET human_review_required=false",
             "DELETE FROM public.task_post_submit_routing_manifests",
-            "TRUNCATE public.task_post_submit_routing_manifests",
+            "TRUNCATE public.task_post_submit_routing_manifests CASCADE",
         )
         for statement in statements:
             async with h.factory() as session:

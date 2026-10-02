@@ -6,10 +6,11 @@ of review/revision behavior. The downstream owner contracts remain separate.
 
 - Disposition: Planned
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
-  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; shared FinalAcceptance persistence is next. No packet resolver or human runtime is live.
+  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON persistence and participation are next. No packet resolver or human runtime is live.
 
 - Completed boundary: queue admission and ReviewLease persistence through 03A2,
-  plus normalized immutable packet storage through 03B and complete Review source storage through 04A.
+  plus normalized immutable packets through 03B, Review sources through 04A
+  and shared FinalAcceptance source storage through 04B.
 - Intent: ensure the authorized reviewer evaluates the exact verified artifact
   under the locked policy version and produces attributable outcomes.
 - Delivered upstream boundary: ARCH-04E1A provides immutable route-neutral TASK
@@ -19,8 +20,7 @@ of review/revision behavior. The downstream owner contracts remain separate.
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: REV-04B shared FinalAcceptance persistence,
-  CON-03C/07 and the existing REV-12A/CON fence foundation under the canonical
+- Next usable boundary: CON-03C contribution/award persistence, then CON-07 and the existing REV-12A/CON fence foundation under the canonical
   order; human hidden behavior may continue independently behind exact AUTH,
   ART and CON prerequisites.
 - Governing sources: `docs/spec_review_lifecycle.md`,
@@ -36,6 +36,11 @@ of review/revision behavior. The downstream owner contracts remain separate.
   the fail-closed AUTH PREP/read handoff are available.
 - [REV-04A](WS-REV-001-04A.md) delivers immutable Review, finding, resolution and completed request storage. Submission responses remain with their future preparation owner.
 - No live claim or canonical review decision is implied by this foundation.
+
+[REV-04B](WS-REV-001-04B.md) stores exclusive Review/TASK source lineage without
+AUTH receipts or a production writer. Before runtime use, harden this same table
+with mandatory exact originating authority and refuse retained pre-authority rows.
+Neither storage foundation grants acceptance authority.
 
 ## Remaining v0.1 sequence
 
@@ -53,13 +58,13 @@ REV owns shared final-acceptance semantics for both paths. The automated path
 must have explicit AUTH service authority and exact TASK/CHECKERS evidence,
 without a fabricated Review, ReviewLease, human actor, or reviewer contribution.
 CON validates that acceptance provenance using the same atomic
-submitter-contribution and applicable compensation participant. These changes
-are planned runtime work, not delivered behavior.
+submitter-contribution and applicable compensation participant. These effects
+are planned runtime work; the source storage foundations are delivered.
 The human branch below continues to use `allow_review`; it is not an automatic
 acceptance signal.
 
 The [versioned policy setting](../../changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
-is available for draft configuration. Extend shared acceptance persistence and
+is available for draft configuration. Add mandatory shared acceptance authority custody and
 the CON participant for both sources before enabling false. The automated branch must not depend on
 live human queues, ReviewLeases or decision endpoints. Human lifecycle work
 remains required for v0.1, but need not delay the first automated end-to-end
@@ -71,8 +76,7 @@ proof. No adjudication setting or behavior is included.
 2. Continue hidden claim/revision behavior against canonical `allow_review`,
    copying the Submission policy version without a current-policy lookup.
 3. TASK's early 04E1A source schema/detached facts and source-neutral accepted-
-   effects types are delivered. After delivered REV-03B and REV-04A storage, implement the REV-04B shared FinalAcceptance persistence foundation,
-   then CON-03C/CON-07 persistence and submitter participation. This foundation
+   effects types are delivered. After delivered REV-03B and REV-04A storage, REV-04B shared FinalAcceptance storage is also delivered. Continue CON-03C/CON-07 persistence and submitter participation. This foundation
    can precede human runtime: ARCH-04E uses it for false/pass acceptance without
    live queues, leases or decisions. Pull the existing REV-12A/CON shared
    obligation-fence foundation forward before either trigger; later drain and

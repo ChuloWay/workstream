@@ -101,3 +101,5 @@ from app.modules.reviews.decision.models import (  # noqa: F401
     ReviewDecisionRequest,
     ReviewFinding,
 )
+
+from app.modules.reviews.acceptance.models import FinalAcceptance  # noqa: F401

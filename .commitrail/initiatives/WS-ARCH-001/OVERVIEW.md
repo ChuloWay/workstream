@@ -9,7 +9,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 
 - Disposition: Planned
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
-  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; shared FinalAcceptance persistence is next. No packet resolver or human runtime is live.
+  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON persistence and participation are next. No packet resolver or human runtime is live.
 
 - Completed boundary: through 02H, [CP05](WS-ARCH-001-CP05.md), [CP06](WS-ARCH-001-CP06.md), [CP07](WS-ARCH-001-CP07.md), [ARCH-03A](WS-ARCH-001-03A.md), and
   [ARCH-04A consolidation](WS-ARCH-001-04A.md) canonical post-submit contracts/conformance.
@@ -28,8 +28,10 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: shared REV-04B FinalAcceptance persistence,
-  CON-03C/07 and the existing REV-12A/CON fence foundation before shared
+  [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
+  storage, without AUTH receipt custody or runtime consumers.
+- Next usable boundary: CON-03C/07 and the existing REV-12A/CON fence foundation,
+  plus mandatory same-table acceptance authority hardening before shared
   acceptance composition, then ARCH-04E1B/04E2/04E3 and ARCH-04F. Output-file
   authority remains unavailable for the zero-output catalogue.
   [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers public manager activation

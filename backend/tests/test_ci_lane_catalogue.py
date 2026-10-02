@@ -179,9 +179,9 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/authorization/submission_history/test_absence.py",
             "tests/authorization/submission_history/test_failures.py",
             "tests/reviews/decision/test_contracts.py",
-    "tests/reviews/decision/test_storage.py",
-    "tests/reviews/decision/test_migration.py",
-    "tests/reviews/packet/test_repository.py",
+            "tests/reviews/decision/test_storage.py",
+            "tests/reviews/decision/test_migration.py",
+            "tests/reviews/packet/test_repository.py",
             "tests/reviews/packet/test_storage.py",
             "tests/reviews/packet/test_migration.py",
             "tests/tasks/post_submit_routing/test_contracts.py",
@@ -307,6 +307,9 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     assert {
         "tests/test_alembic.py",
         "tests/test_database_reset.py",
+        "tests/reviews/acceptance/test_contracts.py",
+        "tests/reviews/acceptance/test_storage.py",
+        "tests/reviews/acceptance/test_migration.py",
         runner.ADMIN_RUNNER_MODULE,
     } | static_contracts == modules_by_lane["schema_contracts"]
     assert {

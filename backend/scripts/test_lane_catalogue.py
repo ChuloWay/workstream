@@ -478,6 +478,9 @@ LANES = (
         "schema_contracts",
         (
             SCHEMA_MODULE,
+            "tests/reviews/acceptance/test_contracts.py",
+            "tests/reviews/acceptance/test_storage.py",
+            "tests/reviews/acceptance/test_migration.py",
             "tests/test_database_reset.py",
             "tests/test_artifact_architecture.py",
             "tests/architecture/test_module_boundaries.py",

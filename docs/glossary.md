@@ -367,7 +367,8 @@ context without rewriting prior work.
 ## FinalAcceptance
 
 The internal immutable accept-only fact and sole source of a submitter's
-`accepted_submission` ContributionRecord. See [Final Acceptance](#final-acceptance)
+`accepted_submission` ContributionRecord. REV-04B delivers storage only; exact
+AUTH custody and the canonical shared operation remain required before runtime use. See [Final Acceptance](#final-acceptance)
 for human and planned automated source boundaries.
 
 ## Revision Replay
