@@ -5,8 +5,8 @@ and the [capability ledger](../../../docs/roadmap_status.md).
 
 - Disposition: Planned
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
-  metadata-only packet types; REV-03B packet storage and REV-04A Review storage
-  precede shared FinalAcceptance. No packet resolver or human runtime is live.
+  metadata-only packet types. REV-03B packet storage is delivered; complete
+  REV-04A Review storage is next before shared FinalAcceptance. No packet resolver or human runtime is live.
 
 - Completed boundary: public Finance ContributionPolicy administration, exact
   Finance Authority, CP06 selected-policy validation and CP07 internal guide
@@ -36,7 +36,9 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   and minimal writers, ARCH-03A internal guide context,
   [CP07 activation/binding](../WS-ARCH-001/WS-ARCH-001-CP07.md) and
   [AUTH-12H live authority](../WS-AUTH-001/WS-AUTH-001-12H.md), before task readiness.
-- Next usable boundary: REV-03B packet and REV-04A Review storage, then
+- Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
+  lease packets with normalized live guide ingests; no resolver or byte authority.
+- Next usable boundary: complete REV-04A Review storage, then
   REV-04B FinalAcceptance persistence and
   CON-03C/07 and the existing shared REV-12A/CON fence foundation before one
   shared acceptance operation serves both the human and automatic triggers.

@@ -20,6 +20,7 @@ FORMAT = "workstream-identifier-inventory-1"
 GENERATION_CLASSIFICATION_FORMAT = "workstream-uuid-generation-classifications-1"
 GENERATION_CLASSIFICATIONS = "identifier_generation_classifications.json"
 SEMANTIC_KEYS = {
+    "review_packet_guide_items": ("packet-to-declared-source membership", ("packet_id", "source_item_id")),
     "actor_profile_migration_state": ("seeded schema-state singleton, not a record sequence", ("id",)),
     "api_rate_control_counters": ("rate-limit scope and digest", ("control_scope", "key_digest")),
     "artifact_admission_scopes": ("artifact quota scope", ("scope_type", "scope_id")),

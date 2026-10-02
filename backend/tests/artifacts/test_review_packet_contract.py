@@ -36,7 +36,7 @@ def packet() -> dict:
 
 def guide(order: int) -> dict:
     return {
-        "guide_binding_id": UUID(int=100 + order),
+        "ingest_id": UUID(int=100 + order),
         "source_item_id": UUID(int=300 + order), "item_order": order,
         "logical_role": "guide_source_original", "media_type": "application/pdf",
     }
@@ -69,7 +69,7 @@ def test_closed_public_field_inventories() -> None:
     }
     assert set(ReviewSubmissionMember.model_fields) == {"binding_id", "logical_role", "media_type"}
     assert set(ReviewGuideMember.model_fields) == {
-        "guide_binding_id", "source_item_id", "item_order", "logical_role", "media_type",
+        "ingest_id", "source_item_id", "item_order", "logical_role", "media_type",
     }
     assert set(ReviewPacketMembership.model_fields) == {"request", "submission", "guide_documents"}
     with pytest.raises(TypeError, match="Protocols cannot be instantiated"):
@@ -120,7 +120,7 @@ def test_invalid_ids_and_strict_versions() -> None:
                 ReviewPacketMembershipRequest.model_validate({**raw["request"], name: "invalid"})
     for model, data, fields in (
         (ReviewSubmissionMember, raw["submission"], ["binding_id"]),
-        (ReviewGuideMember, raw["guide_documents"][0], ["guide_binding_id", "source_item_id"]),
+        (ReviewGuideMember, raw["guide_documents"][0], ["ingest_id", "source_item_id"]),
     ):
         for name in fields:
             with pytest.raises(ValidationError):
@@ -151,7 +151,7 @@ def test_closed_roles_and_supported_media() -> None:
         assert ReviewGuideMember.model_validate({**guide(0), "media_type": media}).media_type == media
 
 
-@pytest.mark.parametrize("attribute", ["guide_binding_id", "source_item_id", "item_order"])
+@pytest.mark.parametrize("attribute", ["ingest_id", "source_item_id", "item_order"])
 def test_independent_duplicate_membership_rejected(attribute: str) -> None:
     raw = packet()
     raw["guide_documents"][1][attribute] = raw["guide_documents"][0][attribute]
@@ -184,7 +184,7 @@ def test_python_uuid_strings_rejected_at_each_nested_boundary() -> None:
         ("request", ("project_id", "task_id", "submission_id", "checker_run_id",
                      "result_id", "guide_id", "source_snapshot_id", "project_setup_run_id")),
         ("submission", ("binding_id",)),
-        ("guide", ("guide_binding_id", "source_item_id")),
+        ("guide", ("ingest_id", "source_item_id")),
     ):
         for field in fields:
             changed = deepcopy(raw)
@@ -196,3 +196,11 @@ def test_python_uuid_strings_rejected_at_each_nested_boundary() -> None:
             assert caught.value.errors()[0]["type"] == "is_instance_of"
             expected_location = ("guide_documents", 0, field) if scope == "guide" else (scope, field)
             assert caught.value.errors()[0]["loc"] == expected_location
+
+
+def test_removed_guide_binding_identity_is_not_an_alias():
+    from app.modules.artifacts.api.review_packet import ReviewGuideMember
+    from app.core.identifiers import new_record_id
+    with pytest.raises(ValidationError):
+        ReviewGuideMember(guide_binding_id=new_record_id(),source_item_id=new_record_id(),
+            item_order=0,logical_role='guide_source_original',media_type='application/pdf')

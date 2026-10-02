@@ -28,7 +28,7 @@ current TASK children do not implement REV/CON internals: consume the
 are delivered after 04C, without REV dependency, runtime participant or handlers.
 REV-04B can reference that schema only after its other source prerequisites:
 [ART-07A1 packet types](../../../WS-ART-001/WS-ART-001-07A1.md) are delivered;
-REV-03B normalized packet storage and complete REV-04A Review storage follow.
+REV-03B normalized packet storage is delivered; complete REV-04A Review storage is next.
 Shared REV-04B/CON-03C/07 and the early
 existing REV-12A/CON fence
 foundation are hard dependencies of false handler composition, not of this

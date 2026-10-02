@@ -6,8 +6,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 
 - Disposition: Planned
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
-  metadata-only packet types; REV-03B packet storage and REV-04A Review storage
-  precede shared FinalAcceptance. No packet resolver or human runtime is live.
+  metadata-only packet types. REV-03B packet storage is delivered; complete
+  REV-04A Review storage is next before shared FinalAcceptance. No packet resolver or human runtime is live.
 
 - Completed boundary: recovery foundation and [TASK/checker authorization cleanup](WS-AUTH-003-TASKCHECKER.md).
 - Intent: route public authorization capability through `authorization.api`
@@ -18,8 +18,10 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   [ARCH-04B2 output custody](../WS-ARCH-001/WS-ARCH-001-04B2.md), ARCH-03D hidden
   intake and [AUTH-18 public manager activation](../WS-AUTH-001/WS-AUTH-001-18.md).
   They install no routing action, handler or runtime composition.
-- Next usable boundary: continue canonical boundary recovery through REV-03B
-  packet and complete REV-04A Review storage, then shared REV/CON/fence
+- Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
+  lease packets with normalized live guide ingests; no resolver or byte authority.
+- Next usable boundary: continue canonical boundary recovery through complete
+  REV-04A Review storage, then shared REV/CON/fence
   foundations and later ARCH-04E1B/04E2/04E3 routing.
   Submission/checker history uses canonical authority; the alternate gate lifecycle
   is removed. Continue shrinking the canonical import ledger as implementation

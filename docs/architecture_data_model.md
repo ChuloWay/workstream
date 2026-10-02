@@ -1835,16 +1835,23 @@ REV's database guard rejects a draft, crossed-project, or lineage-mismatched
 identity. Reviewer and preferred-reviewer FKs accept only canonical human
 ActorProfiles.
 
-`ReviewPacketManifest` remains planned REV persistence. The delivered
-[ART-07A1 contract](../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md)
-provides metadata-only types with distinct Submission and guide binding IDs,
-not a packet table, resolver or byte capability. REV-03B will normalize those
-members before complete REV-04A Review storage and shared FinalAcceptance.
+`ReviewPacketManifest` and `ReviewPacketGuideItem` provide immutable REV packet
+storage. The header binds one lease/queue to the exact Submission/version,
+admitting checker run/aggregate result, locked guide/snapshot and activated
+setup run/generation. It contains exactly one original ZIP binding. Normalized
+members identify each declared source item and live guide ingest, source order,
+role and media type. PostgreSQL reconciles the complete set and committed uploads.
 
-`ReviewPacketManifest` is an immutable REV semantic projection over the exact
-lease, Submission, admitting CheckerRun/results, stamped context, response
-evidence, and ART binding IDs. It contains no bytes, digest, provider locator,
-signed URL, receipt, scratch path, or AUTH matrix data.
+The header's semantic `packet_manifest_digest` covers the full ART membership;
+`packet_manifest_generation` equals the lease attempt generation. `created_at`
+is database-owned. No artifact content hashes, sizes, provider locators, receipts,
+source bodies or AUTH capabilities are copied. Header, members and ingests reject
+mutation/deletion/truncation. Repository writes are caller-transaction operations;
+creation checks the lease deadline against PostgreSQL time; exact replay retains
+the stored identity after expiry or closure. The detached identity is
+`packet_manifest_id`, matching AUTH. This storage is delivered; the resolver,
+claim authority and byte capability remain future work. Complete REV-04A Review
+storage is next before shared FinalAcceptance.
 
 ## Review
 

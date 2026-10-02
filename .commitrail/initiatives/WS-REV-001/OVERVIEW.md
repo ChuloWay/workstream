@@ -6,17 +6,20 @@ of review/revision behavior. The downstream owner contracts remain separate.
 
 - Disposition: Planned
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
-  metadata-only packet types; REV-03B packet storage and REV-04A Review storage
-  precede shared FinalAcceptance. No packet resolver or human runtime is live.
+  metadata-only packet types. REV-03B packet storage is delivered; complete
+  REV-04A Review storage is next before shared FinalAcceptance. No packet resolver or human runtime is live.
 
-- Completed boundary: queue admission and ReviewLease persistence through 03A2.
+- Completed boundary: queue admission and ReviewLease persistence through 03A2,
+  plus normalized immutable packet storage through 03B.
 - Intent: ensure the authorized reviewer evaluates the exact verified artifact
   under the locked policy version and produces attributable outcomes.
 - Delivered upstream boundary: ARCH-04E1A provides immutable route-neutral TASK
   source storage, detached source facts and the type-only accepted-effects
   Protocol. It provides no writer, reader, handler, routing authority, current
   pointer or acceptance implementation.
-- Next usable boundary: REV-03B normalized packet persistence, then complete
+- Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
+  lease packets with normalized live guide ingests; no resolver or byte authority.
+- Next usable boundary: complete
   REV-04A Review storage and REV-04B shared FinalAcceptance persistence,
   CON-03C/07 and the existing REV-12A/CON fence foundation under the canonical
   order; human hidden behavior may continue independently behind exact AUTH,
@@ -62,7 +65,7 @@ live human queues, ReviewLeases or decision endpoints. Human lifecycle work
 remains required for v0.1, but need not delay the first automated end-to-end
 proof. No adjudication setting or behavior is included.
 
-1. `03B`: normalized reviewer packet persistence consumes the delivered
+1. `03B` is complete: normalized reviewer packet persistence consumes the delivered
    [ART-07A1 exact membership contract](../WS-ART-001/WS-ART-001-07A1.md).
    Next complete REV-04A Review-source storage; neither step activates human review.
 2. Continue hidden claim/revision behavior against canonical `allow_review`,

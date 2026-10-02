@@ -327,12 +327,13 @@ keys, provider URIs, scratch paths, receipts, or credentials.
 
 `ReviewPacketManifest` is an immutable REV semantic projection naming the exact
 queue entry, lease, versioned Submission, admitting CheckerRun/results, stamped
-guide or revision context, bounded response relations, and ART binding IDs. It
-stores no bytes, content digest, provider location, signed URL, scratch path,
+guide/setup context, original ZIP binding and live guide ingest IDs. Revision
+response relations belong to the later complete Review storage boundary. It
+stores no bytes, artifact content digest, provider location, signed URL, scratch path,
 receipt, or authorization-matrix data.
 
-An active ReviewLease authorizes artifact bytes only for the single Submission
-packet named by its manifest. Prior, expired, consumed, sibling, later,
+Future exact lease/packet authorization permits artifact bytes only for the single
+Submission packet named by its manifest; an active stored lease alone grants none. Prior, expired, consumed, sibling, later,
 cross-task, and cross-project leases cannot read those bytes. Authorized chain
 history may expose bounded binding ID, relation, media type,
 verification/availability, and required/optional metadata, but never bytes,
@@ -346,19 +347,24 @@ Project Manager/Operator. Prior participation grants metadata history only;
 artifact bytes still require the current active lease for the exact packet.
 
 
-The delivered [ART-07A1 membership contract](../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md)
-provides strict detached types and a type-only async port, not a resolver. Its
-scope includes exact Submission/version, aggregate CheckerRun result identity,
-locked guide/snapshot and activated setup run/generation. It names one required
-original ZIP binding and 1–100 ordered original guide bindings using their
-separate ART owners. Both member kinds are always required. The guide binding
-table exists, but its packet writer/resolver is not implemented. Shape and echoed
-request validation prove neither stored ownership nor complete membership;
-future canonical-owner reads must establish both within the caller transaction.
-REV-03B must retain normalized members; no opaque JSON binding set. Byte access
-still requires separate exact lease/packet authorization. The current catalogue
-has no output files; adding those later requires an explicit owner-custody
-contract, not arbitrary additional packet members.
+The [ART-07A1 membership contract](../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md)
+defines strict detached types and a type-only async port. REV-03B persists one
+immutable metadata packet per exact active, unexpired ReviewLease: the original Submission
+ZIP binding and all 1–100 ordered guide documents from the locked activated setup.
+Guide members name live `ingest_id` values, not the retained extraction binding
+table. Canonical PostgreSQL checks reconcile every owner and the complete declared
+set, including committed upload receipts. A semantic digest covers the complete
+membership; packet generation equals the lease attempt generation. Packet and
+ingest facts reject mutation and deletion; identical replay returns the same ID,
+including after expiry, closure or guide supersession. Creation checks the deadline
+against PostgreSQL time independently of expiry reconciliation. The caller owns
+the transaction.
+
+This delivers storage, not claim, a membership resolver or byte access. Future
+canonical-owner reads must construct the complete membership, and byte access
+requires separate exact lease/packet authorization and current availability checks.
+The current catalogue has no output files; adding those requires an explicit
+owner-custody contract, not arbitrary additional packet members.
 
 ## Review Notes, Findings, And Revision Responses
 
@@ -572,8 +578,8 @@ Extract foundations from existing owner work, not a new initiative:
    not restricted to human admission. False proof is scalar transport only
    while activation remains unavailable. This schema precedes the REV source FK.
 2. [ART-07A1](../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) supplies
-   the metadata-only packet contract. Next implement REV-03B normalized packet
-   persistence, then complete REV-04A Review-source storage before REV-04B
+   the metadata-only packet contract. REV-03B normalized packet persistence is
+   delivered. Next complete REV-04A Review-source storage before REV-04B
    shared FinalAcceptance storage. Do not create an incomplete Review solely as
    an FK target. CON-03C contribution/award persistence and CON-07 submitter
    participation follow. These storage prerequisites require no live human

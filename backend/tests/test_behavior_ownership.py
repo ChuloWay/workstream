@@ -2222,3 +2222,14 @@ def test_review_packet_contract_addition_preserves_existing_ownership() -> None:
     for targets in ([addition], [retained, addition, "backend/app/modules/artifacts/api/packet_reader.py"]):
         with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
             ownership._validate_additive_partition_transition(_partition(sorted(targets)), trusted)
+
+
+def test_review_packet_storage_addition_preserves_existing_ownership() -> None:
+    expected = {f"backend/app/modules/reviews/packet/{name}.py" for name in ("models", "schemas", "repository")}
+    assert ownership.REV_03B_PACKET_TARGETS == expected
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(_partition(sorted({retained, *expected})), trusted)
+    for neighbor in ("backend/app/modules/reviews/packet/resolver.py", "backend/app/modules/reviews/claim.py"):
+        with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+            ownership._validate_additive_partition_transition(_partition(sorted({retained, *expected, neighbor})), trusted)

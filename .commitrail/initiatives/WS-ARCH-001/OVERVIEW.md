@@ -9,8 +9,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 
 - Disposition: Planned
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
-  metadata-only packet types; REV-03B packet storage and REV-04A Review storage
-  precede shared FinalAcceptance. No packet resolver or human runtime is live.
+  metadata-only packet types. REV-03B packet storage is delivered; complete
+  REV-04A Review storage is next before shared FinalAcceptance. No packet resolver or human runtime is live.
 
 - Completed boundary: through 02H, [CP05](WS-ARCH-001-CP05.md), [CP06](WS-ARCH-001-CP06.md), [CP07](WS-ARCH-001-CP07.md), [ARCH-03A](WS-ARCH-001-03A.md), and
   [ARCH-04A consolidation](WS-ARCH-001-04A.md) canonical post-submit contracts/conformance.
@@ -26,7 +26,9 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   authority. The source table has no writer, reader, handler, current pointer,
   routing authority or acceptance effect implementation. False is proven only as
   a scalar DTO value because activation still rejects it.
-- Next usable boundary: REV-03B normalized packet persistence, then complete
+- Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
+  lease packets with normalized live guide ingests; no resolver or byte authority.
+- Next usable boundary: complete
   REV-04A Review storage and shared REV-04B FinalAcceptance persistence,
   CON-03C/07 and the existing REV-12A/CON fence foundation before shared
   acceptance composition, then ARCH-04E1B/04E2/04E3 and ARCH-04F. Output-file

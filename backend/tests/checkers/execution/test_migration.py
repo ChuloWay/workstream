@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from app.core.identifiers import new_record_id
-from tests.migration_fixtures import _config
+from tests.migration_fixtures import _config, current_schema_revision
 from tests.post_submit_materialization_helpers import material_fixture
 
 pytestmark = pytest.mark.postgres_schema_contract
@@ -144,7 +144,7 @@ async def test_empty_database_installs_execution_custody(isolated_database_env, 
         try:
             assert (
                 await conn.fetchval("select version_num from alembic_version")
-                == "0011_task_routing_source"
+                == current_schema_revision()
             )
             assert await conn.fetchval("select count(*) from checker_submission_fences") == 0
             columns = set(

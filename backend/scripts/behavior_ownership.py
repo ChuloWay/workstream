@@ -147,6 +147,7 @@ MODULE_PUBLIC_API_FOUNDATION_TARGETS = frozenset(
         "backend/app/modules/authorization/api/outbox_dispatch.py",
     }
 )
+REV_03B_PACKET_TARGETS = frozenset({'backend/app/modules/reviews/packet/models.py', 'backend/app/modules/reviews/packet/repository.py', 'backend/app/modules/reviews/packet/schemas.py'})
 ARCH_04E1A_SOURCE_TARGETS = frozenset({
     "backend/app/modules/tasks/api/accepted_effects.py",
     "backend/app/modules/tasks/api/post_submit_routing.py",
@@ -738,6 +739,7 @@ def _validate_additive_partition_transition(
         | ARCH_CP03B_ADAPTER_BINDING_AUTH_TARGETS
             | ARCH_CP04A_CONTRIBUTION_POLICY_TARGETS
             | ARCH_CP04B_CONTRIBUTION_POLICY_TARGETS
+        | REV_03B_PACKET_TARGETS
         | ARCH_04E1A_SOURCE_TARGETS
         | ARCH_04D2_AUTHORITY_TARGETS
         | ARCH_04C_EXECUTION_TARGETS
