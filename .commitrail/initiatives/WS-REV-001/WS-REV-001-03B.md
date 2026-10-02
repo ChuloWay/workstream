@@ -27,9 +27,10 @@ read-only. The complete packet remains metadata-only.
 
 - `backend/app/modules/artifacts/api/review_packet.py`: replace guide_binding_id with ingest_id, exact current owner vocabulary; no second contract.
 - `backend/tests/artifacts/test_review_packet_contract.py`: update identity assertions and reject the removed field explicitly; retain all required proof.
-- `backend/app/modules/reviews/packet_models.py`: normalized packet header and guide item models.
-- `backend/app/modules/reviews/packet_schemas.py`: strict internal persistence input and detached stored result.
-- `backend/app/modules/reviews/packet_repository.py`: caller-transaction persistence/replay and project-qualified stored metadata read.
+- `backend/app/modules/reviews/packet/__init__.py`: package marker.
+- `backend/app/modules/reviews/packet/models.py`: normalized packet header and guide item models.
+- `backend/app/modules/reviews/packet/schemas.py`: strict internal persistence input and detached stored result.
+- `backend/app/modules/reviews/packet/repository.py`: caller-transaction persistence/replay and project-qualified stored metadata read.
 - `backend/app/modules/projects/models.py`: correct the ingest model's stale not-yet-bound docstring only.
 - `backend/app/db/models.py`: register the two REV models.
 - `backend/alembic/versions/0012_review_packet.py`: additive tables, exact foreign keys, immutable/completeness guards, guide-ingest immutability, safe SQL name resolution.
@@ -86,6 +87,8 @@ binding table. The existing header request retains all eleven scope fields.
 
 - `id` (UUIDv7), `created_at` (PostgreSQL clock).
 - `review_lease_id` (unique), `review_queue_entry_id`.
+- `packet_manifest_generation` equals the immutable lease attempt generation;
+  `packet_manifest_digest` is the semantic digest defined below.
 - The eleven ART request fields: `project_id`, `task_id`, `submission_id`,
   `submission_version`, `checker_run_id`, `result_id`, `guide_id`, `guide_version`,
   `source_snapshot_id`, `project_setup_run_id`, `setup_generation`.
@@ -100,8 +103,17 @@ at existing boundaries. `result_id` is the aggregate CheckerRun.result_id.
 primary key), `ingest_id`, `item_order`, `logical_role`, `media_type`.
 Unique packet/ingest and packet/order. No surrogate ID for this natural member
 key. Closed roles/media types, bounded nonblank guide version, positive versions,
-nonnegative item order. No hash, size, provider/content/replica identity, receipt,
+nonnegative item order. No artifact content hash, size, provider/content/replica identity, receipt,
 capability, raw policy, arbitrary metadata or source body in either table.
+
+The semantic manifest digest uses existing `canonical_json_hash` over the exact
+ART membership JSON: request, submission and ordered guide members, with native
+UUIDs rendered as strings. It excludes packet UUID, lease identity, generation
+and creation time, so future claim can compute it before allocating a lease.
+Those independent identities remain explicitly bound by AUTH. SQL recomputes
+the same digest using the existing canonical JSON function and pgcrypto digest;
+caller-supplied false digests fail at commit. The positive Python/SQL parity
+proof includes all fields and a changed ordered member. No second serializer.
 
 ### Database custody
 
@@ -111,7 +123,10 @@ and Submission binding; item rows reference header, source item and live ingest.
 Additional canonical checks reconcile:
 
 - Lease and queue exactly match the full project/task/Submission lineage and
-  queue admitting run; checker is a completed allow-review source with matching
+  queue admitting run. New packets require active lease, leased queue and exact
+  active-lease pointer while holding lease then queue locks. Later closure and
+  historical reads remain permitted; replay does not create a new packet.
+  Checker is a completed allow-review source with matching
   aggregate result. Storage does not replace live claim/currentness authority.
 - Submission's locked guide version/snapshot and original ZIP binding match;
   binding belongs to the exact Submission/project and original role/media.
@@ -121,6 +136,13 @@ Additional canonical checks reconcile:
   and exact header snapshot. The complete declared guide set is present in both
   directions, with 1..100 members. Missing/extra/swapped valid foreign members
   fail independently of malformed-ID guards.
+- Every ingest has a committed guide upload for the exact project/source item:
+  object-confirmed put, exact content/replica/namespace and ingest byte identity,
+  plus either its document-stored operation receipt or exact observed-confirmed
+  observation receipt. Use the same immutable predicates as the live ART guide
+  manifest. Do not freeze mutable replica availability or integrity status;
+  future byte resolution must recheck those. Prepared ingest alone is insufficient.
+  No current-draft/latest-snapshot resolver is reused for historical membership.
 
 Use deferred final-state checks for the atomic header/member insertion. No
 persisted draft/sealed state or seal workflow is necessary: immutable header and
@@ -134,7 +156,8 @@ fresh claim or clock reset.
 The live ingest writer `ArtifactRepository` already returns an identical row or
 rejects conflicting prepared bytes; no production update/delete consumer exists.
 Add unconditional update/delete/truncate protection for these immutable ingest
-facts so retained packets cannot change meaning through a referenced source.
+facts using existing `reject_artifact_fact_mutation`, so retained packets cannot
+change meaning through a referenced source.
 Do not add a check-then-update race dependent on whether a packet currently
 exists. Snapshot items, Submission bindings, terminal checker evidence and
 activated guide custody already have immutable owner protections. Preserve
@@ -147,7 +170,10 @@ Temp-table names must not influence constraints. No privileged bypass fixture.
 ### Repository and proof boundary
 
 `ReviewPacketRepository.store(lease_id, membership)` locks the exact
-project-qualified REV lease before selecting/writing that lease's packet. It
+project-qualified REV lease, then its owning queue, before selecting/writing that
+lease's packet (the existing lease-then-queue order). New insertion requires
+active/leased/exact-pointer facts under those locks; replay remains possible
+after closure. It
 allocates a UUIDv7 only for a new packet, inserts header and all guide rows, and
 flushes without committing. Deferred checks stay within the caller transaction.
 An identical retry returns the stored identity; any membership difference raises
@@ -158,7 +184,8 @@ project or contributor lock and cannot grant authority.
 `read(project_id, lease_id)` returns only normalized stored metadata as detached
 strict facts, ordered by source item order; qualify ownership before lookup.
 `ReviewPacketStored` contains `packet_id`, `review_lease_id`,
-`review_queue_entry_id`, `created_at`, and the canonical ART `membership` value.
+`review_queue_entry_id`, `packet_manifest_generation`, `packet_manifest_digest`,
+`created_at`, and the canonical ART `membership` value.
 A missing or foreign scope returns no packet. Authorization is a future caller's
 responsibility; no endpoint or runtime composition exposes this repository.
 
@@ -207,3 +234,33 @@ isolated PostgreSQL runner, strict contract tests, migration/identifier/ownershi
 and lane inventory checks; run Ruff, module boundaries, Commitrail, links and
 stale wording. Full hosted nine-lane and real API checks remain required, with
 no skipped/deselected nodes. No spreadsheet exports are currently present.
+
+### Named future proof inventory
+
+These are implementation obligations, not claims of executed tests:
+
+- `test_packet_matches_canonical_owners_and_digest`: every header/nested owner
+  value and Python/SQL digest parity, including changed ordered membership.
+- `test_packet_rejects_coherent_owner_substitutions`: independently valid foreign
+  project, task, Submission/version, run/result, activated setup/generation, ZIP.
+- `test_packet_rejects_null_source_fields`: each nonnullable source independently.
+- `test_packet_creation_time_is_database_owned`: supplied NULL/past/future times.
+- `test_packet_requires_active_exact_lease`: terminal and sibling lease insertions.
+- `test_packet_requires_committed_guide_upload`: prepared-only ingest cannot pass.
+- `test_packet_requires_complete_canonical_guide_set`: omission, extra, swapped
+  ingest/source, order and media; valid control before each negative commit.
+- `test_packet_and_ingest_facts_are_immutable`: direct UPDATE/DELETE/TRUNCATE for
+  header, members and ingest, and late insert into a completed packet.
+- `test_packet_deferred_failure_rolls_back`: no retained header/member on failure.
+- `test_packet_same_lease_concurrency`: exact and conflicting concurrent writes.
+- `test_packet_creation_serializes_with_lease_closure`: cannot create post-close.
+- `test_packet_read_conceals_foreign_project`: real stored foreign identity.
+- `test_packet_retains_superseded_guide_lineage`: real successor activation, then
+  historical read and identical replay without selecting the successor.
+- `test_packet_shadow_tables_cannot_change_custody`: temporary name shadowing.
+- `test_packet_upgrade_preserves_existing_owners`: populated predecessor upgrade.
+
+Mutation probes target the relevant predicate after valid fixture setup: digest,
+lease status/pointer, committed-upload receipt, exact set, source identity and
+immutability. Each must reach the negative assertion and fail there when its
+guard is removed; harness mismatch/setup failure is not discriminating proof.
