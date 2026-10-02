@@ -530,3 +530,98 @@ async def test_packet_guard_removal_probes(tmp_path, clean_postgres_database):
                 with pytest.raises(DBAPIError, match="immutable"):
                     await session.execute(statement, params)
             await session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_packet_rejects_coherent_sibling_under_another_lease(
+    tmp_path, clean_postgres_database
+):
+    from tests.reviews.packet.support import prepare_packet
+    from tests.tasks.post_submit_routing.support import completed_sibling_source
+
+    async with packet_source(tmp_path, clean_postgres_database) as h:
+        sibling = await completed_sibling_source(h)
+        await prepare_packet(sibling)
+        await valid_control(h)
+        await valid_control(sibling)
+        assert h.membership.request.project_id == sibling.membership.request.project_id
+        assert h.membership.request.task_id != sibling.membership.request.task_id
+        assert h.membership.request.submission_id != sibling.membership.request.submission_id
+        assert h.membership.request.checker_run_id != sibling.membership.request.checker_run_id
+        assert h.queue_id != sibling.queue_id
+        assert h.lease_id != sibling.lease_id
+        # Every header/member/digest is coherent for the sibling. Only the lease is foreign.
+        header = {"review_lease_id": h.lease_id}
+        message = "review packet requires exact active lease"
+        async with h.factory() as session:
+            await assert_packet_rejected(session, sibling, message=message, header=header)
+            await session.rollback()
+            definition = await session.scalar(
+                text(
+                    "SELECT pg_get_functiondef('public.guard_review_packet_creation()'::regprocedure)"
+                )
+            )
+            start = definition.index("OR (NEW.review_queue_entry_id,NEW.task_id")
+            end = definition.index("\n    THEN", start)
+            # Omit only the tuple equality; active lease/queue and all FKs remain enforced.
+            await session.execute(text(definition[:start] + definition[end:]))
+            with pytest.raises(pytest.fail.Exception, match="DID NOT RAISE"):
+                await assert_packet_rejected(session, sibling, message=message, header=header)
+            await session.rollback()
+            assert (
+                await session.scalar(text("SELECT count(*) FROM public.review_packet_manifests"))
+                == 0
+            )
+
+
+@pytest.mark.asyncio
+async def test_packet_rejects_another_documents_valid_receipt(tmp_path, clean_postgres_database):
+    async with packet_source(tmp_path, clean_postgres_database) as h:
+        await valid_control(h)
+        first, second = h.membership.guide_documents
+        async with h.factory() as session:
+            receipt = (
+                await session.execute(
+                    text(
+                        "SELECT receipt.id,receipt.guide_source_item_id,receipt.put_attempt_id,receipt.replica_id "
+                        "FROM public.artifact_put_attempts put "
+                        "JOIN public.artifact_operation_receipts receipt ON receipt.id=put.receipt_id "
+                        "WHERE put.guide_source_item_id=:item AND put.status='object_confirmed' "
+                        "AND receipt.outcome='document_stored'"
+                    ),
+                    {"item": second.source_item_id},
+                )
+            ).one()
+            assert receipt.guide_source_item_id == second.source_item_id
+            assert receipt.guide_source_item_id != first.source_item_id
+            await session.rollback()
+
+            async def substitute():
+                await session.execute(
+                    text(
+                        "UPDATE public.artifact_put_attempts SET receipt_id=:receipt WHERE guide_source_item_id=:item"
+                    ),
+                    {"receipt": receipt.id, "item": first.source_item_id},
+                )
+
+            message = "review packet canonical guide membership mismatch"
+            await substitute()
+            await assert_packet_rejected(session, h, message=message)
+            await session.rollback()
+            definition = await session.scalar(
+                text(
+                    "SELECT pg_get_functiondef('public.validate_review_packet(uuid)'::regprocedure)"
+                )
+            )
+            start = definition.index(" AND receipt.put_attempt_id=put.id")
+            end = definition.index("AND receipt.outcome='document_stored'", start)
+            # Keep the valid receipt ID/outcome and every other packet/upload guard.
+            await session.execute(text(definition[:start] + " " + definition[end:]))
+            await substitute()
+            with pytest.raises(pytest.fail.Exception, match="DID NOT RAISE"):
+                await assert_packet_rejected(session, h, message=message)
+            await session.rollback()
+            assert (
+                await session.scalar(text("SELECT count(*) FROM public.review_packet_manifests"))
+                == 0
+            )

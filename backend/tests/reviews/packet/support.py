@@ -34,100 +34,103 @@ from tests.test_review_lease_persistence import _human_actor
 @asynccontextmanager
 async def packet_source(tmp_path, database_url, **source_options):
     async with completed_source(tmp_path, database_url, **source_options) as h:
-        async with h.factory() as session:
-            submission = await session.get(Submission, str(h.request.submission_id))
-            guide = await session.scalar(
-                select(ProjectGuide).where(
-                    ProjectGuide.project_id == str(h.source["project_id"]),
-                    ProjectGuide.version == submission.locked_guide_version,
-                )
-            )
-            activation = await session.scalar(
-                select(GuideMutationIdempotencyRecord).where(
-                    GuideMutationIdempotencyRecord.operation_id == guide.activation_operation_id,
-                )
-            )
-            proposal = activation.response_json["command"]["target"]["proposal"]
-            rows = (
-                await session.execute(
-                    select(GuideSourceSnapshotItem, GuideSourceArtifactIngest)
-                    .join(
-                        GuideSourceArtifactIngest,
-                        GuideSourceArtifactIngest.source_item_id == GuideSourceSnapshotItem.id,
-                    )
-                    .where(
-                        GuideSourceSnapshotItem.source_snapshot_id
-                        == submission.locked_guide_source_snapshot_id
-                    )
-                    .order_by(GuideSourceSnapshotItem.item_order)
-                )
-            ).all()
-            h.membership = ReviewPacketMembership(
-                request=ReviewPacketMembershipRequest(
-                    project_id=h.source["project_id"],
-                    task_id=h.request.task_id,
-                    submission_id=h.request.submission_id,
-                    submission_version=submission.version,
-                    checker_run_id=h.result.attempt_id,
-                    result_id=h.source["result_id"],
-                    guide_id=UUID(guide.id),
-                    guide_version=guide.version,
-                    source_snapshot_id=UUID(submission.locked_guide_source_snapshot_id),
-                    project_setup_run_id=UUID(proposal["setup_run_id"]),
-                    setup_generation=proposal["setup_generation"],
-                ),
-                submission=ReviewSubmissionMember(
-                    binding_id=UUID(submission.artifact_binding_id),
-                    logical_role="submission_bundle_original",
-                    media_type="application/zip",
-                ),
-                guide_documents=tuple(
-                    ReviewGuideMember(
-                        ingest_id=UUID(ingest.id),
-                        source_item_id=UUID(item.id),
-                        item_order=item.item_order,
-                        logical_role="guide_source_original",
-                        media_type=item.media_type,
-                    )
-                    for item, ingest in rows
-                ),
-            )
-            repository = ReviewQueueRepository(session)
-            queue = await repository.add_queue_entry(
-                ReviewQueueEntryInput(
-                    id=new_record_id(),
-                    project_id=str(h.source["project_id"]),
-                    task_id=str(h.request.task_id),
-                    submission_id=submission.id,
-                    submission_version=submission.version,
-                    admitting_checker_run_id=str(h.result.attempt_id),
-                    routing_mode=ReviewRoutingMode.OPEN,
-                    routing_reason=ReviewRoutingReason.FIRST_SUBMISSION,
-                )
-            )
-            await session.commit()
-            actor_id = await _human_actor(session, label="packet-reviewer")
-            lease = await repository.add_lease(
-                ReviewLeaseInput(
-                    id=new_record_id(),
-                    review_queue_entry_id=queue.id,
-                    project_id=queue.project_id,
-                    task_id=queue.task_id,
-                    submission_id=submission.id,
-                    submission_version=submission.version,
-                    reviewer_id=actor_id,
-                    reviewer_contribution_policy_version_id=h.source[
-                        "contribution_policy_version_id"
-                    ],
-                    attempt_generation=1,
-                    expires_at=datetime.now(UTC) + timedelta(days=1),
-                )
-            )
-            queue.queue_state = "leased"
-            queue.active_lease_id = lease.id
-            await session.commit()
-            h.lease_id, h.queue_id = lease.id, queue.id
+        await prepare_packet(h)
         yield h
+
+
+async def prepare_packet(h):
+    """Attach canonical packet membership and a committed lease to a completed source."""
+    async with h.factory() as session:
+        submission = await session.get(Submission, str(h.request.submission_id))
+        guide = await session.scalar(
+            select(ProjectGuide).where(
+                ProjectGuide.project_id == str(h.source["project_id"]),
+                ProjectGuide.version == submission.locked_guide_version,
+            )
+        )
+        activation = await session.scalar(
+            select(GuideMutationIdempotencyRecord).where(
+                GuideMutationIdempotencyRecord.operation_id == guide.activation_operation_id,
+            )
+        )
+        proposal = activation.response_json["command"]["target"]["proposal"]
+        rows = (
+            await session.execute(
+                select(GuideSourceSnapshotItem, GuideSourceArtifactIngest)
+                .join(
+                    GuideSourceArtifactIngest,
+                    GuideSourceArtifactIngest.source_item_id == GuideSourceSnapshotItem.id,
+                )
+                .where(
+                    GuideSourceSnapshotItem.source_snapshot_id
+                    == submission.locked_guide_source_snapshot_id
+                )
+                .order_by(GuideSourceSnapshotItem.item_order)
+            )
+        ).all()
+        h.membership = ReviewPacketMembership(
+            request=ReviewPacketMembershipRequest(
+                project_id=h.source["project_id"],
+                task_id=h.request.task_id,
+                submission_id=h.request.submission_id,
+                submission_version=submission.version,
+                checker_run_id=h.result.attempt_id,
+                result_id=h.source["result_id"],
+                guide_id=UUID(guide.id),
+                guide_version=guide.version,
+                source_snapshot_id=UUID(submission.locked_guide_source_snapshot_id),
+                project_setup_run_id=UUID(proposal["setup_run_id"]),
+                setup_generation=proposal["setup_generation"],
+            ),
+            submission=ReviewSubmissionMember(
+                binding_id=UUID(submission.artifact_binding_id),
+                logical_role="submission_bundle_original",
+                media_type="application/zip",
+            ),
+            guide_documents=tuple(
+                ReviewGuideMember(
+                    ingest_id=UUID(ingest.id),
+                    source_item_id=UUID(item.id),
+                    item_order=item.item_order,
+                    logical_role="guide_source_original",
+                    media_type=item.media_type,
+                )
+                for item, ingest in rows
+            ),
+        )
+        repository = ReviewQueueRepository(session)
+        queue = await repository.add_queue_entry(
+            ReviewQueueEntryInput(
+                id=new_record_id(),
+                project_id=str(h.source["project_id"]),
+                task_id=str(h.request.task_id),
+                submission_id=submission.id,
+                submission_version=submission.version,
+                admitting_checker_run_id=str(h.result.attempt_id),
+                routing_mode=ReviewRoutingMode.OPEN,
+                routing_reason=ReviewRoutingReason.FIRST_SUBMISSION,
+            )
+        )
+        await session.commit()
+        actor_id = await _human_actor(session, label="packet-reviewer")
+        lease = await repository.add_lease(
+            ReviewLeaseInput(
+                id=new_record_id(),
+                review_queue_entry_id=queue.id,
+                project_id=queue.project_id,
+                task_id=queue.task_id,
+                submission_id=submission.id,
+                submission_version=submission.version,
+                reviewer_id=actor_id,
+                reviewer_contribution_policy_version_id=h.source["contribution_policy_version_id"],
+                attempt_generation=1,
+                expires_at=datetime.now(UTC) + timedelta(days=1),
+            )
+        )
+        queue.queue_state = "leased"
+        queue.active_lease_id = lease.id
+        await session.commit()
+        h.lease_id, h.queue_id = lease.id, queue.id
 
 
 async def raw_insert(session, h, *, header=None, members=None):

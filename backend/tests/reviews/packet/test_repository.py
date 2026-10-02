@@ -213,8 +213,6 @@ async def test_packet_retains_superseded_guide_lineage(tmp_path, clean_postgres_
 
     async with packet_source(tmp_path, clean_postgres_database) as h:
         async with h.factory() as session:
-            original = await ReviewPacketRepository(session).store(h.lease_id, h.membership)
-            await session.commit()
             guide = await session.get(ProjectGuide, str(h.membership.request.guide_id))
             first = await load_guide_activation(session, guide)
             grant, link = (
@@ -251,6 +249,13 @@ async def test_packet_retains_superseded_guide_lineage(tmp_path, clean_postgres_
         async with h.factory() as session:
             guide = await session.get(ProjectGuide, str(h.membership.request.guide_id))
             assert guide.status == "superseded"
+            # First creation must resolve the historical guide, not only replay a packet.
+            original = await ReviewPacketRepository(session).store(h.lease_id, h.membership)
+            await session.commit()
+            assert original.membership == h.membership
+            assert original.packet_manifest_digest == canonical_json_hash(
+                h.membership.model_dump(mode="json")
+            )
             assert (
                 await ReviewPacketRepository(session).read(
                     h.membership.request.project_id, h.lease_id

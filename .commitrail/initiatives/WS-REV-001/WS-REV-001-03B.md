@@ -246,7 +246,13 @@ These tests bind the storage boundary; execution results and review freshness be
   project, task, Submission/version, run/result, activated setup/generation, ZIP.
 - `test_packet_rejects_null_source_fields`: each nonnullable source independently.
 - `test_packet_creation_time_is_database_owned`: supplied NULL/past/future times.
-- `test_packet_requires_active_exact_lease`: terminal and sibling lease insertions.
+- `test_packet_requires_active_exact_lease`: terminal and successor lease insertions.
+- `test_packet_rejects_coherent_sibling_under_another_lease`: a complete valid
+  same-project sibling packet cannot use another lease; removing only the
+  creation tuple comparison makes the rejection assertion fail.
+- `test_packet_rejects_another_documents_valid_receipt`: a valid receipt from
+  another document cannot attest this upload; removing the receipt linkage
+  predicates makes the rejection assertion fail.
 - `test_packet_requires_committed_guide_upload`: prepared-only ingest cannot pass;
   independently crossed content, replica, namespace, receipt, ingest byte and
   media identities fail after a valid operation-receipt control. Namespace
@@ -263,7 +269,8 @@ These tests bind the storage boundary; execution results and review freshness be
 - `test_packet_creation_serializes_with_lease_closure`: cannot create post-close.
 - `test_packet_read_conceals_foreign_project`: real stored foreign identity.
 - `test_packet_retains_superseded_guide_lineage`: real successor activation, then
-  historical read and identical replay without selecting the successor.
+  first packet creation, historical read and identical replay without selecting
+  the successor. An active-only validator must reject that new creation.
 - `test_packet_shadow_tables_cannot_change_custody`: temporary name shadowing.
 - `test_packet_upgrade_preserves_existing_owners`: populated predecessor upgrade.
 
