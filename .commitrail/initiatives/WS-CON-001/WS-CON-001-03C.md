@@ -28,6 +28,16 @@ Canonical behavior remains [CON specification](../../../docs/spec_contribution_c
 - `backend/app/db/models.py`, `backend/alembic/env.py`,
   `backend/alembic/versions/0015_contribution_awards.py`.
 - `backend/tests/contributions/records/{__init__,support,test_contracts,test_storage,test_migration}.py`.
+- Existing fixture support: `backend/tests/tasks/post_submit_routing/support.py`,
+  `backend/tests/post_submit_materialization_helpers.py`,
+  `backend/tests/pre_submit_test_helpers.py`,
+  `backend/tests/projects/unified_policy_fixtures.py`,
+  `backend/tests/projects/guide_activation/{pg_support,compensation_fixtures}.py`.
+  Thread an explicit `contribution_awards` instrument tuple through the real
+  source chain before activation. Extend publication/binding fixture options to
+  create real Finance-authorized money/points units, bindings and definitions
+  for both contribution types. Existing unpaid/default controls remain intact;
+  no production authority is mocked and no frozen policy is edited.
 - Existing Review/FinalAcceptance immutability tests only if the added FK
   requires CASCADE to retain exact trigger reachability; preserve assertions.
 - `backend/tests/conftest.py`, `backend/tests/test_alembic.py`: reset, immutable
@@ -105,17 +115,39 @@ claim positive runtime proof. Both eventual triggers use the same participant.
 - Duplicate source/instrument rows fail; independent sessions prove commit and
   rollback uniqueness. Caller rollback removes tentative records and awards.
 - DB clock and all three mutation operations preserve retained facts.
-- A direct-SQL owner-predicate removal makes the corresponding negative test
-  reach DID NOT RAISE; do not let a stale digest or unrelated constraint mask it.
+- `test_contribution_source_substitution` uses real coherent source rows, exact
+  contribution guard errors, valid control and transactional removal of one
+  exact source/actor equality; the negative assertion must reach DID NOT RAISE.
+- `test_award_definition_substitution` separately varies exact copied economic
+  fields, asserts the award guard, restores a valid control and transactionally
+  removes the exact quantity equality; the mismatched quantity must then reach
+  DID NOT RAISE. Both probes restore SQL through rollback.
+- `test_unpaid_rule_rejects_award` attempts an actual award insertion for an
+  unpaid contribution with an existing compensated definition from another
+  valid policy/type. Check the explicit unpaid-rule error before definition
+  matching, never manufacture an illegal definition under an unpaid rule.
 - Missing-parent race against an uncommitted parent that rolls back leaves no
   child. Populated 0014 upgrade preserves parents; canonical downgrade refuses.
 - Full hosted completeness remains required. Coverage is diagnostic only.
 
 Concrete test fixture path: existing acceptance_source -> actual stored Review,
 lease, verified Submission and policies -> insert_acceptance -> contribution ->
-award. Paid definitions must be installed through existing policy fixtures before
-publication/freezing, not patched into retained policy. Plan review must trace
-that paid-fixture feasibility before implementation.
+award. `contribution_awards=("money", "project_points")` flows from acceptance
+through review/packet **options into the newly explicit completed_source option,
+then material_fixture, approved_pre_submit_fixture and
+create_standalone_unified_policy. Its publisher installs both rules and both
+real instruments before publication/activation, using existing Finance services.
+Empty tuple retains an unpaid control. Plan review traces these exact extensions.
+
+Mandatory future activation tests (not current runtime claims):
+`test_contribution_activation_refuses_retained_foundation` retains a complete
+Review/FinalAcceptance/contribution/award graph, rejects activation and verifies
+all rows unchanged with no receipt backfill/deletion;
+`test_contribution_activation_empty_foundation` requires exact source authority,
+shared fence/ordinal and the participant before any writer/consumer registration;
+`test_participant_complete_award_set_and_rollback` proves the exact definition set
+for compensated rules, zero awards for unpaid rules and whole-aggregate rollback.
+CON-07 and source-authority composition must supply those proofs before exposure.
 
 ## Risk and review routing
 
