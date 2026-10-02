@@ -88,7 +88,13 @@ lowercase form. Models are strict, frozen and reject extra fields.
   Route action/permission are task.post_submit.route, resource is
   task_post_submit_routing_manifest/manifest ID, fixed identity is
   workstream.task.post_submit_router and matched grant is null. Project and
-  resource match the source; the human idempotency reference matches its source.
+  resource match the source. For human receipts, request_id and correlation_id
+  equal source.operation_id; idempotency_reference equals
+  source.review_decision_request_id. The caller idempotency_key remains separately
+  committed. For routing receipts, request_id, correlation_id and
+  idempotency_reference all equal source.route_operation_id; none substitutes the
+  checker evaluation request. Test independent substitutions of all three fields
+  and remove the envelope validator to prove the assertions discriminate.
   All request/correlation/idempotency references are native UUIDs. The full runtime
   resource digest is opaque here. Future audit persistence must carry and verify
   the source commitment; today's audit event does not persist this new shape.
