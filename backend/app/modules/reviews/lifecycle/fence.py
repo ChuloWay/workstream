@@ -41,6 +41,9 @@ class PostgresJointLifecycleMutationFence:
             raise JointLifecycleUnavailable(
                 "lifecycle requires a root transaction and exact generation"
             )
+        connection = await self._session.connection()
+        if connection.in_nested_transaction():
+            raise JointLifecycleUnavailable("lifecycle requires a root database transaction")
         await self._session.execute(
             text("SELECT pg_catalog.pg_advisory_xact_lock(:key)"),
             {"key": JOINT_LIFECYCLE_LOCK_KEY},

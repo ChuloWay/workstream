@@ -168,3 +168,84 @@ async def test_missing_controller_denies_and_stale_identity_map_is_not_used(
     async with factory() as session:
         await session.begin()
         assert await PostgresJointLifecycleMutationFence(session).acquire(0) == facts
+
+
+@pytest.mark.parametrize(
+    "external_savepoint,join_mode",
+    [
+        (True, "conditional_savepoint"),
+        (False, "create_savepoint"),
+    ],
+)
+async def test_externally_bound_savepoint_rejected_before_locks(
+    clean_postgres_database,
+    external_savepoint,
+    join_mode,
+):
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from app.db.session import get_engine
+
+    factory = get_session_factory()
+    async with get_engine().connect() as connection:
+        outer = await connection.begin()
+        if external_savepoint:
+            await connection.begin_nested()
+        try:
+            async with AsyncSession(bind=connection, join_transaction_mode=join_mode) as session:
+                await session.begin()
+                assert session.get_transaction().is_active
+                assert not session.in_nested_transaction()
+                with pytest.raises(JointLifecycleUnavailable, match="root database transaction"):
+                    await PostgresJointLifecycleMutationFence(session).acquire(0)
+                async with factory() as observer:
+                    assert await observer.scalar(
+                        text("SELECT pg_catalog.pg_try_advisory_xact_lock(:key)"),
+                        {"key": JOINT_LIFECYCLE_LOCK_KEY},
+                    )
+                    await observer.execute(
+                        text(
+                            "SELECT id FROM public.joint_lifecycle_release_control FOR UPDATE NOWAIT"
+                        )
+                    )
+                assert outer.is_active
+        finally:
+            await outer.rollback()
+
+
+async def test_externally_bound_root_retains_fence_until_outer_rollback(clean_postgres_database):
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from app.db.session import get_engine
+
+    factory = get_session_factory()
+    async with get_engine().connect() as connection:
+        outer = await connection.begin()
+        try:
+            async with AsyncSession(bind=connection) as session:
+                await session.begin()
+                facts = await PostgresJointLifecycleMutationFence(session).acquire(0)
+                assert facts.generation == 0
+                # The session participates in the external root; it cannot end it.
+                await session.commit()
+                assert outer.is_active
+                async with factory() as observer:
+                    assert not await observer.scalar(
+                        text("SELECT pg_catalog.pg_try_advisory_xact_lock(:key)"),
+                        {"key": JOINT_LIFECYCLE_LOCK_KEY},
+                    )
+            await outer.rollback()
+            async with factory() as observer:
+                assert await observer.scalar(
+                    text("SELECT pg_catalog.pg_try_advisory_xact_lock(:key)"),
+                    {"key": JOINT_LIFECYCLE_LOCK_KEY},
+                )
+                assert (
+                    await observer.scalar(
+                        text(
+                            "SELECT id FROM public.joint_lifecycle_release_control FOR UPDATE NOWAIT"
+                        )
+                    )
+                    == facts.singleton_id
+                )
+        finally:
+            if outer.is_active:
+                await outer.rollback()

@@ -649,6 +649,10 @@ v0.1 is not ready until all of the following are true:
 - Before either route is published, the existing TASK source table gains
   mandatory exact routing and owner-receipt custody and rejects retained
   pre-authority rows; no parallel manifest or permissive backfill is introduced.
+- Before live shared-acceptance route activation, prove actual fulfillment-root
+  and immutable ordinal custody plus authorized lifecycle transitions and drain
+  against the real writer/cutoff. Disabled REV-12A1 locking alone does not meet
+  this gate; no fabricated observation or permissive generation can replace it.
 - A reviewer can claim only that admitted version, access only its bounded
   packet, and record one immutable final decision.
 - `needs_revision` safely continues or rebases the same assignment while
