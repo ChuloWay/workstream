@@ -32,7 +32,10 @@ Canonical behavior remains [CON specification](../../../docs/spec_contribution_c
   `backend/tests/post_submit_materialization_helpers.py`,
   `backend/tests/pre_submit_test_helpers.py`,
   `backend/tests/projects/unified_policy_fixtures.py`,
-  `backend/tests/projects/guide_activation/{pg_support,compensation_fixtures}.py`.
+  `backend/tests/projects/guide_activation/{pg_support,compensation_fixtures}.py`,
+  `backend/tests/authorization/contribution_policies/postgresql_support.py`.
+  Extend the existing `PolicyWorld.request` graph input; do not duplicate its
+  request construction in guide-activation helpers.
   Thread an explicit `contribution_awards` instrument tuple through the real
   source chain before activation. Extend publication/binding fixture options to
   create real Finance-authorized money/points units, bindings and definitions
@@ -72,7 +75,11 @@ submitter and frozen submitter policy, never inference from a Review decision.
 Each Review or FinalAcceptance can source at most one corresponding record;
 contributor ID is not part of uniqueness. Shared joins verify actual project,
 Submission/task, assignment and frozen policy. Artifact hash equals the canonical
-ART content selected by the Submission binding/admission, not package_hash.
+ART content with all exact equalities: Submission.artifact_binding_id equals
+ArtifactBinding.id; Submission.artifact_content_id equals ArtifactContent.id;
+ArtifactBinding.content_id equals ArtifactContent.id; record.artifact_hash equals
+ArtifactContent.sha256. Reviewer records also equal Review.artifact_hash. Never
+use package_hash. Retained admission/binding ownership remains ART's authority.
 Historical published/retired policy versions are valid; current selectors and
 current binding availability must not rewrite frozen economics.
 
@@ -163,3 +170,39 @@ Merged main includes REV-04B source storage and its mandatory later authority
 hardening. Current capability and next-boundary claims will advance together
 with this intended merge outcome. Next: CON-07 participant after required shared
 fence/ordinal and source-authority prerequisites are reviewed against code.
+
+## Focused verification map
+
+These are future implementation test nodes, not claims of executed proof:
+
+| Required behavior | Node under `tests/contributions/records/` |
+| --- | --- |
+| Both immutable input shapes and invalid/extra/non-native values | `test_contracts.py::test_contribution_input_shapes` |
+| Exact accepted submitter and completed reviewer sources, all Review decisions | `test_storage.py::test_contribution_sources` |
+| Exact money/points awards for both types; retired policy and suspended binding | `test_storage.py::test_frozen_awards` |
+| Real unpaid insertion denied | `test_storage.py::test_unpaid_rule_rejects_award` |
+| Source substitutions and independent mutation probe | `test_storage.py::test_contribution_source_substitution` |
+| Economic substitutions and independent mutation probe | `test_storage.py::test_award_definition_substitution` |
+| Exact unique source/instrument, independent-session commit/rollback, caller rollback | `test_storage.py::test_contribution_award_concurrency` |
+| Database time, UPDATE/DELETE/TRUNCATE immutability | `test_storage.py::test_contribution_award_immutability` |
+| Child races missing/uncommitted parent that rolls back | `test_storage.py::test_missing_contribution_parent` |
+| Populated 0014 preservation and canonical downgrade refusal | `test_migration.py::test_contribution_upgrade_preserves_sources` |
+
+From `backend/`, with the documented isolated PostgreSQL/MinIO test environment:
+
+```sh
+.venv/bin/python scripts/run_isolated_tests.py --metadata-json /tmp/con03c-proof.json --timeout-seconds 1200 -- .venv/bin/python -m pytest tests/contributions/records -q --tb=short
+.venv/bin/python -m pytest tests/test_ci_lane_catalogue.py tests/test_behavior_ownership.py -q --tb=short
+```
+
+Lead runs shared boundary/structure/Commitrail/link/wording checks and hosted
+full-suite evidence. No submitter claim lease or automatic expiry is introduced;
+that remains deferred, independently of existing reviewer lease storage.
+
+## Plan review dispositions
+
+Security review required reachable paid fixtures, independent source/economic
+mutation proof, and named later activation/refusal/complete-award tests; those
+are now explicit. Architecture/reuse review additionally required extending the
+existing PolicyWorld owner, all ART identity equalities, and this concrete test
+map. No production behavior was changed to evade these planning findings.
