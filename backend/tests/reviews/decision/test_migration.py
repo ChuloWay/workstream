@@ -66,5 +66,8 @@ async def test_review_upgrade_preserves_owners(tmp_path, isolated_database_env, 
                 )
             finally:
                 await connection.close()
-            with pytest.raises(RuntimeError, match="would delete retained evidence"):
+            with pytest.raises(
+                RuntimeError,
+                match="Workstream v0.1 migrations cannot be downgraded; recreate the database",
+            ):
                 await asyncio.to_thread(command.downgrade, _config(), "0012_review_packet")

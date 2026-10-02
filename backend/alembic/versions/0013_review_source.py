@@ -341,4 +341,4 @@ FOR EACH ROW EXECUTE FUNCTION public.guard_review_source_closed_queue();
 
 
 def downgrade() -> None:
-    raise RuntimeError("Review source downgrade would delete retained evidence")
+    raise RuntimeError("Workstream v0.1 migrations cannot be downgraded; recreate the database")
