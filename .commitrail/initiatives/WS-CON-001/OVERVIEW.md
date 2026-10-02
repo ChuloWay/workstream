@@ -5,7 +5,7 @@ and the [capability ledger](../../../docs/roadmap_status.md).
 
 - Disposition: Planned
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
-  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage is delivered; atomic participation remains next. No packet resolver or human runtime is live.
+  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; mandatory acceptance-source AUTH custody precedes atomic participation. No packet resolver or human runtime is live.
 
 - Completed boundary: public Finance ContributionPolicy administration, exact
   Finance Authority, CP06 selected-policy validation and CP07 internal guide
@@ -41,7 +41,7 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
   storage, without AUTH receipt custody or runtime consumers.
   [CON-03C](WS-CON-001-03C.md) adds exact contribution sources and fixed awards; no recognition or fulfillment operation is live.
-- Next usable boundary: CON-07 and the existing REV-12A/CON fence foundation,
+- Next usable boundary: for the selected automated-acceptance delivery sequence, mandatory acceptance-source AUTH custody, then CON-07 using the delivered REV-12A1 disabled fence,
   plus mandatory same-table acceptance authority hardening before one shared
   acceptance operation serves both human and automatic triggers.
 - Governing sources: `docs/spec_contribution_compensation.md`,
@@ -49,6 +49,16 @@ and the [capability ledger](../../../docs/roadmap_status.md).
 - Preserve: exact policy-version lineage, no claim-time drift, decimal-string
   quantity integrity, atomic REV/CON effects, and no runtime reputation
   projection in v0.1.
+
+Delivered [REV-12A1](../WS-REV-001/WS-REV-001-12A1.md) supplies only disabled
+generation-zero controller storage and transaction locking. Acceptance-source AUTH custody,
+CON participation and authorized activation remain separate required work.
+
+This is delivery priority, not a prerequisite of true human admission. Both
+routing branches require hidden 04E1B → exact AUTH 04E2 → live 04E3; true routing
+can proceed after its own prerequisites without CON-07/shared acceptance or
+scoped lifecycle activation. False routing adds those requirements. Human final
+acceptance later uses the same authorized shared acceptance/CON operation.
 
 ## Delivered
 
@@ -82,14 +92,15 @@ the internal policy operations; CP05A exposes their public Finance routes.
    CP09 removes the replaced legacy
    economic path only after all consumers are replaced, including CHECKERS and
    public Submission cutover; it does not block canonical `allow_review`.
-2. [CON-03C](WS-CON-001-03C.md) delivers immutable ContributionRecord/CompensationAward storage after REV-04B. Continue the CON-07 atomic
-   submitter participant. These shared pieces do not require live human
+2. [CON-03C](WS-CON-001-03C.md) delivers immutable ContributionRecord/CompensationAward storage after REV-04B. The disabled REV-12A1 fence is delivered; mandatory acceptance-source AUTH custody
+   must precede the CON-07 atomic submitter participant. These shared pieces do not require live human
    decision/queue/lease behavior. The locked ReviewPolicy boolean
    `human_review_required` defaults true; false permits authorized automated
    acceptance without a Review or reviewer contribution. Both use the same
    FinalAcceptance/submitter-contribution participant and applicable awards.
-   The existing shared REV-12A/CON fence/ordinal foundation precedes this
-   operation; later drain and fulfillment surfaces do not block it.
+   The delivered REV-12A1 fence precedes this operation. Actual obligation roots
+   and authorized transition/drain proof remain required before activation; live
+   fulfillment endpoints do not block hidden composition.
    Automated acceptance must not require live human-review infrastructure;
    see the [canonical source, authority and transaction contract](../../../docs/spec_review_lifecycle.md#finalacceptance).
 3. Shared dispatcher CON-02B is pulled forward before canonical task authority

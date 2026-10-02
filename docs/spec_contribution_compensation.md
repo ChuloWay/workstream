@@ -1020,9 +1020,11 @@ FinalAcceptance, ContributionRecord, CompensationAward, or receipt truth.
 REV-12A owns the only `JointLifecycleReleaseControl` and
 `JointLifecycleMutationFence`. CON MUST NOT create a second controller, phase,
 generation, or availability writer.
-Its persistence/mutation-fence and CON ordinal hooks are pulled forward as the
-[shared acceptance foundation](spec_review_lifecycle.md#implementation-order-and-required-proof)
-before either trigger can create obligations. Later REV-12A drain/operator
+REV-12A1 delivers its disabled generation-zero persistence and caller-root
+mutation fence. The [shared acceptance order](spec_review_lifecycle.md#implementation-order-and-required-proof)
+requires exact acceptance-source AUTH custody before CON-07 consumption. Actual CON root
+storage and ordinal allocation remain required before either trigger creates
+fulfillment obligations; neither awards nor generic outbox rows substitute. Later REV-12A drain/operator
 work extends this same controller; it is not a prerequisite on live human
 review for the false branch.
 
@@ -1032,8 +1034,9 @@ fulfillment obligation MUST:
 ```text
 acquire the shared lifecycle mutation fence
 -> validate the current generation and phase
--> allocate one immutable monotonically increasing fulfillment_obligation_ordinal
--> persist the obligation root or fail
+-> allocate an immutable increasing ordinal only for a new canonical root
+-> preserve the existing root identity/ordinal for same-root retry or requeue
+-> persist the obligation or fail
 ```
 
 CON dispatch and callback composition consume the same fence. CON also exposes
@@ -1044,7 +1047,8 @@ a same-session read-only `FulfillmentLifecycleDrainObservationPort` returning:
 - the current maximum immutable root ordinal.
 
 REV captures and persists the server-derived cutoff. During
-`delivery_draining`, dispatch and callback may complete only obligations from
+the future authorized `draining` phase with a persisted cutoff, dispatch and
+callback may complete only obligations from
 the same generation whose root ordinal is at or below that cutoff. They MUST
 NOT create a successor, retry-root, repair, or any new obligation. Post-cutoff
 denial occurs before provider I/O.
@@ -1147,9 +1151,10 @@ transaction participants do not wait for generic dispatch:
 The [shared acceptance order](spec_review_lifecycle.md#implementation-order-and-required-proof)
 governs the false branch: delivered TASK ARCH-04E1A source schema/detached facts
 precede the delivered REV-04B acceptance and CON-03C contribution/award storage.
-CON-07 atomic participation, the existing shared fence/ordinal and exact source
-AUTH custody remain required before the shared operation and ARCH-04E1B/AUTH
-routing composition.
+REV-12A1 delivers disabled controller/fence mechanics. Mandatory same-table
+acceptance-source AUTH custody comes next, then CON-07 atomic participation and the shared
+operation/ARCH-04E1B. Actual root ordinal custody and authorized lifecycle
+transition/drain proof precede live AUTH routing composition.
 False guide activation follows joint proof. A stable Review FK target is
 not live ReviewLease/queue/decision behavior. The shared lifecycle/obligation
 fence is required for either trigger; human runtime and fulfillment endpoints

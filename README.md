@@ -174,7 +174,8 @@ Findings and policy proposals retain document-access evidence.
 [ART-07A1](.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) provides strict
 metadata-only reviewer packet types, not a resolver or byte-access capability.
 REV-03B persists immutable normalized packets using live guide ingest identities.
-REV-04A Review and REV-04B shared FinalAcceptance storage foundations are delivered; CON-03C contribution/award storage is delivered; atomic participation remains next. Acceptance storage has no production writer or AUTH receipt; mandatory exact
+REV-04A Review and REV-04B shared FinalAcceptance storage foundations are delivered; CON-03C contribution/award storage and REV-12A1's disabled controller/transaction
+fence are delivered. Exact source authority custody precedes atomic participation. Acceptance storage has no production writer or AUTH receipt; mandatory exact
 authority hardening precedes any runtime consumer. These prerequisites do not require live
 human review before the first automated acceptance path.
 

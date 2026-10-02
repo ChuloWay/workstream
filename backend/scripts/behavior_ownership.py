@@ -148,6 +148,7 @@ MODULE_PUBLIC_API_FOUNDATION_TARGETS = frozenset(
     }
 )
 CON_03C_STORAGE_TARGETS = frozenset({"backend/app/modules/contributions/records/models.py", "backend/app/modules/contributions/records/schemas.py", "backend/app/modules/compensation/awards/models.py"})
+REV_12A1_FENCE_TARGETS = frozenset({"backend/app/modules/reviews/api/lifecycle.py", "backend/app/modules/reviews/lifecycle/models.py", "backend/app/modules/reviews/lifecycle/fence.py"})
 REV_04B_ACCEPTANCE_TARGETS = frozenset({"backend/app/modules/reviews/acceptance/models.py", "backend/app/modules/reviews/acceptance/schemas.py"})
 REV_04A_SOURCE_TARGETS = frozenset({"backend/app/modules/reviews/decision/models.py", "backend/app/modules/reviews/decision/schemas.py"})
 REV_03B_PACKET_TARGETS = frozenset({'backend/app/modules/reviews/packet/models.py', 'backend/app/modules/reviews/packet/repository.py', 'backend/app/modules/reviews/packet/schemas.py'})
@@ -743,6 +744,7 @@ def _validate_additive_partition_transition(
             | ARCH_CP04A_CONTRIBUTION_POLICY_TARGETS
             | ARCH_CP04B_CONTRIBUTION_POLICY_TARGETS
         | CON_03C_STORAGE_TARGETS
+        | REV_12A1_FENCE_TARGETS
         | REV_04B_ACCEPTANCE_TARGETS
         | REV_04A_SOURCE_TARGETS
         | REV_03B_PACKET_TARGETS

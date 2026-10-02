@@ -28,11 +28,13 @@ current TASK children do not implement REV/CON internals: consume the
 are delivered after 04C, without REV dependency, runtime participant or handlers.
 REV-04B now references that schema after its source prerequisites:
 [ART-07A1 packet types](../../../WS-ART-001/WS-ART-001-07A1.md) are delivered;
-REV-03B normalized packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage is delivered; atomic participation remains next.
-CON-07 and the early
-existing REV-12A/CON fence
-foundation are hard dependencies of false handler composition, not of this
-early schema or true admission. This breaks the source-FK dependency cycle.
+REV-03B normalized packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; mandatory acceptance-source AUTH custody precedes atomic participation.
+Mandatory acceptance-source AUTH custody and CON-07, using the delivered
+REV-12A1 disabled controller/fence, are hard dependencies of false handler composition, not of this
+early schema or true admission. Both branches still require hidden 04E1B before
+canonical AUTH 04E2 and live 04E3. True proceeds with its own prerequisites;
+false additionally requires shared acceptance and scoped lifecycle activation,
+with 04F remediation before false guide activation. This breaks the source-FK dependency cycle.
 False guide activation stays unavailable until that path is proven. Avoid
 making automated acceptance depend on live human queues or leases.
 
@@ -239,8 +241,10 @@ checker results without creating Review, ReviewFinding, or
 RevisionContextPreparation records.
 
 This is a coordination contract. Each remaining child record, beginning with
-04E1B after the shared acceptance foundations, supplies its current-main exact
-files, commands, migration head and reviewers before implementation.
+hidden 04E1B after its branch-specific prerequisites, supplies its current-main
+exact files, commands, migration head and reviewers before implementation.
+Shared acceptance foundations additionally gate false composition; they do not
+gate true admission. Both branches retain 04E1B before 04E2 and 04E3.
 
 ## Merge state
 

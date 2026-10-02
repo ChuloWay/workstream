@@ -2287,3 +2287,15 @@ them, together with their closed primary-entity pairing and contract tests.
 - submission artifacts are immutable after `locked_at`
 - a changed artifact requires a new submission version
 - task lifecycle status and compensation fulfillment status remain separate
+
+## Shared lifecycle controller
+
+REV-12A1 adds `joint_lifecycle_release_control`: one UUIDv7 identity, true singleton
+key, closed phase, nonnegative generation and database-owned creation time. The
+seed is disabled at generation zero. INSERT, UPDATE, DELETE and TRUNCATE are
+blocked after seeding; no usable generation or transition authority exists yet.
+The REV public fence reads detached facts under a caller-owned root transaction,
+acquiring its fixed advisory lock before the singleton row lock. It neither
+commits nor grants business authority. Later authorized transitions extend this
+same controller. Fulfillment roots, ordinals, cutoffs and phase history remain
+unimplemented; they are not fields on an award or a substitute outbox record.

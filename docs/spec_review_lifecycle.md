@@ -630,18 +630,22 @@ Extract foundations from existing owner work, not a new initiative:
    the metadata-only packet contract. REV-03B normalized packet persistence is
    delivered. REV-04A immutable Review-source storage and REV-04B shared FinalAcceptance
    storage and CON-03C contribution/award persistence are delivered. Do not create
-   an incomplete Review solely as an FK target. CON-07 atomic participation,
-   the shared fence/ordinal below and exact source AUTH custody remain required
-   before shared acceptance. These foundations require no live human claim or
+   an incomplete Review solely as an FK target. REV-12A1 supplies the disabled
+   controller and transaction fence. Mandatory exact acceptance-source AUTH custody must
+   precede CON-07 consumption and shared acceptance. These foundations require no live human claim or
    decision endpoint. Hidden composition proof precedes exact AUTH
    activation; unavailable authority must not be replaced with fabricated allow evidence.
-3. Pull the existing [REV-12A shared fence foundation](#rev-12a-shared-fence-foundation)
-   (controller/fence persistence, mutation-fence port
-   and CON obligation-ordinal hooks) forward before shared acceptance.
-   They depend on owner persistence, not human queues/decisions/drain projections.
-   Later operator/drain work extends these same rows and ports; no second fence.
-4. The shared operation consumes those foundations. ARCH-04E1B's hidden routing
-   handler then invokes it. The existing lifecycle-control command receives
+3. [REV-12A1](../.commitrail/initiatives/WS-REV-001/WS-REV-001-12A1.md)
+   delivers disabled generation-zero controller storage and the caller-root
+   transaction fence. Complete same-table acceptance-source AUTH custody, then CON-07.
+   Actual CON fulfillment roots own immutable ordinal allocation; no award or
+   outbox row substitutes for a root. Authorized transition/drain composition
+   and real root/cutoff proof extend this fence before activation, independently
+   of live human queues or decisions.
+4. The shared operation consumes those foundations for acceptance. ARCH-04E1B's
+   hidden routing handler invokes it for false/pass. True routing does not
+   require CON-07/shared acceptance; it proceeds through hidden 04E1B, exact
+   AUTH 04E2 and live 04E3 after its own prerequisites. The existing lifecycle-control command receives
    scoped AUTH activation for the proven shared manifest as specified below;
    ARCH-04E2 activates routing and ARCH-04E3 proves live composition.
    PROJECTS enables false only after that
@@ -1025,24 +1029,38 @@ authority.
 
 ### REV-12A shared fence foundation
 
-REV-12A is a non-executable split record. Its shared persistence/fence/CON
-ordinal foundation is pulled forward before either acceptance trigger as
-specified in the [shared implementation order](#implementation-order-and-required-proof).
-REV-12A1 through REV-12A4 later extend, rather than recreate, that one
-PostgreSQL-canonical `JointLifecycleReleaseControl`. It uses
+REV-12A is a historical non-executable split record. Its shared persistence/fence foundation is delivered by REV-12A1; actual CON
+root ordinal custody remains with the future root owner, as specified in the
+[shared implementation order](#implementation-order-and-required-proof).
+Later REV-12A transition, drain and Operator slices extend, rather than recreate,
+that one PostgreSQL-canonical `JointLifecycleReleaseControl`. They add
 compare-and-set phase history,
 PostgreSQL advisory-lock fences, mandatory typed fence ports, and bounded drain
 observations across review mutations, task submissions, queue admission,
 authority-loss replacement, CON fulfillment-obligation writers, dispatch, and
 callbacks.
 
-This named foundation includes only canonical controller/phase/generation
-persistence, the caller-session mutation fence and CON root-ordinal allocation
-hooks, with independent-session writer-versus-cutoff proof. It has no dependency
-on review queues, leases, decisions or projection observation adapters. The
-later REV-12A operator/drain integration reuses it. Both acceptance callers
-require a valid authorized lifecycle generation; no bootstrap bypass or second
-availability flag is introduced.
+REV-12A1 stores one immutable disabled generation-zero controller and supplies
+an advisory-before-row fence within the caller's active root transaction.
+Before either lock, a native `pg_catalog.pg_export_snapshot()` call rejects
+raw-SQL savepoints as well as managed subtransactions, while permitting prior
+AUTH/idempotency queries. Its identifier is discarded, never exposed or retained
+as product data; PostgreSQL holds the temporary snapshot (including xmin) until
+transaction end. Callers keep transactions short, retain commit/rollback ownership
+and roll back after acquisition failure. PostgreSQL two-phase prepare is unsupported.
+Savepoints established after acquisition cannot release the earlier root locks. Its
+public scalar facts are not authority. AUTH retains an independent scalar phase
+projection; lifecycle_phase must equal current_phase, and generation zero must
+be disabled. The four phases are disabled, shadow, live and draining. Detailed
+shutdown stages in historical plans are not additional current persisted phases.
+
+No transition, history, ordinal, cutoff, consumer or usable generation is
+implemented by this foundation. The later authorized transition operation owns
+legal adjacency and extends the same controller. Actual CON root storage and
+real authorized writer-versus-cutoff proof are required before activation; lock
+mechanics alone do not prove drain correctness. Both acceptance callers require
+a valid authorized lifecycle generation, without a bootstrap bypass or second
+availability flag.
 
 ### Scoped activation before human-review runtime
 

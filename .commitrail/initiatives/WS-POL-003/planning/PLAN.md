@@ -1,7 +1,7 @@
 # Plan: WS-POL-003 - Unified Project Guide Compilation
 
 The delivered [ART-07A1 metadata contract](../../WS-ART-001/WS-ART-001-07A1.md)
-and REV-03B normalized packet persistence are delivered. REV-04A Review source storage is also delivered; REV-04B shared acceptance storage is delivered; CON-03C contribution/award storage is delivered; atomic participation remains next. These are storage prerequisites;
+and REV-03B normalized packet persistence are delivered. REV-04A Review source storage is also delivered; REV-04B shared acceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; mandatory acceptance-source AUTH custody precedes atomic participation. These are storage prerequisites;
 no live human-review queue or endpoint is required for automated acceptance.
 
 ## Objective
