@@ -753,7 +753,7 @@ async def test_artifact_binding_truncate_custody_blocks_direct_and_cascade_delet
             )
 
         for statement in (
-            "truncate artifact_bindings",
+            "truncate artifact_bindings cascade",
             "truncate artifact_contents cascade",
         ):
             with pytest.raises(DBAPIError, match="artifact_bindings rows are immutable"):
@@ -768,6 +768,16 @@ async def test_artifact_binding_truncate_custody_blocks_direct_and_cascade_delet
         async with case.factory() as session:
             transaction = await session.begin()
             try:
+                # Isolate the binding trigger from the new inbound packet FK. This
+                # rollback-only probe has no packets; production custody stays intact.
+                assert await session.scalar(text("select count(*) from review_packet_manifests")) == 0
+                await session.execute(text(
+                    "alter table review_packet_manifests drop constraint "
+                    "fk_review_packet_manifests_submission_binding_id_artifa_4ee3"
+                ))
+                with pytest.raises(DBAPIError, match="artifact_bindings rows are immutable"):
+                    async with session.begin_nested():
+                        await session.execute(text("truncate artifact_bindings"))
                 await session.execute(
                     text(
                         "alter table artifact_bindings disable trigger "
@@ -797,6 +807,16 @@ async def test_artifact_binding_truncate_custody_blocks_direct_and_cascade_delet
             assert trigger_definition is not None
             assert "BEFORE TRUNCATE" in trigger_definition
             assert "EXECUTE FUNCTION reject_artifact_fact_mutation()" in trigger_definition
+            assert await session.scalar(text(
+                "select tgenabled='O' from pg_trigger "
+                "where tgrelid='artifact_bindings'::regclass "
+                "and tgname='trg_artifact_bindings_no_truncate'"
+            )) is True
+            assert await session.scalar(text(
+                "select count(*) from pg_constraint "
+                "where conrelid='review_packet_manifests'::regclass "
+                "and conname='fk_review_packet_manifests_submission_binding_id_artifa_4ee3'"
+            )) == 1
 
 
 @pytest.mark.asyncio

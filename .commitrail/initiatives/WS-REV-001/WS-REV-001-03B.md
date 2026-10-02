@@ -44,6 +44,8 @@ carry the owner correction, preserving one change record per implementation PR.
 - `backend/tests/reviews/packet/test_migration.py`
 - `backend/tests/conftest.py`: exact new resettable/guarded tables and measured schema fingerprint; no weaker validation.
 - `backend/tests/test_alembic.py`: exact revision graph.
+- `backend/tests/test_checker_output_storage.py`: retain artifact-binding TRUNCATE
+  rejection and guard-removal proof after adding the packet foreign key.
 - `backend/tests/checkers/execution/test_migration.py`: use the existing shared
   current-head fixture for fresh migration; retain all execution-custody assertions.
 - `backend/scripts/identifier_inventory.py` and `backend/tests/test_identifier_schema.py`: classify only the new natural packet/source-item primary key; preserve all UUID guards.
