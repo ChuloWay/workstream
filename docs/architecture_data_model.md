@@ -2042,6 +2042,9 @@ this record.
 
 ## ContributionRecord
 
+CON-03C implements this immutable storage foundation. Runtime recognition,
+source AUTH hardening and the atomic CON participant remain unavailable.
+
 Fields:
 
 - `id`
@@ -2069,7 +2072,7 @@ The record is immutable. Every valid recorded human Review creates one reviewer
 Reviewer rows require `source_review_id` and `source_review_lease_id` and have
 null FinalAcceptance/assignment sources. Submitter rows require
 `source_final_acceptance_id` and `source_task_assignment_id` and have null
-direct Review/lease sources. Partial unique constraints enforce one
+direct Review/lease sources. Unique constraints on the nullable source IDs enforce one
 `completed_review` per Review and one `accepted_submission` per
 FinalAcceptance; database checks reject mixed or incomplete source shapes. The
 record carries the exact Submission, actor, frozen contribution policy, and
@@ -2077,6 +2080,9 @@ stabilized artifact-hash lineage. Compensation awards may reference it but do
 not replace it; reputation projection remains deferred.
 
 ## CompensationAward
+
+CON-03C implements immutable exact-definition storage; no payment/points
+delivery or runtime creation is activated.
 
 Fields:
 
@@ -2089,7 +2095,7 @@ Fields:
 - `adapter_binding_id`
 - `instrument_type`: `money | project_points`
 - `unit_code`
-- `quantity` as the definition's exact `NUMERIC(38, 18)` decimal
+- `quantity` as the definition's exact unscaled PostgreSQL `NUMERIC`, bounded to 20 integer and 18 fractional digits without rounding
 - `created_at`
 - `correlation_id`
 

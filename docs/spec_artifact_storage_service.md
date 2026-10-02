@@ -1626,7 +1626,7 @@ prevents a live contributor route whose mandatory checker read is unavailable.
 metadata-only packet membership types and a type-only port. It implements no
 resolver or byte access. REV-03B now stores normalized packets referencing live
 guide ingests with committed-upload custody; retained extraction bindings remain
-read-only. REV-04A immutable Review source storage is delivered; REV-04B shared FinalAcceptance storage is delivered; CON persistence and participation are next.
+read-only. REV-04A immutable Review source storage is delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage is delivered; atomic participation remains next.
 ART later supplies an exact, authorized reviewer-packet byte capability, while
 REV owns queueing, leases, decisions, and the reviewer note/findings. The
 approved v0.1 review flow does not upload a reviewer revision artifact. CON owns

@@ -310,6 +310,9 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/reviews/acceptance/test_contracts.py",
         "tests/reviews/acceptance/test_storage.py",
         "tests/reviews/acceptance/test_migration.py",
+        "tests/contributions/records/test_contracts.py",
+        "tests/contributions/records/test_storage.py",
+        "tests/contributions/records/test_migration.py",
         runner.ADMIN_RUNNER_MODULE,
     } | static_contracts == modules_by_lane["schema_contracts"]
     assert {

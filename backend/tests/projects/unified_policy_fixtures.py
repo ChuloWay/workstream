@@ -159,7 +159,7 @@ async def approve_unified_submission_policy(project_id, guide_id, policy_id, *, 
         ).model_dump(mode="json")
 
 
-async def create_standalone_unified_policy(sessions, namespace, *, guide_version="v1", artifact_proposal=None):
+async def create_standalone_unified_policy(sessions, namespace, *, guide_version="v1", artifact_proposal=None, contribution_awards=()):
     """Arrange complete activated context before a downstream artifact transaction."""
     from app.modules.projects.models import PreSubmitCheckerPolicy
     from app.modules.projects.api.post_policy import PostPolicyApproval
@@ -177,7 +177,7 @@ async def create_standalone_unified_policy(sessions, namespace, *, guide_version
         _, derived = await prepare_post_policy(sessions, command, actor, grant, service_actor(values))
         approved = await operate(sessions, actor, command.project_id, grant, "approve",
                                  PostPolicyApproval(target=derived.target, idempotency_key=uuid4()))
-        _, policy = await publish_policy(sessions, command.project_id)
+        _, policy = await publish_policy(sessions, command.project_id, contribution_awards=contribution_awards)
         await activate(sessions, actor, await activation_command(sessions, approved, policy))
     upstream = approved.target.upstream
     async with sessions() as session:

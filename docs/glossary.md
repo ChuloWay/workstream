@@ -44,6 +44,9 @@ owners provide business terms but do not author the machine policy directly.
 
 ## CompensationAward
 
+CON-03C supplies immutable storage; live award creation and fulfillment remain
+separate, unavailable operations.
+
 The immutable result of evaluating one `ContributionRecord` against its frozen
 `ContributionPolicyVersion`. Its instrument is `money` or `project_points`.
 Money awards route downstream to payment-request/settlement adapters; points
@@ -436,6 +439,9 @@ The deferred outcome-based projection of contributor and reviewer performance.
 It is not a v0.1 review-transaction side effect.
 
 ## Contribution Record
+
+CON-03C supplies immutable storage only; live recognition and atomic
+contribution creation remain unavailable until the shared participant is implemented.
 
 The immutable, evidence-backed record of one completed contribution under locked
 project context. `completed_review` is created for every valid recorded human

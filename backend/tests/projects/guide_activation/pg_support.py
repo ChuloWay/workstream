@@ -209,7 +209,7 @@ async def activation_command(factory, approved, policy):
     )
 
 
-async def publish_policy(factory, project_id, *, compensated=False):
+async def publish_policy(factory, project_id, *, compensated=False, contribution_awards=()):
     """Publish complete rules with real scoped Finance authority."""
     from app.modules.authorization.runtime import (
         HumanAuthorizationContext,
@@ -234,10 +234,17 @@ async def publish_policy(factory, project_id, *, compensated=False):
         from .compensation_fixtures import create_binding
 
         world.binding = await create_binding(factory, world)
+    award_bindings = ()
+    if contribution_awards:
+        from .compensation_fixtures import create_binding
+        award_bindings = tuple([
+            (instrument, await create_binding(factory, world, instrument_type=instrument))
+            for instrument in contribution_awards
+        ])
     policy = None
     for operation in ("create_draft", "update_draft", "publish"):
         async with factory() as session, session.begin():
             policy = await getattr(world.service(session), operation)(
-                world.request(operation, policy, compensated=compensated)
+                world.request(operation, policy, compensated=compensated, award_bindings=award_bindings)
             )
     return world, policy

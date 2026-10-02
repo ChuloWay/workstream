@@ -45,7 +45,7 @@ class PolicyWorld:
             session, read_authorization=auth, mutation_authorization=auth
         )
 
-    def request(self, operation, prior=None, *, compensated=False):
+    def request(self, operation, prior=None, *, compensated=False, award_bindings=()):
         """Prepare a valid caller request from a previous immutable result."""
         common = dict(actor_profile_id=self.context.actor_profile_id, project_id=self.project)
         if operation == "create_draft":
@@ -60,28 +60,41 @@ class PolicyWorld:
             return ContributionPolicyReadRequest(**common)
         common["operation_id"] = uuid4()
         if operation == "update_draft":
-            definitions = (
-                (
+            if award_bindings:
+                definitions = tuple(
                     PolicyDefinitionInput(
-                        instrument_type=CompensationInstrumentType.MONEY,
-                        unit_code="USD",
-                        quantity="2",
-                        adapter_binding_id=self.binding,
-                    ),
+                        instrument_type=CompensationInstrumentType(instrument),
+                        unit_code="USD" if instrument == "money" else "PTS",
+                        quantity="2.125000000000000001" if instrument == "money" else "7",
+                        adapter_binding_id=binding,
+                    )
+                    for instrument, binding in award_bindings
                 )
-                if compensated
-                else ()
-            )
+            else:
+                definitions = (
+                    (
+                        PolicyDefinitionInput(
+                            instrument_type=CompensationInstrumentType.MONEY,
+                            unit_code="USD",
+                            quantity="2",
+                            adapter_binding_id=self.binding,
+                        ),
+                    )
+                    if compensated
+                    else ()
+                )
             return ContributionPolicyUpdateDraftRequest(
                 **common,
                 rules=(
                     PolicyRuleInput(
                         contribution_type="accepted_submission",
-                        compensation_mode="compensated" if compensated else "unpaid",
+                        compensation_mode="compensated" if definitions else "unpaid",
                         definitions=definitions,
                     ),
                     PolicyRuleInput(
-                        contribution_type="completed_review", compensation_mode="unpaid"
+                        contribution_type="completed_review",
+                        compensation_mode="compensated" if award_bindings else "unpaid",
+                        definitions=definitions if award_bindings else (),
                     ),
                 ),
             )

@@ -182,7 +182,7 @@ async def test_acceptance_clock_and_immutability(tmp_path, clean_postgres_databa
             "UPDATE public.final_acceptances SET accepted_at=clock_timestamp()",
             "UPDATE public.final_acceptances SET recorded_by=accepted_submitter_id",
             "DELETE FROM public.final_acceptances",
-            "TRUNCATE public.final_acceptances",
+            "TRUNCATE public.final_acceptances CASCADE",
         ):
             async with h.factory() as session:
                 with pytest.raises(DBAPIError, match="immutable"):

@@ -6,7 +6,7 @@ of review/revision behavior. The downstream owner contracts remain separate.
 
 - Disposition: Planned
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
-  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON persistence and participation are next. No packet resolver or human runtime is live.
+  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage is delivered; atomic participation remains next. No packet resolver or human runtime is live.
 
 - Completed boundary: queue admission and ReviewLease persistence through 03A2,
   plus normalized immutable packets through 03B, Review sources through 04A
@@ -20,7 +20,7 @@ of review/revision behavior. The downstream owner contracts remain separate.
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: CON-03C contribution/award persistence, then CON-07 and the existing REV-12A/CON fence foundation under the canonical
+- Next usable boundary: CON-07 atomic participation and the existing REV-12A/CON fence foundation under the canonical
   order; human hidden behavior may continue independently behind exact AUTH,
   ART and CON prerequisites.
 - Governing sources: `docs/spec_review_lifecycle.md`,
@@ -76,7 +76,7 @@ proof. No adjudication setting or behavior is included.
 2. Continue hidden claim/revision behavior against canonical `allow_review`,
    copying the Submission policy version without a current-policy lookup.
 3. TASK's early 04E1A source schema/detached facts and source-neutral accepted-
-   effects types are delivered. After delivered REV-03B and REV-04A storage, REV-04B shared FinalAcceptance storage is also delivered. Continue CON-03C/CON-07 persistence and submitter participation. This foundation
+   effects types are delivered. After delivered REV-03B and REV-04A storage, REV-04B shared FinalAcceptance storage is also delivered. Continue CON-07 atomic submitter participation. This foundation
    can precede human runtime: ARCH-04E uses it for false/pass acceptance without
    live queues, leases or decisions. Pull the existing REV-12A/CON shared
    obligation-fence foundation forward before either trigger; later drain and

@@ -103,3 +103,6 @@ from app.modules.reviews.decision.models import (  # noqa: F401
 )
 
 from app.modules.reviews.acceptance.models import FinalAcceptance  # noqa: F401
+
+from app.modules.contributions.records.models import ContributionRecord  # noqa: F401
+from app.modules.compensation.awards.models import CompensationAward  # noqa: F401

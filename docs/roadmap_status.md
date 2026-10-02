@@ -116,7 +116,7 @@ then branches on the locked ReviewPolicy: true routes to human `allow_review`;
 false invokes shared authorized acceptance without a human Review. Both routing
 integrations remain planned; false has metadata and guard-reachability proof only and guide activation
 still rejects it. ART-07A1 supplies metadata-only reviewer packet types, with no resolver or byte
-authority. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared acceptance storage is delivered; CON persistence and participation are next. Human review/revision, contribution and conditional
+authority. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared acceptance storage is delivered; CON-03C contribution/award storage is delivered; atomic participation remains next. Human review/revision, contribution and conditional
 compensation effects, operations and release proof complete v0.1.
 
 The [independent MCP package](../mcp_server/README.md) implements one profile
@@ -167,10 +167,10 @@ cannot be reused as post-submission review-gate evidence. See the
 | Contributor artifact preparation | **Hidden and proven** | One outer ZIP; bounded scratch inspection; canonical manifest; platform and project prechecks; unchanged-work rejection; durable put intent; verification; capacity-charged ready admission; hidden final handoff validates the exact activated historical guide through owner ports | Complete the later public admission-only cutover |
 | Pre-submission intake checking | **Hidden with approved-guide lineage** | Separate versioned pre-submission catalogue, locked effective-plan compilation, platform/project checks during continuous preparation, blocking feedback before Submission creation, and one internal phase command covering execution/replay with the JSON precheck removed; ARCH-03D connects approved-guide lineage through the final durable handoff | Complete the canonical public cutover after evaluation/remediation prerequisites; passing intake must never substitute for post-submit evaluation |
 | Immutable Submission creation | **Hidden foundation; public packet creation retired** | Contributor preparation authority; durable pre-submit reservation and exact completed-evidence recovery without rerunning checks; atomic admission consumption; TASK-owned admission-backed creation with exact assignment ContributionPolicyVersion and locked policy lineage; fixed-service artifact binding; replay/concurrency/rollback proof | Finish downstream evaluation and the canonical public integration. The retained submission-list GET is not a usable creation POST |
-| Post-submission evaluation and `allow_review` | **Hidden source foundation; routing planned** | One canonical CHECKER post-submit catalogue/compiler used by existing consumers, internal phase service with exact fixed-service post-submit authority, hidden value contracts and structural-handler conformance; ARCH-04B/04B2 input and output custody; ARCH-04C durable execution and current-result custody; ARCH-04D1 canonical ART material custody; ARCH-04D2 exact phase authority and receipts; ARCH-04E1A immutable route-neutral source table, detached facts and type-only accepted-effects Protocol | Build CON-03C/07 and REV-12A/CON fence foundations, then 04E1B/04E2/04E3 dispatch and routing plus 04F remediation. Before publication, harden the same source table with mandatory exact route/owner receipts and refuse retained pre-authority rows. No writer, reader, handler, current pointer, route or acceptance effect is live |
+| Post-submission evaluation and `allow_review` | **Hidden source foundation; routing planned** | One canonical CHECKER post-submit catalogue/compiler used by existing consumers, internal phase service with exact fixed-service post-submit authority, hidden value contracts and structural-handler conformance; ARCH-04B/04B2 input and output custody; ARCH-04C durable execution and current-result custody; ARCH-04D1 canonical ART material custody; ARCH-04D2 exact phase authority and receipts; ARCH-04E1A immutable route-neutral source table, detached facts and type-only accepted-effects Protocol | Build CON-07 and REV-12A/CON fence foundations, then 04E1B/04E2/04E3 dispatch and routing plus 04F remediation. Before publication, harden the same source table with mandatory exact route/owner receipts and refuse retained pre-authority rows. No writer, reader, handler, current pointer, route or acceptance effect is live |
 | Review queue and lease | **Hidden persistence foundation** | Queue/admission idempotency and ReviewLease/preference persistence; complete unavailable REV action/principal catalogue and typed AUTH contracts; ART-07A1 metadata-only packet contract and REV-03B immutable normalized packet persistence with live ingest custody; REV-04A Review/finding/resolution and completed request storage | Future resolver proof; canonical admission from `allow_review`; claim/lease/packet authority; lease copies the Submission-stamped policy version with no CON lookup |
 | Review decision and revision | **Hidden source storage; runtime planned** | Review/revision policy identities and mutation authority; REV-04A immutable Review, findings, resolutions and completed request storage; REV-04B shared FinalAcceptance storage without authority or runtime consumers; approved same-task revision-rebase semantics | Authorized atomic decision composition; `accept`, `needs_revision`, and `reject`; complete-context revision preparation; finding responses; replacement contributor rules; replay and recovery |
-| Contribution and compensation truth | **Schema foundations plus public policy administration** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings; public Finance policy administration; REV-04B shared acceptance source storage | Persist ContributionRecord/CompensationAward and one shared FinalAcceptance/submitter operation for human accept or authorized false/pass routing. Only actual Reviews create reviewer records. Evaluate frozen actor rules into zero, one or two awards |
+| Contribution and compensation truth | **Schema foundations plus public policy administration** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings; public Finance policy administration; REV-04B shared acceptance source storage; CON-03C immutable ContributionRecord/CompensationAward storage | Compose one shared FinalAcceptance/submitter operation for human accept or authorized false/pass routing. Only actual Reviews create reviewer records. Evaluate frozen actor rules into zero, one or two awards |
 | Fulfillment, reconciliation, and audit | **Planned** | Shared audit foundations, provider-neutral adapter convention, AUTH-OUTBOX-02 live dispatcher authority, retained phase audit decisions, Celery delivery/recovery scans and CON-02B custody | Feature-specific handlers and authority, conditional award fulfillment, callbacks, idempotent recovery, reconciliation, bounded operational reads, and release controls |
 | Frontend and pilot | **Planned after stable backend contracts** | React + Vite + TypeScript stack decision | Implement only stable backed surfaces, run the real internal pilot, repair findings, and complete release drills |
 
@@ -465,7 +465,7 @@ The next dependency-safe product sequence is:
    ARCH-04D2 supplies exact input/execute/finalize service authority and durable
    receipt custody. ARCH-04E1A supplies one immutable route-neutral source table,
    detached facts and source-neutral accepted-effects types. It has no runtime
-   entry. CON-03C/07 and the existing REV-12A/CON fence foundation
+   entry. CON-03C adds immutable contribution/award storage without runtime writers or consumers. CON-07 and the existing REV-12A/CON fence foundation
    come next; ARCH-04E1B/04E2/04E3 then dispatch evaluation and publish an exact
    human `allow_review` manifest on true when no blocking failure exists.
    CHECKERS owns durable execution/currentness; the shared facade does not
@@ -476,14 +476,14 @@ The next dependency-safe product sequence is:
    approved catalogue-bound generation. Infrastructure retries and project
    setup faults are not contributor failures; `allow_review` is not acceptance.
    **For the first false-policy acceptance path:** consume the delivered TASK
-   04E1A source facts through the delivered REV-04B source FK; complete CON-03C/07 and the existing
+   04E1A source facts through the delivered REV-04B source FK; complete CON-07 and the existing
    shared fence/controller slice, then wire one shared acceptance operation
    through 04E1B/04E2/04E3. Prove real scoped activation/drain and 04F remediation before
    enabling false. This milestone creates the submitter contribution and
    applicable awards without live human queues/leases/decisions; it neither
    invents a reviewer nor removes the later human branch from v0.1.
    Before any acceptance writer or CON consumer, add mandatory exact AUTH custody
-   to the same FinalAcceptance table and refuse retained pre-authority rows; source
+   to the same FinalAcceptance table and refuse retained pre-authority sources and dependent contribution/award rows unchanged; source
    storage alone grants no acceptance authority.
 3. **Complete public intake and admission integration for claimable work.**
    CP08 already locks the complete guide and policy context before `READY`.
@@ -589,9 +589,10 @@ Delivered foundations (not a claim of full public integration)
     |
     v
   REV-04B immutable shared acceptance source storage (no AUTH custody or runtime)
+  CON-03C immutable contribution records and fixed awards (no runtime consumers)
 
 Remaining integration
-  CON-03C/07 + REV-12A/CON fence foundation
+  CON-07 + REV-12A/CON fence foundation
   -> mandatory same-table AUTH custody -> shared acceptance composition -> 04E1B/04E2/04E3 dispatch/routing
   -> 04F remediation
   -> public intake and immutable admitted Submission cutover
@@ -714,8 +715,9 @@ remaining trace sequence is:
   [ARCH-04E1A source facts](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E1A.md).
   Delivered [ART-07A1 packet types](../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md), [REV-03B packet persistence](../.commitrail/initiatives/WS-REV-001/WS-REV-001-03B.md),
   [REV-04A Review source storage](../.commitrail/initiatives/WS-REV-001/WS-REV-001-04A.md)
-  and [REV-04B acceptance storage](../.commitrail/initiatives/WS-REV-001/WS-REV-001-04B.md)
-  precede CON-03C/07 and the REV-12A/CON fence foundation before
+  and [REV-04B acceptance storage](../.commitrail/initiatives/WS-REV-001/WS-REV-001-04B.md),
+  followed by delivered [CON-03C contribution/award storage](../.commitrail/initiatives/WS-CON-001/WS-CON-001-03C.md),
+  precede CON-07 and the REV-12A/CON fence foundation before
   `04E1B -> 04E2 -> 04E3` dispatch and routing; 04F supplies remediation. The mandatory
   [04D1 canonical material custody](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04D1.md)
   closes the three-field ART database guarantee before authority activation.
@@ -734,9 +736,11 @@ remaining trace sequence is:
   Later `04F` owns contributor-correctable remediation and admission-backed
   resubmission before public cutover; it does not block `allow_review` or
   replace human review/revision.
+- [CON-03C contribution/award storage](../.commitrail/initiatives/WS-CON-001/WS-CON-001-03C.md)
+  supplies immutable source/economic equality, without runtime recognition or fulfillment.
 - Review/revision: REV packet/schema foundations may proceed independently,
   but live admission starts after `ARCH-04E`; the first live Review commit also
-  requires CON contribution/award persistence and its atomic decision participant.
+  requires the atomic CON decision participant on the delivered CON-03C storage.
 
 For implementation ownership and exact contracts, contributors can follow
 [Commitrail Engineering Index](../.commitrail/INDEX.md). For historical
