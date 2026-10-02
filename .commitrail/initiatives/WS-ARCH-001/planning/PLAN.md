@@ -57,7 +57,7 @@ checker-remediation boundary before public Submission cutover.
 | CON-02B | AUTH-OUTBOX-01 | Complete: shared hidden dispatcher/claim fencing, typed handlers and recovery |
 | AUTH-OUTBOX-02 | CON-02B exact hidden manifest | Exact dispatcher mechanics only; no feature authority |
 | [ARCH-04E1A](../WS-ARCH-001-04E1A.md) | ARCH-04C/04D2 | Complete: route-neutral immutable TASK source schema/detached facts and source-neutral accepted-effects types; no runtime writer/reader, handlers, current pointer, routing authority, acceptance implementation or REV dependency |
-| ARCH-04E1B | ARCH-04E1A, CON-02B hidden contract; ART-07A1 types -> delivered REV-03B packet -> delivered REV-04A storage -> delivered REV-04B storage -> REV-12A1 disabled fence -> mandatory source AUTH custody -> CON-07 for false | TASK hidden handlers; consume one shared acceptance operation on false/pass |
+| ARCH-04E1B | Both branches: ARCH-04E1A and CON-02B hidden contract. False additionally: delivered REV/CON storage and REV-12A1 fence -> mandatory source AUTH custody -> CON-07/shared acceptance | TASK hidden handlers; consume one shared acceptance operation on false/pass |
 | Scoped XINT-003-08B controller activation | Early existing REV-12A foundation and hidden shared acceptance/writer/observation proof | Existing Operator lifecycle-control action for the bounded shared manifest, not human runtime |
 | ARCH-04E2 | ARCH-04E1B; scoped XINT-003-08B controller activation for false | AUTH exact TASK routing authority |
 | ARCH-04E3 | ARCH-04E2, ARCH-04D2, AUTH-OUTBOX-02; shared acceptance proof for false | TASK live dispatch/routing composition: true to allow_review, false/pass to shared acceptance when proven |
@@ -98,9 +98,12 @@ new permission requirement.
 Delivered supporting foundations are [ARCH-04B2](../WS-ARCH-001-04B2.md),
 [AUTH-OUTBOX-01/02](../../WS-AUTH-001/planning/PLAN.md#ws-auth-001-outbox-01--unavailable-dispatcher-contract),
 and [CON-02B](../../WS-CON-001/OVERVIEW.md#con-02b-current-dispatcher-contract).
-REV-12A1 delivers disabled controller/fence mechanics. The remaining routing
-sequence starts with mandatory source AUTH custody, then CON-07 and shared acceptance composition,
-then [ARCH-04E1B/04E2/04E3](chunks/WS-ARCH-001-04E-canonical-allow-review.md#current-bounded-sequence)
+REV-12A1 delivers disabled controller/fence mechanics. The current delivery
+priority is the false acceptance branch: mandatory source AUTH custody, CON-07
+and shared acceptance. Both branches use hidden 04E1B before AUTH 04E2 and live
+04E3; true routing can proceed after its own prerequisites without CON-07 or
+shared acceptance. False adds those participants and scoped lifecycle activation.
+See [ARCH-04E1B/04E2/04E3](chunks/WS-ARCH-001-04E-canonical-allow-review.md#current-bounded-sequence)
 and ARCH-04F. ARCH-04E1A is delivered as the source-only predecessor.
 Each numbered section is a current bounded design, expanded into its own change
 record on implementation; the parent is not a multi-owner implementation PR.

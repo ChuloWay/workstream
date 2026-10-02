@@ -31,7 +31,10 @@ REV-04B now references that schema after its source prerequisites:
 REV-03B normalized packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; mandatory source AUTH custody precedes atomic participation.
 Mandatory source AUTH custody and CON-07, using the delivered
 REV-12A1 disabled controller/fence, are hard dependencies of false handler composition, not of this
-early schema or true admission. This breaks the source-FK dependency cycle.
+early schema or true admission. Both branches still require hidden 04E1B before
+canonical AUTH 04E2 and live 04E3. True proceeds with its own prerequisites;
+false additionally requires shared acceptance and scoped lifecycle activation,
+with 04F remediation before false guide activation. This breaks the source-FK dependency cycle.
 False guide activation stays unavailable until that path is proven. Avoid
 making automated acceptance depend on live human queues or leases.
 

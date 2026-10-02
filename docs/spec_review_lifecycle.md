@@ -642,8 +642,10 @@ Extract foundations from existing owner work, not a new initiative:
    outbox row substitutes for a root. Authorized transition/drain composition
    and real root/cutoff proof extend this fence before activation, independently
    of live human queues or decisions.
-4. The shared operation consumes those foundations. ARCH-04E1B's hidden routing
-   handler then invokes it. The existing lifecycle-control command receives
+4. The shared operation consumes those foundations for acceptance. ARCH-04E1B's
+   hidden routing handler invokes it for false/pass. True routing does not
+   require CON-07/shared acceptance; it proceeds through hidden 04E1B, exact
+   AUTH 04E2 and live 04E3 after its own prerequisites. The existing lifecycle-control command receives
    scoped AUTH activation for the proven shared manifest as specified below;
    ARCH-04E2 activates routing and ARCH-04E3 proves live composition.
    PROJECTS enables false only after that
