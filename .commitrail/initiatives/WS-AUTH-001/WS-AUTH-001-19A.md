@@ -5,7 +5,7 @@
 - Intended merge outcome: exact, inert source commitments for human Review and
   post-submit routing, with the router registered as planned and unavailable.
 
-## Intent and prerequisite correction
+## Intent
 
 Main `04bf8b76` delivers the disabled REV-12A1 transaction fence. Review and
 FinalAcceptance foundation rows still lack originating authorization receipts.
@@ -20,12 +20,14 @@ The automated false-policy branch remains the selected first runtime delivery.
 True-policy routing retains its independent prerequisites. Submitter lease/skip,
 live human queues and review/revision operations remain outside this change.
 
-## Design
+## Bounded change
 
 Repair the existing initial/revision ReviewDecisionContract in place. Bind the
 allocated Review ID, ReviewDecisionRequest ID, existing operation ID, native UUID
 idempotency key, request digest and Review aggregate digest. Preserve existing
-exact project/task/assignment/Submission/reviewer/packet/policy facts. A decision
+exact project/task/assignment/Submission/reviewer/packet/policy facts. Add
+submission_version. Replace the speculative reviewer contribution policy
+id/generation/digest triple with reviewer_contribution_policy_version_id. A decision
 may request revision with a new blocker or an unresolved inherited blocker;
 accept requires neither. Initial decisions cannot claim inherited blockers.
 Bound counts to the delivered storage limit; do not duplicate Review content.
@@ -34,9 +36,10 @@ Define strict frozen source commitment and detached receipt value contracts in
 AUTH's dependency-free public API. Human commitments project retained identity,
 request and aggregate facts from the repaired private Review contract. Routing
 commitments project identity and a canonical digest from the existing TASK
-TaskPostSubmitManifestFacts, including its semantic manifest hash. TASK owns this
-projection and digest; AUTH does not import TASK or private contracts through its
-public API. Reuse canonical_json_hash and revalidate input before hashing. There
+TaskPostSubmitManifestFacts, including its semantic manifest hash. TASK owns only task_post_submit_source_digest; a private AUTH
+acceptance_source_contracts module projects TASK public facts into AUTH public
+scalar DTOs. TASK public API imports no AUTH module. AUTH public API imports no
+product or private module. Reuse canonical_json_hash and revalidate input before hashing. There
 is no second manifest model or table. The source digest commits retained facts;
 it is distinct from the full runtime authorization resource digest, which also
 binds runtime facts and is not claimed independently reconstructible today.
@@ -44,20 +47,68 @@ binds runtime facts and is not claimed independently reconstructible today.
 Detached receipt facts bind event/action/actor/project/resource and the selected
 source commitment. They are untrusted values until a future owner verifies the
 actual immutable AUTH event and source. Construction, hashing and a receipt-shaped
-value grant no authority. Routing operation/claim/currentness/effect evaluation
-remains ARCH-04E1B/04E2 work; this does not define an executable routing context.
+value grant no authority. Routing claim/currentness/effect evaluation remains ARCH-04E1B/04E2 work.
+The source contract binds distinct route_operation_id and route_request_digest;
+these are not the checker evaluation request. ARCH-04E1B must persist them before
+genuine routing receipt custody. This is not an executable routing context.
 
 Register task.post_submit.route as a planned action/permission with ARCH-04E2
 ownership and workstream.task.post_submit_router as its sole fixed identity.
 Extend only ActorProfile's closed service-identity CHECK in a successor migration
-for ORM/DDL parity. Create no service actor, grant or event. Leave audit registry
+for ORM/DDL parity. The migration creates no service actor, grant or event. Existing administrator
+provisioning may admit the registered identity; it still cannot execute the
+planned action. Leave audit registry
 constraints, active action sets, kernel and prepared/evaluator paths unchanged.
 
-## Allowed files
+### Exact contracts
+
+All identities below are native UUIDs; SHA-256 fields use the canonical prefixed
+lowercase form. Models are strict, frozen and reject extra fields.
+
+- Human commitment: source=`human_review`; review_id,
+  review_decision_request_id, project_id, task_id, task_assignment_id,
+  submission_id/version, review_queue_entry_id, review_lease_id, reviewer_id,
+  packet_manifest_id/digest, reviewer_contribution_policy_version_id,
+  locked_review_policy_id/generation/hash, artifact_hash, decision, operation_id,
+  idempotency_key, request_digest, review_aggregate_digest.
+- Route commitment: source=`task_post_submit_route`; routing_manifest_id,
+  project_id, task_id, assignment_id, submission_id/version, contributor_id,
+  contribution_policy_version_id, checker_run_id, evaluation_request_id/generation,
+  result_id, completion_event_id, human_review_required, locked_review_policy_id/
+  generation/hash, content_id/hash, semantic_manifest_sha256,
+  routing_source_digest, route_operation_id, route_request_digest. Both policy
+  branches remain represented. The route operation must differ from the checker
+  evaluation request; its request digest has distinct caller-owned semantics.
+- Detached receipt: authorization_decision_event_id, action_id, permission_id,
+  actor_profile_id, actor_identity_link_id, nullable service_identity and
+  matched_grant_id, project_id, resource_type/id, request_id, correlation_id,
+  idempotency_reference, resource_context_digest, source and source_commitment_digest.
+  Human action/permission are review.decision, resource is review/Review.id,
+  actor equals reviewer, service identity is null and matched grant is required.
+  Route action/permission are task.post_submit.route, resource is
+  task_post_submit_routing_manifest/manifest ID, fixed identity is
+  workstream.task.post_submit_router and matched grant is null. Project and
+  resource match the source; the human idempotency reference matches its source.
+  All request/correlation/idempotency references are native UUIDs. The full runtime
+  resource digest is opaque here. Future audit persistence must carry and verify
+  the source commitment; today's audit event does not persist this new shape.
+
+Digest domains are workstream.task_post_submit_source.v0.1 and
+workstream.authorization.acceptance_source.v0.1. TASK hashes every revalidated
+TaskPostSubmitManifestFacts field except database-owned created_at, allowing a
+pre-persistence commitment. The source commitment hashes every selected DTO field,
+including its discriminator. These are initial v0.1 protocol identifiers, not
+parallel implementations. No digest establishes persistence, currentness or
+permission. inherited_unresolved_blocking_count is zero for initial decisions;
+new plus inherited blockers is zero for accept, positive for needs_revision,
+and never exceeds the retained storage limit of 100.
+
+### Allowed files
 
 - `backend/app/modules/actors/api/service_identities.py`.
 - `backend/app/modules/authorization/catalogue.py`, `review_contracts.py`, and
-  new `api/acceptance_source.py` (package exports only if needed).
+  new `api/acceptance_source.py` and private `acceptance_source_contracts.py`
+  (package exports only if needed).
 - `backend/app/modules/tasks/api/post_submit_routing.py` and its existing export.
 - One successor Alembic migration extending only the actor identity CHECK.
 - Existing Review authorization, TASK routing contract, catalogue/service matrix
@@ -69,7 +120,7 @@ constraints, active action sets, kernel and prepared/evaluator paths unchanged.
   Commitrail index, roadmap and canonical authorization/review specifications;
   README and ignored roadmap spreadsheet exports if affected/present.
 
-## Prohibited changes
+### Prohibited changes
 
 No Review/FinalAcceptance schema changes, receipt FK placeholders, audit registry
 expansion, fake allow fixtures, actor provisioning, executable authority, kernel
@@ -77,7 +128,7 @@ or prepared registrations, false-policy activation, contribution/acceptance
 writers, routes, workers or handler activation. No compatibility implementation,
 retained-data deletion, unrelated cleanup, test skipping or gate relaxation.
 
-## Acceptance criteria and verification
+## Acceptance criteria
 
 1. Review contracts bind exact source/request identity. Independent substitutions
    change the source commitment; invalid scalar shapes reject. Existing initial
@@ -93,7 +144,11 @@ retained-data deletion, unrelated cleanup, test skipping or gate relaxation.
 4. Real PostgreSQL migration/schema tests prove canonical service vocabulary parity,
    preserve existing actor rows and create no new actor. A direct-SQL authority
    event control establishes valid audit input; changing it to the planned route
-   action is rejected by the unchanged audit registry, not an unrelated FK/error.
+   action is rejected by the unchanged closed authority constraints, expected
+   ck_audit_events_authorization_action_evidence, with audit rows unchanged.
+   The control uses the real contribution-policy authorization operation and
+   unchanged clone_decision(event, {}); only action/permission change for denial.
+   Prove a provisioned router still cannot resolve the planned action.
 5. Run focused pure and PostgreSQL proofs, discriminating guard-removal probes for
    receipt/source substitutions, module boundaries, ownership/lane completeness,
    lint, markdown links and stale wording checks. Full hosted CI remains blocking.
@@ -102,7 +157,21 @@ retained-data deletion, unrelated cleanup, test skipping or gate relaxation.
    receipts and same-table source custody still required before CON-07. Preserve
    both policy branches; do not rewrite completed historical change records.
 
-## Risk and reviews
+### Named checks
+
+Extend test_review_authorization_contracts.py, tasks/post_submit_routing/
+test_contracts.py, authorization/test_catalogue.py, migrations/
+test_service_identity_schema.py and authorization/contribution_policies/
+test_policy_audit_schema.py. New focused source/receipt tests may live in
+ tests/authorization/test_acceptance_source_contracts.py. Run their complete pytest
+modules through the isolated PostgreSQL runner, plus test_alembic.py and affected
+boundary/inventory tests. Run ruff check on changed Python; scripts.module_boundaries
+validate --protected-base 04bf8b76; scripts.behavior_ownership validate;
+scripts/check_commitrail_records.py --base-ref 04bf8b76;
+scripts/check_markdown_links.py and the existing stale wording/authorization/
+artifact/review scans. Hosted CI must complete all collected nodes.
+
+## Risk and review routing
 
 - Risk class: L1 (authorization vocabulary and immutable source commitments).
 - Plan review: security and architecture, including dependency direction and
