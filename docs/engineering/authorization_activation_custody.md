@@ -68,7 +68,7 @@ use the fixed `workstream.checker.post_submit` identity and phase-specific recei
 
 [ART-07A1](../../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) delivers
 metadata-only packet types without authority or a resolver. REV-03B normalized
-packet storage is delivered; complete REV-04A Review storage is next before shared FinalAcceptance;
+packet storage and REV-04A immutable Review source storage are delivered; shared FinalAcceptance persistence is next;
 hidden composition proof precedes exact activation.
 
 Runtime owner `WS-XINT-002-07` retains catalogue custody. The only approved

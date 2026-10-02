@@ -137,16 +137,11 @@ artifact binding.
 
 ## ReviewPacketManifest
 
-The planned immutable WS-REV semantic projection for one exact queue entry,
-active ReviewLease, Submission, admitting CheckerRun, stamped context, response
-evidence, and ART binding IDs. Only the exact active lease authorizes its packet
-bytes; authorized history exposes bounded metadata only.
-
-## ReviewEvidenceArtifact
-
-The planned immutable WS-REV semantic relation from a lease/finding or
-preparation/response evidence slot to one ART-finalized binding. ART owns the
-bytes and binding; REV owns the lifecycle purpose and lineage.
+The immutable WS-REV metadata projection for one exact queue entry,
+ReviewLease, Submission, admitting CheckerRun, stamped context, and ART binding
+IDs. Storage is delivered; authorized packet resolution and byte access remain
+separate work. The packet contains no contributor-response evidence. Separate
+reviewer-finding and contributor-response artifact uploads are outside v0.1.
 
 ## AdminRoleGrant
 
@@ -344,21 +339,20 @@ rounds append another Review rather than modifying history.
 
 ## ReviewFinding
 
-A planned immutable structured issue submitted with a Review. Its lifecycle
-meaning is `blocking` or `advisory` and it carries area, required change,
-rationale, and optional finalized evidence.
+An immutable structured issue stored with a Review. Its lifecycle
+meaning is `blocking` or `advisory`; it carries bounded area, issue, and
+required-fix text.
 
 ## SubmissionFindingResponse
 
-The immutable submitter response to one prior ReviewFinding, with response text
-and optional finalized evidence. Every unresolved blocking finding requires one
-response before revision submission.
+The planned immutable submitter response to one prior ReviewFinding, with
+bounded response text. Every unresolved blocking finding requires one response
+before revision submission. Storage and runtime await revision-preparation custody.
 
 ## FindingResolution
 
 The immutable later-review judgment for one prior finding and revised
-Submission: `resolved`, `unresolved`, or `not_applicable`, with bounded rationale
-and evidence.
+Submission: `resolved`, `unresolved`, or `not_applicable`, with bounded rationale.
 
 ## RevisionContextPreparation
 
