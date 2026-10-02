@@ -1,11 +1,28 @@
 """Isolated storage fixtures; these are not authorized product decisions."""
 
+import hashlib
+import zipfile
 from contextlib import asynccontextmanager
+from dataclasses import asdict
+from io import BytesIO
+from types import SimpleNamespace
 from uuid import UUID
 
-from sqlalchemy import insert, text
+from sqlalchemy import insert, select, text
 
+from app.adapters.tasks import submitted_bundle_port
+from app.api.deps.authorization import compose_hidden_submission_creation_command
 from app.core.identifiers import new_record_id
+from app.modules.actors.models import ActorIdentityLink
+from app.modules.artifacts.api import SubmissionBundlePreparationRequest
+from app.modules.artifacts.submission_manifest import build_submission_manifest
+from app.modules.authorization.api import ActorIdentityFacts, ActorKind
+from app.modules.checkers.api import (
+    ExpectedPostSubmitContext,
+    ObservedPostSubmitContext,
+    PostSubmitManifestEntry,
+)
+from app.modules.checkers.models import CheckerRun
 from app.modules.reviews.decision.models import (
     FindingResolution,
     Review,
@@ -14,7 +31,16 @@ from app.modules.reviews.decision.models import (
 )
 from app.modules.reviews.decision.schemas import ReviewFindingInput, ReviewSourceInput
 from app.modules.reviews.packet.repository import ReviewPacketRepository
-from tests.reviews.packet.support import packet_source
+from app.modules.tasks.api import SubmissionCreationRequest
+from app.modules.tasks.api.submitted_bundle import SubmittedBundleRequest
+from app.modules.tasks.models import Submission
+from tests.checkers.execution.support import live_executor, reserve
+from tests.checkers.post_submit.support import change_request
+from tests.reviews.packet.support import packet_source, prepare_packet
+from tests.tasks.post_submit_routing.support import source_values
+from tests.tasks.submission_lineage_support import _verified_admission
+from tests.test_artifact_admission import _context
+from tests.test_default_pre_submit_execution import _bytes
 
 
 @asynccontextmanager
@@ -146,29 +172,8 @@ async def close_review_lease(session, source):
     )
 
 
-async def successor_source(h, *, with_packet=True):
+async def _admit_successor(h):
     """Create real admitted successor bytes; only task routing is fixture-arranged."""
-    from dataclasses import asdict
-    from types import SimpleNamespace
-
-    from sqlalchemy import select
-    from app.adapters.tasks import submitted_bundle_port
-    from app.api.deps.authorization import compose_hidden_submission_creation_command
-    from app.modules.actors.models import ActorIdentityLink
-    from app.modules.artifacts.api import SubmissionBundlePreparationRequest
-    from app.modules.authorization.api import ActorIdentityFacts, ActorKind
-    from app.modules.checkers.api import ExpectedPostSubmitContext, ObservedPostSubmitContext
-    from app.modules.checkers.models import CheckerRun
-    from app.modules.tasks.api import SubmissionCreationRequest
-    from app.modules.tasks.api.submitted_bundle import SubmittedBundleRequest
-    from app.modules.tasks.models import Submission
-    from tests.checkers.execution.support import live_executor, reserve
-    from tests.checkers.post_submit.support import change_request
-    from tests.reviews.packet.support import prepare_packet
-    from tests.tasks.post_submit_routing.support import source_values
-    from tests.tasks.submission_lineage_support import _verified_admission
-    from tests.test_artifact_admission import _context
-    from tests.test_default_pre_submit_execution import _bytes
 
     async with h.factory() as session:
         prior = await session.get(Submission, str(h.request.submission_id))
@@ -186,8 +191,6 @@ async def successor_source(h, *, with_packet=True):
             {"id": h.request.task_id},
         )
         await session.commit()
-    from io import BytesIO
-    import zipfile
 
     revised_bytes = BytesIO()
     with (
@@ -236,10 +239,12 @@ async def successor_source(h, *, with_packet=True):
         facts = await submitted_bundle_port(session).read(
             SubmittedBundleRequest(h.request.project_id, h.request.task_id, created.submission_id)
         )
-    import hashlib
-    from app.modules.artifacts.submission_manifest import build_submission_manifest
-    from app.modules.checkers.api import PostSubmitManifestEntry
 
+    return facts, revised_data
+
+
+async def _evaluate_successor(h, facts, revised_data):
+    """Run real post-submit evaluation using the new admitted content identity."""
     digest = "sha256:" + hashlib.sha256(revised_data).hexdigest()
     manifest = build_submission_manifest(h.inspector.inspect(BytesIO(revised_data)))
     request = change_request(
@@ -277,6 +282,13 @@ async def successor_source(h, *, with_packet=True):
         assert run.status == "completed" and run.routing_recommendation == "allow_review"
         successor.material = dict(run.material_custody)
     successor.source = await source_values(successor)
+    return successor
+
+
+async def successor_source(h, *, with_packet=True):
+    """Build an admitted and evaluated successor, optionally with a retained packet."""
+    facts, revised_data = await _admit_successor(h)
+    successor = await _evaluate_successor(h, facts, revised_data)
     if with_packet:
         await prepare_packet(successor)
         await attach_review_source(successor)
