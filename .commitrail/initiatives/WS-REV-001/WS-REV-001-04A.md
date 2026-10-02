@@ -154,7 +154,7 @@ All four tables reject updates, deletes and truncation. Once a Review commits, i
 page will remove unimplemented confidence/arbitrary evidence arrays and label
 future evidence upload separately, consistent with the canonical v0.1 scope.
 
-## Acceptance criteria and verification
+## Acceptance criteria
 
 - Real stored packet/lease/Submission control yields exact immutable Review
   source facts; all three canonical decision values have valid controls.
@@ -173,7 +173,7 @@ future evidence upload separately, consistent with the canonical v0.1 scope.
 - Strict contract tests, real PostgreSQL tests, Ruff, module boundaries, ownership,
   Commitrail, Markdown links, stale wording and complete hosted lanes pass.
 
-## Named proof plan
+## Evidence
 
 Proof tests under `backend/tests/reviews/decision/`:
 
