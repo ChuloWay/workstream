@@ -139,7 +139,7 @@ predecessors must be needs_revision. Finding resolutions reference only open
 findings on that Review ancestry. Resolved/not_applicable closes a finding;
 unresolved leaves it open. Every inherited open blocking finding needs a current
 resolution. Accept has neither new nor unresolved inherited blocking findings;
-needs_revision has at least one of those. Reject uses its bounded summary as
+needs_revision has at least one of those. The resulting open blocking set (new blockers plus inherited blockers left unresolved) is at most 100, so the next Review can resolve the complete set within the same bound. Reject uses its bounded summary as
 human reason and does not fabricate findings.
 
 Counts describe new findings and current resolutions, not historical totals.
@@ -188,7 +188,7 @@ New tests under `backend/tests/reviews/decision/`:
 - `test_storage.py::test_predecessor_chain`: checker-only gaps, nearest Review,
   wrong/null predecessor and branch denial.
 - `test_storage.py::test_finding_carry_forward`: required inherited blockers,
-  resolved/not_applicable closure, no reopening, inherited-only needs_revision.
+  resolved/not_applicable closure, no reopening, inherited-only needs_revision and rejection of more than 100 resulting open blockers.
 - `test_storage.py::test_aggregate_immutability`: count/digest mismatch,
   late child, update/delete/truncate; removed aggregate predicate fails proof.
 - `test_storage.py::test_request_custody`: missing/mismatched request, exact
