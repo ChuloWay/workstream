@@ -60,7 +60,7 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
   fail-closed action availability.
 
 Delivered [REV-12A1](../WS-REV-001/WS-REV-001-12A1.md) supplies only disabled
-generation-zero controller storage and transaction locking. Source AUTH custody,
+generation-zero controller storage and transaction locking. Acceptance-source AUTH custody,
 CON participation and authorized activation remain separate required work.
 
 This is delivery priority, not a prerequisite of true human admission. Both
