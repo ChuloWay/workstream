@@ -20,7 +20,7 @@ of review/revision behavior. The downstream owner contracts remain separate.
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: mandatory source AUTH custody, then CON-07 using the delivered
+- Next usable boundary: for the selected automated-acceptance delivery sequence, mandatory source AUTH custody, then CON-07 using the delivered
   REV-12A1 disabled controller/fence under the canonical order; human hidden behavior may continue independently behind exact AUTH,
   ART and CON prerequisites.
 - Governing sources: `docs/spec_review_lifecycle.md`,
@@ -32,6 +32,12 @@ of review/revision behavior. The downstream owner contracts remain separate.
 Delivered [REV-12A1](../WS-REV-001/WS-REV-001-12A1.md) supplies only disabled
 generation-zero controller storage and transaction locking. Source AUTH custody,
 CON participation and authorized activation remain separate required work.
+
+This is delivery priority, not a prerequisite of true human admission. Both
+routing branches require hidden 04E1B → exact AUTH 04E2 → live 04E3; true routing
+can proceed after its own prerequisites without CON-07/shared acceptance or
+scoped lifecycle activation. False routing adds those requirements. Human final
+acceptance later uses the same authorized shared acceptance/CON operation.
 
 ## Delivered
 

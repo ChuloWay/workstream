@@ -51,7 +51,7 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: mandatory source AUTH custody, then CON-07 using the delivered REV-12A1 disabled fence, before shared acceptance composition and hidden ARCH-04E1B;
+- Next usable boundary: for the selected automated-acceptance delivery sequence, mandatory source AUTH custody, then CON-07 using the delivered REV-12A1 disabled fence, before shared acceptance composition and hidden ARCH-04E1B;
   ARCH-04E2 then owns exact routing activation before 04E3 live composition.
 - Governing source: `docs/spec_authorization_service.md`, authorization code,
   migrations, and tests.
@@ -62,6 +62,12 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 Delivered [REV-12A1](../WS-REV-001/WS-REV-001-12A1.md) supplies only disabled
 generation-zero controller storage and transaction locking. Source AUTH custody,
 CON participation and authorized activation remain separate required work.
+
+This is delivery priority, not a prerequisite of true human admission. Both
+routing branches require hidden 04E1B → exact AUTH 04E2 → live 04E3; true routing
+can proceed after its own prerequisites without CON-07/shared acceptance or
+scoped lifecycle activation. False routing adds those requirements. Human final
+acceptance later uses the same authorized shared acceptance/CON operation.
 
 ## Delivered
 
@@ -93,5 +99,5 @@ manager proposal review, pre-submit approval and manual correction dispatch.
    AUTH-OUTBOX-01/02 bracket hidden CON-02B dispatch; ARCH-04E2 activates only
    the proven TASK routing handler before ARCH-04E3 live composition.
    TASK queue/read exposure is complete through ARCH-03C7. AUTH-18 public
-   manager guide activation/context is delivered; ARCH-03D hidden intake, hidden exact post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C hidden execution is delivered; ARCH-04D1 canonical material custody is delivered; ARCH-04D2 exact input/execution/finalization authority and ARCH-04E1A source-only facts/types are delivered. Routing authority remains ARCH-04E2 after hidden 04E1B proof and the shared acceptance foundations.
+   manager guide activation/context is delivered; ARCH-03D hidden intake, hidden exact post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C hidden execution is delivered; ARCH-04D1 canonical material custody is delivered; ARCH-04D2 exact input/execution/finalization authority and ARCH-04E1A source-only facts/types are delivered. Both branches require hidden 04E1B proof before exact ARCH-04E2 and live 04E3. Shared acceptance foundations additionally gate false routing, not true admission.
    Remaining work must use its exact owner, not the superseded broad designs.

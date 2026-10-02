@@ -241,8 +241,10 @@ checker results without creating Review, ReviewFinding, or
 RevisionContextPreparation records.
 
 This is a coordination contract. Each remaining child record, beginning with
-04E1B after the shared acceptance foundations, supplies its current-main exact
-files, commands, migration head and reviewers before implementation.
+hidden 04E1B after its branch-specific prerequisites, supplies its current-main
+exact files, commands, migration head and reviewers before implementation.
+Shared acceptance foundations additionally gate false composition; they do not
+gate true admission. Both branches retain 04E1B before 04E2 and 04E3.
 
 ## Merge state
 

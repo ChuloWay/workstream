@@ -20,7 +20,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: continue canonical boundary recovery through shared REV/CON/fence
+- Next usable boundary: for the selected automated-acceptance delivery sequence, continue canonical boundary recovery through shared REV/CON/fence
   foundations and later ARCH-04E1B/04E2/04E3 routing.
   Submission/checker history uses canonical authority; the alternate gate lifecycle
   is removed. Continue shrinking the canonical import ledger as implementation
@@ -29,3 +29,9 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   `.ci/auth-boundaries/IMPORT_LEDGER.md`, module-boundary scripts, and tests.
 - Preserve: the ledger is CI debt data, not engineering authority, and may only
   shrink unless a separately reviewed architecture change authorizes growth.
+
+This is delivery priority, not a prerequisite of true human admission. Both
+routing branches require hidden 04E1B → exact AUTH 04E2 → live 04E3; true routing
+can proceed after its own prerequisites without CON-07/shared acceptance or
+scoped lifecycle activation. False routing adds those requirements. Human final
+acceptance later uses the same authorized shared acceptance/CON operation.
