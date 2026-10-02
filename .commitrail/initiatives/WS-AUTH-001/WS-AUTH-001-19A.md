@@ -121,6 +121,8 @@ and never exceeds the retained storage limit of 100.
 - Existing Review authorization, TASK routing contract, catalogue/service matrix
   and migration/schema tests; a focused AUTH source-contract test module if the
   existing tests cannot express the cross-contract proof cohesively.
+- `mcp_server/contracts/authorization_context_get.json`: refresh only the selected
+  OpenAPI action enum, source provenance and canonical digest; no MCP runtime changes.
 - Alembic/schema-head, CI lane and behavior-ownership inventories only as required
   by added paths or canonical identifiers; do not weaken boundaries or gates.
 - This record, current AUTH/REV/CON/POL/ARCH overview/plan/chunk-map navigation,
@@ -141,7 +143,9 @@ retained-data deletion, unrelated cleanup, test skipping or gate relaxation.
    change the source commitment; invalid scalar shapes reject. Existing initial
    and revision behavior stays covered, including inherited-only blockers and
    accept with an unresolved blocker rejecting.
-2. TASK projects its existing source facts without copying their model. Every
+2. TASK projects its existing source facts without copying their model. Assert
+   both true and false survive AUTH projection, and a human reject changes both
+   the projected decision and source commitment. Every
    identity, policy, artifact and request substitution changes its canonical
    commitment. Equal revalidated values hash identically. Receipt envelopes reject
    action, actor, project/resource or commitment-digest mismatches.

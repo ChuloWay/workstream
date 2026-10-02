@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "7e9bf06c60ffc388ba1f2bf945ab689c9442ad922803cc27df7f9e0146b3580a",
+  "canonical_sha256": "b77e0f95c06f55605709111e3f12849f867b5b64627cff5a3dd3e40e89388403",
   "components": {
     "schemas": {
       "ActionId": {
@@ -48,6 +48,7 @@
           "actor.identity_link.revoke",
           "actor.identity_link.reactivate",
           "task.assignment.authority_reconcile",
+          "task.post_submit.route",
           "checker.post_submit.execute",
           "checker.post_submit.finalize",
           "outbox.dispatch",
@@ -533,7 +534,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "actor.authorization_context.read",
-    "backend_git_sha": "8a5b344a8164e86e884139c5c92dc893f66239e5",
+    "backend_git_sha": "22f5d543beea40eaec3afba2cb6124522a116dec",
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/actors/me/authorization-context"

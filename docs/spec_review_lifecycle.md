@@ -397,11 +397,11 @@ resolve the complete set. Immutable aggregate digests seal complete ordered
 children. Stable request digests exclude newly generated record IDs and times.
 
 Finding responses remain with revision preparation storage; no unchecked
-preparation identity or separate evidence upload is added here. Before human
-runtime, reconcile the inert AUTH contract's new-finding count restriction for
-inherited-only blockers and its contribution-policy digest triple with CON's
-actual frozen version identity. These are explicit integration prerequisites,
-not authority supplied by the storage tables.
+preparation identity or separate evidence upload is added here. AUTH-19A reconciles
+its inert decision contract with inherited-only unresolved blockers and CON's
+exact reviewer ContributionPolicyVersion identity. Genuine originating AUTH
+execution, persisted receipt custody and runtime integration remain prerequisites;
+these contracts and storage tables do not supply authority.
 
 ## Decision Transaction
 

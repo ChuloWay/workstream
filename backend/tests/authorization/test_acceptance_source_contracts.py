@@ -13,7 +13,7 @@ from app.modules.authorization.api.acceptance_source import (
     AcceptanceSourceReceiptFacts,
     acceptance_source_commitment_digest,
 )
-from app.modules.authorization.review_contracts import ReviewDecisionContract
+from app.modules.authorization.review_contracts import ReviewDecisionContract, ReviewDecisionValue
 from app.modules.tasks.api.post_submit_routing import (
     TaskPostSubmitManifestFacts,
     task_post_submit_source_digest,
@@ -73,6 +73,11 @@ def test_human_projection_matches_retained_source_fields():
         if name != "source"
     }
     original = acceptance_source_commitment_digest(source)
+    rejected = ReviewDecisionContract(
+        **(values | {"decision": ReviewDecisionValue.REJECT})
+    ).source_commitment()
+    assert rejected.decision == "reject"
+    assert acceptance_source_commitment_digest(rejected) != original
     for name in type(source).model_fields:
         if name in {"source", "decision"}:
             continue
@@ -85,8 +90,10 @@ def test_human_projection_matches_retained_source_fields():
         assert acceptance_source_commitment_digest(projected) != original, name
 
 
-def test_route_projection_and_digest_bind_complete_reconstructed_source():
+@pytest.mark.parametrize("human_review_required", (True, False))
+def test_route_projection_and_digest_bind_complete_reconstructed_source(human_review_required):
     values = _source_values(
+        human_review_required=human_review_required,
         submission_version=2,
         predecessor_submission_id=new_record_id(),
         predecessor_submission_version=1,
