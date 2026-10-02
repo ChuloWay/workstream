@@ -28,8 +28,10 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: shared REV-04B FinalAcceptance persistence,
-  CON-03C/07 and the existing REV-12A/CON fence foundation before shared
+  [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
+  storage, without AUTH receipt custody or runtime consumers.
+- Next usable boundary: CON-03C/07 and the existing REV-12A/CON fence foundation,
+  plus mandatory same-table acceptance authority hardening before shared
   acceptance composition, then ARCH-04E1B/04E2/04E3 and ARCH-04F. Output-file
   authority remains unavailable for the zero-output catalogue.
   [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers public manager activation

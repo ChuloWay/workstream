@@ -38,10 +38,11 @@ and the [capability ledger](../../../docs/roadmap_status.md).
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary:
-  REV-04B FinalAcceptance persistence and
-  CON-03C/07 and the existing shared REV-12A/CON fence foundation before one
-  shared acceptance operation serves both the human and automatic triggers.
+  [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
+  storage, without AUTH receipt custody or runtime consumers.
+- Next usable boundary: CON-03C/07 and the existing REV-12A/CON fence foundation,
+  plus mandatory same-table acceptance authority hardening before one shared
+  acceptance operation serves both human and automatic triggers.
 - Governing sources: `docs/spec_contribution_compensation.md`,
   [`CONFORMANCE.md`](CONFORMANCE.md), code, migrations, and tests.
 - Preserve: exact policy-version lineage, no claim-time drift, decimal-string
