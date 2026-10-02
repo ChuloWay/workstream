@@ -328,7 +328,7 @@ keys, provider URIs, scratch paths, receipts, or credentials.
 `ReviewPacketManifest` is an immutable REV semantic projection naming the exact
 queue entry, lease, versioned Submission, admitting CheckerRun/results, stamped
 guide/setup context, original ZIP binding and live guide ingest IDs. Revision
-response relations belong to the later complete Review storage boundary. It
+response relations belong with the future revision preparation/response storage boundary. It
 stores no bytes, artifact content digest, provider location, signed URL, scratch path,
 receipt, or authorization-matrix data.
 
@@ -378,6 +378,30 @@ There is no separate reviewer-finding or contributor-response artifact upload
 in v0.1. `artifact.review_evidence.binding.create` and related evidence-ingest
 actions remain planned/unavailable. Any future evidence-upload lifecycle needs
 a separate REV-owned intent and reviewed ART/AUTH contract.
+
+## Delivered Review Source Storage
+
+[REV-04A](../.commitrail/initiatives/WS-REV-001/WS-REV-001-04A.md) persists
+complete immutable Review, finding, resolution and completed request metadata.
+It provides no production writer, AUTH action activation, CON participant or
+public decision route. Real PostgreSQL storage fixtures are not canonical
+product decisions. The transaction below remains mandatory for future runtime.
+
+The stored predecessor is the nearest reviewed ancestor on the same-task
+Submission chain; checker-only corrections do not fabricate Reviews. Resolutions
+can address only open findings in that Review ancestry. Resolved/not_applicable
+findings cannot reopen; every inherited open blocker requires a current
+resolution. Accept leaves no blocker open, while needs_revision leaves at least
+one. The resulting open blocking set is bounded at 100 so a later Review can
+resolve the complete set. Immutable aggregate digests seal complete ordered
+children. Stable request digests exclude newly generated record IDs and times.
+
+Finding responses remain with revision preparation storage; no unchecked
+preparation identity or separate evidence upload is added here. Before human
+runtime, reconcile the inert AUTH contract's new-finding count restriction for
+inherited-only blockers and its contribution-policy digest triple with CON's
+actual frozen version identity. These are explicit integration prerequisites,
+not authority supplied by the storage tables.
 
 ## Decision Transaction
 
@@ -579,7 +603,7 @@ Extract foundations from existing owner work, not a new initiative:
    while activation remains unavailable. This schema precedes the REV source FK.
 2. [ART-07A1](../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) supplies
    the metadata-only packet contract. REV-03B normalized packet persistence is
-   delivered. Next complete REV-04A Review-source storage before REV-04B
+   delivered. REV-04A immutable Review-source storage is also delivered; next implement REV-04B
    shared FinalAcceptance storage. Do not create an incomplete Review solely as
    an FK target. CON-03C contribution/award persistence and CON-07 submitter
    participation follow. These storage prerequisites require no live human

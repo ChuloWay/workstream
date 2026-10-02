@@ -1850,80 +1850,70 @@ mutation/deletion/truncation. Repository writes are caller-transaction operation
 creation checks the lease deadline against PostgreSQL time; exact replay retains
 the stored identity after expiry or closure. The detached identity is
 `packet_manifest_id`, matching AUTH. This storage is delivered; the resolver,
-claim authority and byte capability remain future work. Complete REV-04A Review
-storage is next before shared FinalAcceptance.
+claim authority and byte capability remain future work. REV-04A immutable Review source storage is delivered; shared FinalAcceptance persistence is next.
 
 ## Review
 
-Fields:
+REV-04A delivers immutable source storage, not an authorized decision writer.
+The [change contract](../.commitrail/initiatives/WS-REV-001/WS-REV-001-04A.md)
+defines exact columns, limits, digest formats and proof boundaries.
 
-- `id`
-- `submission_id`
-- `review_lease_id`
-- `predecessor_review_id`
-- `reviewer_id`
-- `decision`
-- `summary`
-- `confidence`
-- `acceptance_evidence_refs`
-- `locked_guide_version`
-- `locked_review_policy_id`
-- `locked_review_policy_generation`
-- `locked_review_policy_hash`
-- `created_at`
-- `completed_at`
+A Review retains its project, task, exact Submission/version and assignment,
+reviewer, lease, queue and immutable packet identity/digest; the canonical ART
+ZIP hash; the Submission's locked guide and ReviewPolicy identity; and the
+lease-frozen ContributionPolicyVersion. It stores only `accept`,
+`needs_revision`, or `reject`, a bounded summary, child counts, the complete
+aggregate digest and one PostgreSQL-owned `completed_at` timestamp. The summary
+is the required human reason for reject. There is no draft Review, confidence
+score, arbitrary evidence-reference array or direct creation endpoint.
 
-The Review and its submitted findings/resolutions are immutable. Later rounds
-append a new Review following the Submission predecessor chain.
+The predecessor is the nearest Review on the same-task Submission predecessor
+chain, including across checker-only corrections. It must be `needs_revision`;
+a null predecessor means no reviewed ancestor. Unique Submission, lease, packet
+and non-null predecessor keep the retained Review chain unambiguous.
 
-Decision:
+Creation requires an active unexpired lease using database time. The transaction
+must finish with that lease consumed and its queue closed for review_recorded.
+Storage tests prove these relations; they do not substitute for the still-required
+AUTH, CON, shared fence and lifecycle participants in a canonical decision.
 
-- accept
-- needs_revision
-- reject
+## ReviewFinding And FindingResolution
 
-## ReviewFinding
+A finding stores its UUIDv7 id, owning Review, zero-based order, `blocking` or
+`advisory` kind, area, issue and required fix. A resolution stores its UUIDv7 id,
+resolving Review, prior finding, order, `resolved`, `unresolved` or
+`not_applicable` result, and bounded rationale. Both inherit completion time
+from the owning Review and grant no evidence-upload authority.
 
-Fields:
+Every open inherited blocking finding needs a current resolution. A finding
+closed by resolved/not_applicable cannot reopen; an unresolved result carries
+it forward. Accept leaves no new or inherited blocker open; needs_revision
+leaves at least one. At most 100 blockers may remain open, preserving bounded
+resolution capacity. Counts distinguish new findings from current resolutions.
+The exact complete ordered children are sealed by the Review's digest; late
+inserts, updates, deletes and truncation are rejected by PostgreSQL.
 
-- `id`
-- `review_id`
-- `finding_kind`: `blocking | advisory`
-- `area`
-- `issue`
-- `required_fix`
-- `created_at`
+## ReviewDecisionRequest
 
-## ReviewEvidenceArtifact
+An immutable completed association binds project, reviewer, caller idempotency
+key, operation UUID, stable request digest and exact Review. There is no pending
+state or AUTH/CON placeholder. The request and Review commit or roll back together.
+The request digest excludes newly generated record IDs and timestamps so exact
+concurrent first deliveries match. The separate aggregate digest includes
+retained Review/finding/resolution IDs. Runtime replay and decision authority
+remain later work; the stored key does not grant authority.
 
-Fields:
+## SubmissionFindingResponse
 
-- `id`
-- `project_id`
-- `review_id` (nullable, exactly one purpose owner)
-- `review_finding_id` (nullable, exactly one purpose owner)
-- `submission_finding_response_id` (nullable, exactly one purpose owner)
-- `finding_resolution_id` (nullable, exactly one purpose owner)
-- `artifact_binding_id`
-- `evidence_purpose`
-- `created_by_actor_id`
-- `created_at`
+This remains planned with the revision preparation owner. It will bind the
+assigned contributor's bounded response text, exact preparation head, prior
+finding and new Submission. REV-04A does not add an unchecked preparation UUID
+or claim response admission. Its structural FindingResolution relation must be
+composed with that future custody before revision decisions are activated.
 
-This immutable REV relation binds one ART-finalized ArtifactBinding to the exact
-review, finding, response, or resolution evidence slot. Exactly one purpose owner is set,
-all lineage is same-project and same-task, and the row stores no bytes, digest,
-provider locator, signed URL, receipt, scratch path, or credentials.
-
-## SubmissionFindingResponse And FindingResolution
-
-`SubmissionFindingResponse` immutably binds one unresolved blocking finding to
-the assigned submitter's response text, optional finalized evidence binding,
-exact preparation head, and new Submission. Advisory responses are optional
-unless locked policy requires them.
-
-`FindingResolution` is appended by the later Review for each required prior
-finding. Its result is `resolved`, `unresolved`, or `not_applicable`; it carries
-bounded rationale/evidence and never edits the finding or response.
+Separate reviewer-finding or contributor-response artifact uploads are excluded
+from v0.1. No ReviewEvidenceArtifact table is implemented or required by this
+storage boundary; any future upload capability needs a separate reviewed intent.
 
 ## RevisionContextPreparation
 

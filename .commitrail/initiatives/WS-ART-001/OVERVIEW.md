@@ -23,8 +23,8 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   delivery history. No alias, revived extraction writer or byte authority.
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
-- Next usable boundary: complete REV-04A
-  Review storage before shared acceptance. ARCH-04F remediation and public
+  [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
+- Next usable boundary: shared FinalAcceptance persistence. ARCH-04F remediation and public
   intake follow acceptance and routing composition.
 - Governing sources: artifact specifications, `ArtifactStore`,
   `ArtifactScratchManager`, code, migrations, and artifact tests.
@@ -52,7 +52,7 @@ must prove exact approved lineage at preparation, consumption and binding.
    custody, ARCH-04C hidden durable execution, ARCH-04D2 fixed-service authority
    and ARCH-04E1A source-only material lineage are delivered.
 2. ART-07A1 metadata-only membership types are delivered. REV-03B packet
-   storage is delivered. Complete REV-04A Review storage precedes shared FinalAcceptance,
+   storage is delivered. Delivered REV-04A Review source storage precedes shared FinalAcceptance,
    CON participation and the shared fence, then acceptance/routing composition.
 3. ARCH-04F owns checker-remediation resubmission using existing ART ports;
    later reviewer-requested revision remains a separate REV boundary. Add those dependencies before public Submission

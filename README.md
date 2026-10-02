@@ -174,8 +174,7 @@ Findings and policy proposals retain document-access evidence.
 [ART-07A1](.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) provides strict
 metadata-only reviewer packet types, not a resolver or byte-access capability.
 REV-03B persists immutable normalized packets using live guide ingest identities.
-Complete REV-04A Review storage is next,
-then shared FinalAcceptance. These internal prerequisites do not require live
+REV-04A immutable Review source storage is delivered; shared FinalAcceptance persistence is next. These internal prerequisites do not require live
 human review before the first automated acceptance path.
 
 Active work is connecting those foundations into the remaining production

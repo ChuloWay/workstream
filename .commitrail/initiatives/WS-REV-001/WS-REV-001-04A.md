@@ -1,7 +1,7 @@
 # REV-04A — Immutable Review source storage
 
 - Initiative: `WS-REV-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: complete immutable Review source storage for shared FinalAcceptance, without activating human decisions or acceptance.
 
 ## Intent and current behavior
@@ -107,7 +107,7 @@ Four tables, no mutable reservation state or unfinished Review:
 - `finding_resolutions`: UUIDv7 id, resolving Review id, prior finding id,
   item_order (0–99), result resolved/unresolved/not_applicable and nonblank
   rationale (1–4000). Unique Review/finding and Review/order.
-- `review_decision_requests`: UUIDv7 id and operation_id, project/reviewer,
+- `review_decision_requests`: UUIDv7 id and UUID operation_id, project/reviewer,
   caller UUID idempotency_key, non-null Review id, stable request digest, independently recomputed from retained content.
   Unique project/reviewer/key, operation and Review. Deferred Review FK allows
   one complete request and Review to be staged in either order; rollback removes
@@ -150,7 +150,7 @@ The lease freezes ContributionPolicyVersion.id; do not fabricate the contributio
 
 Parent and child deferred checks lock the immutable Review and recompute exact
 count/order/digest closure. A late child cannot extend a committed aggregate.
-All four tables reject updates, deletes and truncation. The current data-model
+All four tables reject updates, deletes and truncation. Once a Review commits, its consumed lease is already terminal/immutable; a scoped queue trigger also protects its recorded closure fields, without freezing unrelated queue preferences. The current data-model
 page will remove unimplemented confidence/arbitrary evidence arrays and label
 future evidence upload separately, consistent with the canonical v0.1 scope.
 
@@ -175,7 +175,7 @@ future evidence upload separately, consistent with the canonical v0.1 scope.
 
 ## Named proof plan
 
-New tests under `backend/tests/reviews/decision/`:
+Proof tests under `backend/tests/reviews/decision/`:
 
 - `test_contracts.py`: closed types, bounds, AUTH decision-value parity,
   canonical digest includes changed scope and all nested fields.
@@ -185,7 +185,7 @@ New tests under `backend/tests/reviews/decision/`:
   owners with recomputed digest; exact rejection plus removed owner predicate.
 - `test_storage.py::test_lease_terminal_custody`: expired active lease and
   missing consumed/closed state reject, exact valid atomic control.
-- `test_storage.py::test_predecessor_chain`: checker-only gaps, nearest Review,
+- `test_storage.py::test_predecessor_chain` and `test_first_review_after_checker_only_correction`: checker-only gaps, nearest Review,
   wrong/null predecessor and branch denial.
 - `test_storage.py::test_finding_carry_forward`: required inherited blockers,
   resolved/not_applicable closure, no reopening, inherited-only needs_revision and rejection of more than 100 resulting open blockers.
@@ -204,7 +204,19 @@ packet/ART contracts and schema inventories. Run Ruff on changed Python,
 `python -m scripts.module_boundaries validate --protected-base origin/main`,
 `python -m scripts.behavior_ownership validate`, root Commitrail validation,
 Markdown link/stale scans, then all hosted lanes and canonical retained-evidence
-validation. Test names above are future implementation targets, not results.
+validation. These tests exercise storage custody, not an activated decision or acceptance runtime.
+
+## Plan findings and disposition
+
+Preimplementation architecture and security review removed the stale upload and
+response/preparation items; specified four completed-only tables; separated
+stable request identity from generated stored identity; and bounded the resulting
+open blocker set so future resolution remains representable. A scoped queue
+closure guard preserves the terminal source alongside existing lease immutability.
+No pending command framework, production writer or placeholder participant was
+added. The migration plus four related tables and their PostgreSQL proof exceed
+the usual 500-line preference as one cohesive source-custody change; splitting
+its aggregate guards from their tables would leave incomplete evidence.
 
 ## Risk and review routing
 
