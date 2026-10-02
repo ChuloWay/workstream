@@ -4,7 +4,7 @@
 - Durable disposition: `Complete`
 - Intended merge outcome: complete immutable Review source storage for shared FinalAcceptance, without activating human decisions or acceptance.
 
-## Intent and current behavior
+## Intent
 
 Continue the approved packet -> Review -> shared FinalAcceptance sequence.
 Main `fcff997f` contains REV-03B packets, queue/lease storage and exact immutable
