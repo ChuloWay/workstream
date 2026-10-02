@@ -53,11 +53,11 @@ class ReviewSubmissionMember(BaseModel):
 
 
 class ReviewGuideMember(BaseModel):
-    """Required original document from ART's guide_source_artifact_bindings."""
+    """Required original document from the live guide_source_artifact_ingests owner."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    guide_binding_id: UUID
+    ingest_id: UUID
     source_item_id: UUID
     item_order: StrictInt = Field(ge=0)
     logical_role: Literal["guide_source_original"]
@@ -75,7 +75,7 @@ class ReviewPacketMembership(BaseModel):
 
     @model_validator(mode="after")
     def canonical_documents(self) -> ReviewPacketMembership:
-        for attribute in ("guide_binding_id", "source_item_id", "item_order"):
+        for attribute in ("ingest_id", "source_item_id", "item_order"):
             values = [getattr(document, attribute) for document in self.guide_documents]
             if len(values) != len(set(values)):
                 raise ValueError("review packet guide membership is duplicated")

@@ -23,7 +23,7 @@ from scripts.run_isolated_tests import LOOPBACK, NAME_RE, ROLE_RE
 DDL_LOCK_DIRECTORY = Path("/tmp")
 # Match the PostgreSQL 16 engine used by Backend CI. Catalog identity rendering
 # differs across major versions; regenerate only after comparing actual objects.
-EXPECTED_PUBLIC_SCHEMA_SHA256 = "d9c94fbdce2a2fa9aa822b9e0f528f4497362ed0c6b2aef1946f454ea250b354"
+EXPECTED_PUBLIC_SCHEMA_SHA256 = "7b79a9331aad5d7fc19fe85fa8c86f8effea39ccdb7c1ed860c1bbdf60098868"
 PROTECTED_TEST_TABLES = (
     "actor_profile_migration_state",
     "alembic_version",
@@ -108,6 +108,8 @@ RESETTABLE_TEST_TABLES = (
     "review_policies",
     "revision_policies",
     "review_admission_idempotency_records",
+    "review_packet_manifests",
+    "review_packet_guide_items",
     "review_leases",
     "review_queue_entries",
     "submission_policy_mutation_idempotency_records",
@@ -141,6 +143,7 @@ TRUNCATE_GUARDED_TABLES = (
     "guide_sufficiency_report_source_usages",
     "guide_sufficiency_mutation_idempotency_records",
     "guide_source_snapshot_items",
+    "guide_source_artifact_ingests",
     "guide_source_artifact_bindings",
     "guide_source_format_classifications",
     "guide_source_extraction_attempts",
@@ -174,6 +177,8 @@ TRUNCATE_GUARDED_TABLES = (
     "project_role_grants",
     "project_role_qualification_snapshots",
     "review_admission_idempotency_records",
+    "review_packet_manifests",
+    "review_packet_guide_items",
     "review_leases",
     "review_queue_entries",
     "review_policies",

@@ -983,7 +983,7 @@ class GuideSourceSnapshotItem(Base):
 
 
 class GuideSourceArtifactIngest(Base):
-    """Server-owned prepared-byte facts for one not-yet-bound guide item."""
+    """Immutable prepared-byte identity for one uploaded guide document."""
 
     __tablename__ = "guide_source_artifact_ingests"
     __table_args__ = (

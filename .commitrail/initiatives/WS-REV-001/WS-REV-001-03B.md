@@ -1,7 +1,7 @@
 # REV-03B — Immutable normalized reviewer packet persistence
 
 - Initiative: `WS-REV-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Risk: L1 (bounded schema, immutable evidence and owner contract correction).
 - Intended merge outcome: REV persists one exact metadata packet per ReviewLease with normalized guide members; complete REV-04A Review storage is next. No claim, resolver, byte access or acceptance is activated.
 
@@ -12,7 +12,7 @@ sequence, so automated acceptance can become the first complete runtime path
 without fabricating a Review. Build on merged ART-07A1 and the existing queue,
 lease, Submission, checker and activated guide owners.
 
-Current main `7754703f` has no packet persistence. Discovery also found that
+At discovery, main `7754703f` had no packet persistence. Discovery also found that
 ART-07A1's `guide_binding_id` targets the retired extraction binding table.
 `retired_guide_material_write_guard` rejects every write to that table. The live
 upload and guide manifest use `GuideSourceArtifactIngest.id`, exposed as
@@ -42,6 +42,7 @@ read-only. The complete packet remains metadata-only.
 - `backend/tests/reviews/packet/test_migration.py`
 - `backend/tests/conftest.py`: exact new resettable/guarded tables and measured schema fingerprint; no weaker validation.
 - `backend/tests/test_alembic.py`: exact revision graph.
+- `backend/scripts/identifier_inventory.py` and `backend/tests/test_identifier_schema.py`: classify only the new natural packet/source-item primary key; preserve all UUID guards.
 - `backend/scripts/test_lane_catalogue.py` and `backend/tests/test_ci_lane_catalogue.py`: additive registration in existing task lanes.
 - `backend/scripts/behavior_ownership.py`, `backend/tests/test_behavior_ownership.py`, `.ci/behavior-ownership/partition.v1.json`: exact three-module REV addition and neighbor-rejection proof.
 
@@ -96,8 +97,7 @@ binding table. The existing header request retains all eleven scope fields.
 
 Exactly one required ZIP is represented by non-null header fields; no separate
 one-to-one item table. All IDs/references use native PostgreSQL UUID, with native
-Python UUID at new typed boundaries. Existing owner string representations stay
-at existing boundaries. `result_id` is the aggregate CheckerRun.result_id.
+Python UUID at new typed boundaries. ORM references preserve the referenced owner's string-versus-UUID representation; new detached packet boundaries use UUID. `result_id` is the aggregate CheckerRun.result_id.
 
 `review_packet_guide_items` columns: `packet_id`, `source_item_id` (composite
 primary key), `ingest_id`, `item_order`, `logical_role`, `media_type`.
@@ -111,7 +111,7 @@ ART membership JSON: request, submission and ordered guide members, with native
 UUIDs rendered as strings. It excludes packet UUID, lease identity, generation
 and creation time, so future claim can compute it before allocating a lease.
 Those independent identities remain explicitly bound by AUTH. SQL recomputes
-the same digest using the existing canonical JSON function and pgcrypto digest;
+the same digest using the existing canonical JSON function and PostgreSQL SHA-256;
 caller-supplied false digests fail at commit. The positive Python/SQL parity
 proof includes all fields and a changed ordered member. No second serializer.
 
@@ -235,9 +235,9 @@ and lane inventory checks; run Ruff, module boundaries, Commitrail, links and
 stale wording. Full hosted nine-lane and real API checks remain required, with
 no skipped/deselected nodes. No spreadsheet exports are currently present.
 
-### Named future proof inventory
+### Named proof inventory
 
-These are implementation obligations, not claims of executed tests:
+These tests bind the storage boundary; execution results and review freshness belong in the PR:
 
 - `test_packet_matches_canonical_owners_and_digest`: every header/nested owner
   value and Python/SQL digest parity, including changed ordered membership.
@@ -248,7 +248,9 @@ These are implementation obligations, not claims of executed tests:
 - `test_packet_requires_active_exact_lease`: terminal and sibling lease insertions.
 - `test_packet_requires_committed_guide_upload`: prepared-only ingest cannot pass;
   independently crossed content, replica, namespace, receipt, ingest byte and
-  media identities fail after a valid operation-receipt control.
+  media identities fail after a valid operation-receipt control. Namespace
+  substitution is rejected by ART's existing singleton namespace FK before packet
+  validation; no claim that this impossible source reaches the later packet guard.
 - `test_packet_accepts_observed_confirmed_upload`: genuine observed-confirmed
   recovery receipt is accepted; crossed generation and observed byte facts fail.
 - `test_packet_requires_complete_canonical_guide_set`: omission, extra, swapped

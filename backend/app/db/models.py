@@ -92,3 +92,5 @@ from app.modules.projects.guide_compilation.models import (  # noqa: F401
 )
 
 from app.modules.projects.post_policy.models import PostPolicyOperation  # noqa: F401
+
+from app.modules.reviews.packet.models import ReviewPacketManifest, ReviewPacketGuideItem  # noqa: F401

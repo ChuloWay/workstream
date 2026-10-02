@@ -19,7 +19,9 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   zero-output catalogue.
 - Delivered contract: [ART-07A1](WS-ART-001-07A1.md) defines exact, metadata-only
   reviewer packet membership. It supplies no resolver or byte authority.
-- Next usable boundary: REV-03B normalized packet persistence, then REV-04A
+- Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
+  lease packets with normalized live guide ingests; no resolver or byte authority.
+- Next usable boundary: complete REV-04A
   Review storage before shared acceptance. ARCH-04F remediation and public
   intake follow acceptance and routing composition.
 - Governing sources: artifact specifications, `ArtifactStore`,
@@ -48,7 +50,7 @@ must prove exact approved lineage at preparation, consumption and binding.
    custody, ARCH-04C hidden durable execution, ARCH-04D2 fixed-service authority
    and ARCH-04E1A source-only material lineage are delivered.
 2. ART-07A1 metadata-only membership types are delivered. REV-03B packet
-   storage and complete REV-04A Review storage precede shared FinalAcceptance,
+   storage is delivered. Complete REV-04A Review storage precedes shared FinalAcceptance,
    CON participation and the shared fence, then acceptance/routing composition.
 3. ARCH-04F owns checker-remediation resubmission using existing ART ports;
    later reviewer-requested revision remains a separate REV boundary. Add those dependencies before public Submission
