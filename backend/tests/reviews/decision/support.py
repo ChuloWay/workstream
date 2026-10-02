@@ -125,6 +125,15 @@ async def insert_review(
         aggregate_digest=source.aggregate_digest,
     )
     values.update(header or {})
+    for field in (
+        "project_id",
+        "task_id",
+        "task_assignment_id",
+        "submission_id",
+        "reviewer_id",
+        "locked_review_policy_id",
+    ):
+        values[field] = str(values[field])
     await session.execute(insert(Review).values(**values))
     if include_children:
         for order, member in enumerate(source.findings):
@@ -150,6 +159,8 @@ async def insert_review(
             request_digest=source.request_digest,
         )
         request_values.update(request or {})
+        for field in ("project_id", "reviewer_id"):
+            request_values[field] = str(request_values[field])
         await session.execute(insert(ReviewDecisionRequest).values(**request_values))
     if close:
         await close_review_lease(session, source)

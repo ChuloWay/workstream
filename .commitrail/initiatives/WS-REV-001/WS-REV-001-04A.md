@@ -56,7 +56,7 @@ retain exact predecessor/finding relations without claiming revision admission.
 - `.commitrail/initiatives/WS-ARCH-001/planning/CHUNK_MAP.md`
 - `.commitrail/initiatives/WS-ARCH-001/planning/chunks/WS-ARCH-001-04E-canonical-allow-review.md`
   These pages advance only the delivered Review-storage prerequisite.
-- `README.md`, `docs/roadmap_status.md`, `docs/architecture_data_model.md`,
+- `README.md`, `docs/glossary.md`, `docs/roadmap_status.md`, `docs/architecture_data_model.md`,
   `docs/spec_review_lifecycle.md`, `docs/spec_artifact_storage_service.md`,
   `docs/engineering/authorization_activation_custody.md`: reconcile affected
   capability, storage/activation distinction and next dependency.
@@ -183,8 +183,15 @@ Proof tests under `backend/tests/reviews/decision/`:
   exact stored lineage and every nested field compared to the source.
 - `test_storage.py::test_owner_substitution`: coherent foreign and sibling
   owners with recomputed digest; exact rejection plus removed owner predicate.
-- `test_storage.py::test_lease_terminal_custody`: expired active lease and
-  missing consumed/closed state reject, exact valid atomic control.
+- `test_storage.py::test_expired_active_lease_cannot_record_review`: expired active lease rejects.
+- `test_storage.py::test_self_review_guard_is_independent`: coherent contributor-owned
+  lease/packet rejects; removing only self-review protection inverts the assertion.
+- `test_storage.py::test_human_required_guard_is_reached`: reversing the policy
+  predicate rejects the valid true-policy control; restored guard accepts. Existing
+  `tests/projects/guide_activation/test_rejections.py::test_false_review_setting_cannot_activate_automated_acceptance`
+  proves false-policy activation remains unavailable without fabricated lineage.
+- `test_storage.py::test_lease_terminal_custody`: missing consumed/closed state
+  rejects, exact valid atomic control and immutable recorded queue closure.
 - `test_storage.py::test_predecessor_chain` and `test_first_review_after_checker_only_correction`: checker-only gaps, nearest Review,
   wrong/null predecessor and branch denial.
 - `test_storage.py::test_finding_carry_forward`: required inherited blockers,
@@ -192,9 +199,10 @@ Proof tests under `backend/tests/reviews/decision/`:
 - `test_storage.py::test_aggregate_immutability`: count/digest mismatch,
   late child, update/delete/truncate; removed aggregate predicate fails proof.
 - `test_storage.py::test_request_custody`: missing/mismatched request, exact
-  stored association and key/digest conflict; caller rollback.
+  stored association and changed-content digest comparison; caller rollback.
 - `test_storage.py::test_concurrent_request_and_child`: separate PostgreSQL
-  sessions observe real conflicts/parent visibility, not mocked scheduling. Two first identical requests with distinct generated IDs retain identical request digests; changing the digest to include generated IDs must fail this proof.
+  sessions observe unique-key contention, winner recovery and parent visibility, not mocked scheduling. Two identical requests with distinct generated IDs retain identical request digests.
+- `test_contracts.py::test_generated_id_regression_detects_unstable_request_digest`: adding generated identity to the request digest fails the equality proof.
 - `test_migration.py::test_review_upgrade_preserves_owners`: populated predecessor
   upgrade, exact new schema and non-destructive downgrade rejection.
 

@@ -110,6 +110,8 @@ async def test_owner_substitution(tmp_path, clean_postgres_database):
                 )
         for fields in (
             {"submission_version": h.review.submission_version + 1},
+            {"locked_guide_version": h.review.locked_guide_version + "-other"},
+            {"locked_review_policy_generation": h.review.locked_review_policy_generation + 1},
             {"artifact_hash": "sha256:" + "a" * 64},
             {"packet_manifest_digest": "sha256:" + "b" * 64},
             {"locked_review_policy_hash": "sha256:" + "c" * 64},
@@ -399,8 +401,8 @@ async def test_concurrent_request_and_child(tmp_path, clean_postgres_database):
                     .values(
                         id=new_record_id(),
                         operation_id=new_record_id(),
-                        project_id=duplicate.project_id,
-                        reviewer_id=duplicate.reviewer_id,
+                        project_id=str(duplicate.project_id),
+                        reviewer_id=str(duplicate.reviewer_id),
                         idempotency_key=key,
                         review_id=duplicate.id,
                         request_digest=duplicate.request_digest,
@@ -439,8 +441,8 @@ async def test_concurrent_request_and_child(tmp_path, clean_postgres_database):
                 insert(ReviewDecisionRequest).values(
                     id=new_record_id(),
                     operation_id=new_record_id(),
-                    project_id=source.project_id,
-                    reviewer_id=source.reviewer_id,
+                    project_id=str(source.project_id),
+                    reviewer_id=str(source.reviewer_id),
                     idempotency_key=key,
                     review_id=source.id,
                     request_digest=source.request_digest,
@@ -586,3 +588,55 @@ async def test_first_review_after_checker_only_correction(tmp_path, clean_postgr
             await insert_review(session, successor.review)
             await session.commit()
             assert await session.scalar(text("SELECT count(*) FROM public.reviews")) == 1
+
+
+@pytest.mark.asyncio
+async def test_self_review_guard_is_independent(tmp_path, clean_postgres_database, monkeypatch):
+    from sqlalchemy.exc import DBAPIError
+    from tests.reviews.packet import support as packet_support
+
+    async def contributor_as_reviewer(session, *, label):
+        return str(await session.scalar(text("SELECT contributor_id FROM public.submissions")))
+
+    monkeypatch.setattr(packet_support, "_human_actor", contributor_as_reviewer)
+    async with review_source(tmp_path, clean_postgres_database) as h:
+        await assert_rejected(h, h.review, "review source canonical ownership mismatch")
+        async with h.factory() as session:
+            definition = await session.scalar(
+                text(
+                    "SELECT pg_get_functiondef('public.validate_review_source(uuid)'::regprocedure)"
+                )
+            )
+            predicate = "AND r.reviewer_id<>s.contributor_id"
+            assert definition.count(predicate) == 1
+            await session.execute(text(definition.replace(predicate, "")))
+            with pytest.raises(pytest.fail.Exception, match="DID NOT RAISE"):
+                with pytest.raises(DBAPIError, match="review source canonical ownership mismatch"):
+                    await insert_review(session, h.review)
+                    await session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+            await session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_human_required_guard_is_reached(tmp_path, clean_postgres_database):
+    from sqlalchemy.exc import DBAPIError
+
+    async with review_source(tmp_path, clean_postgres_database) as h:
+        async with h.factory() as session:
+            definition = await session.scalar(
+                text(
+                    "SELECT pg_get_functiondef('public.validate_review_source(uuid)'::regprocedure)"
+                )
+            )
+            predicate = "AND policy.human_review_required IS TRUE"
+            assert definition.count(predicate) == 1
+            await session.execute(
+                text(definition.replace(predicate, "AND policy.human_review_required IS FALSE"))
+            )
+            with pytest.raises(DBAPIError, match="review source canonical ownership mismatch"):
+                await insert_review(session, h.review)
+                await session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+            await session.rollback()
+        async with h.factory() as session:
+            await insert_review(session, h.review)
+            await session.commit()

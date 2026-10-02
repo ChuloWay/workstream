@@ -55,17 +55,17 @@ class Review(Base):
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
-    project_id: Mapped[UUID] = mapped_column(
-        Uuid(), ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
+    project_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
     )
-    task_id: Mapped[UUID] = mapped_column(
-        Uuid(), ForeignKey("workstream_tasks.id", ondelete="RESTRICT"), nullable=False
+    task_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("workstream_tasks.id", ondelete="RESTRICT"), nullable=False
     )
-    task_assignment_id: Mapped[UUID] = mapped_column(
-        Uuid(), ForeignKey("task_assignments.id", ondelete="RESTRICT"), nullable=False
+    task_assignment_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("task_assignments.id", ondelete="RESTRICT"), nullable=False
     )
-    submission_id: Mapped[UUID] = mapped_column(
-        Uuid(), ForeignKey("submissions.id", ondelete="RESTRICT"), nullable=False
+    submission_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("submissions.id", ondelete="RESTRICT"), nullable=False
     )
     review_queue_entry_id: Mapped[UUID] = mapped_column(
         Uuid(), ForeignKey("review_queue_entries.id", ondelete="RESTRICT"), nullable=False
@@ -76,14 +76,14 @@ class Review(Base):
     packet_manifest_id: Mapped[UUID] = mapped_column(
         Uuid(), ForeignKey("review_packet_manifests.id", ondelete="RESTRICT"), nullable=False
     )
-    reviewer_id: Mapped[UUID] = mapped_column(
-        Uuid(), ForeignKey("actor_profiles.id", ondelete="RESTRICT"), nullable=False
+    reviewer_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("actor_profiles.id", ondelete="RESTRICT"), nullable=False
     )
     reviewer_contribution_policy_version_id: Mapped[UUID] = mapped_column(
         Uuid(), ForeignKey("contribution_policy_versions.id", ondelete="RESTRICT"), nullable=False
     )
-    locked_review_policy_id: Mapped[UUID] = mapped_column(
-        Uuid(), ForeignKey("review_policies.id", ondelete="RESTRICT"), nullable=False
+    locked_review_policy_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("review_policies.id", ondelete="RESTRICT"), nullable=False
     )
     submission_version: Mapped[int] = mapped_column(Integer, nullable=False)
     packet_manifest_digest: Mapped[str] = mapped_column(String(71), nullable=False)
@@ -188,11 +188,11 @@ class ReviewDecisionRequest(Base):
 
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
     operation_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
-    project_id: Mapped[UUID] = mapped_column(
-        Uuid(), ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
+    project_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
     )
-    reviewer_id: Mapped[UUID] = mapped_column(
-        Uuid(), ForeignKey("actor_profiles.id", ondelete="RESTRICT"), nullable=False
+    reviewer_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("actor_profiles.id", ondelete="RESTRICT"), nullable=False
     )
     idempotency_key: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
     review_id: Mapped[UUID] = mapped_column(
