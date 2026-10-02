@@ -177,8 +177,9 @@ Temp-table names must not influence constraints. No privileged bypass fixture.
 `ReviewPacketRepository.store(lease_id, membership)` locks the exact
 project-qualified REV lease, then its owning queue, before selecting/writing that
 lease's packet (the existing lease-then-queue order). New insertion requires
-active/leased/exact-pointer facts under those locks; replay remains possible
-after closure. It
+active/leased/exact-pointer facts and an unexpired lease against PostgreSQL
+`clock_timestamp()` after those locks; the INSERT guard independently enforces
+that deadline. Exact replay remains possible after expiry or closure. It
 allocates a UUIDv7 only for a new packet, inserts header and all guide rows, and
 flushes without committing. Deferred checks stay within the caller transaction.
 An identical retry returns the stored identity; any membership difference raises
@@ -188,7 +189,7 @@ project or contributor lock and cannot grant authority.
 
 `read(project_id, lease_id)` returns only normalized stored metadata as detached
 strict facts, ordered by source item order; qualify ownership before lookup.
-`ReviewPacketStored` contains `packet_id`, `review_lease_id`,
+`ReviewPacketStored` contains `packet_manifest_id` (the existing AUTH name), `review_lease_id`,
 `review_queue_entry_id`, `packet_manifest_generation`, `packet_manifest_digest`,
 `created_at`, and the canonical ART `membership` value.
 A missing or foreign scope returns no packet. Authorization is a future caller's
@@ -247,10 +248,17 @@ These tests bind the storage boundary; execution results and review freshness be
 - `test_packet_matches_canonical_owners_and_digest`: every header/nested owner
   value and Python/SQL digest parity, including changed ordered membership.
 - `test_packet_rejects_coherent_owner_substitutions`: independently valid foreign
-  project, task, Submission/version, run/result, activated setup/generation, ZIP.
+  project, task, Submission/version, run/result, activated setup/generation, ZIP;
+  final altered-membership digest, named rejection and result-owner removal probe.
 - `test_packet_rejects_null_source_fields`: each nonnullable source independently.
 - `test_packet_creation_time_is_database_owned`: supplied NULL/past/future times.
 - `test_packet_requires_active_exact_lease`: terminal and successor lease insertions.
+- `test_packet_rejects_expired_but_active_lease`: repository and SQL deadline
+  rejection from a transaction opened before expiry, with a deadline-removal probe.
+- `test_exact_packet_replay_survives_expiry_then_closure`: retained replay after
+  actual deadline passage and after persisted expiry closure.
+- `test_child_rejects_uncommitted_parent_that_rolls_back`: two simultaneous
+  sessions, invisible-parent FK rejection, parent rollback and no retained child.
 - `test_packet_rejects_coherent_sibling_under_another_lease`: a complete valid
   same-project sibling packet cannot use another lease; removing only the
   creation tuple comparison makes the rejection assertion fail.
@@ -282,3 +290,25 @@ Mutation probes target the relevant predicate after valid fixture setup: digest,
 lease status/pointer, committed-upload receipt, exact set, source identity and
 immutability. Each must reach the negative assertion and fail there when its
 guard is removed; harness mismatch/setup failure is not discriminating proof.
+
+### Review corrections within this boundary
+
+Creation rejects an expired-but-still-active lease even if expiry reconciliation
+has not closed it. The repository uses PostgreSQL time after locking and preserves
+identical stored replay before checking the deadline; the INSERT trigger checks
+the deadline independently. A real elapsed lease, not a forged timestamp or
+disabled lease guard, proves both rejections and retained replay. Removing only
+the deadline predicate must make the SQL rejection assertion fail.
+
+Direct-SQL substitution fixtures hash the final altered request, ZIP and guide
+member fields. Each negative identifies the intended creation, ownership, FK or
+membership failure. A valid foreign result identity with a correct substituted
+digest is rejected by its owner equality; removing only that equality must make
+the assertion fail while all other constraints remain enforced.
+
+An independent-session child INSERT races an uncommitted packet parent. The
+parent is visible to its writer and invisible to the child session, so PostgreSQL
+rejects the child at the named parent FK while the parent's transaction is still
+open. Rolling that parent back leaves neither row. This concurrency proof
+exercises actual parent visibility; the separate missing-parent validator test
+covers its explicit defensive branch.

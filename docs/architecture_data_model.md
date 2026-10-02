@@ -1847,7 +1847,9 @@ The header's semantic `packet_manifest_digest` covers the full ART membership;
 is database-owned. No artifact content hashes, sizes, provider locators, receipts,
 source bodies or AUTH capabilities are copied. Header, members and ingests reject
 mutation/deletion/truncation. Repository writes are caller-transaction operations;
-exact replay retains the stored identity. This storage is delivered; the resolver,
+creation checks the lease deadline against PostgreSQL time; exact replay retains
+the stored identity after expiry or closure. The detached identity is
+`packet_manifest_id`, matching AUTH. This storage is delivered; the resolver,
 claim authority and byte capability remain future work. Complete REV-04A Review
 storage is next before shared FinalAcceptance.
 

@@ -19,7 +19,7 @@ class ReviewPacketStored(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    packet_id: UUID
+    packet_manifest_id: UUID
     review_lease_id: UUID
     review_queue_entry_id: UUID
     packet_manifest_generation: StrictInt = Field(ge=1)

@@ -236,9 +236,13 @@ async def test_packet_shadow_tables_cannot_change_custody(tmp_path, clean_postgr
 async def test_packet_rejects_numeric_version_and_generation(tmp_path, clean_postgres_database):
     async with packet_source(tmp_path, clean_postgres_database) as h:
         await valid_control(h)
-        for field in ("submission_version", "packet_manifest_generation", "setup_generation"):
+        for field, expected_error in (
+            ("submission_version", "review packet requires exact active lease"),
+            ("packet_manifest_generation", "review packet requires exact active lease"),
+            ("setup_generation", "fk_review_packet_setup"),
+        ):
             async with h.factory() as session:
-                with pytest.raises(DBAPIError):
+                with pytest.raises(DBAPIError, match=expected_error):
                     await raw_insert(session, h, header={field: 999})
                     await session.commit()
                 await session.rollback()
@@ -256,38 +260,61 @@ async def test_packet_rejects_coherent_owner_substitutions(tmp_path, clean_postg
             await valid_control(h)
             await valid_control(foreign)
             foreign_header = foreign.membership.request.model_dump()
-            for field in (
-                "project_id",
-                "task_id",
-                "submission_id",
-                "checker_run_id",
-                "result_id",
-                "guide_id",
-                "source_snapshot_id",
-                "project_setup_run_id",
+            for field, expected_error in (
+                ("project_id", "review packet lease unavailable"),
+                ("task_id", "review packet requires exact active lease"),
+                ("submission_id", "review packet requires exact active lease"),
+                ("checker_run_id", "review packet requires exact active lease"),
+                ("result_id", "review packet canonical header mismatch"),
+                ("guide_id", "fk_review_packet_snapshot"),
+                ("source_snapshot_id", "fk_review_packet_snapshot"),
+                ("project_setup_run_id", "fk_review_packet_setup"),
             ):
                 assert getattr(h.membership.request, field) != foreign_header[field]
                 async with h.factory() as session:
-                    with pytest.raises(DBAPIError):
+                    with pytest.raises(DBAPIError, match=expected_error):
                         await raw_insert(session, h, header={field: foreign_header[field]})
                         await session.commit()
                     await session.rollback()
-            for header, members in (
-                ({"submission_binding_id": foreign.membership.submission.binding_id}, None),
-                ({}, foreign.membership.guide_documents),
+            for header, members, expected_error in (
+                (
+                    {"submission_binding_id": foreign.membership.submission.binding_id},
+                    None,
+                    "canonical header mismatch",
+                ),
+                ({}, foreign.membership.guide_documents, "canonical guide membership"),
                 (
                     {},
                     (
                         *h.membership.guide_documents,
                         foreign.membership.guide_documents[0].model_copy(update={"item_order": 10}),
                     ),
+                    "canonical guide membership",
                 ),
             ):
                 async with h.factory() as session:
-                    with pytest.raises(DBAPIError):
+                    with pytest.raises(DBAPIError, match=expected_error):
                         await raw_insert(session, h, header=header, members=members)
                         await session.commit()
                     await session.rollback()
+            # A correct substituted digest must not mask a missing result-owner equality.
+            async with h.factory() as session:
+                definition = await session.scalar(
+                    text(
+                        "SELECT pg_get_functiondef('public.validate_review_packet(uuid)'::regprocedure)"
+                    )
+                )
+                predicate = "AND r.result_id=packet.result_id"
+                assert definition.count(predicate) == 1
+                await session.execute(text(definition.replace(predicate, "")))
+                with pytest.raises(pytest.fail.Exception, match="DID NOT RAISE"):
+                    await assert_packet_rejected(
+                        session,
+                        h,
+                        header={"result_id": foreign.membership.request.result_id},
+                        message="review packet canonical header mismatch",
+                    )
+                await session.rollback()
             # Stored foreign rows, not nonexistent UUIDs, exercise concealed reads.
             from app.modules.reviews.packet.repository import ReviewPacketRepository
 
@@ -625,3 +652,130 @@ async def test_packet_rejects_another_documents_valid_receipt(tmp_path, clean_po
                 await session.scalar(text("SELECT count(*) FROM public.review_packet_manifests"))
                 == 0
             )
+
+
+@pytest.mark.asyncio
+async def test_packet_rejects_expired_but_active_lease(tmp_path, clean_postgres_database):
+    from datetime import timedelta
+    from app.modules.artifacts.api.review_packet import ReviewPacketMembershipUnavailable
+    from app.modules.reviews.packet.repository import ReviewPacketRepository
+    from tests.reviews.packet.support import wait_for_lease_expiry
+
+    async with packet_source(
+        tmp_path, clean_postgres_database, lease_duration=timedelta(seconds=5)
+    ) as h:
+        await valid_control(h)
+        async with h.factory() as session:
+            # Begin before expiry: transaction_timestamp() would incorrectly remain valid.
+            assert (
+                await session.scalar(
+                    text(
+                        "SELECT transaction_timestamp()<expires_at FROM public.review_leases WHERE id=:id"
+                    ),
+                    {"id": h.lease_id},
+                )
+                is True
+            )
+            await wait_for_lease_expiry(session, h.lease_id)
+            with pytest.raises(ReviewPacketMembershipUnavailable):
+                await ReviewPacketRepository(session).store(h.lease_id, h.membership)
+            await assert_packet_rejected(
+                session, h, message="review packet requires exact active lease"
+            )
+            await session.rollback()
+            definition = await session.scalar(
+                text(
+                    "SELECT pg_get_functiondef('public.guard_review_packet_creation()'::regprocedure)"
+                )
+            )
+            predicate = "OR lease_row.expires_at <= pg_catalog.clock_timestamp()"
+            assert definition.count(predicate) == 1
+            await session.execute(text(definition.replace(predicate, "")))
+            with pytest.raises(pytest.fail.Exception, match="DID NOT RAISE"):
+                await assert_packet_rejected(
+                    session, h, message="review packet requires exact active lease"
+                )
+            await session.rollback()
+            assert (
+                await session.scalar(text("SELECT count(*) FROM public.review_packet_manifests"))
+                == 0
+            )
+
+
+@pytest.mark.asyncio
+async def test_child_rejects_uncommitted_parent_that_rolls_back(tmp_path, clean_postgres_database):
+    import asyncio
+    from app.core.hashing import canonical_json_hash
+
+    async with packet_source(tmp_path, clean_postgres_database) as h:
+        await valid_control(h)
+        ready = asyncio.Future()
+        member = h.membership.guide_documents[0]
+
+        async def insert_child(packet_id):
+            async with h.factory() as session:
+                ready.set_result(await session.scalar(text("SELECT pg_backend_pid()")))
+                assert (
+                    await session.scalar(
+                        text("SELECT count(*) FROM public.review_packet_manifests WHERE id=:id"),
+                        {"id": packet_id},
+                    )
+                    == 0
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO public.review_packet_guide_items "
+                        "(packet_id,source_item_id,ingest_id,item_order,logical_role,media_type) "
+                        "VALUES (:packet_id,:source_item_id,:ingest_id,:item_order,:logical_role,:media_type)"
+                    ),
+                    {"packet_id": packet_id, **member.model_dump()},
+                )
+                await session.commit()
+
+        async with h.factory() as parent:
+            parent_pid = await parent.scalar(text("SELECT pg_backend_pid()"))
+            # Pause a parent write before inserting its members; the transaction rolls back.
+            packet_id = await raw_insert(
+                parent,
+                h,
+                members=[],
+                header={
+                    "packet_manifest_digest": canonical_json_hash(
+                        h.membership.model_dump(mode="json")
+                    )
+                },
+            )
+            task = asyncio.create_task(insert_child(packet_id))
+            try:
+                child_pid = await asyncio.wait_for(ready, 10)
+
+                assert child_pid != parent_pid
+                # PostgreSQL rejects the invisible parent while its write remains open.
+                with pytest.raises(
+                    DBAPIError,
+                    match="fk_review_packet_guide_items_packet_id_review_packet_manifests",
+                ):
+                    await asyncio.wait_for(task, 10)
+                assert (
+                    await parent.scalar(
+                        text("SELECT count(*) FROM public.review_packet_manifests WHERE id=:id"),
+                        {"id": packet_id},
+                    )
+                    == 1
+                )
+                await parent.rollback()
+            finally:
+                if not task.done():
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+        async with h.factory() as session:
+            assert (
+                await session.scalar(text("SELECT count(*) FROM public.review_packet_manifests"))
+                == 0
+            )
+            assert (
+                await session.scalar(text("SELECT count(*) FROM public.review_packet_guide_items"))
+                == 0
+            )
+        # The rolled-back attempt does not poison the exact lease's next valid packet.
+        await valid_control(h)

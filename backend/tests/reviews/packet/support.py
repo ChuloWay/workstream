@@ -1,10 +1,10 @@
 """Packets built from real activated guides, admitted ZIPs and executed checker runs."""
 
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 
 from app.core.identifiers import new_record_id
 from app.modules.artifacts.api.review_packet import (
@@ -32,13 +32,15 @@ from tests.test_review_lease_persistence import _human_actor
 
 
 @asynccontextmanager
-async def packet_source(tmp_path, database_url, **source_options):
+async def packet_source(
+    tmp_path, database_url, *, lease_duration=timedelta(days=1), **source_options
+):
     async with completed_source(tmp_path, database_url, **source_options) as h:
-        await prepare_packet(h)
+        await prepare_packet(h, lease_duration=lease_duration)
         yield h
 
 
-async def prepare_packet(h):
+async def prepare_packet(h, *, lease_duration=timedelta(days=1)):
     """Attach canonical packet membership and a committed lease to a completed source."""
     async with h.factory() as session:
         submission = await session.get(Submission, str(h.request.submission_id))
@@ -113,6 +115,7 @@ async def prepare_packet(h):
         )
         await session.commit()
         actor_id = await _human_actor(session, label="packet-reviewer")
+        database_now = await session.scalar(select(func.clock_timestamp()))
         lease = await repository.add_lease(
             ReviewLeaseInput(
                 id=new_record_id(),
@@ -124,7 +127,7 @@ async def prepare_packet(h):
                 reviewer_id=actor_id,
                 reviewer_contribution_policy_version_id=h.source["contribution_policy_version_id"],
                 attempt_generation=1,
-                expires_at=datetime.now(UTC) + timedelta(days=1),
+                expires_at=database_now + lease_duration,
             )
         )
         queue.queue_state = "leased"
@@ -142,7 +145,6 @@ async def raw_insert(session, h, *, header=None, members=None):
         review_lease_id=h.lease_id,
         review_queue_entry_id=h.queue_id,
         packet_manifest_generation=1,
-        packet_manifest_digest=canonical_json_hash(h.membership.model_dump(mode="json")),
         **h.membership.request.model_dump(),
         submission_binding_id=h.membership.submission.binding_id,
         submission_logical_role=h.membership.submission.logical_role,
@@ -151,14 +153,21 @@ async def raw_insert(session, h, *, header=None, members=None):
     import json
 
     actual_members = h.membership.guide_documents if members is None else members
-    body = h.membership.model_dump(mode="json")
+    values.update(header or {})
+    body = {
+        "request": {key: values[key] for key in ReviewPacketMembershipRequest.model_fields},
+        "submission": {
+            "binding_id": values["submission_binding_id"],
+            "logical_role": values["submission_logical_role"],
+            "media_type": values["submission_media_type"],
+        },
+    }
     body["guide_documents"] = [
         m.model_dump(mode="json") if hasattr(m, "model_dump") else m for m in actual_members
     ]
-    values["packet_manifest_digest"] = canonical_json_hash(
-        json.loads(json.dumps(body, default=str))
+    values["packet_manifest_digest"] = (header or {}).get(
+        "packet_manifest_digest", canonical_json_hash(json.loads(json.dumps(body, default=str)))
     )
-    values.update(header or {})
     await session.execute(
         text(
             "INSERT INTO public.review_packet_manifests ("
@@ -185,3 +194,25 @@ async def raw_insert(session, h, *, header=None, members=None):
             item,
         )
     return values["id"]
+
+
+async def wait_for_lease_expiry(session, lease_id):
+    """Wait for the actual database deadline without rewriting immutable lease facts."""
+    await session.execute(
+        text(
+            "SELECT pg_sleep(GREATEST(0, EXTRACT(EPOCH FROM "
+            "(expires_at-clock_timestamp())))::double precision + 0.01) "
+            "FROM public.review_leases WHERE id=:id"
+        ),
+        {"id": lease_id},
+    )
+    assert (
+        await session.scalar(
+            text(
+                "SELECT status='active' AND expires_at<=clock_timestamp() "
+                "FROM public.review_leases WHERE id=:id"
+            ),
+            {"id": lease_id},
+        )
+        is True
+    )

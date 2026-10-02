@@ -349,14 +349,16 @@ artifact bytes still require the current active lease for the exact packet.
 
 The [ART-07A1 membership contract](../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md)
 defines strict detached types and a type-only async port. REV-03B persists one
-immutable metadata packet per exact active ReviewLease: the original Submission
+immutable metadata packet per exact active, unexpired ReviewLease: the original Submission
 ZIP binding and all 1–100 ordered guide documents from the locked activated setup.
 Guide members name live `ingest_id` values, not the retained extraction binding
 table. Canonical PostgreSQL checks reconcile every owner and the complete declared
 set, including committed upload receipts. A semantic digest covers the complete
 membership; packet generation equals the lease attempt generation. Packet and
 ingest facts reject mutation and deletion; identical replay returns the same ID,
-including after lease closure or guide supersession. The caller owns the transaction.
+including after expiry, closure or guide supersession. Creation checks the deadline
+against PostgreSQL time independently of expiry reconciliation. The caller owns
+the transaction.
 
 This delivers storage, not claim, a membership resolver or byte access. Future
 canonical-owner reads must construct the complete membership, and byte access

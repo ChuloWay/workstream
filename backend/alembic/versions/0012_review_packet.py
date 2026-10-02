@@ -83,6 +83,7 @@ BEGIN
     SELECT * INTO queue_row FROM public.review_queue_entries
       WHERE id=lease_row.review_queue_entry_id AND project_id=NEW.project_id FOR UPDATE;
     IF NOT FOUND OR lease_row.status <> 'active' OR queue_row.queue_state <> 'leased'
+       OR lease_row.expires_at <= pg_catalog.clock_timestamp()
        OR queue_row.active_lease_id IS DISTINCT FROM lease_row.id
        OR (NEW.review_queue_entry_id,NEW.task_id,NEW.submission_id,NEW.submission_version,
            NEW.checker_run_id,NEW.packet_manifest_generation) IS DISTINCT FROM

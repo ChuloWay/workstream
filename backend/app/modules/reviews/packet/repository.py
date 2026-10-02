@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.hashing import canonical_json_hash
@@ -52,9 +52,11 @@ class ReviewPacketRepository:
             if existing.membership != membership:
                 raise ReviewPacketConflict()
             return existing
+        database_now = await self._session.scalar(select(func.clock_timestamp()))
         if (
             queue is None
             or lease.status != "active"
+            or lease.expires_at <= database_now
             or queue.queue_state != "leased"
             or queue.active_lease_id != lease.id
         ):
@@ -89,7 +91,7 @@ class ReviewPacketRepository:
         )
         await self._session.flush()
         return ReviewPacketStored(
-            packet_id=packet.id,
+            packet_manifest_id=packet.id,
             review_lease_id=lease_id,
             review_queue_entry_id=queue.id,
             packet_manifest_generation=packet.packet_manifest_generation,
@@ -120,7 +122,7 @@ class ReviewPacketRepository:
             )
         ).all()
         return ReviewPacketStored(
-            packet_id=packet.id,
+            packet_manifest_id=packet.id,
             review_lease_id=packet.review_lease_id,
             review_queue_entry_id=packet.review_queue_entry_id,
             packet_manifest_generation=packet.packet_manifest_generation,
