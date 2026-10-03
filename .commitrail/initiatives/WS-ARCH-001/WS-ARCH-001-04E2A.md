@@ -41,7 +41,9 @@ value preparation is not an issued capability or persisted allowed decision.
 - Existing TASK public request/source contracts if a concrete owner seam is
   missing; no TASK source writer or routing handler.
 - `backend/tests/authorization/post_submit_routing/{test_contracts,test_prepared,support}.py`;
-  existing `tests/authorization/test_acceptance_source_contracts.py` and
+  existing `tests/test_authorization.py` and `tests/authorization/runtime_support.py`
+  service-matrix fixtures,
+  `tests/authorization/test_acceptance_source_contracts.py` and
   TASK `tests/tasks/post_submit_routing/{support,contract_fixtures}.py` only for reuse.
 - Exact `backend/scripts/{behavior_ownership,test_lane_catalogue}.py`,
   `.ci/behavior-ownership/partition.v1.json`, `backend/tests/test_ci_lane_catalogue.py`
@@ -252,6 +254,12 @@ no skips/deselections. Positive live issuer, persisted receipt and outcome proof
 belong to the activation chunk and must not be claimed here.
 
 ## Reconciliation
+
+- Retained service-matrix tests now supply a valid routing request, project scope
+  and matching operation/request/correlation IDs before asserting planned-action
+  or wrong-service denial. Empty input would stop at shape validation and fail to
+  prove either authorization boundary. The exhaustive action rows and zero-handle,
+  zero-lookup and zero-evidence assertions remain intact.
 
 - Current-source reconciliation: merged #467 supplies exact TASK reservation;
   #465 supplies inert AUTH source contracts. No code change is authorized by an
