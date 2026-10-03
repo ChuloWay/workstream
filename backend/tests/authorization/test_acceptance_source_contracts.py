@@ -18,8 +18,8 @@ from app.modules.tasks.api.post_submit_routing import (
     TaskPostSubmitManifestFacts,
     task_post_submit_source_digest,
 )
-from tests.test_review_authorization_contracts import _decision_values
-from tests.tasks.post_submit_routing.test_contracts import _source_values, SHA_A, SHA_B
+from tests.authorization.review_contract_fixtures import _decision_values
+from tests.tasks.post_submit_routing.contract_fixtures import _source_values, SHA_A, SHA_B
 
 
 def _source(kind):

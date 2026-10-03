@@ -13,8 +13,10 @@ Inspection found that review.decision cannot execute and does not bind the
 allocated Review/request identities; task.post_submit.route is not registered.
 Mandatory receipt DDL now would require fabricated allows for positive tests or
 make valid inserts unreachable. Define the source contracts first. This does not
-satisfy persisted receipt custody: genuine source authorization and same-table
-hardening remain prerequisites to CON-07/shared acceptance.
+satisfy persisted receipt custody: hidden source preparation, AUTH preparation/receipt staging remain
+prerequisites to CON-07/shared acceptance. Mandatory persisted custody follows
+with exact consequence activation before production consumption. A durable allow is first proven with
+its complete governed consequence, never committed as an early prerequisite.
 
 The automated false-policy branch remains the selected first runtime delivery.
 True-policy routing retains its independent prerequisites. Submitter lease/skip,
@@ -49,8 +51,9 @@ source commitment. They are untrusted values until a future owner verifies the
 actual immutable AUTH event and source. Construction, hashing and a receipt-shaped
 value grant no authority. Routing claim/currentness/effect evaluation remains ARCH-04E1B/04E2 work.
 The source contract binds distinct route_operation_id and route_request_digest;
-these are not the checker evaluation request. ARCH-04E1B must persist them before
-genuine routing receipt custody. This is not an executable routing context.
+these are not the checker evaluation request. ARCH-04E1B-A must stage them before ARCH-04E2-A prepares exact authority
+and receipt custody. Durable receipt publication remains atomic with the final
+consequence. This is not an executable routing context.
 
 Register task.post_submit.route as a planned action/permission with ARCH-04E2
 ownership and workstream.task.post_submit_router as its sole fixed identity.
@@ -121,12 +124,15 @@ and never exceeds the retained storage limit of 100.
 - Existing Review authorization, TASK routing contract, catalogue/service matrix
   and migration/schema tests; a focused AUTH source-contract test module if the
   existing tests cannot express the cross-contract proof cohesively.
+- Shared test inputs in `backend/tests/tasks/post_submit_routing/contract_fixtures.py`
+  and `backend/tests/authorization/review_contract_fixtures.py`; tests import these
+  helpers directly, avoiding test-module import side effects during lane collection.
 - `mcp_server/contracts/authorization_context_get.json`: refresh only the selected
   OpenAPI action enum, source provenance and canonical digest; no MCP runtime changes.
 - Alembic/schema-head, CI lane and behavior-ownership inventories only as required
   by added paths or canonical identifiers; do not weaken boundaries or gates.
 - This record, current AUTH/REV/CON/POL/ARCH overview/plan/chunk-map navigation,
-  Commitrail index, current ARCH-04E contract, roadmap and canonical authorization/review specifications;
+  Commitrail index, current ARCH-04E contract, roadmap and canonical authorization/review/contribution specifications;
   README and ignored roadmap spreadsheet exports if affected/present.
 
 ### Prohibited changes
@@ -165,8 +171,10 @@ retained-data deletion, unrelated cleanup, test skipping or gate relaxation.
    receipt/source substitutions, module boundaries, ownership/lane completeness,
    lint, markdown links and stale wording checks. Full hosted CI remains blocking.
    Counts and coverage are diagnostics, not evidence of a particular guard.
-6. Current navigation says source contracts delivered, genuine originating AUTH
-   receipts and same-table source custody still required before CON-07. Preserve
+6. Current navigation says source contracts delivered, hidden originating issuer/receipt
+   staging still required before CON-07; mandatory persisted custody accompanies
+   consequence activation before production consumption. The first
+   durable allow commits only with the complete governed consequence. Preserve
    both policy branches; do not rewrite completed historical change records.
 
 ### Named checks
@@ -181,7 +189,11 @@ boundary/inventory tests. Run ruff check on changed Python; scripts.module_bound
 validate --protected-base 04bf8b76; scripts.behavior_ownership validate;
 scripts/check_commitrail_records.py --base-ref 04bf8b76;
 scripts/check_markdown_links.py and the existing stale wording/authorization/
-artifact/review scans. Hosted CI must complete all collected nodes.
+artifact/review scans. Hosted CI must complete all collected nodes. Shared fixtures must not import test
+modules: prove canonical full-suite collection and isolated collection produce
+identical node sets for the affected modules under one head seed. This protects
+the lane runner from import-time parametrization identity changes without
+changing its selectors or gates.
 
 ## Risk and review routing
 
@@ -201,3 +213,10 @@ PostgreSQL proves the migration preserves source rows and rejects the planned ro
 through its unchanged closed audit registry. The receipt values remain untrusted;
 there is no runtime source custody claim. Exact command and reviewer evidence
 belong to the implementation PR.
+
+External review exposed an ambiguous issuer dependency. The current ARCH-04E
+contract now splits existing source preparation/issuer work from later handlers
+and activation; no durable receipt is required to exist before its atomic
+consequence. The index keeps durable boundaries, while the roadmap carries the
+implementation sequence. Test helpers moved out of test modules so full and
+isolated collection retain identical node identities without changing CI gates.

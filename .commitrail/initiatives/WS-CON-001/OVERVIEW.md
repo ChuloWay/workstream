@@ -1,11 +1,13 @@
 # WS-CON-001 — Contribution and conditional compensation
 
 [AUTH-19A](../WS-AUTH-001/WS-AUTH-001-19A.md) delivers inert exact source/receipt contracts and the
-planned router identity. Next, persist the distinct routing request and implement
-genuine originating authorization with same-table receipt custody before CON-07.
-Contract construction grants no authority; live routing and acceptance remain
-unavailable. Source preparation must precede the hidden handler that consumes
-shared acceptance; true-policy admission keeps its independent prerequisites.
+planned router identity. Next are TASK source/request staging (ARCH-04E1B-A)
+and the hidden AUTH preparation/receipt-staging contract (ARCH-04E2-A), before
+CON-07/shared acceptance. Mandatory durable custody and its genuine positive
+proof belong to consequence activation (04E2-B), before production consumption. Neither phase may
+commit a standalone allow. The first durable receipt must commit with its full
+governed consequence. Hidden handlers and activation follow as 04E1B-B/04E2-B,
+then live 04E3; true admission does not depend on CON/shared acceptance.
 
 Current pre-review work follows the [cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
 and the [capability ledger](../../../docs/roadmap_status.md).
@@ -48,7 +50,7 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
   storage, without AUTH receipt custody or runtime consumers.
   [CON-03C](WS-CON-001-03C.md) adds exact contribution sources and fixed awards; no recognition or fulfillment operation is live.
-- Next usable boundary: for the selected automated-acceptance delivery sequence, originating AUTH execution and same-table source receipt custody, then CON-07 using the delivered REV-12A1 disabled fence,
+- Next usable boundary: for the selected automated-acceptance delivery sequence, ARCH-04E1B-A source staging and ARCH-04E2-A AUTH preparation, then CON-07 using the delivered REV-12A1 disabled fence,
   plus mandatory same-table acceptance authority hardening before one shared
   acceptance operation serves both human and automatic triggers.
 - Governing sources: `docs/spec_contribution_compensation.md`,
@@ -62,7 +64,7 @@ generation-zero controller storage and transaction locking. Acceptance-source AU
 CON participation and authorized activation remain separate required work.
 
 This is delivery priority, not a prerequisite of true human admission. Both
-routing branches require hidden 04E1B → exact AUTH 04E2 → live 04E3; true routing
+routing branches require source staging 04E1B-A → AUTH preparation 04E2-A → hidden handlers 04E1B-B → activation 04E2-B → live 04E3; true routing
 can proceed after its own prerequisites without CON-07/shared acceptance or
 scoped lifecycle activation. False routing adds those requirements. Human final
 acceptance later uses the same authorized shared acceptance/CON operation.
