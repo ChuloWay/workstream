@@ -169,3 +169,94 @@ async def test_replay_rejects_older_still_submitted_version(tmp_path, isolated_d
                 await stage(session, h)
             assert await session.scalar(select(func.count()).select_from(TaskRoutingRequest)) == 1
             assert (await session.get(TaskRoutingRequest, original.route_operation_id)).routing_manifest_id == original.routing_manifest_id
+
+
+def untrusted_completion():
+    """Valid value shape only; empty database ensures root denial precedes owner reads."""
+    from app.core.identifiers import new_record_id
+    from app.modules.checkers.api.execution import EvaluationCompletion
+    from app.modules.checkers.api.post_submit import PostSubmitCurrentResultReference
+    return new_record_id(), EvaluationCompletion(
+        project_id=new_record_id(), task_id=new_record_id(), submission_id=new_record_id(),
+        reference=PostSubmitCurrentResultReference(
+            request_id=new_record_id(), request_digest="sha256:" + "a" * 64,
+            attempt_id=new_record_id(), evaluation_generation=1,
+            result_id=new_record_id(), result_digest="sha256:" + "b" * 64,
+        ), routing_recommendation="allow_review", output_binding_ids=(),
+        execute_evidence_id=new_record_id(), finalize_evidence_id=new_record_id(),
+    )
+
+
+@pytest.mark.parametrize("kind", [
+    "missing", "session_nested", "raw_session", "raw_connection", "raw_driver",
+    "external_connection_nested", "external_create_savepoint",
+])
+async def test_request_requires_database_root_transaction(isolated_database_env, kind):
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    engine = create_async_engine(isolated_database_env)
+    event, completion = untrusted_completion()
+    async def rejected(session):
+        with pytest.raises(TaskRoutingRequestUnavailable, match="routing_request_caller_transaction_required"):
+            await TaskRoutingRequests(session, EvaluationCoordinator(session)).stage(event, completion)
+    try:
+        if kind.startswith("external_"):
+            async with engine.connect() as connection:
+                root = await connection.begin()
+                if kind == "external_connection_nested":
+                    await connection.begin_nested()
+                mode = "create_savepoint" if kind == "external_create_savepoint" else "rollback_only"
+                async with AsyncSession(bind=connection, join_transaction_mode=mode) as session:
+                    await session.begin()
+                    assert not session.in_nested_transaction()
+                    await rejected(session)
+                await root.rollback()
+        else:
+            async with AsyncSession(engine) as session:
+                if kind != "missing":
+                    await session.begin()
+                if kind == "session_nested":
+                    await session.begin_nested()
+                elif kind.startswith("raw_"):
+                    await session.execute(text("SELECT 1"))
+                    if kind == "raw_session":
+                        await session.execute(text("SAVEPOINT hidden_request_scope"))
+                    elif kind == "raw_connection":
+                        await (await session.connection()).execute(text("SAVEPOINT hidden_request_scope"))
+                    else:
+                        raw = await (await session.connection()).get_raw_connection()
+                        await raw.driver_connection.execute("SAVEPOINT hidden_request_scope")
+                    assert not session.in_nested_transaction()
+                    assert not (await session.connection()).in_nested_transaction()
+                await rejected(session)
+                await session.rollback()
+    finally:
+        await engine.dispose()
+
+
+async def test_external_root_and_prior_queries_preserve_reservation_locks(tmp_path, isolated_database_env):
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.exc import DBAPIError
+    async with completed_source(tmp_path, isolated_database_env) as h:
+        async with h.engine.connect() as connection:
+            root = await connection.begin()
+            await connection.execute(text("SELECT 1"))
+            async with AsyncSession(bind=connection, join_transaction_mode="rollback_only") as session:
+                await session.begin()
+                facts = await stage(session, h)
+                await session.execute(text("SAVEPOINT after_request"))
+                await session.execute(text("ROLLBACK TO SAVEPOINT after_request"))
+                await session.execute(text("RELEASE SAVEPOINT after_request"))
+                for table, key, value in (
+                    ("workstream_tasks", "id", h.request.task_id),
+                    ("submissions", "id", h.request.submission_id),
+                    ("checker_submission_fences", "submission_id", h.request.submission_id),
+                    ("checker_runs", "id", h.result.attempt_id),
+                ):
+                    async with h.factory() as other:
+                        with pytest.raises(DBAPIError, match="could not obtain lock"):
+                            await other.execute(text(f"SELECT 1 FROM public.{table} WHERE {key}=:id FOR UPDATE NOWAIT"), {"id": value})
+                assert await session.get(TaskRoutingRequest, facts.route_operation_id) is not None
+                assert root.is_active
+                await root.rollback()
+        async with h.factory() as session:
+            assert await session.get(TaskRoutingRequest, facts.route_operation_id) is None

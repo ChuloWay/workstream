@@ -2,7 +2,8 @@
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.identifiers import new_record_id
@@ -15,6 +16,9 @@ from app.modules.tasks.api.post_submit_routing import (
 from app.modules.tasks.models import Submission
 from app.modules.tasks.post_submit_routing.models import TaskRoutingRequest
 from app.modules.tasks.repository import TaskRepository
+
+
+_OWNER_STRING_IDS = frozenset({"project_id", "task_id", "submission_id", "checker_run_id"})
 
 
 class TaskRoutingRequestUnavailable(RuntimeError):
@@ -32,8 +36,20 @@ class TaskRoutingRequests:
         self, event_id: UUID, completion: EvaluationCompletion
     ) -> TaskRoutingRequestFacts:
         """Revalidate latest Submission and current completion before reservation or replay."""
-        if not self._session.in_transaction() or self._session.in_nested_transaction():
+        transaction = self._session.get_transaction()
+        if transaction is None or not transaction.is_active or self._session.in_nested_transaction():
             raise TaskRoutingRequestUnavailable("routing_request_caller_transaction_required")
+        connection = await self._session.connection()
+        if connection.in_nested_transaction():
+            raise TaskRoutingRequestUnavailable("routing_request_caller_transaction_required")
+        # PostgreSQL observes native savepoints which SQLAlchemy cannot see.
+        # Discard the snapshot token; caller transaction completion owns cleanup.
+        try:
+            await self._session.execute(text("SELECT pg_catalog.pg_export_snapshot()"))
+        except DBAPIError as exc:
+            if getattr(exc.orig, "sqlstate", None) != "25001":
+                raise
+            raise TaskRoutingRequestUnavailable("routing_request_caller_transaction_required") from exc
         completion = EvaluationCompletion.model_validate(completion)
         if not isinstance(event_id, UUID) or completion.routing_recommendation != "allow_review":
             raise TaskRoutingRequestUnavailable("routing_request_unavailable")
@@ -69,19 +85,22 @@ class TaskRoutingRequests:
         )
         digest = task_routing_request_digest(selection)
         prior = await self._session.scalar(select(TaskRoutingRequest).where(
-            TaskRoutingRequest.submission_id == selection.submission_id,
-            TaskRoutingRequest.checker_run_id == selection.checker_run_id,
+            TaskRoutingRequest.submission_id == str(selection.submission_id),
+            TaskRoutingRequest.checker_run_id == str(selection.checker_run_id),
             TaskRoutingRequest.result_digest == selection.result_digest,
         ).execution_options(populate_existing=True))
         if prior is None:
             prior = TaskRoutingRequest(
-                **selection.model_dump(), route_operation_id=new_record_id(),
+                **{key: str(value) if key in _OWNER_STRING_IDS else value
+                   for key, value in selection.model_dump().items()},
+                route_operation_id=new_record_id(),
                 routing_manifest_id=new_record_id(), route_request_digest=digest,
             )
             self._session.add(prior)
             await self._session.flush()
         facts = TaskRoutingRequestFacts(**{
-            key: getattr(prior, key) for key in TaskRoutingRequestFacts.model_fields
+            key: UUID(getattr(prior, key)) if key in _OWNER_STRING_IDS else getattr(prior, key)
+            for key in TaskRoutingRequestFacts.model_fields
         })
         if (
             facts.route_request_digest != digest

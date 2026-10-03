@@ -100,7 +100,7 @@ creating human admission, acceptance or contribution effects.
    production for its own evaluation-request event and the TASK consumer of
    04C's already-defined final-result notification, exact public facts, currentness protocol
    and transaction proof described below. No live worker or action activation.
-   Initial request reservation is a bounded atomic consequence of the existing
+   Initial checker evaluation-request reservation is a bounded atomic consequence of the existing
    exact `submission.create` command, not an authority token sent to the worker.
 3. **ARCH-04E2-B — AUTH routing activation.** After 04E1B-B hidden proof, AUTH
    also consumes scoped XINT-003-08B lifecycle-control activation for the false

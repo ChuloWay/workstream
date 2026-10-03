@@ -146,10 +146,13 @@ class TaskRoutingRequest(Base):
     __table_args__ = (
         CheckConstraint(
             "(get_byte(uuid_send(route_operation_id), 6) >> 4) = 7 and "
-            "(get_byte(uuid_send(route_operation_id), 8) & 192) = 128 and "
+            "(get_byte(uuid_send(route_operation_id), 8) & 192) = 128",
+            name="route_operation_id_uuid7",
+        ),
+        CheckConstraint(
             "(get_byte(uuid_send(routing_manifest_id), 6) >> 4) = 7 and "
             "(get_byte(uuid_send(routing_manifest_id), 8) & 192) = 128",
-            name="request_ids_uuid7",
+            name="routing_manifest_id_uuid7",
         ),
         CheckConstraint(
             "route_operation_id <> routing_manifest_id and "
@@ -186,11 +189,11 @@ class TaskRoutingRequest(Base):
 
     route_operation_id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
     routing_manifest_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
-    project_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
-    task_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
-    submission_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
+    project_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    task_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    submission_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     submission_version: Mapped[int] = mapped_column(Integer, nullable=False)
-    checker_run_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
+    checker_run_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     evaluation_request_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
     evaluation_request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
     evaluation_generation: Mapped[int] = mapped_column(Integer, nullable=False)

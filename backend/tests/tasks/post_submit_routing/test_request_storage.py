@@ -142,7 +142,7 @@ async def test_request_ids_are_distinct_uuid7(tmp_path, isolated_database_env):
                 await reject(h, values | {target: values[source]}, "distinct_request_ids")
         await reject(h, values | {"routing_manifest_id": values["route_operation_id"]}, "distinct_request_ids")
         from uuid import UUID
-        await reject(h, values | {"route_operation_id": UUID("00000000-0000-4000-8000-000000000001")}, "request_ids_uuid7")
+        await reject(h, values | {"route_operation_id": UUID("00000000-0000-4000-8000-000000000001")}, "route_operation_id_uuid7")
         async with h.factory() as session, session.begin():
             await insert_request(session, values)
         await reject(h, values | {"routing_manifest_id": new_record_id()}, "pk_task_post_submit_routing_requests")

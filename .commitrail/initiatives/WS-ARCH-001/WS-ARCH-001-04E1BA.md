@@ -56,9 +56,11 @@ its database timestamp and eventual authorization receipt belong to publication.
 ## Allowed files
 
 - This record; current ARCH/AUTH/POL initiative overviews, plans and chunk maps;
-  the ARCH-04E coordination contract; `.commitrail/INDEX.md`.
+  the ARCH-04E coordination contract; `.commitrail/INDEX.md`; current CON/REV
+  overviews for their linked next-boundary descriptions.
 - `README.md`, `docs/roadmap_status.md`, `docs/spec_chunk_4_task_queue_assignment.md`,
-  `docs/architecture_data_model.md`, `docs/engineering/authorization_activation_custody.md`.
+  `docs/architecture_data_model.md`, `docs/engineering/authorization_activation_custody.md`,
+  `docs/spec_review_lifecycle.md`.
 - `backend/app/modules/tasks/api/post_submit_routing.py` and `api/__init__.py`;
   `backend/app/modules/tasks/post_submit_routing/{models,requests}.py`.
 - `backend/app/modules/checkers/api/execution.py`;
@@ -224,3 +226,19 @@ Current roadmap, TASK/data-model specs and AUTH/ARCH/POL navigation advance to
 hidden AUTH preparation. No local spreadsheet exports are present. Public intake,
 source publication, complete authority, routing, acceptance and remediation
 remain separate prerequisites to the first complete contributor journey.
+
+## Review repairs
+
+Implementation review required four bounded corrections: preserve string-backed
+UUID representations for the four existing relational owners; name each generated
+UUIDv7 guard canonically; enforce root transaction custody against SQLAlchemy,
+external-connection and raw PostgreSQL savepoints; reconcile linked CON/REV
+navigation and the canonical review specification. The request stager uses the
+same PostgreSQL root-only snapshot-export probe as the existing REV fence, without
+adding a framework or crossing its private boundary. It discards the token,
+translates only SQLSTATE 25001 and preserves other database failures. Real
+PostgreSQL tests cover session/connection/native savepoints and external-root
+success after prior queries, including all four retained locks and caller rollback.
+The exact tests `test_request_requires_database_root_transaction` and
+`test_external_root_and_prior_queries_preserve_reservation_locks` replace no
+existing proof. CI retains the same three added modules and existing lane limits.
