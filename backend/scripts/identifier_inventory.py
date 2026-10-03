@@ -530,6 +530,11 @@ def _key(table: dict[str, Any], orm_present: bool) -> dict[str, str]:
         )
     if not orm_present:
         return {"classification": "unresolved", "reason": "schema table has no ORM owner"}
+    if table["name"] == "task_post_submit_routing_requests" and table["primary_key"] == ["route_operation_id"]:
+        return {
+            "classification": "generated_surrogate",
+            "reason": "TASK-owned generated routing operation record",
+        }
     if len(table["primary_key"]) == 1 and table["primary_key"][0] in {
         "id",
         "event_id",

@@ -6,6 +6,7 @@ from pathlib import Path
 from scripts.identifier_inventory import (
     FORMAT,
     _string_uuid_references,
+    _key,
     _sql_created_table,
     build_inventory,
     parse_orm_models,
@@ -310,3 +311,11 @@ def dataclass_field(field):
     assert [site["site_key"] for site in first] == [
         site["site_key"] for site in shifted
     ]
+
+
+def test_routing_operation_key_classification_is_owner_and_shape_scoped() -> None:
+    table = {"name": "task_post_submit_routing_requests", "primary_key": ["route_operation_id"]}
+    assert _key(table, True)["classification"] == "generated_surrogate"
+    assert _key(table, False)["classification"] == "unresolved"
+    assert _key(table | {"name": "unowned_requests"}, True)["classification"] == "unresolved"
+    assert _key(table | {"primary_key": ["unexpected_id"]}, True)["classification"] == "unresolved"

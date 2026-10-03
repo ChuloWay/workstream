@@ -69,9 +69,9 @@ its database timestamp and eventual authorization receipt belong to publication.
   `backend/alembic/env.py`; `backend/app/db/models.py` if registration requires it.
 - `backend/tests/tasks/post_submit_routing/{support,test_contracts,test_requests,test_request_storage,test_request_contracts,test_migration}.py`;
   `backend/tests/checkers/execution/test_coordination.py` if existing proof belongs there.
-- `backend/tests/{conftest,test_alembic,test_coverage_contract,test_behavior_ownership,test_ci_lane_catalogue}.py`
+- `backend/tests/{conftest,test_alembic,test_coverage_contract,test_behavior_ownership,test_ci_lane_catalogue,test_identifier_inventory}.py`
   and existing migration tests only for exact current-head inventory.
-- `backend/scripts/{behavior_ownership,test_lane_catalogue}.py`;
+- `backend/scripts/{behavior_ownership,test_lane_catalogue,identifier_inventory}.py`;
   `.ci/behavior-ownership/partition.v1.json`; test-structure canonical inventory and
   an exact assertion map only if an affected frozen test requires extraction.
 - Existing ignored local roadmap XLSX/CSV exports only if present.
