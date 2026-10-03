@@ -134,7 +134,8 @@ async def test_sql_advance_first_rejects_old_completion(tmp_path, isolated_datab
             assert await session.scalar(select(func.count()).select_from(TaskRoutingRequest)) == 0
 
 
-async def test_request_ids_are_distinct_uuid7(tmp_path, isolated_database_env):
+@pytest.mark.parametrize("generated_id", ["route_operation_id", "routing_manifest_id"])
+async def test_request_ids_are_distinct_uuid7(tmp_path, isolated_database_env, generated_id):
     async with completed_source(tmp_path, isolated_database_env) as h:
         values = request_values(h)
         for target in ("route_operation_id", "routing_manifest_id"):
@@ -142,7 +143,7 @@ async def test_request_ids_are_distinct_uuid7(tmp_path, isolated_database_env):
                 await reject(h, values | {target: values[source]}, "distinct_request_ids")
         await reject(h, values | {"routing_manifest_id": values["route_operation_id"]}, "distinct_request_ids")
         from uuid import UUID
-        await reject(h, values | {"route_operation_id": UUID("00000000-0000-4000-8000-000000000001")}, "route_operation_id_uuid7")
+        await reject(h, values | {generated_id: UUID("00000000-0000-4000-8000-000000000001")}, f"{generated_id}_uuid7")
         async with h.factory() as session, session.begin():
             await insert_request(session, values)
         await reject(h, values | {"routing_manifest_id": new_record_id()}, "pk_task_post_submit_routing_requests")
