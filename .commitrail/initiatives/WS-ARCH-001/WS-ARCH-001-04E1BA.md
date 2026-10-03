@@ -135,7 +135,7 @@ path, retained-data deletion or unrelated cleanup. No CI gate weakening.
 5. Currentness locks remain held through preparation; an independent session
    cannot advance the same fence before caller completion. No claimed authority
    or transaction-fence guarantee beyond the actual tested preparation boundary.
-6. Current navigation names AUTH-04E2-A preparation next, without describing
+6. Current navigation names ARCH-04E2-A preparation next, without describing
    source projection, actual receipt validation or live routing as delivered.
 
 ## Evidence
