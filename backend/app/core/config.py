@@ -46,7 +46,7 @@ _EMPTY_ARTIFACT_S3_SECRETS: tuple[SecretStr | None, SecretStr | None, SecretStr 
 )
 _MISSING_SECRET = object()
 _INVALID_OBSERVABILITY_ENDPOINT = object()
-_SECURE_OBSERVABILITY_ENVIRONMENTS = frozenset({"staging", "preview", "prod", "production"})
+PRODUCTION_LIKE_ENVIRONMENTS = frozenset({"staging", "preview", "prod", "production"})
 _ALTERNATE_VALIDATION_RESTORES_SECRETS: ContextVar[bool] = ContextVar(
     "alternate_validation_restores_secrets",
     default=False,
@@ -305,7 +305,7 @@ class Settings(BaseSettings):
     def _validate_observability_endpoint_security(self) -> None:
         """Require transport security for every production-like collector."""
         if (
-            self.environment in _SECURE_OBSERVABILITY_ENVIRONMENTS
+            self.environment in PRODUCTION_LIKE_ENVIRONMENTS
             and self.observability_otlp_endpoint is not None
             and not self.observability_otlp_endpoint.startswith("https://")
         ):

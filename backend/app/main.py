@@ -27,6 +27,7 @@ from app.core.api_controls import (
 )
 from app.core.auth import build_auth_verifier, cache_auth_verifier, prepare_auth_verifier
 from app.core.config import (
+    PRODUCTION_LIKE_ENVIRONMENTS,
     Settings,
     decode_pagination_cursor_hmac_secret,
     get_settings,
@@ -38,7 +39,6 @@ from app.modules.checkers.catalogue import (
     parse_disabled_pre_submission_checker_ids,
 )
 
-PRODUCTION_LIKE_ENVIRONMENTS = {"staging", "preview", "prod", "production"}
 MAX_VALIDATION_ERRORS = 20
 MAX_VALIDATION_LOCATION_PARTS = 8
 MAX_VALIDATION_CODE_LENGTH = 64

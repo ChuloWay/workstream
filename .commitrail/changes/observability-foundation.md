@@ -476,6 +476,10 @@ implementation. The foundation implements the amended design above.
 
 ## Reconciliation
 
+- `REUSE-OBS-002`: production authentication startup and collector TLS validation
+  use one immutable environment vocabulary owned by `app.core.config`; `main`
+  imports it rather than maintaining a second policy list.
+
 - Current-source reconciliation: Based on main commit
   `176952e6624244bdc405bac973ce6c4abddb0dae`. Shared README and roadmap wording
   describe this standalone foundation; concurrent product changes must be
