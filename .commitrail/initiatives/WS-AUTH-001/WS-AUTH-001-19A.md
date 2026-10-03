@@ -51,8 +51,8 @@ source commitment. They are untrusted values until a future owner verifies the
 actual immutable AUTH event and source. Construction, hashing and a receipt-shaped
 value grant no authority. Routing claim/currentness/effect evaluation remains ARCH-04E1B/04E2 work.
 The source contract binds distinct route_operation_id and route_request_digest;
-these are not the checker evaluation request. ARCH-04E1B-A must stage them before ARCH-04E2-A prepares exact authority
-and receipt custody. Durable receipt publication remains atomic with the final
+these are not the checker evaluation request. ARCH-04E1B-A must stage them before ARCH-04E2-A prepares the exact resource
+and receipt staging. Durable receipt publication remains atomic with the final
 consequence. This is not an executable routing context.
 
 Register task.post_submit.route as a planned action/permission with ARCH-04E2
@@ -132,7 +132,9 @@ and never exceeds the retained storage limit of 100.
 - Alembic/schema-head, CI lane and behavior-ownership inventories only as required
   by added paths or canonical identifiers; do not weaken boundaries or gates.
 - This record, current AUTH/REV/CON/POL/ARCH overview/plan/chunk-map navigation,
-  Commitrail index, current ARCH-04E contract, roadmap and canonical authorization/review/contribution specifications;
+  Commitrail index, current ARCH-04E contract, roadmap and canonical authorization/review/contribution specifications and the linked
+  `docs/engineering/authorization_activation_custody.md` and
+  `docs/engineering/review_authorization_action_custody.md` current custody guides;
   README and ignored roadmap spreadsheet exports if affected/present.
 
 ### Prohibited changes

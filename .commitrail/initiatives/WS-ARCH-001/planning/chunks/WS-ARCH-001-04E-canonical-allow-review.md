@@ -65,7 +65,7 @@ current TASK children do not implement REV/CON internals: consume the
 are delivered after 04C, without REV dependency, runtime participant or handlers.
 REV-04B now references that schema after its source prerequisites:
 [ART-07A1 packet types](../../../WS-ART-001/WS-ART-001-07A1.md) are delivered;
-REV-03B normalized packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; mandatory acceptance-source AUTH custody precedes atomic participation.
+REV-03B normalized packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; hidden AUTH preparation precedes CON-07; mandatory persisted custody accompanies the first authorized atomic consequence at 04E2-B.
 Exact AUTH preparation/receipt staging, then CON-07, using the delivered
 REV-12A1 disabled controller/fence, are hard dependencies of false handler composition, not of this
 early schema or true admission. Both branches use the preparation/issuer phases

@@ -44,5 +44,3 @@ def _decision_values() -> dict[str, object]:
         "reviewer_contribution_policy_version_id": new_record_id(),
         "artifact_hash": SHA,
     }
-
-
