@@ -129,6 +129,10 @@ and never exceeds the retained storage limit of 100.
   helpers directly, avoiding test-module import side effects during lane collection.
 - `mcp_server/contracts/authorization_context_get.json`: refresh only the selected
   OpenAPI action enum, source provenance and canonical digest; no MCP runtime changes.
+- Move the fixed-service matrix invariant intact from `tests/test_authorization.py`
+  to `tests/authorization/test_catalogue.py` when correcting its planned-action
+  count. Retain all assertions; update only observed structural-debt inventory
+  and `.ci/auth-boundaries/assertion-maps/WS-AUTH-001-19A.json` provenance.
 - Alembic/schema-head, CI lane and behavior-ownership inventories only as required
   by added paths or canonical identifiers; do not weaken boundaries or gates.
 - This record, current AUTH/REV/CON/POL/ARCH overview/plan/chunk-map navigation,
