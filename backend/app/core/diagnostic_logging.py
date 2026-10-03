@@ -67,6 +67,8 @@ _LOGGING_LOCK = Lock()
 _LOGGING_OWNERS = 0
 _LOGGING_SNAPSHOT: dict[str, tuple[list[logging.Handler], bool, int]] = {}
 _SAFE_HANDLER: logging.Handler | None = None
+_PROCESS_SERVICE_NAME: str | None = None
+_SERVICE_NAMES = frozenset({"workstream-api", "workstream-celery"})
 
 
 def canonical_uuid_text(value: object) -> str | None:
@@ -129,17 +131,20 @@ def current_diagnostic_ids() -> tuple[str | None, str | None]:
 class SafeJsonFormatter(logging.Formatter):
     """Format a closed diagnostic record without rendering its message or exception."""
 
-    def __init__(self, environment: str) -> None:
+    def __init__(self, environment: str, service_name: str) -> None:
         super().__init__()
         self._environment = environment
+        self._service_name = service_name
 
     def format(self, record: logging.LogRecord) -> str:
-        severity = record.levelname if record.levelname in {
-            "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
-        } else "INFO"
+        severity = (
+            record.levelname
+            if record.levelname in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+            else "INFO"
+        )
         value: dict[str, str] = {
             "timestamp": datetime.fromtimestamp(record.created, UTC).isoformat(),
-            "service": _SERVICE_NAME.get() or "workstream",
+            "service": _SERVICE_NAME.get() or self._service_name,
             "environment": self._environment,
             "severity": severity,
             "event": self._event(record, severity.lower()),
@@ -170,14 +175,17 @@ def _logging_targets() -> tuple[logging.Logger, ...]:
     return (logging.getLogger(),) + tuple(logging.getLogger(name) for name in _OWNED_LOGGERS)
 
 
-def acquire_safe_logging(settings: Settings) -> None:
+def acquire_safe_logging(settings: Settings, service_name: str) -> None:
     """Acquire one process-wide safe logging lease."""
-    global _LOGGING_OWNERS, _SAFE_HANDLER
+    global _LOGGING_OWNERS, _PROCESS_SERVICE_NAME, _SAFE_HANDLER
+    if service_name not in _SERVICE_NAMES:
+        raise ValueError("invalid diagnostic process service")
     with _LOGGING_LOCK:
         if _LOGGING_OWNERS == 0:
             handler = logging.StreamHandler(sys.stderr)
-            handler.setFormatter(SafeJsonFormatter(settings.environment))
+            handler.setFormatter(SafeJsonFormatter(settings.environment, service_name))
             handler.setLevel(getattr(logging, settings.observability_log_level))
+            _PROCESS_SERVICE_NAME = service_name
             _SAFE_HANDLER = handler
             for logger in _logging_targets():
                 key = logger.name or "root"
@@ -185,12 +193,14 @@ def acquire_safe_logging(settings: Settings) -> None:
                 logger.handlers = [handler]
                 logger.propagate = False
                 logger.setLevel(getattr(logging, settings.observability_log_level))
+        elif _PROCESS_SERVICE_NAME != service_name:
+            raise ValueError("conflicting diagnostic process service")
         _LOGGING_OWNERS += 1
 
 
 def release_safe_logging() -> None:
     """Release one lease, restoring prior logging only after the last owner."""
-    global _LOGGING_OWNERS, _SAFE_HANDLER
+    global _LOGGING_OWNERS, _PROCESS_SERVICE_NAME, _SAFE_HANDLER
     with _LOGGING_LOCK:
         if _LOGGING_OWNERS == 0:
             return
@@ -203,6 +213,7 @@ def release_safe_logging() -> None:
             logger.handlers = handlers
             logger.propagate = propagate
             logger.setLevel(level)
+        _PROCESS_SERVICE_NAME = None
         _SAFE_HANDLER = None
 
 

@@ -46,6 +46,7 @@ _EMPTY_ARTIFACT_S3_SECRETS: tuple[SecretStr | None, SecretStr | None, SecretStr 
 )
 _MISSING_SECRET = object()
 _INVALID_OBSERVABILITY_ENDPOINT = object()
+_SECURE_OBSERVABILITY_ENVIRONMENTS = frozenset({"staging", "preview", "prod", "production"})
 _ALTERNATE_VALIDATION_RESTORES_SECRETS: ContextVar[bool] = ContextVar(
     "alternate_validation_restores_secrets",
     default=False,
@@ -124,7 +125,9 @@ class Settings(BaseSettings):
     project_agent_circuit_cooldown_seconds: int = Field(default=60, ge=1, le=600)
     project_agent_max_manifest_bytes: int = Field(default=256_000, ge=1024, le=1_000_000)
     project_agent_max_documents: int = Field(default=100, ge=1, le=100)
-    project_agent_max_document_bytes: int = Field(default=64 * 1024 * 1024, ge=1, le=512 * 1024 * 1024)
+    project_agent_max_document_bytes: int = Field(
+        default=64 * 1024 * 1024, ge=1, le=512 * 1024 * 1024
+    )
     project_agent_max_total_document_bytes: int = Field(default=512 * 1024 * 1024, ge=1)
     project_agent_max_turns: int = Field(default=40, ge=3, le=100)
     project_agent_max_hosted_tool_calls: int = Field(default=80, ge=3, le=200)
@@ -285,6 +288,7 @@ class Settings(BaseSettings):
             cursor_secret = _extract_pagination_cursor_hmac_secret(values)
             s3_secrets = _extract_artifact_s3_static_secrets(values)
             super().__init__(**values)
+            self._validate_observability_endpoint_security()
             self._api_rate_limit_key_secret = secret
             self._pagination_cursor_hmac_secret = cursor_secret
             self._set_artifact_s3_static_secrets(s3_secrets)
@@ -297,6 +301,15 @@ class Settings(BaseSettings):
             cursor_secret = None
             s3_secrets = _EMPTY_ARTIFACT_S3_SECRETS
             raise
+
+    def _validate_observability_endpoint_security(self) -> None:
+        """Require transport security for every production-like collector."""
+        if (
+            self.environment in _SECURE_OBSERVABILITY_ENVIRONMENTS
+            and self.observability_otlp_endpoint is not None
+            and not self.observability_otlp_endpoint.startswith("https://")
+        ):
+            raise ValueError("production observability OTLP endpoint requires HTTPS")
 
     @classmethod
     def model_validate(cls, obj: object, **kwargs: object) -> Self:
@@ -635,6 +648,7 @@ def _clear_settings_private_secrets(settings: object) -> None:
     settings_values = getattr(settings, "__dict__", None)
     if isinstance(settings_values, dict):
         settings_values["artifact_s3_endpoint_url"] = None
+        settings_values["observability_otlp_endpoint"] = None
     private_values = getattr(settings, "__pydantic_private__", None)
     if not isinstance(private_values, dict):
         return

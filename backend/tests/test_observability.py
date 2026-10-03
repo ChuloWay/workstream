@@ -93,7 +93,7 @@ def _runtime(
     reader = InMemoryMetricReader()
     runtime = ObservabilityRuntime(
         _settings(observability_trace_sample_ratio=ratio),
-        service_name="workstream-test",
+        service_name="workstream-api",
         route_templates=routes,
         task_names=tasks,
         span_exporter=exporter or memory_exporter,
@@ -161,7 +161,12 @@ async def test_api_emits_exactly_one_http_span_and_metric_set_for_every_route_ou
         invalid = await _get(app, "/items/value", headers={"X-Request-ID": "invalid"})
         unmatched = await _get(app, "/missing")
         failed = await _get(app, "/boom")
-        assert [valid.status_code, invalid.status_code, unmatched.status_code, failed.status_code] == [
+        assert [
+            valid.status_code,
+            invalid.status_code,
+            unmatched.status_code,
+            failed.status_code,
+        ] == [
             200,
             400,
             404,
@@ -177,7 +182,7 @@ async def test_api_emits_exactly_one_http_span_and_metric_set_for_every_route_ou
             "HTTP GET /boom",
         }
         expected_resource = {
-            "service.name": "workstream-test",
+            "service.name": "workstream-api",
             "service.version": "0.1.0",
             "deployment.environment.name": "test",
         }
@@ -221,6 +226,73 @@ async def test_api_emits_exactly_one_http_span_and_metric_set_for_every_route_ou
         )
         for canary in ("secret-value", "query-secret", "exception-secret", "token="):
             assert canary not in encoded
+    finally:
+        runtime.shutdown()
+
+
+async def test_unknown_http_method_and_varied_ids_collapse_to_one_exact_metric_series() -> None:
+    runtime, exporter, reader = _runtime(routes=frozenset({"/unknown-method"}))
+    duration = _RecordingInstrument(runtime.http_duration)
+    active = _RecordingInstrument(runtime.http_active)
+    runtime.http_duration = duration
+    runtime.http_active = active
+    app = FastAPI()
+
+    @app.api_route("/unknown-method", methods=["BREW"])
+    async def unknown_method() -> dict[str, bool]:
+        return {"ok": True}
+
+    app.add_middleware(RequestContextMiddleware)
+    app.add_middleware(ObservabilityMiddleware, runtime=runtime)
+    identifiers = [(str(uuid4()), str(uuid4())) for _ in range(24)]
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://testserver"
+        ) as client:
+            responses = [
+                await client.request(
+                    "BREW",
+                    "/unknown-method",
+                    headers={"X-Request-ID": request_id, "X-Correlation-ID": correlation_id},
+                )
+                for request_id, correlation_id in identifiers
+            ]
+        assert {response.status_code for response in responses} == {200}
+        assert runtime.force_flush()
+        spans = exporter.get_finished_spans()
+        assert len(spans) == len(identifiers)
+        expected_metric_attributes = {
+            "http.request.method": "other",
+            "http.route": "/unknown-method",
+            "http.response.status_class": "2xx",
+            "workstream.outcome": "success",
+        }
+        for span, (request_id, correlation_id) in zip(spans, identifiers, strict=True):
+            assert span.name == "HTTP other /unknown-method"
+            assert dict(span.attributes) == {
+                **expected_metric_attributes,
+                "workstream.request_id": request_id,
+                "workstream.correlation_id": correlation_id,
+            }
+        assert len(duration.calls) == len(identifiers)
+        assert {tuple(sorted(attributes.items())) for _, attributes in duration.calls} == {
+            tuple(sorted(expected_metric_attributes.items()))
+        }
+        assert [value for value, _ in active.calls] == [1, -1] * len(identifiers)
+        assert {tuple(sorted(attributes.items())) for _, attributes in active.calls} == {
+            (("http.request.method", "other"),)
+        }
+        points = _metric_points(reader)
+        assert {(name, tuple(sorted(attributes.items()))) for name, attributes, _ in points} == {
+            (
+                "workstream.http.server.duration",
+                tuple(sorted(expected_metric_attributes.items())),
+            ),
+            (
+                "workstream.http.server.active_requests",
+                (("http.request.method", "other"),),
+            ),
+        }
     finally:
         runtime.shutdown()
 
@@ -326,7 +398,9 @@ async def test_concurrent_api_diagnostic_context_is_isolated() -> None:
         runtime.shutdown()
 
 
-async def test_overlapping_app_lifespans_keep_owned_providers_and_one_log_handler() -> None:
+async def test_overlapping_app_lifespans_keep_owned_providers_and_one_log_handler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     first = create_app(_settings())
     second = create_app(_settings())
     first_runtime = first.state.observability_runtime
@@ -338,14 +412,21 @@ async def test_overlapping_app_lifespans_keep_owned_providers_and_one_log_handle
         first_provider = first_runtime._tracer_provider
         handler = diagnostic_logging.safe_handler()
         assert first_provider is not None and handler is not None
+        stream = io.StringIO()
+        monkeypatch.setattr(handler, "stream", stream)
         assert logging.getLogger().handlers == [handler]
+        logging.getLogger("app.main").info("startup canary")
         async with second.router.lifespan_context(second):
             assert second_runtime._tracer_provider is not None
             assert second_runtime._tracer_provider is not first_provider
             assert diagnostic_logging.safe_handler() is handler
             assert logging.getLogger().handlers == [handler]
+            logging.getLogger("app.main").info("overlap canary")
         assert first_runtime.started is True
         assert diagnostic_logging.safe_handler() is handler
+        assert {json.loads(line)["service"] for line in stream.getvalue().splitlines()} == {
+            "workstream-api"
+        }
 
     deadline = monotonic() + 1
     while diagnostic_logging.safe_handler() is not None and monotonic() < deadline:
@@ -355,9 +436,7 @@ async def test_overlapping_app_lifespans_keep_owned_providers_and_one_log_handle
 
 
 async def test_static_and_dynamic_routes_keep_the_selected_registered_template() -> None:
-    runtime, exporter, _ = _runtime(
-        routes=frozenset({"/items/static", "/items/{item_id}"})
-    )
+    runtime, exporter, _ = _runtime(routes=frozenset({"/items/static", "/items/{item_id}"}))
     app = FastAPI()
 
     @app.get("/items/static")
@@ -400,9 +479,7 @@ async def test_public_propagation_and_sampling_input_cannot_control_local_trace(
     finally:
         runtime.shutdown()
 
-    unsampled, unsampled_exporter, _ = _runtime(
-        routes=frozenset({"/items/{item_id}"}), ratio=0.0
-    )
+    unsampled, unsampled_exporter, _ = _runtime(routes=frozenset({"/items/{item_id}"}), ratio=0.0)
     try:
         response = await _get(_api(unsampled), "/items/value", headers=headers)
         assert response.status_code == 200
@@ -533,6 +610,7 @@ def test_real_loggers_and_hostile_exception_never_render_sensitive_values(
             "span_id",
         }
         assert all(set(record) <= allowed for record in records)
+        assert {record["service"] for record in records} == {"workstream-api"}
         encoded = stream.getvalue()
         for canary in (
             "argument-secret",
@@ -582,6 +660,7 @@ async def test_telemetry_instrument_failure_never_masks_http_or_leaks_context() 
     finally:
         runtime.shutdown()
 
+
 class _ShutdownProbeExporter(SpanExporter):
     def __init__(self, *, block: bool = False) -> None:
         self.block = block
@@ -620,7 +699,7 @@ class _ProcessBlockingExporter(SpanExporter):
 def _bounded_process_exit_probe(ready: Any) -> None:
     runtime = ObservabilityRuntime(
         _settings(observability_shutdown_timeout_seconds=0.1),
-        service_name="workstream-test",
+        service_name="workstream-api",
         span_exporter=_ProcessBlockingExporter(),
     )
     runtime.start()
@@ -640,7 +719,7 @@ def test_partial_provider_startup_closes_created_exporter_and_releases_logging(
     monkeypatch.setattr(diagnostics, "MeterProvider", fail_meter_provider)
     runtime = ObservabilityRuntime(
         _settings(observability_shutdown_timeout_seconds=0.2),
-        service_name="workstream-test",
+        service_name="workstream-api",
         span_exporter=exporter,
         metric_reader=reader,
     )
@@ -666,12 +745,46 @@ def test_tracer_provider_construction_failure_closes_unattached_exporter_and_rea
     monkeypatch.setattr(diagnostics, "TracerProvider", fail_tracer_provider)
     runtime = ObservabilityRuntime(
         _settings(observability_shutdown_timeout_seconds=0.2),
-        service_name="workstream-test",
+        service_name="workstream-api",
         span_exporter=exporter,
         metric_reader=reader,
     )
     runtime.start()
     assert runtime.started is False
+    assert exporter.closed.wait(1)
+    assert reader.closed.wait(1)
+    deadline = monotonic() + 1
+    while diagnostic_logging.safe_handler() is not None and monotonic() < deadline:
+        time.sleep(0.01)
+    assert diagnostic_logging.safe_handler() is None
+
+
+def test_failure_after_provider_assignment_clears_every_runtime_reference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    exporter = _ShutdownProbeExporter()
+    reader = _ShutdownProbeReader()
+
+    def fail_get_tracer(self: object, *_args: object, **_kwargs: object) -> object:
+        raise RuntimeError("tracer acquisition failed")
+
+    monkeypatch.setattr(diagnostics.TracerProvider, "get_tracer", fail_get_tracer)
+    runtime = ObservabilityRuntime(
+        _settings(observability_shutdown_timeout_seconds=0.2),
+        service_name="workstream-api",
+        span_exporter=exporter,
+        metric_reader=reader,
+    )
+    runtime.start()
+
+    assert runtime.started is False
+    assert runtime._tracer_provider is None
+    assert runtime._meter_provider is None
+    assert runtime.meter is None
+    assert runtime.http_duration is None
+    assert runtime.http_active is None
+    assert runtime.task_duration is None
+    assert runtime.force_flush() is False
     assert exporter.closed.wait(1)
     assert reader.closed.wait(1)
     deadline = monotonic() + 1
@@ -687,7 +800,7 @@ def test_trace_flush_failure_still_closes_trace_and_metric_providers(
     reader = _ShutdownProbeReader()
     runtime = ObservabilityRuntime(
         _settings(observability_shutdown_timeout_seconds=0.2),
-        service_name="workstream-test",
+        service_name="workstream-api",
         span_exporter=exporter,
         metric_reader=reader,
     )
@@ -710,7 +823,7 @@ def test_timed_out_shutdown_keeps_safe_logging_until_exporter_thread_stops(
     exporter = _ShutdownProbeExporter(block=True)
     runtime = ObservabilityRuntime(
         _settings(observability_shutdown_timeout_seconds=0.1),
-        service_name="workstream-test",
+        service_name="workstream-api",
         span_exporter=exporter,
     )
     runtime.start()
@@ -768,7 +881,7 @@ async def test_collector_failure_is_bounded_and_product_flow_succeeds(
     )
     construction = ObservabilityRuntime(
         _settings(observability_otlp_endpoint="http://127.0.0.1:4318"),
-        service_name="workstream-test",
+        service_name="workstream-api",
         route_templates=frozenset({"/items/{item_id}"}),
     )
     construction.start()
@@ -778,13 +891,17 @@ async def test_collector_failure_is_bounded_and_product_flow_succeeds(
     finally:
         construction.shutdown()
 
-    failing, _, _ = _runtime(
-        routes=frozenset({"/items/{item_id}"}), exporter=_FailingExporter()
-    )
+    failing, _, _ = _runtime(routes=frozenset({"/items/{item_id}"}), exporter=_FailingExporter())
+    stream = io.StringIO()
+    assert diagnostic_logging.safe_handler() is not None
+    monkeypatch.setattr(diagnostic_logging.safe_handler(), "stream", stream)
     try:
         started = monotonic()
         assert (await _get(_api(failing), "/items/value")).status_code == 200
         failing.force_flush()
+        records = [json.loads(line) for line in stream.getvalue().splitlines()]
+        assert records
+        assert {record["service"] for record in records} == {"workstream-api"}
         failing.shutdown()
         assert monotonic() - started < 5.0
     finally:
@@ -815,5 +932,15 @@ def test_operator_docs_match_runtime_observability_contract() -> None:
         "on-demand profiling",
         "implemented",
         "deployed",
+        "staging, preview, prod, and production require https",
+        "workstream-api",
+        "workstream-celery",
+        "http {method} {route}",
+        "celery {task}",
+        "workstream.http.server.duration",
+        "workstream.http.server.active_requests",
+        "workstream.celery.task.duration",
+        "{request}",
+        "scripts.run_isolated_tests",
     ):
         assert boundary in documentation.lower()

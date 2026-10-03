@@ -102,7 +102,7 @@ def initialize_worker_observability() -> None:
     if prior is not None:
         prior.shutdown()
     runtime = ObservabilityRuntime(
-        settings, service_name="workstream-worker", task_names=task_names
+        settings, service_name="workstream-celery", task_names=task_names
     )
     runtime.start()
     _WORKER_RUNTIME = runtime
@@ -133,7 +133,7 @@ def _setup_celery_parent_logging(**_kwargs: object) -> None:
     with _CELERY_LOCK:
         if _CELERY_PARENT_LOGGING_OWNED or _CELERY_SETTINGS is None:
             return
-        acquire_safe_logging(_CELERY_SETTINGS)
+        acquire_safe_logging(_CELERY_SETTINGS, "workstream-celery")
         _CELERY_PARENT_LOGGING_OWNED = True
 
 
@@ -147,9 +147,7 @@ def _before_task_publish(headers: dict[str, Any] | None = None, **_kwargs: objec
         span_context = trace.get_current_span().get_span_context()
         if span_context.is_valid:
             carrier: dict[str, str] = {}
-            TraceContextTextMapPropagator().inject(
-                carrier, context=otel_context.get_current()
-            )
+            TraceContextTextMapPropagator().inject(carrier, context=otel_context.get_current())
             traceparent = carrier.get(TRACEPARENT_HEADER)
             if traceparent is not None:
                 headers[TRACEPARENT_HEADER] = traceparent
@@ -194,9 +192,7 @@ def _task_prerun(task_id: object = None, task: object = None, **_kwargs: object)
             f"celery {task_name}", context=parent, kind=SpanKind.CONSUMER
         )
         span_token = otel_context.attach(trace.set_span_in_context(span, parent))
-        diagnostic_tokens = bind_diagnostic_context(
-            request_id, correlation_id, "workstream-worker"
-        )
+        diagnostic_tokens = bind_diagnostic_context(request_id, correlation_id, "workstream-celery")
         _ACTIVE_TASKS[key] = _TaskObservation(
             span=span,
             span_token=span_token,

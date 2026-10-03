@@ -1,4 +1,4 @@
-# Observability Foundation — Safe API And Worker Diagnostics
+# Observability Foundation — Safe API And Celery Diagnostics
 
 - Initiative: None
 - Durable disposition: Complete
@@ -21,7 +21,7 @@ The v0.1 release bar requires an observable and recoverable path. Diagnostics
 must help investigate that path without becoming lifecycle truth, an authority
 input, a source of sensitive content, or a new reason for product work to fail.
 This change establishes the smallest practical foundation: safe structured
-logs, sampled traces, bounded metrics, API/worker correlation, and operational
+logs, sampled traces, bounded metrics, API/Celery correlation, and operational
 guidance. It does not build a monitoring platform.
 
 ### Current behavior
@@ -71,7 +71,7 @@ guidance. It does not build a monitoring platform.
   existing constraint; neither native FastAPI telemetry nor contrib/Celery
   auto-instrumentation is used.
 - `backend/.env.example`: public, credential-free example settings for log
-  level, OTLP endpoint, and trace sample ratio, with the API and worker sharing
+  level, OTLP endpoint, and trace sample ratio, with the API and Celery process sharing
   the same deployment environment while using distinct fixed service names.
 - `backend/app/core/config.py`: typed, bounded diagnostics configuration and
   validation. Collector endpoints must be absolute HTTP(S) URLs without
@@ -83,7 +83,7 @@ guidance. It does not build a monitoring platform.
   bounded shutdown.
 - `backend/app/core/celery_observability.py`: traceparent-only broker
   propagation, child-owned task context/spans/metrics, public signal
-  registration, and worker-parent logging setup without parent exporters.
+  registration, and Celery-parent logging setup without parent exporters.
 - `backend/app/core/api_controls.py`: bind the existing validated request and
   correlation IDs for the duration of the ASGI request and annotate the active
   span without changing validation, response, or error behavior.
@@ -93,7 +93,7 @@ guidance. It does not build a monitoring platform.
 - `backend/app/workers/celery_app.py`: pass the immutable registered task
   inventory to application-owned Celery signal instrumentation, initialize
   providers only after `worker_process_init`, and flush/shut down in bounded
-  worker hooks without disturbing artifact-runtime ownership.
+  Celery process hooks without disturbing artifact-runtime ownership.
 - `backend/app/modules/outbox/delivery.py`: after the canonical envelope is
   loaded, annotate only the current diagnostic span with its already-persisted,
   bounded outbox correlation ID. Do not store trace context or change delivery,
@@ -106,6 +106,7 @@ guidance. It does not build a monitoring platform.
   and bounded-cardinality proof.
 - `backend/scripts/test_lane_catalogue.py`,
   `backend/scripts/behavior_ownership.py`,
+  `backend/scripts/identifier_generation_classifications.json`,
   `backend/tests/test_ci_lane_catalogue.py`, and
   `.ci/behavior-ownership/partition.v1.json`: register the two new diagnostics
   modules once on the hosted schema/architecture lane with measured headroom,
@@ -172,7 +173,7 @@ task content, and closes the span with only normalized method, registered route
 template, status class, outcome, and validated diagnostic IDs. It records the
 matching application-owned metrics from the same normalized values. There is no
 native/contrib compatibility path or runtime switch. The API service name is
-fixed to `workstream-api` and the worker service name to `workstream-worker`,
+fixed to `workstream-api` and the Celery service name to `workstream-celery`,
 with application version and deployment environment as bounded resource
 attributes.
 
@@ -225,7 +226,7 @@ propagator. Public HTTP does not extract trace context. Broker publication
 strips any pre-existing `traceparent`, `baggage`, `tracestate`, and private
 diagnostic headers, then emits only the current internal `traceparent` and two
 canonical UUID diagnostic headers. API-side publication hooks are installed
-once per process and select the request-bound runtime; worker providers remain
+once per process and select the request-bound runtime; Celery providers remain
 child-owned after fork.
 
 Application-owned Celery receivers use only public signal APIs. `task_prerun`
@@ -265,7 +266,7 @@ daemon, endpoint, or continuous capture is added.
 - FastAPI and Celery contrib/automatic instrumentation were rejected because
   they add broader callbacks and attributes than the contract. The official
   Celery failure/retry callbacks render exceptions/reasons, and its duration
-  metric includes raw worker hostname; disconnecting private callbacks would be
+  metric includes raw Celery hostname; disconnecting private callbacks would be
   brittle and could duplicate application metrics.
 - Exporting framework spans unchanged was rejected because native FastAPI can
   include raw query data and official Celery instrumentation can include
@@ -298,59 +299,59 @@ daemon, endpoint, or continuous capture is added.
 
 ## Acceptance criteria
 
-- [ ] The single explicit ASGI path produces exactly one HTTP server span and
+- [x] The single explicit ASGI path produces exactly one HTTP server span and
       the closed application-owned HTTP metrics per request; FastAPI native and
       contrib instrumentation are absent.
-- [ ] API logs and exported spans reuse the exact validated HTTP request and
+- [x] API logs and exported spans reuse the exact validated HTTP request and
       correlation IDs under concurrent requests, and the formatter/provider
       state is not mutated per request or replaced by repeated/overlapping app
       factory lifespans.
-- [ ] A real prefork Celery child initializes providers after fork, extracts the
+- [x] A real prefork Celery child initializes providers after fork, extracts the
       producer trace and validated diagnostic IDs through application-owned
       public signal handlers, and executes under the same trace; repeated
-      initialization produces one consumer span and one metric without worker
+      initialization produces one consumer span and one metric without Celery
       hostname.
-- [ ] A privacy-canary probe across structured logs, captured exported spans,
+- [x] A privacy-canary probe across structured logs, captured exported spans,
       and metrics proves credentials, bodies, guide/task/prompt/ZIP content,
       signed URLs, raw query values, SQL parameters, exception messages/stacks,
       and arbitrary extras are absent.
-- [ ] Privacy-canary logging tests use the real configured Uvicorn access/error,
+- [x] Privacy-canary logging tests use the real configured Uvicorn access/error,
       Celery task/retry/error, Kombu/OpenTelemetry, SQLAlchemy, Workstream, and
       unknown logger paths with sensitive data placed separately in `msg`,
       interpolation arguments, exception objects, and extras; output contains
       only registered constant event values.
-- [ ] Metric attribute keys and values remain in the closed low-cardinality set
+- [x] Metric attribute keys and values remain in the closed low-cardinality set
       across requests and tasks with different record/user/project/request IDs.
       Unknown methods, routes, task names, exception classes, and outcome values
       map to one fixed `other`/`unmatched` category.
-- [ ] Public HTTP ignores incoming `traceparent`, `tracestate`, and baggage,
+- [x] Public HTTP ignores incoming `traceparent`, `tracestate`, and baggage,
       starts a random local trace, and applies only the configured local sample
       ratio. Broker propagation emits only that internal `traceparent` plus the
       two canonical UUID diagnostic headers; baggage and tracestate canaries do
       not reach child context or outbound headers.
-- [ ] An invalid endpoint fails startup with a fixed error that does not retain
+- [x] An invalid endpoint fails startup with a fixed error that does not retain
       or echo input. A missing endpoint disables export; exporter construction
       failure, collector refusal/timeout, force-flush failure, and shutdown
       failure do not change HTTP/task outcomes and remain within tested bounds.
-- [ ] Repeated `create_app` use and repeated Celery signal setup do not duplicate
+- [x] Repeated `create_app` use and repeated Celery signal setup do not duplicate
       handlers, providers, instrumentation, spans, or metric readers.
-- [ ] Two sequential tasks in one real prefork child prove normal, failure, and
+- [x] Two sequential tasks in one real prefork child prove normal, failure, and
       retry exits reset all span/diagnostic tokens; a second task with missing or
       malformed headers cannot inherit the first task's IDs or trace context.
-- [ ] A task failure carrying an exception whose `__str__` raises is handled by
+- [x] A task failure carrying an exception whose `__str__` raises is handled by
       Workstream telemetry without calling that method or changing the task's
       product outcome.
-- [ ] Direct API-to-Celery work retains causal trace context. Outbox recovery
+- [x] Direct API-to-Celery work retains causal trace context. Outbox recovery
       honestly begins a new trace and adds the existing persisted correlation ID
       only after the canonical envelope is loaded; no business row, payload,
       digest, schema, or authorization input changes.
-- [ ] The OpenAI Agents SDK remains configured with tracing disabled and
+- [x] The OpenAI Agents SDK remains configured with tracing disabled and
       sensitive trace data disabled.
-- [ ] Operator docs distinguish implemented instrumentation from configured
+- [x] Operator docs distinguish implemented instrumentation from configured
       export and deployed monitoring, document safe OTLP credentials through
       runtime environment only, state the outbox trace gap, and keep profiling
       on demand.
-- [ ] Focused tests, the relevant existing API/Celery/outbox tests, lint,
+- [x] Focused tests, the relevant existing API/Celery/outbox tests, lint,
       dependency-lock verification, markdown links, stale-wording scan, and the
       repository's applicable deterministic gates pass.
 
@@ -362,16 +363,18 @@ daemon, endpoint, or continuous capture is added.
 | Concurrent requests retain their own validated request/correlation IDs in logs and spans and reset both contexts after completion | `app.core.api_controls.RequestContextMiddleware` with core child-owned diagnostic context tokens | `tests/test_observability.py::test_concurrent_api_diagnostic_context_is_isolated` |
 | Public `traceparent`, `tracestate`, baggage, caller-chosen trace IDs, and sampled flags cannot select the local trace identity or override the local sample decision | Core explicit ASGI trace start and local root sampler | `tests/test_observability.py::test_public_propagation_and_sampling_input_cannot_control_local_trace` |
 | Repeated and overlapping app lifespans keep distinct app providers and one process log handler | `app.main` composition with `app.core.observability` runtime | `tests/test_observability.py::test_overlapping_app_lifespans_keep_owned_providers_and_one_log_handler` |
+| API startup, exporter-thread, request, Celery-parent, and Celery-child logs carry exactly one fixed process role outside and inside diagnostic context | Reference-counted process logging ownership composed by API and Celery roots | `tests/test_observability.py::test_overlapping_app_lifespans_keep_owned_providers_and_one_log_handler`, `tests/test_observability.py::test_real_loggers_and_hostile_exception_never_render_sensitive_values`, and `tests/test_celery_observability.py::test_celery_parent_logging_is_safe_without_parent_exporters` |
 | Exporter/provider threads are absent in the Celery parent and initialized in the real child only | `app.workers.celery_app` `worker_process_init` composition | `tests/test_celery_observability.py::test_real_celery_prefork_correlates_api_and_resets_sequential_task_context` |
 | Direct API-to-Celery publication creates one server-to-consumer parent-child trace and outbound broker headers contain only internal `traceparent` and the two canonical UUID diagnostic headers | Core before-publish hook and child-only Celery receivers composed by `app.workers.celery_app` | `tests/test_observability.py::test_api_to_celery_trace_is_parent_child_and_headers_are_allowlisted` plus `tests/test_celery_observability.py::test_real_celery_prefork_correlates_api_and_resets_sequential_task_context` |
-| Repeating Celery receiver setup leaves one receiver set, one child provider/reader set, one consumer span, and one task metric measurement | Idempotent core signal registration with child-owned worker runtime | `tests/test_celery_observability.py::test_repeated_celery_receiver_setup_does_not_duplicate_spans_or_readers` |
+| Repeating Celery receiver setup leaves one receiver set, one child provider/reader set, one consumer span, and one task metric measurement | Idempotent core signal registration with child-owned Celery runtime | `tests/test_celery_observability.py::test_repeated_celery_receiver_setup_does_not_duplicate_spans_or_readers` |
 | One task duration metric uses a registered task name plus fixed outcome and never hostname or IDs | Core task metric with immutable task inventory supplied by Celery composition | `tests/test_observability.py::test_api_to_celery_trace_is_parent_child_and_headers_are_allowlisted` plus `tests/test_celery_observability.py::test_real_celery_prefork_correlates_api_and_resets_sequential_task_context` |
 | Normal, failure, retry, missing-header, and malformed-header task exits cannot leak context to the next task in one child | Core public Celery signal receivers and child-owned context tokens | `tests/test_celery_observability.py::test_sequential_task_failures_and_retries_reset_every_context_token` plus `tests/test_celery_observability.py::test_real_celery_prefork_correlates_api_and_resets_sequential_task_context` |
-| Core diagnostics stays acyclic and imports no worker or product module | Composition-root boundary | `tests/test_observability.py::test_observability_core_has_no_worker_or_module_imports` |
+| Core diagnostics stays acyclic and imports no Celery composition or product module | Composition-root boundary | `tests/test_observability.py::test_observability_core_has_no_worker_or_module_imports` |
 | Existing outbox correlation annotates only after the canonical invocation marker and envelope transaction commit; before/after snapshots prove no business row, payload, digest, schema, or authorization input changes, and structure checks prove no persisted trace fields | `app.modules.outbox.delivery.OutboxDelivery.invoke` calling generic core annotation | `tests/outbox/test_delivery_postgresql.py::test_diagnostic_annotation_follows_committed_invocation_envelope` |
-| Every exported API/worker span and metric has only closed keys and normalized values | Core explicit ASGI/Celery instrumentation and sanitizing exporter | `tests/test_observability.py::test_complete_export_sets_are_closed_and_bounded` |
+| Every exported API/Celery span and metric has only closed keys and normalized values | Core explicit ASGI/Celery instrumentation and sanitizing exporter | `tests/test_observability.py::test_complete_export_sets_are_closed_and_bounded` plus `tests/test_observability.py::test_unknown_http_method_and_varied_ids_collapse_to_one_exact_metric_series` and `tests/test_celery_observability.py::test_unknown_task_and_state_values_collapse_to_one_exact_metric_series` |
 | Dynamic logger data and hostile exception stringification never enter Workstream diagnostics | Core closed log-event map and signal exits | `tests/test_observability.py::test_real_loggers_and_hostile_exception_never_render_sensitive_values` |
-| An invalid endpoint fails startup with an input-free fixed error | Typed settings validation before runtime composition | `tests/test_config.py::test_invalid_observability_endpoint_fails_startup_without_retaining_input` |
+| An invalid endpoint fails startup with an input-free fixed error; production-like environments require HTTPS while local/test may use HTTP | Typed settings validation before runtime composition | `tests/test_config.py::test_invalid_observability_endpoint_fails_startup_without_retaining_input`, `tests/test_config.py::test_local_observability_endpoint_may_use_http`, `tests/test_config.py::test_production_like_observability_endpoint_requires_https_without_retaining_input`, and `tests/test_config.py::test_production_like_observability_endpoint_accepts_https` |
+| Failure after provider assignment clears provider and instrument references, closes owned resources, and leaves force-flush disabled | Core runtime partial-start cleanup | `tests/test_observability.py::test_failure_after_provider_assignment_clears_every_runtime_reference` |
 | A missing endpoint disables export; exporter construction failure, collector refusal/timeout, flush failure, and shutdown failure remain bounded and do not change request/task outcomes | Core exporter/runtime lifecycle | `tests/test_observability.py::test_collector_failure_is_bounded_and_product_flow_succeeds` |
 | The OpenAI Agents SDK remains configured with both tracing and sensitive trace data disabled | Existing `app.adapters.project_agents.openai_agent_sdk` owner, unchanged by diagnostics composition | `tests/test_agent_runtime.py::test_unified_compilation_uses_scoped_tools_and_strict_output` |
 | Operator guidance matches the implemented environment keys, safe export contract, partial outbox linkage, deployment distinction, and on-demand profiling boundary | `docs/engineering/observability.md`, README logs section, and typed diagnostics settings | `tests/test_observability.py::test_operator_docs_match_runtime_observability_contract` |
@@ -390,7 +393,7 @@ daemon, endpoint, or continuous capture is added.
   after exact-head proof and review.
 - Budget posture: Sol high with this record, exact diff, and focused owners only;
   Astra remains lead.
-- Why: The change is bounded to diagnostics but crosses API and prefork worker
+- Why: The change is bounded to diagnostics but crosses API and prefork Celery
   composition, dependency lock, sensitive-data export, and shutdown behavior.
 - Human review focus: the closed export/log/metric field sets; whether the
   outbox partial-linkage boundary is honest and useful; fail-open and bounded
@@ -401,14 +404,14 @@ daemon, endpoint, or continuous capture is added.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Existing API IDs and sanitized failures are reusable | Inspect `app.core.api_controls.RequestContextMiddleware` and `tests/test_api_controls.py` | Confirmed at base `176952e6624244bdc405bac973ce6c4abddb0dae` | No logging/tracing context exists yet |
-| Worker telemetry must initialize after fork | Inspect `app.workers.celery_app` hooks and OpenTelemetry prefork guidance | Confirmed; application providers and signal state will be child-owned after `worker_process_init` | Runtime proof remains future implementation evidence |
+| Existing API IDs and sanitized failures are reusable | Inspect `app.core.api_controls.RequestContextMiddleware` and `tests/test_api_controls.py` | Reused through one canonical UUID validator and context-local binding | Diagnostic IDs remain non-authoritative |
+| Celery telemetry must initialize after fork | Inspect `app.workers.celery_app` hooks and real-prefork focused proof | Application providers and signal state are child-owned after `worker_process_init` | Collector deployment remains operational work |
 | Native FastAPI defaults are broader than the closed capture contract | Inspect FastAPI 0.142.2 `fastapi.telemetry._asgi` and `_api` source | Confirmed raw `url.query` span attribute and exception log content; native telemetry rejected for this change | No runtime dependence on native telemetry remains |
 | Explicit ASGI instrumentation is the selected HTTP implementation | Compare FastAPI 0.142.2 source with the required capture allowlist | One small application-owned span/metric path avoids raw pre-route capture and global HTTP propagation | No native/contrib fallback or compatibility path remains |
-| Official Celery auto-instrumentation exceeds the privacy/cardinality boundary | Inspect OpenTelemetry Celery 0.66b0 source | Confirmed exception/retry string rendering and `flower.task.runtime.seconds` hostname label; application-owned public signal receivers selected | Signal-order and cleanup behavior remain future runtime evidence |
-| No trace context can honestly survive current durable outbox recovery | Inspect outbox envelope/model/worker and all broker publication call sites | Confirmed: business correlation exists, W3C context is not persisted | New trace after restart/recovery is intentional |
-| Application behavior and tests | Future focused pytest nodes plus existing API, Celery topology, and outbox suites | Pending implementation | Real collector deployment remains outside repository proof |
-| Dependency integrity | `cd backend && uv lock --check && uv sync --locked --extra dev --extra agents` on the supported matrix | Pending implementation | Hosted CI remains final environment proof |
+| Official Celery auto-instrumentation exceeds the privacy/cardinality boundary | Inspect OpenTelemetry Celery 0.66b0 source | Confirmed exception/retry string rendering and `flower.task.runtime.seconds` hostname label; application-owned public signal receivers selected and exercised through a real prefork process | Dependency upgrades require replay of the privacy and duplicate-instrumentation proofs |
+| No trace context can honestly survive current durable outbox recovery | Inspect outbox envelope/model/Celery delivery and all broker publication call sites | Confirmed: business correlation exists, W3C context is not persisted | New trace after restart/recovery is intentional |
+| Application behavior and tests | Focused API, Celery, controls, configuration, topology, agent-runtime, ownership, architecture, identifier-inventory, and isolated PostgreSQL outbox proofs | Implemented proofs pass, including real Redis/prefork execution | Real collector deployment remains outside repository proof |
+| Dependency integrity | `cd backend && uv lock --check` with the committed SDK/exporter lock | Locked dependency graph passes | Hosted CI remains final environment proof |
 
 ## Review findings
 
@@ -440,6 +443,32 @@ daemon, endpoint, or continuous capture is added.
 - `SEC-OBS-004`: correct the security finding identifiers and preserve their
   original disposition in this record. Resolved by the mapping above; the
   security replay found no remaining runtime blocker.
+- `DOCS/OPS-OBS-001`: preserve the fixed process role on logs emitted outside
+  request/task context, including API startup, Celery parent, and exporter
+  threads. Resolved with reference-counted process ownership and the sole
+  `workstream-api` / `workstream-celery` role names.
+- `DOCS-OBS-002`: make the operator contract actionable. Resolved with the exact
+  span and metric inventory, units, attribute semantics, and a practical
+  privacy, correlation, outage, and outbox-discontinuity drill.
+- `SEC-OBS-IMPL-001`: prevent plaintext production-like collector transport.
+  Resolved by requiring HTTPS in staging, preview, prod, and production while
+  retaining HTTP for local/test use and fixed input-free validation errors.
+- `REUSE-OBS-001`: remove duplicate request UUID validation. Resolved by ASCII
+  decoding at the HTTP boundary and delegation to `canonical_uuid_text` with
+  the existing API error behavior retained.
+- `QA-OBS-001` / `TD-OBS-001`: prove value cardinality rather than key shape
+  alone. Resolved with varied-ID BREW requests and unregistered Celery
+  task/state values that assert the exact collapsed span and metric series.
+- `QA-OBS-002`: clear stale runtime state after failures that occur after
+  provider assignment. Resolved by one reset owner and proof that all provider
+  and instrument references clear, resources close, and force-flush stays
+  disabled.
+
+Hosted schema-lane replay found the Celery task fallback's UUIDv4 site missing
+from the exact generation inventory. The fallback is now classified as a
+transport token: it supplies a process-local diagnostic ID only when no
+canonical broker task ID exists and never mints or persists a product record.
+The full identifier inventory is part of the frozen evidence.
 
 Architecture and security plan replay established this capture boundary before
 implementation. The foundation implements the amended design above.

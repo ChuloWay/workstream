@@ -51,7 +51,7 @@ def _runtime() -> tuple[ObservabilityRuntime, InMemorySpanExporter]:
     exporter = InMemorySpanExporter()
     runtime = ObservabilityRuntime(
         _settings(),
-        service_name="workstream-worker",
+        service_name="workstream-celery",
         task_names=frozenset({KNOWN_TASK}),
         span_exporter=exporter,
         metric_reader=InMemoryMetricReader(),
@@ -61,8 +61,14 @@ def _runtime() -> tuple[ObservabilityRuntime, InMemorySpanExporter]:
 
 
 class _Task:
-    def __init__(self, task_id: str, headers: dict[str, str] | None) -> None:
-        self.name = KNOWN_TASK
+    def __init__(
+        self,
+        task_id: str,
+        headers: dict[str, str] | None,
+        *,
+        name: str = KNOWN_TASK,
+    ) -> None:
+        self.name = name
         self.request = SimpleNamespace(id=task_id, headers=headers)
 
 
@@ -152,13 +158,84 @@ def test_sequential_task_failures_and_retries_reset_every_context_token(
         runtime.shutdown()
 
 
+def test_unknown_task_and_state_values_collapse_to_one_exact_metric_series(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    exporter = InMemorySpanExporter()
+    reader = InMemoryMetricReader()
+    runtime = ObservabilityRuntime(
+        _settings(),
+        service_name="workstream-celery",
+        task_names=frozenset({KNOWN_TASK}),
+        span_exporter=exporter,
+        metric_reader=reader,
+    )
+    runtime.start()
+    monkeypatch.setattr(diagnostics, "_WORKER_RUNTIME", runtime)
+    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}))
+    identifiers = [(str(uuid4()), str(uuid4()), str(uuid4())) for _ in range(24)]
+    try:
+        for index, (task_id, request_id, correlation_id) in enumerate(identifiers):
+            task = _Task(
+                task_id,
+                {
+                    REQUEST_ID_BROKER_HEADER: request_id,
+                    CORRELATION_ID_BROKER_HEADER: correlation_id,
+                },
+                name=f"unregistered.private.{index}",
+            )
+            signals.task_prerun.send(sender=None, task_id=task_id, task=task)
+            signals.task_postrun.send(
+                sender=None,
+                task_id=task_id,
+                task=task,
+                state=f"PRIVATE_STATE_{index}",
+            )
+
+        assert runtime.force_flush()
+        spans = exporter.get_finished_spans()
+        assert len(spans) == len(identifiers)
+        for span, (_, request_id, correlation_id) in zip(spans, identifiers, strict=True):
+            assert span.name == "celery other"
+            assert dict(span.attributes) == {
+                "messaging.destination.name": "other",
+                "workstream.outcome": "other",
+                "workstream.request_id": request_id,
+                "workstream.correlation_id": correlation_id,
+            }
+
+        metric_data = reader.get_metrics_data()
+        assert metric_data is not None
+        points = [
+            (metric.name, dict(point.attributes))
+            for resource_metrics in metric_data.resource_metrics
+            for scope_metrics in resource_metrics.scope_metrics
+            for metric in scope_metrics.metrics
+            for point in metric.data.data_points
+        ]
+        assert points == [
+            (
+                "workstream.celery.task.duration",
+                {
+                    "messaging.destination.name": "other",
+                    "workstream.outcome": "other",
+                },
+            )
+        ]
+        assert diagnostics._ACTIVE_TASKS == {}
+        assert diagnostic_logging.current_diagnostic_ids() == (None, None)
+    finally:
+        diagnostics._ACTIVE_TASKS.clear()
+        runtime.shutdown()
+
+
 def _prefork_context_probe(queue: multiprocessing.Queue) -> None:
     """Create providers in the forked child and return two sequential span contexts."""
     exporter = InMemorySpanExporter()
     reader = InMemoryMetricReader()
     runtime = ObservabilityRuntime(
         _settings(),
-        service_name="workstream-worker",
+        service_name="workstream-celery",
         task_names=frozenset({KNOWN_TASK}),
         span_exporter=exporter,
         metric_reader=reader,
@@ -444,22 +521,20 @@ async def test_real_celery_prefork_correlates_api_and_resets_sequential_task_con
         assert direct["trace_id"] == server_span.context.trace_id
         assert direct["parent_span_id"] == server_span.context.span_id
         failure = next(
-            item
-            for item in spans
-            if item["attributes"]["workstream.request_id"] == failure_task_id
+            item for item in spans if item["attributes"]["workstream.request_id"] == failure_task_id
         )
         assert failure["attributes"]["workstream.correlation_id"] == failure_task_id
         retry_spans = [
-            item
-            for item in spans
-            if item["attributes"]["workstream.request_id"] == retry_task_id
+            item for item in spans if item["attributes"]["workstream.request_id"] == retry_task_id
         ]
         assert {item["attributes"]["workstream.outcome"] for item in retry_spans} == {
             "retry",
             "success",
         }
         final_metrics = exits[-1]["metrics"]
-        task_metrics = [item for item in final_metrics if item[0] == "workstream.celery.task.duration"]
+        task_metrics = [
+            item for item in final_metrics if item[0] == "workstream.celery.task.duration"
+        ]
         assert task_metrics
         assert all(
             set(attributes) == {"messaging.destination.name", "workstream.outcome"}
@@ -469,9 +544,7 @@ async def test_real_celery_prefork_correlates_api_and_resets_sequential_task_con
     finally:
         if api_runtime is not None:
             api_runtime.shutdown()
-        signals.task_postrun.disconnect(
-            dispatch_uid="workstream-observability-real-prefork-probe"
-        )
+        signals.task_postrun.disconnect(dispatch_uid="workstream-observability-real-prefork-probe")
         if process.is_alive():
             os.killpg(process.pid, signal.SIGTERM)
         process.join(timeout=10)
@@ -507,6 +580,7 @@ def test_celery_parent_logging_is_safe_without_parent_exporters(
         )
         record = json.loads(stream.getvalue())
         assert record["event"] == "celery.error"
+        assert record["service"] == "workstream-celery"
         assert "broker.invalid" not in stream.getvalue()
     finally:
         diagnostics.shutdown_celery_parent_observability()

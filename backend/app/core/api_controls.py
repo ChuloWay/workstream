@@ -5,14 +5,18 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 import logging
 from typing import Any
-from uuid import RFC_4122, UUID, uuid4
+from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from app.core.diagnostic_logging import bind_diagnostic_context, reset_diagnostic_context
+from app.core.diagnostic_logging import (
+    bind_diagnostic_context,
+    canonical_uuid_text,
+    reset_diagnostic_context,
+)
 
 REQUEST_ID_HEADER = b"x-request-id"
 CORRELATION_ID_HEADER = b"x-correlation-id"
@@ -138,19 +142,11 @@ def _header_value(scope: Scope, name: bytes) -> bytes | None:
 
 
 def _canonical_uuid(value: bytes) -> str:
-    if len(value) != 36:
-        raise ValueError("invalid request context header")
     try:
         text = value.decode("ascii")
-        parsed = UUID(text)
-    except (UnicodeDecodeError, ValueError) as exc:
+    except UnicodeDecodeError as exc:
         raise ValueError("invalid request context header") from exc
-    if (
-        parsed.int == 0
-        or parsed.variant != RFC_4122
-        or parsed.version not in range(1, 9)
-        or str(parsed) != text
-    ):
+    if canonical_uuid_text(text) is None:
         raise ValueError("invalid request context header")
     return text
 
@@ -333,9 +329,7 @@ def install_api_control_openapi(app: FastAPI) -> None:
                                 "headers": headers,
                                 "content": {
                                     "application/json": {
-                                        "schema": {
-                                            "$ref": "#/components/schemas/ApiErrorResponse"
-                                        }
+                                        "schema": {"$ref": "#/components/schemas/ApiErrorResponse"}
                                     }
                                 },
                             },

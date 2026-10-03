@@ -127,7 +127,7 @@ compensation effects, operations and release proof complete v0.1.
 The [independent MCP package](../mcp_server/README.md) implements one profile
 tool. It is not a deployed service or the complete proposed tool catalogue.
 
-Privacy-bounded API and prefork-worker diagnostics are implemented: structured
+Privacy-bounded API and prefork Celery diagnostics are implemented: structured
 logs, sampled traces and bounded metrics. Collector deployment and an operational
 end-to-end drill remain release work; diagnostics do not establish lifecycle truth.
 
@@ -191,7 +191,7 @@ cannot be reused as post-submission review-gate evidence. See the
 - FastAPI, SQLAlchemy 2.x async, PostgreSQL, Alembic, Celery, and Redis form the
   locked backend execution stack.
 - [Runtime diagnostics](engineering/observability.md) provide closed structured
-  logging, sampled API/prefork-worker traces and bounded metrics through optional
+  logging, sampled API/prefork Celery traces and bounded metrics through optional
   OTLP export. Public propagation cannot control sampling; sensitive payloads,
   credentials and exception text are excluded. Collector failures do not change
   product outcomes. Durable outbox recovery starts a new trace and retains only
@@ -589,7 +589,7 @@ execute/finalize authority. Output write/bind authority remains unavailable. Pub
 
 ```text
 Delivered foundations (not a claim of full public integration)
-  privacy-bounded API/worker diagnostics (collector deployment still required)
+  privacy-bounded API/Celery diagnostics (collector deployment still required)
   automatic unified setup + separate manager pre/post approvals
   public Finance ContributionPolicy administration + exact selected-version validation
   public manager activation context + exact guide activation/binding
@@ -694,7 +694,7 @@ v0.1 is not ready until all of the following are true:
 - Fulfillment and recovery are idempotent, observable, reconcilable, and safe
   under durable-job, provider, transaction, and unknown-commit failures.
 - Configure secured diagnostic collection with bounded retention and access,
-  and prove API/worker correlation, privacy and collector-outage behavior in
+  and prove API/Celery correlation, privacy and collector-outage behavior in
   the release drill. Implemented instrumentation alone is not deployed monitoring.
 - Public APIs and frontend surfaces expose only the canonical paths, obsolete
   authority and legacy routes are removed, and the full security/operations

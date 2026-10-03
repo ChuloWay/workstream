@@ -440,7 +440,7 @@ and stops at findings and draft proposals; manager review/approval remains separ
 
 ### Logs, Shutdown, And Reset
 
-The API and prefork worker emit privacy-bounded structured logs and can export
+The API and prefork Celery process emit privacy-bounded structured logs and can export
 explicit traces and metrics to an optional OTLP HTTP/protobuf collector. See the
 [observability operations guide](docs/engineering/observability.md) for the
 configuration, safe field contract, failure behavior, outbox trace boundary,

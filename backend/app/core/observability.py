@@ -193,7 +193,7 @@ class ObservabilityRuntime:
             span_exporter: SpanExporter | None = None
             metric_reader: MetricReader | None = None
             try:
-                acquire_safe_logging(self.settings)
+                acquire_safe_logging(self.settings, self.service_name)
                 self._logging_owned = True
                 resource = Resource(
                     {
@@ -269,6 +269,7 @@ class ObservabilityRuntime:
                 self.started = True
             except Exception:
                 logging.getLogger(__name__).error("observability_export_unavailable")
+                self._reset_runtime_state()
                 self._bounded_close(
                     tracer_provider,
                     meter_provider,
@@ -277,6 +278,16 @@ class ObservabilityRuntime:
                     release_logging=self._logging_owned,
                 )
                 self._logging_owned = False
+
+    def _reset_runtime_state(self) -> None:
+        self._tracer_provider = None
+        self._meter_provider = None
+        self.tracer = trace.NoOpTracerProvider().get_tracer("workstream.observability")
+        self.meter = None
+        self.http_duration = None
+        self.http_active = None
+        self.task_duration = None
+        self.started = False
 
     def _build_span_exporter(self) -> SpanExporter | None:
         endpoint = self.settings.observability_otlp_endpoint
@@ -318,9 +329,7 @@ class ObservabilityRuntime:
             meter_provider = self._meter_provider
             release_logging = self._logging_owned
             self._logging_owned = False
-            self.started = False
-            self._tracer_provider = None
-            self._meter_provider = None
+            self._reset_runtime_state()
             self._bounded_close(
                 tracer_provider,
                 meter_provider,
@@ -395,17 +404,15 @@ class ObservabilityRuntime:
 
     def force_flush(self) -> bool:
         """Flush owned providers within the export timeout for tests and operators."""
-        timeout_millis = max(
-            1, int(self.settings.observability_export_timeout_seconds * 1000)
-        )
+        if not self.started:
+            return False
+        timeout_millis = max(1, int(self.settings.observability_export_timeout_seconds * 1000))
         try:
-            trace_flushed = (
-                self._tracer_provider is None
-                or self._tracer_provider.force_flush(timeout_millis)
+            trace_flushed = self._tracer_provider is None or self._tracer_provider.force_flush(
+                timeout_millis
             )
-            metric_flushed = (
-                self._meter_provider is None
-                or self._meter_provider.force_flush(timeout_millis)
+            metric_flushed = self._meter_provider is None or self._meter_provider.force_flush(
+                timeout_millis
             )
             return trace_flushed and metric_flushed
         except Exception:
@@ -478,9 +485,7 @@ class ObservabilityMiddleware:
             try:
                 route_object = scope.get("route")
                 route = self.runtime.normalize_route(getattr(route_object, "path", None))
-                status_class = (
-                    f"{status_code // 100}xx" if 100 <= status_code <= 599 else "other"
-                )
+                status_class = f"{status_code // 100}xx" if 100 <= status_code <= 599 else "other"
                 outcome = (
                     "success"
                     if status_code < 400
