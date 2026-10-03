@@ -161,7 +161,13 @@ New tests: `test_reserve_replay_and_rollback`,
 `test_request_storage_rejects_substituted_owner`,
 `test_request_storage_rejects_wrong_digest`,
 `test_request_is_immutable`, `test_reservation_holds_currentness_lock`,
-`test_non_allow_completion_cannot_reserve`.
+`test_non_allow_completion_cannot_reserve`,
+`test_database_owns_request_timestamp`, `test_request_ids_are_distinct_uuid7`,
+`test_sql_insert_blocks_fence_advancement`,
+`test_sql_advance_first_rejects_old_completion`,
+`test_sql_rejects_crossed_completion_event`,
+`test_replay_requires_latest_submitted_submission`,
+`test_reservation_blocks_successor_parent_lock`.
 These are implementation targets, not claims of existing proof. From backend:
 
 ```sh
