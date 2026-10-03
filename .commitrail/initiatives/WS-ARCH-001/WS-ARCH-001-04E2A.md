@@ -255,6 +255,13 @@ belong to the activation chunk and must not be claimed here.
 
 ## Reconciliation
 
+- The two new AUTH routing proof modules run once on existing task lane A.
+  Task lane C exceeded its unchanged 1,200-second bound in hosted execution;
+  its earlier passing run had only about 46 seconds of headroom. Task lane A
+  measured about 685 seconds before this allocation. Existing routing-request
+  proofs stay on C; no test, existing assignment, lane count or timeout is removed
+  or weakened.
+
 - Retained service-matrix tests now supply a valid routing request, project scope
   and matching operation/request/correlation IDs before asserting planned-action
   or wrong-service denial. Empty input would stop at shape validation and fail to

@@ -517,6 +517,10 @@ LANES = (
         ),
     ),
     *(TestLane(name, PROJECT_MODULES) for name in PARTITIONED_PROJECT_LANES),
-    *(TestLane(name, TASK_MODULES + (TASK_ROUTING_REQUEST_MODULES + ROUTING_AUTH_PREPARATION_MODULES if name == "task_lifecycle_c" else ()))
-      for name in PARTITIONED_TASK_LANES),
+    *(TestLane(
+        name,
+        TASK_MODULES
+        + (TASK_ROUTING_REQUEST_MODULES if name == "task_lifecycle_c" else ())
+        + (ROUTING_AUTH_PREPARATION_MODULES if name == "task_lifecycle_a" else ()),
+    ) for name in PARTITIONED_TASK_LANES),
 )
