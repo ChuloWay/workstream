@@ -217,9 +217,17 @@ in isolated probes: each named substitution regression must fail at its expected
 rejection assertion, not setup. Real positive receipt/handle execution is deferred.
 
 Commands: `cd backend && .venv/bin/pytest tests/authorization/post_submit_routing/test_contracts.py tests/authorization/test_acceptance_source_contracts.py -q`;
-real PostgreSQL command uses the canonical isolated runner with
-`tests/authorization/post_submit_routing/test_prepared.py`, using an isolated
-admin URL from the existing local Docker test fixture without printing secrets.
+real PostgreSQL proof uses:
+
+```sh
+cd backend && .venv/bin/python scripts/run_isolated_tests.py \
+  --metadata-json /tmp/arch04e2a-pg.json --timeout-seconds 1200 -- \
+  .venv/bin/python -m pytest \
+  tests/authorization/post_submit_routing/test_prepared.py -q --tb=short
+```
+
+Supply `WORKSTREAM_TEST_ADMIN_DATABASE_URL` from the existing local Docker
+fixture without printing credentials; the runner creates its own isolated database.
 
 Run focused pure routing/source contract tests, real PostgreSQL planned-action
 and rollback proofs, retained PREP/source tests and canonical module/AUTH/test
