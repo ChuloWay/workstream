@@ -51,6 +51,11 @@ guidance. It does not build a monitoring platform.
   Celery instrumentor can record exception messages, stacks, and retry reasons.
   Neither default is safe enough to export directly under this repository's
   content boundary.
+- FastAPI native telemetry does not capture request headers or bodies as span
+  attributes by default, but it extracts the process-global propagator and
+  records raw path/query values before route selection. Its provider injection,
+  `logs=False`, `metrics=False`, `auto_configure=False`, and route-template
+  updates are usable only behind the application-owned exporter allowlist.
 - `app.adapters.project_agents.openai_agent_sdk` explicitly keeps the OpenAI
   Agents SDK's tracing disabled and sensitive trace inclusion false.
 
@@ -60,10 +65,11 @@ guidance. It does not build a monitoring platform.
 
 - `.commitrail/changes/observability-foundation.md`: durable intent, boundary,
   proof, and material review disposition.
-- `backend/pyproject.toml` and `backend/uv.lock`: upgrade to FastAPI 0.142.2 or
-  newer within the existing `<1.0` bound and add only the OpenTelemetry SDK,
+- `backend/pyproject.toml` and `backend/uv.lock`: add only the OpenTelemetry SDK,
   OTLP HTTP/protobuf exporter, and official Celery instrumentation required by
-  this design.
+  this design. Resolve FastAPI 0.142.2 or newer within the existing `<1.0`
+  bound only if native tracing passes the behavior/privacy probes; the explicit
+  ASGI fallback does not require the framework feature.
 - `backend/.env.example`: public, credential-free example settings for log
   level, OTLP endpoint, and trace sample ratio, with the API and worker sharing
   the same deployment environment while using distinct fixed service names.
@@ -72,8 +78,8 @@ guidance. It does not build a monitoring platform.
   embedded credentials, query strings, or fragments.
 - `backend/app/core/observability.py`: one small composition owner for safe JSON
   formatting, context-local diagnostic IDs, explicit OpenTelemetry resources
-  and providers, sampling, safe span export, bounded metric views, Celery
-  propagation hooks, and bounded shutdown.
+  and providers, local-budget sampling, safe span export, closed application
+  metrics, traceparent-only Celery propagation hooks, and bounded shutdown.
 - `backend/app/core/api_controls.py`: bind the existing validated request and
   correlation IDs for the duration of the ASGI request and annotate the active
   span without changing validation, response, or error behavior.
@@ -111,9 +117,11 @@ guidance. It does not build a monitoring platform.
 - Request/response bodies, guide/task/prompt/ZIP content, raw query strings,
   signed URLs, credentials, tokens, cookies, SQL text/parameters, exception
   messages, stack traces, or arbitrary logging extras in emitted diagnostics.
-- Record, actor, user, project, request, correlation, task, trace, or span IDs
-  as metric attributes. Metric labels are limited to fixed route templates,
-  HTTP method/status/error class, registered Celery task name, and service role.
+- Record, actor, user, project, request, correlation, broker-message, trace, or
+  span IDs as metric attributes. Metric labels are limited to registered route
+  templates, a fixed HTTP method/status/outcome vocabulary, registered Celery
+  task names, and fixed service role. Values outside those exact registries and
+  vocabularies collapse to one fixed `other`/`unmatched` value.
 - FastAPI contrib/ASGI auto-instrumentation alongside native telemetry, OpenAI
   Agents SDK tracing, database/client auto-instrumentation, an always-on
   profiler, a vendor SDK, dashboards, alerting rules, a collector fleet, or
@@ -127,47 +135,79 @@ guidance. It does not build a monitoring platform.
 
 The API and every prefork Celery child emit one-line structured logs with stable
 service/environment/severity/event fields and, when present, the already
-validated request ID, correlation ID, trace ID, and span ID. The API uses
-FastAPI's native HTTP spans and metrics exactly once. Celery uses the official
-instrumentor in each initialized child and propagates W3C trace context plus
-validated Workstream diagnostic IDs through broker headers. A missing,
-misconfigured, slow, or unavailable collector cannot block startup, requests,
-tasks, or shutdown beyond the configured bound.
+validated request ID, correlation ID, trace ID, and span ID. Exactly one HTTP
+server span and one closed set of application-owned HTTP metrics are produced
+per request. Celery uses the official instrumentor in each initialized child
+and propagates only W3C `traceparent` plus validated Workstream diagnostic UUIDs
+through broker headers. A missing, misconfigured, slow, or unavailable
+collector cannot block startup, requests, tasks, or shutdown beyond the
+configured bound.
 
 ### Design chosen
 
 `app.core.observability` owns explicit application-created tracer and meter
-providers. FastAPI receives those providers with `logs=False` and
-`auto_configure=False`; no second FastAPI instrumentation library is installed.
-The API service name is fixed to `workstream-api` and the worker service name to
-`workstream-worker`, with application version and deployment environment as
-bounded resource attributes.
+providers. The current choice is FastAPI 0.142.2 native tracing because source
+inspection confirms it accepts an explicit tracer provider, can disable native
+logs/metrics/environment configuration, updates spans to registered route
+templates, and detects a legacy contrib middleware stack. It receives
+`logs=False`, `metrics=False`, and `auto_configure=False`; no contrib FastAPI
+instrumentation is installed. Application-owned request metrics provide the
+closed value mapping that native metrics do not expose. If implementation proof
+shows any native span bypasses the sanitizing exporter or duplicates a span,
+the in-scope fallback is one explicit ASGI server span in the same core module,
+with native tracing disabled. The observable contract and file boundary do not
+depend on a FastAPI-specific telemetry feature. The API service name is fixed
+to `workstream-api` and the worker service name to `workstream-worker`, with
+application version and deployment environment as bounded resource attributes.
 
-Trace sampling uses parent-based ratio sampling with a validated ratio and a
-small fixed batch queue, batch size, schedule delay, OTLP request timeout, and
-shutdown deadline. A sanitizing exporter boundary copies only approved span
-names, context, timing, status code without description, links without
-attributes, and an explicit attribute allowlist. It drops span events and raw
-resource attributes before any in-memory test exporter or OTLP exporter sees
-them. This removes FastAPI query/path input and Celery exception/retry content
-while preserving route templates, registered task names, HTTP outcomes, safe
-diagnostic IDs, and causal trace context. Export construction and export errors
-are reduced to constant local diagnostic events.
+Trace sampling uses a local trace-ID ratio sampler with a validated ratio rather
+than a parent-based sampler, so an untrusted remote sampled flag cannot override
+the Workstream budget. The same trace ID produces a consistent decision in a
+Celery child. A small fixed batch queue, batch size, schedule delay, OTLP request
+timeout, and shutdown deadline bound resource use. A sanitizing exporter
+boundary copies only approved span names, context, timing, status code without
+description, links without attributes, and an explicit attribute key/value
+allowlist. Registered HTTP route and Celery task inventories bound names and
+values; unknown method, route, task, operation, error, or span values map to one
+fixed category. It drops span events and raw resource attributes before any
+in-memory test exporter or OTLP exporter sees them. This removes FastAPI
+path/query input and Celery exception/retry content while preserving registered
+route templates, registered task names, bounded HTTP outcomes, safe diagnostic
+IDs, and causal trace context. Export construction and export errors are
+reduced to constant local diagnostic events.
 
-Metrics use explicit SDK views whose retained attributes are closed and bounded.
-HTTP request duration/active-request metrics and Celery task duration are
-exportable; record and identity values never become labels. Existing auth and
-artifact metric owners remain unchanged in this chunk rather than gaining a
-second counter implementation.
+Application-owned HTTP request and Celery task metrics admit values through
+exact runtime registries: the built FastAPI route inventory, the Celery task
+registry, a fixed HTTP method set, status class, and fixed outcome vocabulary.
+Unknown values map to `unmatched` or `other` before recording. Metrics use SDK
+views as a second key allowlist. Request duration/active-request and task
+duration are exportable; record and identity values never become labels.
+Existing auth and artifact metric owners remain unchanged in this chunk rather
+than gaining a second counter implementation.
 
 The logging configuration is installed idempotently once per process, never
 mutated per request, and uses context variables for concurrent isolation. Its
-JSON formatter emits a closed field set and never serializes `exc_info`, stack
-text, logger arguments as separate fields, or arbitrary extras. Existing static
-event messages remain visible. Request middleware binds and resets its current
-IDs around the whole ASGI call. Celery publication copies only canonical UUID
+JSON formatter never calls `LogRecord.getMessage()`. It maps an exact registry
+of Workstream static message templates to fixed event codes and discards their
+arguments; all Uvicorn access/error, Celery task/retry/error, Kombu,
+OpenTelemetry, SQLAlchemy, and unknown logger records map by logger family and
+severity to fixed event codes without rendering `msg`, `args`, `exc_info`,
+stack text, or arbitrary extras. The formatter's output fields and event values
+are therefore both closed. Request middleware binds and resets service,
+environment, and its current IDs around the whole ASGI call. Process-wide
+handler installation is reference-safe and app providers remain app-owned, so
+overlapping/repeated application factory lifespans neither replace another
+app's provider nor add handlers. Celery publication copies only canonical UUID
 IDs into private broker headers; task entry rejects malformed values and falls
 back to the canonical Celery task UUID for diagnostic context.
+
+The global propagator is installed idempotently as a traceparent-only
+propagator. It validates W3C `traceparent`, deliberately discards inbound
+`tracestate`, never extracts or injects baggage, and emits only `traceparent`.
+Broker publication strips any pre-existing `baggage` or `tracestate` before the
+official instrumentor injects context. API-side publication hooks are installed
+once per process and select the request-bound runtime; worker providers and the
+official instrumentor remain child-owned after fork.
 
 Providers and instrumentation are created after Celery's prefork child startup,
 as required by the official instrumentor. Shutdown first performs a bounded
@@ -191,9 +231,14 @@ daemon, endpoint, or continuous capture is added.
 - FastAPI automatic environment setup was rejected because the application
   needs one explicit provider lifecycle, fail-open construction, and a privacy
   filter before export.
+- FastAPI native metrics were rejected because their exported attribute values
+  cannot be mapped through the application route/task registries before
+  recording. Small application-owned HTTP/task instruments provide a closed
+  value boundary.
 - Native FastAPI plus contrib FastAPI instrumentation was rejected because it
   duplicates spans and metrics. Native FastAPI telemetry alone owns HTTP
-  instrumentation after the version upgrade.
+  tracing when it passes the exact export/privacy probes; one explicit ASGI
+  server span is the bounded fallback if it does not.
 - Exporting native spans unchanged was rejected because native FastAPI can
   include raw query data and Celery can include exception/retry content.
 - Persisting W3C trace context in outbox events was rejected because it would
@@ -206,6 +251,9 @@ daemon, endpoint, or continuous capture is added.
 - SQL, HTTP client, object-store, and model-provider auto-instrumentation was
   rejected for this chunk because it expands privacy and cardinality risk. The
   OpenAI SDK's existing sensitive tracing disablement remains intact.
+- Default composite propagation and parent-based sampling were rejected because
+  baggage/tracestate can carry arbitrary input and a remote sampled bit must not
+  override the local sampling budget.
 
 ### Boundaries preserved / what must not change
 
@@ -221,12 +269,15 @@ daemon, endpoint, or continuous capture is added.
 
 ## Acceptance criteria
 
-- [ ] FastAPI resolves at least 0.142.2 and receives explicit native telemetry
-      providers with `logs=False` and `auto_configure=False`; no contrib FastAPI
-      instrumentation or duplicate HTTP spans/metrics exist.
+- [ ] Exactly one HTTP server span and the closed application-owned HTTP metrics
+      exist per request, with no contrib/native/custom duplication. The selected
+      path accepts explicit application providers, disables framework exception
+      logs and automatic export, and passes the same privacy probes; it does not
+      rely on a framework feature merely because it is available.
 - [ ] API logs and exported spans reuse the exact validated HTTP request and
       correlation IDs under concurrent requests, and the formatter/provider
-      state is not mutated per request.
+      state is not mutated per request or replaced by repeated/overlapping app
+      factory lifespans.
 - [ ] A real prefork Celery child initializes tracing after fork, extracts the
       producer trace and validated diagnostic IDs, and executes under the same
       trace; repeated initialization produces one consumer span and one metric.
@@ -234,8 +285,19 @@ daemon, endpoint, or continuous capture is added.
       and metrics proves credentials, bodies, guide/task/prompt/ZIP content,
       signed URLs, raw query values, SQL parameters, exception messages/stacks,
       and arbitrary extras are absent.
+- [ ] Privacy-canary logging tests use the real configured Uvicorn access/error,
+      Celery task/retry/error, Kombu/OpenTelemetry, SQLAlchemy, Workstream, and
+      unknown logger paths with sensitive data placed separately in `msg`,
+      interpolation arguments, exception objects, and extras; output contains
+      only registered constant event values.
 - [ ] Metric attribute keys and values remain in the closed low-cardinality set
       across requests and tasks with different record/user/project/request IDs.
+      Unknown methods, routes, task names, exception classes, and outcome values
+      map to one fixed `other`/`unmatched` category.
+- [ ] HTTP and broker propagation accepts and emits only `traceparent` plus the
+      two canonical UUID diagnostic headers. Baggage and tracestate canaries do
+      not reach child context or outbound headers, and an inbound sampled flag
+      cannot override the configured local sample-ratio decision.
 - [ ] Missing endpoint, invalid endpoint, exporter construction failure,
       collector refusal/timeout, force-flush failure, and shutdown failure do
       not change HTTP/task outcomes; startup and shutdown remain within tested
@@ -284,6 +346,8 @@ daemon, endpoint, or continuous capture is added.
 | Existing API IDs and sanitized failures are reusable | Inspect `app.core.api_controls.RequestContextMiddleware` and `tests/test_api_controls.py` | Confirmed at base `176952e6624244bdc405bac973ce6c4abddb0dae` | No logging/tracing context exists yet |
 | Worker telemetry must initialize after fork | Inspect `app.workers.celery_app` hooks and official OpenTelemetry Celery instrumentor documentation/source | Confirmed; official guidance requires provider and instrumentor setup after `worker_process_init` | Runtime proof remains future implementation evidence |
 | Native FastAPI defaults are not privacy-safe enough | Inspect FastAPI 0.142.2 `fastapi.telemetry._asgi` and `_api` source | Confirmed raw `url.query` span attribute and exception log content; explicit `logs=False` plus export sanitization required | Future version drift must remain lock-tested |
+| Native FastAPI tracing is controllable but not required by the behavior contract | Inspect FastAPI 0.142.2 provider/config path and legacy-stack detection | Explicit provider, log/metric/auto-config disablement and route-template update are available; native tracing remains conditional on exporter/privacy probes | One explicit ASGI span is the in-scope fallback |
+| Default Celery propagation/error tracing exceeds the privacy boundary | Inspect OpenTelemetry Celery 0.66b0 source | Confirmed global composite propagation plus exception/retry recording; traceparent-only propagation and sanitized export are required | Exact locked version remains future implementation evidence |
 | No trace context can honestly survive current durable outbox recovery | Inspect outbox envelope/model/worker and all broker publication call sites | Confirmed: business correlation exists, W3C context is not persisted | New trace after restart/recovery is intentional |
 | Application behavior and tests | Future focused pytest nodes plus existing API, Celery topology, and outbox suites | Pending implementation | Real collector deployment remains outside repository proof |
 | Dependency integrity | `cd backend && uv lock --check && uv sync --locked --extra dev --extra agents` on the supported matrix | Pending implementation | Hosted CI remains final environment proof |
