@@ -76,10 +76,14 @@ guidance. It does not build a monitoring platform.
 - `backend/app/core/config.py`: typed, bounded diagnostics configuration and
   validation. Collector endpoints must be absolute HTTP(S) URLs without
   embedded credentials, query strings, or fragments.
-- `backend/app/core/observability.py`: one small composition owner for safe JSON
-  formatting, context-local diagnostic IDs, explicit OpenTelemetry resources
-  and providers, local-budget sampling, safe span export, closed application
-  metrics, traceparent-only Celery propagation hooks, and bounded shutdown.
+- `backend/app/core/diagnostic_logging.py`: closed JSON formatting,
+  context-local diagnostic IDs, and reference-safe process logging ownership.
+- `backend/app/core/observability.py`: explicit OpenTelemetry resources and
+  providers, local-budget sampling, safe span export, closed HTTP metrics, and
+  bounded shutdown.
+- `backend/app/core/celery_observability.py`: traceparent-only broker
+  propagation, child-owned task context/spans/metrics, public signal
+  registration, and worker-parent logging setup without parent exporters.
 - `backend/app/core/api_controls.py`: bind the existing validated request and
   correlation IDs for the duration of the ASGI request and annotate the active
   span without changing validation, response, or error behavior.
@@ -94,10 +98,19 @@ guidance. It does not build a monitoring platform.
   loaded, annotate only the current diagnostic span with its already-persisted,
   bounded outbox correlation ID. Do not store trace context or change delivery,
   authorization, digest, retry, or handler behavior.
-- `backend/tests/test_observability.py`, `backend/tests/test_api_controls.py`,
-  `backend/tests/test_config.py`, and focused existing outbox tests only where
-  needed: observable privacy, correlation, fail-open, lifecycle, real-prefork,
-  duplicate-instrumentation, and bounded-cardinality proof.
+- `backend/tests/test_observability.py`,
+  `backend/tests/test_celery_observability.py`,
+  `backend/tests/test_api_controls.py`, `backend/tests/test_config.py`, and
+  focused existing outbox tests only where needed: observable privacy,
+  correlation, fail-open, lifecycle, real-prefork, duplicate-instrumentation,
+  and bounded-cardinality proof.
+- `backend/scripts/test_lane_catalogue.py`,
+  `backend/scripts/behavior_ownership.py`,
+  `backend/tests/test_ci_lane_catalogue.py`, and
+  `.ci/behavior-ownership/partition.v1.json`: register the two new diagnostics
+  modules once on the hosted schema/architecture lane with measured headroom,
+  and add exact ownership entries for the new production modules without
+  changing lane count, caps, workflow, or existing assignments.
 - `docs/engineering/observability.md` and the existing README logs section:
   operator configuration, interpretation, limitations, troubleshooting, and
   on-demand profiling guidance.
@@ -141,8 +154,10 @@ server span and one closed set of application-owned HTTP metrics are produced
 per request. Application-owned Celery signal handlers create one child-local
 consumer span and one task-duration measurement and propagate only W3C
 `traceparent` plus validated Workstream diagnostic UUIDs through broker headers.
-A missing, misconfigured, slow, or unavailable collector cannot block startup,
-requests, tasks, or shutdown beyond the configured bound.
+A missing endpoint disables export. An invalid endpoint fails startup with a
+fixed error that cannot echo its input. After valid configuration, a slow or
+unavailable collector cannot block requests, tasks, or shutdown beyond the
+configured bound.
 
 ### Design chosen
 
@@ -313,10 +328,10 @@ daemon, endpoint, or continuous capture is added.
       ratio. Broker propagation emits only that internal `traceparent` plus the
       two canonical UUID diagnostic headers; baggage and tracestate canaries do
       not reach child context or outbound headers.
-- [ ] Missing endpoint, invalid endpoint, exporter construction failure,
-      collector refusal/timeout, force-flush failure, and shutdown failure do
-      not change HTTP/task outcomes; startup and shutdown remain within tested
-      bounds.
+- [ ] An invalid endpoint fails startup with a fixed error that does not retain
+      or echo input. A missing endpoint disables export; exporter construction
+      failure, collector refusal/timeout, force-flush failure, and shutdown
+      failure do not change HTTP/task outcomes and remain within tested bounds.
 - [ ] Repeated `create_app` use and repeated Celery signal setup do not duplicate
       handlers, providers, instrumentation, spans, or metric readers.
 - [ ] Two sequential tasks in one real prefork child prove normal, failure, and
@@ -347,17 +362,18 @@ daemon, endpoint, or continuous capture is added.
 | Concurrent requests retain their own validated request/correlation IDs in logs and spans and reset both contexts after completion | `app.core.api_controls.RequestContextMiddleware` with core child-owned diagnostic context tokens | `tests/test_observability.py::test_concurrent_api_diagnostic_context_is_isolated` |
 | Public `traceparent`, `tracestate`, baggage, caller-chosen trace IDs, and sampled flags cannot select the local trace identity or override the local sample decision | Core explicit ASGI trace start and local root sampler | `tests/test_observability.py::test_public_propagation_and_sampling_input_cannot_control_local_trace` |
 | Repeated and overlapping app lifespans keep distinct app providers and one process log handler | `app.main` composition with `app.core.observability` runtime | `tests/test_observability.py::test_overlapping_app_lifespans_keep_owned_providers_and_one_log_handler` |
-| Exporter/provider threads are absent in the Celery parent and initialized in the real child only | `app.workers.celery_app` `worker_process_init` composition | `tests/test_observability.py::test_real_prefork_initializes_telemetry_only_in_child` |
-| Direct API-to-Celery publication creates one producer-to-consumer parent-child trace and outbound broker headers contain only internal `traceparent` and the two canonical UUID diagnostic headers | Core before-publish hook and child-only Celery receivers composed by `app.workers.celery_app` | `tests/test_observability.py::test_api_to_celery_trace_is_parent_child_and_headers_are_allowlisted` |
-| Repeating Celery receiver setup leaves one receiver set, one child provider/reader set, one consumer span, and one task metric measurement | Idempotent core signal registration with child-owned worker runtime | `tests/test_observability.py::test_repeated_celery_receiver_setup_does_not_duplicate_spans_or_readers` |
-| One task duration metric uses a registered task name plus fixed outcome and never hostname or IDs | Core task metric with immutable task inventory supplied by Celery composition | `tests/test_observability.py::test_worker_task_metric_is_single_and_has_no_hostname_or_ids` |
-| Normal, failure, retry, missing-header, and malformed-header task exits cannot leak context to the next task in one child | Core public Celery signal receivers and child-owned context tokens | `tests/test_observability.py::test_real_prefork_sequential_tasks_cannot_inherit_diagnostic_context` |
+| Exporter/provider threads are absent in the Celery parent and initialized in the real child only | `app.workers.celery_app` `worker_process_init` composition | `tests/test_celery_observability.py::test_real_celery_prefork_correlates_api_and_resets_sequential_task_context` |
+| Direct API-to-Celery publication creates one server-to-consumer parent-child trace and outbound broker headers contain only internal `traceparent` and the two canonical UUID diagnostic headers | Core before-publish hook and child-only Celery receivers composed by `app.workers.celery_app` | `tests/test_observability.py::test_api_to_celery_trace_is_parent_child_and_headers_are_allowlisted` plus `tests/test_celery_observability.py::test_real_celery_prefork_correlates_api_and_resets_sequential_task_context` |
+| Repeating Celery receiver setup leaves one receiver set, one child provider/reader set, one consumer span, and one task metric measurement | Idempotent core signal registration with child-owned worker runtime | `tests/test_celery_observability.py::test_repeated_celery_receiver_setup_does_not_duplicate_spans_or_readers` |
+| One task duration metric uses a registered task name plus fixed outcome and never hostname or IDs | Core task metric with immutable task inventory supplied by Celery composition | `tests/test_observability.py::test_api_to_celery_trace_is_parent_child_and_headers_are_allowlisted` plus `tests/test_celery_observability.py::test_real_celery_prefork_correlates_api_and_resets_sequential_task_context` |
+| Normal, failure, retry, missing-header, and malformed-header task exits cannot leak context to the next task in one child | Core public Celery signal receivers and child-owned context tokens | `tests/test_celery_observability.py::test_sequential_task_failures_and_retries_reset_every_context_token` plus `tests/test_celery_observability.py::test_real_celery_prefork_correlates_api_and_resets_sequential_task_context` |
 | Core diagnostics stays acyclic and imports no worker or product module | Composition-root boundary | `tests/test_observability.py::test_observability_core_has_no_worker_or_module_imports` |
 | Existing outbox correlation annotates only after the canonical invocation marker and envelope transaction commit; before/after snapshots prove no business row, payload, digest, schema, or authorization input changes, and structure checks prove no persisted trace fields | `app.modules.outbox.delivery.OutboxDelivery.invoke` calling generic core annotation | `tests/outbox/test_delivery_postgresql.py::test_diagnostic_annotation_follows_committed_invocation_envelope` |
 | Every exported API/worker span and metric has only closed keys and normalized values | Core explicit ASGI/Celery instrumentation and sanitizing exporter | `tests/test_observability.py::test_complete_export_sets_are_closed_and_bounded` |
 | Dynamic logger data and hostile exception stringification never enter Workstream diagnostics | Core closed log-event map and signal exits | `tests/test_observability.py::test_real_loggers_and_hostile_exception_never_render_sensitive_values` |
-| Missing endpoint, invalid endpoint, exporter construction failure, collector refusal/timeout, flush failure, and shutdown failure remain bounded and do not change request/task outcomes | Core exporter/runtime lifecycle | `tests/test_observability.py::test_collector_failure_is_bounded_and_product_flow_succeeds` |
-| The OpenAI Agents SDK remains configured with both tracing and sensitive trace data disabled | Existing `app.adapters.project_agents.openai_agent_sdk` owner, unchanged by diagnostics composition | `tests/test_observability.py::test_openai_agent_tracing_remains_disabled` |
+| An invalid endpoint fails startup with an input-free fixed error | Typed settings validation before runtime composition | `tests/test_config.py::test_invalid_observability_endpoint_fails_startup_without_retaining_input` |
+| A missing endpoint disables export; exporter construction failure, collector refusal/timeout, flush failure, and shutdown failure remain bounded and do not change request/task outcomes | Core exporter/runtime lifecycle | `tests/test_observability.py::test_collector_failure_is_bounded_and_product_flow_succeeds` |
+| The OpenAI Agents SDK remains configured with both tracing and sensitive trace data disabled | Existing `app.adapters.project_agents.openai_agent_sdk` owner, unchanged by diagnostics composition | `tests/test_agent_runtime.py::test_unified_compilation_uses_scoped_tools_and_strict_output` |
 | Operator guidance matches the implemented environment keys, safe export contract, partial outbox linkage, deployment distinction, and on-demand profiling boundary | `docs/engineering/observability.md`, README logs section, and typed diagnostics settings | `tests/test_observability.py::test_operator_docs_match_runtime_observability_contract` |
 
 ## Risk and review routing

@@ -470,6 +470,13 @@ TASK_ROUTING_REQUEST_MODULES = (
     "tests/tasks/post_submit_routing/test_request_storage.py",
 )
 
+# Core diagnostics stay on the schema/architecture lane with measured hosted
+# headroom; the shared and task lanes are already closest to the hard cap.
+OBSERVABILITY_MODULES = (
+    "tests/test_observability.py",
+    "tests/test_celery_observability.py",
+)
+
 PARTITION_GROUPS = (
     (PARTITIONED_SHARED_LANES, SHARED_FOUNDATION_MODULES),
     (PARTITIONED_PROJECT_LANES, PROJECT_MODULES),
@@ -507,6 +514,7 @@ LANES = (
             "tests/test_ci_test_lanes.py",
             "tests/test_test_lane_evidence.py",
             "tests/test_merge_test_lane_evidence.py",
+            *OBSERVABILITY_MODULES,
             ADMIN_RUNNER_MODULE,
         ),
     ),

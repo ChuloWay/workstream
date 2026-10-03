@@ -60,9 +60,76 @@ def test_default_settings_are_fail_closed(monkeypatch: pytest.MonkeyPatch) -> No
     assert settings.api_admin_mutation_rate_window_seconds == 60
     assert settings.api_authorization_read_rate_limit == 120
     assert settings.api_authorization_read_rate_window_seconds == 60
+    assert settings.observability_log_level == "INFO"
+    assert settings.observability_otlp_endpoint is None
+    assert settings.observability_trace_sample_ratio == 0.1
+    assert settings.observability_export_timeout_seconds == 2.0
+    assert settings.observability_shutdown_timeout_seconds == 3.0
     limits = submission_archive_limits(settings)
     assert limits.maximum_expanded_bytes == 512 * 1024 * 1024
     assert limits.maximum_entry_bytes == 128 * 1024 * 1024
+
+
+def test_observability_endpoint_is_a_credential_free_origin() -> None:
+    settings = Settings(observability_otlp_endpoint="https://[::1]:4318/")
+    assert settings.observability_otlp_endpoint == "https://[::1]:4318"
+
+    for endpoint in (
+        "ftp://collector.invalid",
+        "https://user:secret@collector.invalid",
+        "https://collector.invalid/path",
+        "https://collector.invalid?token=secret",
+        "https://collector.invalid#fragment",
+    ):
+        with pytest.raises(ValueError, match="^invalid observability OTLP endpoint$"):
+            Settings(observability_otlp_endpoint=endpoint)
+
+
+def test_invalid_observability_endpoint_fails_startup_without_retaining_input(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    canaries = (
+        "https://operator:direct-secret@collector.invalid?token=direct-query",
+        "https://operator:environment-secret@collector.invalid?token=environment-query",
+        "https://operator:dotenv-secret@collector.invalid?token=dotenv-query",
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        f"WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT={canaries[2]}\n",
+        encoding="utf-8",
+    )
+    constructors = (
+        lambda: Settings(observability_otlp_endpoint=canaries[0]),
+        lambda: Settings(),
+        lambda: Settings(_env_file=env_file),
+        lambda: Settings.model_validate({"observability_otlp_endpoint": canaries[0]}),
+    )
+    for index, constructor in enumerate(constructors):
+        monkeypatch.delenv("WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT", raising=False)
+        if index == 1:
+            monkeypatch.setenv("WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT", canaries[1])
+        with pytest.raises(ValueError, match="^invalid observability OTLP endpoint$") as caught:
+            constructor()
+        assert not isinstance(caught.value, ValidationError)
+        for canary in canaries:
+            assert canary not in f"{caught.value!s} {caught.value!r}"
+            assert_secret_not_retained(
+                caught.value,
+                canary,
+                traceback_module_prefixes=("app.",),
+            )
+
+
+def test_observability_bounds_reject_unbounded_resource_configuration() -> None:
+    for values in (
+        {"observability_trace_sample_ratio": -0.01},
+        {"observability_trace_sample_ratio": 1.01},
+        {"observability_export_timeout_seconds": 0.01},
+        {"observability_shutdown_timeout_seconds": 11},
+    ):
+        with pytest.raises(ValidationError):
+            Settings(**values)
 
 
 def test_submission_archive_settings_map_to_fixed_validated_limits() -> None:
