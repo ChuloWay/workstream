@@ -111,7 +111,9 @@ guidance. It does not build a monitoring platform.
   `.ci/behavior-ownership/partition.v1.json`: register the two new diagnostics
   modules once on the hosted schema/architecture lane with measured headroom,
   and add exact ownership entries for the new production modules without
-  changing lane count, caps, workflow, or existing assignments.
+  changing lane count, caps, or workflow. The three existing routing-request
+  proof modules may move together from task C to the schema lane to repair the
+  measured timeout; preserve their exact-once inventory and every assertion.
 - `docs/engineering/observability.md` and the existing README logs section:
   operator configuration, interpretation, limitations, troubleshooting, and
   on-demand profiling guidance.
@@ -492,3 +494,18 @@ implementation. The foundation implements the amended design above.
   duplicate-instrumentation tests must bind the selected lock. An unavailable
   collector is deliberately tolerated, which
   means operators must monitor collector health outside product request flow.
+
+### Hosted lane timing repair
+
+The hosted run at `84872b30` exhausted task C's unchanged 1,200-second
+bound after 459 of 483 tests, with no assertion failure and 24 unfinished task
+tests. Schema completed in 526.854 seconds; task A and B took 1,099.530 and
+1,155.429 seconds. Move the three existing routing-request contract, repository
+and storage proof modules together from task C to schema, which already owns
+related routing storage contracts. Preserve all tests, exact-once membership,
+partition hashing, lane count, timeout, coverage and completeness checks.
+
+The focused catalogue test must prove the exact destination and reject missing,
+duplicate and wrong-lane membership. CI-integrity and QA/test-delta review must
+inspect this repair, followed by full hosted verification. This allocation
+reduces the measured hotspot; it does not claim to eliminate runner variance.
