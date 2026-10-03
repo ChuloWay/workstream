@@ -343,8 +343,13 @@ daemon, endpoint, or continuous capture is added.
 
 | Behavior | Owner | Named test |
 |---|---|---|
+| Valid IDs, invalid IDs, an unmatched route, and an exception route each produce exactly one HTTP server span and one request-duration/count measurement, with no FastAPI-native or contrib span/metric names or providers | `app.main` composition with the one explicit `app.core.observability` ASGI path | `tests/test_observability.py::test_api_emits_exactly_one_http_span_and_metric_set_for_every_route_outcome` |
+| Concurrent requests retain their own validated request/correlation IDs in logs and spans and reset both contexts after completion | `app.core.api_controls.RequestContextMiddleware` with core child-owned diagnostic context tokens | `tests/test_observability.py::test_concurrent_api_diagnostic_context_is_isolated` |
+| Public `traceparent`, `tracestate`, baggage, caller-chosen trace IDs, and sampled flags cannot select the local trace identity or override the local sample decision | Core explicit ASGI trace start and local root sampler | `tests/test_observability.py::test_public_propagation_and_sampling_input_cannot_control_local_trace` |
 | Repeated and overlapping app lifespans keep distinct app providers and one process log handler | `app.main` composition with `app.core.observability` runtime | `tests/test_observability.py::test_overlapping_app_lifespans_keep_owned_providers_and_one_log_handler` |
 | Exporter/provider threads are absent in the Celery parent and initialized in the real child only | `app.workers.celery_app` `worker_process_init` composition | `tests/test_observability.py::test_real_prefork_initializes_telemetry_only_in_child` |
+| Direct API-to-Celery publication creates one producer-to-consumer parent-child trace and outbound broker headers contain only internal `traceparent` and the two canonical UUID diagnostic headers | Core before-publish hook and child-only Celery receivers composed by `app.workers.celery_app` | `tests/test_observability.py::test_api_to_celery_trace_is_parent_child_and_headers_are_allowlisted` |
+| Repeating Celery receiver setup leaves one receiver set, one child provider/reader set, one consumer span, and one task metric measurement | Idempotent core signal registration with child-owned worker runtime | `tests/test_observability.py::test_repeated_celery_receiver_setup_does_not_duplicate_spans_or_readers` |
 | One task duration metric uses a registered task name plus fixed outcome and never hostname or IDs | Core task metric with immutable task inventory supplied by Celery composition | `tests/test_observability.py::test_worker_task_metric_is_single_and_has_no_hostname_or_ids` |
 | Normal, failure, retry, missing-header, and malformed-header task exits cannot leak context to the next task in one child | Core public Celery signal receivers and child-owned context tokens | `tests/test_observability.py::test_real_prefork_sequential_tasks_cannot_inherit_diagnostic_context` |
 | Core diagnostics stays acyclic and imports no worker or product module | Composition-root boundary | `tests/test_observability.py::test_observability_core_has_no_worker_or_module_imports` |
@@ -352,6 +357,8 @@ daemon, endpoint, or continuous capture is added.
 | Every exported API/worker span and metric has only closed keys and normalized values | Core explicit ASGI/Celery instrumentation and sanitizing exporter | `tests/test_observability.py::test_complete_export_sets_are_closed_and_bounded` |
 | Dynamic logger data and hostile exception stringification never enter Workstream diagnostics | Core closed log-event map and signal exits | `tests/test_observability.py::test_real_loggers_and_hostile_exception_never_render_sensitive_values` |
 | Collector refusal, timeout, flush failure, and shutdown failure remain bounded and do not change request/task outcomes | Core exporter/runtime lifecycle | `tests/test_observability.py::test_collector_failure_is_bounded_and_product_flow_succeeds` |
+| The OpenAI Agents SDK remains configured with both tracing and sensitive trace data disabled | Existing `app.adapters.project_agents.openai_agent_sdk` owner, unchanged by diagnostics composition | `tests/test_observability.py::test_openai_agent_tracing_remains_disabled` |
+| Operator guidance matches the implemented environment keys, safe export contract, partial outbox linkage, deployment distinction, and on-demand profiling boundary | `docs/engineering/observability.md`, README logs section, and typed diagnostics settings | `tests/test_observability.py::test_operator_docs_match_runtime_observability_contract` |
 
 ## Risk and review routing
 
@@ -389,25 +396,34 @@ daemon, endpoint, or continuous capture is added.
 
 ## Review findings
 
-- `ARCH-OBS-001`: choose one HTTP implementation rather than a native/custom
-  runtime fallback. Resolved in plan by selecting the explicit ASGI path only.
-- `ARCH-OBS-002`: avoid official Celery instrumentation teardown through private
-  callback internals and duplicate metrics. Resolved in plan with
-  application-owned public signal receivers.
+- `ARCH-OBS-001`: remove duplicate Celery instrumentation and its overlapping
+  duration metric. Resolved in plan by excluding the official instrumentor and
+  selecting one application-owned public-signal implementation.
+- `ARCH-OBS-002`: define child-owned diagnostic context cleanup for every task
+  exit. Resolved in plan with entry clearing, child-owned tokens, one idempotent
+  normal/failure/retry exit, and two-task real-prefork leakage proof.
 - `ARCH-OBS-003`: keep dependency direction explicit. Resolved in plan by
   passing immutable route/task inventories from composition roots and
   prohibiting core imports of workers/product modules.
-- `ARCH-OBS-004`: bind every behavior to an owner and named discriminating test.
-  Resolved in the behavior ownership table; runtime evidence remains pending.
-- `SEC-OBS-001`: start public requests from fresh locally sampled traces so
-  caller-selected trace IDs/flags cannot force export. Resolved in plan; public
-  propagation input is ignored.
-- `SEC-OBS-002`: make child context cleanup explicit across normal, failure,
-  retry, missing, and malformed header paths. Resolved in plan with child-owned
-  tokens, idempotent exits, and sequential real-prefork proof.
-- `SEC-OBS-003`: prove hostile exception formatting is never invoked by the
-  diagnostics path and ensure outbox correlation follows committed custody.
-  Resolved in plan and named proof; runtime evidence remains pending.
+- `ARCH-OBS-004`: bind every behavior to an owner and a discriminating test
+  whose assertions prove count, causality, cleanup, or composition directly.
+  Resolved in the behavior ownership table with separate named proofs for HTTP
+  count/outcomes, concurrent context isolation, public propagation and local
+  sampling, API-to-Celery parentage/header allowlisting, repeated receiver
+  setup, retained OpenAI tracing disablement, and operator-doc consistency;
+  runtime evidence remains pending.
+- `SEC-OBS-001`: prevent exception/retry string rendering by Workstream
+  telemetry. Resolved with constant outcomes, no exception events or status
+  descriptions, and hostile-`__str__` proof through the real logger/task paths.
+- `SEC-OBS-002`: remove duplicate/raw Celery metrics, especially raw hostname
+  and unregistered task values. Resolved by excluding the official instrumentor
+  and emitting one application metric through the immutable task inventory.
+- `SEC-OBS-003`: prevent callers from controlling trace identity or sampling.
+  Resolved by ignoring all public propagation input, starting a random local
+  root, and applying only the locally configured root-sampling budget.
+- `SEC-OBS-004`: correct the security finding identifiers and preserve their
+  original disposition in this record. Resolved by the mapping above; the
+  security replay found no remaining runtime blocker.
 
 No application implementation begins until architecture and security reviewers
 replay this amended plan.
