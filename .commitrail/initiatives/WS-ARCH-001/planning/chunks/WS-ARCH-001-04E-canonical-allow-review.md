@@ -15,6 +15,43 @@ the separately named AUTH child owns only its authorization changes.
 
 ## Current bounded sequence
 
+AUTH-19A delivers inert source commitments and planned router registration.
+Split preparation from consequences within the existing TASK and AUTH owners:
+
+1. **ARCH-04E1B-A — TASK source/request staging.** Stage the distinct
+   `route_operation_id` and `route_request_digest` in the existing owner request
+   preparation custody. Provide caller-session staging, with no handler, commit,
+   current-pointer publication or acceptance effect.
+2. **ARCH-04E2-A — hidden AUTH issuer and receipt staging.** The issuer is the
+   existing planned `task.post_submit.route` action/permission, with sole fixed
+   identity `workstream.task.post_submit_router`. Build its exact prepared
+   evaluator and receipt-staging participant against 04E1B-A. Leave the action
+   planned/unavailable; mandatory source/FinalAcceptance receipt guards and their
+   positive SQL proof follow at 04E2-B, not before CON-07. Keep standalone invocation,
+   live workers and consequence activation unavailable. This phase requires no
+   acceptance-consuming handler and cannot commit an allow independently.
+3. **CON-07 and shared acceptance composition** consume the exact prepared
+   contracts. CON-07 is a caller-owned flush-only participant; its isolated
+   storage controls prove contribution/award behavior, not acceptance authority.
+   Do not require a fabricated AUTH allow to make those controls reachable.
+   At 04E2-B, install mandatory receipt custody and prove the first genuine allow
+   atomically with source publication, FinalAcceptance, TASK and contribution/
+   award effects, plus required audit/outbox records. Refuse retained
+   pre-authority sources before any production composition or consumer. Pre-CON
+   proof covers exact preparation, unavailable execution and rollback, not a
+   durable allowed operation.
+4. **ARCH-04E1B-B / 04E2-B / 04E3** complete hidden handlers, exact consequence
+   activation and live composition as detailed below. True admission uses the
+   same preparation/issuer phases but does not require CON/shared acceptance;
+   its receipt commits with its own full admission consequence.
+
+Human acceptance later uses the existing `review.decision` issuer and the same
+shared acceptance participant. Its genuine source receipt and Review effects
+must commit together; AUTH-19A's human contract supplies no executable issuer.
+These phases split existing work; they introduce no additional action, service
+identity, source table or acceptance operation. Before implementation, each
+phase gets its bounded current-main record and exact owner proof.
+
 Policy-switch integration dependency: these handlers consume the merged
 ReviewPolicy boolean schema and immutable lineage behavior specified in the
 [product-builder handoff](../../../../changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
@@ -28,11 +65,11 @@ current TASK children do not implement REV/CON internals: consume the
 are delivered after 04C, without REV dependency, runtime participant or handlers.
 REV-04B now references that schema after its source prerequisites:
 [ART-07A1 packet types](../../../WS-ART-001/WS-ART-001-07A1.md) are delivered;
-REV-03B normalized packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; mandatory acceptance-source AUTH custody precedes atomic participation.
-Mandatory acceptance-source AUTH custody and CON-07, using the delivered
+REV-03B normalized packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; hidden AUTH preparation precedes CON-07; mandatory persisted custody accompanies the first authorized atomic consequence at 04E2-B.
+Exact AUTH preparation/receipt staging, then CON-07, using the delivered
 REV-12A1 disabled controller/fence, are hard dependencies of false handler composition, not of this
-early schema or true admission. Both branches still require hidden 04E1B before
-canonical AUTH 04E2 and live 04E3. True proceeds with its own prerequisites;
+early schema or true admission. Both branches use the preparation/issuer phases
+above before hidden 04E1B-B, canonical activation 04E2-B and live 04E3. True proceeds with its own prerequisites;
 false additionally requires shared acceptance and scoped lifecycle activation,
 with 04F remediation before false guide activation. This breaks the source-FK dependency cycle.
 False guide activation stays unavailable until that path is proven. Avoid
@@ -51,10 +88,10 @@ creating human admission, acceptance or contribution effects.
    Source evidence alone never admits a human or authorizes acceptance.
    The current true-policy graph supplies real SQL proof; false is value-shape
    transport only because guide activation still rejects it. Before publication,
-   04E1B/04E2 must harden this same table with mandatory exact route and
+   04E2-B must harden this same table with mandatory exact route and
    owner-receipt custody and refuse every retained pre-authority source row,
    without backfill, mutation, deletion or a parallel table.
-2. **ARCH-04E1B — hidden TASK handlers.** After 04E1A and
+2. **ARCH-04E1B-B — hidden TASK handlers.** After 04E1B-A/04E2-A and
    CON-02B's handler/claim contract (plus shared acceptance foundations for
    false), TASK implements unavailable request/event
    production for its own evaluation-request event and the TASK consumer of
@@ -62,11 +99,11 @@ creating human admission, acceptance or contribution effects.
    and transaction proof described below. No live worker or action activation.
    Initial request reservation is a bounded atomic consequence of the existing
    exact `submission.create` command, not an authority token sent to the worker.
-3. **ARCH-04E2 — AUTH routing activation.** After 04E1B hidden proof, AUTH
+3. **ARCH-04E2-B — AUTH routing activation.** After 04E1B-B hidden proof, AUTH
    also consumes scoped XINT-003-08B lifecycle-control activation for the false
    consequence; true routing and the early source schema do not depend on it.
    AUTH
-   registers and activates proposed fixed identity
+   activates the already-registered fixed identity
    `workstream.task.post_submit_router` with sole action/permission
    `task.post_submit.route`. Its context binds committed completion event/claim,
    immutable Submission, request/generation, exact CHECKERS result/fence and
@@ -80,7 +117,7 @@ creating human admission, acceptance or contribution effects.
    checker, ART, dispatcher, human review or generic contribution actions.
    Derived submitter/award writes occur only through the shared participant,
    exactly as they do inside human `review.decision`.
-4. **ARCH-04E3 — live composition and end-to-end proof.** After 04E2, 04D and
+4. **ARCH-04E3 — live composition and end-to-end proof.** After 04E2-B, 04D and
    AUTH-OUTBOX-02, wire the proven handlers and canonical Submission route to
    the existing shared dispatcher. TASK owns this narrow live integration and
    legacy-call reachability cutover, not another implementation of 04E1B.
@@ -241,10 +278,11 @@ checker results without creating Review, ReviewFinding, or
 RevisionContextPreparation records.
 
 This is a coordination contract. Each remaining child record, beginning with
-hidden 04E1B after its branch-specific prerequisites, supplies its current-main
+source staging 04E1B-A, supplies its current-main
 exact files, commands, migration head and reviewers before implementation.
 Shared acceptance foundations additionally gate false composition; they do not
-gate true admission. Both branches retain 04E1B before 04E2 and 04E3.
+gate true admission. Both branches retain the preparation, issuer, handler, activation and live
+composition phases above; only false handlers add shared acceptance.
 
 ## Merge state
 

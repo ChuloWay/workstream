@@ -1,0 +1,279 @@
+{
+  "schema": "workstream.auth-assertion-map.v1",
+  "chunk_id": "WS-AUTH-001-19A",
+  "mappings": [
+    {
+      "invariant_category": "fixed_service_closed_action_matrix",
+      "new_test_node": "tests/authorization/test_catalogue.py::test_fixed_service_action_matrix_and_activation_are_exact_and_immutable",
+      "old_assertion_id": "assertion:2207:2207:8a862fd7d5c7a3b74e6598dd3d947df29f8ae247a8b93a1c88d49e93ba4470c4",
+      "old_content_sha256": "8a862fd7d5c7a3b74e6598dd3d947df29f8ae247a8b93a1c88d49e93ba4470c4",
+      "old_revision": "04bf8b76acde45760191458ed5841d9f643a5e23",
+      "old_source_span": [
+        2207,
+        2207
+      ],
+      "old_test_node": "tests/test_authorization.py::test_fixed_service_action_matrix_and_activation_are_exact_and_immutable",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime concurrency is exercised by owner authorization integration tests."
+        },
+        "lock_order": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime lock_order is exercised by owner authorization integration tests."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime denial_side_effects is exercised by owner authorization integration tests."
+        },
+        "replay": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime replay is exercised by owner authorization integration tests."
+        },
+        "revocation": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime revocation is exercised by owner authorization integration tests."
+        },
+        "evidence": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime evidence is exercised by owner authorization integration tests."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime transaction_ownership is exercised by owner authorization integration tests."
+        },
+        "concealment": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime concealment is exercised by owner authorization integration tests."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "fixed_service_closed_action_matrix",
+      "new_test_node": "tests/authorization/test_catalogue.py::test_fixed_service_action_matrix_and_activation_are_exact_and_immutable",
+      "old_assertion_id": "assertion:2208:2211:df042c24135dd21255c766aeeb97f1fe5f2ab975ec2650a13d6d4b5b21735257",
+      "old_content_sha256": "df042c24135dd21255c766aeeb97f1fe5f2ab975ec2650a13d6d4b5b21735257",
+      "old_revision": "04bf8b76acde45760191458ed5841d9f643a5e23",
+      "old_source_span": [
+        2208,
+        2211
+      ],
+      "old_test_node": "tests/test_authorization.py::test_fixed_service_action_matrix_and_activation_are_exact_and_immutable",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime concurrency is exercised by owner authorization integration tests."
+        },
+        "lock_order": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime lock_order is exercised by owner authorization integration tests."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime denial_side_effects is exercised by owner authorization integration tests."
+        },
+        "replay": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime replay is exercised by owner authorization integration tests."
+        },
+        "revocation": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime revocation is exercised by owner authorization integration tests."
+        },
+        "evidence": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime evidence is exercised by owner authorization integration tests."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime transaction_ownership is exercised by owner authorization integration tests."
+        },
+        "concealment": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime concealment is exercised by owner authorization integration tests."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "fixed_service_closed_action_matrix",
+      "new_test_node": "tests/authorization/test_catalogue.py::test_fixed_service_action_matrix_and_activation_are_exact_and_immutable",
+      "old_assertion_id": "assertion:2200:2202:92a6110894459e5b550af0ea5ced88760526ac952be5bba8879f57006f579a7c",
+      "old_content_sha256": "92a6110894459e5b550af0ea5ced88760526ac952be5bba8879f57006f579a7c",
+      "old_revision": "04bf8b76acde45760191458ed5841d9f643a5e23",
+      "old_source_span": [
+        2200,
+        2202
+      ],
+      "old_test_node": "tests/test_authorization.py::test_fixed_service_action_matrix_and_activation_are_exact_and_immutable",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime concurrency is exercised by owner authorization integration tests."
+        },
+        "lock_order": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime lock_order is exercised by owner authorization integration tests."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime denial_side_effects is exercised by owner authorization integration tests."
+        },
+        "replay": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime replay is exercised by owner authorization integration tests."
+        },
+        "revocation": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime revocation is exercised by owner authorization integration tests."
+        },
+        "evidence": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime evidence is exercised by owner authorization integration tests."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime transaction_ownership is exercised by owner authorization integration tests."
+        },
+        "concealment": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime concealment is exercised by owner authorization integration tests."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "fixed_service_closed_action_matrix",
+      "new_test_node": "tests/authorization/test_catalogue.py::test_fixed_service_action_matrix_and_activation_are_exact_and_immutable",
+      "old_assertion_id": "assertion:2203:2206:e826293a38cb51a120cf8eb9852227d7fc9e9a88e4b6b4bdc21112a3525006e1",
+      "old_content_sha256": "e826293a38cb51a120cf8eb9852227d7fc9e9a88e4b6b4bdc21112a3525006e1",
+      "old_revision": "04bf8b76acde45760191458ed5841d9f643a5e23",
+      "old_source_span": [
+        2203,
+        2206
+      ],
+      "old_test_node": "tests/test_authorization.py::test_fixed_service_action_matrix_and_activation_are_exact_and_immutable",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime concurrency is exercised by owner authorization integration tests."
+        },
+        "lock_order": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime lock_order is exercised by owner authorization integration tests."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime denial_side_effects is exercised by owner authorization integration tests."
+        },
+        "replay": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime replay is exercised by owner authorization integration tests."
+        },
+        "revocation": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime revocation is exercised by owner authorization integration tests."
+        },
+        "evidence": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime evidence is exercised by owner authorization integration tests."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime transaction_ownership is exercised by owner authorization integration tests."
+        },
+        "concealment": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime concealment is exercised by owner authorization integration tests."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "fixed_service_closed_action_matrix",
+      "new_test_node": "tests/authorization/test_catalogue.py::test_fixed_service_action_matrix_and_activation_are_exact_and_immutable",
+      "old_assertion_id": "assertion:2220:2258:18e41dafe9c546f2c362bc4ceb1aa8a5242e8eb89eb58b8d582e3f6397640fd9",
+      "old_content_sha256": "18e41dafe9c546f2c362bc4ceb1aa8a5242e8eb89eb58b8d582e3f6397640fd9",
+      "old_revision": "04bf8b76acde45760191458ed5841d9f643a5e23",
+      "old_source_span": [
+        2220,
+        2258
+      ],
+      "old_test_node": "tests/test_authorization.py::test_fixed_service_action_matrix_and_activation_are_exact_and_immutable",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime concurrency is exercised by owner authorization integration tests."
+        },
+        "lock_order": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime lock_order is exercised by owner authorization integration tests."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime denial_side_effects is exercised by owner authorization integration tests."
+        },
+        "replay": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime replay is exercised by owner authorization integration tests."
+        },
+        "revocation": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime revocation is exercised by owner authorization integration tests."
+        },
+        "evidence": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime evidence is exercised by owner authorization integration tests."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime transaction_ownership is exercised by owner authorization integration tests."
+        },
+        "concealment": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime concealment is exercised by owner authorization integration tests."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "fixed_service_closed_action_matrix",
+      "new_test_node": "tests/authorization/test_catalogue.py::test_fixed_service_action_matrix_and_activation_are_exact_and_immutable",
+      "old_assertion_id": "assertion:2216:2218:3b4598241358b31020702866ba6ef57db0eb009234643e11134032e59c608cea",
+      "old_content_sha256": "3b4598241358b31020702866ba6ef57db0eb009234643e11134032e59c608cea",
+      "old_revision": "04bf8b76acde45760191458ed5841d9f643a5e23",
+      "old_source_span": [
+        2216,
+        2218
+      ],
+      "old_test_node": "tests/test_authorization.py::test_fixed_service_action_matrix_and_activation_are_exact_and_immutable",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime concurrency is exercised by owner authorization integration tests."
+        },
+        "lock_order": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime lock_order is exercised by owner authorization integration tests."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime denial_side_effects is exercised by owner authorization integration tests."
+        },
+        "replay": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime replay is exercised by owner authorization integration tests."
+        },
+        "revocation": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime revocation is exercised by owner authorization integration tests."
+        },
+        "evidence": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime evidence is exercised by owner authorization integration tests."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime transaction_ownership is exercised by owner authorization integration tests."
+        },
+        "concealment": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime concealment is exercised by owner authorization integration tests."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "fixed_service_closed_action_matrix",
+      "new_test_node": "tests/authorization/test_catalogue.py::test_fixed_service_action_matrix_and_activation_are_exact_and_immutable",
+      "old_assertion_id": "assertion:2212:2215:fee9ffdc6f60f155971c5245c2f4478981b95314d90b5962c4b61b9799c8a4cf",
+      "old_content_sha256": "fee9ffdc6f60f155971c5245c2f4478981b95314d90b5962c4b61b9799c8a4cf",
+      "old_revision": "04bf8b76acde45760191458ed5841d9f643a5e23",
+      "old_source_span": [
+        2212,
+        2215
+      ],
+      "old_test_node": "tests/test_authorization.py::test_fixed_service_action_matrix_and_activation_are_exact_and_immutable",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime concurrency is exercised by owner authorization integration tests."
+        },
+        "lock_order": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime lock_order is exercised by owner authorization integration tests."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime denial_side_effects is exercised by owner authorization integration tests."
+        },
+        "replay": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime replay is exercised by owner authorization integration tests."
+        },
+        "revocation": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime revocation is exercised by owner authorization integration tests."
+        },
+        "evidence": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime evidence is exercised by owner authorization integration tests."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime transaction_ownership is exercised by owner authorization integration tests."
+        },
+        "concealment": {
+          "not_applicable_reason": "Pure catalogue membership and planned availability; runtime concealment is exercised by owner authorization integration tests."
+        }
+      },
+      "target_layer": "domain"
+    }
+  ]
+}

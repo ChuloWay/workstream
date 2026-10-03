@@ -2285,3 +2285,17 @@ def test_lifecycle_fence_has_exact_ownership() -> None:
     for neighbor in ("backend/app/modules/reviews/lifecycle/service.py", "backend/app/modules/reviews/lifecycle/authority.py"):
         with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
             ownership._validate_additive_partition_transition(_partition(sorted({retained, *expected, neighbor})), trusted)
+
+
+def test_acceptance_source_contract_registration_excludes_execution() -> None:
+    expected = {
+        "backend/app/modules/authorization/api/acceptance_source.py",
+        "backend/app/modules/authorization/acceptance_source_contracts.py",
+    }
+    assert ownership.AUTH_19A_SOURCE_CONTRACT_TARGETS == expected
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(_partition(sorted({retained, *expected})), trusted)
+    for neighbor in ("backend/app/modules/authorization/acceptance_source_authorization.py", "backend/app/modules/tasks/post_submit_routing/service.py"):
+        with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+            ownership._validate_additive_partition_transition(_partition(sorted({retained, *expected, neighbor})), trusted)

@@ -84,7 +84,7 @@ from app.modules.audit.schemas import (
 from app.modules.audit.service import AuditService
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.actors.service import ActorService, ResolvedActor
-from app.modules.actors.api import SERVICE_IDENTITIES, ServiceIdentity
+from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization import catalogue as authorization_catalogue
 from app.modules.authorization import kernel as authorization_kernel
 from app.modules.authorization import prepared as authorization_prepared
@@ -130,7 +130,6 @@ from app.modules.authorization.read_service import (
 from app.modules.authorization.catalogue import (
     ACTION_BY_ID,
     ACTION_DEFINITIONS,
-    FUTURE_INTENT_REQUIRED_ACTIONS,
     ActionAvailability,
     ActionDefinition,
     ActionId,
@@ -200,7 +199,6 @@ from app.modules.authorization.admin_service import (
 )
 from app.modules.authorization.policy import ADMIN_ROLE_PERMISSIONS, ADMIN_ROLE_SCOPES
 from app.modules.authorization.service_actor_schemas import ServiceActorProvisionResourceContext
-from tests.authorization.catalogue_fixtures import FIXED_SERVICE_ACTION_EXPECTATIONS
 from app.modules.authorization.runtime import (
     ActorAdminRoleGrantHistoryResourceContext,
     ActorAuthorizationContextResourceContext,
@@ -2193,69 +2191,6 @@ def test_obsolete_artifact_upload_authority_is_historical_only() -> None:
         if any(identifier in text_value for identifier in obsolete):
             found.add(path.relative_to(repository_root).as_posix())
     assert found == set()
-
-
-def test_fixed_service_action_matrix_and_activation_are_exact_and_immutable() -> None:
-    expected = FIXED_SERVICE_ACTION_EXPECTATIONS
-    assert set(SERVICE_ACTIONS_BY_IDENTITY) == SERVICE_IDENTITIES - {
-        ServiceIdentity.COMPENSATION_ADAPTER
-    }
-    assert {
-        identity: {action.value for action in actions}
-        for identity, actions in SERVICE_ACTIONS_BY_IDENTITY.items()
-    } == expected
-    assert sum(map(len, SERVICE_ACTIONS_BY_IDENTITY.values())) == 27
-    assert FUTURE_INTENT_REQUIRED_ACTIONS == {
-        ActionId.REVIEW_FINDING_EVIDENCE_INGEST,
-        ActionId.REVIEW_FINDING_RESPONSE_EVIDENCE_INGEST,
-    }
-    assert all(
-        ACTION_BY_ID[action].availability is ActionAvailability.PLANNED
-        for action in FUTURE_INTENT_REQUIRED_ACTIONS
-    )
-    assert FUTURE_INTENT_REQUIRED_ACTIONS.isdisjoint(
-        set().union(*SERVICE_ACTIONS_BY_IDENTITY.values())
-    )
-    project_setup_actions = SERVICE_ACTIONS_BY_IDENTITY[ServiceIdentity.PROJECT_SETUP]
-    assert {
-        action: (
-            ACTION_BY_ID[action].permission_id,
-            ACTION_BY_ID[action].owner,
-            ACTION_BY_ID[action].availability,
-        )
-        for action in project_setup_actions
-    } == {
-        ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC: (
-            PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
-            ActionOwner.AUTH_12I,
-            ActionAvailability.ACTIVE,
-        ),
-        ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE: (
-            PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
-            ActionOwner.AUTH_12I,
-            ActionAvailability.ACTIVE,
-        ),
-        ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN: (
-            PermissionId.PROJECT_GUIDE_MANAGE,
-            ActionOwner.AUTH_12E,
-            ActionAvailability.ACTIVE,
-        ),
-        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE: (
-            PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE,
-            ActionOwner.AUTH_12F3,
-            ActionAvailability.ACTIVE,
-        ),
-        ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE: (
-            PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE,
-            ActionOwner.AUTH_12G,
-            ActionAvailability.ACTIVE,
-        ),
-        ActionId.PROJECT_SETUP_RUN_UPDATE: (
-            PermissionId.PROJECT_GUIDE_MANAGE,
-            ActionOwner.AUTH_12B2,
-            ActionAvailability.ACTIVE,
-        ),
-    }
 
 
 def test_submission_artifact_policy_draft_actions_have_exact_child_owners() -> None:

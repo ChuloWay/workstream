@@ -398,6 +398,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/acceptance_source_contracts.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/adapter_binding_authorization.py"
     },
     {
@@ -407,6 +411,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/admin_service.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/acceptance_source.py"
     },
     {
       "group": "auth",
@@ -1589,7 +1597,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "e299b037743b24c1bb81937095d486257770749bbc8ac2445318a8c25bb79d89",
+  "authority_digest": "0589846d4fbd85d88e87f6b6f569e1d0c7509704ae26058e30c03025c3326fcf",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

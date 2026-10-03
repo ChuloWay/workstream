@@ -13,6 +13,7 @@ from app.modules.actors.models import ActorProfile
 
 pytestmark = pytest.mark.postgres_schema_contract
 FIXED_IDENTITIES = (
+    "workstream.task.post_submit_router",
     "workstream.compensation.adapter",
     "workstream.outbox.dispatcher",
     "workstream.task.assignment_reconciler",
@@ -86,3 +87,69 @@ def test_fixed_service_identities_accept_once_and_reject_unknown_or_duplicate(
     with pytest.raises(asyncpg.UniqueViolationError) as duplicate:
         asyncio.run(_insert_service(isolated_database_env, FIXED_IDENTITIES[1]))
     assert duplicate.value.constraint_name == "service_identity"
+
+
+async def _assert_router_unavailable(database_url: str) -> None:
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from app.modules.actors.api import ServiceIdentity
+    from app.modules.authorization.catalogue import ActionId
+    from app.modules.authorization.prepared import fixed_service_action_context
+    from app.modules.authorization.runtime import PreparedAuthorizationUnsupported, AuthorizationDenialCode
+
+    engine = create_async_engine(database_url)
+    try:
+        async with async_sessionmaker(engine)() as session, session.begin():
+            with pytest.raises(PreparedAuthorizationUnsupported) as denied:
+                await fixed_service_action_context(
+                    session, service_identity=ServiceIdentity.TASK_POST_SUBMIT_ROUTER,
+                    action_id=ActionId.TASK_POST_SUBMIT_ROUTE,
+                    request_id=new_record_id(), correlation_id=new_record_id(),
+                )
+            assert denied.value.denial_code is AuthorizationDenialCode.PERMISSION_NOT_GRANTED
+    finally:
+        await engine.dispose()
+
+
+def test_existing_router_identity_does_not_activate_its_action(isolated_database_env):
+    asyncio.run(_insert_service(isolated_database_env, "workstream.task.post_submit_router"))
+    asyncio.run(_assert_router_unavailable(isolated_database_env))
+
+
+def test_router_vocabulary_upgrade_preserves_rows_without_provisioning(
+    isolated_database_env, migration_lock,
+):
+    from alembic import command
+    from app.db import session as db_session
+    from tests.migration_fixtures import _config
+
+    async def reset():
+        await db_session.dispose_engine()
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        try:
+            await connection.execute("drop schema public cascade; create schema public")
+        finally:
+            await connection.close()
+
+    async def snapshot():
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        try:
+            rows = []
+            for table in ("actor_profiles", "actor_identity_links", "audit_events"):
+                rows.append(tuple(await connection.fetch(
+                    f"select to_jsonb(t)::text from public.{table} t order by id"
+                )))
+            return tuple(rows)
+        finally:
+            await connection.close()
+
+    with migration_lock():
+        asyncio.run(reset())
+        command.upgrade(_config(), "0016_review_lifecycle_fence")
+        asyncio.run(_insert_service(isolated_database_env, "workstream.outbox.dispatcher"))
+        before = asyncio.run(snapshot())
+        assert before[0] and before[1]
+        command.upgrade(_config(), "0017_acceptance_source_contracts")
+        assert asyncio.run(snapshot()) == before
+        assert "workstream.task.post_submit_router" in asyncio.run(_constraint_definition(isolated_database_env))
+        asyncio.run(_insert_service(isolated_database_env, "workstream.task.post_submit_router"))
+        asyncio.run(_assert_router_unavailable(isolated_database_env))

@@ -1022,7 +1022,8 @@ REV-12A owns the only `JointLifecycleReleaseControl` and
 generation, or availability writer.
 REV-12A1 delivers its disabled generation-zero persistence and caller-root
 mutation fence. The [shared acceptance order](spec_review_lifecycle.md#implementation-order-and-required-proof)
-requires exact acceptance-source AUTH custody before CON-07 consumption. Actual CON root
+requires hidden AUTH preparation/receipt staging before CON-07, and mandatory
+persisted custody before production composition or consumption. Actual CON root
 storage and ordinal allocation remain required before either trigger creates
 fulfillment obligations; neither awards nor generic outbox rows substitute. Later REV-12A drain/operator
 work extends this same controller; it is not a prerequisite on live human
@@ -1151,9 +1152,13 @@ transaction participants do not wait for generic dispatch:
 The [shared acceptance order](spec_review_lifecycle.md#implementation-order-and-required-proof)
 governs the false branch: delivered TASK ARCH-04E1A source schema/detached facts
 precede the delivered REV-04B acceptance and CON-03C contribution/award storage.
-REV-12A1 delivers disabled controller/fence mechanics. Mandatory same-table
-acceptance-source AUTH custody comes next, then CON-07 atomic participation and the shared
-operation/ARCH-04E1B. Actual root ordinal custody and authorized lifecycle
+REV-12A1 delivers disabled controller/fence mechanics. TASK request staging (04E1B-A) and
+hidden AUTH preparation/receipt staging (04E2-A) precede CON-07 flush-only
+participation and the shared operation/04E1B-B handler. CON-07 isolated storage
+controls prove economic behavior, not acceptance authority. At 04E2-B, mandatory
+same-table receipt custody and exact activation prove the first genuine allow
+with source, FinalAcceptance, TASK effects, CON rows and audit/outbox in one
+transaction. No standalone allow or fabricated authority fixture is permitted. Actual root ordinal custody and authorized lifecycle
 transition/drain proof precede live AUTH routing composition.
 False guide activation follows joint proof. A stable Review FK target is
 not live ReviewLease/queue/decision behavior. The shared lifecycle/obligation
