@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import faulthandler
 import io
 import json
 import logging
@@ -696,15 +697,27 @@ class _ProcessBlockingExporter(SpanExporter):
         Event().wait(30)
 
 
-def _bounded_process_exit_probe(ready: Any) -> None:
+_PROCESS_TRACE_STREAM: Any = None
+
+
+def _bounded_process_exit_probe(status: Any, trace_path: str) -> None:
+    global _PROCESS_TRACE_STREAM
     runtime = ObservabilityRuntime(
         _settings(observability_shutdown_timeout_seconds=0.1),
         service_name="workstream-api",
         span_exporter=_ProcessBlockingExporter(),
     )
     runtime.start()
+    status.send("runtime_started")
+    _PROCESS_TRACE_STREAM = Path(trace_path).open("w", encoding="utf-8")
+    faulthandler.dump_traceback_later(
+        1.0,
+        repeat=True,
+        file=_PROCESS_TRACE_STREAM,
+    )
     runtime.shutdown()
-    ready.set()
+    status.send("shutdown_returned")
+    status.close()
 
 
 def test_partial_provider_startup_closes_created_exporter_and_releases_logging(
@@ -845,17 +858,29 @@ def test_timed_out_shutdown_keeps_safe_logging_until_exporter_thread_stops(
     assert diagnostic_logging.safe_handler() is None
 
 
-def test_owned_providers_do_not_register_unbounded_interpreter_exit_hooks() -> None:
+def test_owned_providers_do_not_register_unbounded_interpreter_exit_hooks(
+    tmp_path: Path,
+) -> None:
     context = multiprocessing.get_context("spawn")
-    ready = context.Event()
-    process = context.Process(target=_bounded_process_exit_probe, args=(ready,))
+    status, child_status = context.Pipe(duplex=False)
+    trace_path = tmp_path / "process-exit-trace.log"
+    process = context.Process(
+        target=_bounded_process_exit_probe,
+        args=(child_status, str(trace_path)),
+    )
     process.start()
-    assert ready.wait(10)
+    child_status.close()
+    assert status.poll(10), "child did not finish runtime startup"
+    assert status.recv() == "runtime_started"
+    assert status.poll(2), "bounded runtime shutdown did not return"
+    assert status.recv() == "shutdown_returned"
     started = monotonic()
     process.join(timeout=2)
     if process.is_alive():
         process.kill()
         process.join(timeout=2)
+        trace = trace_path.read_text(encoding="utf-8") if trace_path.exists() else ""
+        pytest.fail(f"child did not exit after bounded shutdown\n{trace}")
     assert process.exitcode == 0
     assert monotonic() - started < 2
 
