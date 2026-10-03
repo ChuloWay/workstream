@@ -1,7 +1,16 @@
 # WS-AUTH-001 — Current pre-review activation plan
 
+[AUTH-19A](../../WS-AUTH-001/WS-AUTH-001-19A.md) delivers inert exact source/receipt contracts and the
+planned router identity. Next are TASK source/request staging (ARCH-04E1B-A)
+and the hidden AUTH preparation/receipt-staging contract (ARCH-04E2-A), before
+CON-07/shared acceptance. Mandatory durable custody and its genuine positive
+proof belong to consequence activation (04E2-B), before production consumption. Neither phase may
+commit a standalone allow. The first durable receipt must commit with its full
+governed consequence. Hidden handlers and activation follow as 04E1B-B/04E2-B,
+then live 04E3; true admission does not depend on CON/shared acceptance.
+
 The delivered [ART-07A1 metadata contract](../../WS-ART-001/WS-ART-001-07A1.md)
-and REV-03B normalized packet persistence are delivered. REV-04A Review source storage is also delivered; REV-04B shared acceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; mandatory acceptance-source AUTH custody precedes atomic participation. These are storage prerequisites;
+and REV-03B normalized packet persistence are delivered. REV-04A Review source storage is also delivered; REV-04B shared acceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; hidden AUTH preparation precedes CON-07; mandatory persisted custody accompanies the first authorized atomic consequence at 04E2-B. These are storage prerequisites;
 no live human-review queue or endpoint is required for automated acceptance.
 
 The [cross-owner dependency contract](../../WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
@@ -29,7 +38,7 @@ AUTH-13/14 cutovers are not additional implementation work.
   public TASK activation is complete through ARCH-03C7.
 - [AUTH-18](../WS-AUTH-001-18.md) delivers public manager activation and exact
   selection discovery over CP07/AUTH-12H. ARCH-03D completes hidden approved-guide
-  intake; ARCH-04B hidden exact post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C hidden durable execution is delivered; ARCH-04D1 canonical custody is delivered; ARCH-04D2 exact input/execution/finalization authority and ARCH-04E1A source-only facts/types are delivered. REV-12A1 disabled fencing is delivered. Both branches require hidden 04E1B before exact 04E2 and live 04E3. True routing proceeds on its own prerequisites. False additionally requires acceptance-source AUTH custody, CON-07/shared acceptance and scoped lifecycle activation; it is the current delivery priority.
+  intake; ARCH-04B hidden exact post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C hidden durable execution is delivered; ARCH-04D1 canonical custody is delivered; ARCH-04D2 exact input/execution/finalization authority and ARCH-04E1A source-only facts/types are delivered. REV-12A1 disabled fencing is delivered. Both branches require source staging 04E1B-A and AUTH preparation 04E2-A before hidden handlers 04E1B-B, activation 04E2-B and live 04E3. True routing proceeds on its own prerequisites. False additionally requires acceptance-source AUTH custody, CON-07/shared acceptance and scoped lifecycle activation; it is the current delivery priority.
 - CP05 owns exact ContributionPolicy-action activation after merged CP04B.
 - CP08 delivered the minimal lineage writers. ARCH-03B8 hidden task audit
   evidence and 03B9 hidden assignment invalidation are complete. ARCH-03C delivered

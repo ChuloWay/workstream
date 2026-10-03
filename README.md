@@ -175,7 +175,7 @@ Findings and policy proposals retain document-access evidence.
 metadata-only reviewer packet types, not a resolver or byte-access capability.
 REV-03B persists immutable normalized packets using live guide ingest identities.
 REV-04A Review and REV-04B shared FinalAcceptance storage foundations are delivered; CON-03C contribution/award storage and REV-12A1's disabled controller/transaction
-fence are delivered. Exact source authority custody precedes atomic participation. Acceptance storage has no production writer or AUTH receipt; mandatory exact
+fence are delivered. Exact AUTH preparation precedes hidden participation; durable source custody accompanies the first atomic governed consequence. Acceptance storage has no production writer or AUTH receipt; mandatory exact
 authority hardening precedes any runtime consumer. These prerequisites do not require live
 human review before the first automated acceptance path.
 
@@ -675,7 +675,10 @@ remains unavailable. ARCH-04D1 validates retained terminal material against cano
 ART lineage. ARCH-04D2 supplies fixed-service input, execute and finalize authority,
 with PostgreSQL enforcement of exact execution/finalization receipts. ARCH-04E1A
 adds immutable source storage and detached contracts only. Automatic dispatch,
-routing and acceptance remain ARCH-04E work.
+routing and acceptance remain ARCH-04E work. AUTH-19A defines inert exact
+Review/routing source commitments and registers the router as planned. It does not
+issue or persist source authorization receipts; those remain prerequisites to
+shared acceptance and contribution creation.
 
 ## v0.1 Success Standard
 

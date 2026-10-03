@@ -12,6 +12,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validato
 
 from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.catalogue import ActionId
+from app.modules.authorization.api.acceptance_source import HumanReviewSourceCommitment
 
 _STRICT_FROZEN = ConfigDict(extra="forbid", frozen=True, strict=True)
 _DIGEST = r"^sha256:[0-9a-f]{64}$"
@@ -314,17 +315,22 @@ class _ReviewDecisionContract(_ReviewerPacketContract):
     """Facts shared by mutually exclusive initial and revision decisions."""
 
     action_id: Literal[ActionId.REVIEW_DECISION]
+    review_id: UUID
+    review_decision_request_id: UUID
     review_operation_id: UUID
+    idempotency_key: UUID
+    request_digest: str = Field(pattern=_DIGEST)
+    review_aggregate_digest: str = Field(pattern=_DIGEST)
+    submission_version: int = Field(ge=1, le=2_147_483_647)
     decision: ReviewDecisionValue
-    finding_count: int = Field(ge=0)
-    blocking_finding_count: int = Field(ge=0)
+    finding_count: int = Field(ge=0, le=100)
+    blocking_finding_count: int = Field(ge=0, le=100)
+    inherited_unresolved_blocking_count: int = Field(ge=0, le=100)
     findings_resolutions_digest: str = Field(pattern=_DIGEST)
     review_policy_id: UUID
     review_policy_generation: int = Field(ge=1)
     review_policy_digest: str = Field(pattern=_DIGEST)
-    reviewer_contribution_policy_id: UUID
-    reviewer_contribution_policy_generation: int = Field(ge=1)
-    reviewer_contribution_policy_digest: str = Field(pattern=_DIGEST)
+    reviewer_contribution_policy_version_id: UUID
     artifact_hash: str = Field(pattern=_DIGEST)
 
     @model_validator(mode="after")
@@ -332,9 +338,37 @@ class _ReviewDecisionContract(_ReviewerPacketContract):
         """Keep the approved needs-revision blocking-finding invariant explicit."""
         if self.blocking_finding_count > self.finding_count:
             raise ValueError("blocking finding count exceeds finding count")
-        if self.decision is ReviewDecisionValue.NEEDS_REVISION and self.blocking_finding_count < 1:
+        open_blockers = self.blocking_finding_count + self.inherited_unresolved_blocking_count
+        if open_blockers > 100:
+            raise ValueError("open blocking finding limit exceeded")
+        if self.decision is ReviewDecisionValue.ACCEPT and open_blockers:
+            raise ValueError("accept requires no open blocking finding")
+        if self.decision is ReviewDecisionValue.NEEDS_REVISION and not open_blockers:
             raise ValueError("needs_revision requires a blocking finding")
         return self
+
+
+    def source_commitment(self) -> HumanReviewSourceCommitment:
+        """Project retained facts, not transient lifecycle authorization context."""
+        checked = type(self).model_validate(self.model_dump(mode="python"))
+        return HumanReviewSourceCommitment(
+            source="human_review", review_id=checked.review_id,
+            review_decision_request_id=checked.review_decision_request_id,
+            project_id=checked.project_id, task_id=checked.task_id,
+            task_assignment_id=checked.task_assignment_id, submission_id=checked.submission_id,
+            submission_version=checked.submission_version,
+            review_queue_entry_id=checked.queue_entry_id, review_lease_id=checked.review_lease_id,
+            reviewer_id=checked.reviewer_actor_profile_id,
+            packet_manifest_id=checked.packet_manifest_id,
+            packet_manifest_digest=checked.packet_manifest_digest,
+            reviewer_contribution_policy_version_id=checked.reviewer_contribution_policy_version_id,
+            locked_review_policy_id=checked.review_policy_id,
+            locked_review_policy_generation=checked.review_policy_generation,
+            locked_review_policy_hash=checked.review_policy_digest,
+            artifact_hash=checked.artifact_hash, decision=checked.decision.value,
+            operation_id=checked.review_operation_id, idempotency_key=checked.idempotency_key,
+            request_digest=checked.request_digest, review_aggregate_digest=checked.review_aggregate_digest,
+        )
 
 
 class ReviewDecisionContract(_ReviewDecisionContract):
@@ -342,6 +376,13 @@ class ReviewDecisionContract(_ReviewDecisionContract):
 
     decision_shape: Literal["initial"]
     predecessor_review_id: Literal[None] = None
+
+    @model_validator(mode="after")
+    def require_no_inherited_blockers(self):
+        """An initial review cannot claim unresolved predecessor findings."""
+        if self.inherited_unresolved_blocking_count:
+            raise ValueError("initial decision has inherited blockers")
+        return self
 
 
 class ReviewRevisionDecisionContract(_ReviewDecisionContract):

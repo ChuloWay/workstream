@@ -1,15 +1,13 @@
 """Pure contract proof for detached routing source and accepted TASK effects."""
 
-from datetime import UTC, datetime
 from inspect import isclass, iscoroutinefunction
-from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
 
 from app.core.identifiers import new_record_id
 from app.modules.actors.api import ServiceIdentity
-from app.modules.authorization.catalogue import ActionId, PermissionId
+from app.modules.authorization.catalogue import (ActionId, PermissionId, ActionAvailability, ACTION_BY_ID, SERVICE_ACTIONS_BY_IDENTITY, resolve_executable_action)
 from app.modules.tasks import api as task_api
 from app.modules.tasks.api import accepted_effects, post_submit_routing
 from app.modules.tasks.api.accepted_effects import (
@@ -19,71 +17,7 @@ from app.modules.tasks.api.accepted_effects import (
     TaskAcceptedEffectsUnavailable,
 )
 from app.modules.tasks.api.post_submit_routing import TaskPostSubmitManifestFacts
-from app.modules.tasks.api.transition_audit import TaskPolicyLineage
-
-SHA_A = "sha256:" + "a" * 64
-SHA_B = "sha256:" + "b" * 64
-
-
-def _lineage(*, contribution_policy_version_id: UUID) -> TaskPolicyLineage:
-    return TaskPolicyLineage(
-        locked_guide_version="guide-v1",
-        locked_guide_source_snapshot_id=new_record_id(),
-        locked_guide_source_snapshot_hash=SHA_A,
-        locked_effective_project_submission_artifact_policy_id=new_record_id(),
-        locked_effective_project_submission_artifact_policy_hash=SHA_A,
-        locked_pre_submit_checker_policy_id=new_record_id(),
-        locked_pre_submit_checker_bundle_hash=SHA_A,
-        locked_post_submit_checker_policy_id=new_record_id(),
-        locked_post_submit_checker_policy_version="post-v1",
-        locked_post_submit_checker_policy_hash=SHA_A,
-        locked_review_policy_id=new_record_id(),
-        locked_review_policy_generation=1,
-        locked_review_policy_hash=SHA_A,
-        locked_revision_policy_id=new_record_id(),
-        locked_revision_policy_generation=1,
-        locked_revision_policy_hash=SHA_A,
-        locked_contribution_policy_version_id=contribution_policy_version_id,
-    )
-
-
-def _source_values(**changes: object) -> dict[str, object]:
-    contribution_policy_version_id = new_record_id()
-    values: dict[str, object] = {
-        "id": new_record_id(),
-        "created_at": datetime(2026, 1, 2, tzinfo=UTC),
-        "project_id": new_record_id(),
-        "task_id": new_record_id(),
-        "submission_id": new_record_id(),
-        "submission_version": 1,
-        "assignment_id": new_record_id(),
-        "contributor_id": new_record_id(),
-        "contribution_policy_version_id": contribution_policy_version_id,
-        "checker_run_id": new_record_id(),
-        "evaluation_request_id": new_record_id(),
-        "request_digest": SHA_A,
-        "evaluation_generation": 1,
-        "result_id": new_record_id(),
-        "result_digest": SHA_B,
-        "completion_event_id": new_record_id(),
-        "execute_evidence_id": new_record_id(),
-        "finalize_evidence_id": new_record_id(),
-        "human_review_required": True,
-        "replica_id": new_record_id(),
-        "content_sha256": SHA_A,
-        "byte_count": 0,
-        "semantic_manifest_sha256": SHA_B,
-        "predecessor_submission_id": None,
-        "predecessor_submission_version": None,
-        "admission_id": new_record_id(),
-        "binding_id": new_record_id(),
-        "content_id": new_record_id(),
-        "locked_policy": _lineage(contribution_policy_version_id=contribution_policy_version_id),
-        "routing_recommendation": "allow_review",
-    }
-    values.update(changes)
-    return values
-
+from tests.tasks.post_submit_routing.contract_fixtures import SHA_A, _lineage, _source_values
 
 def _effects_values(**changes: object) -> dict[str, object]:
     values: dict[str, object] = {
@@ -307,7 +241,7 @@ def test_accepted_effects_contract_is_source_neutral() -> None:
 
 
 def test_source_foundation_has_no_runtime_entry() -> None:
-    assert post_submit_routing.__all__ == ("TaskPostSubmitManifestFacts",)
+    assert post_submit_routing.__all__ == ("TaskPostSubmitManifestFacts", "task_post_submit_source_digest")
     assert accepted_effects.__all__ == (
         "TaskAcceptedEffectsPort",
         "TaskAcceptedEffectsRequest",
@@ -316,7 +250,7 @@ def test_source_foundation_has_no_runtime_entry() -> None:
     )
     for name in post_submit_routing.__all__ + accepted_effects.__all__:
         assert getattr(task_api, name) is getattr(
-            post_submit_routing if name.startswith("TaskPostSubmit") else accepted_effects,
+            post_submit_routing if name in post_submit_routing.__all__ else accepted_effects,
             name,
         )
 
@@ -335,10 +269,9 @@ def test_source_foundation_has_no_runtime_entry() -> None:
         "TaskAcceptedEffectsResult",
         "TaskAcceptedEffectsUnavailable",
     }
-    for closed_enum, proposed_identifier in (
-        (ActionId, "task.post_submit.route"),
-        (PermissionId, "task.post_submit.route"),
-        (ServiceIdentity, "workstream.task.post_submit_router"),
-    ):
-        with pytest.raises(ValueError):
-            closed_enum(proposed_identifier)
+    action = ActionId.TASK_POST_SUBMIT_ROUTE
+    assert ACTION_BY_ID[action].permission_id is PermissionId.TASK_POST_SUBMIT_ROUTE
+    assert ACTION_BY_ID[action].availability is ActionAvailability.PLANNED
+    assert SERVICE_ACTIONS_BY_IDENTITY[ServiceIdentity.TASK_POST_SUBMIT_ROUTER] == {action}
+    with pytest.raises(ValueError, match="authorization action is not active"):
+        resolve_executable_action(action)

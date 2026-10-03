@@ -44,7 +44,7 @@ def _arguments(name: str) -> dict[str, Any]:
 def _response(name: str) -> dict[str, Any]:
     # Representative entries use the backend's frozen catalogue totals.
     if name == "workstream_permissions_list":
-        return {"items": [{"permission_id": "actor.profile.read_any"}], "total": 77}
+        return {"items": [{"permission_id": "actor.profile.read_any"}], "total": 78}
     if name == "workstream_admin_roles_list":
         return {
             "items": [
@@ -389,7 +389,7 @@ def test_malformed_access_read_response_rejected(
 @pytest.mark.parametrize(
     ("name", "field", "value"),
     [
-        ("workstream_permissions_list", "total", 76),
+        ("workstream_permissions_list", "total", 77),
         ("workstream_admin_roles_list", "total", 4),
         ("workstream_admin_grants_list", "total", -1),
         ("workstream_actor_admin_grants_list", "next_cursor", 42),

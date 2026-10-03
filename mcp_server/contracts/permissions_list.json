@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "e7997eba1304ff891e14666837cdbbf37c90e0ac07b74cfefac5406e2c1ce5ce",
+  "canonical_sha256": "610114e15ba7a4204cd3df81ea15455e1060e82d49d70ff491e344b518c61be3",
   "components": {
     "schemas": {
       "ApiError": {
@@ -87,7 +87,7 @@
             "type": "array"
           },
           "total": {
-            "const": 77,
+            "const": 78,
             "title": "Total",
             "type": "integer"
           }
@@ -112,6 +112,7 @@
           "actor.identity_link.revoke",
           "actor.identity_link.reactivate",
           "task.assignment.authority_reconcile",
+          "task.post_submit.route",
           "checker.post_submit.execute",
           "checker.post_submit.finalize",
           "outbox.dispatch",
@@ -388,7 +389,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "authorization.permission_catalogue.read",
-    "backend_git_sha": "7f8acfaf29bfc7de613485481f81b8ef1557abd7",
+    "backend_git_sha": "2134c7be05d10c381649872d423e957f9c18caff",
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/authorization/permissions"

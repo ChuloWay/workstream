@@ -397,11 +397,11 @@ resolve the complete set. Immutable aggregate digests seal complete ordered
 children. Stable request digests exclude newly generated record IDs and times.
 
 Finding responses remain with revision preparation storage; no unchecked
-preparation identity or separate evidence upload is added here. Before human
-runtime, reconcile the inert AUTH contract's new-finding count restriction for
-inherited-only blockers and its contribution-policy digest triple with CON's
-actual frozen version identity. These are explicit integration prerequisites,
-not authority supplied by the storage tables.
+preparation identity or separate evidence upload is added here. AUTH-19A reconciles
+its inert decision contract with inherited-only unresolved blockers and CON's
+exact reviewer ContributionPolicyVersion identity. Genuine originating AUTH
+execution, persisted receipt custody and runtime integration remain prerequisites;
+these contracts and storage tables do not supply authority.
 
 ## Decision Transaction
 
@@ -631,23 +631,32 @@ Extract foundations from existing owner work, not a new initiative:
    delivered. REV-04A immutable Review-source storage and REV-04B shared FinalAcceptance
    storage and CON-03C contribution/award persistence are delivered. Do not create
    an incomplete Review solely as an FK target. REV-12A1 supplies the disabled
-   controller and transaction fence. Mandatory exact acceptance-source AUTH custody must
-   precede CON-07 consumption and shared acceptance. These foundations require no live human claim or
+   controller and transaction fence. Exact hidden AUTH preparation precedes CON-07; mandatory persisted receipt
+   custody precedes production composition or consumption. These foundations require no live human claim or
    decision endpoint. Hidden composition proof precedes exact AUTH
    activation; unavailable authority must not be replaced with fabricated allow evidence.
 3. [REV-12A1](../.commitrail/initiatives/WS-REV-001/WS-REV-001-12A1.md)
    delivers disabled generation-zero controller storage and the caller-root
-   transaction fence. Complete same-table acceptance-source AUTH custody, then CON-07.
+   transaction fence. AUTH-19A supplies inert exact source/request and detached receipt contracts.
+   Stage the distinct routing request in ARCH-04E1B-A, then implement the hidden
+   task.post_submit.route preparation/receipt-staging interface in 04E2-A using
+   workstream.task.post_submit_router. The action remains planned/unavailable.
+   CON-07 follows as a flush-only participant; isolated storage controls prove
+   economic behavior without claiming acceptance authority or fabricating allows.
    Actual CON fulfillment roots own immutable ordinal allocation; no award or
    outbox row substitutes for a root. Authorized transition/drain composition
    and real root/cutoff proof extend this fence before activation, independently
    of live human queues or decisions.
-4. The shared operation consumes those foundations for acceptance. ARCH-04E1B's
+4. The shared operation consumes those foundations for acceptance. ARCH-04E1B-B's
    hidden routing handler invokes it for false/pass. True routing does not
-   require CON-07/shared acceptance; it proceeds through hidden 04E1B, exact
-   AUTH 04E2 and live 04E3 after its own prerequisites. The existing lifecycle-control command receives
+   require CON-07/shared acceptance; it uses the same preparation phases, hidden 04E1B-B, exact
+   AUTH 04E2-B and live 04E3 after its own prerequisites. The existing lifecycle-control command receives
    scoped AUTH activation for the proven shared manifest as specified below;
-   ARCH-04E2 activates routing and ARCH-04E3 proves live composition.
+   ARCH-04E2-B installs mandatory same-table receipt custody and activates the
+   existing action. Its first genuine allow commits in one caller transaction
+   with source publication, FinalAcceptance, TASK effects, CON rows and audit/
+   outbox; failure rolls all back. Retained pre-authority sources remain refused.
+   ARCH-04E3 then proves live composition.
    PROJECTS enables false only after that
    proof and ARCH-04F's usable checker-remediation path.
 
