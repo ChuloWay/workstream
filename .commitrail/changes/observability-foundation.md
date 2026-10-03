@@ -1,7 +1,7 @@
 # Observability Foundation — Safe API And Worker Diagnostics
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Add one provider-neutral, privacy-bounded diagnostics pipeline for the API and prefork Celery workers without changing product authority or claiming a deployed monitoring service.
 
 ## Intent
@@ -441,17 +441,18 @@ daemon, endpoint, or continuous capture is added.
   original disposition in this record. Resolved by the mapping above; the
   security replay found no remaining runtime blocker.
 
-No application implementation begins until architecture and security reviewers
-replay this amended plan.
+Architecture and security plan replay established this capture boundary before
+implementation. The foundation implements the amended design above.
 
 ## Reconciliation
 
 - Current-source reconciliation: Based on main commit
   `176952e6624244bdc405bac973ce6c4abddb0dae`. Shared README and roadmap wording
-  will be reconciled with concurrent product work before PR readiness.
-- Next usable boundary: Implement this one bounded diagnostics foundation after
-  lead plan review; deployment-specific collectors, dashboards, alerts, and SLOs
-  remain separate operational work.
+  describe this standalone foundation; concurrent product changes must be
+  preserved when their merged main is incorporated.
+- Next usable boundary: Configure secured diagnostic collection and exercise it
+  in the release drill. Deployment-specific dashboards, alerts and SLOs remain
+  operational work; this foundation changes no product lifecycle prerequisite.
 - Remaining risks: Celery signal ordering and OpenTelemetry SDK/exporter
   internals can change across dependency upgrades, so privacy, cleanup, and
   duplicate-instrumentation tests must bind the selected lock. An unavailable
