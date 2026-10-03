@@ -65,8 +65,9 @@ manifest identity, route operation/digest or policy branch must reject.
 The exact resource distinguishes the true human-admission consequence from the
 false shared-acceptance consequence, including its allocated acceptance identity.
 No value or digest proves persisted ownership, live authority or currentness.
-Project request selectors exclude database-created timestamps; all semantic
-selectors and allocated operation/manifest identities remain bound.
+The prepare value contains the revalidated reserved request, including its
+retained timestamp; semantic request/source digests keep their existing
+timestamp exclusions. Do not redefine either TASK digest.
 
 Extend existing AUTH/PREP binding and consumption seams rather than constructing
 another capability. Retain planned-action rejection in the kernel and fixed
@@ -85,6 +86,83 @@ then owner locks, and stages the eventual decision and consequences together.
 Do not add a test-only activation switch or commit fabricated allows to obtain
 positive pre-activation integration proof.
 
+### Exact symbols and field custody
+
+`PostSubmitRoutingResourceContext` is AUTH-private, strict, frozen and closed.
+It contains `resource_type=task_post_submit_routing_manifest`, `resource_id`,
+`scope_project_id`, `request: TaskRoutingRequestFacts`,
+`source: TaskPostSubmitManifestFacts`, `claim: OutboxClaim`, and a closed
+`consequence` union. It uses existing owner public DTOs rather than copied
+request/source/claim shapes. `resource_id == request.routing_manifest_id ==
+source.id`; scope equals all project identities including the claim. Match
+request and source task, Submission/version, checker run, evaluation request,
+evaluation request digest (source.request_digest), generation, result ID/digest,
+completion event and literal allow_review. Claim event/project equals completion
+and project. Claim lease/payload facts enter the resource digest but remain
+untrusted until the future OUTBOX owner validates the stored invocation.
+
+The source already contains assignment/contributor/contribution-policy identity,
+exact guide/pre/post/review/revision lineage, artifact admission/binding/content/
+replica/hash/size/semantic manifest, phase receipts and predecessor. Its locked
+review policy ID/generation/hash and human_review_required boolean are bound.
+Use `routing_source_commitment(source, route_operation_id, route_request_digest)`
+and `acceptance_source_commitment_digest`, never another source-hash algorithm.
+
+- `HumanAdmissionConsequence`: discriminator `kind=human_admission`,
+  expected_task_status=evaluation_pending, target_task_status=review_pending.
+  The resource's source/submission IDs identify exact publication/currentness.
+  No queue/admission reservation IDs, acceptance IDs or accepted-effect fields.
+- `AutomatedAcceptanceConsequence`: discriminator `kind=final_acceptance`,
+  `task_effects: TaskAcceptedEffectsRequest`. Reuse its exact project/task/
+  assignment/Submission/version/contributor/contribution-policy/content/hash,
+  allocated final_acceptance_id and expected_task_status=evaluation_pending.
+  Require equality with the resource/source. Its intended target is accepted
+  and completed assignment; it has no review_pending or queue fields.
+  Future shared acceptance maps id=task_effects.final_acceptance_id,
+  acceptance_source=task_post_submit_route, source_review_id=null,
+  source_routing_manifest_id=source.id, accepted_submitter_id=source.contributor_id,
+  policy_context_ref=source.locked_policy.locked_review_policy_id, and
+  recorded_by=the AUTH-resolved fixed router profile. No REV private DTO import.
+
+True requires exclusively HumanAdmissionConsequence; false requires exclusively
+AutomatedAcceptanceConsequence. The exact false lifecycle fence, obligation
+custody and contribution/award participant outcomes remain activation/composition
+requirements; this value boundary does not assert them verified.
+
+`post_submit_routing_prepare_values(request)` produces the single closed
+routing_request field from the existing request DTO's JSON representation.
+`parse_post_submit_routing_prepare` revalidates it and rejects extras.
+`post_submit_routing_prepare_matches` checks exact request equality and final
+resource validation; `_validate_consumption` additionally binds the existing
+PREP caller idempotency, fixed context request ID and correlation ID to
+request.route_operation_id. Requested project scope equals request.project_id.
+The named new `_PreparedAuthorizationBinding.routing_request` field stores that
+revalidated request. Route remains outside CHECKERS' POST_SUBMIT_ACTIONS.
+
+`post_submit_routing_resource_digest` uses canonical_json_hash with domain
+`workstream.authorization.task_post_submit_route.v0.1`, the exact routing
+request/source commitments, full claim, branch consequence and resource scope.
+Every semantic nested field participates; use canonical existing source/request
+hashes rather than copying their field inventories. `authorization_resource_digest`
+dispatches to it; runtime union, project-scope/resource matching,
+`_scope_from_resource`, audit resource type and project audit target gain only
+this typed resource. Audit database registry stays unchanged/unavailable.
+
+`PostSubmitRoutingAuthorization.prepare(request)` is the nominal fixed router
+adapter using the existing fixed_service_prepared_authorization and PREP service.
+It cannot select a different identity or bypass availability. Its private prepared
+participant calls canonical consume and only then projects the existing
+AcceptanceSourceReceiptFacts. The projection checks allowed, revalidated,
+FIXED_SERVICE kind, exact action/permission, resource type/manifest ID, canonical
+resource digest and route-operation request/correlation/idempotency identities.
+Project is checked through exact resource/source/claim scope (fixed-service
+AuthorizationDecision intentionally has no matched project grant).
+Actor profile and identity link come only from FixedServicePreparedAuthorization,
+not caller-supplied UUIDs. No exported helper accepts arbitrary constructed
+AuthorizationDecision values. Projection writes/commits nothing; no receipt can
+be produced while the action is planned. A future consumer still verifies the
+actual immutable AUTH event and exact fixed identity, never only this DTO.
+
 ## Acceptance criteria
 
 1. Valid preparation values for both policy branches bind every exact request,
@@ -97,7 +175,9 @@ positive pre-activation integration proof.
    human principals cannot substitute. Rejection leaves no source or product effect.
 4. Receipt candidates are explicitly untrusted; mismatched issuer, request,
    resource or source commitment cannot be silently projected as the exact receipt.
-5. Real caller rollback preserves the existing request/no-effect boundary.
+5. Real caller rollback keeps the previously committed TASK request unchanged
+   and leaves zero new audit/source/product effects. Planned denial occurs before
+   TASK staging/locks; this is not a positive composed authority/owner-lock proof.
    Positive handle/receipt/lock-order/atomic-outcome execution is not reachable
    while planned and is not claimed: exercise value matchers with valid controls
    and prove actual PREP denial without fabricating an allowed decision.
@@ -114,6 +194,32 @@ positive pre-activation integration proof.
   request commitments, and both policy branches retained.
 
 ## Evidence
+
+Named future pure tests in tests/authorization/post_submit_routing/test_contracts.py:
+`test_valid_policy_branch_resources`, `test_each_request_source_selector_rejects`,
+`test_exclusive_branch_consequences`, `test_each_consequence_identity_rejects`,
+`test_prepare_parse_and_match_exact_request`, `test_digest_binds_claim_and_source`,
+`test_fixed_principal_and_decision_receipt_checks`. Valid true/false controls are
+strict values; false is transport/matcher proof only because false policy
+activation remains unavailable. Do not call those values persisted/authorized.
+
+Named real PostgreSQL tests in test_prepared.py:
+`test_provisioned_router_remains_planned` uses valid real committed request/source
+facts and genuine provisioned service, expects kernel ACTION_UNAVAILABLE and
+zero handle/receipt/allow/source/product effects;
+`test_foreign_service_and_human_cannot_prepare_route` keeps principal controls
+separate; `test_planned_denial_rollback_preserves_request` compares retained
+request and exact audit/source/effect snapshots. No test activation flag.
+Receipt validation helpers may test predicate rejection with synthetic values
+only; no fabricated allowed event is stored or described as issued authority.
+Delete the request equality matcher and the private receipt consistency check
+in isolated probes: each named substitution regression must fail at its expected
+rejection assertion, not setup. Real positive receipt/handle execution is deferred.
+
+Commands: `cd backend && .venv/bin/pytest tests/authorization/post_submit_routing/test_contracts.py tests/authorization/test_acceptance_source_contracts.py -q`;
+real PostgreSQL command uses the canonical isolated runner with
+`tests/authorization/post_submit_routing/test_prepared.py`, using an isolated
+admin URL from the existing local Docker test fixture without printing secrets.
 
 Run focused pure routing/source contract tests, real PostgreSQL planned-action
 and rollback proofs, retained PREP/source tests and canonical module/AUTH/test
