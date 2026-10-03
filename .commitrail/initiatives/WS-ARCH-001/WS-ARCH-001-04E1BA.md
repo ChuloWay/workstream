@@ -59,13 +59,13 @@ its database timestamp and eventual authorization receipt belong to publication.
   the ARCH-04E coordination contract; `.commitrail/INDEX.md`.
 - `README.md`, `docs/roadmap_status.md`, `docs/spec_chunk_4_task_queue_assignment.md`,
   `docs/architecture_data_model.md`, `docs/engineering/authorization_activation_custody.md`.
-- `backend/app/modules/tasks/api/post_submit_routing.py`;
+- `backend/app/modules/tasks/api/post_submit_routing.py` and `api/__init__.py`;
   `backend/app/modules/tasks/post_submit_routing/{models,requests}.py`.
 - `backend/app/modules/checkers/api/execution.py`;
   `backend/app/modules/checkers/{execution_coordination,execution_repository}.py`.
 - `backend/alembic/versions/0018_task_routing_request.py`;
   `backend/alembic/env.py`; `backend/app/db/models.py` if registration requires it.
-- `backend/tests/tasks/post_submit_routing/{support,test_requests,test_request_storage,test_request_contracts,test_migration}.py`;
+- `backend/tests/tasks/post_submit_routing/{support,test_contracts,test_requests,test_request_storage,test_request_contracts,test_migration}.py`;
   `backend/tests/checkers/execution/test_coordination.py` if existing proof belongs there.
 - `backend/tests/{conftest,test_alembic,test_coverage_contract,test_behavior_ownership,test_ci_lane_catalogue}.py`
   and existing migration tests only for exact current-head inventory.

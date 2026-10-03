@@ -98,7 +98,8 @@ def task_post_submit_source_digest(source: TaskPostSubmitManifestFacts) -> str:
     })
 
 
-__all__ = ("TaskPostSubmitManifestFacts", "task_post_submit_source_digest")
+__all__ = ("TaskPostSubmitManifestFacts", "task_post_submit_source_digest",
+           "TaskRoutingSelection", "TaskRoutingRequestFacts", "task_routing_request_digest")
 
 
 class TaskRoutingSelection(BaseModel):
