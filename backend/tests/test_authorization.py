@@ -2204,7 +2204,7 @@ def test_fixed_service_action_matrix_and_activation_are_exact_and_immutable() ->
         identity: {action.value for action in actions}
         for identity, actions in SERVICE_ACTIONS_BY_IDENTITY.items()
     } == expected
-    assert sum(map(len, SERVICE_ACTIONS_BY_IDENTITY.values())) == 27
+    assert sum(map(len, SERVICE_ACTIONS_BY_IDENTITY.values())) == 28
     assert FUTURE_INTENT_REQUIRED_ACTIONS == {
         ActionId.REVIEW_FINDING_EVIDENCE_INGEST,
         ActionId.REVIEW_FINDING_RESPONSE_EVIDENCE_INGEST,
