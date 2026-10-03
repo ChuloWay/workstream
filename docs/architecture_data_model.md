@@ -2299,3 +2299,23 @@ acquiring its fixed advisory lock before the singleton row lock. It neither
 commits nor grants business authority. Later authorized transitions extend this
 same controller. Fulfillment roots, ordinals, cutoffs and phase history remain
 unimplemented; they are not fields on an award or a substitute outbox record.
+
+### TASK routing request reservation
+
+`task_post_submit_routing_requests` is immutable coordination custody, separate
+from the retained source manifest. `route_operation_id` is its generated UUIDv7
+primary key; `routing_manifest_id` reserves the future source identity and is
+unique. Neither is derived from the checker request or a content digest.
+
+The row binds project/task/Submission/version, checker run, evaluation request/
+digest/generation, result ID/digest, completion event and literal `allow_review`.
+The route-request digest hashes that closed selection with its own domain/action;
+allocated IDs and database creation time are excluded. The completion event and
+`(submission_id, checker_run_id, result_digest)` each have unique constraints.
+
+Insert custody locks Task, latest submitted Submission, CHECKERS fence and run in
+that order, verifies canonical receipts/material and the immutable completion
+event, and recomputes the digest. Updates, deletion and truncation are rejected.
+This row grants no authority and publishes no routing source or outcome. Future
+source publication must enforce the reserved manifest identity together with
+its actual AUTH receipt and governed consequence.

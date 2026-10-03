@@ -638,7 +638,8 @@ Extract foundations from existing owner work, not a new initiative:
 3. [REV-12A1](../.commitrail/initiatives/WS-REV-001/WS-REV-001-12A1.md)
    delivers disabled generation-zero controller storage and the caller-root
    transaction fence. AUTH-19A supplies inert exact source/request and detached receipt contracts.
-   Stage the distinct routing request in ARCH-04E1B-A, then implement the hidden
+   ARCH-04E1B-A delivers distinct routing-request and future source-ID reservation.
+   Next implement the hidden
    task.post_submit.route preparation/receipt-staging interface in 04E2-A using
    workstream.task.post_submit_router. The action remains planned/unavailable.
    CON-07 follows as a flush-only participant; isolated storage controls prove

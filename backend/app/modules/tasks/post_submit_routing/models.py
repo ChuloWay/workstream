@@ -137,3 +137,74 @@ class TaskPostSubmitRoutingManifest(Base):
     content_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     byte_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
     semantic_manifest_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
+
+
+class TaskRoutingRequest(Base):
+    """Immutable coordination reservation; its allocated manifest is not yet published."""
+
+    __tablename__ = "task_post_submit_routing_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "(get_byte(uuid_send(route_operation_id), 6) >> 4) = 7 and "
+            "(get_byte(uuid_send(route_operation_id), 8) & 192) = 128",
+            name="route_operation_id_uuid7",
+        ),
+        CheckConstraint(
+            "(get_byte(uuid_send(routing_manifest_id), 6) >> 4) = 7 and "
+            "(get_byte(uuid_send(routing_manifest_id), 8) & 192) = 128",
+            name="routing_manifest_id_uuid7",
+        ),
+        CheckConstraint(
+            "route_operation_id <> routing_manifest_id and "
+            "route_operation_id not in (evaluation_request_id, result_id, completion_event_id) and "
+            "routing_manifest_id not in (evaluation_request_id, result_id, completion_event_id)",
+            name="distinct_request_ids",
+        ),
+        CheckConstraint("submission_version > 0 and evaluation_generation > 0", name="positive_versions"),
+        CheckConstraint("routing_recommendation = 'allow_review'", name="allow_review_only"),
+        CheckConstraint(
+            "evaluation_request_digest ~ '^sha256:[0-9a-f]{64}$' and "
+            "result_digest ~ '^sha256:[0-9a-f]{64}$' and "
+            "route_request_digest ~ '^sha256:[0-9a-f]{64}$' and "
+            "route_request_digest <> evaluation_request_digest", name="request_digests",
+        ),
+        ForeignKeyConstraint(
+            ["task_id", "project_id"], ["workstream_tasks.id", "workstream_tasks.project_id"],
+            name="fk_task_route_request_task_project", ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["submission_id", "task_id", "submission_version"],
+            ["submissions.id", "submissions.task_id", "submissions.version"],
+            name="fk_task_route_request_submission", ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["checker_run_id", "task_id", "submission_id"],
+            ["checker_runs.id", "checker_runs.task_id", "checker_runs.submission_id"],
+            name="fk_task_route_request_checker", ondelete="RESTRICT",
+        ),
+        UniqueConstraint("routing_manifest_id", name="uq_task_route_request_manifest"),
+        UniqueConstraint("completion_event_id", name="uq_task_route_request_completion"),
+        UniqueConstraint("submission_id", "checker_run_id", "result_digest", name="uq_task_route_request_source"),
+    )
+
+    route_operation_id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    routing_manifest_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
+    project_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    task_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    submission_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    submission_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    checker_run_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    evaluation_request_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
+    evaluation_request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    evaluation_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    result_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
+    result_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    completion_event_id: Mapped[UUID] = mapped_column(
+        Uuid(), ForeignKey("outbox_events.event_id", name="fk_task_route_request_event", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    routing_recommendation: Mapped[str] = mapped_column(String(30), nullable=False)
+    route_request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.clock_timestamp()
+    )

@@ -1,8 +1,8 @@
 # WS-ARCH-001 — Current delivery plan through allow_review
 
 [AUTH-19A](../../WS-AUTH-001/WS-AUTH-001-19A.md) delivers inert exact source/receipt contracts and the
-planned router identity. Next are TASK source/request staging (ARCH-04E1B-A)
-and the hidden AUTH preparation/receipt-staging contract (ARCH-04E2-A), before
+planned router identity. ARCH-04E1B-A delivers caller-owned routing-request and
+future source-identity reservation. Next is hidden AUTH preparation (ARCH-04E2-A), before
 CON-07/shared acceptance. Mandatory durable custody and its genuine positive
 proof belong to consequence activation (04E2-B), before production consumption. Neither phase may
 commit a standalone allow. The first durable receipt must commit with its full
@@ -66,7 +66,7 @@ checker-remediation boundary before public Submission cutover.
 | CON-02B | AUTH-OUTBOX-01 | Complete: shared hidden dispatcher/claim fencing, typed handlers and recovery |
 | AUTH-OUTBOX-02 | CON-02B exact hidden manifest | Exact dispatcher mechanics only; no feature authority |
 | [ARCH-04E1A](../WS-ARCH-001-04E1A.md) | ARCH-04C/04D2 | Complete: route-neutral immutable TASK source schema/detached facts and source-neutral accepted-effects types; no runtime writer/reader, handlers, current pointer, routing authority, acceptance implementation or REV dependency |
-| ARCH-04E1B-A | ARCH-04E1A, AUTH-19A | TASK caller-session source/request staging; no handler or commit |
+| ARCH-04E1B-A | ARCH-04E1A, AUTH-19A | Complete: TASK caller-session request/source-identity reservation; no source publication, handler or commit |
 | ARCH-04E2-A | ARCH-04E1B-A | Existing planned task.post_submit.route hidden preparation/receipt staging; no standalone allow or consequence activation |
 | ARCH-04E1B-B | ARCH-04E2-A and CON-02B; false additionally CON-07/shared acceptance using delivered storage/fence | Hidden TASK handlers; durable receipt proof follows at exact activation |
 | Scoped XINT-003-08B controller activation | Early existing REV-12A foundation and hidden shared acceptance/writer/observation proof | Existing Operator lifecycle-control action for the bounded shared manifest, not human runtime |
@@ -111,7 +111,7 @@ Delivered supporting foundations are [ARCH-04B2](../WS-ARCH-001-04B2.md),
 and [CON-02B](../../WS-CON-001/OVERVIEW.md#con-02b-current-dispatcher-contract).
 REV-12A1 delivers disabled controller/fence mechanics. The current delivery
 priority is the false acceptance branch: exact AUTH preparation, CON-07
-and shared acceptance. Both branches use source staging 04E1B-A and hidden AUTH preparation
+and shared acceptance. Both branches have request reservation 04E1B-A and need hidden AUTH preparation
 04E2-A before handlers 04E1B-B, activation 04E2-B and live 04E3; true routing can proceed after its own prerequisites without CON-07 or
 shared acceptance. False adds those participants and scoped lifecycle activation.
 See [ARCH-04E1B/04E2/04E3](chunks/WS-ARCH-001-04E-canonical-allow-review.md#current-bounded-sequence)

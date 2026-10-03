@@ -1,8 +1,8 @@
 # WS-POL-003 — Unified project-guide compilation
 
 [AUTH-19A](../WS-AUTH-001/WS-AUTH-001-19A.md) delivers inert exact source/receipt contracts and the
-planned router identity. Next are TASK source/request staging (ARCH-04E1B-A)
-and the hidden AUTH preparation/receipt-staging contract (ARCH-04E2-A), before
+planned router identity. ARCH-04E1B-A delivers caller-owned routing-request and
+future source-identity reservation. Next is hidden AUTH preparation (ARCH-04E2-A), before
 CON-07/shared acceptance. Mandatory durable custody and its genuine positive
 proof belong to consequence activation (04E2-B), before production consumption. Neither phase may
 commit a standalone allow. The first durable receipt must commit with its full
@@ -72,7 +72,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: for the selected automated-acceptance delivery sequence, ARCH-04E1B-A source staging and ARCH-04E2-A AUTH preparation, then CON-07 using the delivered REV-12A1 disabled fence, then shared acceptance composition and ARCH-04E1B/04E2/04E3.
+- Next usable boundary: for the selected automated-acceptance delivery sequence, ARCH-04E2-A AUTH preparation after delivered TASK request reservation, then CON-07 using the delivered REV-12A1 disabled fence, then shared acceptance composition and ARCH-04E1B/04E2/04E3.
   ARCH-04F remediation still precedes enabling false.
 - Governing sources: project-guide specifications, authorization and
   contribution-policy specifications, code, migrations, and tests.
@@ -85,7 +85,7 @@ generation-zero controller storage and transaction locking. Acceptance-source AU
 CON participation and authorized activation remain separate required work.
 
 This is delivery priority, not a prerequisite of true human admission. Both
-routing branches require source staging 04E1B-A → AUTH preparation 04E2-A → hidden handlers 04E1B-B → activation 04E2-B → live 04E3; true routing
+routing branches have request reservation 04E1B-A → AUTH preparation 04E2-A → hidden handlers 04E1B-B → activation 04E2-B → live 04E3; true routing
 can proceed after its own prerequisites without CON-07/shared acceptance or
 scoped lifecycle activation. False routing adds those requirements. Human final
 acceptance later uses the same authorized shared acceptance/CON operation.

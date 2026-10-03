@@ -314,3 +314,10 @@ accompanies the first genuine allowed consequence at 04E2-B, before production
 composition or consumption; no standalone allow is committed. Authorized
 REV transitions and real obligation/cutoff proof remain required before live
 shared acceptance, without requiring live human-review queues first.
+
+ARCH-04E1B-A adds immutable TASK routing-request and future source-ID reservation,
+with caller-owned rollback and current-completion replay checks. It does not
+construct acceptance-source commitments or consume receipt-shaped values as
+AUTH evidence. ARCH-04E2-A preparation remains next; complete source projection,
+actual immutable AUTH-event/service-actor verification and atomic publication
+remain required before consequence activation.

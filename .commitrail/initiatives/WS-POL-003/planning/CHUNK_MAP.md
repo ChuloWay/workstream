@@ -1,8 +1,8 @@
 # Chunk Map: WS-POL-003 - Unified Project Guide Compilation
 
 [AUTH-19A](../../WS-AUTH-001/WS-AUTH-001-19A.md) delivers inert exact source/receipt contracts and the
-planned router identity. Next are TASK source/request staging (ARCH-04E1B-A)
-and the hidden AUTH preparation/receipt-staging contract (ARCH-04E2-A), before
+planned router identity. ARCH-04E1B-A delivers caller-owned routing-request and
+future source-identity reservation. Next is hidden AUTH preparation (ARCH-04E2-A), before
 CON-07/shared acceptance. Mandatory durable custody and its genuine positive
 proof belong to consequence activation (04E2-B), before production consumption. Neither phase may
 commit a standalone allow. The first durable receipt must commit with its full

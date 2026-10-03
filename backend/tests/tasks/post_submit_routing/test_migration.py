@@ -106,3 +106,31 @@ async def test_upgrade_preserves_existing_sources_without_publishing(
                 assert await _snapshot(connection, h) == before
             finally:
                 await connection.close()
+
+
+async def test_request_upgrade_preserves_completed_owners(tmp_path, isolated_database_env, migration_lock):
+    """Upgrade actual predecessor data without creating a request or publishing a source."""
+    url = isolated_database_env.replace("+asyncpg", "")
+    with migration_lock():
+        await db_session.dispose_engine()
+        connection = await asyncpg.connect(url)
+        try:
+            await connection.execute("drop schema public cascade; create schema public")
+        finally:
+            await connection.close()
+        await asyncio.to_thread(command.upgrade, _config(), "0017_acceptance_source_contracts")
+        async with completed_source(tmp_path, isolated_database_env) as h:
+            connection = await asyncpg.connect(url)
+            try:
+                before = await _snapshot(connection, h)
+                assert await connection.fetchval("select to_regclass('public.task_post_submit_routing_requests')") is None
+            finally:
+                await connection.close()
+            await asyncio.to_thread(command.upgrade, _config(), "0018_task_routing_request")
+            connection = await asyncpg.connect(url)
+            try:
+                assert await _snapshot(connection, h) == before
+                assert await connection.fetchval("select count(*) from public.task_post_submit_routing_requests") == 0
+                assert await connection.fetchval("select count(*) from public.task_post_submit_routing_manifests") == 0
+            finally:
+                await connection.close()

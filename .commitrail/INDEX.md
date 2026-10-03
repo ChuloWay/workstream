@@ -8,9 +8,9 @@ for current product capability.
 |---|---|---|
 | [WS-DB-002](initiatives/WS-DB-002/OVERVIEW.md) | Complete | Shared UUIDv7 record generation, native-UUID relationships and fresh v0.1 baseline; natural-owner retry custody and aligned CI/local setup |
 | [WS-MCP-002](initiatives/WS-MCP-002/OVERVIEW.md) | Planned | Three self-service tools delivered through WS-MCP-002-02; 24 tools remain and WS-MCP-002-03 administrative reads are next |
-| [WS-ARCH-001](initiatives/WS-ARCH-001/OVERVIEW.md) | Planned | Source storage and inert AUTH contracts are delivered; originating receipt custody, shared acceptance and routing integration remain. True admission and automated acceptance retain separate prerequisites. |
+| [WS-ARCH-001](initiatives/WS-ARCH-001/OVERVIEW.md) | Planned | Source storage, inert AUTH contracts and TASK request reservation are delivered; hidden AUTH preparation is next, followed by shared acceptance and atomic routing activation. True admission and automated acceptance retain separate prerequisites. |
 | [WS-ART-001](initiatives/WS-ART-001/OVERVIEW.md) | Planned | Exact checker input/output custody and packet foundations are delivered; routing integration, remediation and public intake remain. |
-| [WS-AUTH-001](initiatives/WS-AUTH-001/OVERVIEW.md) | Planned | AUTH-19A inert source commitments are delivered; originating AUTH preparation, atomic receipt custody and scoped routing activation remain. |
+| [WS-AUTH-001](initiatives/WS-AUTH-001/OVERVIEW.md) | Planned | AUTH-19A commitments and TASK request reservation are delivered; ARCH-04E2-A hidden AUTH preparation is next, with atomic receipt custody and scoped activation still required. |
 | [WS-CON-001](initiatives/WS-CON-001/OVERVIEW.md) | Planned | Contribution/award storage is delivered; CON-07 hidden atomic participation follows exact AUTH preparation; production consumption requires genuine authority and retained source receipts. |
 | [WS-AUTH-003](initiatives/WS-AUTH-003/OVERVIEW.md) | Planned | Canonical source facts and disabled lifecycle fencing are delivered; exact lifecycle activation remains tied to the governed consequence. |
 | [WS-POL-003](initiatives/WS-POL-003/OVERVIEW.md) | Planned | Locked policy configuration and inert source commitments are delivered; false-policy activation remains gated by shared acceptance, exact authority, routing and remediation. |

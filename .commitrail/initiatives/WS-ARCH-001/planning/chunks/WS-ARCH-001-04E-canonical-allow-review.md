@@ -18,10 +18,13 @@ the separately named AUTH child owns only its authorization changes.
 AUTH-19A delivers inert source commitments and planned router registration.
 Split preparation from consequences within the existing TASK and AUTH owners:
 
-1. **ARCH-04E1B-A — TASK source/request staging.** Stage the distinct
-   `route_operation_id` and `route_request_digest` in the existing owner request
-   preparation custody. Provide caller-session staging, with no handler, commit,
-   current-pointer publication or acceptance effect.
+1. **ARCH-04E1B-A — Complete: TASK request/source-identity reservation.**
+   [The bounded record](../../WS-ARCH-001-04E1BA.md) reserves a distinct
+   route operation/digest and future manifest ID for the exact latest submitted
+   Submission and current completed `allow_review` evaluation. Caller-owned
+   staging/replay does not insert a manifest, publish a current pointer, issue
+   an AUTH receipt or apply any acceptance effect. Full source projection and
+   exact receipt verification remain composition work at 04E1B-B/04E2-B.
 2. **ARCH-04E2-A — hidden AUTH issuer and receipt staging.** The issuer is the
    existing planned `task.post_submit.route` action/permission, with sole fixed
    identity `workstream.task.post_submit_router`. Build its exact prepared
@@ -97,7 +100,7 @@ creating human admission, acceptance or contribution effects.
    production for its own evaluation-request event and the TASK consumer of
    04C's already-defined final-result notification, exact public facts, currentness protocol
    and transaction proof described below. No live worker or action activation.
-   Initial request reservation is a bounded atomic consequence of the existing
+   Initial checker evaluation-request reservation is a bounded atomic consequence of the existing
    exact `submission.create` command, not an authority token sent to the worker.
 3. **ARCH-04E2-B — AUTH routing activation.** After 04E1B-B hidden proof, AUTH
    also consumes scoped XINT-003-08B lifecycle-control activation for the false
@@ -278,7 +281,7 @@ checker results without creating Review, ReviewFinding, or
 RevisionContextPreparation records.
 
 This is a coordination contract. Each remaining child record, beginning with
-source staging 04E1B-A, supplies its current-main
+delivered request reservation 04E1B-A, supplies its current-main
 exact files, commands, migration head and reviewers before implementation.
 Shared acceptance foundations additionally gate false composition; they do not
 gate true admission. Both branches retain the preparation, issuer, handler, activation and live
