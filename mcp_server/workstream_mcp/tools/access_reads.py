@@ -61,12 +61,13 @@ async def invoke(
     if tool_name not in TOOL_NAMES:
         return adapter_failure("unknown_tool", status=404)
     name = tool_name.removeprefix("workstream_")
-    if "limit" in arguments and type(arguments["limit"]) is not int:
-        return adapter_failure("invalid_tool_input", status=400)
     try:
         _INPUT_VALIDATORS[name].validate(arguments)
     except ValidationError:
         return adapter_failure("invalid_tool_input", status=400)
+    if "limit" in arguments:
+        # JSON Schema integers include integral floats; serialize a canonical query value.
+        arguments = {**arguments, "limit": int(arguments["limit"])}
     outcome = await gateway.access_read(name, bearer, arguments, correlation_id)
     if outcome.failure is not None:
         return outcome.failure.result()

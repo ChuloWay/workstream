@@ -224,6 +224,25 @@ def test_grant_queries_preserve_bounds_and_opaque_cursor(
     )
 
 
+@pytest.mark.parametrize("name", GRANT_TOOLS)
+@pytest.mark.parametrize("limit", [1.0, 100.0])
+def test_integral_numeric_limit_matches_advertised_schema(
+    adapter: Adapter, call: Call, name: str, limit: float
+) -> None:
+    client, received, upstream = adapter
+    upstream["json"] = _response(name)
+    arguments = {**_arguments(name), "limit": limit}
+    schema = _catalogue(client)[name]["inputSchema"]
+    Draft202012Validator(schema, format_checker=FormatChecker()).validate(arguments)
+
+    result = call(client, name=name, arguments=arguments).json()["result"]
+
+    assert result["isError"] is False
+    assert result["structuredContent"] == upstream["json"]
+    assert len(received) == 1
+    assert received[0].url.params["limit"] == str(int(limit))
+
+
 def _invalid_inputs() -> Iterator[Any]:
     for name in PATHS:
         for field in ("url", "authorization", "headers", "idempotency_key", "contact_email"):
