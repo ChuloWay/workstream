@@ -125,6 +125,7 @@ and `acceptance_source_commitment_digest`, never another source-hash algorithm.
   `task_effects: TaskAcceptedEffectsRequest`. Reuse its exact project/task/
   assignment/Submission/version/contributor/contribution-policy/content/hash,
   allocated final_acceptance_id and expected_task_status=evaluation_pending.
+  The allocated acceptance identity must be UUIDv7, matching canonical storage.
   Require equality with the resource/source. Its intended target is accepted
   and completed assignment; it has no review_pending or queue fields.
   Future shared acceptance maps id=task_effects.final_acceptance_id,
@@ -211,6 +212,11 @@ Named pure-test evidence in tests/authorization/post_submit_routing/test_contrac
 `test_fixed_principal_and_decision_receipt_checks`. Valid true/false controls are
 strict values; false is transport/matcher proof only because false policy
 activation remains unavailable. Do not call those values persisted/authorized.
+`test_each_resource_and_claim_identity_rejects` independently substitutes all
+six top-level manifest/scope and nested source/request/claim identities, with a
+specific identity-error assertion. Removing the claim-project conjunct must fail
+that assertion. `test_acceptance_identity_requires_uuid7` proves a valid allocated
+control and rejection of a UUIDv4 acceptance identity before future storage.
 
 Named real PostgreSQL evidence in test_prepared.py:
 `test_provisioned_router_remains_planned` uses valid real committed request/source

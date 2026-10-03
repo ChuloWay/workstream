@@ -78,6 +78,8 @@ class PostSubmitRoutingResourceContext(_RoutingValue):
                 raise ValueError("routing consequence differs from review policy")
             consequence = AutomatedAcceptanceConsequence.model_validate(self.consequence.model_dump())
             effects = TaskAcceptedEffectsRequest.model_validate(consequence.task_effects.model_dump())
+            if effects.final_acceptance_id.version != 7:
+                raise ValueError("routing acceptance requires UUIDv7 identity")
             if effects.expected_task_status != "evaluation_pending":
                 raise ValueError("routing acceptance source state differs")
             for field in (

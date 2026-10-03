@@ -1,6 +1,7 @@
 """Pure exact-value proofs for hidden post-submit routing preparation."""
 
 from datetime import timedelta
+from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
@@ -88,6 +89,33 @@ def test_each_request_source_selector_rejects(field, changed):
                 | {"routing_recommendation": "needs_revision"}
             )
         )
+
+
+@pytest.mark.parametrize("field", (
+    "resource_id", "scope_project_id", "request.routing_manifest_id", "source.id",
+    "claim.project_id", "claim.event_id",
+))
+def test_each_resource_and_claim_identity_rejects(field):
+    control = resource_for()
+    assert control.validate_identity() is control
+    values = control.model_dump()
+    if "." in field:
+        parent, nested_field = field.split(".")
+        values[parent][nested_field] = new_record_id()
+    else:
+        values[field] = new_record_id()
+    with pytest.raises(ValidationError, match="routing resource identity differs"):
+        PostSubmitRoutingResourceContext(**values)
+
+
+def test_acceptance_identity_requires_uuid7():
+    control = resource_for(human_review_required=False)
+    assert control.validate_identity() is control
+    assert control.consequence.task_effects.final_acceptance_id.version == 7
+    values = control.model_dump()
+    values["consequence"]["task_effects"]["final_acceptance_id"] = uuid4()
+    with pytest.raises(ValidationError, match="routing acceptance requires UUIDv7 identity"):
+        PostSubmitRoutingResourceContext(**values)
 
 
 def test_exclusive_branch_consequences():
