@@ -1,7 +1,7 @@
 # WS-ARCH-001-04E2A — Exact hidden routing authorization preparation
 
 - Initiative: WS-ARCH-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: exact routing preparation and receipt-staging contracts
   extend canonical AUTH/PREP while `task.post_submit.route` remains unavailable.
 
@@ -45,7 +45,8 @@ value preparation is not an issued capability or persisted allowed decision.
   TASK `tests/tasks/post_submit_routing/{support,contract_fixtures}.py` only for reuse.
 - Exact `backend/scripts/{behavior_ownership,test_lane_catalogue}.py`,
   `.ci/behavior-ownership/partition.v1.json`, `backend/tests/test_ci_lane_catalogue.py`
-  inventory registration; no runner/workflow/cap/skip changes.
+  inventory registration, plus `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`
+  measured shrink refresh; no runner/workflow/cap/skip/threshold changes.
 
 ### Not allowed
 
@@ -79,6 +80,14 @@ while planned, with no alternate callable allow path. Source receipt shape is
 derived from the exact context and canonical
 source commitment; genuine immutable audit-event verification and mandatory
 persisted receipt custody remain activation prerequisites, not an assumed fact.
+
+Adding the routing binding must not enlarge existing structural debt. Keep the
+unchanged setup-sufficiency binding parser behind a private helper so PREP's
+`_binding` shrinks while retaining its existing request shape. Reuse one private
+principal-context base for duplicated human/service principal and request fields
+so `runtime.py` also shrinks while both concrete strict schemas, required fields
+and literal principal kinds remain unchanged. Refresh only the measured debt
+entries; do not change a gate or remove a test.
 
 Preparation must not acquire TASK locks and then attempt to acquire fixed-service
 locks. The future routing composition acquires its live service authority first,
@@ -195,7 +204,7 @@ actual immutable AUTH event and exact fixed identity, never only this DTO.
 
 ## Evidence
 
-Named future pure tests in tests/authorization/post_submit_routing/test_contracts.py:
+Named pure-test evidence in tests/authorization/post_submit_routing/test_contracts.py:
 `test_valid_policy_branch_resources`, `test_each_request_source_selector_rejects`,
 `test_exclusive_branch_consequences`, `test_each_consequence_identity_rejects`,
 `test_prepare_parse_and_match_exact_request`, `test_digest_binds_claim_and_source`,
@@ -203,7 +212,7 @@ Named future pure tests in tests/authorization/post_submit_routing/test_contract
 strict values; false is transport/matcher proof only because false policy
 activation remains unavailable. Do not call those values persisted/authorized.
 
-Named real PostgreSQL tests in test_prepared.py:
+Named real PostgreSQL evidence in test_prepared.py:
 `test_provisioned_router_remains_planned` uses valid real committed request/source
 facts and genuine provisioned service, expects kernel ACTION_UNAVAILABLE and
 zero handle/receipt/allow/source/product effects;
