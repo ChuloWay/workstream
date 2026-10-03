@@ -85,6 +85,7 @@ from app.modules.tasks.models import (  # noqa: F401
 )
 from app.modules.tasks.post_submit_routing.models import (  # noqa: F401
     TaskPostSubmitRoutingManifest,
+    TaskRoutingRequest,
 )
 
 from app.modules.projects.guide_compilation.models import (  # noqa: F401

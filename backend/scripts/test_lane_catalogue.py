@@ -463,6 +463,13 @@ TASK_MODULES = (
 )
 
 
+# New request proofs stay on the measured TASK lane with available headroom.
+TASK_ROUTING_REQUEST_MODULES = (
+    "tests/tasks/post_submit_routing/test_request_contracts.py",
+    "tests/tasks/post_submit_routing/test_requests.py",
+    "tests/tasks/post_submit_routing/test_request_storage.py",
+)
+
 PARTITION_GROUPS = (
     (PARTITIONED_SHARED_LANES, SHARED_FOUNDATION_MODULES),
     (PARTITIONED_PROJECT_LANES, PROJECT_MODULES),
@@ -504,5 +511,6 @@ LANES = (
         ),
     ),
     *(TestLane(name, PROJECT_MODULES) for name in PARTITIONED_PROJECT_LANES),
-    *(TestLane(name, TASK_MODULES) for name in PARTITIONED_TASK_LANES),
+    *(TestLane(name, TASK_MODULES + (TASK_ROUTING_REQUEST_MODULES if name == "task_lifecycle_c" else ()))
+      for name in PARTITIONED_TASK_LANES),
 )

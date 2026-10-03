@@ -677,8 +677,11 @@ with PostgreSQL enforcement of exact execution/finalization receipts. ARCH-04E1A
 adds immutable source storage and detached contracts only. Automatic dispatch,
 routing and acceptance remain ARCH-04E work. AUTH-19A defines inert exact
 Review/routing source commitments and registers the router as planned. It does not
-issue or persist source authorization receipts; those remain prerequisites to
-shared acceptance and contribution creation.
+issue or persist source authorization receipts. ARCH-04E1B-A reserves the TASK
+routing operation and future source identity under caller-owned transactions,
+with exact current-completion verification and replay. It publishes no source or
+outcome. Hidden AUTH preparation is next; actual receipt custody must commit with
+the governed consequence before shared acceptance and contribution creation run.
 
 ## v0.1 Success Standard
 

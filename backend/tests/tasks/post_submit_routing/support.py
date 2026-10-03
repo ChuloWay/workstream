@@ -322,8 +322,8 @@ async def completed_source(
         yield h
 
 
-async def _create_sibling_submission(h, context, task_id, assignment_id):
-    """Admit the ZIP and create its exact sibling Submission through owner services."""
+async def _create_submission(h, context, task_id, assignment_id, predecessor_id=None):
+    """Admit the ZIP and create exact Submission lineage through owner services."""
     preparation = SubmissionBundlePreparationRequest(
         actor=ActorIdentityFacts(
             context.actor_profile_id,
@@ -334,7 +334,7 @@ async def _create_sibling_submission(h, context, task_id, assignment_id):
         correlation_id=context.correlation_id,
         task_id=task_id,
         assignment_id=assignment_id,
-        predecessor_submission_id=None,
+        predecessor_submission_id=predecessor_id,
         idempotency_key=new_record_id(),
         summary=h.request.structural_input.summary,
         contributor_attestation=h.request.structural_input.worker_attestation,
@@ -360,7 +360,7 @@ async def _create_sibling_submission(h, context, task_id, assignment_id):
                 task_id=task_id,
                 assignment_id=assignment_id,
                 contributor_id=context.actor_profile_id,
-                predecessor_submission_id=None,
+                predecessor_submission_id=predecessor_id,
                 admission_id=admission_id,
                 summary=preparation.summary,
                 contributor_attestation=preparation.contributor_attestation,
@@ -396,7 +396,7 @@ async def completed_sibling_source(h):
             },
         )
 
-    created = await _create_sibling_submission(h, context, task_id, assignment_id)
+    created = await _create_submission(h, context, task_id, assignment_id)
     async with h.factory() as session:
         facts = await submitted_bundle_port(session).read(
             SubmittedBundleRequest(
@@ -536,3 +536,79 @@ async def activate_successor_guide(h):
         }
     )
     return await activate(h.factory, manager, command)
+
+
+def completion_for(h):
+    """Build the actual completed publication from retained fixture facts."""
+    from app.modules.checkers.api.execution import EvaluationCompletion
+    from app.modules.checkers.api.post_submit import PostSubmitCurrentResultReference
+
+    return EvaluationCompletion(
+        project_id=h.request.project_id, task_id=h.request.task_id,
+        submission_id=h.request.submission_id,
+        reference=PostSubmitCurrentResultReference(
+            **h.result.model_dump(include=set(PostSubmitCurrentResultReference.model_fields) - {"schema_version"})
+        ),
+        routing_recommendation="allow_review", output_binding_ids=(),
+        execute_evidence_id=h.source["execute_evidence_id"],
+        finalize_evidence_id=h.source["finalize_evidence_id"],
+    )
+
+
+def request_values(h):
+    """Canonical request selectors with new owner IDs, for direct SQL proof."""
+    from app.modules.tasks.api.post_submit_routing import TaskRoutingSelection, task_routing_request_digest
+
+    source = h.source
+    selected = TaskRoutingSelection(
+        **{key: source[key] for key in TaskRoutingSelection.model_fields
+           if key not in {"evaluation_request_digest", "routing_recommendation"}},
+        evaluation_request_digest=source["request_digest"], routing_recommendation="allow_review",
+    )
+    return dict(selected.model_dump(), route_operation_id=new_record_id(),
+                routing_manifest_id=new_record_id(), route_request_digest=task_routing_request_digest(selected))
+
+
+def rehash_request(values):
+    """Ensure owner-substitution tests fail on custody, never an unrelated stale digest."""
+    from app.modules.tasks.api.post_submit_routing import TaskRoutingSelection, task_routing_request_digest
+    values = dict(values)
+    selection = TaskRoutingSelection(**{key: values[key] for key in TaskRoutingSelection.model_fields})
+    values["route_request_digest"] = task_routing_request_digest(selection)
+    return values
+
+
+async def insert_request(session, values):
+    columns = tuple(values)
+    await session.execute(text(
+        "INSERT INTO public.task_post_submit_routing_requests (" + ",".join(columns)
+        + ") VALUES (" + ",".join(":" + key for key in columns) + ")"
+    ), values)
+
+
+async def successor_submission(h):
+    """Use the hidden real intake writer after seeding the future revision precondition.
+
+    This proves retained Submission ordering, not a live Review/revision operation.
+    """
+    from sqlalchemy import text
+    async with h.factory() as session, session.begin():
+        original = await session.get(Submission, str(h.request.submission_id))
+        identity_link_id = await session.scalar(select(ActorIdentityLink.id).where(
+            ActorIdentityLink.actor_profile_id == original.contributor_id,
+            ActorIdentityLink.status == "active",
+        ))
+        await session.execute(text("UPDATE public.workstream_tasks SET status='needs_revision' WHERE id=:id"),
+                              {"id": h.request.task_id})
+        context = _context(actor_profile_id=as_uuid(original.contributor_id), identity_link_id=as_uuid(identity_link_id))
+    from io import BytesIO
+    from zipfile import ZipFile
+    revised = BytesIO()
+    with ZipFile(BytesIO(h.data)) as source, ZipFile(revised, "w") as target:
+        for item in source.infolist():
+            data = source.read(item)
+            if item.filename == "notes.txt":
+                data += b"\nRevision: corrected the implementation.\n"
+            target.writestr(item, data)
+    successor = SimpleNamespace(**(vars(h) | {"data": revised.getvalue()}))
+    return await _create_submission(successor, context, h.request.task_id, h.request.assignment_id, h.request.submission_id)

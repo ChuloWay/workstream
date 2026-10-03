@@ -99,3 +99,59 @@ def task_post_submit_source_digest(source: TaskPostSubmitManifestFacts) -> str:
 
 
 __all__ = ("TaskPostSubmitManifestFacts", "task_post_submit_source_digest")
+
+
+class TaskRoutingSelection(BaseModel):
+    """Exact completion selectors; values alone establish neither ownership nor authority."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    project_id: UUID
+    task_id: UUID
+    submission_id: UUID
+    submission_version: _PositiveVersion
+    checker_run_id: UUID
+    evaluation_request_id: UUID
+    evaluation_request_digest: _Sha256
+    evaluation_generation: _PositiveVersion
+    result_id: UUID
+    result_digest: _Sha256
+    completion_event_id: UUID
+    routing_recommendation: Literal["allow_review"]
+
+
+def task_routing_request_digest(selection: TaskRoutingSelection) -> str:
+    """Hash semantic selectors, independently of allocated IDs and database time."""
+    if type(selection) is not TaskRoutingSelection:
+        raise ValueError("routing request selection is invalid")
+    checked = TaskRoutingSelection.model_validate(selection.model_dump())
+    return canonical_json_hash({
+        "domain": "workstream.task_post_submit_route_request.v0.1",
+        "action": "task.post_submit.route",
+        "selection": checked.model_dump(mode="json"),
+    })
+
+
+class TaskRoutingRequestFacts(TaskRoutingSelection):
+    """Reserved request and future source identity, never a published routing source."""
+
+    route_operation_id: UUID
+    routing_manifest_id: UUID
+    route_request_digest: _Sha256
+    created_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_request_custody(self) -> Self:
+        """Reject identity reuse and a digest inconsistent with the closed selectors."""
+        ids = (self.route_operation_id, self.routing_manifest_id)
+        if any(value.version != 7 for value in ids) or ids[0] == ids[1]:
+            raise ValueError("routing request requires distinct UUIDv7 identities")
+        if set(ids) & {self.evaluation_request_id, self.result_id, self.completion_event_id}:
+            raise ValueError("routing request identities reuse checker identities")
+        selection = TaskRoutingSelection(**self.model_dump(include=set(TaskRoutingSelection.model_fields)))
+        if (
+            self.route_request_digest != task_routing_request_digest(selection)
+            or self.route_request_digest == self.evaluation_request_digest
+        ):
+            raise ValueError("routing request digest differs")
+        return self

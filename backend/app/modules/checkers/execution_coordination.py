@@ -1,5 +1,6 @@
 """Caller-owned request reservation and exact current-result reads; no execution."""
 
+import json
 from uuid import UUID
 
 from sqlalchemy import select, text
@@ -12,6 +13,8 @@ from app.modules.checkers.api.execution import (
     CheckerExecutionUnavailable,
     CompletedEvaluation,
     EvaluationReservation,
+    EvaluationCompletion,
+    VerifiedMaterialFacts,
 )
 from app.modules.checkers.api.post_submit import (
     PostSubmissionEvaluationRequest,
@@ -28,6 +31,7 @@ from app.modules.checkers.execution_repository import (
     request_text,
     reservation,
     stored_result,
+    stored_request,
 )
 from app.modules.checkers.execution_results import classify_result
 from app.modules.checkers.models import CheckerRun, CheckerSubmissionFence
@@ -150,6 +154,58 @@ class EvaluationCoordinator:
         return CompletedEvaluation(
             reference=reference, routing_recommendation=classification.routing, result=result
         )
+
+
+    async def require_current_completion(
+        self, event_id: UUID, completion: EvaluationCompletion
+    ) -> int:
+        """Verify caller completion against retained current custody without granting authority."""
+        require_transaction(self._session)
+        completion = EvaluationCompletion.model_validate(completion)
+        if not isinstance(event_id, UUID) or completion.routing_recommendation != "allow_review":
+            raise CheckerExecutionUnavailable("checker_current_completion_unavailable")
+        ref = completion.reference
+        # Qualify every untrusted owner selector before acquiring any CHECKERS lock.
+        run = await self._session.scalar(select(CheckerRun).where(
+            CheckerRun.id == str(ref.attempt_id),
+            CheckerRun.project_id == str(completion.project_id),
+            CheckerRun.task_id == str(completion.task_id),
+            CheckerRun.submission_id == str(completion.submission_id),
+            CheckerRun.evaluation_request_id == str(ref.request_id),
+            CheckerRun.request_digest == ref.request_digest,
+            CheckerRun.evaluation_generation == ref.evaluation_generation,
+            CheckerRun.result_id == str(ref.result_id),
+            CheckerRun.result_digest == ref.result_digest,
+            CheckerRun.completion_event_id == event_id,
+        ).execution_options(populate_existing=True))
+        if run is None:
+            raise CheckerExecutionUnavailable("checker_current_completion_unavailable")
+        request = stored_request(run)
+        completed = await self.read_current_result(request)
+        # read_current_result refreshes and locks this same run after its fence.
+        if (
+            completed.reference != ref
+            or completed.routing_recommendation != "allow_review"
+            or run.completion_event_id != event_id
+            or run.execute_evidence_id != str(completion.execute_evidence_id)
+            or run.finalize_evidence_id != str(completion.finalize_evidence_id)
+            or completion.execute_evidence_id == completion.finalize_evidence_id
+            or run.material_custody is None
+        ):
+            raise CheckerExecutionUnavailable("checker_current_completion_unavailable")
+        material = VerifiedMaterialFacts.model_validate_json(
+            json.dumps(run.material_custody)
+        )
+        if (
+            material.submission_id != request.submission_id
+            or material.submission_version != request.submission_version
+            or material.binding_id != request.binding_id
+            or material.content_id != request.content_id
+            or material.content_sha256 != request.content_sha256
+            or material.byte_count != request.byte_count
+        ):
+            raise CheckerExecutionUnavailable("checker_current_completion_unavailable")
+        return run.submission_version
 
 
 class CurrentExecution:

@@ -1,7 +1,7 @@
 # ARCH-04E1B-A — Routing request and source identity reservation
 
 - Initiative: WS-ARCH-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Risk: L1 (immutable coordination custody, owner boundaries).
 - Intended merge outcome: caller-owned preparation reserves one distinct TASK routing operation and future source identity for an exact completed current evaluation. Routing remains unavailable.
 
@@ -186,3 +186,41 @@ From repository root:
 .venv/bin/python scripts/check_stale_workstream_wording.py
 git diff --check
 ```
+
+## Verification scheduling
+
+Keep the three new request-test modules on existing `task_lifecycle_c`, without
+changing other node assignments, services, the nine-lane inventory, completeness
+checks or 1,200-second limit. Merged-base hosted run 37083930861 completed TASK C
+in approximately 12m27s including job setup, while TASK B took approximately
+20m59s including setup. Randomly adding the new expensive owner-graph fixtures
+to B has insufficient measured headroom. This is explicit scheduling of new
+proof only; exact-head hosted completion must still establish the actual budget.
+Ordinary transaction tests use canonical reset and schema verification; only
+migration tests rebuild schema. No test or assertion is skipped to fit the lane.
+
+## Implementation and proof boundaries
+
+The request table, strict facts and caller-session stager implement the bounded
+outcome. CHECKERS extends its existing coordination interface; TASK imports no
+private CHECKERS implementation. The source manifest remains unchanged.
+
+Focused proofs cover exact replay/rollback, concurrent winner recovery, every
+committed selector, both fence race orders, phase/event custody, timestamp and
+identity ownership, no lifecycle/economic/audit/outbox effects, and migration
+preservation. A real successor Submission is created through the existing hidden
+intake writer after explicitly seeding its future revision precondition; this
+proves ordering rejection, not a live review/revision workflow. Existing source
+proof remains retained. No obsolete product implementation is replaced here:
+there was no prior TASK routing-request path to remove.
+
+A local test-of-test probe removes only the completion-event aggregate predicate
+from the request guard. The crossed-event regression then fails at its expected
+rejection assertion, while the function is restored before teardown. This does
+not rely on a digest error or fixture failure. Exact clean-head execution and
+review freshness belong in the PR trust summary.
+
+Current roadmap, TASK/data-model specs and AUTH/ARCH/POL navigation advance to
+hidden AUTH preparation. No local spreadsheet exports are present. Public intake,
+source publication, complete authority, routing, acceptance and remediation
+remain separate prerequisites to the first complete contributor journey.
