@@ -700,8 +700,23 @@ class _ProcessBlockingExporter(SpanExporter):
 _PROCESS_TRACE_STREAM: Any = None
 
 
-def _bounded_process_exit_probe(status: Any, trace_path: str) -> None:
+def _bounded_process_exit_probe(
+    status: Any,
+    trace_path: str,
+    *,
+    call_runtime_shutdown: bool = True,
+    register_sdk_atexit: bool = False,
+) -> None:
     global _PROCESS_TRACE_STREAM
+    if register_sdk_atexit:
+        tracer_provider_type = diagnostics.TracerProvider
+        meter_provider_type = diagnostics.MeterProvider
+        diagnostics.TracerProvider = lambda **kwargs: tracer_provider_type(
+            **{**kwargs, "shutdown_on_exit": True}
+        )
+        diagnostics.MeterProvider = lambda **kwargs: meter_provider_type(
+            **{**kwargs, "shutdown_on_exit": True}
+        )
     runtime = ObservabilityRuntime(
         _settings(observability_shutdown_timeout_seconds=0.1),
         service_name="workstream-api",
@@ -715,9 +730,43 @@ def _bounded_process_exit_probe(status: Any, trace_path: str) -> None:
         repeat=True,
         file=_PROCESS_TRACE_STREAM,
     )
-    runtime.shutdown()
-    status.send("shutdown_returned")
+    if call_runtime_shutdown:
+        runtime.shutdown()
+        status.send("shutdown_returned")
+    else:
+        status.send("probe_returning")
     status.close()
+
+
+def _start_process_exit_probe(
+    tmp_path: Path,
+    *,
+    call_runtime_shutdown: bool = True,
+    register_sdk_atexit: bool = False,
+) -> tuple[Any, Any, Path]:
+    context = multiprocessing.get_context("spawn")
+    status, child_status = context.Pipe(duplex=False)
+    trace_path = tmp_path / (
+        "sdk-atexit-trace.log" if register_sdk_atexit else "process-exit-trace.log"
+    )
+    process = context.Process(
+        target=_bounded_process_exit_probe,
+        args=(child_status, str(trace_path)),
+        kwargs={
+            "call_runtime_shutdown": call_runtime_shutdown,
+            "register_sdk_atexit": register_sdk_atexit,
+        },
+    )
+    process.start()
+    child_status.close()
+    return process, status, trace_path
+
+
+def _stop_process(process: Any, status: Any) -> None:
+    status.close()
+    if process.is_alive():
+        process.kill()
+    process.join(timeout=2)
 
 
 def test_partial_provider_startup_closes_created_exporter_and_releases_logging(
@@ -858,31 +907,69 @@ def test_timed_out_shutdown_keeps_safe_logging_until_exporter_thread_stops(
     assert diagnostic_logging.safe_handler() is None
 
 
+def test_bounded_runtime_shutdown_returns_before_process_exit(
+    tmp_path: Path,
+) -> None:
+    process, status, trace_path = _start_process_exit_probe(tmp_path)
+    try:
+        assert status.poll(10), "child did not finish runtime startup"
+        assert status.recv() == "runtime_started"
+        assert status.poll(2), "bounded runtime shutdown did not return"
+        assert status.recv() == "shutdown_returned"
+        started = monotonic()
+        process.join(timeout=2)
+        if process.is_alive():
+            trace = trace_path.read_text(encoding="utf-8") if trace_path.exists() else ""
+            pytest.fail(f"child did not exit after bounded shutdown\n{trace}")
+        assert process.exitcode == 0
+        assert monotonic() - started < 2
+    finally:
+        _stop_process(process, status)
+
+
 def test_owned_providers_do_not_register_unbounded_interpreter_exit_hooks(
     tmp_path: Path,
 ) -> None:
-    context = multiprocessing.get_context("spawn")
-    status, child_status = context.Pipe(duplex=False)
-    trace_path = tmp_path / "process-exit-trace.log"
-    process = context.Process(
-        target=_bounded_process_exit_probe,
-        args=(child_status, str(trace_path)),
+    process, status, trace_path = _start_process_exit_probe(
+        tmp_path,
+        call_runtime_shutdown=False,
     )
-    process.start()
-    child_status.close()
-    assert status.poll(10), "child did not finish runtime startup"
-    assert status.recv() == "runtime_started"
-    assert status.poll(2), "bounded runtime shutdown did not return"
-    assert status.recv() == "shutdown_returned"
-    started = monotonic()
-    process.join(timeout=2)
-    if process.is_alive():
-        process.kill()
+    try:
+        assert status.poll(10), "child did not finish runtime startup"
+        assert status.recv() == "runtime_started"
+        assert status.poll(2), "child did not reach interpreter exit"
+        assert status.recv() == "probe_returning"
+        started = monotonic()
         process.join(timeout=2)
-        trace = trace_path.read_text(encoding="utf-8") if trace_path.exists() else ""
-        pytest.fail(f"child did not exit after bounded shutdown\n{trace}")
-    assert process.exitcode == 0
-    assert monotonic() - started < 2
+        if process.is_alive():
+            trace = trace_path.read_text(encoding="utf-8") if trace_path.exists() else ""
+            pytest.fail(f"child did not complete normal interpreter exit\n{trace}")
+        assert process.exitcode == 0
+        assert monotonic() - started < 2
+    finally:
+        _stop_process(process, status)
+
+
+def test_process_exit_probe_rejects_sdk_atexit_shutdown_registration(
+    tmp_path: Path,
+) -> None:
+    process, status, trace_path = _start_process_exit_probe(
+        tmp_path,
+        call_runtime_shutdown=False,
+        register_sdk_atexit=True,
+    )
+    try:
+        assert status.poll(10), "mutant child did not finish runtime startup"
+        assert status.recv() == "runtime_started"
+        assert status.poll(2), "mutant child did not reach interpreter exit"
+        assert status.recv() == "probe_returning"
+        process.join(timeout=2)
+        assert process.is_alive(), "SDK atexit registration mutant escaped the exit bound"
+        trace = trace_path.read_text(encoding="utf-8")
+        assert "test_observability.py" in trace and " in shutdown" in trace
+        assert "opentelemetry/sdk/trace" in trace
+    finally:
+        _stop_process(process, status)
 
 
 async def test_collector_failure_is_bounded_and_product_flow_succeeds(
