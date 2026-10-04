@@ -127,12 +127,12 @@ projection only after canonical consumption, which is unreachable while the acti
 is planned. Durable receipts commit only with the complete consequence. Human review/revision, contribution and conditional
 compensation effects, operations and release proof complete v0.1.
 
-The [independent MCP package](../mcp_server/README.md) implements three
-self-service tools. The [Go CLI](../cli/README.md) provides caller-profile and
-exact-project authorization reads plus human self-profile editing, with text/JSON
-output. CLI write uncertainty is explicit and never automatically retried. These packages
-do not claim hosted deployment, published CLI binaries or the complete proposed
-workflow catalogue.
+The [independent MCP package](../mcp_server/README.md) implements nine self-service
+and administrative read tools through WS-MCP-002-03. The
+[Go CLI](../cli/README.md) provides caller-profile and exact-project authorization
+reads plus human self-profile editing, with text/JSON output. CLI write uncertainty
+is explicit and never automatically retried. These source packages do not claim
+hosted deployment, published CLI binaries or the complete proposed workflow catalogue.
 
 Privacy-bounded API and prefork Celery diagnostics are implemented: structured
 logs, sampled traces and bounded metrics through one typed export adapter.
@@ -272,8 +272,10 @@ cannot be reused as post-submission review-gate evidence. See the
   15 real-process checks and 24 focused tests, including first admission and
   caller isolation. Independent packaging and the three bounded self-service
   tools are delivered through WS-MCP-002-02: profile read, profile update and
-  exact-project authorization context. Twenty-four proposed tools remain;
-  WS-MCP-002-03 administrative reads are next. This remains a custom
+  exact-project authorization context. WS-MCP-002-03 adds six administrative
+  reads for permission/role definitions, grants and actor/identity projections.
+  Eighteen proposed tools remain; WS-MCP-002-04 administrative grant mutations
+  are next. This remains a custom
   authentication adapter, not a public deployment or a 27-tool release.
   The [CLI foundation](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-01.md)
   provides `whoami` and `project access PROJECT_ID` through those public REST
