@@ -463,7 +463,7 @@ TASK_MODULES = (
 )
 
 
-# New request proofs stay on the measured TASK lane with available headroom.
+# Routing-request custody proofs use schema capacity after task C exhausted its cap.
 TASK_ROUTING_REQUEST_MODULES = (
     "tests/tasks/post_submit_routing/test_request_contracts.py",
     "tests/tasks/post_submit_routing/test_requests.py",
@@ -513,6 +513,7 @@ LANES = (
             "tests/test_ci_test_lanes.py",
             "tests/test_test_lane_evidence.py",
             "tests/test_merge_test_lane_evidence.py",
+            *TASK_ROUTING_REQUEST_MODULES,
             ADMIN_RUNNER_MODULE,
         ),
     ),
@@ -520,7 +521,6 @@ LANES = (
     *(TestLane(
         name,
         TASK_MODULES
-        + (TASK_ROUTING_REQUEST_MODULES if name == "task_lifecycle_c" else ())
         + (ROUTING_AUTH_PREPARATION_MODULES if name == "task_lifecycle_a" else ()),
     ) for name in PARTITIONED_TASK_LANES),
 )

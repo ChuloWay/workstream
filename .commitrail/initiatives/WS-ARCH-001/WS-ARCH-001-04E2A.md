@@ -47,7 +47,8 @@ value preparation is not an issued capability or persisted allowed decision.
   TASK `tests/tasks/post_submit_routing/{support,contract_fixtures}.py` only for reuse.
 - Exact `backend/scripts/{behavior_ownership,test_lane_catalogue}.py`,
   `.ci/behavior-ownership/partition.v1.json`, `backend/tests/test_ci_lane_catalogue.py`
-  inventory registration, plus `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`
+  inventory registration and measured routing-request allocation repair, plus
+  `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`
   measured shrink refresh; no runner/workflow/cap/skip/threshold changes.
 
 ### Not allowed
@@ -258,9 +259,10 @@ belong to the activation chunk and must not be claimed here.
 - The two new AUTH routing proof modules run once on existing task lane A.
   Task lane C exceeded its unchanged 1,200-second bound in hosted execution;
   its earlier passing run had only about 46 seconds of headroom. Task lane A
-  measured about 685 seconds before this allocation. Existing routing-request
-  proofs stay on C; no test, existing assignment, lane count or timeout is removed
-  or weakened.
+  measured about 685 seconds before this allocation. A later task-C timeout
+  requires moving the three existing routing-request proof modules together to
+  schema, retaining the new AUTH proofs on A and every exact-once test assignment.
+  No test, lane count or timeout is removed or weakened.
 
 - Retained service-matrix tests now supply a valid routing request, project scope
   and matching operation/request/correlation IDs before asserting planned-action
@@ -289,3 +291,19 @@ Remove each source equality and the receipt request-value equality separately in
 isolated probes; the corresponding negative assertion must fail after its valid
 control succeeds. This repairs proof only: no authorization behavior or exposure
 changes. Replay affected QA/test-delta and security reviews and hosted checks.
+
+### Remaining task-C timing repair
+
+The hosted run at `2d3d7fcb` exhausted task C at 1,200.963 seconds after
+480 of 481 nodes, with no assertion failure; only the final task test remained
+unexecuted. Schema completed in 528.110 seconds, while task A took 1,183.002
+and task B 1,128.009 seconds. Move the existing three-module
+`TASK_ROUTING_REQUEST_MODULES` tuple (57 nodes) from C to schema. This is the
+same measured allocation used in the parallel observability change; it does not
+import observability behavior or make this PR depend on that branch.
+
+Keep all nodes, assertions, partition hashing, lane count, the 1,200-second cap
+and completeness/coverage gates. The exact placement test must reject wrong,
+missing and duplicate assignment. Replay CI-integrity and QA/test-delta review
+and full hosted verification. Task A's approximately 17-second margin remains
+an explicit timing risk; this allocation is not a claim of broad CI stability.
