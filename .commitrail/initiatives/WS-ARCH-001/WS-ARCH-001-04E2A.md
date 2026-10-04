@@ -296,7 +296,7 @@ changes. Replay affected QA/test-delta and security reviews and hosted checks.
 
 The hosted run at `2d3d7fcb` exhausted task C at 1,200.963 seconds after
 480 of 481 nodes, with no assertion failure; only the final task test remained
-unexecuted. Schema completed in 528.110 seconds, while task A took 1,183.002
+unfinished. Schema completed in 528.110 seconds, while task A took 1,183.002
 and task B 1,128.009 seconds. Move the existing three-module
 `TASK_ROUTING_REQUEST_MODULES` tuple (57 nodes) from C to schema. This is the
 same measured allocation used in the parallel observability change; it does not
