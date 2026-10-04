@@ -93,7 +93,7 @@ def test_each_request_source_selector_rejects(field, changed):
 
 @pytest.mark.parametrize("field", (
     "resource_id", "scope_project_id", "request.routing_manifest_id", "source.id",
-    "claim.project_id", "claim.event_id",
+    "source.project_id", "source.completion_event_id", "claim.project_id", "claim.event_id",
 ))
 def test_each_resource_and_claim_identity_rejects(field):
     control = resource_for()
@@ -408,3 +408,18 @@ def test_fixed_principal_and_decision_receipt_checks(field, changed):
     )
     with pytest.raises(PreparedAuthorizationHandleInvalid):
         _PreparedRouting(authority, object(), wrong_input)._receipt(decision, resource)
+
+
+    changed_value_request = changed_request(
+        resource.request,
+        created_at=resource.request.created_at + timedelta(microseconds=1),
+    )
+    wrong_value = PreparedAuthorizationInput(
+        idempotency_key=resource.request.route_operation_id,
+        request_value=post_submit_routing_prepare_values(changed_value_request),
+    )
+    assert changed_value_request.route_request_digest == resource.request.route_request_digest
+    with pytest.raises(
+        PreparedAuthorizationHandleInvalid, match="invalid routing authorization receipt"
+    ):
+        _PreparedRouting(authority, object(), wrong_value)._receipt(decision, resource)

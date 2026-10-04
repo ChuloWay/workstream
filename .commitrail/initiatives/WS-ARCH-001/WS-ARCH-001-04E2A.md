@@ -215,7 +215,7 @@ Named pure-test evidence in tests/authorization/post_submit_routing/test_contrac
 strict values; false is transport/matcher proof only because false policy
 activation remains unavailable. Do not call those values persisted/authorized.
 `test_each_resource_and_claim_identity_rejects` independently substitutes all
-six top-level manifest/scope and nested source/request/claim identities, with a
+eight top-level manifest/scope and nested source/request/claim identities, with a
 specific identity-error assertion. Removing the claim-project conjunct must fail
 that assertion. `test_acceptance_identity_requires_uuid7` proves a valid allocated
 control and rejection of a UUIDv4 acceptance identity before future storage.
@@ -275,3 +275,17 @@ belong to the activation chunk and must not be claimed here.
   followed by exact receipt/consequence activation and live composition.
 - Remaining risks: source projection and actual receipt custody are still future
   work; detached values never substitute for the immutable AUTH event.
+
+### Independent substitution proof repair
+
+Extend the existing pure identity matrix with separate source project and source
+completion-event substitutions, preserving the otherwise valid request and claim.
+Extend the receipt predicate proof with a valid request whose retained creation
+time alone differs from the prepared input, keeping its operation/idempotency ID,
+decision, resource and semantic request digest unchanged. Assert the exact receipt
+error so another malformed-input guard cannot substitute for this proof.
+
+Remove each source equality and the receipt request-value equality separately in
+isolated probes; the corresponding negative assertion must fail after its valid
+control succeeds. This repairs proof only: no authorization behavior or exposure
+changes. Replay affected QA/test-delta and security reviews and hosted checks.
