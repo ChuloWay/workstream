@@ -2045,8 +2045,11 @@ this record.
 
 ## ContributionRecord
 
-CON-03C implements this immutable storage foundation. Runtime recognition,
-source AUTH hardening and the atomic CON participant remain unavailable.
+CON-03C implements this immutable storage foundation. CON-07 adds the hidden
+submitter participant and complete frozen award staging/replay in the caller's
+transaction. Shared acceptance/TASK effects, source AUTH hardening and runtime
+composition remain unavailable; reviewer participation and fulfillment are
+separate future work.
 
 Fields:
 
