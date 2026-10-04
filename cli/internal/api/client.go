@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -21,6 +22,7 @@ import (
 )
 
 const maxResponseBytes = 64 * 1024
+const maxUpdateBytes = 8 * 1024
 
 var bearerValue = regexp.MustCompile(`^[A-Za-z0-9\-._~+/]+=*$`)
 var safeCode = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,99}$`)
@@ -29,12 +31,18 @@ var safeCorrelation = regexp.MustCompile(`^[0-9a-fA-F-]{36}$`)
 // Failure contains only bounded, public error metadata. It never includes a
 // credential, URL, response body, or transport exception.
 type Failure struct {
-	Code          string `json:"code"`
-	Status        int    `json:"status,omitempty"`
-	CorrelationID string `json:"correlation_id,omitempty"`
+	Code           string `json:"code"`
+	Status         int    `json:"status,omitempty"`
+	CorrelationID  string `json:"correlation_id,omitempty"`
+	OutcomeUnknown bool   `json:"outcome_unknown,omitempty"`
 }
 
 func (f *Failure) Error() string {
+	if f.OutcomeUnknown {
+		known := *f
+		known.OutcomeUnknown = false
+		return known.Error() + "; update outcome unknown; read whoami before retrying"
+	}
 	if f.CorrelationID != "" {
 		return fmt.Sprintf("%s (HTTP %d; correlation %s)", f.Code, f.Status, f.CorrelationID)
 	}
@@ -76,6 +84,15 @@ type AuthorizationContext struct {
 type Result[T any] struct {
 	Raw   json.RawMessage
 	Value T
+}
+
+// ProfileUpdate distinguishes absent fields from explicit clearing. Validation
+// of text and authority remains with the public Workstream API.
+type ProfileUpdate struct {
+	DisplayName       *string
+	ContactEmail      *string
+	ClearDisplayName  bool
+	ClearContactEmail bool
 }
 
 func New(origin, token string) (*Client, error) {
@@ -134,12 +151,17 @@ func validateOrigin(raw string) (string, error) {
 
 func (c *Client) Profile(ctx context.Context) (Result[Profile], error) {
 	var result Result[Profile]
-	raw, err := c.get(ctx, "/api/v1/actors/me", "")
+	raw, err := c.request(ctx, http.MethodGet, "/api/v1/actors/me", "", nil)
 	if err != nil {
 		return result, err
 	}
+	return decodeProfile(raw)
+}
+
+func decodeProfile(raw json.RawMessage) (Result[Profile], error) {
+	var result Result[Profile]
 	value := Profile{Domains: []string{"contributor"}, AdminRoles: []string{}, ProjectRoleGrants: []string{}}
-	err = decode(raw, &value, []string{
+	err := decode(raw, &value, []string{
 		"actor_profile_id", "actor_kind", "status", "display_name", "contact_email",
 		"created_at", "updated_at", "last_seen_at",
 	}, []string{"domains", "admin_roles", "project_role_grants"})
@@ -154,13 +176,52 @@ func (c *Client) Profile(ctx context.Context) (Result[Profile], error) {
 	return Result[Profile]{Raw: raw, Value: value}, nil
 }
 
+func (c *Client) UpdateProfile(ctx context.Context, update ProfileUpdate) (Result[Profile], error) {
+	var result Result[Profile]
+	if (update.DisplayName != nil && !utf8.ValidString(*update.DisplayName)) ||
+		(update.ContactEmail != nil && !utf8.ValidString(*update.ContactEmail)) {
+		return result, errors.New("profile fields must be valid UTF-8")
+	}
+	if (update.DisplayName != nil && update.ClearDisplayName) ||
+		(update.ContactEmail != nil && update.ClearContactEmail) {
+		return result, errors.New("cannot set and clear the same profile field")
+	}
+	fields := make(map[string]*string)
+	if update.DisplayName != nil || update.ClearDisplayName {
+		fields["display_name"] = update.DisplayName
+	}
+	if update.ContactEmail != nil || update.ClearContactEmail {
+		fields["contact_email"] = update.ContactEmail
+	}
+	if len(fields) == 0 {
+		return result, errors.New("select at least one profile field")
+	}
+	body, err := json.Marshal(fields)
+	if err != nil || len(body) > maxUpdateBytes {
+		return result, errors.New("profile update exceeds the request size limit")
+	}
+	raw, err := c.request(ctx, http.MethodPatch, "/api/v1/actors/me", "", body)
+	if err != nil {
+		return result, err
+	}
+	result, err = decodeProfile(raw)
+	if err != nil {
+		var failure *Failure
+		if errors.As(err, &failure) {
+			// A malformed successful reply cannot establish the write outcome.
+			failure.OutcomeUnknown = true
+		}
+	}
+	return result, err
+}
+
 func (c *Client) AuthorizationContext(ctx context.Context, projectID string) (Result[AuthorizationContext], error) {
 	var result Result[AuthorizationContext]
 	if projectID == "" || !utf8.ValidString(projectID) || utf8.RuneCountInString(projectID) > 100 || strings.ContainsRune(projectID, '\x00') {
 		return result, errors.New("PROJECT_ID must be a nonempty project selector of at most 100 characters")
 	}
 	query := url.Values{"project_id": {projectID}}.Encode()
-	raw, err := c.get(ctx, "/api/v1/actors/me/authorization-context", query)
+	raw, err := c.request(ctx, http.MethodGet, "/api/v1/actors/me/authorization-context", query, nil)
 	if err != nil {
 		return result, err
 	}
@@ -238,26 +299,33 @@ func (c *Client) safeMetadata(value string) bool {
 	return !strings.Contains(strings.ToLower(value), strings.ToLower(c.token))
 }
 
-func (c *Client) get(ctx context.Context, path, query string) (json.RawMessage, error) {
+func (c *Client) request(ctx context.Context, method, path, query string, body []byte) (json.RawMessage, error) {
 	target := c.origin + path
 	if query != "" {
 		target += "?" + query
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, target, reader)
 	if err != nil {
 		return nil, &Failure{Code: "invalid_request"}
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Accept-Encoding", "identity")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	response, err := c.http.Do(req)
 	if err != nil {
-		return nil, &Failure{Code: "service_unavailable"}
+		return nil, &Failure{Code: "service_unavailable", OutcomeUnknown: method == http.MethodPatch}
 	}
 	defer response.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
-	if err != nil || len(body) > maxResponseBytes {
-		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode}
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
+	if err != nil || len(responseBody) > maxResponseBytes {
+		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, OutcomeUnknown: method == http.MethodPatch}
 	}
 	correlation := response.Header.Get("X-Correlation-ID")
 	if !safeCorrelation.MatchString(correlation) || !c.safeMetadata(correlation) {
@@ -268,6 +336,7 @@ func (c *Client) get(ctx context.Context, path, query string) (json.RawMessage, 
 	}
 	if response.StatusCode != http.StatusOK {
 		code := "api_error"
+		knownEnvelope := false
 		if response.StatusCode >= 300 && response.StatusCode < 400 {
 			code = "redirect_refused"
 		} else {
@@ -276,15 +345,19 @@ func (c *Client) get(ctx context.Context, path, query string) (json.RawMessage, 
 					Code string `json:"code"`
 				} `json:"error"`
 			}
-			if json.Unmarshal(body, &envelope) == nil && safeCode.MatchString(envelope.Error.Code) && c.safeMetadata(envelope.Error.Code) {
+			knownEnvelope = jsonv2.Unmarshal(responseBody, &envelope) == nil && envelope.Error.Code != ""
+			if knownEnvelope && safeCode.MatchString(envelope.Error.Code) && c.safeMetadata(envelope.Error.Code) {
 				code = envelope.Error.Code
 			}
 		}
-		return nil, &Failure{Code: code, Status: response.StatusCode, CorrelationID: correlation}
+		// A complete API 4xx envelope is a known denial, independent of code
+		// spelling/redaction. A gateway reply without it cannot prove rollback.
+		return nil, &Failure{Code: code, Status: response.StatusCode, CorrelationID: correlation,
+			OutcomeUnknown: method == http.MethodPatch && (response.StatusCode < 400 || response.StatusCode >= 500 || !knownEnvelope)}
 	}
 	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
-	if err != nil || mediaType != "application/json" || !jsontext.Value(body).IsValid() {
-		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, CorrelationID: correlation}
+	if err != nil || mediaType != "application/json" || !jsontext.Value(responseBody).IsValid() {
+		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, CorrelationID: correlation, OutcomeUnknown: method == http.MethodPatch}
 	}
-	return json.RawMessage(body), nil
+	return json.RawMessage(responseBody), nil
 }

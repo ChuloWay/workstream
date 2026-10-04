@@ -296,8 +296,9 @@ implementation history until their owning migrations replace the runtime.
 ## Terminal Client
 
 The independent [Go CLI](cli/README.md) provides `workstream whoami` and
-`workstream project access PROJECT_ID` through the currently public REST API.
-Both support human-readable and JSON output, using the caller's Flow token.
+`workstream project access PROJECT_ID`, plus `workstream profile update` for
+caller-owned human display fields, through the currently public REST API.
+All support human-readable and JSON output, using the caller's Flow token.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
 
