@@ -228,6 +228,117 @@ def test_api_failures_and_invalid_responses(cli):
             assert len(requests) == before + 1, "invalid response was retried"
 
 
+def test_reflected_credentials_are_not_error_codes(cli):
+    with http_fixture() as (origin, response, _requests):
+        for output in ("text", "json"):
+            token = "credential_canary_AAA"
+            for code in (token, token.upper(), "prefix_" + token + "_suffix"):
+                response.update(
+                    status=403,
+                    body=json.dumps({"error": {"code": code}}).encode(),
+                    headers={"Content-Type": "application/json"},
+                )
+                result = cli(origin, token, "whoami", "-o", output)
+                assert result.returncode == 1 and result.stdout == ""
+                if output == "json":
+                    assert json.loads(result.stderr)["error"] == {
+                        "code": "api_error",
+                        "status": 403,
+                    }
+                else:
+                    assert result.stderr == "Error: api_error (HTTP 403)\n"
+
+
+def test_reflected_credentials_are_not_correlation_ids(cli):
+    with http_fixture() as (origin, response, _requests):
+        for output in ("text", "json"):
+            token = ACTOR
+            for header, reflected in (
+                ("X-Correlation-ID", token),
+                ("X-Request-ID", token),
+                ("X-Correlation-ID", token.upper()),
+            ):
+                response.update(
+                    status=403,
+                    body=b'{"error":{"code":"permission_not_granted"}}',
+                    headers={"Content-Type": "application/json", header: reflected},
+                )
+                result = cli(origin, token, "whoami", "-o", output)
+                assert result.returncode == 1 and result.stdout == ""
+                assert "correlation" not in result.stderr
+                # The preferred reflected header must not hide a safe fallback.
+                response["headers"]["X-Correlation-ID"] = token
+                response["headers"]["X-Request-ID"] = PROJECT
+                fallback = cli(origin, token, "whoami", "-o", output)
+                assert fallback.returncode == 1 and PROJECT in fallback.stderr
+
+
+def test_supported_uuid_selectors_preserve_wire_spelling(cli):
+    with http_fixture() as (origin, response, requests):
+        response["body"] = json.dumps(CONTEXT).encode()
+        for selector in (
+            PROJECT.replace("-", ""),
+            PROJECT.upper(),
+            "{" + PROJECT + "}",
+            "urn:uuid:" + PROJECT,
+        ):
+            result = cli(origin, TOKEN, "project", "access", selector, "-o", "json")
+            assert result.returncode == 0 and json.loads(result.stdout) == CONTEXT
+            assert parse_qs(urlsplit(requests[-1][1]).query) == {
+                "project_id": [selector]
+            }
+
+
+def test_malformed_identity_responses_fail(cli):
+    with http_fixture() as (origin, response, _requests):
+        for body in (
+            {**CONTEXT, "actor_profile_id": "not-uuid"},
+            {**CONTEXT, "project_id": "not-uuid"},
+            {**CONTEXT, "project_id": ACTOR},
+        ):
+            response["body"] = json.dumps(body).encode()
+            for output in ("text", "json"):
+                result = cli(origin, TOKEN, "project", "access", PROJECT, "-o", output)
+                assert result.returncode == 1 and result.stdout == ""
+                assert "invalid_api_response" in result.stderr
+
+        response["body"] = json.dumps(
+            {**PROFILE, "actor_profile_id": "not-uuid"}
+        ).encode()
+        assert_failure(
+            cli(origin, TOKEN, "whoami", "-o", "json"), "invalid_api_response"
+        )
+
+
+def test_non_null_string_array_members_are_required(cli):
+    with http_fixture() as (origin, response, _requests):
+        for body in (
+            *(
+                {**CONTEXT, field: [None]}
+                for field in ("admin_roles", "project_roles", "effective_action_ids")
+            ),
+            *(
+                {**CONTEXT, field: ["submitter", None]}
+                for field in ("admin_roles", "project_roles", "effective_action_ids")
+            ),
+            *(
+                {**CONTEXT, field: [7]}
+                for field in ("admin_roles", "project_roles", "effective_action_ids")
+            ),
+        ):
+            response["body"] = json.dumps(body).encode()
+            for output in ("text", "json"):
+                result = cli(origin, TOKEN, "project", "access", PROJECT, "-o", output)
+                assert result.returncode == 1 and result.stdout == ""
+                assert "invalid_api_response" in result.stderr
+
+        for field in ("domains", "admin_roles", "project_role_grants"):
+            response["body"] = json.dumps({**PROFILE, field: [None]}).encode()
+            assert_failure(
+                cli(origin, TOKEN, "whoami", "-o", "json"), "invalid_api_response"
+            )
+
+
 def test_redirect_cannot_forward_the_bearer(cli):
     with http_fixture() as (origin, response, _requests):
         with http_fixture() as (destination, _unused, destination_requests):

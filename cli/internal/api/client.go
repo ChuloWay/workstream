@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
@@ -141,8 +142,9 @@ func (c *Client) Profile(ctx context.Context) (Result[Profile], error) {
 	err = decode(raw, &value, []string{
 		"actor_profile_id", "actor_kind", "status", "display_name", "contact_email",
 		"created_at", "updated_at", "last_seen_at",
-	})
-	if err != nil || value.ActorProfileID == "" || value.ActorKind != "human" || !validStatus(value.Status) ||
+	}, []string{"domains", "admin_roles", "project_role_grants"})
+	_, validActorID := uuidIdentity(value.ActorProfileID)
+	if err != nil || !validActorID || value.ActorKind != "human" || !validStatus(value.Status) ||
 		len(value.Domains) != 1 || value.Domains[0] != "contributor" ||
 		value.AdminRoles == nil || value.ProjectRoleGrants == nil ||
 		!validTime(value.CreatedAt) || !validTime(value.UpdatedAt) ||
@@ -165,9 +167,12 @@ func (c *Client) AuthorizationContext(ctx context.Context, projectID string) (Re
 	var value AuthorizationContext
 	err = decode(raw, &value, []string{
 		"actor_profile_id", "status", "project_id", "admin_roles", "project_roles", "effective_action_ids",
-	})
-	if err != nil || value.ActorProfileID == "" || value.ProjectID == "" ||
-		!strings.EqualFold(value.ProjectID, projectID) || !validStatus(value.Status) ||
+	}, []string{"admin_roles", "project_roles", "effective_action_ids"})
+	_, validActorID := uuidIdentity(value.ActorProfileID)
+	returnedProject, validProjectID := uuidIdentity(value.ProjectID)
+	selectedProject, validSelector := uuidIdentity(projectID)
+	if err != nil || !validActorID || !validProjectID || !validSelector ||
+		returnedProject != selectedProject || !validStatus(value.Status) ||
 		value.AdminRoles == nil || value.ProjectRoles == nil || value.EffectiveActionIDs == nil {
 		return result, &Failure{Code: "invalid_api_response"}
 	}
@@ -183,7 +188,23 @@ func validTime(value string) bool {
 	return err == nil
 }
 
-func decode(raw json.RawMessage, value any, required []string) error {
+// Compare UUID values, not selector spelling. Keep the original selector on the
+// wire; UUID normalization mirrors the backend's UUID selector resolution.
+func uuidIdentity(value string) ([16]byte, bool) {
+	var identity [16]byte
+	value = strings.TrimPrefix(value, "urn:uuid:")
+	if len(value) >= 2 && value[0] == '{' && value[len(value)-1] == '}' {
+		value = value[1 : len(value)-1]
+	}
+	value = strings.ReplaceAll(value, "-", "")
+	if len(value) != 32 {
+		return identity, false
+	}
+	_, err := hex.Decode(identity[:], []byte(value))
+	return identity, err == nil
+}
+
+func decode(raw json.RawMessage, value any, required, stringArrays []string) error {
 	var fields map[string]json.RawMessage
 	if err := jsonv2.Unmarshal(raw, &fields); err != nil || fields == nil {
 		return errors.New("invalid object")
@@ -193,7 +214,28 @@ func decode(raw json.RawMessage, value any, required []string) error {
 			return errors.New("missing field")
 		}
 	}
+	// JSON null decodes to a Go string's zero value. Inspect array members
+	// explicitly so a malformed authority fact cannot become a success object.
+	for _, key := range stringArrays {
+		field, present := fields[key]
+		if !present {
+			continue // Optional profile arrays retain their schema defaults.
+		}
+		var members []*string
+		if err := jsonv2.Unmarshal(field, &members); err != nil || members == nil {
+			return errors.New("invalid string array")
+		}
+		for _, member := range members {
+			if member == nil {
+				return errors.New("null string array member")
+			}
+		}
+	}
 	return jsonv2.Unmarshal(raw, value, jsonv2.RejectUnknownMembers(true))
+}
+
+func (c *Client) safeMetadata(value string) bool {
+	return !strings.Contains(strings.ToLower(value), strings.ToLower(c.token))
 }
 
 func (c *Client) get(ctx context.Context, path, query string) (json.RawMessage, error) {
@@ -218,9 +260,9 @@ func (c *Client) get(ctx context.Context, path, query string) (json.RawMessage, 
 		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode}
 	}
 	correlation := response.Header.Get("X-Correlation-ID")
-	if !safeCorrelation.MatchString(correlation) {
+	if !safeCorrelation.MatchString(correlation) || !c.safeMetadata(correlation) {
 		correlation = response.Header.Get("X-Request-ID")
-		if !safeCorrelation.MatchString(correlation) {
+		if !safeCorrelation.MatchString(correlation) || !c.safeMetadata(correlation) {
 			correlation = ""
 		}
 	}
@@ -234,7 +276,7 @@ func (c *Client) get(ctx context.Context, path, query string) (json.RawMessage, 
 					Code string `json:"code"`
 				} `json:"error"`
 			}
-			if json.Unmarshal(body, &envelope) == nil && safeCode.MatchString(envelope.Error.Code) {
+			if json.Unmarshal(body, &envelope) == nil && safeCode.MatchString(envelope.Error.Code) && c.safeMetadata(envelope.Error.Code) {
 				code = envelope.Error.Code
 			}
 		}

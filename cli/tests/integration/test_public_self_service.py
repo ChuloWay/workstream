@@ -182,6 +182,26 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
                 == profiles["cli-manager"]["actor_profile_id"]
             )
 
+            compact_project_id = project_id.replace("-", "")
+            compact_manager = cli(
+                origin,
+                tokens["cli-manager"],
+                "project",
+                "access",
+                compact_project_id,
+                "-o",
+                "json",
+            )
+            direct_compact_manager = await direct.get(
+                "/api/v1/actors/me/authorization-context",
+                params={"project_id": compact_project_id},
+                headers={"Authorization": f"Bearer {tokens['cli-manager']}"},
+            )
+            assert direct_compact_manager.status_code == 200
+            assert compact_manager.returncode == 0, compact_manager.stderr
+            assert json.loads(compact_manager.stdout) == direct_compact_manager.json()
+            assert json.loads(compact_manager.stdout)["project_id"] == project_id
+
             outsider = cli(
                 origin,
                 tokens["cli-outsider"],

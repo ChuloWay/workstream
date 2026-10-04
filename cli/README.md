@@ -46,6 +46,11 @@ the successful API object to stdout without a wrapper. Failures leave stdout
 empty and write bounded error metadata to stderr; JSON errors use an `error`
 object with `code`, optional HTTP `status`, and optional `correlation_id`.
 Raw error bodies and transport exceptions are not printed.
+Server error codes and correlation headers containing the caller's bearer
+are suppressed, including case-only reflections. Success responses require
+valid UUID identities and non-null string array members. Project access compares
+UUID identity rather than spelling, while sending the supplied selector unchanged
+and preserving the successful API JSON.
 
 Exit status is `0` for success, `1` for API/network/response failure, and `2`
 for invalid arguments or configuration. A request times out after 12 seconds;
