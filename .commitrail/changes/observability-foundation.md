@@ -736,16 +736,16 @@ Move only the existing post-submit authorization receipt-custody and migration
 proof modules from shared partitioning to schema, which already owns related
 storage and migration contracts. Allowed files for this repair are this record,
 `backend/scripts/test_lane_catalogue.py`, and
-`backend/tests/test_ci_lane_catalogue.py`. No product file, assertion, test node,
-partition algorithm, lane count, timeout, workflow or completeness gate changes.
+`backend/tests/test_ci_lane_catalogue.py`. No product file or test-node changes; only catalogue assertions change to
+enforce the move. No partition algorithm, lane count, timeout, workflow or
+completeness gate changes.
 The catalogue proof must verify their exact schema destination, absence from
 shared partitioning, and conserved unique inventory; removal and wrong-lane
 mutants must fail. CI-integrity and QA/test-delta review precede a full hosted run.
 
-The receiver completed in 748.642 seconds. Prior isolated measurements were
-151.59 seconds for receipt custody and 142.16 seconds for migration together
-with concurrency. Even charging both complete processes to the receiver gives
-1,042.392 seconds; actual incremental setup may be smaller. Reported shared A
-calls for the moved modules account for 34.65–48.84 seconds, excluding fixture
-work. These measurements support this bounded allocation; they do not guarantee
-future runner timing. Full completion on the repaired tree remains required.
+The receiver completed in 748.642 seconds, leaving 451.358 seconds below the
+unchanged cap. Reported shared A calls for the moved modules account for
+34.65–48.84 seconds, excluding fixture work. These observed timings support the
+bounded allocation; they do not establish an upper bound for the combined lane
+or guarantee future runner timing. Full completion on the repaired tree remains
+required.
