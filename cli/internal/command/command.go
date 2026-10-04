@@ -66,17 +66,46 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 			if err != nil {
 				return err
 			}
-			if output == "json" {
-				return writeJSON(stdout, result.Raw)
-			}
-			p := result.Value
-			_, err = fmt.Fprintf(stdout,
-				"Actor: %s\nStatus: %s\nName: %s\nEmail: %s\nAdmin roles: %s\nProject grants: %s\n",
-				safeText(p.ActorProfileID), safeText(p.Status), optional(p.DisplayName), optional(p.ContactEmail),
-				list(p.AdminRoles), list(p.ProjectRoleGrants))
-			return err
+			return writeProfile(stdout, output, result)
 		},
 	})
+
+	profile := &cobra.Command{Use: "profile", Short: "Caller-owned profile operations"}
+	var displayName, contactEmail string
+	var clearDisplayName, clearContactEmail bool
+	update := &cobra.Command{
+		Use:   "update",
+		Short: "Set or clear your human profile display fields",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			fields := api.ProfileUpdate{ClearDisplayName: clearDisplayName, ClearContactEmail: clearContactEmail}
+			if cmd.Flags().Changed("display-name") {
+				fields.DisplayName = &displayName
+			}
+			if cmd.Flags().Changed("contact-email") {
+				fields.ContactEmail = &contactEmail
+			}
+			if (fields.DisplayName != nil && clearDisplayName) || (fields.ContactEmail != nil && clearContactEmail) ||
+				(fields.DisplayName == nil && fields.ContactEmail == nil && !clearDisplayName && !clearContactEmail) {
+				return commandError{"invalid_arguments", "select profile fields; do not set and clear the same field"}
+			}
+			apiClient, err := client()
+			if err != nil {
+				return err
+			}
+			result, err := apiClient.UpdateProfile(cmd.Context(), fields)
+			if err != nil {
+				return err
+			}
+			return writeProfile(stdout, output, result)
+		},
+	}
+	update.Flags().StringVar(&displayName, "display-name", "", "Set your display name")
+	update.Flags().StringVar(&contactEmail, "contact-email", "", "Set your profile contact text (not your login identity)")
+	update.Flags().BoolVar(&clearDisplayName, "clear-display-name", false, "Clear your display name")
+	update.Flags().BoolVar(&clearContactEmail, "clear-contact-email", false, "Clear your profile contact text")
+	profile.AddCommand(update)
+	root.AddCommand(profile)
 
 	project := &cobra.Command{Use: "project", Short: "Project-scoped public operations"}
 	project.AddCommand(&cobra.Command{
@@ -136,6 +165,18 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 
 func writeJSON(w io.Writer, raw json.RawMessage) error {
 	_, err := fmt.Fprintln(w, string(bytes.TrimSpace(raw)))
+	return err
+}
+
+func writeProfile(w io.Writer, output string, result api.Result[api.Profile]) error {
+	if output == "json" {
+		return writeJSON(w, result.Raw)
+	}
+	p := result.Value
+	_, err := fmt.Fprintf(w,
+		"Actor: %s\nStatus: %s\nName: %s\nEmail: %s\nAdmin roles: %s\nProject grants: %s\n",
+		safeText(p.ActorProfileID), safeText(p.Status), optional(p.DisplayName), optional(p.ContactEmail),
+		list(p.AdminRoles), list(p.ProjectRoleGrants))
 	return err
 }
 

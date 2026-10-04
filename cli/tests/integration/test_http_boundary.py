@@ -43,6 +43,8 @@ def http_fixture():
         "body": json.dumps(PROFILE).encode(),
         "headers": {"Content-Type": "application/json"},
         "delay": 0,
+        "drop": False,
+        "updates": [],
     }
 
     class Handler(BaseHTTPRequestHandler):
@@ -50,6 +52,9 @@ def http_fixture():
             requests.append(
                 (self.command, self.path, self.headers.get("Authorization"))
             )
+            if response["drop"]:
+                self.close_connection = True
+                return
             time.sleep(response["delay"])
             self.send_response(response["status"])
             for key, value in response["headers"].items():
@@ -59,6 +64,13 @@ def http_fixture():
                 self.wfile.write(response["body"])
             except (BrokenPipeError, ConnectionResetError):
                 pass
+
+        def do_PATCH(self):  # noqa: N802 - standard HTTP handler interface
+            body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            response["updates"].append(
+                (self.headers.get("Content-Type"), json.loads(body))
+            )
+            self.do_GET()
 
         def do_CONNECT(self):  # noqa: N802 - captures attempted HTTPS proxy use
             requests.append(
@@ -84,6 +96,190 @@ def http_fixture():
 def assert_failure(result, code, exit_code=1):
     assert result.returncode == exit_code and result.stdout == ""
     assert json.loads(result.stderr)["error"]["code"] == code
+
+
+def test_profile_update_sends_only_selected_fields(cli):
+    with http_fixture() as (origin, response, requests):
+        for flags, expected in (
+            (("--display-name", "Ada é"), {"display_name": "Ada é"}),
+            (
+                ("--contact-email", "contact@example.test"),
+                {"contact_email": "contact@example.test"},
+            ),
+            (("--clear-display-name",), {"display_name": None}),
+            (("--clear-contact-email",), {"contact_email": None}),
+            (
+                ("--display-name", "Ada", "--clear-contact-email"),
+                {"display_name": "Ada", "contact_email": None},
+            ),
+            (
+                ("--clear-display-name", "--clear-contact-email"),
+                {"display_name": None, "contact_email": None},
+            ),
+        ):
+            result = cli(origin, TOKEN, "profile", "update", *flags, "-o", "json")
+            assert result.returncode == 0 and result.stderr == ""
+            assert json.loads(result.stdout) == PROFILE
+            assert response["updates"][-1] == ("application/json", expected)
+        assert requests == [("PATCH", "/api/v1/actors/me", "Bearer " + TOKEN)] * 6
+        response["body"] = json.dumps({**PROFILE, "display_name": "Ada\x1b"}).encode()
+        text = cli(origin, TOKEN, "profile", "update", "--display-name", "Ada")
+        assert text.returncode == 0 and "Name: Ada\\u001B\n" in text.stdout
+
+
+def test_profile_update_bad_arguments_never_write(cli):
+    with http_fixture() as (origin, response, requests):
+        for flags in (
+            (),
+            ("--clear-display-name=false",),
+            ("--display-name", "Ada", "--clear-display-name"),
+            ("--contact-email", "x", "--clear-contact-email"),
+            ("--actor-profile-id", ACTOR),
+            ("--admin-roles", "access_administrator"),
+            ("unexpected",),
+            ("--display-name", "x" * 9000),
+            ("--display-name", b"\xff"),
+        ):
+            result = cli(origin, TOKEN, "-o", "json", "profile", "update", *flags)
+            assert_failure(result, "invalid_arguments", exit_code=2)
+        assert requests == [] and response["updates"] == []
+
+
+def test_profile_update_uncertainty_and_known_denials(cli):
+    with http_fixture() as (origin, response, requests):
+        # Record body receipt, then lose the connection before status headers.
+        response["drop"] = True
+        result = cli(
+            origin, TOKEN, "profile", "update", "--display-name", "Ada", "-o", "json"
+        )
+        assert_failure(result, "service_unavailable")
+        assert json.loads(result.stderr)["error"]["outcome_unknown"] is True
+        assert len(requests) == len(response["updates"]) == 1
+        response["drop"] = False
+        for status, body, headers, code, unknown in (
+            (
+                403,
+                b'{"error":{"code":"actor_suspended"}}',
+                {},
+                "actor_suspended",
+                False,
+            ),
+            (
+                422,
+                b'{"error":{"code":"validation_error"}}',
+                {},
+                "validation_error",
+                False,
+            ),
+            (
+                503,
+                b'{"error":{"code":"service_unavailable"}}',
+                {},
+                "service_unavailable",
+                True,
+            ),
+            (
+                422,
+                b'{"error":{"code":"invalid_api_response"}}',
+                {},
+                "invalid_api_response",
+                False,
+            ),
+            (408, b"gateway timeout", {}, "api_error", True),
+            (429, b"{}", {}, "api_error", True),
+            (
+                408,
+                b'{"Error":{"Code":"gateway_timeout"}}',
+                {},
+                "api_error",
+                True,
+            ),
+            (
+                408,
+                b'{"error":{"Code":"gateway_timeout"}}',
+                {},
+                "api_error",
+                True,
+            ),
+            (
+                408,
+                b'{"Error":{"code":"gateway_timeout"}}',
+                {},
+                "api_error",
+                True,
+            ),
+            (
+                408,
+                b'{"error":{"code":"a"},"error":{"code":"b"}}',
+                {},
+                "api_error",
+                True,
+            ),
+            (
+                408,
+                b'{"error":{"code":"a","code":"b"}}',
+                {},
+                "api_error",
+                True,
+            ),
+            (
+                422,
+                json.dumps({"error": {"code": TOKEN}}).encode(),
+                {},
+                "api_error",
+                False,
+            ),
+            (200, b'{"actor_profile_id":"bad"}', {}, "invalid_api_response", True),
+            (
+                200,
+                json.dumps(PROFILE).encode(),
+                {"Content-Length": "99999"},
+                "invalid_api_response",
+                True,
+            ),
+            (200, b"x" * 65537, {}, "invalid_api_response", True),
+        ):
+            response.update(
+                status=status,
+                body=body,
+                headers={"Content-Type": "application/json", **headers},
+            )
+            before = len(requests)
+            result = cli(
+                origin,
+                TOKEN,
+                "profile",
+                "update",
+                "--clear-contact-email",
+                "-o",
+                "json",
+            )
+            assert (
+                json.loads(result.stderr)["error"].get("outcome_unknown", False)
+                is unknown
+            )
+            assert_failure(result, code)
+            assert len(requests) == before + 1
+        response.update(
+            status=503, body=b"{}", headers={"Content-Type": "application/json"}
+        )
+        text = cli(origin, TOKEN, "profile", "update", "--clear-display-name")
+        assert text.returncode == 1 and text.stdout == ""
+        assert "update outcome unknown; read whoami before retrying" in text.stderr
+
+
+def test_profile_update_redirect_does_not_forward_body_or_bearer(cli):
+    with (
+        http_fixture() as (sink, _, sink_requests),
+        http_fixture() as (origin, response, requests),
+    ):
+        response.update(status=307, body=b"", headers={"Location": sink})
+        result = cli(
+            origin, TOKEN, "profile", "update", "--display-name", "Ada", "-o", "json"
+        )
+        assert_failure(result, "redirect_refused")
+        assert json.loads(result.stderr)["error"]["outcome_unknown"] is True
+        assert len(requests) == 1 and sink_requests == []
 
 
 def test_public_commands_and_noninteractive_output(cli):

@@ -1,4 +1,4 @@
-"""Installed CLI parity with two public Workstream self-service operations."""
+"""Installed CLI parity with public Workstream self-service operations."""
 
 from __future__ import annotations
 
@@ -108,6 +108,7 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
                 assert "get" in specification.json()["paths"][path], (
                     "CLI route must remain public"
                 )
+            assert "patch" in specification.json()["paths"]["/api/v1/actors/me"]
             profiles: dict[str, dict] = {}
             for name, token in tokens.items():
                 result = cli(origin, token, "whoami", "--output", "json")
@@ -130,6 +131,80 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
             assert (
                 len({profile["actor_profile_id"] for profile in profiles.values()}) == 3
             )
+
+            manager_headers = {"Authorization": f"Bearer {tokens['cli-manager']}"}
+            # No project/admin grant is required for these caller-owned fields.
+            for flags, name, email in (
+                (
+                    (
+                        "--display-name",
+                        "  Ada é  ",
+                        "--contact-email",
+                        "  contact@example.test  ",
+                    ),
+                    "Ada é",
+                    "contact@example.test",
+                ),
+                (("--display-name", "N" * 200), "N" * 200, "contact@example.test"),
+                (("--contact-email", "E" * 320), "N" * 200, "E" * 320),
+                (("--clear-display-name",), None, "E" * 320),
+                (("--clear-contact-email",), None, None),
+            ):
+                edited = cli(
+                    origin,
+                    tokens["cli-manager"],
+                    "profile",
+                    "update",
+                    *flags,
+                    "-o",
+                    "json",
+                )
+                assert edited.returncode == 0, edited.stderr
+                saved = await direct.get("/api/v1/actors/me", headers=manager_headers)
+                assert saved.status_code == 200
+                actual = json.loads(edited.stdout)
+                assert (
+                    actual["actor_profile_id"]
+                    == profiles["cli-manager"]["actor_profile_id"]
+                )
+                assert actual["display_name"] == saved.json()["display_name"] == name
+                assert actual["contact_email"] == saved.json()["contact_email"] == email
+                assert {k: v for k, v in actual.items() if k not in touched} == {
+                    k: v for k, v in saved.json().items() if k not in touched
+                }
+                assert (
+                    actual["admin_roles"] == [] and actual["project_role_grants"] == []
+                )
+            for flags in (
+                ("--display-name", ""),
+                ("--display-name", "   "),
+                ("--display-name", "N" * 201),
+                ("--contact-email", "E" * 321),
+            ):
+                rejected = cli(
+                    origin,
+                    tokens["cli-manager"],
+                    "profile",
+                    "update",
+                    *flags,
+                    "-o",
+                    "json",
+                )
+                assert rejected.returncode == 1 and rejected.stdout == ""
+                assert json.loads(rejected.stderr)["error"]["status"] == 422
+                assert "outcome_unknown" not in json.loads(rejected.stderr)["error"]
+                saved = await direct.get("/api/v1/actors/me", headers=manager_headers)
+                assert (
+                    saved.json()["display_name"] is None
+                    and saved.json()["contact_email"] is None
+                )
+            outsider_profile = await direct.get(
+                "/api/v1/actors/me",
+                headers={"Authorization": f"Bearer {tokens['cli-outsider']}"},
+            )
+            assert {
+                k: v for k, v in outsider_profile.json().items() if k not in touched
+            } == {k: v for k, v in profiles["cli-outsider"].items() if k not in touched}
 
             _bootstrap(profiles["cli-admin"]["actor_profile_id"], env)
             grant = await direct.post(
@@ -242,6 +317,33 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
             )
             assert after_revocation.returncode == 1 and after_revocation.stdout == ""
             assert json.loads(after_revocation.stderr)["error"]["status"] == 404
+            suspended = await direct.post(
+                f"/api/v1/actors/{profiles['cli-manager']['actor_profile_id']}/suspend",
+                headers={
+                    "Authorization": f"Bearer {tokens['cli-admin']}",
+                    "Idempotency-Key": str(uuid4()),
+                },
+                json={"reason": "CLI self-update lifecycle denial proof"},
+            )
+            assert suspended.status_code == 200, suspended.text
+            denied = cli(
+                origin,
+                tokens["cli-manager"],
+                "profile",
+                "update",
+                "--display-name",
+                "must not persist",
+                "-o",
+                "json",
+            )
+            assert denied.returncode == 1 and denied.stdout == ""
+            assert json.loads(denied.stderr)["error"]["code"] == "actor_suspended"
+            assert "outcome_unknown" not in json.loads(denied.stderr)["error"]
+            stored = await direct.get(
+                f"/api/v1/actors/{profiles['cli-manager']['actor_profile_id']}",
+                headers={"Authorization": f"Bearer {tokens['cli-admin']}"},
+            )
+            assert stored.status_code == 200 and stored.json()["display_name"] is None
     finally:
         api.terminate()
         try:
