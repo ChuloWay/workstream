@@ -148,6 +148,10 @@ MODULE_PUBLIC_API_FOUNDATION_TARGETS = frozenset(
     }
 )
 CON_03C_STORAGE_TARGETS = frozenset({"backend/app/modules/contributions/records/models.py", "backend/app/modules/contributions/records/schemas.py", "backend/app/modules/compensation/awards/models.py"})
+ARCH_04E2A_ROUTING_AUTH_TARGETS = frozenset({
+    "backend/app/modules/authorization/domain/post_submit_routing.py",
+    "backend/app/modules/authorization/post_submit_routing_authorization.py",
+})
 AUTH_19A_SOURCE_CONTRACT_TARGETS = frozenset({
     "backend/app/modules/authorization/api/acceptance_source.py",
     "backend/app/modules/authorization/acceptance_source_contracts.py",
@@ -157,6 +161,15 @@ REV_04B_ACCEPTANCE_TARGETS = frozenset({"backend/app/modules/reviews/acceptance/
 REV_04A_SOURCE_TARGETS = frozenset({"backend/app/modules/reviews/decision/models.py", "backend/app/modules/reviews/decision/schemas.py"})
 REV_03B_PACKET_TARGETS = frozenset({'backend/app/modules/reviews/packet/models.py', 'backend/app/modules/reviews/packet/repository.py', 'backend/app/modules/reviews/packet/schemas.py'})
 ARCH_04E1BA_REQUEST_TARGETS = frozenset({"backend/app/modules/tasks/post_submit_routing/requests.py"})
+OBSERVABILITY_FOUNDATION_TARGETS = frozenset(
+    {
+        "backend/app/adapters/observability.py",
+        "backend/app/core/celery_observability.py",
+        "backend/app/core/diagnostic_logging.py",
+        "backend/app/core/observability.py",
+        "backend/app/interfaces/observability.py",
+    }
+)
 ARCH_04E1A_SOURCE_TARGETS = frozenset({
     "backend/app/modules/tasks/api/accepted_effects.py",
     "backend/app/modules/tasks/api/post_submit_routing.py",
@@ -750,11 +763,13 @@ def _validate_additive_partition_transition(
             | ARCH_CP04B_CONTRIBUTION_POLICY_TARGETS
         | CON_03C_STORAGE_TARGETS
         | AUTH_19A_SOURCE_CONTRACT_TARGETS
+        | ARCH_04E2A_ROUTING_AUTH_TARGETS
         | REV_12A1_FENCE_TARGETS
         | REV_04B_ACCEPTANCE_TARGETS
         | REV_04A_SOURCE_TARGETS
         | REV_03B_PACKET_TARGETS
-        | ARCH_04E1BA_REQUEST_TARGETS
+            | ARCH_04E1BA_REQUEST_TARGETS
+            | OBSERVABILITY_FOUNDATION_TARGETS
         | ARCH_04E1A_SOURCE_TARGETS
         | ARCH_04D2_AUTHORITY_TARGETS
         | ARCH_04C_EXECUTION_TARGETS

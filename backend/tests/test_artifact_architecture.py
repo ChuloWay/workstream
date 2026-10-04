@@ -32,6 +32,7 @@ RETIRED_ARTIFACT_MATERIALIZATION_API = (
 )
 COMPOSITION_ROOT = APP_ROOT / "adapters" / "artifacts" / "__init__.py"
 AGENT_COMPOSITION_ROOT = APP_ROOT / "adapters/project_agents/__init__.py"
+OBSERVABILITY_COMPOSITION_ROOT = APP_ROOT / "adapters" / "observability.py"
 AGENT_ADAPTER_MODULE = "app.adapters.project_agents.openai_agent_sdk"
 S3_ADAPTER_MODULE = APP_ROOT / "adapters" / "artifacts" / "s3_compatible.py"
 CLOSED_PORTS = {
@@ -84,6 +85,10 @@ PROVIDER_METHODS = {"put", "observe_put_result", "open", "head"}
 CONCRETE_ADAPTER_MODULES = {
     "app.adapters.artifacts.local",
     "app.adapters.artifacts.s3_compatible",
+}
+CONCRETE_OBSERVABILITY_MODULES = {
+    "opentelemetry.exporter.otlp.proto.http.metric_exporter",
+    "opentelemetry.exporter.otlp.proto.http.trace_exporter",
 }
 
 
@@ -280,21 +285,36 @@ def test_concrete_adapter_construction_has_one_composition_path() -> None:
     concrete_imports: list[Path] = []
     agent_imports: list[Path] = []
     agent_calls: list[Path] = []
+    observability_imports: list[Path] = []
+    observability_calls: list[Path] = []
     for path in _python_files(APP_ROOT):
         imports, calls = imported_symbols_and_calls(_tree(path))
         if imports & CONCRETE_ADAPTER_MODULES:
             concrete_imports.append(path)
         if AGENT_ADAPTER_MODULE in imports:
             agent_imports.append(path)
+        if imports & CONCRETE_OBSERVABILITY_MODULES:
+            observability_imports.append(path)
         factory_calls.extend(path for name in calls if name == "ExternalServiceAdapterFactory")
         adapter_calls.extend(path for name in calls if name in {"LocalStorageAdapter", "S3CompatibleArtifactStore"})
         agent_calls.extend(path for name in calls if name == "OpenAIAgentSdkProjectGuideRuntime")
-    assert set(factory_calls) == {COMPOSITION_ROOT, AGENT_COMPOSITION_ROOT}
-    assert len(factory_calls) == 2
+        observability_calls.extend(
+            path
+            for name in calls
+            if name in {"OTLPMetricExporter", "OTLPSpanExporter", "PeriodicExportingMetricReader"}
+        )
+    assert set(factory_calls) == {
+        COMPOSITION_ROOT,
+        AGENT_COMPOSITION_ROOT,
+        OBSERVABILITY_COMPOSITION_ROOT,
+    }
+    assert len(factory_calls) == 3
     assert adapter_calls == [COMPOSITION_ROOT, S3_ADAPTER_MODULE]
     assert set(concrete_imports) == {COMPOSITION_ROOT}
     assert agent_imports == [AGENT_COMPOSITION_ROOT]
     assert agent_calls == [AGENT_COMPOSITION_ROOT]
+    assert observability_imports == [OBSERVABILITY_COMPOSITION_ROOT]
+    assert observability_calls == [OBSERVABILITY_COMPOSITION_ROOT] * 3
 
 
 @pytest.mark.parametrize("source", [

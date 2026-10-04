@@ -37,6 +37,10 @@
       "target": "backend/app/adapters/auth/metrics.py"
     },
     {
+      "group": "shared",
+      "target": "backend/app/adapters/observability.py"
+    },
+    {
       "group": "lifecycle",
       "target": "backend/app/adapters/project_agents/openai_agent_sdk.py"
     },
@@ -138,7 +142,15 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/core/celery_observability.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/core/config.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/core/diagnostic_logging.py"
     },
     {
       "group": "shared",
@@ -151,6 +163,10 @@
     {
       "group": "shared",
       "target": "backend/app/core/identifiers.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/core/observability.py"
     },
     {
       "group": "lifecycle",
@@ -195,6 +211,10 @@
     {
       "group": "artifacts",
       "target": "backend/app/interfaces/external_services.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/interfaces/observability.py"
     },
     {
       "group": "lifecycle",
@@ -554,6 +574,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/domain/post_submit_routing.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/domain/prepared_adapter_bindings.py"
     },
     {
@@ -659,6 +683,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/post_submit_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/post_submit_routing_authorization.py"
     },
     {
       "group": "auth",
@@ -1601,7 +1629,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "6f3a700c22a1cc2316e8cf5390d5949968c30a1507f13a33584ad323be9bb824",
+  "authority_digest": "f945d1495efbf8c69985a1e50669a5219bc3d8746556fe27c14d8238ba97ba86",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

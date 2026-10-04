@@ -544,5 +544,6 @@ stamps creation time and forbids request update, deletion and truncation.
 
 This is preparation only: no source manifest, current routing pointer, outbox
 publication, TASK transition, Review, FinalAcceptance or ContributionRecord is
-created. AUTH preparation remains next. Later atomic publication must bind the
+created. ARCH-04E2-A delivers strict hidden AUTH preparation and receipt-staging
+contracts; routing remains unavailable. Later atomic publication must bind the
 manifest to the reserved identity and verify genuine immutable AUTH evidence.
