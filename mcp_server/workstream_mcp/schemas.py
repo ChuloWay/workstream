@@ -50,6 +50,16 @@ _GRANT_PROPERTIES = {
     "limit": {"type": "integer", "minimum": 1, "maximum": 100},
     "cursor": {"type": "string", "maxLength": 512},
 }
+_GRANT_SCOPE_CONSTRAINTS = [
+    {
+        "if": {"properties": {"scope_type": {"const": "project"}}, "required": ["scope_type"]},
+        "then": {"required": ["scope_project_id"]},
+    },
+    {
+        "if": {"properties": {"scope_type": {"const": "system"}}, "required": ["scope_type"]},
+        "then": {"not": {"required": ["scope_project_id"]}},
+    },
+]
 ACCESS_READ_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
     "permissions_list": EMPTY_INPUT_SCHEMA,
     "admin_roles_list": EMPTY_INPUT_SCHEMA,
@@ -57,12 +67,14 @@ ACCESS_READ_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
         "type": "object",
         "properties": _GRANT_PROPERTIES,
         "required": ["scope_type"],
+        "allOf": _GRANT_SCOPE_CONSTRAINTS,
         "additionalProperties": False,
     },
     "actor_admin_grants_list": {
         "type": "object",
         "properties": {"actor_profile_id": _UUID_INPUT, **_GRANT_PROPERTIES},
         "required": ["actor_profile_id", "scope_type"],
+        "allOf": _GRANT_SCOPE_CONSTRAINTS,
         "additionalProperties": False,
     },
     "actor_get": _ACTOR_INPUT,

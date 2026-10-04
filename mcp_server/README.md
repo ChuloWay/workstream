@@ -63,7 +63,8 @@ fabricated results.
 
 Definition tools take `{}` and return definitions, not the caller's effective
 permissions. Actor reads require a UUID `actor_profile_id`. Grant lists require
-`scope_type` (`system` or `project`), with `scope_project_id` for project scope;
+`scope_type` (`system` or `project`); `scope_project_id` is required for project
+scope and forbidden for system scope;
 the actor-history tool also requires `actor_profile_id`. Optional `status`
 (`active`, `revoked`, `all`), `limit` (1-100) and `cursor` (up to 512 characters)
 are forwarded only when supplied. Omission uses backend defaults; null is not a
@@ -72,6 +73,9 @@ scope and filters. Workstream validates cursor syntax and current authority on
 every call; these grant cursors are not cryptographically bound to query scope.
 Administrative projections exclude contact details and
 external identity subjects; read calls may still update admission/audit state.
+Actor display names and grant/revocation reasons are caller-controlled. Their
+model-visible text is explicitly marked as untrusted data while
+`structuredContent` preserves the exact validated API object.
 
 ## Deployment Boundary
 
