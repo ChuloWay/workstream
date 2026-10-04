@@ -97,7 +97,9 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
         async with httpx.AsyncClient(
             base_url=origin, trust_env=False, timeout=10
         ) as direct:
-            specification = await direct.get("/openapi.json")
+            # Initial schema generation is API-fixture startup, not a CLI
+            # request. Keep it bounded separately from command deadlines.
+            specification = await direct.get("/openapi.json", timeout=60)
             assert specification.status_code == 200
             for path in (
                 "/api/v1/actors/me",
