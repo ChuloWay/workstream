@@ -128,8 +128,11 @@ The [independent MCP package](../mcp_server/README.md) implements one profile
 tool. It is not a deployed service or the complete proposed tool catalogue.
 
 Privacy-bounded API and prefork Celery diagnostics are implemented: structured
-logs, sampled traces and bounded metrics. Collector deployment and an operational
-end-to-end drill remain release work; diagnostics do not establish lifecycle truth.
+logs, sampled traces and bounded metrics through one typed export adapter.
+Trusted-broker trace linkage depends on restricted broker publisher ACLs and
+never supplies product authority. Collector deployment, diagnostic-store access
+and finite-retention controls, and an operational end-to-end drill remain
+release work; diagnostics do not establish lifecycle truth.
 
 ## Pre-Submission And Post-Submission Checking
 
@@ -181,7 +184,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Review decision and revision | **Hidden source storage; runtime planned** | Review/revision policy identities and mutation authority; REV-04A immutable Review, findings, resolutions and completed request storage; REV-04B shared FinalAcceptance storage without authority or runtime consumers; approved same-task revision-rebase semantics | Authorized atomic decision composition; `accept`, `needs_revision`, and `reject`; complete-context revision preparation; finding responses; replacement contributor rules; replay and recovery |
 | Contribution and compensation truth | **Schema foundations plus public policy administration** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings; public Finance policy administration; REV-04B shared acceptance source storage; CON-03C immutable ContributionRecord/CompensationAward storage | Compose one shared FinalAcceptance/submitter operation for human accept or authorized false/pass routing. Only actual Reviews create reviewer records. Evaluate frozen actor rules into zero, one or two awards |
 | Fulfillment, reconciliation, and audit | **Planned** | Shared audit foundations, provider-neutral adapter convention, AUTH-OUTBOX-02 live dispatcher authority, retained phase audit decisions, Celery delivery/recovery scans and CON-02B custody | Feature-specific handlers and authority, conditional award fulfillment, callbacks, idempotent recovery, reconciliation, bounded operational reads, and release controls |
-| Runtime diagnostics | **Implemented foundation** | Closed structured logging, explicit API/Celery tracing, bounded metrics, safe correlation and optional OTLP export | Configure and secure the collector, validate retention/access and prove diagnostics during the release drill; no deployed monitoring claim |
+| Runtime diagnostics | **Implemented foundation** | Closed structured logging, explicit API/Celery tracing, bounded metrics, safe correlation and optional typed OTLP export | Restrict broker publishers; configure and secure collector/log access, egress, encryption and finite deletion; prove diagnostics during the release drill; no deployed monitoring claim |
 | Frontend and pilot | **Planned after stable backend contracts** | React + Vite + TypeScript stack decision | Implement only stable backed surfaces, run the real internal pilot, repair findings, and complete release drills |
 
 ## What Has Been Completed

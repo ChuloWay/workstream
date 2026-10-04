@@ -85,6 +85,84 @@ def test_observability_endpoint_is_a_credential_free_origin() -> None:
             Settings(observability_otlp_endpoint=endpoint)
 
 
+@pytest.mark.parametrize(
+    ("endpoint", "canonical"),
+    [
+        ("http://localhost", "http://localhost"),
+        ("https://Collector.Example:4318/", "https://collector.example:4318"),
+        ("http://127.0.0.1:4318", "http://127.0.0.1:4318"),
+        ("https://[2001:0db8:0:0:0:0:0:1]:4318", "https://[2001:db8::1]:4318"),
+    ],
+)
+def test_observability_endpoint_accepts_canonical_http_origin_controls(
+    endpoint: str,
+    canonical: str,
+) -> None:
+    settings = Settings(environment="test", observability_otlp_endpoint=endpoint)
+    assert settings.observability_otlp_endpoint == canonical
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://bad_host:4318",
+        "https://127.000.000.001:4318",
+        "https://999.1.1.1:4318",
+        "https://2130706433:4318",
+        "https://[2001:db8::1",
+        "https://collector.local:0",
+        "https://collector.local:65536",
+        "https://collector.local:notaport",
+        "https://-collector.local",
+        "https://collector-.local",
+        "https://collector..local",
+        "https://collector.local.",
+        f"https://{'a' * 64}.local",
+        f"https://{'.'.join(['a' * 63] * 5)}",
+        "https://colléctor.local",
+        "https://collector%2elocal",
+        "https://collector .local",
+        "https://collector\t.local",
+    ],
+)
+def test_observability_endpoint_rejects_noncanonical_host_and_port_input(
+    endpoint: str,
+) -> None:
+    with pytest.raises(ValueError, match="^invalid observability OTLP endpoint$") as caught:
+        Settings(environment="test", observability_otlp_endpoint=endpoint)
+    assert endpoint not in f"{caught.value!s} {caught.value!r}"
+    assert_secret_not_retained(caught.value, endpoint, traceback_module_prefixes=("app.",))
+
+
+@pytest.mark.parametrize("source", ["kwargs", "environment", "dotenv", "model_validate"])
+def test_observability_endpoint_requires_canonical_http_origin_across_settings_sources(
+    source: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    endpoint = "https://operator-secret@bad_host:4318?token=private"
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        f"WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT={endpoint}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT", raising=False)
+    constructors = {
+        "kwargs": lambda: Settings(observability_otlp_endpoint=endpoint),
+        "environment": lambda: Settings(),
+        "dotenv": lambda: Settings(_env_file=env_file),
+        "model_validate": lambda: Settings.model_validate(
+            {"observability_otlp_endpoint": endpoint}
+        ),
+    }
+    if source == "environment":
+        monkeypatch.setenv("WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT", endpoint)
+    with pytest.raises(ValueError, match="^invalid observability OTLP endpoint$") as caught:
+        constructors[source]()
+    assert endpoint not in f"{caught.value!s} {caught.value!r}"
+    assert_secret_not_retained(caught.value, endpoint, traceback_module_prefixes=("app.",))
+
+
 @pytest.mark.parametrize("environment", ["local", "dev", "development", "test"])
 def test_local_observability_endpoint_may_use_http(environment: str) -> None:
     settings = Settings(

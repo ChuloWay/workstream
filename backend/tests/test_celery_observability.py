@@ -34,6 +34,7 @@ from app.core.celery_observability import (
 from app.core.config import Settings
 from app.core.api_controls import RequestContextMiddleware
 from app.core.observability import ObservabilityMiddleware, ObservabilityRuntime
+from observability_test_support import fake_export_adapter
 
 PAGINATION_SECRET = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
 KNOWN_TASK = "workstream.test.known"
@@ -53,8 +54,7 @@ def _runtime() -> tuple[ObservabilityRuntime, InMemorySpanExporter]:
         _settings(),
         service_name="workstream-celery",
         task_names=frozenset({KNOWN_TASK}),
-        span_exporter=exporter,
-        metric_reader=InMemoryMetricReader(),
+        export_adapter=fake_export_adapter(exporter),
     )
     runtime.start()
     return runtime, exporter
@@ -87,8 +87,8 @@ def test_repeated_celery_receiver_setup_does_not_duplicate_spans_or_readers(
 ) -> None:
     runtime, exporter = _runtime()
     monkeypatch.setattr(diagnostics, "_WORKER_RUNTIME", runtime)
-    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}))
-    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}))
+    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}), lambda: None)
+    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}), lambda: None)
     task_id = str(uuid4())
     try:
         _send_task(task_id, None, "SUCCESS")
@@ -107,7 +107,7 @@ def test_sequential_task_failures_and_retries_reset_every_context_token(
 ) -> None:
     runtime, exporter = _runtime()
     monkeypatch.setattr(diagnostics, "_WORKER_RUNTIME", runtime)
-    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}))
+    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}), lambda: None)
     first_task_id, second_task_id, third_task_id = (str(uuid4()) for _ in range(3))
     first_request, first_correlation = str(uuid4()), str(uuid4())
 
@@ -125,6 +125,7 @@ def test_sequential_task_failures_and_retries_reset_every_context_token(
             {
                 REQUEST_ID_BROKER_HEADER: first_request,
                 CORRELATION_ID_BROKER_HEADER: first_correlation,
+                "traceparent": "00-11111111111111111111111111111111-2222222222222222-01",
             },
         )
         signals.task_prerun.send(sender=None, task_id=first_task_id, task=first)
@@ -158,6 +159,78 @@ def test_sequential_task_failures_and_retries_reset_every_context_token(
         runtime.shutdown()
 
 
+def test_celery_parent_requires_registered_task_and_complete_private_tuple(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime, exporter = _runtime()
+    monkeypatch.setattr(diagnostics, "_WORKER_RUNTIME", runtime)
+    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}), lambda: None)
+    supplied_trace_id = "11111111111111111111111111111111"
+    supplied_parent_id = "2222222222222222"
+    valid_request, valid_correlation = str(uuid4()), str(uuid4())
+    valid_headers = {
+        "traceparent": f"00-{supplied_trace_id}-{supplied_parent_id}-00",
+        REQUEST_ID_BROKER_HEADER: valid_request,
+        CORRELATION_ID_BROKER_HEADER: valid_correlation,
+    }
+    invalid_cases = (
+        ({key: value for key, value in valid_headers.items() if key != CORRELATION_ID_BROKER_HEADER}, KNOWN_TASK),
+        ({**valid_headers, "traceparent": "malformed"}, KNOWN_TASK),
+        (valid_headers, "workstream.private.unregistered"),
+    )
+    try:
+        valid_task_id = str(uuid4())
+        _send_task(valid_task_id, valid_headers, "SUCCESS")
+        invalid_ids: list[str] = []
+        for headers, task_name in invalid_cases:
+            task_id = str(uuid4())
+            invalid_ids.append(task_id)
+            task = _Task(task_id, dict(headers), name=task_name)
+            signals.task_prerun.send(sender=None, task_id=task_id, task=task)
+            signals.task_postrun.send(sender=None, task_id=task_id, task=task, state="SUCCESS")
+        assert runtime.force_flush()
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 4
+        valid = spans[0]
+        assert f"{valid.context.trace_id:032x}" == supplied_trace_id
+        assert valid.parent is not None and f"{valid.parent.span_id:016x}" == supplied_parent_id
+        assert valid.attributes["workstream.request_id"] == valid_request
+        assert valid.attributes["workstream.correlation_id"] == valid_correlation
+        for span, task_id in zip(spans[1:], invalid_ids, strict=True):
+            assert f"{span.context.trace_id:032x}" != supplied_trace_id
+            assert span.parent is None
+            assert span.attributes["workstream.request_id"] == task_id
+            assert span.attributes["workstream.correlation_id"] == task_id
+    finally:
+        diagnostics._ACTIVE_TASKS.clear()
+        runtime.shutdown()
+
+    unsampled_exporter = InMemorySpanExporter()
+    unsampled_runtime = ObservabilityRuntime(
+        Settings(
+            environment="test",
+            pagination_cursor_hmac_secret=PAGINATION_SECRET,
+            observability_trace_sample_ratio=0.0,
+        ),
+        service_name="workstream-celery",
+        task_names=frozenset({KNOWN_TASK}),
+        export_adapter=fake_export_adapter(unsampled_exporter),
+    )
+    unsampled_runtime.start()
+    monkeypatch.setattr(diagnostics, "_WORKER_RUNTIME", unsampled_runtime)
+    try:
+        forced_headers = {
+            **valid_headers,
+            "traceparent": f"00-{supplied_trace_id}-{supplied_parent_id}-01",
+        }
+        _send_task(str(uuid4()), forced_headers, "SUCCESS")
+        assert unsampled_runtime.force_flush()
+        assert unsampled_exporter.get_finished_spans() == ()
+    finally:
+        diagnostics._ACTIVE_TASKS.clear()
+        unsampled_runtime.shutdown()
+
+
 def test_unknown_task_and_state_values_collapse_to_one_exact_metric_series(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -167,12 +240,11 @@ def test_unknown_task_and_state_values_collapse_to_one_exact_metric_series(
         _settings(),
         service_name="workstream-celery",
         task_names=frozenset({KNOWN_TASK}),
-        span_exporter=exporter,
-        metric_reader=reader,
+        export_adapter=fake_export_adapter(exporter, reader),
     )
     runtime.start()
     monkeypatch.setattr(diagnostics, "_WORKER_RUNTIME", runtime)
-    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}))
+    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}), lambda: None)
     identifiers = [(str(uuid4()), str(uuid4()), str(uuid4())) for _ in range(24)]
     try:
         for index, (task_id, request_id, correlation_id) in enumerate(identifiers):
@@ -195,13 +267,13 @@ def test_unknown_task_and_state_values_collapse_to_one_exact_metric_series(
         assert runtime.force_flush()
         spans = exporter.get_finished_spans()
         assert len(spans) == len(identifiers)
-        for span, (_, request_id, correlation_id) in zip(spans, identifiers, strict=True):
+        for span, (task_id, _, _) in zip(spans, identifiers, strict=True):
             assert span.name == "celery other"
             assert dict(span.attributes) == {
                 "messaging.destination.name": "other",
                 "workstream.outcome": "other",
-                "workstream.request_id": request_id,
-                "workstream.correlation_id": correlation_id,
+                "workstream.request_id": task_id,
+                "workstream.correlation_id": task_id,
             }
 
         metric_data = reader.get_metrics_data()
@@ -237,12 +309,11 @@ def _prefork_context_probe(queue: multiprocessing.Queue) -> None:
         _settings(),
         service_name="workstream-celery",
         task_names=frozenset({KNOWN_TASK}),
-        span_exporter=exporter,
-        metric_reader=reader,
+        export_adapter=fake_export_adapter(exporter, reader),
     )
     original_runtime_type = diagnostics.ObservabilityRuntime
     diagnostics.ObservabilityRuntime = lambda *_args, **_kwargs: runtime
-    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}))
+    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}), lambda: None)
     diagnostics.initialize_worker_observability()
     try:
         first_id, second_id = str(uuid4()), str(uuid4())
@@ -286,7 +357,7 @@ def _prefork_context_probe(queue: multiprocessing.Queue) -> None:
 
 
 def test_forked_child_signal_probe_resets_second_task_context() -> None:
-    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}))
+    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}), lambda: None)
     diagnostics._WORKER_RUNTIME = None
     context = multiprocessing.get_context("fork")
     queue = context.Queue()
@@ -368,18 +439,25 @@ async def test_real_celery_prefork_correlates_api_and_resets_sequential_task_con
     get_settings.cache_clear()
     from app.workers.celery_app import celery_app
 
-    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}))
-
-    def runtime_factory(settings, *, service_name, task_names):
+    def adapter_builder():
         reader = InMemoryMetricReader()
+        observations.put({"kind": "adapter", "pid": os.getpid()})
+        return fake_export_adapter(_QueueSpanExporter(observations), reader)
+
+    configure_celery_observability(
+        _settings(),
+        frozenset({KNOWN_TASK}),
+        adapter_builder,
+    )
+
+    def runtime_factory(settings, *, service_name, task_names, export_adapter):
         runtime = ObservabilityRuntime(
             settings,
             service_name=service_name,
             task_names=task_names,
-            span_exporter=_QueueSpanExporter(observations),
-            metric_reader=reader,
+            export_adapter=export_adapter,
         )
-        runtime.probe_reader = reader
+        runtime.probe_reader = export_adapter.metric_reader
         return runtime
 
     monkeypatch.setattr(diagnostics, "ObservabilityRuntime", runtime_factory)
@@ -455,8 +533,7 @@ async def test_real_celery_prefork_correlates_api_and_resets_sequential_task_con
             _settings(),
             service_name="workstream-api",
             route_templates=frozenset({"/dispatch"}),
-            span_exporter=api_exporter,
-            metric_reader=InMemoryMetricReader(),
+            export_adapter=fake_export_adapter(api_exporter),
         )
         api_runtime.start()
         app = FastAPI()
@@ -482,13 +559,15 @@ async def test_real_celery_prefork_correlates_api_and_resets_sequential_task_con
         [server_span] = api_exporter.get_finished_spans()
 
         failure_task_id, retry_task_id = str(uuid4()), str(uuid4())
+        forged_request_id, forged_correlation_id = str(uuid4()), str(uuid4())
+        forged_trace_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         probe_task.apply_async(
             kwargs={"mode": "failure"},
             task_id=failure_task_id,
             headers={
-                REQUEST_ID_BROKER_HEADER: "malformed",
-                CORRELATION_ID_BROKER_HEADER: "malformed",
-                "traceparent": "malformed",
+                REQUEST_ID_BROKER_HEADER: forged_request_id,
+                CORRELATION_ID_BROKER_HEADER: forged_correlation_id,
+                "traceparent": f"00-{forged_trace_id}-bbbbbbbbbbbbbbbb-01",
                 "tracestate": "secret=state",
                 "baggage": "secret=value",
             },
@@ -508,8 +587,11 @@ async def test_real_celery_prefork_correlates_api_and_resets_sequential_task_con
                 break
         spans = [item for item in messages if item["kind"] == "span"]
         exits = [item for item in messages if item["kind"] == "task_exit"]
+        adapters = [item for item in messages if item["kind"] == "adapter"]
         assert len(spans) == 4
         assert len(exits) == 4
+        assert len(adapters) == 1
+        assert adapters[0]["pid"] == spans[0]["pid"]
         assert len({item["pid"] for item in spans + exits}) == 1
         assert spans[0]["pid"] != process.pid and spans[0]["pid"] != os.getpid()
         assert all(item["clean"] and item["active"] == 0 for item in exits)
@@ -524,6 +606,13 @@ async def test_real_celery_prefork_correlates_api_and_resets_sequential_task_con
             item for item in spans if item["attributes"]["workstream.request_id"] == failure_task_id
         )
         assert failure["attributes"]["workstream.correlation_id"] == failure_task_id
+        assert failure["trace_id"] != int(forged_trace_id, 16)
+        assert forged_request_id not in {
+            item["attributes"]["workstream.request_id"] for item in spans
+        }
+        assert forged_correlation_id not in {
+            item["attributes"]["workstream.correlation_id"] for item in spans
+        }
         retry_spans = [
             item for item in spans if item["attributes"]["workstream.request_id"] == retry_task_id
         ]
@@ -567,7 +656,7 @@ def test_celery_parent_logging_is_safe_without_parent_exporters(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     diagnostics.shutdown_celery_parent_observability()
-    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}))
+    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}), lambda: None)
     signals.setup_logging.send(sender=None)
     assert diagnostics._WORKER_RUNTIME is None
     handler = diagnostic_logging.safe_handler()

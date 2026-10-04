@@ -114,6 +114,7 @@ guidance. It does not build a monitoring platform.
   delivery, authorization, digest, retry, or handler behavior.
 - `backend/tests/test_observability.py`,
   `backend/tests/test_observability_otlp.py`,
+  `backend/tests/observability_test_support.py`,
   `backend/tests/test_celery_observability.py`,
   `backend/tests/test_api_controls.py`, `backend/tests/test_config.py`, and
   `backend/tests/test_artifact_architecture.py` plus focused existing
@@ -206,9 +207,11 @@ registry is passed into core. Missing endpoint configuration returns disabled
 export before factory creation and is the only non-adapter branch.
 
 The OTLP adapter creates both concrete resources as one owned operation. If
-construction fails after either resource exists, it closes every constructed
-resource before raising a stable `ExternalServiceConfigurationError` containing
-only the adapter identity. On success, ownership transfers in the immutable
+construction fails after either resource exists, it starts independent shutdown
+for every constructed resource, waits only the configured bound, and raises a
+stable `ExternalServiceConfigurationError` containing only the adapter identity.
+A cleanup that outlives that bound retains the existing safe-logging lease until
+the cleanup thread exits. On success, ownership transfers in the immutable
 bundle to `ObservabilityRuntime`. API composition builds the adapter at
 lifespan composition. Celery composition stores only a narrow typed builder and
 invokes it after `worker_process_init`; no adapter, exporter, reader, factory,
@@ -403,18 +406,19 @@ deployment controls are active.
 
 ## Acceptance criteria
 
-- [ ] Serialized OTLP span and metric payloads contain exactly the fixed
+- [x] Serialized OTLP span and metric payloads contain exactly the fixed
       `service.name` and bounded `deployment.environment.name` resource keys.
       Hostile `app_version`, `OTEL_SERVICE_NAME`, and
       `OTEL_RESOURCE_ATTRIBUTES` canaries are absent; no `service.version` is
       emitted.
-- [ ] Core imports no concrete OTLP exporter or periodic reader and accepts only
+- [x] Core imports no concrete OTLP exporter or periodic reader and accepts only
       the typed `ObservabilityExportAdapter`. API and post-fork Celery roots use
       the one adapter-package builder and one instance-local typed factory;
       tests use the same port with a fake adapter. Partial bundle construction
-      closes every constructed exporter/reader and raises only a stable
+      starts bounded independent cleanup for every constructed exporter/reader,
+      retains safe logging until delayed cleanup exits, and raises only a stable
       identity-bearing, input-free external-service error.
-- [ ] The strict endpoint owner accepts only canonical bounded ASCII DNS/IP
+- [x] The strict endpoint owner accepts only canonical bounded ASCII DNS/IP
       origins and valid ports, rejects invalid DNS, numeric-IP, IPv6, port,
       whitespace, control, Unicode, percent-encoded, credential, path, query,
       and fragment forms, and produces one input-free error through direct,
@@ -426,7 +430,7 @@ deployment controls are active.
       correlation IDs under concurrent requests, and the formatter/provider
       state is not mutated per request or replaced by repeated/overlapping app
       factory lifespans.
-- [ ] A real prefork Celery child initializes its adapter, exporter bundle, and
+- [x] A real prefork Celery child initializes its adapter, exporter bundle, and
       providers after fork, extracts the
       producer trace and validated diagnostic IDs through application-owned
       public signal handlers, and executes under the same trace; repeated
@@ -445,7 +449,7 @@ deployment controls are active.
       across requests and tasks with different record/user/project/request IDs.
       Unknown methods, routes, task names, exception classes, and outcome values
       map to one fixed `other`/`unmatched` category.
-- [ ] Public HTTP ignores incoming `traceparent`, `tracestate`, and baggage,
+- [x] Public HTTP ignores incoming `traceparent`, `tracestate`, and baggage,
       starts a random local trace, and applies only the configured local sample
       ratio. The canonical Redis publisher strips forged trace and private
       headers before emitting the current internal `traceparent` plus two
@@ -453,7 +457,7 @@ deployment controls are active.
       complete valid tuple can parent a consumer; partial, malformed, or
       unregistered cases start a fresh local trace whose identity/sampling is
       not inherited. Baggage and tracestate never reach child context.
-- [ ] An invalid endpoint fails startup with a fixed error that does not retain
+- [x] An invalid endpoint fails startup with a fixed error that does not retain
       or echo input. A missing endpoint disables export; exporter construction
       failure, real OTLP HTTP 503/refusal/timeout, force-flush failure, and
       shutdown failure do not change HTTP/task outcomes and remain within
@@ -467,7 +471,7 @@ deployment controls are active.
 - [x] A task failure carrying an exception whose `__str__` raises is handled by
       Workstream telemetry without calling that method or changing the task's
       product outcome.
-- [ ] Direct API-to-Celery work retains causal trace context through the trusted
+- [x] Direct API-to-Celery work retains causal trace context through the trusted
       broker-publisher boundary. Outbox recovery
       honestly begins a new trace and adds the existing persisted correlation ID
       only when pending-event scan/worker delivery reaches the existing
@@ -477,14 +481,14 @@ deployment controls are active.
       product outcome changes beyond canonical delivery custody.
 - [x] The OpenAI Agents SDK remains configured with tracing disabled and
       sensitive trace data disabled.
-- [ ] Operator docs distinguish implemented instrumentation from configured
+- [x] Operator docs distinguish implemented instrumentation from configured
       export and deployed monitoring, document safe OTLP credentials through
       runtime environment only, state the broker ACL trust boundary and outbox
       trace gap, describe actual constant construction/lifecycle events versus
       safe SDK network-error events, require collector/log backend access
       control, encryption, finite retention/deletion verification and a release
       outage/privacy/correlation drill, and keep profiling on demand.
-- [ ] Focused tests, the relevant existing API/Celery/outbox tests, lint,
+- [x] Focused tests, the relevant existing API/Celery/outbox tests, lint,
       dependency-lock verification, markdown links, stale-wording scan, and the
       repository's applicable deterministic gates pass.
 
@@ -496,13 +500,13 @@ deployment controls are active.
 | Concurrent requests retain their own validated request/correlation IDs in logs and spans and reset both contexts after completion | `app.core.api_controls.RequestContextMiddleware` with core child-owned diagnostic context tokens | `tests/test_observability.py::test_concurrent_api_diagnostic_context_is_isolated` |
 | Public `traceparent`, `tracestate`, baggage, caller-chosen trace IDs, and sampled flags cannot select the local trace identity or override the local sample decision | Core explicit ASGI trace start and local root sampler | `tests/test_observability.py::test_public_propagation_and_sampling_input_cannot_control_local_trace` |
 | Serialized OTLP trace and metric protobuf resources contain only fixed `service.name` and bounded `deployment.environment.name`; hostile `app_version`, standard OTEL environment resource overrides, and `service.version` are absent | Core closed resource construction plus sanitizing span/metric export boundary | `tests/test_observability_otlp.py::test_serialized_otlp_payload_has_exact_resource_allowlist` |
-| One instance-local typed factory registers only `otlp_http`; composition roots use its builder, core has no concrete OTLP imports or direct exporter/reader injection path, and fake tests use the same adapter port | `app.interfaces.observability`, `app.adapters.observability`, and API/Celery composition roots | `tests/test_artifact_architecture.py::test_concrete_adapter_construction_has_one_composition_path` and `tests/test_observability.py::test_runtime_uses_only_the_typed_export_adapter` |
-| Failure after partial exporter-bundle construction closes every created span/metric resource and raises one stable identity-bearing input-free external-service error | Concrete OTLP export adapter construction owner | `tests/test_observability_otlp.py::test_partial_export_bundle_construction_closes_owned_resources` |
+| One instance-local typed factory registers only `otlp_http`; composition roots use its builder, core has no concrete OTLP imports or direct exporter/reader injection path, and fake tests use the same adapter port | `app.interfaces.observability`, `app.adapters.observability`, and API/Celery composition roots | `tests/test_artifact_architecture.py::test_concrete_adapter_construction_has_one_composition_path` and `tests/test_observability_otlp.py::test_runtime_uses_only_the_typed_export_adapter` |
+| Failure after partial exporter-bundle construction closes every created span/metric resource, keeps the existing safe logger until detached cleanup exits, and raises one stable identity-bearing input-free external-service error | Concrete OTLP export adapter construction owner plus refcounted core logging lease | `tests/test_observability_otlp.py::test_partial_export_bundle_construction_closes_owned_resources` and `tests/test_observability_otlp.py::test_partial_cleanup_retains_safe_logging_after_bounded_runtime_shutdown` |
 | Repeated and overlapping app lifespans keep distinct app providers and one process log handler | `app.main` composition with `app.core.observability` runtime | `tests/test_observability.py::test_overlapping_app_lifespans_keep_owned_providers_and_one_log_handler` |
 | API startup, exporter-thread, request, Celery-parent, and Celery-child logs carry exactly one fixed process role outside and inside diagnostic context | Reference-counted process logging ownership composed by API and Celery roots | `tests/test_observability.py::test_overlapping_app_lifespans_keep_owned_providers_and_one_log_handler`, `tests/test_observability.py::test_real_loggers_and_hostile_exception_never_render_sensitive_values`, and `tests/test_celery_observability.py::test_celery_parent_logging_is_safe_without_parent_exporters` |
 | Adapter/exporter/provider threads are absent in the Celery parent and initialized in the real child only | `app.workers.celery_app` post-fork adapter-builder and `worker_process_init` composition | `tests/test_celery_observability.py::test_real_celery_prefork_correlates_api_and_resets_sequential_task_context` |
-| Real Redis publication through the canonical `apply_async` path removes forged trace/baggage/private headers and emits only the current local traceparent plus both canonical UUID fields | Core before-publish hook composed by API/Celery roots | `tests/test_celery_observability.py::test_real_redis_publisher_strips_forged_observability_headers` |
-| Only a registered task carrying valid traceparent, request ID, and correlation ID receives parentage; partial, malformed, or unregistered tuples start a random local root and cannot inherit the supplied remote sampled flag | Child-only Celery receiver validation and local ratio sampler | `tests/test_celery_observability.py::test_celery_parent_requires_registered_task_and_complete_private_tuple` and `tests/test_celery_observability.py::test_real_celery_prefork_rejects_incomplete_and_unregistered_lineage` |
+| Real Redis publication through the canonical `apply_async` path removes forged trace/baggage/private headers and emits only the current local traceparent plus both canonical UUID fields | Core before-publish hook composed by API/Celery roots | `tests/test_celery_observability.py::test_real_celery_prefork_correlates_api_and_resets_sequential_task_context` |
+| Only a registered task carrying valid traceparent, request ID, and correlation ID receives parentage; partial, malformed, or unregistered tuples start a random local root and cannot inherit the supplied remote sampled flag | Child-only Celery receiver validation and local ratio sampler | `tests/test_celery_observability.py::test_celery_parent_requires_registered_task_and_complete_private_tuple` and `tests/test_celery_observability.py::test_real_celery_prefork_correlates_api_and_resets_sequential_task_context` |
 | Direct API-to-Celery publication through the credentialed broker boundary creates one server-to-consumer parent-child trace; the tuple is diagnostic metadata and no product authority consumes it | Core publisher/receiver hooks composed by API and Celery roots | `tests/test_observability.py::test_api_to_celery_trace_is_parent_child_and_headers_are_allowlisted` plus `tests/test_celery_observability.py::test_real_celery_prefork_correlates_api_and_resets_sequential_task_context` |
 | Repeating Celery receiver setup leaves one receiver set, one child provider/reader set, one consumer span, and one task metric measurement | Idempotent core signal registration with child-owned Celery runtime | `tests/test_celery_observability.py::test_repeated_celery_receiver_setup_does_not_duplicate_spans_or_readers` |
 | One task duration metric uses a registered task name plus fixed outcome and never hostname or IDs | Core task metric with immutable task inventory supplied by Celery composition | `tests/test_observability.py::test_api_to_celery_trace_is_parent_child_and_headers_are_allowlisted` plus `tests/test_celery_observability.py::test_real_celery_prefork_correlates_api_and_resets_sequential_task_context` |
@@ -550,8 +554,8 @@ deployment controls are active.
 | Explicit ASGI instrumentation is the selected HTTP implementation | Compare FastAPI 0.142.2 source with the required capture allowlist | One small application-owned span/metric path avoids raw pre-route capture and global HTTP propagation | No native/contrib fallback or compatibility path remains |
 | Official Celery auto-instrumentation exceeds the privacy/cardinality boundary | Inspect OpenTelemetry Celery 0.66b0 source | Confirmed exception/retry string rendering and `flower.task.runtime.seconds` hostname label; application-owned public signal receivers selected and exercised through a real prefork process | Dependency upgrades require replay of the privacy and duplicate-instrumentation proofs |
 | No trace context can honestly survive current durable outbox recovery | Inspect outbox envelope/model/Celery delivery and all broker publication call sites | Confirmed: business correlation exists, W3C context is not persisted | New trace after restart/recovery is intentional |
-| External review repair boundary | Inspect exported resources, concrete OTLP imports/construction, endpoint parsing, broker signal handlers, outbox scan/delivery/recovery, tests, and operator guide at `667f98ea9aff44a4437ef983e67e1c9e63aa55e2` | Repair plan owns removal of `service.version`, one ADR 0014 adapter path, strict origins, trusted-broker tuple validation, real OTLP HTTP/protobuf and PostgreSQL recovery proof, and access/retention guidance | Implementation and named proofs remain pending until lead plan approval |
-| Application behavior and tests | Focused API, Celery, controls, configuration, topology, agent-runtime, ownership, architecture, identifier-inventory, and isolated PostgreSQL outbox proofs | Implemented proofs pass, including real Redis/prefork execution | Real collector deployment remains outside repository proof |
+| External review repair boundary | Inspect exported resources, concrete OTLP imports/construction, endpoint parsing, broker signal handlers, outbox scan/delivery/recovery, tests, and operator guide at `667f98ea9aff44a4437ef983e67e1c9e63aa55e2` | Removed `service.version`, installed one ADR 0014 adapter path, strict origins, trusted-broker tuple validation, real OTLP HTTP/protobuf and PostgreSQL recovery proof, and access/retention guidance | Exact-head implementation review and hosted CI remain pending |
+| Application behavior and tests | Focused API, Celery, controls, configuration, topology, agent-runtime, ownership, architecture, identifier-inventory, real Redis prefork, local OTLP HTTP/protobuf, and isolated PostgreSQL outbox proofs | 300 focused tests, 7 OTLP tests, the real Redis prefork proof, and the actual scan/delivery PostgreSQL recovery proof pass | Real collector deployment remains outside repository proof |
 | Dependency integrity | `cd backend && uv lock --check` with the committed SDK/exporter lock | Locked dependency graph passes | Hosted CI remains final environment proof |
 
 ## Review findings
@@ -605,26 +609,26 @@ deployment controls are active.
   and instrument references clear, resources close, and force-flush stays
   disabled.
 - `EXT-OBS-001`: configurable `app_version` currently reaches
-  `service.version`. Accepted repair removes `service.version` and proves the
+  `service.version`. Resolved: remove `service.version` and prove the
   exact serialized span/metric resource allowlist against OTEL environment
   canaries.
 - `EXT-OBS-002`: concrete OTLP exporters/readers are currently built in core.
-  Accepted repair moves the sole construction path behind an ADR 0014 typed
+  Resolved: move the sole construction path behind an ADR 0014 typed
   adapter/factory, preserves post-fork ownership, and proves partial-construction
   cleanup.
-- `EXT-OBS-003`: broker parentage requires an explicit trust boundary. Accepted
-  repair retains causal traces only for registered tasks with the complete
+- `EXT-OBS-003`: broker parentage requires an explicit trust boundary. Resolved:
+  retain causal traces only for registered tasks with the complete
   canonical tuple, proves canonical publisher stripping and receiver fallback,
   and documents credential/vhost ACL trust without treating telemetry as auth.
-- `EXT-OBS-004`: endpoint parsing accepts noncanonical hosts. Accepted repair
-  adds one strict observability-origin owner and an input-free all-source host
+- `EXT-OBS-004`: endpoint parsing accepts noncanonical hosts. Resolved: add one
+  strict observability-origin owner and an input-free all-source host
   matrix without changing the S3 endpoint contract.
 - `EXT-OBS-005`: mocked exporter failures do not prove the real network or
-  serialization boundary. Accepted repair adds local OTLP HTTP/protobuf success,
+  serialization boundary. Resolved: add local OTLP HTTP/protobuf success,
   503/refusal/timeout, and real PostgreSQL pending-recovery proofs without
   claiming a deployed collector.
 - `EXT-OBS-006`: operator guidance overstates failure-event uniformity and omits
-  deployed access/retention controls. Accepted repair documents actual safe
+  deployed access/retention controls. Resolved: document actual safe
   events plus broker/collector/log-query ACLs, encryption, finite deletion, and
   release-drill requirements as deployment work.
 

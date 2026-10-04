@@ -702,9 +702,11 @@ def test_catalogue_partition_addition_is_bounded(addition: str, allowed: bool) -
 @pytest.mark.parametrize(
     "addition",
     (
+        "backend/app/adapters/observability.py",
         "backend/app/core/celery_observability.py",
         "backend/app/core/diagnostic_logging.py",
         "backend/app/core/observability.py",
+        "backend/app/interfaces/observability.py",
     ),
 )
 def test_observability_partition_additions_are_exact(addition: str) -> None:
@@ -748,7 +750,11 @@ def test_routing_request_proofs_use_schema_lane_with_measured_headroom():
 
 
 def test_observability_proofs_use_schema_lane_with_measured_headroom():
-    expected = {"tests/test_observability.py", "tests/test_celery_observability.py"}
+    expected = {
+        "tests/test_observability.py",
+        "tests/test_observability_otlp.py",
+        "tests/test_celery_observability.py",
+    }
     assert set(catalogue.OBSERVABILITY_MODULES) == expected
     for lane in LANES:
         assert set(lane.modules) & expected == (expected if lane.name == "schema_contracts" else set())

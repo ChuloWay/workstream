@@ -13,6 +13,7 @@ from uuid import uuid4
 from celery import signals
 from opentelemetry import context as otel_context
 from opentelemetry import trace
+from opentelemetry.context import Context
 from opentelemetry.trace import Span, SpanKind, Status, StatusCode
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
@@ -28,6 +29,7 @@ from app.core.diagnostic_logging import (
     reset_diagnostic_context,
 )
 from app.core.observability import ObservabilityRuntime
+from app.interfaces.observability import ObservabilityExportAdapterBuilder
 
 REQUEST_ID_BROKER_HEADER = "workstream-request-id"
 CORRELATION_ID_BROKER_HEADER = "workstream-correlation-id"
@@ -45,6 +47,7 @@ _TASK_OUTCOMES = frozenset({"success", "failure", "retry", "other"})
 _CELERY_LOCK = Lock()
 _CELERY_SETTINGS: Settings | None = None
 _CELERY_TASK_NAMES: frozenset[str] = frozenset()
+_CELERY_EXPORT_ADAPTER_BUILDER: ObservabilityExportAdapterBuilder | None = None
 _WORKER_RUNTIME: ObservabilityRuntime | None = None
 _CELERY_PARENT_LOGGING_OWNED = False
 
@@ -62,12 +65,17 @@ class _TaskObservation:
 _ACTIVE_TASKS: dict[str, _TaskObservation] = {}
 
 
-def configure_celery_observability(settings: Settings, task_names: frozenset[str]) -> None:
+def configure_celery_observability(
+    settings: Settings,
+    task_names: frozenset[str],
+    export_adapter_builder: ObservabilityExportAdapterBuilder,
+) -> None:
     """Register one public-signal receiver set without creating process providers."""
-    global _CELERY_SETTINGS, _CELERY_TASK_NAMES
+    global _CELERY_EXPORT_ADAPTER_BUILDER, _CELERY_SETTINGS, _CELERY_TASK_NAMES
     with _CELERY_LOCK:
         _CELERY_SETTINGS = settings
         _CELERY_TASK_NAMES = frozenset(task_names)
+        _CELERY_EXPORT_ADAPTER_BUILDER = export_adapter_builder
         signals.before_task_publish.connect(
             _before_task_publish, weak=False, dispatch_uid="workstream-observability-publish"
         )
@@ -96,13 +104,22 @@ def initialize_worker_observability() -> None:
     with _CELERY_LOCK:
         settings = _CELERY_SETTINGS
         task_names = _CELERY_TASK_NAMES
-    if settings is None:
+        export_adapter_builder = _CELERY_EXPORT_ADAPTER_BUILDER
+    if settings is None or export_adapter_builder is None:
         return
     prior = _WORKER_RUNTIME
     if prior is not None:
         prior.shutdown()
+    try:
+        export_adapter = export_adapter_builder()
+    except Exception:
+        logging.getLogger(__name__).error("observability_export_unavailable")
+        export_adapter = None
     runtime = ObservabilityRuntime(
-        settings, service_name="workstream-celery", task_names=task_names
+        settings,
+        service_name="workstream-celery",
+        task_names=task_names,
+        export_adapter=export_adapter,
     )
     runtime.start()
     _WORKER_RUNTIME = runtime
@@ -145,17 +162,15 @@ def _before_task_publish(headers: dict[str, Any] | None = None, **_kwargs: objec
             headers.pop(key, None)
     try:
         span_context = trace.get_current_span().get_span_context()
-        if span_context.is_valid:
+        request_id, correlation_id = current_diagnostic_ids()
+        if span_context.is_valid and request_id is not None and correlation_id is not None:
             carrier: dict[str, str] = {}
             TraceContextTextMapPropagator().inject(carrier, context=otel_context.get_current())
             traceparent = carrier.get(TRACEPARENT_HEADER)
             if traceparent is not None:
                 headers[TRACEPARENT_HEADER] = traceparent
-        request_id, correlation_id = current_diagnostic_ids()
-        if request_id is not None:
-            headers[REQUEST_ID_BROKER_HEADER] = request_id
-        if correlation_id is not None:
-            headers[CORRELATION_ID_BROKER_HEADER] = correlation_id
+                headers[REQUEST_ID_BROKER_HEADER] = request_id
+                headers[CORRELATION_ID_BROKER_HEADER] = correlation_id
     except Exception:
         logging.getLogger(__name__).error("observability_export_unavailable")
 
@@ -180,14 +195,29 @@ def _task_prerun(task_id: object = None, task: object = None, **_kwargs: object)
         raw_headers = getattr(getattr(task, "request", None), "headers", None)
         headers = raw_headers if isinstance(raw_headers, Mapping) else {}
         fallback = canonical_uuid_text(task_id) or str(uuid4())
-        request_id = canonical_uuid_text(headers.get(REQUEST_ID_BROKER_HEADER)) or fallback
-        correlation_id = canonical_uuid_text(headers.get(CORRELATION_ID_BROKER_HEADER)) or fallback
-        carrier: dict[str, str] = {}
+        raw_task_name = getattr(task, "name", None)
+        task_name = runtime.normalize_task(raw_task_name)
+        request_id = canonical_uuid_text(headers.get(REQUEST_ID_BROKER_HEADER))
+        correlation_id = canonical_uuid_text(headers.get(CORRELATION_ID_BROKER_HEADER))
         traceparent = headers.get(TRACEPARENT_HEADER)
-        if isinstance(traceparent, str):
-            carrier[TRACEPARENT_HEADER] = traceparent
-        parent = TraceContextTextMapPropagator().extract(carrier=carrier)
-        task_name = runtime.normalize_task(getattr(task, "name", None))
+        parent = Context()
+        tuple_is_complete = (
+            isinstance(raw_task_name, str)
+            and raw_task_name in runtime.task_names
+            and request_id is not None
+            and correlation_id is not None
+            and isinstance(traceparent, str)
+        )
+        if tuple_is_complete:
+            extracted = TraceContextTextMapPropagator().extract(
+                carrier={TRACEPARENT_HEADER: traceparent}
+            )
+            if trace.get_current_span(extracted).get_span_context().is_valid:
+                parent = extracted
+            else:
+                tuple_is_complete = False
+        if not tuple_is_complete:
+            request_id = correlation_id = fallback
         span = runtime.tracer.start_span(
             f"celery {task_name}", context=parent, kind=SpanKind.CONSUMER
         )

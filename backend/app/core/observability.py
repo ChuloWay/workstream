@@ -12,11 +12,9 @@ from typing import Any
 from opentelemetry import context as otel_context
 from opentelemetry import trace
 from opentelemetry.context import Context
-from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.metrics import Histogram, Meter, UpDownCounter
 from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import MetricReader, PeriodicExportingMetricReader
+from opentelemetry.sdk.metrics.export import MetricReader
 from opentelemetry.sdk.metrics.view import View
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
@@ -36,6 +34,7 @@ from app.core.diagnostic_logging import (
     canonical_uuid_text,
     release_safe_logging,
 )
+from app.interfaces.observability import ObservabilityExportAdapter
 
 _HTTP_METHODS = frozenset({"DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"})
 _HTTP_OUTCOMES = frozenset({"success", "client_error", "server_error"})
@@ -163,15 +162,13 @@ class ObservabilityRuntime:
         service_name: str,
         route_templates: frozenset[str] = frozenset(),
         task_names: frozenset[str] = frozenset(),
-        span_exporter: SpanExporter | None = None,
-        metric_reader: MetricReader | None = None,
+        export_adapter: ObservabilityExportAdapter | None = None,
     ) -> None:
         self.settings = settings
         self.service_name = service_name
         self.route_templates = route_templates
         self.task_names = task_names
-        self._provided_span_exporter = span_exporter
-        self._provided_metric_reader = metric_reader
+        self._export_adapter = export_adapter
         self._tracer_provider: TracerProvider | None = None
         self._meter_provider: MeterProvider | None = None
         self.tracer = trace.NoOpTracerProvider().get_tracer("workstream")
@@ -198,12 +195,16 @@ class ObservabilityRuntime:
                 resource = Resource(
                     {
                         "service.name": self.service_name,
-                        "service.version": self.settings.app_version,
                         "deployment.environment.name": self.settings.environment,
                     }
                 )
-                span_exporter = self._provided_span_exporter or self._build_span_exporter()
-                metric_reader = self._provided_metric_reader or self._build_metric_reader()
+                if self._export_adapter is not None:
+                    try:
+                        bundle = self._export_adapter.create_exporters()
+                        span_exporter = bundle.span_exporter
+                        metric_reader = bundle.metric_reader
+                    except Exception:
+                        logging.getLogger(__name__).error("observability_export_unavailable")
                 tracer_provider = TracerProvider(
                     sampler=TraceIdRatioBased(self.settings.observability_trace_sample_ratio),
                     resource=resource,
@@ -288,37 +289,6 @@ class ObservabilityRuntime:
         self.http_active = None
         self.task_duration = None
         self.started = False
-
-    def _build_span_exporter(self) -> SpanExporter | None:
-        endpoint = self.settings.observability_otlp_endpoint
-        if endpoint is None:
-            return None
-        try:
-            return OTLPSpanExporter(
-                endpoint=f"{endpoint}/v1/traces",
-                timeout=self.settings.observability_export_timeout_seconds,
-            )
-        except Exception:
-            logging.getLogger(__name__).error("observability_export_unavailable")
-            return None
-
-    def _build_metric_reader(self) -> MetricReader | None:
-        endpoint = self.settings.observability_otlp_endpoint
-        if endpoint is None:
-            return None
-        try:
-            exporter = OTLPMetricExporter(
-                endpoint=f"{endpoint}/v1/metrics",
-                timeout=self.settings.observability_export_timeout_seconds,
-            )
-            return PeriodicExportingMetricReader(
-                exporter,
-                export_interval_millis=10_000,
-                export_timeout_millis=self.settings.observability_export_timeout_seconds * 1000,
-            )
-        except Exception:
-            logging.getLogger(__name__).error("observability_export_unavailable")
-            return None
 
     def shutdown(self) -> None:
         """Bound provider flushing and shutdown without changing product outcomes."""

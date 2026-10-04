@@ -37,6 +37,10 @@
       "target": "backend/app/adapters/auth/metrics.py"
     },
     {
+      "group": "shared",
+      "target": "backend/app/adapters/observability.py"
+    },
+    {
       "group": "lifecycle",
       "target": "backend/app/adapters/project_agents/openai_agent_sdk.py"
     },
@@ -207,6 +211,10 @@
     {
       "group": "artifacts",
       "target": "backend/app/interfaces/external_services.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/interfaces/observability.py"
     },
     {
       "group": "lifecycle",
@@ -1613,7 +1621,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "2ce3ec7b5cdb38761dde95d65b93fe2a8430905ad3f59094d3286749e3512153",
+  "authority_digest": "180e8d5ece03927e5d5afc55b48db59e9155b574255a03812e0825ec1a3a35fc",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

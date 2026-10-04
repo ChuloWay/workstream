@@ -18,6 +18,7 @@ from app.adapters.artifacts import (
     cleanup_stale_artifact_scratch,
     create_artifact_store_bootstrap,
 )
+from app.adapters.observability import create_observability_export_adapter
 from app.core.api_controls import (
     ApiErrorResponse,
     RequestContextMiddleware,
@@ -297,6 +298,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings,
         service_name="workstream-api",
         route_templates=route_templates,
+        export_adapter=create_observability_export_adapter(
+            settings, service_name="workstream-api"
+        ),
     )
     app.state.observability_runtime = runtime
     app.add_middleware(RequestContextMiddleware)

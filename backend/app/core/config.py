@@ -5,8 +5,10 @@ from __future__ import annotations
 import base64
 import binascii
 from contextvars import ContextVar
+import ipaddress
 import json
 import os
+import re
 from collections.abc import Callable, Mapping
 from functools import lru_cache
 from pathlib import Path
@@ -39,6 +41,7 @@ _ARTIFACT_S3_SECRET_FIELDS = frozenset(
 )
 _ARTIFACT_S3_SENSITIVE_INPUT_FIELDS = _ARTIFACT_S3_SECRET_FIELDS | {"artifact_s3_endpoint_url"}
 _OBSERVABILITY_SENSITIVE_INPUT_FIELDS = frozenset({"observability_otlp_endpoint"})
+_OBSERVABILITY_DNS_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 _EMPTY_ARTIFACT_S3_SECRETS: tuple[SecretStr | None, SecretStr | None, SecretStr | None] = (
     None,
     None,
@@ -663,28 +666,59 @@ def _canonical_observability_endpoint(value: object) -> str | None | object:
     """Return a credential-free origin or an input-free invalid sentinel."""
     if value is None or value == "":
         return None
-    if not isinstance(value, str):
+    if (
+        not isinstance(value, str)
+        or len(value) > 2048
+        or not value.isascii()
+        or "%" in value
+        or any(ord(character) < 33 or character.isspace() for character in value)
+    ):
         return _INVALID_OBSERVABILITY_ENDPOINT
     try:
         parsed = urlsplit(value)
         port = parsed.port
-    except ValueError:
+    except (UnicodeError, ValueError):
         return _INVALID_OBSERVABILITY_ENDPOINT
     if (
-        parsed.scheme not in {"http", "https"}
+        parsed.scheme.lower() not in {"http", "https"}
         or parsed.hostname is None
         or parsed.username is not None
         or parsed.password is not None
         or parsed.query
         or parsed.fragment
         or parsed.path not in {"", "/"}
+        or port == 0
     ):
         return _INVALID_OBSERVABILITY_ENDPOINT
-    host = parsed.hostname
+    scheme = parsed.scheme.lower()
+    host = _canonical_observability_host(parsed.hostname)
+    if host is None:
+        return _INVALID_OBSERVABILITY_ENDPOINT
     if ":" in host:
         host = f"[{host}]"
     authority = host if port is None else f"{host}:{port}"
-    return urlunsplit((parsed.scheme, authority, "", "", ""))
+    return urlunsplit((scheme, authority, "", "", ""))
+
+
+def _canonical_observability_host(host: str) -> str | None:
+    """Return one canonical ASCII DNS/IP host without resolving it."""
+    lowered = host.lower()
+    if ":" in lowered:
+        try:
+            return ipaddress.IPv6Address(lowered).compressed
+        except ipaddress.AddressValueError:
+            return None
+    if all(character.isdigit() or character == "." for character in lowered):
+        try:
+            return str(ipaddress.IPv4Address(lowered))
+        except ipaddress.AddressValueError:
+            return None
+    if len(lowered) > 253 or lowered.endswith("."):
+        return None
+    labels = lowered.split(".")
+    if not labels or any(_OBSERVABILITY_DNS_LABEL.fullmatch(label) is None for label in labels):
+        return None
+    return lowered
 
 
 def _raise_invalid_observability_endpoint() -> None:

@@ -54,6 +54,7 @@ from app.core.observability import (
     SanitizingSpanExporter,
 )
 from app.main import create_app
+from observability_test_support import fake_export_adapter
 
 PAGINATION_SECRET = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
 KNOWN_TASK = "workstream.test.known"
@@ -97,8 +98,7 @@ def _runtime(
         service_name="workstream-api",
         route_templates=routes,
         task_names=tasks,
-        span_exporter=exporter or memory_exporter,
-        metric_reader=reader,
+        export_adapter=fake_export_adapter(exporter or memory_exporter, reader),
     )
     runtime.start()
     return runtime, memory_exporter, reader
@@ -184,7 +184,6 @@ async def test_api_emits_exactly_one_http_span_and_metric_set_for_every_route_ou
         }
         expected_resource = {
             "service.name": "workstream-api",
-            "service.version": "0.1.0",
             "deployment.environment.name": "test",
         }
         assert all(dict(span.resource.attributes) == expected_resource for span in spans)
@@ -303,7 +302,6 @@ def test_complete_export_sets_are_closed_and_bounded() -> None:
     safe_resource = Resource.create(
         {
             "service.name": "workstream-api",
-            "service.version": "0.1.0",
             "deployment.environment.name": "test",
         }
     )
@@ -505,8 +503,8 @@ async def test_api_to_celery_trace_is_parent_child_and_headers_are_allowlisted(
     task_duration = _RecordingInstrument(runtime.task_duration)
     runtime.task_duration = task_duration
     monkeypatch.setattr(celery_diagnostics, "_WORKER_RUNTIME", runtime)
-    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}))
-    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}))
+    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}), lambda: None)
+    configure_celery_observability(_settings(), frozenset({KNOWN_TASK}), lambda: None)
     published: list[dict] = []
     request_id, correlation_id = str(uuid4()), str(uuid4())
     try:
@@ -720,7 +718,7 @@ def _bounded_process_exit_probe(
     runtime = ObservabilityRuntime(
         _settings(observability_shutdown_timeout_seconds=0.1),
         service_name="workstream-api",
-        span_exporter=_ProcessBlockingExporter(),
+        export_adapter=fake_export_adapter(_ProcessBlockingExporter()),
     )
     runtime.start()
     status.send("runtime_started")
@@ -782,8 +780,7 @@ def test_partial_provider_startup_closes_created_exporter_and_releases_logging(
     runtime = ObservabilityRuntime(
         _settings(observability_shutdown_timeout_seconds=0.2),
         service_name="workstream-api",
-        span_exporter=exporter,
-        metric_reader=reader,
+        export_adapter=fake_export_adapter(exporter, reader),
     )
     runtime.start()
     assert runtime.started is False
@@ -808,8 +805,7 @@ def test_tracer_provider_construction_failure_closes_unattached_exporter_and_rea
     runtime = ObservabilityRuntime(
         _settings(observability_shutdown_timeout_seconds=0.2),
         service_name="workstream-api",
-        span_exporter=exporter,
-        metric_reader=reader,
+        export_adapter=fake_export_adapter(exporter, reader),
     )
     runtime.start()
     assert runtime.started is False
@@ -834,8 +830,7 @@ def test_failure_after_provider_assignment_clears_every_runtime_reference(
     runtime = ObservabilityRuntime(
         _settings(observability_shutdown_timeout_seconds=0.2),
         service_name="workstream-api",
-        span_exporter=exporter,
-        metric_reader=reader,
+        export_adapter=fake_export_adapter(exporter, reader),
     )
     runtime.start()
 
@@ -863,8 +858,7 @@ def test_trace_flush_failure_still_closes_trace_and_metric_providers(
     runtime = ObservabilityRuntime(
         _settings(observability_shutdown_timeout_seconds=0.2),
         service_name="workstream-api",
-        span_exporter=exporter,
-        metric_reader=reader,
+        export_adapter=fake_export_adapter(exporter, reader),
     )
     runtime.start()
     tracer_provider = runtime._tracer_provider
@@ -886,7 +880,7 @@ def test_timed_out_shutdown_keeps_safe_logging_until_exporter_thread_stops(
     runtime = ObservabilityRuntime(
         _settings(observability_shutdown_timeout_seconds=0.1),
         service_name="workstream-api",
-        span_exporter=exporter,
+        export_adapter=fake_export_adapter(exporter),
     )
     runtime.start()
     assert diagnostic_logging.safe_handler() is not None
@@ -981,20 +975,15 @@ async def test_collector_failure_is_bounded_and_product_flow_succeeds(
     finally:
         missing.shutdown()
 
-    monkeypatch.setattr(
-        diagnostics,
-        "OTLPSpanExporter",
-        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("construction-secret")),
-    )
-    monkeypatch.setattr(
-        diagnostics,
-        "OTLPMetricExporter",
-        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("construction-secret")),
-    )
+    class FailingAdapter:
+        def create_exporters(self):
+            raise RuntimeError("construction-secret")
+
     construction = ObservabilityRuntime(
         _settings(observability_otlp_endpoint="http://127.0.0.1:4318"),
         service_name="workstream-api",
         route_templates=frozenset({"/items/{item_id}"}),
+        export_adapter=FailingAdapter(),
     )
     construction.start()
     try:
@@ -1054,5 +1043,12 @@ def test_operator_docs_match_runtime_observability_contract() -> None:
         "workstream.celery.task.duration",
         "{request}",
         "scripts.run_isolated_tests",
+        "broker credentials",
+        "publish acls",
+        "encryption at rest",
+        "finite approved retention",
+        "exercise deletion",
+        "opentelemetry.error",
+        "service.version",
     ):
         assert boundary in documentation.lower()

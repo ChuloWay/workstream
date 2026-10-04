@@ -159,9 +159,11 @@ REV_03B_PACKET_TARGETS = frozenset({'backend/app/modules/reviews/packet/models.p
 ARCH_04E1BA_REQUEST_TARGETS = frozenset({"backend/app/modules/tasks/post_submit_routing/requests.py"})
 OBSERVABILITY_FOUNDATION_TARGETS = frozenset(
     {
+        "backend/app/adapters/observability.py",
         "backend/app/core/celery_observability.py",
         "backend/app/core/diagnostic_logging.py",
         "backend/app/core/observability.py",
+        "backend/app/interfaces/observability.py",
     }
 )
 ARCH_04E1A_SOURCE_TARGETS = frozenset({

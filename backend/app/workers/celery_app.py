@@ -12,6 +12,7 @@ from app.adapters.artifacts.internal_workers import (
     initialize_artifact_internal_runtime,
     shutdown_artifact_internal_runtime,
 )
+from app.adapters.observability import create_observability_export_adapter
 from app.core.config import get_settings
 from app.core.celery_observability import (
     configure_celery_observability,
@@ -144,7 +145,13 @@ def create_celery_app() -> Celery:
             },
         },
     )
-    configure_celery_observability(settings, OBSERVED_TASK_NAMES)
+    configure_celery_observability(
+        settings,
+        OBSERVED_TASK_NAMES,
+        lambda: create_observability_export_adapter(
+            settings, service_name="workstream-celery"
+        ),
+    )
     return celery_app
 
 

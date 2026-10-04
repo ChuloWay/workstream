@@ -23,7 +23,10 @@ the fixed service names `workstream-api` and `workstream-celery`.
 Export is opt-in. With no endpoint, Workstream still emits safe JSON logs and
 runs the explicit instrumentation without an external trace or metric reader.
 An invalid endpoint fails startup with a fixed error that does not echo its
-input. The endpoint rejects credentials, paths, query strings, and fragments.
+input. The endpoint accepts only canonical ASCII DNS, IPv4, or IPv6 origins and
+ports from 1 through 65535. It rejects credentials, paths, query strings,
+fragments, whitespace, control characters, Unicode, percent encoding,
+underscores, malformed numeric addresses, and noncanonical DNS labels.
 If a collector requires authentication, supply standard OTLP headers through
 the deployment's secret environment, such as `OTEL_EXPORTER_OTLP_HEADERS`;
 never put them in the endpoint or committed environment files.
@@ -34,9 +37,13 @@ timeouts, force-flush, and
 shutdown waits are bounded. Missing configuration disables export. Once valid
 configuration has passed startup validation, exporter construction failure,
 collector refusal or timeout, and flush or shutdown failure do not change API
-responses or task outcomes. A failed exporter produces only a constant safe log
-event. Operators must monitor collector health separately because Workstream
-deliberately keeps product flow fail-open to diagnostic outages.
+responses or task outcomes. Application-owned adapter construction and
+provider-lifecycle failures produce the fixed
+`observability_export_unavailable` event. OTLP SDK HTTP/protocol failures pass
+through the safe logger as the fixed `opentelemetry.error` event. Neither event
+contains the endpoint, response, credential, or exception. Operators must
+monitor collector health separately because Workstream deliberately keeps
+product flow fail-open to diagnostic outages.
 
 ## Privacy and cardinality
 
@@ -65,6 +72,15 @@ canonical Workstream diagnostic UUID headers. The Celery child initializes provi
 after prefork and resets every context token on normal, failure, and retry exits.
 OpenAI Agents SDK tracing and sensitive trace inclusion remain disabled.
 
+The accepted broker tuple is not authentication. Canonical publication first
+removes prepopulated trace, baggage, and private diagnostic headers, then emits
+the current local traceparent and both canonical UUID fields. The receiver uses
+that parent only for a registered task with the complete valid tuple; all other
+cases start a fresh local root. Direct publishers are trusted by possession of
+restricted broker credentials and vhost/queue publish ACLs. Telemetry never
+grants product authority, so a broker ACL failure must be handled as an
+operational security incident rather than inferred from trace metadata.
+
 ## Signal inventory
 
 The API emits one `SERVER` span named `HTTP {method} {route}` for every HTTP
@@ -75,6 +91,12 @@ Celery process emits one `CONSUMER` span named `celery {task}` with
 `messaging.destination.name`, `workstream.outcome`, and the same optional
 diagnostic IDs. Neither span form exports events, links, status descriptions,
 or arbitrary instrumentation metadata.
+
+Both span and metric payloads use exactly `service.name` with the fixed
+`workstream-api` or `workstream-celery` value and
+`deployment.environment.name` with the validated environment. They do not emit
+`service.version`; application version and standard OTEL resource/service-name
+environment overrides cannot expand the resource.
 
 | Metric | Unit | Attributes | Meaning |
 | --- | --- | --- | --- |
@@ -91,15 +113,33 @@ become metric attributes.
 Direct API-to-Celery publication keeps a parent-child trace while both
 processes are running. The durable outbox does not persist trace context in a
 business row, payload, digest, schema, or authorization input. Therefore,
-outbox recovery after a process boundary honestly begins a new trace. Once the
-canonical invocation envelope is committed, the active Celery span may include
-the envelope's existing correlation ID for investigation. That value remains a
+outbox recovery through pending-event scan and delivery after a process boundary begins a new
+trace. Once `_begin_invocation` commits the canonical invocation envelope, the
+active Celery span may include the envelope's existing correlation ID for
+investigation. Expired-attempt recovery and duplicate or completed delivery do
+not add that annotation. The value remains a
 diagnostic annotation, never a metric label or authority fact.
+
+## Deployment access and retention
+
+Repository instrumentation does not deploy or secure a collector. Before
+enabling export, restrict broker publishing to the intended Workstream
+processes, restrict API/Celery egress to the collector, and restrict collector
+ingest plus log/trace/metric query access to named operator principals. Use TLS
+in every production-like environment, inject authentication headers from the
+deployment secret store, rotate them under the normal credential process, and
+enable backend encryption at rest.
+
+Define a finite approved retention period for logs, traces, and metrics. Disable
+raw request/payload capture in the collector and backend, exercise deletion at
+the end of retention, and retain only the operational evidence required by the
+deployment policy. Durable Workstream audit records, rather than diagnostic
+storage, remain the source for authorization and lifecycle decisions.
 
 ## Operational drill
 
 Use a local Redis instance and the repository's isolated PostgreSQL runner for
-the four practical checks below. Never place a real token, credential, query,
+the five practical checks below. Never place a real token, credential, query,
 payload, prompt, archive, or signed URL in a canary.
 
 1. Run the configured-logger privacy proof and inspect its JSON output. Every
@@ -108,16 +148,22 @@ payload, prompt, archive, or signed URL in a canary.
    Celery consumer span share the expected parent-child trace, the child PID
    differs from the parent, and the next task with missing or malformed headers
    inherits no diagnostic context.
-3. Run the collector-failure proof with no endpoint, exporter-construction
-   failure, and a refusing or timing-out local endpoint. API responses and
-   Celery task outcomes must remain unchanged, while only the constant
-   `observability_export_unavailable` event is logged.
-4. Run
-   `tests/outbox/test_delivery_postgresql.py::test_diagnostic_annotation_follows_committed_invocation_envelope`
-   through `scripts.run_isolated_tests`. Compare the before/after snapshots:
-   no business row, payload, digest, authorization input, or schema changes.
-   Recovery starts a new trace, while the committed outbox correlation ID may
-   annotate only the current span.
+3. Run the real OTLP transport proof. Confirm a local HTTP receiver decodes
+   trace and metric protobufs with the exact resource/field allowlists, then
+   repeat with 503, refused, and delayed endpoints. API responses and task
+   outcomes must remain unchanged and logs must use only the two safe events
+   described above. This proves the SDK/network boundary, not a deployed
+   collector.
+4. Run the PostgreSQL pending-recovery proof through
+   `scripts.run_isolated_tests`. Compare the before/after snapshots: a new local
+   trace receives the committed correlation only at the existing
+   post-invocation commit seam; expired recovery, duplicates, and completed
+   delivery remain unannotated; no payload, digest, authorization input,
+   repeated effect, or trace/span schema field is added.
+5. In the release environment, verify broker/collector/query ACLs, TLS, egress,
+   encryption at rest, secret rotation, finite retention, and deletion. Repeat
+   the privacy, correlation, outage, and outbox-gap checks without real private
+   content. Record deployment evidence separately from repository test results.
 
 The focused privacy, outage, and correlation commands are:
 
@@ -125,14 +171,15 @@ The focused privacy, outage, and correlation commands are:
 cd backend
 WORKSTREAM_TEST_BROKER_URL=redis://127.0.0.1:6379/15 uv run pytest -q \
   tests/test_observability.py::test_real_loggers_and_hostile_exception_never_render_sensitive_values \
-  tests/test_observability.py::test_collector_failure_is_bounded_and_product_flow_succeeds \
+  tests/test_observability_otlp.py \
   tests/test_celery_observability.py::test_real_celery_prefork_correlates_api_and_resets_sequential_task_context
 ```
 
 ## Troubleshooting and profiling
 
-Start with the constant `observability_export_unavailable` event and collector
-health. Verify network reachability from both API and Celery processes, the
+Start with `observability_export_unavailable` for application-owned construction
+or lifecycle failure, `opentelemetry.error` for SDK network/protocol failure,
+and collector health. Verify network reachability from both API and Celery processes, the
 credential-free endpoint origin, secret-injected OTLP headers, and collector
 support for OTLP HTTP/protobuf. Do not enable framework, Celery, database,
 client, or model-provider auto-instrumentation alongside this path; it would

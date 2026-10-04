@@ -474,6 +474,7 @@ TASK_ROUTING_REQUEST_MODULES = (
 # headroom; the shared and task lanes are already closest to the hard cap.
 OBSERVABILITY_MODULES = (
     "tests/test_observability.py",
+    "tests/test_observability_otlp.py",
     "tests/test_celery_observability.py",
 )
 
