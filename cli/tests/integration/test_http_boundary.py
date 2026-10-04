@@ -188,6 +188,41 @@ def test_profile_update_uncertainty_and_known_denials(cli):
             (408, b"gateway timeout", {}, "api_error", True),
             (429, b"{}", {}, "api_error", True),
             (
+                408,
+                b'{"Error":{"Code":"gateway_timeout"}}',
+                {},
+                "api_error",
+                True,
+            ),
+            (
+                408,
+                b'{"error":{"Code":"gateway_timeout"}}',
+                {},
+                "api_error",
+                True,
+            ),
+            (
+                408,
+                b'{"Error":{"code":"gateway_timeout"}}',
+                {},
+                "api_error",
+                True,
+            ),
+            (
+                408,
+                b'{"error":{"code":"a"},"error":{"code":"b"}}',
+                {},
+                "api_error",
+                True,
+            ),
+            (
+                408,
+                b'{"error":{"code":"a","code":"b"}}',
+                {},
+                "api_error",
+                True,
+            ),
+            (
                 422,
                 json.dumps({"error": {"code": TOKEN}}).encode(),
                 {},
@@ -219,11 +254,11 @@ def test_profile_update_uncertainty_and_known_denials(cli):
                 "-o",
                 "json",
             )
-            assert_failure(result, code)
             assert (
                 json.loads(result.stderr)["error"].get("outcome_unknown", False)
                 is unknown
             )
+            assert_failure(result, code)
             assert len(requests) == before + 1
         response.update(
             status=503, body=b"{}", headers={"Content-Type": "application/json"}

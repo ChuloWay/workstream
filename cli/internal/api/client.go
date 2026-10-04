@@ -345,7 +345,7 @@ func (c *Client) request(ctx context.Context, method, path, query string, body [
 					Code string `json:"code"`
 				} `json:"error"`
 			}
-			knownEnvelope = json.Unmarshal(responseBody, &envelope) == nil && envelope.Error.Code != ""
+			knownEnvelope = jsonv2.Unmarshal(responseBody, &envelope) == nil && envelope.Error.Code != ""
 			if knownEnvelope && safeCode.MatchString(envelope.Error.Code) && c.safeMetadata(envelope.Error.Code) {
 				code = envelope.Error.Code
 			}
