@@ -167,9 +167,9 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         }
     )
     assert (
-        modules_by_lane["task_lifecycle_a"]
+        modules_by_lane["task_lifecycle_a"] - set(catalogue.ROUTING_AUTH_PREPARATION_MODULES)
         == modules_by_lane["task_lifecycle_b"]
-        == modules_by_lane["task_lifecycle_c"] - set(catalogue.TASK_ROUTING_REQUEST_MODULES)
+        == modules_by_lane["task_lifecycle_c"]
         == {
             "tests/authorization/submission_history/test_reads.py",
             "tests/authorization/submission_history/test_privacy.py",
@@ -318,7 +318,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/contributions/records/test_storage.py",
         "tests/contributions/records/test_migration.py",
         runner.ADMIN_RUNNER_MODULE,
-    } | static_contracts == modules_by_lane["schema_contracts"]
+    } | static_contracts | set(catalogue.TASK_ROUTING_REQUEST_MODULES) == modules_by_lane["schema_contracts"]
     assert {
         "tests/authorization/admin_access/test_bootstrap_cli.py",
         "tests/authorization/admin_access/test_api_journey.py",
@@ -709,7 +709,7 @@ def test_finalization_tests_are_all_in_project_lanes():
     assert expected <= set(PROJECT_MODULES)
 
 
-def test_routing_request_proofs_use_task_lane_with_measured_headroom():
+def test_routing_request_proofs_use_schema_lane_with_measured_headroom():
     expected = {
         "tests/tasks/post_submit_routing/test_request_contracts.py",
         "tests/tasks/post_submit_routing/test_requests.py",
@@ -717,5 +717,16 @@ def test_routing_request_proofs_use_task_lane_with_measured_headroom():
     }
     assert set(catalogue.TASK_ROUTING_REQUEST_MODULES) == expected
     for lane in LANES:
-        assert set(lane.modules) & expected == (expected if lane.name == "task_lifecycle_c" else set())
+        assert set(lane.modules) & expected == (expected if lane.name == "schema_contracts" else set())
+    assert not expected & set(catalogue.PARTITION_LANES_BY_MODULE)
+
+
+def test_routing_authorization_proofs_run_once_on_task_a():
+    expected = {
+        "tests/authorization/post_submit_routing/test_contracts.py",
+        "tests/authorization/post_submit_routing/test_prepared.py",
+    }
+    assert set(catalogue.ROUTING_AUTH_PREPARATION_MODULES) == expected
+    for lane in LANES:
+        assert set(lane.modules) & expected == (expected if lane.name == "task_lifecycle_a" else set())
     assert not expected & set(catalogue.PARTITION_LANES_BY_MODULE)
