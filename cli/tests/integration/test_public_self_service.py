@@ -26,11 +26,12 @@ from api_contract_e2e import (  # noqa: E402
 
 
 async def _ready(url: str, process: subprocess.Popen[bytes]) -> None:
+    deadline = asyncio.get_running_loop().time() + 90
     async with httpx.AsyncClient(timeout=1, trust_env=False) as client:
-        for _ in range(120):
+        while asyncio.get_running_loop().time() < deadline:
             assert process.poll() is None, "API exited before readiness"
             try:
-                if (await client.get(url)).status_code < 500:
+                if (await client.get(url)).status_code == 200:
                     return
             except httpx.HTTPError:
                 pass
