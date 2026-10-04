@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -135,9 +137,10 @@ func (c *Client) Profile(ctx context.Context) (Result[Profile], error) {
 	if err != nil {
 		return result, err
 	}
-	value, err := decode[Profile](raw, []string{
+	value := Profile{Domains: []string{"contributor"}, AdminRoles: []string{}, ProjectRoleGrants: []string{}}
+	err = decode(raw, &value, []string{
 		"actor_profile_id", "actor_kind", "status", "display_name", "contact_email",
-		"created_at", "updated_at", "last_seen_at", "domains", "admin_roles", "project_role_grants",
+		"created_at", "updated_at", "last_seen_at",
 	})
 	if err != nil || value.ActorProfileID == "" || value.ActorKind != "human" || !validStatus(value.Status) ||
 		len(value.Domains) != 1 || value.Domains[0] != "contributor" ||
@@ -159,7 +162,8 @@ func (c *Client) AuthorizationContext(ctx context.Context, projectID string) (Re
 	if err != nil {
 		return result, err
 	}
-	value, err := decode[AuthorizationContext](raw, []string{
+	var value AuthorizationContext
+	err = decode(raw, &value, []string{
 		"actor_profile_id", "status", "project_id", "admin_roles", "project_roles", "effective_action_ids",
 	})
 	if err != nil || value.ActorProfileID == "" || value.ProjectID == "" ||
@@ -179,23 +183,17 @@ func validTime(value string) bool {
 	return err == nil
 }
 
-func decode[T any](raw json.RawMessage, required []string) (T, error) {
-	var value T
+func decode(raw json.RawMessage, value any, required []string) error {
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
-		return value, errors.New("invalid object")
+	if err := jsonv2.Unmarshal(raw, &fields); err != nil || fields == nil {
+		return errors.New("invalid object")
 	}
 	for _, key := range required {
 		if _, ok := fields[key]; !ok {
-			return value, errors.New("missing field")
+			return errors.New("missing field")
 		}
 	}
-	decoder := json.NewDecoder(strings.NewReader(string(raw)))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&value); err != nil {
-		return value, err
-	}
-	return value, nil
+	return jsonv2.Unmarshal(raw, value, jsonv2.RejectUnknownMembers(true))
 }
 
 func (c *Client) get(ctx context.Context, path, query string) (json.RawMessage, error) {
@@ -243,7 +241,7 @@ func (c *Client) get(ctx context.Context, path, query string) (json.RawMessage, 
 		return nil, &Failure{Code: code, Status: response.StatusCode, CorrelationID: correlation}
 	}
 	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
-	if err != nil || mediaType != "application/json" || !json.Valid(body) {
+	if err != nil || mediaType != "application/json" || !jsontext.Value(body).IsValid() {
 		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, CorrelationID: correlation}
 	}
 	return json.RawMessage(body), nil

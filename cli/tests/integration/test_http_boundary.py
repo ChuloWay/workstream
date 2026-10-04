@@ -104,6 +104,16 @@ def test_public_commands_and_noninteractive_output(cli):
         assert human.returncode == 0 and human.stderr == ""
         assert "Ada\\u001B[31m\\u202E" in human.stdout and "\x1b" not in human.stdout
 
+        defaulted = {
+            key: value
+            for key, value in PROFILE.items()
+            if key not in {"domains", "admin_roles", "project_role_grants"}
+        }
+        response["body"] = json.dumps(defaulted).encode()
+        omitted_defaults = cli(origin, TOKEN, "whoami", "-o", "json")
+        assert omitted_defaults.returncode == 0 and omitted_defaults.stderr == ""
+        assert json.loads(omitted_defaults.stdout) == defaulted
+
         response["body"] = json.dumps(CONTEXT).encode()
         context = cli(origin, TOKEN, "project", "access", PROJECT, "-o", "json")
         assert (
@@ -116,6 +126,23 @@ def test_public_commands_and_noninteractive_output(cli):
         parsed = urlsplit(target)
         assert parsed.path == "/api/v1/actors/me/authorization-context"
         assert parse_qs(parsed.query) == {"project_id": [PROJECT]}
+
+        response["body"] = json.dumps(
+            {
+                **CONTEXT,
+                "admin_roles": ["project_manager\x1b"],
+                "project_roles": ["submitter\u202e"],
+                "effective_action_ids": ["task.claim\x1b"],
+            }
+        ).encode()
+        human_context = cli(origin, TOKEN, "project", "access", PROJECT)
+        assert human_context.returncode == 0 and human_context.stderr == ""
+        assert human_context.stdout == (
+            f"Project: {PROJECT}\nActor: {ACTOR}\nStatus: active\n"
+            "Admin roles: project_manager\\u001B\n"
+            "Project roles: submitter\\u202E\n"
+            "Effective actions (1):\n  task.claim\\u001B\n"
+        )
 
         selector = "project /?&= é"
         response.update(
@@ -136,6 +163,18 @@ def test_public_commands_and_noninteractive_output(cli):
             "invalid_api_response",
         )
 
+        # A parser must not accept an ambiguous authority object and then emit
+        # its conflicting fields unchanged for another consumer to interpret.
+        for body in (
+            ('{"project_id":"foreign",' + json.dumps(CONTEXT)[1:]).encode(),
+            json.dumps({**CONTEXT, "PROJECT_ID": "foreign"}).encode(),
+        ):
+            response["body"] = body
+            assert_failure(
+                cli(origin, TOKEN, "project", "access", PROJECT, "-o", "json"),
+                "invalid_api_response",
+            )
+
 
 def test_api_failures_and_invalid_responses(cli):
     with http_fixture() as (origin, response, requests):
@@ -149,6 +188,23 @@ def test_api_failures_and_invalid_responses(cli):
         assert_failure(denied, "permission_not_granted")
         assert json.loads(denied.stderr)["error"]["status"] == 403
 
+        correlation = "018f0ebc-7966-7e8d-bc4d-1cae1e000003"
+        response["headers"]["X-Correlation-ID"] = correlation
+        human_denied = cli(origin, TOKEN, "whoami")
+        assert human_denied.returncode == 1 and human_denied.stdout == ""
+        assert human_denied.stderr == (
+            f"Error: permission_not_granted (HTTP 403; correlation {correlation})\n"
+        )
+        response["headers"]["X-Correlation-ID"] = "unsafe-correlation"
+        response["headers"]["X-Request-ID"] = correlation
+        fallback = cli(origin, TOKEN, "whoami", "-o", "json")
+        assert_failure(fallback, "permission_not_granted")
+        assert json.loads(fallback.stderr)["error"]["correlation_id"] == correlation
+        response["headers"]["X-Request-ID"] = "also-unsafe"
+        dropped = cli(origin, TOKEN, "whoami", "-o", "json")
+        assert_failure(dropped, "permission_not_granted")
+        assert "correlation_id" not in json.loads(dropped.stderr)["error"]
+
         response["status"] = 200
         for body, content_type in (
             (b"{", "application/json"),
@@ -159,7 +215,10 @@ def test_api_failures_and_invalid_responses(cli):
                 "application/json",
             ),
             (json.dumps(PROFILE).encode(), "text/plain"),
-            (b" " * 65537, "application/json"),
+            (
+                json.dumps({**PROFILE, "display_name": "a" * 65537}).encode(),
+                "application/json",
+            ),
         ):
             response.update(body=body, headers={"Content-Type": content_type})
             before = len(requests)

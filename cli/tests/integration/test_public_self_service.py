@@ -174,6 +174,10 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
             assert direct_manager.status_code == 200
             assert json.loads(manager.stdout) == direct_manager.json()
             assert json.loads(manager.stdout)["project_id"] == project_id
+            assert (
+                json.loads(manager.stdout)["actor_profile_id"]
+                == profiles["cli-manager"]["actor_profile_id"]
+            )
 
             outsider = cli(
                 origin,

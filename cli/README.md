@@ -77,3 +77,6 @@ The real API fixture uses the documented local administrator bootstrap solely
 to arrange test authority, then creates its project through public APIs. These
 test dependencies are absent from the shipped CLI. See the workflow for the
 complete [hosted check](../.github/workflows/cli.yml).
+That reusable check runs in parallel with Backend lanes; its failure also fails
+the existing required Backend `test` result. No separate optional PR workflow
+or extra branch-protection setting is needed.
