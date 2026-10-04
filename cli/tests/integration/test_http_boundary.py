@@ -185,6 +185,15 @@ def test_profile_update_uncertainty_and_known_denials(cli):
                 "invalid_api_response",
                 False,
             ),
+            (408, b"gateway timeout", {}, "api_error", True),
+            (429, b"{}", {}, "api_error", True),
+            (
+                422,
+                json.dumps({"error": {"code": TOKEN}}).encode(),
+                {},
+                "api_error",
+                False,
+            ),
             (200, b'{"actor_profile_id":"bad"}', {}, "invalid_api_response", True),
             (
                 200,

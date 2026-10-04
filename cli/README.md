@@ -86,7 +86,10 @@ malformed success, redirect or server error), exit status is nonzero and JSON
 includes `error.outcome_unknown: true`; text explains the uncertainty. Do not
 assume rollback or blindly retry: use `workstream whoami` to inspect the current
 profile. That observation cannot establish global order against concurrent
-later edits. Complete API denials and validation failures remain known errors.
+later edits. Complete 4xx replies with a parseable Workstream error envelope
+(a nonempty string `error.code`) remain known denials or validation failures,
+even when sensitive metadata is suppressed. A gateway 4xx without that envelope
+is uncertain too; HTTP status alone does not establish a Workstream denial.
 
 ## Verification
 

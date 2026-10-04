@@ -336,6 +336,7 @@ func (c *Client) request(ctx context.Context, method, path, query string, body [
 	}
 	if response.StatusCode != http.StatusOK {
 		code := "api_error"
+		knownEnvelope := false
 		if response.StatusCode >= 300 && response.StatusCode < 400 {
 			code = "redirect_refused"
 		} else {
@@ -344,14 +345,15 @@ func (c *Client) request(ctx context.Context, method, path, query string, body [
 					Code string `json:"code"`
 				} `json:"error"`
 			}
-			if json.Unmarshal(responseBody, &envelope) == nil && safeCode.MatchString(envelope.Error.Code) && c.safeMetadata(envelope.Error.Code) {
+			knownEnvelope = json.Unmarshal(responseBody, &envelope) == nil && envelope.Error.Code != ""
+			if knownEnvelope && safeCode.MatchString(envelope.Error.Code) && c.safeMetadata(envelope.Error.Code) {
 				code = envelope.Error.Code
 			}
 		}
-		// A fully received 4xx response is a known denial regardless of its
-		// server-controlled error code. Incomplete replies were handled above.
+		// A complete API 4xx envelope is a known denial, independent of code
+		// spelling/redaction. A gateway reply without it cannot prove rollback.
 		return nil, &Failure{Code: code, Status: response.StatusCode, CorrelationID: correlation,
-			OutcomeUnknown: method == http.MethodPatch && (response.StatusCode < 400 || response.StatusCode >= 500)}
+			OutcomeUnknown: method == http.MethodPatch && (response.StatusCode < 400 || response.StatusCode >= 500 || !knownEnvelope)}
 	}
 	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" || !jsontext.Value(responseBody).IsValid() {
