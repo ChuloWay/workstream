@@ -442,6 +442,7 @@ def _real_worker(app, hostname: str, log_path: str) -> None:
 )
 async def test_real_celery_prefork_correlates_api_and_resets_sequential_task_context(
     monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
     tmp_path: Path,
 ) -> None:
     """Exercise actual Redis publication, worker parent, and one prefork child."""
@@ -457,6 +458,15 @@ async def test_real_celery_prefork_correlates_api_and_resets_sequential_task_con
     monkeypatch.setenv("WORKSTREAM_ARTIFACT_STORE_BACKEND", "disabled")
     get_settings.cache_clear()
     from app.workers.celery_app import celery_app
+
+    prior_task = celery_app.tasks.pop(KNOWN_TASK, None)
+
+    def restore_task_registration() -> None:
+        celery_app.tasks.pop(KNOWN_TASK, None)
+        if prior_task is not None:
+            celery_app.tasks.register(prior_task)
+
+    request.addfinalizer(restore_task_registration)
 
     def adapter_builder():
         reader = InMemoryMetricReader()
