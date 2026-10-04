@@ -5,7 +5,8 @@
   Workstream operations without creating another identity, authority, or product
   lifecycle implementation.
 - Delivered boundary: [WS-CLI-001-01](WS-CLI-001-01.md), caller-owned profile and
-  exact-project authorization context through the public REST API.
+  exact-project authorization context; [WS-CLI-001-02](WS-CLI-001-02.md), human
+  self-profile editing through the public REST API.
 
 ## Current boundary
 
@@ -16,8 +17,11 @@ The backend exposes `GET /api/v1/actors/me` and
 those operations, but is not a certification of every public or hidden route.
 The independent [MCP adapter](../../../mcp_server/README.md) forwards caller
 bearers to the same API; it is not a CLI client library. The independent Go
-package under `cli/` implements `whoami` and `project access PROJECT_ID`, with
-text/JSON output and built-binary integration proof. Further public workflows
+package under `cli/` implements `whoami`, `project access PROJECT_ID`, and
+`profile update` for caller-owned human display fields. All have text/JSON
+output and built-binary integration proof. Mutations preserve omitted/null
+semantics and explicitly report uncertain outcomes without automatic retries.
+Further public workflows
 and binary distribution remain proposed below.
 
 ## Design
@@ -41,16 +45,16 @@ completion. Bubble Tea is a candidate for a later, bounded TUI change, not a
 dependency of the foundation. Do not add Python, TypeScript, or Rust duplicate
 CLIs. Keep the package independent of backend and MCP runtime dependencies.
 
-## Proposed PR boundaries
+## Delivered and later boundaries
 
 1. **WS-CLI-001-01:** Independent Go package, safe caller-token transport, exact
    self-profile and project-authorization reads, human/JSON output, built-binary
    integration proof, package CI, and documentation. `GET /actors/me` can cause server-owned first
    admission and last-seen updates; the CLI must not describe it as side-effect
    free.
-2. **Later self-service writes:** Profile editing and any further public
-   self-service operation, with explicit omission/null and uncertain-mutation
-   behavior. Define its own bounded record when started.
+2. **WS-CLI-001-02:** Human profile editing through the existing public PATCH,
+   with explicit omission/null and uncertain-mutation behavior. It changes no
+   identity, authority or backend policy.
 3. **Later governed-work commands:** Add project setup, task, submission,
    review, revision, and contribution reads/writes only as their actual public
    contracts and authority boundaries become available. Split by user journey,

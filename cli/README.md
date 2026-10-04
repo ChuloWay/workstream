@@ -1,11 +1,13 @@
 # Workstream CLI
 
 An independent Go client for Workstream's public REST API, for humans and
-agents using the terminal. The first slice provides two self-service reads:
+agents using the terminal. It provides human self-profile reads and editing,
+plus one exact-project authority read:
 
 | Command | Public API |
 |---|---|
 | `workstream whoami` | `GET /api/v1/actors/me` |
+| `workstream profile update` | `PATCH /api/v1/actors/me` |
 | `workstream project access PROJECT_ID` | `GET /api/v1/actors/me/authorization-context?project_id=PROJECT_ID` |
 
 Workstream verifies the caller's Flow bearer and owns identity resolution,
@@ -45,6 +47,8 @@ terminal control characters in API text. `--output json` (or `-o json`) writes
 the successful API object to stdout without a wrapper. Failures leave stdout
 empty and write bounded error metadata to stderr; JSON errors use an `error`
 object with `code`, optional HTTP `status`, and optional `correlation_id`.
+For machine-readable argument errors, place `--output json` before the command;
+flag parsing can stop at an invalid argument before reading later flags.
 Raw error bodies and transport exceptions are not printed.
 Server error codes and correlation headers containing the caller's bearer
 are suppressed, including case-only reflections. Success responses require
@@ -58,6 +62,32 @@ responses are bounded to 64 KiB and requests are not automatically retried.
 Use `--help`, `--version` and `completion bash|zsh|fish|powershell` without a
 credential or network connection.
 
+## Edit your profile
+
+```sh
+workstream profile update --display-name 'Ada' --contact-email 'ada@example.test'
+workstream profile update --clear-contact-email --output json
+```
+
+Only human caller-owned `display_name` and `contact_email` are writable.
+An omitted flag leaves its field unchanged; a clear flag sends explicit JSON
+null. You can also use `--clear-display-name`. Select at least one field; setting
+and clearing the same field is invalid. Text must be valid UTF-8 and the JSON
+request is capped at 8 KiB. Workstream validates and normalizes the text:
+display name has a 200-character limit, contact text 320, and blank or NUL text
+is rejected. Contact text does not change your Flow login or identity.
+Service-actor editing and authority/lifecycle changes are not CLI operations.
+
+A successful update prints the validated API profile, using the same text/JSON
+output as `whoami`. No preflight read or automatic retry is performed, and no
+idempotency/version mechanism is invented. If the server might have received
+the update but no trustworthy result arrives (including lost connection,
+malformed success, redirect or server error), exit status is nonzero and JSON
+includes `error.outcome_unknown: true`; text explains the uncertainty. Do not
+assume rollback or blindly retry: use `workstream whoami` to inspect the current
+profile. That observation cannot establish global order against concurrent
+later edits. Complete API denials and validation failures remain known errors.
+
 ## Verification
 
 Behavior tests invoke the built executable from outside the repository, with
@@ -65,6 +95,10 @@ no import of Go internals. One suite uses a controlled HTTP server to exercise
 credential/destination safety, output and failure boundaries. The other uses
 the current FastAPI app with isolated real PostgreSQL to prove first admission,
 profile fields, authorized exact-project context and foreign-project denial.
+It also proves persisted profile edits, normalization, omission/null semantics,
+field limits, caller isolation and suspended denial. The HTTP fixture proves
+the exact PATCH body, invalid local input, redirect refusal and no-retry behavior
+when a response is lost after body receipt.
 Local Flow-compatible tokens are test fixtures, not deployed-provider proof.
 No coverage percentage or test-count target is used.
 
