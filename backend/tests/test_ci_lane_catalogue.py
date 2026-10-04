@@ -271,8 +271,6 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/authorization/post_submit/test_atomicity.py",
         "tests/authorization/post_submit/test_concurrency.py",
         "tests/authorization/post_submit/test_live_authority.py",
-        "tests/authorization/post_submit/test_migration.py",
-        "tests/authorization/post_submit/test_receipt_custody.py",
         "tests/authorization/post_submit/test_principals.py",
         "tests/authorization/post_submit/test_timeout.py",
         "tests/authorization/post_policy/test_concurrency.py",
@@ -290,6 +288,11 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/authorization/setup_finalization/test_resource_context.py",
         "tests/authorization/setup_finalization/test_structure.py",
     }.issubset(shared_a)
+    post_submit_storage_contracts = {
+        "tests/authorization/post_submit/test_receipt_custody.py",
+        "tests/authorization/post_submit/test_migration.py",
+    }
+    assert post_submit_storage_contracts.isdisjoint(shared_a | shared_b)
     static_contracts = {
         "tests/test_artifact_architecture.py",
         "tests/architecture/test_module_boundaries.py",
@@ -318,7 +321,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/contributions/records/test_storage.py",
         "tests/contributions/records/test_migration.py",
         runner.ADMIN_RUNNER_MODULE,
-    } | static_contracts | set(catalogue.OBSERVABILITY_MODULES) | set(catalogue.TASK_ROUTING_REQUEST_MODULES) == modules_by_lane[
+    } | static_contracts | post_submit_storage_contracts | set(catalogue.OBSERVABILITY_MODULES) | set(catalogue.TASK_ROUTING_REQUEST_MODULES) == modules_by_lane[
         "schema_contracts"
     ]
     assert {

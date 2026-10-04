@@ -697,9 +697,9 @@ implementation. The foundation implements the amended design above.
   imports it rather than maintaining a second policy list.
 
 - Current-source reconciliation: Based on main commit
-  `176952e6624244bdc405bac973ce6c4abddb0dae`. Shared README and roadmap wording
-  describe this standalone foundation; concurrent product changes must be
-  preserved when their merged main is incorporated.
+  `9281ecb96bce43ea51905af8e29e7417041d0d83`, including merged ARCH-04E2-A.
+  Shared README, roadmap, ownership and lane registrations preserve both hidden
+  routing preparation and this diagnostics foundation. Routing remains unavailable.
 - Next usable boundary: Configure secured diagnostic collection and exercise it
   in the release drill. Deployment-specific dashboards, alerts and SLOs remain
   operational work; this foundation changes no product lifecycle prerequisite.
@@ -723,3 +723,29 @@ The focused catalogue test must prove the exact destination and reject missing,
 duplicate and wrong-lane membership. CI-integrity and QA/test-delta review must
 inspect this repair, followed by full hosted verification. This allocation
 reduces the measured hotspot; it does not claim to eliminate runner variance.
+
+
+### Combined-tree shared-lane timing repair
+
+The reconciled tree `56550f78` exceeded shared A's unchanged 1,200-second
+bound at 1,201.629 seconds after 2,205 of 2,446 nodes, leaving 241 unfinished.
+No assertion failed; all other lanes completed and database/object cleanup
+succeeded. This is incomplete verification, not a passing suite.
+
+Move only the existing post-submit authorization receipt-custody and migration
+proof modules from shared partitioning to schema, which already owns related
+storage and migration contracts. Allowed files for this repair are this record,
+`backend/scripts/test_lane_catalogue.py`, and
+`backend/tests/test_ci_lane_catalogue.py`. No product file, assertion, test node,
+partition algorithm, lane count, timeout, workflow or completeness gate changes.
+The catalogue proof must verify their exact schema destination, absence from
+shared partitioning, and conserved unique inventory; removal and wrong-lane
+mutants must fail. CI-integrity and QA/test-delta review precede a full hosted run.
+
+The receiver completed in 748.642 seconds. Prior isolated measurements were
+151.59 seconds for receipt custody and 142.16 seconds for migration together
+with concurrency. Even charging both complete processes to the receiver gives
+1,042.392 seconds; actual incremental setup may be smaller. Reported shared A
+calls for the moved modules account for 34.65–48.84 seconds, excluding fixture
+work. These measurements support this bounded allocation; they do not guarantee
+future runner timing. Full completion on the repaired tree remains required.

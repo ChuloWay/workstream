@@ -27,8 +27,6 @@ SHARED_FOUNDATION_MODULES = (
     "tests/authorization/post_submit/test_atomicity.py",
     "tests/authorization/post_submit/test_concurrency.py",
     "tests/authorization/post_submit/test_live_authority.py",
-    "tests/authorization/post_submit/test_migration.py",
-    "tests/authorization/post_submit/test_receipt_custody.py",
     "tests/authorization/post_submit/test_principals.py",
     "tests/authorization/post_submit/test_timeout.py",
 
@@ -499,6 +497,8 @@ LANES = (
         "schema_contracts",
         (
             SCHEMA_MODULE,
+            "tests/authorization/post_submit/test_receipt_custody.py",
+            "tests/authorization/post_submit/test_migration.py",
             "tests/reviews/packet/test_storage.py",
             "tests/reviews/lifecycle/test_contracts.py",
             "tests/reviews/lifecycle/test_storage.py",
