@@ -30,7 +30,7 @@ value preparation is not an issued capability or persisted allowed decision.
 ### Allowed
 
 - This record and affected current ARCH/AUTH/POL/CON/REV navigation, coordination
-  contract, `.commitrail/INDEX.md`, README, roadmap, canonical authorization and
+  contract, `.commitrail/INDEX.md`, README, roadmap, canonical authorization, TASK and
   review specifications and authorization custody documentation.
 - `backend/app/modules/authorization/domain/post_submit_routing.py`,
   `post_submit_routing_authorization.py` and existing `acceptance_source_contracts.py`;
