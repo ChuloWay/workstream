@@ -22,11 +22,12 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import ReadableSpan
+from opentelemetry.sdk.trace import Event as SpanEvent, ReadableSpan
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.sdk.util.instrumentation import InstrumentationScope
 from opentelemetry.trace import (
+    Link,
     SpanContext,
     SpanKind,
     Status,
@@ -336,6 +337,19 @@ def test_complete_export_sets_are_closed_and_bounded() -> None:
             "workstream.outcome": "success",
             "http.url": f"https://example.invalid/?token={canary}",
         },
+        events=(SpanEvent(f"event-{canary}", {"secret": canary}, timestamp=1),),
+        links=(
+            Link(
+                SpanContext(
+                    trace_id=4,
+                    span_id=5,
+                    is_remote=True,
+                    trace_flags=TraceFlags.SAMPLED,
+                    trace_state=TraceState((("vendor", canary),)),
+                ),
+                {"secret": canary},
+            ),
+        ),
         kind=SpanKind.SERVER,
         instrumentation_scope=InstrumentationScope(
             canary,

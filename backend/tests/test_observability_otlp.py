@@ -26,6 +26,7 @@ from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
 )
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from opentelemetry.trace import Link, SpanContext, TraceFlags, TraceState
 import pytest
 
 from app.adapters import observability as otlp_adapter
@@ -42,6 +43,8 @@ from observability_test_support import fake_export_adapter
 
 
 PAGINATION_SECRET = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+HOSTILE_EVENT_CANARY = "private-span-event-canary"
+HOSTILE_LINK_CANARY = "private-span-link-canary"
 
 
 class _Receiver(ThreadingHTTPServer):
@@ -151,6 +154,44 @@ async def _request(runtime: ObservabilityRuntime) -> int:
     return response.status_code
 
 
+def _emit_hostile_span_content(runtime: ObservabilityRuntime) -> None:
+    link = Link(
+        SpanContext(
+            trace_id=int("a" * 32, 16),
+            span_id=int("b" * 16, 16),
+            is_remote=True,
+            trace_flags=TraceFlags.SAMPLED,
+            trace_state=TraceState((("vendor", HOSTILE_LINK_CANARY),)),
+        ),
+        {"private.link.attribute": HOSTILE_LINK_CANARY},
+    )
+    with runtime.tracer.start_as_current_span(
+        "hostile-span-input",
+        links=(link,),
+    ) as span:
+        span.add_event(
+            HOSTILE_EVENT_CANARY,
+            {"private.event.attribute": HOSTILE_EVENT_CANARY},
+        )
+
+
+def _assert_serialized_span_content_is_closed(
+    request: ExportTraceServiceRequest,
+) -> None:
+    spans = [
+        span
+        for resource_spans in request.resource_spans
+        for scope_spans in resource_spans.scope_spans
+        for span in scope_spans.spans
+    ]
+    assert spans
+    assert all(not span.events for span in spans), "serialized span events retained"
+    assert all(not span.links for span in spans), "serialized span links retained"
+    payload = request.SerializeToString()
+    assert HOSTILE_EVENT_CANARY.encode() not in payload
+    assert HOSTILE_LINK_CANARY.encode() not in payload
+
+
 def _run_registered_eager_task_against_collector_failure(
     settings: Settings,
     monkeypatch: pytest.MonkeyPatch,
@@ -162,7 +203,7 @@ def _run_registered_eager_task_against_collector_failure(
     invocations: list[str] = []
     canary = "eager-task-private-canary"
 
-    @task_app.task(name=task_name)
+    @task_app.task(name=task_name, shared=False)
     def task() -> dict[str, str]:
         invocations.append("invoked")
         logging.getLogger("celery.task").error("task failure detail: %s", canary)
@@ -191,6 +232,7 @@ def _run_registered_eager_task_against_collector_failure(
         runtime.force_flush()
     finally:
         celery_diagnostics.shutdown_worker_observability()
+        task_app.tasks.pop(task_name, None)
         task_app.close()
     encoded = stream.getvalue()
     assert canary not in encoded
@@ -220,6 +262,7 @@ async def test_serialized_otlp_payload_has_exact_resource_allowlist(
         endpoint = f"http://127.0.0.1:{receiver.server_port}"
         runtime = _runtime(_settings(endpoint))
         try:
+            _emit_hostile_span_content(runtime)
             assert await _request(runtime) == 200
             assert runtime.force_flush()
         finally:
@@ -241,6 +284,7 @@ async def test_serialized_otlp_payload_has_exact_resource_allowlist(
         "deployment.environment.name": "test",
     }
     assert trace_request.resource_spans
+    _assert_serialized_span_content_is_closed(trace_request)
     assert metric_request.resource_metrics
     assert {
         tuple(sorted(_resource_attributes(item.resource).items()))

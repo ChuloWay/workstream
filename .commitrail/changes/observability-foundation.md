@@ -133,9 +133,10 @@ guidance. It does not build a monitoring platform.
   changing lane count, caps, or workflow. The three existing routing-request
   proof modules may move together from task C to the schema lane to repair the
   measured timeout; preserve their exact-once inventory and every assertion.
-- `docs/engineering/observability.md` and the existing README logs section:
-  operator configuration, interpretation, limitations, troubleshooting, and
-  on-demand profiling guidance.
+- `docs/engineering/observability.md`, `docs/architecture_data_model.md`, and
+  the existing README logs section: operator configuration, interpretation,
+  limitations, troubleshooting, on-demand profiling guidance, and accurate
+  references from retained product evidence to privacy-bounded diagnostics.
 - `docs/roadmap_status.md`: reconcile only the affected platform-foundation and
   release-proof claims after implementation is frozen, distinguishing code
   capability from collector configuration and deployment. The lead will
@@ -445,7 +446,9 @@ deployment controls are active.
 - [x] A privacy-canary probe across structured logs, captured exported spans,
       and metrics proves credentials, bodies, guide/task/prompt/ZIP content,
       signed URLs, raw query values, SQL parameters, exception messages/stacks,
-      and arbitrary extras are absent.
+      arbitrary extras, span events, and span links are absent. The real OTLP
+      protobuf proof starts with hostile event/link content, and independent
+      event-retention and link-retention mutants each fail that proof.
 - [x] Privacy-canary logging tests use the real configured Uvicorn access/error,
       Celery task/retry/error, Kombu/OpenTelemetry, SQLAlchemy, Workstream, and
       unknown logger paths with sensitive data placed separately in `msg`,
@@ -509,6 +512,7 @@ deployment controls are active.
 | Concurrent requests retain their own validated request/correlation IDs in logs and spans and reset both contexts after completion | `app.core.api_controls.RequestContextMiddleware` with core child-owned diagnostic context tokens | `tests/test_observability.py::test_concurrent_api_diagnostic_context_is_isolated` |
 | Public `traceparent`, `tracestate`, baggage, caller-chosen trace IDs, and sampled flags cannot select the local trace identity or override the local sample decision | Core explicit ASGI trace start and local root sampler | `tests/test_observability.py::test_public_propagation_and_sampling_input_cannot_control_local_trace` |
 | Serialized OTLP trace and metric protobuf resources contain only fixed `service.name` and bounded `deployment.environment.name`; hostile `app_version`, standard OTEL environment resource overrides, and `service.version` are absent | Core closed resource construction plus sanitizing span/metric export boundary | `tests/test_observability_otlp.py::test_serialized_otlp_payload_has_exact_resource_allowlist` |
+| Hostile span event and link names, attributes, and trace state are absent from real serialized OTLP protobufs, and retaining either field independently fails the wire-level privacy assertion | Core sanitizing span exporter before the actual OTLP HTTP adapter | `tests/test_observability_otlp.py::test_serialized_otlp_payload_has_exact_resource_allowlist` plus isolated mutation runs of the production `events` and `links` stripping assignments |
 | One instance-local typed factory registers only `otlp_http`; composition roots use its builder, core has no concrete OTLP imports or direct exporter/reader injection path, and fake tests use the same adapter port | `app.interfaces.observability`, `app.adapters.observability`, and API/Celery composition roots | `tests/test_artifact_architecture.py::test_concrete_adapter_construction_has_one_composition_path` and `tests/test_observability_otlp.py::test_runtime_uses_only_the_typed_export_adapter` |
 | Failure after partial exporter-bundle construction closes every created span/metric resource, keeps the existing safe logger until detached cleanup exits, and raises one stable identity-bearing input-free external-service error | Concrete OTLP export adapter construction owner plus refcounted core logging lease | `tests/test_observability_otlp.py::test_partial_export_bundle_construction_closes_owned_resources` and `tests/test_observability_otlp.py::test_partial_cleanup_retains_safe_logging_after_bounded_runtime_shutdown` |
 | Repeated and overlapping app lifespans keep distinct app providers and one process log handler | `app.main` composition with `app.core.observability` runtime | `tests/test_observability.py::test_overlapping_app_lifespans_keep_owned_providers_and_one_log_handler` |
@@ -666,6 +670,15 @@ deployment controls are active.
   startup and exit limits now exercise a lightweight target in the existing
   observability test support, with an early target-entry milestone and stack
   capture before runtime startup.
+- OTLP fixture-isolation replay: the local/eager collector-outage task is
+  application-local and explicitly removed at fixture exit so it cannot expand
+  the shared Celery task registry or weaken the exact production inventory.
+- Span privacy replay: hostile events and links now reach the real OTLP
+  serialization boundary before sanitization, with independent retention
+  mutants proving that each closed-field assertion detects disclosure.
+- Architecture-guidance replay: the data-model guide references fixed safe
+  events and validated correlation IDs rather than sensitive server logs, links
+  the operator guide, and names the bounded retained setup evidence accurately.
 
 Hosted schema-lane replay found the Celery task fallback's UUIDv4 site missing
 from the exact generation inventory. The fallback is now classified as a
