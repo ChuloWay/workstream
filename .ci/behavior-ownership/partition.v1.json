@@ -574,6 +574,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/domain/post_submit_routing.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/domain/prepared_adapter_bindings.py"
     },
     {
@@ -679,6 +683,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/post_submit_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/post_submit_routing_authorization.py"
     },
     {
       "group": "auth",
@@ -1621,7 +1629,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "180e8d5ece03927e5d5afc55b48db59e9155b574255a03812e0825ec1a3a35fc",
+  "authority_digest": "f945d1495efbf8c69985a1e50669a5219bc3d8746556fe27c14d8238ba97ba86",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

@@ -478,6 +478,12 @@ OBSERVABILITY_MODULES = (
     "tests/test_celery_observability.py",
 )
 
+# The routing PREP proofs reuse the same real completion fixture on this lane.
+ROUTING_AUTH_PREPARATION_MODULES = (
+    "tests/authorization/post_submit_routing/test_contracts.py",
+    "tests/authorization/post_submit_routing/test_prepared.py",
+)
+
 PARTITION_GROUPS = (
     (PARTITIONED_SHARED_LANES, SHARED_FOUNDATION_MODULES),
     (PARTITIONED_PROJECT_LANES, PROJECT_MODULES),
@@ -521,5 +527,9 @@ LANES = (
         ),
     ),
     *(TestLane(name, PROJECT_MODULES) for name in PARTITIONED_PROJECT_LANES),
-    *(TestLane(name, TASK_MODULES) for name in PARTITIONED_TASK_LANES),
+    *(TestLane(
+        name,
+        TASK_MODULES
+        + (ROUTING_AUTH_PREPARATION_MODULES if name == "task_lifecycle_a" else ()),
+    ) for name in PARTITIONED_TASK_LANES),
 )
