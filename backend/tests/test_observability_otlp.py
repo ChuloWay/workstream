@@ -15,7 +15,7 @@ import time
 from time import monotonic
 from uuid import uuid4
 
-from celery import Celery
+from celery import Celery, current_app
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import (
@@ -198,7 +198,11 @@ def _run_registered_eager_task_against_collector_failure(
 ) -> str:
     """Exercise one registered local/eager task; real prefork is proved separately."""
     task_name = "workstream.test.otlp_failure"
-    task_app = Celery("workstream-observability-otlp-failure")
+    prior_current_app = current_app._get_current_object()
+    task_app = Celery(
+        "workstream-observability-otlp-failure",
+        set_as_current=False,
+    )
     task_app.conf.task_always_eager = True
     invocations: list[str] = []
     canary = "eager-task-private-canary"
@@ -234,6 +238,7 @@ def _run_registered_eager_task_against_collector_failure(
         celery_diagnostics.shutdown_worker_observability()
         task_app.tasks.pop(task_name, None)
         task_app.close()
+    assert current_app._get_current_object() is prior_current_app
     encoded = stream.getvalue()
     assert canary not in encoded
     return encoded

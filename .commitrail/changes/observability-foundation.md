@@ -671,8 +671,9 @@ deployment controls are active.
   observability test support, with an early target-entry milestone and stack
   capture before runtime startup.
 - OTLP fixture-isolation replay: the local/eager collector-outage task is
-  application-local and explicitly removed at fixture exit so it cannot expand
-  the shared Celery task registry or weaken the exact production inventory.
+  application-local, never replaces the process current Celery app, and is
+  explicitly removed at fixture exit so it cannot expand the shared Celery task
+  registry or weaken the exact production inventory.
 - Span privacy replay: hostile events and links now reach the real OTLP
   serialization boundary before sanitization, with independent retention
   mutants proving that each closed-field assertion detects disclosure.
