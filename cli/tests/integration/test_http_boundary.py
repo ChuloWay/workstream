@@ -1,0 +1,240 @@
+"""Exercise the built CLI against deliberately hostile HTTP responses."""
+
+from __future__ import annotations
+
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import json
+from threading import Thread
+import time
+from urllib.parse import parse_qs, urlsplit
+
+TOKEN = "caller.flow.token"
+ACTOR = "018f0ebc-7966-7e8d-bc4d-1cae1e000001"
+PROJECT = "018f0ebc-7966-7e8d-bc4d-1cae1e000002"
+PROFILE = {
+    "actor_profile_id": ACTOR,
+    "actor_kind": "human",
+    "status": "active",
+    "domains": ["contributor"],
+    "admin_roles": [],
+    "project_role_grants": [],
+    "display_name": "Ada",
+    "contact_email": None,
+    "created_at": "2026-10-01T00:00:00Z",
+    "updated_at": "2026-10-01T00:00:00Z",
+    "last_seen_at": None,
+}
+CONTEXT = {
+    "actor_profile_id": ACTOR,
+    "status": "active",
+    "project_id": PROJECT,
+    "admin_roles": [],
+    "project_roles": ["submitter"],
+    "effective_action_ids": ["task.claim"],
+}
+
+
+@contextmanager
+def http_fixture():
+    requests = []
+    response = {
+        "status": 200,
+        "body": json.dumps(PROFILE).encode(),
+        "headers": {"Content-Type": "application/json"},
+        "delay": 0,
+    }
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802 - standard HTTP handler interface
+            requests.append(
+                (self.command, self.path, self.headers.get("Authorization"))
+            )
+            time.sleep(response["delay"])
+            self.send_response(response["status"])
+            for key, value in response["headers"].items():
+                self.send_header(key, value)
+            self.end_headers()
+            try:
+                self.wfile.write(response["body"])
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+        def do_CONNECT(self):  # noqa: N802 - captures attempted HTTPS proxy use
+            requests.append(
+                (self.command, self.path, self.headers.get("Authorization"))
+            )
+            self.send_error(502)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.daemon_threads = True
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}", response, requests
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def assert_failure(result, code, exit_code=1):
+    assert result.returncode == exit_code and result.stdout == ""
+    assert json.loads(result.stderr)["error"]["code"] == code
+
+
+def test_public_commands_and_noninteractive_output(cli):
+    with http_fixture() as (origin, response, requests):
+        raw = response["body"].decode()
+        profile = cli(origin, TOKEN, "whoami", "-o", "json")
+        assert (
+            profile.returncode == 0
+            and profile.stderr == ""
+            and profile.stdout == raw + "\n"
+        )
+        assert requests == [("GET", "/api/v1/actors/me", "Bearer " + TOKEN)]
+
+        response["body"] = json.dumps(
+            {**PROFILE, "display_name": "Ada\x1b[31m\u202e"}
+        ).encode()
+        human = cli(origin, TOKEN, "whoami")
+        assert human.returncode == 0 and human.stderr == ""
+        assert "Ada\\u001B[31m\\u202E" in human.stdout and "\x1b" not in human.stdout
+
+        response["body"] = json.dumps(CONTEXT).encode()
+        context = cli(origin, TOKEN, "project", "access", PROJECT, "-o", "json")
+        assert (
+            context.returncode == 0
+            and context.stderr == ""
+            and json.loads(context.stdout) == CONTEXT
+        )
+        method, target, authorization = requests[-1]
+        assert method == "GET" and authorization == "Bearer " + TOKEN
+        parsed = urlsplit(target)
+        assert parsed.path == "/api/v1/actors/me/authorization-context"
+        assert parse_qs(parsed.query) == {"project_id": [PROJECT]}
+
+        selector = "project /?&= é"
+        response.update(
+            status=404,
+            body=json.dumps(
+                {"error": {"code": "project_authorization_resource_not_found"}}
+            ).encode(),
+        )
+        assert_failure(
+            cli(origin, TOKEN, "project", "access", selector, "-o", "json"),
+            "project_authorization_resource_not_found",
+        )
+        assert parse_qs(urlsplit(requests[-1][1]).query) == {"project_id": [selector]}
+
+        response.update(status=200, body=json.dumps(CONTEXT).encode())
+        assert_failure(
+            cli(origin, TOKEN, "project", "access", "foreign", "-o", "json"),
+            "invalid_api_response",
+        )
+
+
+def test_api_failures_and_invalid_responses(cli):
+    with http_fixture() as (origin, response, requests):
+        response.update(
+            status=403,
+            body=json.dumps(
+                {"error": {"code": "permission_not_granted", "message": TOKEN}}
+            ).encode(),
+        )
+        denied = cli(origin, TOKEN, "whoami", "-o", "json")
+        assert_failure(denied, "permission_not_granted")
+        assert json.loads(denied.stderr)["error"]["status"] == 403
+
+        response["status"] = 200
+        for body, content_type in (
+            (b"{", "application/json"),
+            (b"{}", "application/json"),
+            (json.dumps({**PROFILE, "admin_roles": None}).encode(), "application/json"),
+            (
+                json.dumps({**PROFILE, "status": "unrecognized"}).encode(),
+                "application/json",
+            ),
+            (json.dumps(PROFILE).encode(), "text/plain"),
+            (b" " * 65537, "application/json"),
+        ):
+            response.update(body=body, headers={"Content-Type": content_type})
+            before = len(requests)
+            assert_failure(
+                cli(origin, TOKEN, "whoami", "-o", "json"), "invalid_api_response"
+            )
+            assert len(requests) == before + 1, "invalid response was retried"
+
+
+def test_redirect_cannot_forward_the_bearer(cli):
+    with http_fixture() as (origin, response, _requests):
+        with http_fixture() as (destination, _unused, destination_requests):
+            response.update(status=302, body=b"", headers={"Location": destination})
+            assert_failure(
+                cli(origin, TOKEN, "whoami", "-o", "json"), "redirect_refused"
+            )
+            assert destination_requests == [], "redirect target received the bearer"
+
+
+def test_invalid_configuration_and_local_help_make_no_requests(cli):
+    with http_fixture() as (origin, _response, requests):
+        before = len(requests)
+        for bad_origin in (
+            "http://example.com",
+            origin + "/api",
+            origin + "?",
+            "https://user:secret@example.com",
+        ):
+            assert_failure(
+                cli(bad_origin, TOKEN, "whoami", "-o", "json"),
+                "invalid_configuration",
+                2,
+            )
+        for bad_token in ("", "Bearer abc", "abc\r\nInjected: true"):
+            assert_failure(
+                cli(origin, bad_token, "whoami", "-o", "json"),
+                "invalid_configuration",
+                2,
+            )
+        assert len(requests) == before, "invalid configuration sent a request"
+
+        for args in (("--help",), ("--version",), ("completion", "bash")):
+            result = cli("", "", *args)
+            assert result.returncode == 0 and result.stdout and result.stderr == ""
+        assert_failure(
+            cli("", "", "-o", "json", "whoami", "--unknown", TOKEN),
+            "invalid_arguments",
+            2,
+        )
+
+
+def test_ambient_proxy_cannot_receive_a_connection(cli):
+    with http_fixture() as (proxy, _unused, proxy_requests):
+        result = cli(
+            "https://workstream.invalid",
+            TOKEN,
+            "whoami",
+            "-o",
+            "json",
+            extra_env={"HTTPS_PROXY": proxy, "HTTP_PROXY": proxy, "ALL_PROXY": proxy},
+        )
+        assert_failure(result, "service_unavailable")
+        assert proxy_requests == [], "ambient proxy received a connection"
+
+
+def test_request_timeout_is_bounded(cli):
+    with http_fixture() as (origin, response, _requests):
+        response.update(
+            status=200,
+            body=json.dumps(PROFILE).encode(),
+            headers={"Content-Type": "application/json"},
+            delay=13,
+        )
+        start = time.monotonic()
+        assert_failure(
+            cli(origin, TOKEN, "whoami", "-o", "json"), "service_unavailable"
+        )
+        assert time.monotonic() - start < 15, "CLI timeout exceeded its request bound"
