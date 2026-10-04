@@ -886,6 +886,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/modules/compensation/api/awards.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/modules/compensation/api/instruments.py"
     },
     {
@@ -895,6 +899,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/compensation/awards/models.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/compensation/awards/participant.py"
     },
     {
       "group": "shared",
@@ -915,6 +923,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/compensation/service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/api/participation.py"
     },
     {
       "group": "lifecycle",
@@ -959,6 +971,14 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/contributions/records/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/participant.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/repository.py"
     },
     {
       "group": "lifecycle",
@@ -1629,7 +1649,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "f945d1495efbf8c69985a1e50669a5219bc3d8746556fe27c14d8238ba97ba86",
+  "authority_digest": "ce43271253a9f45a0477b003990161c7dca4eec4edee4ae0ad31e0ddafbfef3a",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

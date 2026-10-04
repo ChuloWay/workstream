@@ -21,6 +21,15 @@ from app.modules.compensation.api.adapter_bindings import (
     validate_adapter_route_key,
 )
 from app.modules.compensation.api.instruments import CompensationInstrumentType
+from app.modules.compensation.api.awards import (
+    AwardContributionFacts,
+    AwardDefinitionFacts,
+    CompleteAwardSetPort,
+    CompleteAwardSetRequest,
+    CompleteAwardSetResult,
+    CompensationAwardConflict,
+    CompensationAwardFacts,
+)
 from app.modules.compensation.api.policy_bindings import (
     LockedPolicyAdapterBindingFacts,
     PolicyAdapterBindingPort,
@@ -46,6 +55,13 @@ __all__ = (
     "AdapterBindingView",
     "DenyAdapterBindingAuthorization",
     "CompensationInstrumentType",
+    "AwardContributionFacts",
+    "AwardDefinitionFacts",
+    "CompleteAwardSetPort",
+    "CompleteAwardSetRequest",
+    "CompleteAwardSetResult",
+    "CompensationAwardConflict",
+    "CompensationAwardFacts",
     "LockedPolicyAdapterBindingFacts",
     "PolicyAdapterBindingPort",
     "PolicyAdapterBindingUnavailable",
