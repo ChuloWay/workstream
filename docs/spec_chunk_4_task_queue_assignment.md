@@ -525,3 +525,25 @@ reclaim workflow.
 
 TASK locked-context failures use the canonical `error.code` and `error.details`
 envelope; duplicate top-level code/details fields are removed.
+
+### Internal post-submit routing request reservation
+
+ARCH-04E1B-A provides caller-owned request preparation for an exact current
+completed `allow_review` evaluation. TASK locks the project-qualified Task and
+its latest submitted Submission before CHECKERS locks its fence and run. The
+CHECKERS public coordination port verifies the supplied completion against
+retained result, event, phase receipts and material, returning the stored
+Submission version. Neither completion values nor request facts grant authority.
+
+`task_post_submit_routing_requests` reserves distinct generated routing-operation
+and future manifest UUIDv7 identities. Its canonical digest binds the exact owner,
+evaluation, result and completion selectors. Concurrent identical preparations
+recover the same IDs; replay repeats latest-submission/currentness verification.
+The caller owns commit and rollback. PostgreSQL independently validates custody,
+stamps creation time and forbids request update, deletion and truncation.
+
+This is preparation only: no source manifest, current routing pointer, outbox
+publication, TASK transition, Review, FinalAcceptance or ContributionRecord is
+created. ARCH-04E2-A delivers strict hidden AUTH preparation and receipt-staging
+contracts; routing remains unavailable. Later atomic publication must bind the
+manifest to the reserved identity and verify genuine immutable AUTH evidence.

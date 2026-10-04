@@ -241,7 +241,10 @@ def test_accepted_effects_contract_is_source_neutral() -> None:
 
 
 def test_source_foundation_has_no_runtime_entry() -> None:
-    assert post_submit_routing.__all__ == ("TaskPostSubmitManifestFacts", "task_post_submit_source_digest")
+    assert post_submit_routing.__all__ == (
+        "TaskPostSubmitManifestFacts", "task_post_submit_source_digest",
+        "TaskRoutingSelection", "TaskRoutingRequestFacts", "task_routing_request_digest",
+    )
     assert accepted_effects.__all__ == (
         "TaskAcceptedEffectsPort",
         "TaskAcceptedEffectsRequest",
@@ -258,7 +261,8 @@ def test_source_foundation_has_no_runtime_entry() -> None:
         name
         for name, value in vars(post_submit_routing).items()
         if isclass(value) and value.__module__ == post_submit_routing.__name__
-    } == {"TaskPostSubmitManifestFacts"}
+    } == {"TaskPostSubmitManifestFacts", "TaskRoutingSelection", "TaskRoutingRequestFacts"}
+    assert not hasattr(task_api, "TaskRoutingRequests")
     assert {
         name
         for name, value in vars(accepted_effects).items()

@@ -463,6 +463,19 @@ TASK_MODULES = (
 )
 
 
+# Routing-request custody proofs use schema capacity after task C exhausted its cap.
+TASK_ROUTING_REQUEST_MODULES = (
+    "tests/tasks/post_submit_routing/test_request_contracts.py",
+    "tests/tasks/post_submit_routing/test_requests.py",
+    "tests/tasks/post_submit_routing/test_request_storage.py",
+)
+
+# The routing PREP proofs reuse the same real completion fixture on this lane.
+ROUTING_AUTH_PREPARATION_MODULES = (
+    "tests/authorization/post_submit_routing/test_contracts.py",
+    "tests/authorization/post_submit_routing/test_prepared.py",
+)
+
 PARTITION_GROUPS = (
     (PARTITIONED_SHARED_LANES, SHARED_FOUNDATION_MODULES),
     (PARTITIONED_PROJECT_LANES, PROJECT_MODULES),
@@ -500,9 +513,14 @@ LANES = (
             "tests/test_ci_test_lanes.py",
             "tests/test_test_lane_evidence.py",
             "tests/test_merge_test_lane_evidence.py",
+            *TASK_ROUTING_REQUEST_MODULES,
             ADMIN_RUNNER_MODULE,
         ),
     ),
     *(TestLane(name, PROJECT_MODULES) for name in PARTITIONED_PROJECT_LANES),
-    *(TestLane(name, TASK_MODULES) for name in PARTITIONED_TASK_LANES),
+    *(TestLane(
+        name,
+        TASK_MODULES
+        + (ROUTING_AUTH_PREPARATION_MODULES if name == "task_lifecycle_a" else ()),
+    ) for name in PARTITIONED_TASK_LANES),
 )

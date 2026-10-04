@@ -222,6 +222,12 @@ class CompletedEvaluation(PostSubmitValue):
 class EvaluationCoordinationPort(Protocol):
     """Reserve and read exact current evaluations in caller transactions."""
 
+    async def require_current_completion(
+        self, event_id: ResourceId, completion: "EvaluationCompletion"
+    ) -> int:
+        """Lock exact current allow-review completion; return its stored submission version."""
+        ...
+
     async def reserve_current_evaluation(
         self, request: PostSubmissionEvaluationRequest
     ) -> EvaluationReservation:
