@@ -151,7 +151,23 @@ async def test_completeness_upgrade_preserves_complete_retained_awards(
                 ]
                 for row in functions:
                     assert row["proconfig"] == ["search_path=pg_catalog, public, pg_temp"]
-                    assert "public.contribution_records" in row["body"]
+                bodies = {row["proname"]: row["body"] for row in functions}
+                helper_body = bodies["accepted_submission_award_set_is_complete"]
+                for relation in (
+                    "contribution_records",
+                    "contribution_rules",
+                    "contribution_award_definitions",
+                    "compensation_awards",
+                ):
+                    assert f"public.{relation}" in helper_body
+                trigger_body = bodies["require_accepted_submission_award_set"]
+                for relation in ("contribution_records", "compensation_awards"):
+                    assert (
+                        f"TG_TABLE_SCHEMA = 'public' AND TG_TABLE_NAME = '{relation}'"
+                    ) in trigger_body
+                assert (
+                    "public.accepted_submission_award_set_is_complete(record_uuid)"
+                ) in trigger_body
                 triggers = await connection.fetch(
                     "SELECT tgname, tgdeferrable, tginitdeferred FROM pg_catalog.pg_trigger "
                     "WHERE tgname LIKE 'accepted_submission_award_set_from_%' ORDER BY tgname"
