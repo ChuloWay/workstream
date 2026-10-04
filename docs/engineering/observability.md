@@ -26,7 +26,10 @@ An invalid endpoint fails startup with a fixed error that does not echo its
 input. The endpoint accepts only canonical ASCII DNS, IPv4, or IPv6 origins and
 ports from 1 through 65535. It rejects credentials, paths, query strings,
 fragments, whitespace, control characters, Unicode, percent encoding,
-underscores, malformed numeric addresses, and noncanonical DNS labels.
+underscores, ambiguous decimal/hex numeric hosts, malformed addresses, and
+noncanonical DNS labels. No path is accepted except one optional root slash,
+which is canonicalized away. Raw `?` and `#` delimiters are rejected even when
+their query or fragment is empty.
 If a collector requires authentication, supply standard OTLP headers through
 the deployment's secret environment, such as `OTEL_EXPORTER_OTLP_HEADERS`;
 never put them in the endpoint or committed environment files.
@@ -113,12 +116,14 @@ become metric attributes.
 Direct API-to-Celery publication keeps a parent-child trace while both
 processes are running. The durable outbox does not persist trace context in a
 business row, payload, digest, schema, or authorization input. Therefore,
-outbox recovery through pending-event scan and delivery after a process boundary begins a new
-trace. Once `_begin_invocation` commits the canonical invocation envelope, the
-active Celery span may include the envelope's existing correlation ID for
+outbox recovery through pending-event scan after a process boundary starts a
+new root disconnected from the original business trace. Canonical publication
+makes the delivery consumer a child of that scan within the new recovery trace.
+Once `_begin_invocation` commits the canonical invocation envelope, only the
+delivery span may include the envelope's existing correlation ID for
 investigation. Expired-attempt recovery and duplicate or completed delivery do
-not add that annotation. The value remains a
-diagnostic annotation, never a metric label or authority fact.
+not add that annotation. The value remains a diagnostic annotation, never a
+metric label or authority fact.
 
 ## Deployment access and retention
 
@@ -150,16 +155,19 @@ payload, prompt, archive, or signed URL in a canary.
    inherits no diagnostic context.
 3. Run the real OTLP transport proof. Confirm a local HTTP receiver decodes
    trace and metric protobufs with the exact resource/field allowlists, then
-   repeat with 503, refused, and delayed endpoints. API responses and task
-   outcomes must remain unchanged and logs must use only the two safe events
-   described above. This proves the SDK/network boundary, not a deployed
-   collector.
+   repeat with 503, refused, and delayed endpoints for both an API request and
+   one registered local/eager Celery task. API responses and exact task results
+   must remain unchanged and logs must use only safe constant events. This eager
+   task proves the typed adapter's task failure boundary; the separate Redis
+   proof owns real prefork behavior. Neither proves a deployed collector.
 4. Run the PostgreSQL pending-recovery proof through
-   `scripts.run_isolated_tests`. Compare the before/after snapshots: a new local
-   trace receives the committed correlation only at the existing
-   post-invocation commit seam; expired recovery, duplicates, and completed
-   delivery remain unannotated; no payload, digest, authorization input,
-   repeated effect, or trace/span schema field is added.
+   `scripts.run_isolated_tests`. Compare the before/after snapshots: the scan
+   starts a new root disconnected from the original business trace, canonical
+   publication makes delivery its child, and only that delivery span receives
+   the committed correlation at the existing post-invocation commit seam.
+   Expired recovery, duplicates, and completed delivery remain unannotated; no
+   payload, digest, authorization input, repeated effect, or trace/span schema
+   field is added.
 5. In the release environment, verify broker/collector/query ACLs, TLS, egress,
    encryption at rest, secret rotation, finite retention, and deletion. Repeat
    the privacy, correlation, outage, and outbox-gap checks without real private

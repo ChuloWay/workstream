@@ -42,6 +42,7 @@ _ARTIFACT_S3_SECRET_FIELDS = frozenset(
 _ARTIFACT_S3_SENSITIVE_INPUT_FIELDS = _ARTIFACT_S3_SECRET_FIELDS | {"artifact_s3_endpoint_url"}
 _OBSERVABILITY_SENSITIVE_INPUT_FIELDS = frozenset({"observability_otlp_endpoint"})
 _OBSERVABILITY_DNS_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+_OBSERVABILITY_NUMERIC_LABEL = re.compile(r"(?:[0-9]+|0x[0-9a-f]+)$")
 _EMPTY_ARTIFACT_S3_SECRETS: tuple[SecretStr | None, SecretStr | None, SecretStr | None] = (
     None,
     None,
@@ -671,6 +672,8 @@ def _canonical_observability_endpoint(value: object) -> str | None | object:
         or len(value) > 2048
         or not value.isascii()
         or "%" in value
+        or "?" in value
+        or "#" in value
         or any(ord(character) < 33 or character.isspace() for character in value)
     ):
         return _INVALID_OBSERVABILITY_ENDPOINT
@@ -716,6 +719,8 @@ def _canonical_observability_host(host: str) -> str | None:
     if len(lowered) > 253 or lowered.endswith("."):
         return None
     labels = lowered.split(".")
+    if labels and all(_OBSERVABILITY_NUMERIC_LABEL.fullmatch(label) for label in labels):
+        return None
     if not labels or any(_OBSERVABILITY_DNS_LABEL.fullmatch(label) is None for label in labels):
         return None
     return lowered

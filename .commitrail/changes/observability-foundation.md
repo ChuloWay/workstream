@@ -323,10 +323,12 @@ canonical envelope and `_begin_invocation` exits its transaction successfully,
 `OutboxDelivery.invoke` calls only the generic core span annotator with the
 existing bounded `correlation_id`. It is not reinterpreted as a trace ID, metric
 label, authority fact, or new persisted value. Process restart/recovery uses the
-existing pending-event scan and worker delivery path: a new local trace selects
-and publishes the committed pending event, and `deliver`/`invoke` reaches the
-same post-commit annotation seam. Expired-attempt `recover` and completed or
-duplicate delivery remain unannotated. Before/after database snapshots and
+existing pending-event scan and worker delivery path: the scan starts a new root
+disconnected from the original business trace, and canonical publication makes
+delivery its child within that recovery trace. `deliver`/`invoke` reaches the
+same post-commit annotation seam, where only the delivery span gains the stored
+correlation. Expired-attempt `recover` and completed or duplicate delivery remain
+unannotated. Before/after database snapshots and
 model/schema inspection prove that the diagnostic seam adds no trace field and
 changes no payload, digest, authorization input, repeated effect, or product
 decision; only canonical delivery-custody changes are permitted.
@@ -335,9 +337,12 @@ decision; only canonical delivery-custody changes are permitted.
 owner used before every Pydantic validation path, including direct values,
 environment variables, and dotenv input. It accepts only bounded canonical
 ASCII DNS labels or canonical `ipaddress` IPv4/IPv6 hosts and ports 1 through
-65535. It rejects whitespace/control/Unicode/percent-encoding, credentials,
-paths, query, fragments, trailing dots, empty/underscore/overlong or
-leading/trailing-hyphen labels, and malformed numeric, IPv6, or port forms.
+65535. It allows at most one root slash and canonicalizes that slash away. It
+rejects whitespace/control/Unicode/percent-encoding, credentials, other paths,
+raw query/fragment delimiters even when empty, trailing dots,
+empty/underscore/overlong or leading/trailing-hyphen labels, ambiguous
+whole-host decimal/hex numeric labels, and malformed numeric, IPv6, or port
+forms.
 It does not resolve DNS or reject private addresses because internal collectors
 are valid operator-owned destinations. Every rejection raises the same
 input-free error after the raw value is discarded. The nearby private MinIO
@@ -419,9 +424,10 @@ deployment controls are active.
       retains safe logging until delayed cleanup exits, and raises only a stable
       identity-bearing, input-free external-service error.
 - [x] The strict endpoint owner accepts only canonical bounded ASCII DNS/IP
-      origins and valid ports, rejects invalid DNS, numeric-IP, IPv6, port,
-      whitespace, control, Unicode, percent-encoded, credential, path, query,
-      and fragment forms, and produces one input-free error through direct,
+      origins and valid ports, canonicalizes one root slash, rejects invalid
+      DNS, ambiguous decimal/hex numeric hosts, IPv6, port, whitespace, control,
+      Unicode, percent-encoded, credential, path, and raw query/fragment forms
+      including empty delimiters, and produces one input-free error through direct,
       environment, dotenv, and model validation paths.
 - [x] The single explicit ASGI path produces exactly one HTTP server span and
       the closed application-owned HTTP metrics per request; FastAPI native and
@@ -474,8 +480,9 @@ deployment controls are active.
 - [x] Direct API-to-Celery work retains causal trace context through the trusted
       broker-publisher boundary. Outbox recovery
       honestly begins a new trace and adds the existing persisted correlation ID
-      only when pending-event scan/worker delivery reaches the existing
-      post-`_begin_invocation` commit seam; expired-attempt recovery and
+      only on the delivery child after canonical scan publication reaches the
+      existing post-`_begin_invocation` commit seam; the scan root remains
+      disconnected from the original business trace, and expired-attempt recovery and
       duplicate/completed delivery add no annotation, and no business row,
       payload, digest, schema, authorization input, repeated handler effect, or
       product outcome changes beyond canonical delivery custody.
@@ -513,12 +520,12 @@ deployment controls are active.
 | Normal, failure, retry, missing-header, and malformed-header task exits cannot leak context to the next task in one child | Core public Celery signal receivers and child-owned context tokens | `tests/test_celery_observability.py::test_sequential_task_failures_and_retries_reset_every_context_token` plus `tests/test_celery_observability.py::test_real_celery_prefork_correlates_api_and_resets_sequential_task_context` |
 | Core diagnostics stays acyclic and imports no Celery composition or product module | Composition-root boundary | `tests/test_observability.py::test_observability_core_has_no_worker_or_module_imports` |
 | Existing outbox correlation annotates only after the canonical invocation marker and envelope transaction commit; before/after snapshots prove no business row, payload, digest, schema, or authorization input changes, and structure checks prove no persisted trace fields | `app.modules.outbox.delivery.OutboxDelivery.invoke` calling generic core annotation | `tests/outbox/test_delivery_postgresql.py::test_diagnostic_annotation_follows_committed_invocation_envelope` |
-| A committed pending event selected after process restart enters worker delivery under a new root and gains its stored correlation ID only at the existing post-commit invocation seam; expired-attempt recovery, duplicates, and completed delivery remain unannotated, with only canonical custody changes in database snapshots | Existing outbox scan/publish/deliver/invoke composition; no recovery-specific telemetry hook | `tests/outbox/test_recovery_postgresql.py::test_pending_recovery_trace_annotates_only_after_committed_invocation` |
+| A committed pending event selected after process restart starts a scan root disconnected from the original business trace; canonical before-publish headers make delivery its child, only delivery gains the stored correlation after independently visible invocation commit, and expired/duplicate/completed controls remain unannotated with no repeated effect or noncanonical database change | Existing outbox scan/publish/deliver/invoke composition; no recovery-specific telemetry hook | `tests/outbox/test_recovery_postgresql.py::test_pending_recovery_trace_annotates_only_after_committed_invocation` |
 | Every exported API/Celery span and metric has only closed keys and normalized values | Core explicit ASGI/Celery instrumentation and sanitizing exporter | `tests/test_observability.py::test_complete_export_sets_are_closed_and_bounded` plus `tests/test_observability.py::test_unknown_http_method_and_varied_ids_collapse_to_one_exact_metric_series` and `tests/test_celery_observability.py::test_unknown_task_and_state_values_collapse_to_one_exact_metric_series` |
 | Dynamic logger data and hostile exception stringification never enter Workstream diagnostics | Core closed log-event map and signal exits | `tests/test_observability.py::test_real_loggers_and_hostile_exception_never_render_sensitive_values` |
-| Canonical localhost/DNS/IPv4/IPv6 origins and valid ports pass; malformed numeric/IP/port, Unicode/percent-encoded/whitespace/control, underscore, trailing-dot, empty/overlong, and leading/trailing-hyphen hosts fail with the same input-free error through kwargs, environment, dotenv, and model-validation paths; production-like environments require HTTPS | Sole strict observability-origin owner in typed settings validation | `tests/test_config.py::test_observability_endpoint_requires_canonical_http_origin_across_settings_sources`, `tests/test_config.py::test_invalid_observability_endpoint_fails_startup_without_retaining_input`, and `tests/test_config.py::test_production_like_observability_endpoint_requires_https_without_retaining_input` |
+| Canonical localhost/DNS/IPv4/IPv6 origins, one optional root slash, and valid ports pass; ambiguous decimal/hex whole-host forms, raw empty query/fragment delimiters, malformed numeric/IP/port, Unicode/percent-encoded/whitespace/control, underscore, trailing-dot, empty/overlong, and leading/trailing-hyphen hosts fail with the same input-free error through kwargs, environment, dotenv, and model-validation paths; production-like environments require HTTPS | Sole strict observability-origin owner in typed settings validation | `tests/test_config.py::test_ambiguous_numeric_host_forms_cannot_fall_through_dns_validation`, `tests/test_config.py::test_observability_endpoint_requires_canonical_http_origin_across_settings_sources`, `tests/test_config.py::test_invalid_observability_endpoint_fails_startup_without_retaining_input`, and `tests/test_config.py::test_production_like_observability_endpoint_requires_https_without_retaining_input` |
 | Failure after provider assignment clears provider and instrument references, closes owned resources, and leaves force-flush disabled | Core runtime partial-start cleanup | `tests/test_observability.py::test_failure_after_provider_assignment_clears_every_runtime_reference` |
-| A local HTTP receiver decodes real SDK-produced trace and metric OTLP protobufs; separate 503, refusal, and delayed-response cases remain bounded, preserve HTTP/task results, and emit only the documented input-free safe events | Typed OTLP adapter plus core runtime/export lifecycle and safe logging owner | `tests/test_observability_otlp.py::test_real_otlp_http_transport_is_sanitized_and_fail_open` |
+| A local HTTP receiver decodes real SDK-produced trace and metric OTLP protobufs; separate 503, refusal, and delayed-response cases remain bounded for an API request and one registered local/eager Celery task, preserve the HTTP response and exact task result/invocation count, and emit only documented input-free safe events; the separate Redis proof owns prefork claims | Typed OTLP adapter plus core runtime/export lifecycle and safe logging owner | `tests/test_observability_otlp.py::test_real_otlp_http_transport_is_sanitized_and_fail_open` |
 | Explicit runtime shutdown returns before the process-exit bound, normal interpreter exit does not re-enter owned providers, and an SDK-atexit mutant is caught with a blocking shutdown stack | Core provider ownership with SDK exit hooks disabled | `tests/test_observability.py::test_bounded_runtime_shutdown_returns_before_process_exit`, `tests/test_observability.py::test_owned_providers_do_not_register_unbounded_interpreter_exit_hooks`, and `tests/test_observability.py::test_process_exit_probe_rejects_sdk_atexit_shutdown_registration` |
 | The OpenAI Agents SDK remains configured with both tracing and sensitive trace data disabled | Existing `app.adapters.project_agents.openai_agent_sdk` owner, unchanged by diagnostics composition | `tests/test_agent_runtime.py::test_unified_compilation_uses_scoped_tools_and_strict_output` |
 | Operator guidance matches environment keys and actual failure events, names broker/collector/log-query ACLs, TLS/encryption, egress, finite retention/deletion, non-authority, partial outbox linkage, implementation/deployment distinction, and the release privacy/correlation/outage/deletion drill while keeping profiling on demand | `docs/engineering/observability.md`, README logs section, and typed diagnostics settings | `tests/test_observability.py::test_operator_docs_match_runtime_observability_contract` |
@@ -631,6 +638,16 @@ deployment controls are active.
   deployed access/retention controls. Resolved: document actual safe
   events plus broker/collector/log-query ACLs, encryption, finite deletion, and
   release-drill requirements as deployment work.
+- Endpoint canonicalization replay: resolved ambiguous decimal/hex whole-host
+  forms and raw empty query/fragment delimiters without rejecting ordinary DNS
+  labels that merely begin with `0x`; all settings sources share the guard.
+- Task outage replay: resolved the API-only proof gap by exercising one exact
+  registered local/eager Celery task through the real typed OTLP adapter for
+  503, refusal, and timeout while keeping the real-prefork Redis claim separate.
+- Recovery propagation replay: resolved the dropped-header fixture by capturing
+  canonical before-publish headers during the actual scan task and supplying
+  them to the actual delivery task; the delivery is a child of the new scan root
+  and remains disconnected from the original business trace.
 
 Hosted schema-lane replay found the Celery task fallback's UUIDv4 site missing
 from the exact generation inventory. The fallback is now classified as a

@@ -5,6 +5,7 @@ from dataclasses import fields
 import json
 from uuid import uuid4
 
+from celery import signals
 from opentelemetry import trace
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -40,18 +41,6 @@ async def test_pending_recovery_trace_annotates_only_after_committed_invocation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     h = delivery_harness
-    event = await h.append(correlation_id=str(new_record_id()))
-
-    async with h.factory() as session:
-        row = await session.get(OutboxEvent, event.event_id)
-        immutable_before = (
-            row.payload,
-            row.payload_digest,
-            row.correlation_id,
-            row.event_type,
-            row.event_version,
-        )
-
     exporter = InMemorySpanExporter()
     runtime = ObservabilityRuntime(
         Settings(
@@ -70,6 +59,20 @@ async def test_pending_recovery_trace_annotates_only_after_committed_invocation(
         frozenset({OUTBOX_DELIVERY_TASK, "workstream.outbox.scan_pending"}),
         lambda: None,
     )
+    with runtime.tracer.start_as_current_span("original business event") as original_span:
+        original_trace_id = original_span.get_span_context().trace_id
+        event = await h.append(correlation_id=str(new_record_id()))
+
+    async with h.factory() as session:
+        row = await session.get(OutboxEvent, event.event_id)
+        immutable_before = (
+            row.payload,
+            row.payload_digest,
+            row.correlation_id,
+            row.event_type,
+            row.event_version,
+        )
+
     monkeypatch.setenv("WORKSTREAM_CELERY_TASK_ALWAYS_EAGER", "true")
     get_settings.cache_clear()
     from app.workers import outbox as worker
@@ -89,11 +92,17 @@ async def test_pending_recovery_trace_annotates_only_after_committed_invocation(
 
     monkeypatch.setattr(worker, "production_outbox_delivery", compose_delivery)
 
-    async def deliver(task_id: str, selected_event=event) -> dict[str, str]:
+    async def deliver(
+        task_id: str,
+        selected_event=event,
+        *,
+        headers: dict[str, object] | None = None,
+    ) -> dict[str, str]:
         return await asyncio.to_thread(
             lambda: worker.deliver_event.apply(
                 args=(str(selected_event.event_id), str(h.project)),
                 task_id=task_id,
+                headers=headers,
                 throw=True,
             ).get()
         )
@@ -124,19 +133,36 @@ async def test_pending_recovery_trace_annotates_only_after_committed_invocation(
 
         h.handler_hook = observe_annotation
 
-        published: list[tuple[str, str]] = []
+        published: list[tuple[tuple[str, str], dict[str, object]]] = []
 
         def publish(*, args: tuple[str, str]) -> None:
-            published.append(args)
+            headers: dict[str, object] = {}
+            signals.before_task_publish.send(
+                sender=OUTBOX_DELIVERY_TASK,
+                headers=headers,
+            )
+            published.append((args, dict(headers)))
 
         monkeypatch.setattr(worker.deliver_event, "apply_async", publish)
+        scan_task_id = str(uuid4())
         scan = await asyncio.to_thread(
-            lambda: worker.scan_pending.apply(task_id=str(uuid4()), throw=True).get()
+            lambda: worker.scan_pending.apply(task_id=scan_task_id, throw=True).get()
         )
         assert scan == {"selected": 1, "published": 1}
-        assert published == [(str(event.event_id), str(h.project))]
+        assert len(published) == 1
+        published_args, published_headers = published[0]
+        assert published_args == (str(event.event_id), str(h.project))
+        assert set(published_headers) == {
+            "traceparent",
+            "workstream-request-id",
+            "workstream-correlation-id",
+        }
+        assert published_headers["workstream-request-id"] == scan_task_id
+        assert published_headers["workstream-correlation-id"] == scan_task_id
 
-        assert await deliver(first_task_id) == {"status": "delivery_recorded"}
+        assert await deliver(first_task_id, headers=published_headers) == {
+            "status": "delivery_recorded"
+        }
         assert annotation_seen == [event.correlation_id]
         assert len(h.handled) == 1
 
@@ -157,11 +183,18 @@ async def test_pending_recovery_trace_annotates_only_after_committed_invocation(
         assert len(h.handled) == 1
         assert runtime.force_flush()
         spans = exporter.get_finished_spans()
-        assert len(spans) == 4
-        scan_span, first, duplicate, expired = spans
+        assert len(spans) == 5
+        original, scan_span, first, duplicate, expired = spans
         assert len({span.context.trace_id for span in spans}) == 4
-        assert all(span.parent is None for span in spans)
+        assert original.context.trace_id == original_trace_id
+        assert original.parent is None
         assert scan_span.name == "celery workstream.outbox.scan_pending"
+        assert scan_span.parent is None
+        assert scan_span.context.trace_id != original_trace_id
+        assert first.context.trace_id == scan_span.context.trace_id
+        assert first.parent is not None
+        assert first.parent.span_id == scan_span.context.span_id
+        assert duplicate.parent is None and expired.parent is None
         assert first.attributes["workstream.outbox.correlation_id"] == event.correlation_id, [
             dict(span.attributes) for span in spans
         ]

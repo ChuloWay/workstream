@@ -15,6 +15,7 @@ import time
 from time import monotonic
 from uuid import uuid4
 
+from celery import Celery
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import (
@@ -30,7 +31,9 @@ import pytest
 from app.adapters import observability as otlp_adapter
 from app.adapters.observability import create_observability_export_adapter
 from app.core import diagnostic_logging
+from app.core import celery_observability as celery_diagnostics
 from app.core.api_controls import RequestContextMiddleware
+from app.core.celery_observability import configure_celery_observability
 from app.core.config import Settings
 from app.core.observability import ObservabilityMiddleware, ObservabilityRuntime
 from app.interfaces.external_services import ExternalServiceConfigurationError
@@ -148,6 +151,52 @@ async def _request(runtime: ObservabilityRuntime) -> int:
     return response.status_code
 
 
+def _run_registered_eager_task_against_collector_failure(
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> str:
+    """Exercise one registered local/eager task; real prefork is proved separately."""
+    task_name = "workstream.test.otlp_failure"
+    task_app = Celery("workstream-observability-otlp-failure")
+    task_app.conf.task_always_eager = True
+    invocations: list[str] = []
+    canary = "eager-task-private-canary"
+
+    @task_app.task(name=task_name)
+    def task() -> dict[str, str]:
+        invocations.append("invoked")
+        logging.getLogger("celery.task").error("task failure detail: %s", canary)
+        return {"status": "ok"}
+
+    configure_celery_observability(
+        settings,
+        frozenset({task_name}),
+        lambda: create_observability_export_adapter(
+            settings, service_name="workstream-celery"
+        ),
+    )
+    celery_diagnostics.initialize_worker_observability()
+    runtime = celery_diagnostics._WORKER_RUNTIME
+    assert runtime is not None and runtime.started
+    handler = diagnostic_logging.safe_handler()
+    assert handler is not None
+    stream = io.StringIO()
+    monkeypatch.setattr(handler, "stream", stream)
+    try:
+        task_id = str(uuid4())
+        result = task.apply(task_id=task_id, throw=True).get()
+        assert result == {"status": "ok"}
+        assert invocations == ["invoked"]
+        assert celery_diagnostics._ACTIVE_TASKS == {}
+        runtime.force_flush()
+    finally:
+        celery_diagnostics.shutdown_worker_observability()
+        task_app.close()
+    encoded = stream.getvalue()
+    assert canary not in encoded
+    return encoded
+
+
 def _resource_attributes(resource: object) -> dict[str, object]:
     attributes = getattr(resource, "attributes")
     return {item.key: getattr(item.value, item.value.WhichOneof("value")) for item in attributes}
@@ -225,7 +274,8 @@ async def test_real_otlp_http_transport_is_sanitized_and_fail_open(
         )
 
     async def exercise(endpoint: str) -> None:
-        runtime = _runtime(_settings(endpoint))
+        settings = _settings(endpoint)
+        runtime = _runtime(settings)
         handler = diagnostic_logging.safe_handler()
         assert handler is not None
         stream = io.StringIO()
@@ -236,16 +286,24 @@ async def test_real_otlp_http_transport_is_sanitized_and_fail_open(
             runtime.force_flush()
         finally:
             runtime.shutdown()
+        assert _safe_logging_released()
+        task_encoded = _run_registered_eager_task_against_collector_failure(
+            settings, monkeypatch
+        )
         assert monotonic() - started < 2.0
-        encoded = stream.getvalue()
+        encoded = stream.getvalue() + task_encoded
         assert endpoint not in encoded
         assert "query-privacy-canary" not in encoded
         records = [json.loads(line) for line in encoded.splitlines()]
-        assert all(
-            record["event"]
-            in {"external.info", "opentelemetry.error", "observability_export_unavailable"}
-            for record in records
-        )
+        events = {record["event"] for record in records}
+        assert events <= {
+            "celery.error",
+            "celery.info",
+            "external.info",
+            "opentelemetry.error",
+            "observability_export_unavailable",
+        }, events
+        assert {"celery.error", "celery.info", "opentelemetry.error"} <= events
 
     if receiver_context is None:
         await exercise(endpoint)
