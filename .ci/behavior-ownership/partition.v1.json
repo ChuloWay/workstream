@@ -885,7 +885,7 @@
       "target": "backend/app/modules/compensation/api/adapter_bindings.py"
     },
     {
-      "group": "shared",
+      "group": "lifecycle",
       "target": "backend/app/modules/compensation/api/awards.py"
     },
     {
@@ -901,7 +901,7 @@
       "target": "backend/app/modules/compensation/awards/models.py"
     },
     {
-      "group": "shared",
+      "group": "lifecycle",
       "target": "backend/app/modules/compensation/awards/participant.py"
     },
     {
@@ -1649,7 +1649,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "ce43271253a9f45a0477b003990161c7dca4eec4edee4ae0ad31e0ddafbfef3a",
+  "authority_digest": "fdbbf9eb7ded754eb10e532c3a3b811f4af227136fcd2870f7f638405656345b",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
