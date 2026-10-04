@@ -1,20 +1,263 @@
 """Crash boundaries, retry exhaustion and exact retained outcome replay."""
 
 import asyncio
+from dataclasses import fields
 import json
+from uuid import uuid4
 
+from celery import signals
+from opentelemetry import trace
+from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 import pytest
 from sqlalchemy import select, text
 
+from app.adapters.outbox import outbox_delivery
+from app.core import celery_observability as celery_diagnostics
+from app.core.celery_observability import configure_celery_observability
+from app.core.config import Settings, get_settings
 from app.core.hashing import canonical_json_hash
+from app.core.identifiers import new_record_id
+from app.core.observability import ObservabilityRuntime
 from app.modules.outbox.api import DeliveryUnavailable, FinalizationCause, HandlerOutcome
 from app.modules.outbox.delivery_repository import DeliveryRepository
 from app.modules.outbox.models import OutboxDeliveryAttempt, OutboxEvent
+from app.modules.outbox.registry import HandlerRegistry
+from app.workers.outbox_topology import OUTBOX_DELIVERY_TASK
+from observability_test_support import fake_export_adapter
+from tests.outbox.conftest import TracedPort
+
+
+PAGINATION_SECRET = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
 
 
 async def expire(h):
     async with h.factory() as session:
         await session.execute(text("select pg_sleep(3.05)"))
+
+
+def _start_recovery_runtime(monkeypatch: pytest.MonkeyPatch):
+    exporter = InMemorySpanExporter()
+    runtime = ObservabilityRuntime(
+        Settings(
+            environment="test",
+            pagination_cursor_hmac_secret=PAGINATION_SECRET,
+            observability_trace_sample_ratio=1.0,
+        ),
+        service_name="workstream-celery",
+        task_names=frozenset({OUTBOX_DELIVERY_TASK, "workstream.outbox.scan_pending"}),
+        export_adapter=fake_export_adapter(exporter, InMemoryMetricReader()),
+    )
+    runtime.start()
+    monkeypatch.setattr(celery_diagnostics, "_WORKER_RUNTIME", runtime)
+    configure_celery_observability(
+        runtime.settings,
+        frozenset({OUTBOX_DELIVERY_TASK, "workstream.outbox.scan_pending"}),
+        lambda: None,
+    )
+    return runtime, exporter
+
+
+async def _immutable_event_snapshot(factory, event_id):
+    async with factory() as session:
+        row = await session.get(OutboxEvent, event_id)
+        return (
+            row.payload,
+            row.payload_digest,
+            row.correlation_id,
+            row.event_type,
+            row.event_version,
+        )
+
+
+def _configure_recovery_worker(h, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("WORKSTREAM_CELERY_TASK_ALWAYS_EAGER", "true")
+    get_settings.cache_clear()
+    from app.workers import outbox as worker
+
+    monkeypatch.setattr(worker, "require_outbox_worker", lambda _task: None)
+    monkeypatch.setattr(worker, "get_database_url", lambda: h.factory.kw["bind"].url)
+    worker_factories = []
+
+    def compose_delivery(factory):
+        worker_factories.append(factory)
+        return outbox_delivery(
+            factory,
+            authorization_factory=lambda session: TracedPort(h, session),
+            registry=HandlerRegistry([("ContributionRecorded", 1, h.handle)]),
+            options=h.options,
+        )
+
+    monkeypatch.setattr(worker, "production_outbox_delivery", compose_delivery)
+    return worker, worker_factories
+
+
+async def _deliver_recovery_task(worker, h, event, task_id, *, headers=None):
+    return await asyncio.to_thread(
+        lambda: worker.deliver_event.apply(
+            args=(str(event.event_id), str(h.project)),
+            task_id=task_id,
+            headers=headers,
+            throw=True,
+        ).get()
+    )
+
+
+def _install_committed_annotation_observer(h, worker_factories, event):
+    annotation_seen: list[str] = []
+
+    async def observe_annotation(_envelope) -> None:
+        active = trace.get_current_span()
+        assert active.is_recording()
+        value = active.attributes.get("workstream.outbox.correlation_id")
+        assert value == event.correlation_id
+        annotation_seen.append(value)
+        async with worker_factories[-1]() as independent:
+            attempt = (
+                await independent.scalars(
+                    select(OutboxDeliveryAttempt).where(
+                        OutboxDeliveryAttempt.event_id == event.event_id
+                    )
+                )
+            ).one()
+            stored_event = await independent.get(OutboxEvent, event.event_id)
+            assert attempt.stage == "invoked"
+            assert attempt.invoked_at is not None
+            assert attempt.outcome_json is None
+            assert stored_event.delivery_state == "claimed"
+
+    h.handler_hook = observe_annotation
+    return annotation_seen
+
+
+async def _scan_recovery_event(worker, h, event, monkeypatch: pytest.MonkeyPatch):
+    published: list[tuple[tuple[str, str], dict[str, object]]] = []
+
+    def publish(*, args: tuple[str, str]) -> None:
+        headers: dict[str, object] = {}
+        signals.before_task_publish.send(sender=OUTBOX_DELIVERY_TASK, headers=headers)
+        published.append((args, dict(headers)))
+
+    monkeypatch.setattr(worker.deliver_event, "apply_async", publish)
+    scan_task_id = str(uuid4())
+    scan = await asyncio.to_thread(
+        lambda: worker.scan_pending.apply(task_id=scan_task_id, throw=True).get()
+    )
+    assert scan == {"selected": 1, "published": 1}
+    assert len(published) == 1
+    published_args, published_headers = published[0]
+    assert published_args == (str(event.event_id), str(h.project))
+    assert set(published_headers) == {
+        "traceparent",
+        "workstream-request-id",
+        "workstream-correlation-id",
+    }
+    assert published_headers["workstream-request-id"] == scan_task_id
+    assert published_headers["workstream-correlation-id"] == scan_task_id
+    return published_headers
+
+
+def _assert_recovery_spans(exporter, event, original_trace_id):
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 5
+    original, scan_span, first, duplicate, expired = spans
+    assert len({span.context.trace_id for span in spans}) == 4
+    assert original.context.trace_id == original_trace_id
+    assert original.parent is None
+    assert scan_span.name == "celery workstream.outbox.scan_pending"
+    assert scan_span.parent is None
+    assert scan_span.context.trace_id != original_trace_id
+    assert first.context.trace_id == scan_span.context.trace_id
+    assert first.parent is not None
+    assert first.parent.span_id == scan_span.context.span_id
+    assert duplicate.parent is None and expired.parent is None
+    assert first.attributes["workstream.outbox.correlation_id"] == event.correlation_id, [
+        dict(span.attributes) for span in spans
+    ]
+    assert "workstream.outbox.correlation_id" not in duplicate.attributes
+    assert "workstream.outbox.correlation_id" not in expired.attributes
+
+
+async def _assert_recovery_storage(h, event, immutable_before):
+    async with h.factory() as session:
+        after = await session.get(OutboxEvent, event.event_id)
+        immutable_after = (
+            after.payload,
+            after.payload_digest,
+            after.correlation_id,
+            after.event_type,
+            after.event_version,
+        )
+        attempts = (
+            await session.scalars(
+                select(OutboxDeliveryAttempt).where(
+                    OutboxDeliveryAttempt.event_id == event.event_id
+                )
+            )
+        ).all()
+    assert immutable_after == immutable_before
+    assert len(attempts) == 1
+    assert attempts[0].stage == "completed"
+    assert attempts[0].outcome_json is not None
+    assert not any(
+        "trace" in column.name or "span" in column.name
+        for model in (OutboxEvent, OutboxDeliveryAttempt)
+        for column in model.__table__.columns
+    )
+    assert all(
+        "trace" not in field.name and "span" not in field.name
+        for facts in h.consumed
+        for field in fields(facts)
+    )
+
+
+async def test_pending_recovery_trace_annotates_only_after_committed_invocation(
+    delivery_harness,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    h = delivery_harness
+    runtime, exporter = _start_recovery_runtime(monkeypatch)
+    with runtime.tracer.start_as_current_span("original business event") as original_span:
+        original_trace_id = original_span.get_span_context().trace_id
+        event = await h.append(correlation_id=str(new_record_id()))
+    immutable_before = await _immutable_event_snapshot(h.factory, event.event_id)
+    worker, worker_factories = _configure_recovery_worker(h, monkeypatch)
+
+    try:
+        annotation_seen = _install_committed_annotation_observer(h, worker_factories, event)
+        published_headers = await _scan_recovery_event(worker, h, event, monkeypatch)
+        assert await _deliver_recovery_task(
+            worker, h, event, str(uuid4()), headers=published_headers
+        ) == {
+            "status": "delivery_recorded"
+        }
+        assert annotation_seen == [event.correlation_id]
+        assert len(h.handled) == 1
+
+        assert await _deliver_recovery_task(worker, h, event, str(uuid4())) == {
+            "status": "delivery_unavailable"
+        }
+        assert len(h.handled) == 1
+
+        expired_event = await h.append(idempotency_key="recovery-expired-control")
+        expired_claim = await h.delivery.claim(
+            expired_event.event_id,
+            h.project,
+            "expired-control",
+        )
+        assert expired_claim is not None
+        await expire(h)
+        assert await _deliver_recovery_task(worker, h, expired_event, str(uuid4())) == {
+            "status": "delivery_recorded"
+        }
+        assert len(h.handled) == 1
+        assert runtime.force_flush()
+        _assert_recovery_spans(exporter, event, original_trace_id)
+        await _assert_recovery_storage(h, event, immutable_before)
+    finally:
+        celery_diagnostics._ACTIVE_TASKS.clear()
+        runtime.shutdown()
+        get_settings.cache_clear()
 
 
 async def test_crash_before_invoke_recovers(delivery_harness):

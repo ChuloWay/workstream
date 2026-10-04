@@ -271,8 +271,6 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/authorization/post_submit/test_atomicity.py",
         "tests/authorization/post_submit/test_concurrency.py",
         "tests/authorization/post_submit/test_live_authority.py",
-        "tests/authorization/post_submit/test_migration.py",
-        "tests/authorization/post_submit/test_receipt_custody.py",
         "tests/authorization/post_submit/test_principals.py",
         "tests/authorization/post_submit/test_timeout.py",
         "tests/authorization/post_policy/test_concurrency.py",
@@ -290,6 +288,11 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/authorization/setup_finalization/test_resource_context.py",
         "tests/authorization/setup_finalization/test_structure.py",
     }.issubset(shared_a)
+    post_submit_storage_contracts = {
+        "tests/authorization/post_submit/test_receipt_custody.py",
+        "tests/authorization/post_submit/test_migration.py",
+    }
+    assert post_submit_storage_contracts.isdisjoint(shared_a | shared_b)
     static_contracts = {
         "tests/test_artifact_architecture.py",
         "tests/architecture/test_module_boundaries.py",
@@ -318,7 +321,9 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/contributions/records/test_storage.py",
         "tests/contributions/records/test_migration.py",
         runner.ADMIN_RUNNER_MODULE,
-    } | static_contracts | set(catalogue.TASK_ROUTING_REQUEST_MODULES) == modules_by_lane["schema_contracts"]
+    } | static_contracts | post_submit_storage_contracts | set(catalogue.OBSERVABILITY_MODULES) | set(catalogue.TASK_ROUTING_REQUEST_MODULES) == modules_by_lane[
+        "schema_contracts"
+    ]
     assert {
         "tests/authorization/admin_access/test_bootstrap_cli.py",
         "tests/authorization/admin_access/test_api_journey.py",
@@ -697,6 +702,32 @@ def test_catalogue_partition_addition_is_bounded(addition: str, allowed: bool) -
             ownership._validate_additive_partition_transition(current, trusted)
 
 
+@pytest.mark.parametrize(
+    "addition",
+    (
+        "backend/app/adapters/observability.py",
+        "backend/app/core/celery_observability.py",
+        "backend/app/core/diagnostic_logging.py",
+        "backend/app/core/observability.py",
+        "backend/app/interfaces/observability.py",
+    ),
+)
+def test_observability_partition_additions_are_exact(addition: str) -> None:
+    from scripts import behavior_ownership as ownership
+
+    authority = {
+        "schema": ownership.PARTITION_SCHEMA,
+        "protected_base_commit": "a" * 40,
+        "assignments": [{"group": "shared", "target": "backend/app/core/config.py"}],
+    }
+    trusted = {**authority, "authority_digest": ownership._digest(authority)}
+    current = {
+        **trusted,
+        "assignments": [*authority["assignments"], {"group": "shared", "target": addition}],
+    }
+    ownership._validate_additive_partition_transition(current, trusted)
+
+
 def test_finalization_tests_are_all_in_project_lanes():
     from scripts.test_lane_catalogue import PROJECT_MODULES
 
@@ -716,6 +747,18 @@ def test_routing_request_proofs_use_schema_lane_with_measured_headroom():
         "tests/tasks/post_submit_routing/test_request_storage.py",
     }
     assert set(catalogue.TASK_ROUTING_REQUEST_MODULES) == expected
+    for lane in LANES:
+        assert set(lane.modules) & expected == (expected if lane.name == "schema_contracts" else set())
+    assert not expected & set(catalogue.PARTITION_LANES_BY_MODULE)
+
+
+def test_observability_proofs_use_schema_lane_with_measured_headroom():
+    expected = {
+        "tests/test_observability.py",
+        "tests/test_observability_otlp.py",
+        "tests/test_celery_observability.py",
+    }
+    assert set(catalogue.OBSERVABILITY_MODULES) == expected
     for lane in LANES:
         assert set(lane.modules) & expected == (expected if lane.name == "schema_contracts" else set())
     assert not expected & set(catalogue.PARTITION_LANES_BY_MODULE)

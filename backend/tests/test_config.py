@@ -60,9 +60,262 @@ def test_default_settings_are_fail_closed(monkeypatch: pytest.MonkeyPatch) -> No
     assert settings.api_admin_mutation_rate_window_seconds == 60
     assert settings.api_authorization_read_rate_limit == 120
     assert settings.api_authorization_read_rate_window_seconds == 60
+    assert settings.observability_log_level == "INFO"
+    assert settings.observability_otlp_endpoint is None
+    assert settings.observability_trace_sample_ratio == 0.1
+    assert settings.observability_export_timeout_seconds == 2.0
+    assert settings.observability_shutdown_timeout_seconds == 3.0
     limits = submission_archive_limits(settings)
     assert limits.maximum_expanded_bytes == 512 * 1024 * 1024
     assert limits.maximum_entry_bytes == 128 * 1024 * 1024
+
+
+def test_observability_endpoint_is_a_credential_free_origin() -> None:
+    settings = Settings(observability_otlp_endpoint="https://[::1]:4318/")
+    assert settings.observability_otlp_endpoint == "https://[::1]:4318"
+
+    for endpoint in (
+        "ftp://collector.invalid",
+        "https://user:secret@collector.invalid",
+        "https://collector.invalid/path",
+        "https://collector.invalid?token=secret",
+        "https://collector.invalid#fragment",
+    ):
+        with pytest.raises(ValueError, match="^invalid observability OTLP endpoint$"):
+            Settings(observability_otlp_endpoint=endpoint)
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "canonical"),
+    [
+        ("http://localhost", "http://localhost"),
+        ("https://0xcollector.local", "https://0xcollector.local"),
+        ("https://0xdeadbeef.collector.local", "https://0xdeadbeef.collector.local"),
+        ("https://Collector.Example:4318/", "https://collector.example:4318"),
+        ("http://127.0.0.1:4318", "http://127.0.0.1:4318"),
+        ("https://[2001:0db8:0:0:0:0:0:1]:4318", "https://[2001:db8::1]:4318"),
+    ],
+)
+def test_observability_endpoint_accepts_canonical_http_origin_controls(
+    endpoint: str,
+    canonical: str,
+) -> None:
+    settings = Settings(environment="test", observability_otlp_endpoint=endpoint)
+    assert settings.observability_otlp_endpoint == canonical
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://bad_host:4318",
+        "https://127.000.000.001:4318",
+        "https://999.1.1.1:4318",
+        "https://2130706433:4318",
+        "https://[2001:db8::1",
+        "https://collector.local:0",
+        "https://collector.local:65536",
+        "https://collector.local:notaport",
+        "https://collector.local?",
+        "https://collector.local#",
+        "https://-collector.local",
+        "https://collector-.local",
+        "https://collector..local",
+        "https://collector.local.",
+        f"https://{'a' * 64}.local",
+        f"https://{'.'.join(['a' * 63] * 5)}",
+        "https://colléctor.local",
+        "https://collector%2elocal",
+        "https://collector .local",
+        "https://collector\t.local",
+    ],
+)
+def test_observability_endpoint_rejects_noncanonical_host_and_port_input(
+    endpoint: str,
+) -> None:
+    with pytest.raises(ValueError, match="^invalid observability OTLP endpoint$") as caught:
+        Settings(environment="test", observability_otlp_endpoint=endpoint)
+    assert endpoint not in f"{caught.value!s} {caught.value!r}"
+    assert_secret_not_retained(caught.value, endpoint, traceback_module_prefixes=("app.",))
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://0x7f000001:4318",
+        "https://0x7f.0x0.0x0.0x1:4318",
+        "https://127.0x0.0.1:4318",
+        "https://0177.0x0.0.1:4318",
+    ],
+)
+def test_ambiguous_numeric_host_forms_cannot_fall_through_dns_validation(
+    endpoint: str,
+) -> None:
+    with pytest.raises(ValueError, match="^invalid observability OTLP endpoint$") as caught:
+        Settings(environment="test", observability_otlp_endpoint=endpoint)
+    assert endpoint not in f"{caught.value!s} {caught.value!r}"
+    assert_secret_not_retained(caught.value, endpoint, traceback_module_prefixes=("app.",))
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://operator-secret@bad_host:4318?token=private",
+        "https://0x7f.0x0.0x0.0x1:4318",
+        "https://collector.local?",
+        "https://collector.local#",
+    ],
+)
+@pytest.mark.parametrize("source", ["kwargs", "environment", "dotenv", "model_validate"])
+def test_observability_endpoint_requires_canonical_http_origin_across_settings_sources(
+    endpoint: str,
+    source: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        f'WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT="{endpoint}"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT", raising=False)
+    constructors = {
+        "kwargs": lambda: Settings(observability_otlp_endpoint=endpoint),
+        "environment": lambda: Settings(),
+        "dotenv": lambda: Settings(_env_file=env_file),
+        "model_validate": lambda: Settings.model_validate(
+            {"observability_otlp_endpoint": endpoint}
+        ),
+    }
+    if source == "environment":
+        monkeypatch.setenv("WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT", endpoint)
+    with pytest.raises(ValueError, match="^invalid observability OTLP endpoint$") as caught:
+        constructors[source]()
+    assert endpoint not in f"{caught.value!s} {caught.value!r}"
+    assert_secret_not_retained(caught.value, endpoint, traceback_module_prefixes=("app.",))
+
+
+@pytest.mark.parametrize("environment", ["local", "dev", "development", "test"])
+def test_local_observability_endpoint_may_use_http(environment: str) -> None:
+    settings = Settings(
+        environment=environment,
+        observability_otlp_endpoint="http://collector.local:4318",
+    )
+    assert settings.observability_otlp_endpoint == "http://collector.local:4318"
+
+
+@pytest.mark.parametrize("environment", ["staging", "preview", "prod", "production"])
+def test_production_like_observability_endpoint_requires_https_without_retaining_input(
+    environment: str,
+) -> None:
+    endpoint = "http://private-collector.invalid:4318"
+    with pytest.raises(
+        ValueError,
+        match="^production observability OTLP endpoint requires HTTPS$",
+    ) as caught:
+        Settings(environment=environment, observability_otlp_endpoint=endpoint)
+    assert endpoint not in f"{caught.value!s} {caught.value!r}"
+    assert_secret_not_retained(caught.value, endpoint, traceback_module_prefixes=("app.",))
+
+
+def test_plaintext_production_endpoint_from_external_sources_is_not_retained(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    endpoints = (
+        "http://environment-private.invalid:4318",
+        "http://dotenv-private.invalid:4318",
+        "http://mapping-private.invalid:4318",
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "WORKSTREAM_ENVIRONMENT=production\n"
+        f"WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT={endpoints[1]}\n",
+        encoding="utf-8",
+    )
+    constructors = (
+        lambda: Settings(),
+        lambda: Settings(_env_file=env_file),
+        lambda: Settings.model_validate(
+            {
+                "environment": "production",
+                "observability_otlp_endpoint": endpoints[2],
+            }
+        ),
+    )
+    for index, constructor in enumerate(constructors):
+        monkeypatch.delenv("WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT", raising=False)
+        monkeypatch.delenv("WORKSTREAM_ENVIRONMENT", raising=False)
+        if index == 0:
+            monkeypatch.setenv("WORKSTREAM_ENVIRONMENT", "production")
+            monkeypatch.setenv("WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT", endpoints[0])
+        with pytest.raises(
+            ValueError,
+            match="production observability OTLP endpoint requires HTTPS",
+        ) as caught:
+            constructor()
+        for endpoint in endpoints:
+            assert endpoint not in f"{caught.value!s} {caught.value!r}"
+            assert_secret_not_retained(
+                caught.value,
+                endpoint,
+                traceback_module_prefixes=("app.",),
+            )
+
+
+@pytest.mark.parametrize("environment", ["staging", "preview", "prod", "production"])
+def test_production_like_observability_endpoint_accepts_https(environment: str) -> None:
+    settings = Settings(
+        environment=environment,
+        observability_otlp_endpoint="https://collector.example:4318",
+    )
+    assert settings.observability_otlp_endpoint == "https://collector.example:4318"
+
+
+def test_invalid_observability_endpoint_fails_startup_without_retaining_input(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    canaries = (
+        "https://operator:direct-secret@collector.invalid?token=direct-query",
+        "https://operator:environment-secret@collector.invalid?token=environment-query",
+        "https://operator:dotenv-secret@collector.invalid?token=dotenv-query",
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        f"WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT={canaries[2]}\n",
+        encoding="utf-8",
+    )
+    constructors = (
+        lambda: Settings(observability_otlp_endpoint=canaries[0]),
+        lambda: Settings(),
+        lambda: Settings(_env_file=env_file),
+        lambda: Settings.model_validate({"observability_otlp_endpoint": canaries[0]}),
+    )
+    for index, constructor in enumerate(constructors):
+        monkeypatch.delenv("WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT", raising=False)
+        if index == 1:
+            monkeypatch.setenv("WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT", canaries[1])
+        with pytest.raises(ValueError, match="^invalid observability OTLP endpoint$") as caught:
+            constructor()
+        assert not isinstance(caught.value, ValidationError)
+        for canary in canaries:
+            assert canary not in f"{caught.value!s} {caught.value!r}"
+            assert_secret_not_retained(
+                caught.value,
+                canary,
+                traceback_module_prefixes=("app.",),
+            )
+
+
+def test_observability_bounds_reject_unbounded_resource_configuration() -> None:
+    for values in (
+        {"observability_trace_sample_ratio": -0.01},
+        {"observability_trace_sample_ratio": 1.01},
+        {"observability_export_timeout_seconds": 0.01},
+        {"observability_shutdown_timeout_seconds": 11},
+    ):
+        with pytest.raises(ValidationError):
+            Settings(**values)
 
 
 def test_submission_archive_settings_map_to_fixed_validated_limits() -> None:
@@ -1279,10 +1532,7 @@ def test_s3_prefix_validation_rejects_noncanonical_outer_bounds(value: object) -
 
 def test_minio_endpoint_canonicalization_handles_ipv6_and_invalid_ports() -> None:
     assert canonical_minio_endpoint("HTTP://[::1]:9000/") == "http://[::1]:9000"
-    assert (
-        canonical_minio_endpoint("http://[0:0:0:0:0:0:0:1]:9000")
-        == "http://[::1]:9000"
-    )
+    assert canonical_minio_endpoint("http://[0:0:0:0:0:0:0:1]:9000") == "http://[::1]:9000"
     with pytest.raises(ValueError, match="endpoint is invalid"):
         canonical_minio_endpoint("http://localhost:not-a-port")
 

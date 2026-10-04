@@ -506,13 +506,16 @@ Statuses:
 The run references downstream truth by id/hash. Operators can read the latest
 run through the project setup API to understand whether setup is still queued,
 blocked by guide sufficiency, waiting on policy approval, compiling post-submit
-policy, blocked by unsupported checker requirements, or failed at the
-queue/worker layer. Error summaries and post-submit derivation summaries are
-bounded and redacted; server logs remain the source for sensitive diagnostics.
-The default setup-run API returns the source snapshot id for correlation, but
-does not return the exact source snapshot hash; exact hashes remain available
-through source-snapshot and policy records when an authorized workflow needs
-provenance inspection.
+policy, blocked by unsupported checker requirements, or failed at the Celery
+queue layer. Retained error summaries and post-submit derivation summaries are
+bounded and redacted. Operational diagnostics use fixed safe events plus
+validated request and correlation IDs; they do not retain sensitive messages or
+bodies. See the [observability operator guide](engineering/observability.md) for
+the privacy, access, retention, correlation, and outage contract. The default
+setup-run API returns the source snapshot id for correlation, but does not
+return the exact source snapshot hash; exact hashes remain available through
+source-snapshot and policy records when an authorized workflow needs provenance
+inspection.
 
 ## GuideSourceArtifactBinding
 

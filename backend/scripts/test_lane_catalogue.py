@@ -27,8 +27,6 @@ SHARED_FOUNDATION_MODULES = (
     "tests/authorization/post_submit/test_atomicity.py",
     "tests/authorization/post_submit/test_concurrency.py",
     "tests/authorization/post_submit/test_live_authority.py",
-    "tests/authorization/post_submit/test_migration.py",
-    "tests/authorization/post_submit/test_receipt_custody.py",
     "tests/authorization/post_submit/test_principals.py",
     "tests/authorization/post_submit/test_timeout.py",
 
@@ -470,6 +468,14 @@ TASK_ROUTING_REQUEST_MODULES = (
     "tests/tasks/post_submit_routing/test_request_storage.py",
 )
 
+# Core diagnostics stay on the schema/architecture lane with measured hosted
+# headroom; the shared and task lanes are already closest to the hard cap.
+OBSERVABILITY_MODULES = (
+    "tests/test_observability.py",
+    "tests/test_observability_otlp.py",
+    "tests/test_celery_observability.py",
+)
+
 # The routing PREP proofs reuse the same real completion fixture on this lane.
 ROUTING_AUTH_PREPARATION_MODULES = (
     "tests/authorization/post_submit_routing/test_contracts.py",
@@ -491,6 +497,8 @@ LANES = (
         "schema_contracts",
         (
             SCHEMA_MODULE,
+            "tests/authorization/post_submit/test_receipt_custody.py",
+            "tests/authorization/post_submit/test_migration.py",
             "tests/reviews/packet/test_storage.py",
             "tests/reviews/lifecycle/test_contracts.py",
             "tests/reviews/lifecycle/test_storage.py",
@@ -514,6 +522,7 @@ LANES = (
             "tests/test_test_lane_evidence.py",
             "tests/test_merge_test_lane_evidence.py",
             *TASK_ROUTING_REQUEST_MODULES,
+            *OBSERVABILITY_MODULES,
             ADMIN_RUNNER_MODULE,
         ),
     ),
