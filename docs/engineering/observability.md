@@ -61,8 +61,8 @@ reasons, broker URLs, or exception content.
 The general diagnostic log level does not enable routine SQLAlchemy engine
 statement or transaction logging. Workstream applies a `WARNING` floor to the
 SQLAlchemy logger family and preserves an existing stricter `ERROR` or
-`CRITICAL` level. SQLAlchemy warnings and errors still pass through the closed
-formatter as fixed events without SQL text or parameters.
+`CRITICAL` level. SQLAlchemy records that meet the resulting effective level still pass through
+the closed formatter as fixed events without SQL text or parameters.
 
 The explicit HTTP path records a registered route template, normalized method,
 status class, fixed outcome, and validated diagnostic IDs. The task path records
