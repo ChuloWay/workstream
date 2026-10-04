@@ -130,8 +130,10 @@ compensation effects, operations and release proof complete v0.1.
 The [independent MCP package](../mcp_server/README.md) implements nine self-service
 and administrative read tools through WS-MCP-002-03. The
 [Go CLI](../cli/README.md) provides caller-profile and exact-project authorization
-reads plus human self-profile editing, with text/JSON output. CLI write uncertainty
-is explicit and never automatically retried. These source packages do not claim
+reads plus human self-profile editing and exact-project inspection, with text/JSON
+output. Inspection preserves server-selected full/minimal fields; no public list
+route is invented. CLI write uncertainty is explicit and never automatically
+retried. These source packages do not claim
 hosted deployment, published CLI binaries or the complete proposed workflow catalogue.
 
 Privacy-bounded API and prefork Celery diagnostics are implemented: structured
@@ -281,7 +283,10 @@ cannot be reused as post-submission review-gate evidence. See the
   provides `whoami` and `project access PROJECT_ID` through those public REST
   contracts. [CLI profile editing](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-02.md)
   adds caller-owned display-field set/clear through public PATCH, with explicit
-  uncertain-outcome reporting and no automatic retry. Built-binary HTTP
+  uncertain-outcome reporting and no automatic retry.
+  [CLI project inspection](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-03.md)
+  adds the existing public project read, preserving server-selected full/minimal
+  fields and concealed foreign/revoked/suspended denials. Built-binary HTTP
   integration and isolated real-API proof accompany
   the package. Further public commands, optional TUI and binary distribution
   remain planned; CLI reads do not complete unfinished product lifecycle work.
