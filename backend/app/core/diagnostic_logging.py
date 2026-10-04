@@ -59,6 +59,7 @@ _OWNED_LOGGERS = (
     "kombu",
     "opentelemetry",
     "sqlalchemy",
+    "sqlalchemy.engine",
 )
 _REQUEST_ID: ContextVar[str | None] = ContextVar("diagnostic_request_id", default=None)
 _CORRELATION_ID: ContextVar[str | None] = ContextVar("diagnostic_correlation_id", default=None)
@@ -69,6 +70,10 @@ _LOGGING_SNAPSHOT: dict[str, tuple[list[logging.Handler], bool, int]] = {}
 _SAFE_HANDLER: logging.Handler | None = None
 _PROCESS_SERVICE_NAME: str | None = None
 _SERVICE_NAMES = frozenset({"workstream-api", "workstream-celery"})
+_LOGGER_MINIMUM_LEVELS = {
+    "sqlalchemy": logging.WARNING,
+    "sqlalchemy.engine": logging.WARNING,
+}
 
 
 def canonical_uuid_text(value: object) -> str | None:
@@ -192,7 +197,13 @@ def acquire_safe_logging(settings: Settings, service_name: str) -> None:
                 _LOGGING_SNAPSHOT[key] = (list(logger.handlers), logger.propagate, logger.level)
                 logger.handlers = [handler]
                 logger.propagate = False
-                logger.setLevel(getattr(logging, settings.observability_log_level))
+                configured_level = getattr(logging, settings.observability_log_level)
+                minimum_level = _LOGGER_MINIMUM_LEVELS.get(logger.name)
+                logger.setLevel(
+                    configured_level
+                    if minimum_level is None
+                    else max(configured_level, minimum_level, logger.level)
+                )
         elif _PROCESS_SERVICE_NAME != service_name:
             raise ValueError("conflicting diagnostic process service")
         _LOGGING_OWNERS += 1

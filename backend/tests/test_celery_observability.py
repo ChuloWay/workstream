@@ -102,6 +102,25 @@ def test_repeated_celery_receiver_setup_does_not_duplicate_spans_or_readers(
         runtime.shutdown()
 
 
+def test_observed_task_inventory_matches_every_registered_workstream_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("WORKSTREAM_CELERY_TASK_ALWAYS_EAGER", "true")
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    try:
+        from app.workers.celery_app import OBSERVED_TASK_NAMES, celery_app
+
+        celery_app.loader.import_default_modules()
+        registered = frozenset(
+            task_name for task_name in celery_app.tasks if task_name.startswith("workstream.")
+        )
+        assert registered == OBSERVED_TASK_NAMES
+    finally:
+        get_settings.cache_clear()
+
+
 def test_sequential_task_failures_and_retries_reset_every_context_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

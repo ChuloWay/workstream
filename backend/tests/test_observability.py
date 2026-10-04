@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import copy
-import faulthandler
 import io
 import json
 import logging
@@ -36,6 +35,7 @@ from opentelemetry.trace import (
     TraceState,
 )
 import pytest
+from sqlalchemy import create_engine, text as sql_text
 from uvicorn.config import LOGGING_CONFIG
 
 from app.core.api_controls import RequestContextMiddleware
@@ -54,7 +54,7 @@ from app.core.observability import (
     SanitizingSpanExporter,
 )
 from app.main import create_app
-from observability_test_support import fake_export_adapter
+from observability_test_support import bounded_process_exit_probe, fake_export_adapter
 
 PAGINATION_SECRET = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
 KNOWN_TASK = "workstream.test.known"
@@ -629,6 +629,75 @@ def test_real_loggers_and_hostile_exception_never_render_sensitive_values(
             logger.disabled = disabled
 
 
+def test_sqlalchemy_query_logs_are_suppressed_until_final_safe_logging_release() -> None:
+    loggers = [logging.getLogger(name) for name in ("sqlalchemy", "sqlalchemy.engine")]
+    original = [
+        (list(logger.handlers), logger.propagate, logger.level) for logger in loggers
+    ]
+    seeded_handlers = [logging.NullHandler(), logging.NullHandler()]
+    seeded_levels = [logging.ERROR, logging.DEBUG]
+    for logger, handler, level in zip(
+        loggers, seeded_handlers, seeded_levels, strict=True
+    ):
+        logger.handlers = [handler]
+        logger.propagate = False
+        logger.setLevel(level)
+
+    leases = 0
+    engine = None
+    try:
+        for _ in range(2):
+            diagnostic_logging.acquire_safe_logging(_settings(), "workstream-api")
+            leases += 1
+        assert [logger.level for logger in loggers] == [logging.ERROR, logging.WARNING]
+        stream = io.StringIO()
+        handler = diagnostic_logging.safe_handler()
+        assert handler is not None
+        handler.stream = stream
+
+        engine = create_engine("sqlite+pysqlite:///:memory:")
+        with engine.connect() as connection:
+            connection.execute(sql_text("select 'sql-private-canary'"))
+        logging.getLogger("sqlalchemy.engine").warning("transaction-private-canary")
+        records = [json.loads(line) for line in stream.getvalue().splitlines()]
+        assert [record["event"] for record in records] == ["sqlalchemy.warning"]
+        assert "sql-private-canary" not in stream.getvalue()
+        assert "transaction-private-canary" not in stream.getvalue()
+
+        diagnostic_logging.release_safe_logging()
+        leases -= 1
+        assert diagnostic_logging.safe_handler() is handler
+        logging.getLogger("sqlalchemy.engine").error("sql-error-private-canary")
+        records = [json.loads(line) for line in stream.getvalue().splitlines()]
+        assert [record["event"] for record in records] == [
+            "sqlalchemy.warning",
+            "sqlalchemy.error",
+        ]
+        assert "private-canary" not in stream.getvalue()
+
+        engine.dispose()
+        engine = None
+        diagnostic_logging.release_safe_logging()
+        leases -= 1
+        assert diagnostic_logging.safe_handler() is None
+        for logger, handler, level in zip(
+            loggers, seeded_handlers, seeded_levels, strict=True
+        ):
+            assert logger.handlers == [handler]
+            assert logger.propagate is False
+            assert logger.level == level
+    finally:
+        if engine is not None:
+            engine.dispose()
+        for _ in range(leases):
+            diagnostic_logging.release_safe_logging()
+        for logger, snapshot in zip(loggers, original, strict=True):
+            handlers, propagate, level = snapshot
+            logger.handlers = handlers
+            logger.propagate = propagate
+            logger.setLevel(level)
+
+
 class _FailingExporter(SpanExporter):
     def export(self, spans):
         raise RuntimeError("credential=collector-secret")
@@ -687,68 +756,19 @@ class _ShutdownProbeReader(InMemoryMetricReader):
         super().shutdown(timeout_millis=timeout_millis, **kwargs)
 
 
-class _ProcessBlockingExporter(SpanExporter):
-    def export(self, _spans) -> SpanExportResult:
-        return SpanExportResult.SUCCESS
-
-    def shutdown(self) -> None:
-        Event().wait(30)
-
-
-_PROCESS_TRACE_STREAM: Any = None
-
-
-def _bounded_process_exit_probe(
-    status: Any,
-    trace_path: str,
-    *,
-    call_runtime_shutdown: bool = True,
-    register_sdk_atexit: bool = False,
-) -> None:
-    global _PROCESS_TRACE_STREAM
-    if register_sdk_atexit:
-        tracer_provider_type = diagnostics.TracerProvider
-        meter_provider_type = diagnostics.MeterProvider
-        diagnostics.TracerProvider = lambda **kwargs: tracer_provider_type(
-            **{**kwargs, "shutdown_on_exit": True}
-        )
-        diagnostics.MeterProvider = lambda **kwargs: meter_provider_type(
-            **{**kwargs, "shutdown_on_exit": True}
-        )
-    runtime = ObservabilityRuntime(
-        _settings(observability_shutdown_timeout_seconds=0.1),
-        service_name="workstream-api",
-        export_adapter=fake_export_adapter(_ProcessBlockingExporter()),
-    )
-    runtime.start()
-    status.send("runtime_started")
-    _PROCESS_TRACE_STREAM = Path(trace_path).open("w", encoding="utf-8")
-    faulthandler.dump_traceback_later(
-        1.0,
-        repeat=True,
-        file=_PROCESS_TRACE_STREAM,
-    )
-    if call_runtime_shutdown:
-        runtime.shutdown()
-        status.send("shutdown_returned")
-    else:
-        status.send("probe_returning")
-    status.close()
-
-
 def _start_process_exit_probe(
     tmp_path: Path,
     *,
     call_runtime_shutdown: bool = True,
     register_sdk_atexit: bool = False,
-) -> tuple[Any, Any, Path]:
+) -> tuple[Any, Any, Path, float]:
     context = multiprocessing.get_context("spawn")
     status, child_status = context.Pipe(duplex=False)
     trace_path = tmp_path / (
         "sdk-atexit-trace.log" if register_sdk_atexit else "process-exit-trace.log"
     )
     process = context.Process(
-        target=_bounded_process_exit_probe,
+        target=bounded_process_exit_probe,
         args=(child_status, str(trace_path)),
         kwargs={
             "call_runtime_shutdown": call_runtime_shutdown,
@@ -756,8 +776,15 @@ def _start_process_exit_probe(
         },
     )
     process.start()
+    startup_deadline = monotonic() + 10
     child_status.close()
-    return process, status, trace_path
+    return process, status, trace_path, startup_deadline
+
+
+def _expect_probe_startup(status: Any, expected: str, deadline: float) -> None:
+    remaining = max(0.0, deadline - monotonic())
+    assert status.poll(remaining), f"child did not report {expected} within startup bound"
+    assert status.recv() == expected
 
 
 def _stop_process(process: Any, status: Any) -> None:
@@ -904,10 +931,10 @@ def test_timed_out_shutdown_keeps_safe_logging_until_exporter_thread_stops(
 def test_bounded_runtime_shutdown_returns_before_process_exit(
     tmp_path: Path,
 ) -> None:
-    process, status, trace_path = _start_process_exit_probe(tmp_path)
+    process, status, trace_path, startup_deadline = _start_process_exit_probe(tmp_path)
     try:
-        assert status.poll(10), "child did not finish runtime startup"
-        assert status.recv() == "runtime_started"
+        _expect_probe_startup(status, "target_entered", startup_deadline)
+        _expect_probe_startup(status, "runtime_started", startup_deadline)
         assert status.poll(2), "bounded runtime shutdown did not return"
         assert status.recv() == "shutdown_returned"
         started = monotonic()
@@ -924,13 +951,13 @@ def test_bounded_runtime_shutdown_returns_before_process_exit(
 def test_owned_providers_do_not_register_unbounded_interpreter_exit_hooks(
     tmp_path: Path,
 ) -> None:
-    process, status, trace_path = _start_process_exit_probe(
+    process, status, trace_path, startup_deadline = _start_process_exit_probe(
         tmp_path,
         call_runtime_shutdown=False,
     )
     try:
-        assert status.poll(10), "child did not finish runtime startup"
-        assert status.recv() == "runtime_started"
+        _expect_probe_startup(status, "target_entered", startup_deadline)
+        _expect_probe_startup(status, "runtime_started", startup_deadline)
         assert status.poll(2), "child did not reach interpreter exit"
         assert status.recv() == "probe_returning"
         started = monotonic()
@@ -947,20 +974,20 @@ def test_owned_providers_do_not_register_unbounded_interpreter_exit_hooks(
 def test_process_exit_probe_rejects_sdk_atexit_shutdown_registration(
     tmp_path: Path,
 ) -> None:
-    process, status, trace_path = _start_process_exit_probe(
+    process, status, trace_path, startup_deadline = _start_process_exit_probe(
         tmp_path,
         call_runtime_shutdown=False,
         register_sdk_atexit=True,
     )
     try:
-        assert status.poll(10), "mutant child did not finish runtime startup"
-        assert status.recv() == "runtime_started"
+        _expect_probe_startup(status, "target_entered", startup_deadline)
+        _expect_probe_startup(status, "runtime_started", startup_deadline)
         assert status.poll(2), "mutant child did not reach interpreter exit"
         assert status.recv() == "probe_returning"
         process.join(timeout=2)
         assert process.is_alive(), "SDK atexit registration mutant escaped the exit bound"
         trace = trace_path.read_text(encoding="utf-8")
-        assert "test_observability.py" in trace and " in shutdown" in trace
+        assert "observability_test_support.py" in trace and " in shutdown" in trace
         assert "opentelemetry/sdk/trace" in trace
     finally:
         _stop_process(process, status)

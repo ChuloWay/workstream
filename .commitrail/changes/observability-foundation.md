@@ -450,7 +450,9 @@ deployment controls are active.
       Celery task/retry/error, Kombu/OpenTelemetry, SQLAlchemy, Workstream, and
       unknown logger paths with sensitive data placed separately in `msg`,
       interpolation arguments, exception objects, and extras; output contains
-      only registered constant event values.
+      only registered constant event values. SQLAlchemy and its engine logger
+      keep a `WARNING` minimum without weakening stricter configured levels, so
+      routine statement/transaction logs are not amplified by diagnostics.
 - [x] Metric attribute keys and values remain in the closed low-cardinality set
       across requests and tasks with different record/user/project/request IDs.
       Unknown methods, routes, task names, exception classes, and outcome values
@@ -523,6 +525,8 @@ deployment controls are active.
 | A committed pending event selected after process restart starts a scan root disconnected from the original business trace; canonical before-publish headers make delivery its child, only delivery gains the stored correlation after independently visible invocation commit, and expired/duplicate/completed controls remain unannotated with no repeated effect or noncanonical database change | Existing outbox scan/publish/deliver/invoke composition; no recovery-specific telemetry hook | `tests/outbox/test_recovery_postgresql.py::test_pending_recovery_trace_annotates_only_after_committed_invocation` |
 | Every exported API/Celery span and metric has only closed keys and normalized values | Core explicit ASGI/Celery instrumentation and sanitizing exporter | `tests/test_observability.py::test_complete_export_sets_are_closed_and_bounded` plus `tests/test_observability.py::test_unknown_http_method_and_varied_ids_collapse_to_one_exact_metric_series` and `tests/test_celery_observability.py::test_unknown_task_and_state_values_collapse_to_one_exact_metric_series` |
 | Dynamic logger data and hostile exception stringification never enter Workstream diagnostics | Core closed log-event map and signal exits | `tests/test_observability.py::test_real_loggers_and_hostile_exception_never_render_sensitive_values` |
+| Safe logging suppresses real SQLAlchemy statement and transaction INFO output, retains sanitized warning/error events through overlapping leases, and restores both owned logger snapshots after the final release | Core reference-counted logging owner with a SQLAlchemy-family `WARNING` floor | `tests/test_observability.py::test_sqlalchemy_query_logs_are_suppressed_until_final_safe_logging_release` |
+| The bounded Celery task-name inventory exactly covers every registered Workstream task from the configured Celery modules | Celery composition root supplying the immutable task inventory | `tests/test_celery_observability.py::test_observed_task_inventory_matches_every_registered_workstream_task` |
 | Canonical localhost/DNS/IPv4/IPv6 origins, one optional root slash, and valid ports pass; ambiguous decimal/hex whole-host forms, raw empty query/fragment delimiters, malformed numeric/IP/port, Unicode/percent-encoded/whitespace/control, underscore, trailing-dot, empty/overlong, and leading/trailing-hyphen hosts fail with the same input-free error through kwargs, environment, dotenv, and model-validation paths; production-like environments require HTTPS | Sole strict observability-origin owner in typed settings validation | `tests/test_config.py::test_ambiguous_numeric_host_forms_cannot_fall_through_dns_validation`, `tests/test_config.py::test_observability_endpoint_requires_canonical_http_origin_across_settings_sources`, `tests/test_config.py::test_invalid_observability_endpoint_fails_startup_without_retaining_input`, and `tests/test_config.py::test_production_like_observability_endpoint_requires_https_without_retaining_input` |
 | Failure after provider assignment clears provider and instrument references, closes owned resources, and leaves force-flush disabled | Core runtime partial-start cleanup | `tests/test_observability.py::test_failure_after_provider_assignment_clears_every_runtime_reference` |
 | A local HTTP receiver decodes real SDK-produced trace and metric OTLP protobufs; separate 503, refusal, and delayed-response cases remain bounded for an API request and one registered local/eager Celery task, preserve the HTTP response and exact task result/invocation count, and emit only documented input-free safe events; the separate Redis proof owns prefork claims | Typed OTLP adapter plus core runtime/export lifecycle and safe logging owner | `tests/test_observability_otlp.py::test_real_otlp_http_transport_is_sanitized_and_fail_open` |
@@ -648,6 +652,20 @@ deployment controls are active.
   canonical before-publish headers during the actual scan task and supplying
   them to the actual delivery task; the delivery is a child of the new scan root
   and remains disconnected from the original business trace.
+- Logging-amplification replay: resolved SQLAlchemy INFO statement/transaction
+  amplification by owning both the family and engine loggers with a `WARNING`
+  floor, preserving stricter prior levels and exact final-lease restoration.
+- Task-inventory replay: resolved drift risk by comparing the immutable observed
+  task inventory with the actual registered Workstream task set.
+- Hosted AUTH-boundary preflight: resolved the new oversized recovery-test item
+  by extracting cohesive setup, scan/header, committed-annotation, trace-graph,
+  and storage assertions while retaining the original named behavior and
+  leaving the frozen debt ledger unchanged.
+- Process-exit harness replay: diagnosed repeated startup misses as the spawn
+  child re-importing the large test module before entering the target. The same
+  startup and exit limits now exercise a lightweight target in the existing
+  observability test support, with an early target-entry milestone and stack
+  capture before runtime startup.
 
 Hosted schema-lane replay found the Celery task fallback's UUIDv4 site missing
 from the exact generation inventory. The fallback is now classified as a
