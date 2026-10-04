@@ -104,7 +104,7 @@ def test_project_show_preserves_projection_and_selector(cli):
         "slug": "project-slug",
         "description": "Details\n\x1b[32m",
         "created_at": PROFILE["created_at"],
-        "updated_at": PROFILE["updated_at"],
+        "updated_at": "2026-10-02T00:00:00Z",
     }
     with http_fixture() as (origin, response, requests):
         for value in (minimal, full, full | {"description": None}):
@@ -126,10 +126,16 @@ def test_project_show_preserves_projection_and_selector(cli):
                 )
             text = cli(origin, TOKEN, "project", "show", PROJECT)
             assert text.returncode == 0 and text.stderr == ""
-            assert "Name: Project é\\u000A\\u001B[31m" in text.stdout
-            assert "\x1b" not in text.stdout
-            assert ("Slug:" in text.stdout) == ("slug" in value)
-            assert ("Description:" in text.stdout) == ("description" in value)
+            expected = f"Project: {PROJECT}\nName: Project é\\u000A\\u001B[31m\nStatus: draft\n"
+            if "slug" in value:
+                description = (
+                    "—" if value["description"] is None else "Details\\u000A\\u001B[32m"
+                )
+                expected += (
+                    f"Slug: project-slug\nDescription: {description}\n"
+                    "Created: 2026-10-01T00:00:00Z\nUpdated: 2026-10-02T00:00:00Z\n"
+                )
+            assert text.stdout == expected
         assert len(requests) == 15  # Exactly one call per invocation; no preflight.
 
 
