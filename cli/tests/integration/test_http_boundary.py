@@ -178,6 +178,13 @@ def test_profile_update_uncertainty_and_known_denials(cli):
                 "service_unavailable",
                 True,
             ),
+            (
+                422,
+                b'{"error":{"code":"invalid_api_response"}}',
+                {},
+                "invalid_api_response",
+                False,
+            ),
             (200, b'{"actor_profile_id":"bad"}', {}, "invalid_api_response", True),
             (
                 200,

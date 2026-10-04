@@ -201,15 +201,15 @@ func (c *Client) UpdateProfile(ctx context.Context, update ProfileUpdate) (Resul
 		return result, errors.New("profile update exceeds the request size limit")
 	}
 	raw, err := c.request(ctx, http.MethodPatch, "/api/v1/actors/me", "", body)
-	if err == nil {
-		result, err = decodeProfile(raw)
+	if err != nil {
+		return result, err
 	}
+	result, err = decodeProfile(raw)
 	if err != nil {
 		var failure *Failure
 		if errors.As(err, &failure) {
-			// Complete 4xx replies are known denials. Every other failed
-			// write response conservatively leaves commit outcome unknown.
-			failure.OutcomeUnknown = failure.Status < 400 || failure.Status >= 500 || failure.Code == "invalid_api_response"
+			// A malformed successful reply cannot establish the write outcome.
+			failure.OutcomeUnknown = true
 		}
 	}
 	return result, err
@@ -320,12 +320,12 @@ func (c *Client) request(ctx context.Context, method, path, query string, body [
 	}
 	response, err := c.http.Do(req)
 	if err != nil {
-		return nil, &Failure{Code: "service_unavailable"}
+		return nil, &Failure{Code: "service_unavailable", OutcomeUnknown: method == http.MethodPatch}
 	}
 	defer response.Body.Close()
 	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
 	if err != nil || len(responseBody) > maxResponseBytes {
-		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode}
+		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, OutcomeUnknown: method == http.MethodPatch}
 	}
 	correlation := response.Header.Get("X-Correlation-ID")
 	if !safeCorrelation.MatchString(correlation) || !c.safeMetadata(correlation) {
@@ -348,11 +348,14 @@ func (c *Client) request(ctx context.Context, method, path, query string, body [
 				code = envelope.Error.Code
 			}
 		}
-		return nil, &Failure{Code: code, Status: response.StatusCode, CorrelationID: correlation}
+		// A fully received 4xx response is a known denial regardless of its
+		// server-controlled error code. Incomplete replies were handled above.
+		return nil, &Failure{Code: code, Status: response.StatusCode, CorrelationID: correlation,
+			OutcomeUnknown: method == http.MethodPatch && (response.StatusCode < 400 || response.StatusCode >= 500)}
 	}
 	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" || !jsontext.Value(responseBody).IsValid() {
-		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, CorrelationID: correlation}
+		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, CorrelationID: correlation, OutcomeUnknown: method == http.MethodPatch}
 	}
 	return json.RawMessage(responseBody), nil
 }
