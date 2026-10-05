@@ -292,7 +292,11 @@ cannot be reused as post-submission review-gate evidence. See the
   uncertain-outcome reporting and no automatic retry.
   [CLI project inspection](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-03.md)
   adds the existing public project read, preserving server-selected full/minimal
-  fields and concealed foreign/revoked/suspended denials. Built-binary HTTP
+  fields and concealed foreign/revoked/suspended denials.
+  [CLI manager task browsing](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-04.md)
+  adds one-page task discovery and exact task detail through existing manager
+  reads, with server-owned live authority and opaque continuation.
+  Built-binary HTTP
   integration and isolated real-API proof accompany
   the package. Further public commands, optional TUI and binary distribution
   remain planned; CLI reads do not complete unfinished product lifecycle work.

@@ -7,7 +7,8 @@
 - Delivered boundary: [WS-CLI-001-01](WS-CLI-001-01.md), caller-owned profile and
   exact-project authorization context; [WS-CLI-001-02](WS-CLI-001-02.md), human
   self-profile editing through the public REST API; [WS-CLI-001-03](WS-CLI-001-03.md),
-  exact-project inspection with server-owned full/minimal disclosure.
+  exact-project inspection with server-owned full/minimal disclosure;
+  [WS-CLI-001-04](WS-CLI-001-04.md), public manager task pagination and detail.
 
 ## Current boundary
 
@@ -21,6 +22,8 @@ bearers to the same API; it is not a CLI client library. The independent Go
 package under `cli/` implements `whoami`, `project access PROJECT_ID`, and
 `profile update` for caller-owned human display fields. `project show PROJECT_ID`
 reads only the existing public project's server-selected disclosure shape.
+`project tasks PROJECT_ID` and `project task PROJECT_ID TASK_ID` add the public
+manager queue/detail journey with server-owned authority on each page.
 All have text/JSON
 output and built-binary integration proof. Mutations preserve omitted/null
 semantics and explicitly report uncertain outcomes without automatic retries.
@@ -61,11 +64,13 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
 3. **WS-CLI-001-03:** Inspect a known project alongside its current authority,
    through the public project read. Preserve administrative/contributor response
    boundaries; do not invent a public project-list contract.
-4. **Later governed-work commands:** Add project setup, task, submission,
+4. **WS-CLI-001-04:** Browse a manager task page and open its exact project/task
+   detail, passing opaque continuation unchanged without automatic pagination.
+5. **Later governed-work commands:** Add project setup, contributor task, submission,
    review, revision, and contribution reads/writes only as their actual public
    contracts and authority boundaries become available. Split by user journey,
    not one PR per endpoint or one giant catalogue PR.
-5. **Optional TUI:** Add a focused public queue/evidence view after its API
+6. **Optional TUI:** Add a focused public queue/evidence view after its API
    workflow is complete. Never require a TUI for agents or scripts.
 
 ## Risks and proof

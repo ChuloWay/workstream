@@ -308,6 +308,8 @@ The independent [Go CLI](cli/README.md) provides `workstream whoami` and
 caller-owned human display fields, through the currently public REST API.
 `workstream project show PROJECT_ID` inspects the project fields returned for
 the caller's current authority, preserving contributor-minimal disclosure.
+`workstream project tasks PROJECT_ID` and `project task PROJECT_ID TASK_ID`
+provide a paginated manager list-to-detail journey through public reads.
 All support human-readable and JSON output, using the caller's Flow token.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
