@@ -58,14 +58,15 @@ atomic contribution effects; checker success alone is not acceptance. The
 [canonical shared acceptance contract](spec_review_lifecycle.md#finalacceptance)
 defines one FinalAcceptance/submitter-contribution operation with two triggers,
 not a separate automated acceptance system. The human branch retains canonical
-`allow_review`. Shared REV source persistence and CON participation precede
-ARCH-04E false/pass integration; human queues/leases are not its prerequisites.
+`allow_review`. Shared REV source persistence and hidden CON submitter
+participation are delivered before ARCH-04E false/pass integration; human
+queues/leases are not its prerequisites.
 
 The setting is configurable through the existing authorized policy writer;
 creation defaults true and omitted replacements inherit the predecessor.
 Versioned hashing preserves old policy hashes and locks. False remains blocked
 by the current activation service. See the [implementation record](../.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation). Enabling false follows shared final-acceptance,
-CON and exact AUTH integration proof, not live human-review infrastructure.
+TASK effects, exact AUTH/source custody and routing proof, not live human-review infrastructure.
 The first complete contributor milestone is claim -> upload ZIP -> pre-submit
 feedback or immutable Submission -> automatic post-submit checking -> outcome.
 For an eligible project with locked `human_review_required=false`, success must
@@ -120,12 +121,12 @@ then branches on the locked ReviewPolicy: true routes to human `allow_review`;
 false invokes shared authorized acceptance without a human Review. Both routing
 integrations remain planned; false has metadata and guard-reachability proof only and guide activation
 still rejects it. ART-07A1 supplies metadata-only reviewer packet types, with no resolver or byte
-authority. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared acceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence mechanics
+authority. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared acceptance storage, CON-03C contribution/award storage, REV-12A1 disabled controller/fence mechanics and CON-07 hidden source-neutral submitter participation with complete frozen award sets
 are delivered. AUTH-19A supplies inert exact source commitments and a planned router
 identity; ARCH-04E2-A supplies hidden source preparation and a nominal receipt
 projection only after canonical consumption, which is unreachable while the action
-is planned. Durable receipts commit only with the complete consequence. Human review/revision, contribution and conditional
-compensation effects, operations and release proof complete v0.1.
+is planned. Durable receipts commit only with the complete consequence. Human review/revision, acceptance composition, conditional
+fulfillment, operations and release proof complete v0.1.
 
 The [independent MCP package](../mcp_server/README.md) implements nine self-service
 and administrative read tools through WS-MCP-002-03. The
@@ -188,10 +189,10 @@ cannot be reused as post-submission review-gate evidence. See the
 | Contributor artifact preparation | **Hidden and proven** | One outer ZIP; bounded scratch inspection; canonical manifest; platform and project prechecks; unchanged-work rejection; durable put intent; verification; capacity-charged ready admission; hidden final handoff validates the exact activated historical guide through owner ports | Complete the later public admission-only cutover |
 | Pre-submission intake checking | **Hidden with approved-guide lineage** | Separate versioned pre-submission catalogue, locked effective-plan compilation, platform/project checks during continuous preparation, blocking feedback before Submission creation, and one internal phase command covering execution/replay with the JSON precheck removed; ARCH-03D connects approved-guide lineage through the final durable handoff | Complete the canonical public cutover after evaluation/remediation prerequisites; passing intake must never substitute for post-submit evaluation |
 | Immutable Submission creation | **Hidden foundation; public packet creation retired** | Contributor preparation authority; durable pre-submit reservation and exact completed-evidence recovery without rerunning checks; atomic admission consumption; TASK-owned admission-backed creation with exact assignment ContributionPolicyVersion and locked policy lineage; fixed-service artifact binding; replay/concurrency/rollback proof | Finish downstream evaluation and the canonical public integration. The retained submission-list GET is not a usable creation POST |
-| Post-submission evaluation and `allow_review` | **Hidden exact preparation; routing planned** | One canonical CHECKER post-submit catalogue/compiler used by existing consumers, internal phase service with exact fixed-service post-submit authority, hidden value contracts and structural-handler conformance; ARCH-04B/04B2 input and output custody; ARCH-04C durable execution and current-result custody; ARCH-04D1 canonical ART material custody; ARCH-04D2 exact phase authority and receipts; ARCH-04E1A immutable route-neutral source table, detached facts and type-only accepted-effects Protocol; AUTH-19A inert source/receipt commitments and planned router identity; ARCH-04E1B-A immutable request/source-identity reservation and exact replay; ARCH-04E2-A strict resource/request/consequence matching and nominal adapter through canonical PREP, with planned denial before handle issuance | Next selected automated path: CON-07/shared acceptance prerequisites -> hidden handlers 04E1B-B -> activation 04E2-B -> live 04E3. True routing uses the delivered preparation and can proceed to its handler after its own prerequisites without CON/shared acceptance. Mandatory persisted custody begins at activation using delivered REV-12A1 fencing, actual obligation custody and scoped lifecycle activation; false guide activation also requires 04F remediation. Before publication, harden the same source table with mandatory exact route/owner receipts and refuse retained pre-authority rows. No source-manifest writer/reader, handler, current pointer, route or acceptance effect is live |
+| Post-submission evaluation and `allow_review` | **Hidden exact preparation; routing planned** | One canonical CHECKER post-submit catalogue/compiler used by existing consumers, internal phase service with exact fixed-service post-submit authority, hidden value contracts and structural-handler conformance; ARCH-04B/04B2 input and output custody; ARCH-04C durable execution and current-result custody; ARCH-04D1 canonical ART material custody; ARCH-04D2 exact phase authority and receipts; ARCH-04E1A immutable route-neutral source table, detached facts and type-only accepted-effects Protocol; AUTH-19A inert source/receipt commitments and planned router identity; ARCH-04E1B-A immutable request/source-identity reservation and exact replay; ARCH-04E2-A strict resource/request/consequence matching and nominal adapter through canonical PREP, with planned denial before handle issuance | Next selected automated path: shared acceptance/TASK effects using delivered CON-07 participation -> hidden handlers 04E1B-B -> activation 04E2-B -> live 04E3. True routing uses the delivered preparation and can proceed to its handler after its own prerequisites without CON/shared acceptance. Mandatory persisted custody begins at activation using delivered REV-12A1 fencing, actual fulfillment-root/ordinal custody and scoped lifecycle activation; false guide activation also requires 04F remediation. Before publication, harden the same source table with mandatory exact route/owner receipts and refuse retained pre-authority rows. No source-manifest writer/reader, handler, current pointer, route or acceptance effect is live |
 | Review queue and lease | **Hidden persistence foundation** | Queue/admission idempotency and ReviewLease/preference persistence; complete unavailable REV action/principal catalogue and typed AUTH contracts; ART-07A1 metadata-only packet contract and REV-03B immutable normalized packet persistence with live ingest custody; REV-04A Review/finding/resolution and completed request storage | Future resolver proof; canonical admission from `allow_review`; claim/lease/packet authority; lease copies the Submission-stamped policy version with no CON lookup |
-| Review decision and revision | **Hidden source storage; runtime planned** | Review/revision policy identities and mutation authority; REV-04A immutable Review, findings, resolutions and completed request storage; REV-04B shared FinalAcceptance storage without authority or runtime consumers; approved same-task revision-rebase semantics | Authorized atomic decision composition; `accept`, `needs_revision`, and `reject`; complete-context revision preparation; finding responses; replacement contributor rules; replay and recovery |
-| Contribution and compensation truth | **Schema foundations plus public policy administration** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings; public Finance policy administration; REV-04B shared acceptance source storage; CON-03C immutable ContributionRecord/CompensationAward storage | Compose one shared FinalAcceptance/submitter operation for human accept or authorized false/pass routing. Only actual Reviews create reviewer records. Evaluate frozen actor rules into zero, one or two awards |
+| Review decision and revision | **Hidden source storage; runtime planned** | Review/revision policy identities and mutation authority; REV-04A immutable Review, findings, resolutions and completed request storage; REV-04B shared FinalAcceptance storage without authority or a production writer; approved same-task revision-rebase semantics | Authorized atomic decision composition; `accept`, `needs_revision`, and `reject`; complete-context revision preparation; finding responses; replacement contributor rules; replay and recovery |
+| Contribution and compensation truth | **Hidden submitter participant plus public policy administration** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings; public Finance policy administration; REV-04B shared acceptance source storage; CON-03C immutable ContributionRecord/CompensationAward storage; CON-07 source-neutral submitter participant and complete zero/one/two frozen award-set staging/replay | Compose one shared FinalAcceptance/TASK-effects operation for human accept or authorized false/pass routing. Only actual Reviews create reviewer records. Add fulfillment-root/ordinal custody before activation; no public recognition or fulfillment route is live |
 | Fulfillment, reconciliation, and audit | **Planned** | Shared audit foundations, provider-neutral adapter convention, AUTH-OUTBOX-02 live dispatcher authority, retained phase audit decisions, Celery delivery/recovery scans and CON-02B custody | Feature-specific handlers and authority, conditional award fulfillment, callbacks, idempotent recovery, reconciliation, bounded operational reads, and release controls |
 | Runtime diagnostics | **Implemented foundation** | Closed structured logging, explicit API/Celery tracing, bounded metrics, safe correlation and optional typed OTLP export | Restrict broker publishers; configure and secure collector/log access, egress, encryption and finite deletion; prove diagnostics during the release drill; no deployed monitoring claim |
 | Frontend and pilot | **Planned after stable backend contracts** | React + Vite + TypeScript stack decision | Implement only stable backed surfaces, run the real internal pilot, repair findings, and complete release drills |
@@ -506,13 +507,14 @@ The next dependency-safe product sequence is:
    ARCH-04D2 supplies exact input/execute/finalize service authority and durable
    receipt custody. ARCH-04E1A supplies one immutable route-neutral source table,
    detached facts and source-neutral accepted-effects types. It has no runtime
-   entry. CON-03C adds immutable contribution/award storage without runtime writers or consumers. REV-12A1 supplies disabled controller/fence mechanics with PostgreSQL-enforced root-transaction checks, including raw-SQL savepoint rejection.
+   entry. CON-03C adds immutable contribution/award storage. REV-12A1 supplies disabled controller/fence mechanics with PostgreSQL-enforced root-transaction checks, including raw-SQL savepoint rejection. CON-07 supplies a hidden source-neutral submitter participant and complete frozen award-set staging/replay under that caller-root fence; it adds no acceptance/source writer, TASK effect, AUTH claim, route, fulfillment root or reviewer participant.
    Both branches have delivered request reservation 04E1B-A and hidden AUTH
    preparation 04E2-A before handlers 04E1B-B, activation 04E2-B and live 04E3.
    True routing may proceed after its own prerequisites to publish the exact TASK
    manifest and move `evaluation_pending -> review_pending` when no blocking
-   failure exists; this does not write the REV queue. CON-07 and shared acceptance
-   are additional false-branch requirements, not prerequisites for true admission.
+   failure exists; this does not write the REV queue. Shared acceptance and TASK
+   terminal effects are additional false-branch requirements; true admission has
+   no CON prerequisite.
    CHECKERS owns durable execution/currentness; the shared facade does not
    create a second result store. Work evaluation may be deterministic or use
    an explicitly implemented model judge. A structural presence check cannot
@@ -524,9 +526,11 @@ The next dependency-safe product sequence is:
    04E1A source facts through the delivered REV-04B source FK; TASK request/source-identity reservation (04E1B-A) and the hidden
    `task.post_submit.route` preparation for `workstream.task.post_submit_router`
    (04E2-A) are delivered. They bind exact `TaskAcceptedEffectsRequest` values
-   without a Review and precede CON-07 and shared acceptance
-   using the delivered REV-12A1 fence; neither may commit a standalone allow.
-   Complete hidden handlers 04E1B-B, then at activation 04E2-B enforce mandatory
+   without a Review. CON-07 now uses the delivered REV-12A1 fence to stage or
+   exactly replay the contribution and complete zero/one/two frozen award set;
+   paid replay checks its correlation and unpaid replay retains none. Complete
+   shared acceptance and TASK terminal effects, then hidden handlers 04E1B-B;
+   at activation 04E2-B enforce mandatory
    receipt custody and prove a genuine allow with all acceptance effects in that
    caller transaction. Only then wire live 04E3. CON-07 isolated storage controls
    prove economic participation, not acceptance authority. Prove real scoped activation/drain and 04F remediation before
@@ -640,19 +644,20 @@ Delivered foundations (not a claim of full public integration)
   REV-04A immutable Review/finding/resolution and completed request storage
     |
     v
-  REV-04B immutable shared acceptance source storage (no AUTH custody or runtime)
-  CON-03C immutable contribution records and fixed awards (no runtime consumers)
+  REV-04B immutable shared acceptance source storage (no AUTH custody or production writer)
+  CON-03C immutable contribution records and fixed awards
   REV-12A1 disabled generation-zero controller and transaction fence (no authority)
   AUTH-19A exact source/receipt contracts and planned router (no execution or receipt storage)
   ARCH-04E1B-A immutable request and future source-ID reservation (no source publication)
   ARCH-04E2-A strict hidden preparation + nominal PREP adapter (action unavailable)
+  CON-07 hidden source-neutral submitter participant + complete frozen award set
 
 Remaining integration
   both branches: handlers 04E1B-B -> activation 04E2-B -> live 04E3 dispatch/routing
-  true: own routing prerequisites; no CON-07/shared acceptance prerequisite
-  selected false path first: CON-07 -> shared acceptance -> handler
+  true: own routing prerequisites; no CON/shared acceptance prerequisite
+  selected false path first: shared acceptance + TASK terminal effects -> handler
     (first durable receipt commits with all consequence effects)
-    -> actual obligation custody and authorized lifecycle activation
+    -> fulfillment-root ordinal custody and authorized lifecycle activation
   -> 04F remediation
   -> public intake and immutable admitted Submission cutover
   -> automatically consume the durable current result + required checks pass
@@ -671,8 +676,8 @@ Remaining integration
 Human `needs_revision` follows controlled revision; `reject` records a rejected
 outcome. Every final human decision records reviewer work and any applicable
 reviewer award atomically; the false branch creates neither. Both acceptance
-triggers use the same operation. Shared acceptance persistence
-and CON participation must exist before false/pass routing is activated; human
+triggers use the same operation. Shared acceptance persistence and hidden CON
+participation are separate foundations before false/pass routing activation; human
 queues and leases are not prerequisites for that branch. The diagram shows the
 successful evaluation branches; failure/remediation and recovery remain required
 by the sequence and release gates below. Neither branch is live end to end yet.
@@ -716,8 +721,9 @@ v0.1 is not ready until all of the following are true:
   distinct effects.
 - Every final review atomically creates the reviewer ContributionRecord;
   `accept` additionally creates FinalAcceptance and the submitter record.
-- Frozen policy rules produce zero, one, or two CompensationAwards without
-  controlling Workstream lifecycle truth.
+- The delivered CON-07 participant's zero, one, or two frozen CompensationAwards
+  run inside the authorized shared-acceptance transaction without controlling
+  Workstream lifecycle truth; isolated hidden participation is not release proof.
 - Fulfillment and recovery are idempotent, observable, reconcilable, and safe
   under durable-job, provider, transaction, and unknown-commit failures.
 - Configure secured diagnostic collection with bounded retention and access,
@@ -787,8 +793,9 @@ remaining trace sequence is:
   [REV-04A Review source storage](../.commitrail/initiatives/WS-REV-001/WS-REV-001-04A.md)
   and [REV-04B acceptance storage](../.commitrail/initiatives/WS-REV-001/WS-REV-001-04B.md),
   followed by delivered [CON-03C contribution/award storage](../.commitrail/initiatives/WS-CON-001/WS-CON-001-03C.md),
-  and [REV-12A1 disabled controller/fence](../.commitrail/initiatives/WS-REV-001/WS-REV-001-12A1.md)
-  support the additional false-path acceptance-source AUTH custody, CON-07 and shared
+  [REV-12A1 disabled controller/fence](../.commitrail/initiatives/WS-REV-001/WS-REV-001-12A1.md)
+  and [CON-07 hidden participation](../.commitrail/initiatives/WS-CON-001/WS-CON-001-07.md)
+  support the additional false-path acceptance-source AUTH custody and shared
   acceptance prerequisites. Both branches have delivered request reservation `04E1B-A` and AUTH preparation `04E2-A`,
   then handlers/activation/live `04E1B-B -> 04E2-B -> 04E3`; true
   routing proceeds after its own prerequisites without shared acceptance; 04F supplies remediation. The mandatory
@@ -805,14 +812,16 @@ remaining trace sequence is:
   separately authorized checker-routing handler; the installed assignment handler
   does not supply that authority. These foundations do not require REV or fulfillment.
   TASK request/source-identity reservation `04E1B-A` and hidden AUTH preparation
-  `04E2-A` are delivered. The selected automated path next completes CON-07/shared
-  acceptance prerequisites, then handlers `04E1B-B`, activation `04E2-B` and
+  `04E2-A` and CON-07 hidden participation are delivered. The selected automated
+  path next completes shared acceptance/TASK effects, then handlers `04E1B-B`, activation `04E2-B` and
   live integration `04E3`; a dispatcher cannot authorize TASK or CHECKERS mutations.
   Later `04F` owns contributor-correctable remediation and admission-backed
   resubmission before public cutover; it does not block `allow_review` or
   replace human review/revision.
 - [CON-03C contribution/award storage](../.commitrail/initiatives/WS-CON-001/WS-CON-001-03C.md)
-  supplies immutable source/economic equality, without runtime recognition or fulfillment.
+  supplies immutable source/economic equality. [CON-07 hidden participation](../.commitrail/initiatives/WS-CON-001/WS-CON-001-07.md)
+  supplies source replay and complete frozen award sets, without runtime
+  recognition, acceptance authority or fulfillment.
 - Review/revision: REV packet/schema foundations may proceed independently,
   but live admission starts after `ARCH-04E`; the first live Review commit also
   requires the atomic CON decision participant on the delivered CON-03C storage.

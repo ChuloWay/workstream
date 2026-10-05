@@ -440,8 +440,11 @@ It is not a v0.1 review-transaction side effect.
 
 ## Contribution Record
 
-CON-03C supplies immutable storage only; live recognition and atomic
-contribution creation remain unavailable until the shared participant is implemented.
+CON-03C supplies immutable storage; CON-07 supplies hidden submitter
+participation with complete frozen award staging and exact replay in the
+caller's transaction. Live recognition still requires shared acceptance/TASK
+effects, source authority and runtime composition. Reviewer participation
+and fulfillment remain separate future work.
 
 The immutable, evidence-backed record of one completed contribution under locked
 project context. `completed_review` is created for every valid recorded human

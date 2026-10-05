@@ -51,6 +51,12 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         == modules_by_lane["project_lifecycle_b"]
         == modules_by_lane["project_lifecycle_c"]
         == {
+            "tests/contributions/records/test_contracts.py",
+            "tests/contributions/records/test_storage.py",
+            "tests/contributions/records/test_migration.py",
+            "tests/contributions/participation/test_contracts.py",
+            "tests/contributions/participation/test_postgresql.py",
+            "tests/contributions/participation/test_transactions.py",
             "tests/projects/guide_activation/test_admission.py",
             "tests/projects/guide_activation/test_audit_contract.py",
             "tests/projects/guide_activation/test_concurrency.py",
@@ -317,9 +323,6 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/reviews/acceptance/test_contracts.py",
         "tests/reviews/acceptance/test_storage.py",
         "tests/reviews/acceptance/test_migration.py",
-        "tests/contributions/records/test_contracts.py",
-        "tests/contributions/records/test_storage.py",
-        "tests/contributions/records/test_migration.py",
         runner.ADMIN_RUNNER_MODULE,
     } | static_contracts | post_submit_storage_contracts | set(catalogue.OBSERVABILITY_MODULES) | set(catalogue.TASK_ROUTING_REQUEST_MODULES) == modules_by_lane[
         "schema_contracts"

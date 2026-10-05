@@ -4,15 +4,21 @@
 planned router identity. ARCH-04E1B-A delivers caller-owned routing-request and
 future source-identity reservation. ARCH-04E2-A delivers strict hidden
 resource/preparation matching and a nominal fixed-router adapter through canonical
-PREP while the action remains planned/unavailable. CON-07/shared acceptance
-prerequisites are next for the selected automated path. Mandatory durable custody and its genuine positive
-proof belong to consequence activation (04E2-B), before production consumption. Neither phase may
+PREP while the action remains planned/unavailable. CON-07 hidden submitter
+participation and complete frozen award-set staging/replay are delivered. Shared
+acceptance and TASK terminal effects are next. Mandatory source-receipt custody,
+fulfillment-root ordinal custody and scoped lifecycle activation remain required
+before production consumption. Neither phase may
 commit a standalone allow. The first durable receipt must commit with its full
 governed consequence. Hidden handlers and activation follow as 04E1B-B/04E2-B,
 then live 04E3; true admission does not depend on CON/shared acceptance.
 
 The delivered [ART-07A1 metadata contract](../../WS-ART-001/WS-ART-001-07A1.md)
-and REV-03B normalized packet persistence are delivered. REV-04A Review source storage is also delivered; REV-04B shared acceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; hidden AUTH preparation is delivered before CON-07; mandatory persisted custody accompanies the first authorized atomic consequence at 04E2-B. These are storage prerequisites;
+and REV-03B normalized packet persistence are delivered. REV-04A Review source
+storage, REV-04B acceptance storage, CON-03C contribution/award storage,
+REV-12A1 disabled fencing, hidden AUTH preparation and CON-07 hidden submitter
+participation are delivered; mandatory persisted custody accompanies the first
+authorized atomic consequence at 04E2-B. These are hidden prerequisites;
 no live human-review queue or endpoint is required for automated acceptance.
 
 Use the [current plan](PLAN.md) and
@@ -32,7 +38,7 @@ work and historical proposals.
 | [ARCH-04D2](../../WS-ARCH-001/WS-ARCH-001-04D2.md) | Complete: exact materialization and execute/finalize authority; output write/bind unavailable; replaces AUTH-14/XINT-06B |
 | [AUTH-OUTBOX-01](PLAN.md#ws-auth-001-outbox-01--unavailable-dispatcher-contract) | Complete: unavailable exact dispatcher identity/action/phase contract; CON-02B and AUTH-OUTBOX-02 mechanics complete; feature authority/registration remain separate |
 | [AUTH-OUTBOX-02](PLAN.md#ws-auth-001-outbox-02--exact-dispatcher-activation) | Complete: exact dispatcher mechanics activation, phase audit custody and bounded prefork delivery; ARCH-03C2 subsequently registers assignment invalidation, while future handlers require their own exact authority |
-| [ARCH-04E2](../../WS-ARCH-001/planning/chunks/WS-ARCH-001-04E-canonical-allow-review.md#current-bounded-sequence) | Both branches: delivered source-only 04E1A -> delivered request reservation 04E1B-A -> delivered hidden AUTH preparation 04E2-A -> handlers 04E1B-B -> consequence activation 04E2-B -> live 04E3. True uses its own prerequisites; false additionally requires acceptance-source AUTH custody, CON-07/shared acceptance, actual obligation custody and scoped lifecycle activation |
+| [ARCH-04E2](../../WS-ARCH-001/planning/chunks/WS-ARCH-001-04E-canonical-allow-review.md#current-bounded-sequence) | Both branches: delivered source-only 04E1A -> delivered request reservation 04E1B-A -> delivered hidden AUTH preparation 04E2-A -> handlers 04E1B-B -> consequence activation 04E2-B -> live 04E3. True uses its own prerequisites and does not depend on CON; false additionally requires shared acceptance/TASK effects using delivered CON-07 participation, acceptance-source AUTH custody, fulfillment-root ordinal custody and scoped lifecycle activation |
 
 Guide activation needs CP05 -> CP06 -> hidden CP07 and POL-07, which also
 requires independent ARCH-04A registered-capability proof. It does not need

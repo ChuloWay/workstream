@@ -53,6 +53,17 @@ The delivered ARCH-04E1A route-neutral source row alone also cannot satisfy this
 boundary; later publication must add mandatory exact routing/owner-receipt
 custody to that same table before CON consumes the REV-owned acceptance fact.
 
+The hidden CON submitter participant is delivered as a source-neutral,
+flush-only consumer of a real stored FinalAcceptance and assignment lineage. It
+runs only inside the caller-owned root transaction after acquiring the supplied
+canonical lifecycle fence. It creates or exactly replays one
+`accepted_submission` ContributionRecord and the complete frozen award set:
+zero awards for unpaid work, one for money-only or points-only work, and two for
+combined work. Compensated replay checks the original correlation UUID and
+award IDs; unpaid replay retains no correlation to compare. This participant
+adds no acceptance/source writer, TASK transition, authorization claim, route,
+fulfillment root or reviewer contribution.
+
 The boundary MUST preserve four distinct facts:
 
 1. `Review` records the reviewer's decision.
@@ -262,12 +273,14 @@ depends on the binding.
 
 ### ContributionRecord
 
-CON-03C delivers immutable source and award storage only. No production writer,
-reader, participant or fulfillment consumer is registered. Before activation,
-originating Review/FinalAcceptance authority and the shared fence/ordinal must
-be installed; retained pre-authority sources and dependent contribution/award
-rows must cause refusal unchanged, never receipt backfill or deletion. CON-07
-must prove complete compensated award sets and whole-transaction rollback.
+CON-03C delivers immutable source and award storage. CON-07 adds the hidden
+source-neutral accepted-submission participant and complete frozen award-set
+owner. No production source writer, reader, recognition route, reviewer
+participant or fulfillment consumer is registered. Before activation,
+originating Review/FinalAcceptance authority, mandatory source receipts and
+fulfillment-root ordinal custody must be installed; retained pre-authority
+sources and dependent contribution/award rows must cause refusal unchanged,
+never receipt backfill or deletion.
 
 Canonical fields:
 
@@ -540,9 +553,10 @@ not ordinary review-claim selection.
 
 ## Atomic Review-To-Contribution Transaction
 
-One mandatory `ContributionCompensationDecisionParticipant` exposes two
-ordered, operation-specific methods in the initiating command's caller-owned
-session. Human decision composition uses the reviewer method; the shared
+The target decision boundary has two ordered, operation-specific CON methods in
+the initiating command's caller-owned session. CON-07 delivers the source-neutral
+submitter port; the reviewer participant remains future human-lifecycle work.
+Human decision composition will use the reviewer method, while the shared
 acceptance operation uses the submitter method for either trigger. A combined
 request carrying nullable FinalAcceptance or both actors' source and policy
 facts is prohibited.
@@ -628,21 +642,23 @@ Reject MUST NOT change an actor grant, another task, or another assignment.
 
 ### Submitter operation
 
-The submitter operation exists only after the shared acceptance operation has created
-FinalAcceptance and applied accepted Task and completed TaskAssignment effects.
+Runtime composition invokes the submitter operation only after shared acceptance
+has created FinalAcceptance and applied accepted Task and completed
+TaskAssignment effects. The delivered hidden participant itself consumes exact
+stored lineage and neither creates nor authorizes those facts.
 
-Its typed input contains only locked:
-
-- FinalAcceptance and TaskAssignment;
-- existing versioned Submission, project, and task;
-- submitter actor;
-- assignment-frozen submitter ContributionPolicyVersion;
-- the originating authorization decision, request, and correlation references;
-- the same stabilized artifact hash.
+Its delivered typed input contains only immutable scalar IDs for project, task,
+Submission, FinalAcceptance, TaskAssignment, submitter and the assignment-frozen
+ContributionPolicyVersion, plus the stabilized artifact hash, caller correlation
+UUID and expected lifecycle generation. It carries no authorization decision,
+receipt-shaped value or caller-selected contribution/award ID; future shared
+acceptance owns authority and request idempotency.
 
 It contains no direct Review or ReviewLease contribution-source fields. It
-creates exactly one `accepted_submission`, evaluates only the submitter rule,
-stages zero to two awards, returns typed audit/outbox inputs, and flushes.
+creates or exactly replays one `accepted_submission`, evaluates only the frozen
+submitter rule, stages the complete zero-to-two award set, returns immutable
+contribution/award facts, and flushes. Paid replay checks correlation equality;
+unpaid replay has no stored award correlation to compare.
 
 ### Atomicity
 
@@ -893,8 +909,9 @@ not canonical catalogue identifiers and MUST NOT be registered by CON.
 `task.claim` currently has a stable PermissionId but no ActionId. CP08 lineage
 and ARCH-03B task-owned readiness/inheritance composition must merge before AUTH registers
 or activates that future action. `review.claim` and `review.decision` remain
-planned until the inherited task-policy lineage, CON-07, and complete REV
-composition merge. AUTH must transfer the complete
+planned until complete REV composition and the reviewer participant merge; the
+inherited task-policy lineage and CON-07 submitter participant are delivered.
+AUTH must transfer the complete
 REV action set under its canonical custody contract; CON MUST NOT define a
 partial local transfer.
 
@@ -1022,8 +1039,9 @@ REV-12A owns the only `JointLifecycleReleaseControl` and
 generation, or availability writer.
 REV-12A1 delivers its disabled generation-zero persistence and caller-root
 mutation fence. The [shared acceptance order](spec_review_lifecycle.md#implementation-order-and-required-proof)
-requires hidden AUTH preparation/receipt staging before CON-07, and mandatory
-persisted custody before production composition or consumption. Actual CON root
+now includes delivered hidden AUTH preparation and CON-07 participation, while
+mandatory persisted receipt custody remains required before production
+composition or consumption. Actual CON root
 storage and ordinal allocation remain required before either trigger creates
 fulfillment obligations; neither awards nor generic outbox rows substitute. Later REV-12A drain/operator
 work extends this same controller; it is not a prerequisite on live human
@@ -1151,11 +1169,13 @@ transaction participants do not wait for generic dispatch:
 
 The [shared acceptance order](spec_review_lifecycle.md#implementation-order-and-required-proof)
 governs the false branch: delivered TASK ARCH-04E1A source schema/detached facts
-precede the delivered REV-04B acceptance and CON-03C contribution/award storage.
-REV-12A1 delivers disabled controller/fence mechanics. TASK request staging (04E1B-A) and
-hidden AUTH preparation/receipt staging (04E2-A) precede CON-07 flush-only
-participation and the shared operation/04E1B-B handler. CON-07 isolated storage
-controls prove economic behavior, not acceptance authority. At 04E2-B, mandatory
+precede the delivered REV-04B acceptance, CON-03C contribution/award storage and
+CON-07 flush-only submitter participation. REV-12A1 supplies the disabled
+controller/fence mechanics used through CON's consumer-owned acquisition
+Protocol; TASK request staging (04E1B-A) and hidden AUTH preparation (04E2-A)
+are also delivered. Shared acceptance and TASK terminal effects precede the
+04E1B-B handler. CON-07 isolated storage controls prove economic behavior, not
+acceptance authority. At 04E2-B, mandatory
 same-table receipt custody and exact activation prove the first genuine allow
 with source, FinalAcceptance, TASK effects, CON rows and audit/outbox in one
 transaction. No standalone allow or fabricated authority fixture is permitted. Actual root ordinal custody and authorized lifecycle

@@ -5,9 +5,11 @@ planned router identity. ARCH-04E1B-A delivers caller-owned routing-request and
 future source-identity reservation. ARCH-04E2-A now delivers strict hidden
 resource/preparation matching and a nominal fixed-router adapter through canonical
 PREP. The action remains planned and unavailable, so it issues no handle, allow or
-receipt and writes no source or effect. The selected automated path proceeds to
-CON-07/shared acceptance prerequisites. Mandatory durable custody and its genuine positive
-proof belong to consequence activation (04E2-B), before production consumption. Neither phase may
+receipt and writes no source or effect. The selected automated path now has
+CON-07 hidden submitter participation and complete frozen award-set staging/replay.
+Shared acceptance and TASK terminal effects are next. Mandatory source-receipt
+custody, fulfillment-root ordinal custody and scoped lifecycle activation remain
+required before production consumption. Neither phase may
 commit a standalone allow. The first durable receipt must commit with its full
 governed consequence. Hidden handlers and activation follow as 04E1B-B/04E2-B,
 then live 04E3; true admission does not depend on CON/shared acceptance.
@@ -23,7 +25,11 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 
 - Disposition: Planned
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
-  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; hidden AUTH preparation is delivered before CON-07; mandatory persisted custody accompanies the first authorized atomic consequence at 04E2-B. No packet resolver or human runtime is live.
+  metadata-only packet types. REV-03B packets, REV-04A Review storage, REV-04B
+  FinalAcceptance storage, CON-03C contribution/award storage, REV-12A1 disabled
+  fencing, hidden AUTH preparation and CON-07 hidden submitter participation are
+  delivered. Mandatory persisted custody accompanies the first authorized atomic
+  consequence at 04E2-B. No packet resolver or human runtime is live.
 
 - Intent: provide deny-default, project-scoped authority with canonical human
   and service identities and attributable audit evidence.
@@ -67,7 +73,7 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: for the selected automated-acceptance delivery sequence, CON-07 using the delivered REV-12A1 disabled fence, before shared acceptance composition and hidden ARCH-04E1B-B;
+- Next usable boundary: shared acceptance/TASK effects before hidden ARCH-04E1B-B;
   ARCH-04E2 then owns exact routing activation before 04E3 live composition.
 - Governing source: `docs/spec_authorization_service.md`, authorization code,
   migrations, and tests.
@@ -76,12 +82,13 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
   fail-closed action availability.
 
 Delivered [REV-12A1](../WS-REV-001/WS-REV-001-12A1.md) supplies only disabled
-generation-zero controller storage and transaction locking. Acceptance-source AUTH custody,
-CON participation and authorized activation remain separate required work.
+generation-zero controller storage and transaction locking. Acceptance-source
+AUTH custody, shared acceptance/TASK effects and authorized activation remain
+separate work.
 
 This is delivery priority, not a prerequisite of true human admission. Both
 routing branches have delivered request reservation 04E1B-A → delivered AUTH preparation 04E2-A → hidden handlers 04E1B-B → activation 04E2-B → live 04E3; true routing
-can proceed after its own prerequisites without CON-07/shared acceptance or
+can proceed after its own prerequisites without CON/shared acceptance or
 scoped lifecycle activation. False routing adds those requirements. Human final
 acceptance later uses the same authorized shared acceptance/CON operation.
 

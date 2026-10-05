@@ -60,8 +60,10 @@ existing locked ReviewPolicy. After required post-submit checks pass, true
 requires human review; false uses an authorized automated FinalAcceptance and
 submitter ContributionRecord, with no reviewer contribution. This branch is
 not live yet: the [policy setting](.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
-is implemented for configuration; shared acceptance/CON integration remains
-pending. Adjudication is excluded.
+is implemented for configuration, and the hidden submitter participant can
+stage or exactly replay its complete frozen award set. Shared acceptance, TASK
+terminal effects, authority/source custody, routing activation and public
+composition remain pending. Adjudication is excluded.
 
 The stage describes the purpose and lifecycle boundary, not a promise that all
 checks are deterministic. Deterministic compilation and policy routing do not
@@ -174,14 +176,16 @@ Findings and policy proposals retain document-access evidence.
 [ART-07A1](.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) provides strict
 metadata-only reviewer packet types, not a resolver or byte-access capability.
 REV-03B persists immutable normalized packets using live guide ingest identities.
-REV-04A Review and REV-04B shared FinalAcceptance storage foundations are delivered; CON-03C contribution/award storage and REV-12A1's disabled controller/transaction
-fence are delivered. Exact hidden AUTH preparation is delivered before hidden participation; durable source custody accompanies the first atomic governed consequence. Acceptance storage has no production writer or AUTH receipt; mandatory exact
+REV-04A Review and REV-04B shared FinalAcceptance storage foundations are delivered; CON-03C contribution/award storage, REV-12A1's disabled controller/transaction
+fence, exact hidden AUTH preparation and CON-07 hidden source-neutral submitter
+participation with complete frozen award sets are delivered. Acceptance storage
+has no production writer or AUTH receipt; mandatory exact
 authority hardening precedes any runtime consumer. These prerequisites do not require live
 human review before the first automated acceptance path.
 
 Active work is connecting those foundations into the remaining production
 lifecycle: the remaining artifact custody chain, review and revision,
-atomic contribution/award creation and conditional fulfillment.
+shared acceptance/TASK effects, reviewer participation and conditional fulfillment.
 Contribution evidence remains the input for a separately implemented future
 reputation projection. Frontend product work follows stable and tested backend
 contracts for the surface it consumes.
@@ -705,9 +709,10 @@ allow, receipt, source write, publication or effect is reachable. The true branc
 binds only the future TASK `evaluation_pending -> review_pending` manifest effect,
 without creating a REV queue dependency. The false branch binds exact
 `TaskAcceptedEffectsRequest` values for the future shared FinalAcceptance path,
-without fabricating a Review. CON-07/shared acceptance prerequisites are next;
-actual receipt custody must commit with the governed consequence before shared
-acceptance and contribution creation run.
+without fabricating a Review. CON-07 now supplies the hidden source-neutral
+submitter participant and complete frozen award-set staging/replay. Shared
+acceptance and TASK terminal effects remain next; actual receipt custody must
+commit with the governed consequence before production consumption.
 
 ## v0.1 Success Standard
 

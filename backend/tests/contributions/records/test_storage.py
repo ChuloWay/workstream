@@ -139,23 +139,21 @@ async def test_contribution_source_substitution(tmp_path, isolated_database_env)
 async def test_award_definition_substitution(tmp_path, isolated_database_env):
     async with contribution_source(tmp_path, isolated_database_env, paid=True) as h:
         async with h.factory() as session:
-            await insert_record(session, h.submitter_record)
             await insert_record(session, h.reviewer_record)
-            money, points = await award_values(session, h.submitter_record)
             reviewer_awards = await award_values(session, h.reviewer_record)
             await session.commit()
         async with h.factory() as session:
+            money, points = reviewer_awards
             for changes in (
                 {"quantity": money["quantity"] + Decimal("0.000000000000000001")},
                 {"unit_code": "EUR"},
                 {"adapter_binding_id": points["adapter_binding_id"]},
                 {"award_definition_id": points["award_definition_id"]},
-                {"award_definition_id": reviewer_awards[0]["award_definition_id"]},
                 {"instrument_type": "project_points", "quantity": Decimal("7"), "unit_code": "PTS"},
             ):
                 await reject_award(session, money, "award frozen definition mismatch", **changes)
             await reject_award(session, money, "award contribution lineage mismatch",
-                               contributor_id=h.reviewer_record.contributor_id)
+                               contributor_id=h.submitter_record.contributor_id)
             assert await rows(session, "compensation_awards") == []
             definition = await session.scalar(text(
                 "SELECT pg_get_functiondef('public.guard_compensation_award()'::regprocedure)"
@@ -172,7 +170,15 @@ async def test_award_definition_substitution(tmp_path, isolated_database_env):
             provision_services=False, storage_settings=h.settings,
         ) as foreign:
             async with h.factory() as session:
+                await insert_record(session, h.submitter_record)
+                money, points = await award_values(session, h.submitter_record)
                 foreign_money = (await award_values(session, foreign.submitter_record))[0]
+                await reject_award(
+                    session,
+                    money,
+                    "award frozen definition mismatch",
+                    award_definition_id=reviewer_awards[0]["award_definition_id"],
+                )
                 await reject_award(session, money, "award contribution lineage mismatch",
                                    project_id=foreign_money["project_id"])
                 await reject_award(session, money, "award contribution lineage mismatch",
@@ -181,9 +187,10 @@ async def test_award_definition_substitution(tmp_path, isolated_database_env):
                                    award_definition_id=foreign_money["award_definition_id"],
                                    adapter_binding_id=foreign_money["adapter_binding_id"])
                 assert await rows(session, "compensation_awards") == []
+                await insert_award(session, money)
+                await insert_award(session, points)
+                await session.commit()
         async with h.factory() as session, session.begin():
-            await insert_award(session, money)
-            await insert_award(session, points)
             await reject_award(session, money, "uq_compensation_awards", id=new_record_id())
 
 
@@ -211,8 +218,12 @@ async def test_contribution_award_immutability(tmp_path, isolated_database_env):
         async with h.factory() as session:
             before = await session.scalar(select(func.clock_timestamp()))
             await insert_record(session, h.submitter_record, created_at=datetime(2000, 1, 1, tzinfo=UTC))
-            award = (await award_values(session, h.submitter_record))[0]
-            await insert_award(session, award, created_at=datetime(2000, 1, 1, tzinfo=UTC))
+            awards = await award_values(session, h.submitter_record)
+            award = awards[0]
+            for values in awards:
+                await insert_award(
+                    session, values, created_at=datetime(2000, 1, 1, tzinfo=UTC)
+                )
             await session.commit()
             after = await session.scalar(select(func.clock_timestamp()))
             record = await session.get(ContributionRecord, h.submitter_record.id)
@@ -235,11 +246,20 @@ async def test_contribution_award_immutability(tmp_path, isolated_database_env):
 async def test_contribution_award_concurrency(tmp_path, isolated_database_env, kind, commit_first):
     import asyncio
     from tests.reviews.packet.test_repository import wait_for_blocker
-    async with contribution_source(tmp_path, isolated_database_env, paid=True) as h:
+    # Contribution source uniqueness is isolated with an unpaid accepted-submission
+    # record; the participant owns complete paid-set assembly. Award uniqueness is
+    # isolated with a reviewer award until the future reviewer participant exists.
+    async with contribution_source(
+        tmp_path, isolated_database_env, paid=kind == "award"
+    ) as h:
         async with h.factory() as session:
-            award = (await award_values(session, h.submitter_record))[0]
+            award = (
+                (await award_values(session, h.reviewer_record))[0]
+                if kind == "award"
+                else None
+            )
             if kind == "award":
-                await insert_record(session, h.submitter_record)
+                await insert_record(session, h.reviewer_record)
                 await session.commit()
         first_id = h.submitter_record.id if kind == "contribution" else award["id"]
         duplicate_id = new_record_id()
@@ -277,8 +297,11 @@ async def test_contribution_award_concurrency(tmp_path, isolated_database_env, k
             actual = await rows(session, table)
             assert [r["id"] for r in actual] == [str(first_id if commit_first else duplicate_id)]
             before = {name: await rows(session, name) for name in ("contribution_records", "compensation_awards")}
-            await insert_record(session, h.reviewer_record)
-            for values in await award_values(session, h.reviewer_record):
+            rollback_record = (
+                h.reviewer_record if kind == "contribution" else h.submitter_record
+            )
+            await insert_record(session, rollback_record)
+            for values in await award_values(session, rollback_record):
                 await insert_award(session, values)
             await session.rollback()
             assert {name: await rows(session, name) for name in before} == before
@@ -306,5 +329,62 @@ async def test_missing_contribution_parent(tmp_path, isolated_database_env):
             assert await rows(session, "compensation_awards") == []
             await insert_acceptance(session, h.acceptance)
             await insert_record(session, h.submitter_record)
-            await insert_award(session, award)
+            for values in await award_values(session, h.submitter_record):
+                await insert_award(session, values)
             await session.commit()
+
+
+async def test_accepted_submission_complete_award_set_is_deferred_and_exact(
+    tmp_path, isolated_database_env
+):
+    async with contribution_source(tmp_path, isolated_database_env, paid=True) as paid:
+        async with paid.factory() as session:
+            awards = await award_values(session, paid.submitter_record)
+            await insert_record(session, paid.submitter_record)
+            await insert_award(session, awards[0])
+            with pytest.raises(DBAPIError, match="incomplete award set"):
+                await session.commit()
+            await session.rollback()
+        async with paid.factory() as session:
+            assert await rows(session, "contribution_records") == []
+            assert await rows(session, "compensation_awards") == []
+            await insert_record(session, paid.submitter_record)
+            for award in awards:
+                await insert_award(session, award)
+            await session.commit()
+        async with paid.factory() as session:
+            assert len(await rows(session, "contribution_records")) == 1
+            assert len(await rows(session, "compensation_awards")) == 2
+
+    async with contribution_source(
+        tmp_path / "unpaid", isolated_database_env, provision_services=False,
+        storage_settings=paid.settings,
+    ) as unpaid:
+        async with unpaid.factory() as session:
+            await insert_record(session, unpaid.submitter_record)
+            await session.commit()
+        async with unpaid.factory() as session:
+            assert len(await rows(session, "contribution_records")) == 2
+            assert len(await rows(session, "compensation_awards")) == 2
+
+
+async def test_removing_deferred_completeness_guard_breaks_partial_set_rejection(
+    tmp_path, isolated_database_env
+):
+    async with contribution_source(tmp_path, isolated_database_env, paid=True) as h:
+        async with h.factory() as session:
+            awards = await award_values(session, h.submitter_record)
+            await session.execute(text(
+                "DROP TRIGGER accepted_submission_award_set_from_contribution "
+                "ON public.contribution_records"
+            ))
+            await session.execute(text(
+                "DROP TRIGGER accepted_submission_award_set_from_award "
+                "ON public.compensation_awards"
+            ))
+            await insert_record(session, h.submitter_record)
+            await insert_award(session, awards[0])
+            with pytest.raises(pytest.fail.Exception, match="DID NOT RAISE"):
+                with pytest.raises(DBAPIError, match="incomplete award set"):
+                    await session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+            await session.rollback()

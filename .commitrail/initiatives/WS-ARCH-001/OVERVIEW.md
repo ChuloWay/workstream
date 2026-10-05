@@ -5,9 +5,11 @@ planned router identity. ARCH-04E1B-A delivers caller-owned routing-request and
 future source-identity reservation. ARCH-04E2-A now delivers strict hidden
 resource/preparation matching and a nominal fixed-router adapter through canonical
 PREP. The action remains planned and unavailable, so it issues no handle, allow or
-receipt and writes no source or effect. The selected automated path proceeds to
-CON-07/shared acceptance prerequisites. Mandatory durable custody and its genuine positive
-proof belong to consequence activation (04E2-B), before production consumption. Neither phase may
+receipt and writes no source or effect. The selected automated path now has
+CON-07 hidden submitter participation and complete frozen award-set staging/replay.
+Shared acceptance and TASK terminal effects are next. Mandatory source-receipt
+custody, fulfillment-root ordinal custody and scoped lifecycle activation remain
+required before production consumption. Neither phase may
 commit a standalone allow. The first durable receipt must commit with its full
 governed consequence. Hidden handlers and activation follow as 04E1B-B/04E2-B,
 then live 04E3; true admission does not depend on CON/shared acceptance.
@@ -21,7 +23,11 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 
 - Disposition: Planned
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
-  metadata-only packet types. REV-03B packets and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON-03C contribution/award storage and REV-12A1 disabled controller/fence are delivered; hidden AUTH preparation is delivered before CON-07; mandatory persisted custody accompanies the first authorized atomic consequence at 04E2-B. No packet resolver or human runtime is live.
+  metadata-only packet types. REV-03B packets, REV-04A Review storage, REV-04B
+  FinalAcceptance storage, CON-03C contribution/award storage, REV-12A1 disabled
+  fencing, hidden AUTH preparation and CON-07 hidden submitter participation are
+  delivered. Mandatory persisted custody accompanies the first authorized atomic
+  consequence at 04E2-B. No packet resolver or human runtime is live.
 
 - Completed boundary: through 02H, [CP05](WS-ARCH-001-CP05.md), [CP06](WS-ARCH-001-CP06.md), [CP07](WS-ARCH-001-CP07.md), [ARCH-03A](WS-ARCH-001-03A.md), and
   [ARCH-04A consolidation](WS-ARCH-001-04A.md) canonical post-submit contracts/conformance.
@@ -46,9 +52,9 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
   [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
-  storage, without AUTH receipt custody or runtime consumers.
-- Next usable boundary: for the selected automated-acceptance delivery sequence, CON-07/shared acceptance prerequisites using the delivered REV-12A1 disabled fence,
-  plus mandatory same-table acceptance authority hardening before shared
+  storage, without AUTH receipt custody or a production writer.
+- Next usable boundary: shared acceptance/TASK effects using the delivered
+  REV-12A1 fence and CON-07 participant, plus mandatory same-table acceptance authority hardening before shared
   acceptance composition, then ARCH-04E1B/04E2/04E3 and ARCH-04F. Output-file
   authority remains unavailable for the zero-output catalogue.
   [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers public manager activation
@@ -77,12 +83,13 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   factory or authorization paths.
 
 Delivered [REV-12A1](../WS-REV-001/WS-REV-001-12A1.md) supplies only disabled
-generation-zero controller storage and transaction locking. Acceptance-source AUTH custody,
-CON participation and authorized activation remain separate required work.
+generation-zero controller storage and transaction locking. Acceptance-source
+AUTH custody, shared acceptance/TASK effects and authorized activation remain
+separate work.
 
 This is delivery priority, not a prerequisite of true human admission. Both
 routing branches have delivered request reservation 04E1B-A → delivered AUTH preparation 04E2-A → hidden handlers 04E1B-B → activation 04E2-B → live 04E3; true routing
-can proceed after its own prerequisites without CON-07/shared acceptance or
+can proceed after its own prerequisites without CON/shared acceptance or
 scoped lifecycle activation. False routing adds those requirements. Human final
 acceptance later uses the same authorized shared acceptance/CON operation.
 

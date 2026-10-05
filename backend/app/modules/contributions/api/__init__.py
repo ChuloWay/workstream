@@ -37,6 +37,15 @@ from app.modules.contributions.api.validation import (
     ContributionPolicyValidationPurpose,
     ContributionPolicyValidationRequest,
 )
+from app.modules.contributions.api.participation import (
+    ContributionParticipationConflict,
+    ContributionParticipationUnavailable,
+    ParticipationLifecycleFence,
+    SubmitterContributionFacts,
+    SubmitterParticipationPort,
+    SubmitterParticipationRequest,
+    SubmitterParticipationResult,
+)
 
 __all__ = (
     "ContributionPolicyOperationsPort",
@@ -46,6 +55,13 @@ __all__ = (
     "ContributionPolicyValidationPort",
     "ContributionPolicyValidationPurpose",
     "ContributionPolicyValidationRequest",
+    "ContributionParticipationConflict",
+    "ContributionParticipationUnavailable",
+    "ParticipationLifecycleFence",
+    "SubmitterContributionFacts",
+    "SubmitterParticipationPort",
+    "SubmitterParticipationRequest",
+    "SubmitterParticipationResult",
     "CompensationMode",
     "ContributionPolicyConflict",
     "ContributionPolicyCreateDraftRequest",

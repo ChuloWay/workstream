@@ -53,7 +53,7 @@ root-level version namespace do not create an alias.
 
 ## v0.1 Boundary
 
-### Planned shared acceptance
+### Shared acceptance boundary
 
 The accepted product direction uses `human_review_required: bool = true` in
 the existing guide-bound ReviewPolicy. After required post-submit checks pass,
@@ -64,7 +64,10 @@ enum, policy entity or adjudication setting is introduced. The
 queue, lease and human-decision sections apply only to the human branch. The
 [policy setting](../.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
 is persisted and versioned; false activation remains unavailable.
-Automated acceptance is not implemented or enabled by this note. In particular,
+The hidden source-neutral CON submitter participant and complete frozen award-set
+port are delivered, but no shared acceptance writer, TASK terminal
+effects, production authority, handler or route is implemented or enabled by
+this note. In particular,
 `allow_review` retains its human-admission meaning, and a checker pass alone
 does not authorize FinalAcceptance. No synthetic human Review or ReviewLease
 may be used for the false branch.
@@ -493,8 +496,8 @@ effects, FinalAcceptance, contributions, awards, audit, and outbox together.
 `FinalAcceptance` is one internal immutable REV fact, created by one shared
 acceptance operation. There is no public/manual creation API, independent
 materialization action, second decision entity or automated acceptance engine.
-This is a target implementation contract; neither branch is enabled by this
-document.
+The hidden CON participant that consumes this fact is delivered; the shared
+writer and both runtime branches remain unavailable.
 
 | Trigger | Required source | Result |
 |---|---|---|
@@ -563,8 +566,18 @@ inferred from a FK. v0.1 has no reopen or replacement acceptance.
 immutable `final_acceptances` table and closed metadata inputs, with exclusive
 Review/TASK source lineage, exact locked policy and submitter, database-owned
 time and unique terminal source identities. It adds no writer, reader, shared
-operation, CON consumer or TASK effect. Direct SQL fixture rows prove relational
+operation or TASK effect. Direct SQL fixture rows prove relational
 custody only; they are not authorized acceptance.
+
+[CON-07](../.commitrail/initiatives/WS-CON-001/WS-CON-001-07.md) delivers the
+hidden source-neutral submitter participant and complete frozen award-set port.
+After acquiring the supplied canonical REV fence through a CON-owned Protocol,
+it stages or exactly replays one accepted-submission contribution and zero, one
+or two awards inside the caller's existing root transaction. Exact source
+replay returns the original row IDs. Compensated replay requires the original
+correlation UUID; unpaid replay retains no correlation. It does not write
+FinalAcceptance, change TASK, evaluate AUTH, publish a source, fulfill an award
+or create a reviewer contribution.
 
 `authorization_decision_event_id` above remains a required runtime field, absent
 from this foundation because neither originating authority is live. Before any
@@ -638,8 +651,9 @@ Extract foundations from existing owner work, not a new initiative:
    delivered. REV-04A immutable Review-source storage and REV-04B shared FinalAcceptance
    storage and CON-03C contribution/award persistence are delivered. Do not create
    an incomplete Review solely as an FK target. REV-12A1 supplies the disabled
-   controller and transaction fence. Exact hidden AUTH preparation is delivered before CON-07; mandatory persisted receipt
-   custody precedes production composition or consumption. These foundations require no live human claim or
+   controller and transaction fence. Exact hidden AUTH preparation and CON-07
+   participation are delivered; mandatory persisted receipt custody precedes
+   production composition or consumption. These foundations require no live human claim or
    decision endpoint. Hidden composition proof precedes exact AUTH
    activation; unavailable authority must not be replaced with fabricated allow evidence.
 3. [REV-12A1](../.commitrail/initiatives/WS-REV-001/WS-REV-001-12A1.md)
@@ -650,15 +664,19 @@ Extract foundations from existing owner work, not a new initiative:
    preparation matcher plus nominal `workstream.task.post_submit_router` adapter
    through canonical PREP. The action remains planned/unavailable and denial occurs
    before handle issuance; no allow, receipt, source publication or effect exists.
-   CON-07 follows as a flush-only participant; isolated storage controls prove
-   economic behavior without claiming acceptance authority or fabricating allows.
+   CON-07 then delivers the flush-only participant and complete frozen award-set
+   owner. Its consumer-owned Protocol acquires the supplied canonical fence
+   before CON or compensation access; exact source replay preserves contribution
+   and award IDs, paid replay checks correlation, and unpaid replay retains no
+   correlation. These isolated storage controls prove economic behavior without
+   claiming acceptance authority or fabricating allows.
    Actual CON fulfillment roots own immutable ordinal allocation; no award or
    outbox row substitutes for a root. Authorized transition/drain composition
    and real root/cutoff proof extend this fence before activation, independently
    of live human queues or decisions.
-4. The shared operation consumes those foundations for acceptance. ARCH-04E1B-B's
+4. The shared operation and TASK accepted/completed effects are next. ARCH-04E1B-B's
    hidden routing handler invokes it for false/pass. True routing does not
-   require CON-07/shared acceptance; it uses the delivered preparation, hidden 04E1B-B, exact
+   require CON or shared acceptance; it uses the delivered preparation, hidden 04E1B-B, exact
    AUTH 04E2-B and live 04E3 after its own prerequisites. The existing lifecycle-control command receives
    scoped AUTH activation for the proven shared manifest as specified below;
    ARCH-04E2-B installs mandatory same-table receipt custody and activates the
@@ -706,21 +724,25 @@ another acceptance architecture.
 contract authority. This section defines REV's orchestration obligations at that
 boundary. Merged CON-01 publishes contracts only; it implements no policy
 persistence, contribution record, award, participant, or fulfillment runtime.
+CON-07 delivers the source-neutral submitter port and complete frozen
+award-set owner; reviewer participation and runtime composition remain future.
 
 Every committed Review creates exactly one reviewer `completed_review`
 ContributionRecord sourced directly from the Review and ReviewLease. Only
 FinalAcceptance creates a submitter `accepted_submission` ContributionRecord.
 CON never infers submitter acceptance from `Review.decision`.
 
-The CON participant exposes two operation-specific flush-only inputs:
+The target CON boundary exposes two operation-specific flush-only inputs:
 
 - reviewer input for every decision, containing Review, ReviewLease, reviewer,
   lease-frozen ContributionPolicyVersion, Submission/project/task lineage,
   AuthorizationDecision, request/correlation references, and stabilized
   `artifact_hash`; it contains no FinalAcceptance or submitter-policy facts;
-- submitter input only after accept creates FinalAcceptance and applies accepted
-  task effects, containing FinalAcceptance, TaskAssignment, submitter,
-  assignment-frozen ContributionPolicyVersion, and the same locked lineage.
+- delivered submitter input only after accept creates FinalAcceptance and applies
+  accepted task effects, containing immutable scalar FinalAcceptance,
+  TaskAssignment, submitter, assignment-frozen ContributionPolicyVersion,
+  stabilized artifact, correlation and expected-generation facts. It carries no
+  authorization decision or receipt-shaped authority value.
 
 Database constraints keep the source shapes mutually exclusive and enforce one
 `completed_review` per Review and one `accepted_submission` per

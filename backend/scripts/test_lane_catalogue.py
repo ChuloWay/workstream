@@ -251,6 +251,13 @@ SHARED_FOUNDATION_MODULES = (
 )
 
 PROJECT_MODULES = (
+    # Frozen policy participation shares measured project capacity, not the full schema lane.
+    "tests/contributions/records/test_contracts.py",
+    "tests/contributions/records/test_storage.py",
+    "tests/contributions/records/test_migration.py",
+    "tests/contributions/participation/test_contracts.py",
+    "tests/contributions/participation/test_postgresql.py",
+    "tests/contributions/participation/test_transactions.py",
     "tests/projects/guide_activation/test_admission.py",
     "tests/projects/guide_activation/test_audit_contract.py",
     "tests/projects/guide_activation/test_concurrency.py",
@@ -507,9 +514,6 @@ LANES = (
             "tests/reviews/acceptance/test_contracts.py",
             "tests/reviews/acceptance/test_storage.py",
             "tests/reviews/acceptance/test_migration.py",
-            "tests/contributions/records/test_contracts.py",
-            "tests/contributions/records/test_storage.py",
-            "tests/contributions/records/test_migration.py",
             "tests/test_database_reset.py",
             "tests/test_artifact_architecture.py",
             "tests/architecture/test_module_boundaries.py",

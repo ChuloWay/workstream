@@ -14,10 +14,24 @@ from tests.reviews.acceptance.support import acceptance_source, insert_acceptanc
 
 
 @asynccontextmanager
-async def contribution_source(tmp_path, url, *, decision="accept", paid=False, persist_acceptance=True, **options):
+async def contribution_source(
+    tmp_path,
+    url,
+    *,
+    decision="accept",
+    paid=False,
+    contribution_awards=None,
+    persist_acceptance=True,
+    **options,
+):
+    frozen_awards = (
+        tuple(contribution_awards)
+        if contribution_awards is not None
+        else (("money", "project_points") if paid else ())
+    )
     async with acceptance_source(
         tmp_path, url, decision=decision,
-        contribution_awards=("money", "project_points") if paid else (), **options,
+        contribution_awards=frozen_awards, **options,
     ) as h:
         async with h.factory() as session:
             if decision == "accept" and persist_acceptance:
