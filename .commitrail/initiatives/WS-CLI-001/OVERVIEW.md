@@ -8,7 +8,8 @@
   exact-project authorization context; [WS-CLI-001-02](WS-CLI-001-02.md), human
   self-profile editing through the public REST API; [WS-CLI-001-03](WS-CLI-001-03.md),
   exact-project inspection with server-owned full/minimal disclosure;
-  [WS-CLI-001-04](WS-CLI-001-04.md), public manager task pagination and detail.
+  [WS-CLI-001-04](WS-CLI-001-04.md), public manager task pagination and detail;
+  [WS-CLI-001-05](WS-CLI-001-05.md), contributor ready-task discovery and instructions.
 
 ## Current boundary
 
@@ -24,6 +25,8 @@ package under `cli/` implements `whoami`, `project access PROJECT_ID`, and
 reads only the existing public project's server-selected disclosure shape.
 `project tasks PROJECT_ID` and `project task PROJECT_ID TASK_ID` add the public
 manager queue/detail journey with server-owned authority on each page.
+`task ready PROJECT_ID` and `task show TASK_ID` add the contributor projection
+with exact Submitter authority and server-owned assignment visibility.
 All have text/JSON
 output and built-binary integration proof. Mutations preserve omitted/null
 semantics and explicitly report uncertain outcomes without automatic retries.
@@ -66,11 +69,13 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
    boundaries; do not invent a public project-list contract.
 4. **WS-CLI-001-04:** Browse a manager task page and open its exact project/task
    detail, passing opaque continuation unchanged without automatic pagination.
-5. **Later governed-work commands:** Add project setup, contributor task, submission,
+5. **WS-CLI-001-05:** Discover one ready-task page and inspect contributor
+   instructions through public reads, without management metadata or task writes.
+6. **Later governed-work commands:** Add project setup, contributor task mutations, submission,
    review, revision, and contribution reads/writes only as their actual public
    contracts and authority boundaries become available. Split by user journey,
    not one PR per endpoint or one giant catalogue PR.
-6. **Optional TUI:** Add a focused public queue/evidence view after its API
+7. **Optional TUI:** Add a focused public queue/evidence view after its API
    workflow is complete. Never require a TUI for agents or scripts.
 
 ## Risks and proof

@@ -45,6 +45,12 @@ type TaskPage struct {
 	NextCursor *string
 }
 
+type taskPageResponse struct {
+	ProjectID  string            `json:"project_id"`
+	Items      []json.RawMessage `json:"items"`
+	NextCursor *string           `json:"next_cursor"`
+}
+
 func taskProjectPath(selector string) (string, error) {
 	if _, ok := uuidIdentity(selector); !ok || len(selector) > 100 {
 		return "", errors.New("PROJECT_ID must be a UUID")
@@ -58,28 +64,17 @@ func (c *Client) Tasks(ctx context.Context, project string, limit int, cursor *s
 	if err != nil {
 		return result, err
 	}
-	if limit < 1 || limit > 100 || (cursor != nil && !validTaskCursor(*cursor)) {
-		return result, errors.New("limit must be 1–100; cursor must contain 1–512 valid UTF-8 characters")
-	}
-	query := url.Values{"limit": {strconv.Itoa(limit)}}
-	if cursor != nil {
-		query.Set("cursor", *cursor)
-	}
-	raw, err := c.request(ctx, http.MethodGet, path, query.Encode(), nil)
+	query, err := taskPageQuery(limit, cursor)
 	if err != nil {
 		return result, err
 	}
-	var page struct {
-		ProjectID  string            `json:"project_id"`
-		Items      []json.RawMessage `json:"items"`
-		NextCursor *string           `json:"next_cursor"`
+	raw, err := c.request(ctx, http.MethodGet, path, query, nil)
+	if err != nil {
+		return result, err
 	}
-	err = decode(raw, &page, []string{"project_id", "items", "next_cursor"}, nil)
-	selected, _ := uuidIdentity(project)
-	returned, valid := uuidIdentity(page.ProjectID)
-	if err != nil || !valid || selected != returned || page.Items == nil || len(page.Items) > limit ||
-		(page.NextCursor != nil && (!validTaskCursor(*page.NextCursor) || len(page.Items) == 0)) {
-		return result, &Failure{Code: "invalid_api_response"}
+	page, err := decodeTaskPage(raw, project, limit)
+	if err != nil {
+		return result, err
 	}
 	value := TaskPage{ProjectID: page.ProjectID, Items: make([]TaskSummary, 0, len(page.Items)), NextCursor: page.NextCursor}
 	seen := make(map[[16]byte]bool)
@@ -96,6 +91,29 @@ func (c *Client) Tasks(ctx context.Context, project string, limit int, cursor *s
 		value.Items = append(value.Items, task)
 	}
 	return Result[TaskPage]{Raw: raw, Value: value}, nil
+}
+
+func taskPageQuery(limit int, cursor *string) (string, error) {
+	if limit < 1 || limit > 100 || (cursor != nil && !validTaskCursor(*cursor)) {
+		return "", errors.New("limit must be 1–100; cursor must contain 1–512 valid UTF-8 characters")
+	}
+	query := url.Values{"limit": {strconv.Itoa(limit)}}
+	if cursor != nil {
+		query.Set("cursor", *cursor)
+	}
+	return query.Encode(), nil
+}
+
+func decodeTaskPage(raw json.RawMessage, project string, limit int) (taskPageResponse, error) {
+	var page taskPageResponse
+	err := decode(raw, &page, []string{"project_id", "items", "next_cursor"}, nil)
+	selected, _ := uuidIdentity(project)
+	returned, valid := uuidIdentity(page.ProjectID)
+	if err != nil || !valid || selected != returned || page.Items == nil || len(page.Items) > limit ||
+		(page.NextCursor != nil && (!validTaskCursor(*page.NextCursor) || len(page.Items) == 0)) {
+		return page, &Failure{Code: "invalid_api_response"}
+	}
+	return page, nil
 }
 
 func (c *Client) Task(ctx context.Context, project, selector string) (Result[TaskDetail], error) {
@@ -149,6 +167,10 @@ func decodeTask(raw json.RawMessage, value any, detail bool) error {
 	} else {
 		required = append(required, "task_type", "difficulty", "estimated_time_minutes", "deadline_at")
 	}
+	return decodeTaskFields(raw, value, strings, required)
+}
+
+func decodeTaskFields(raw json.RawMessage, value any, strings, required []string) error {
 	var fields map[string]json.RawMessage
 	if err := jsonv2.Unmarshal(raw, &fields); err != nil || fields == nil {
 		return errors.New("invalid task object")
@@ -159,5 +181,5 @@ func decodeTask(raw json.RawMessage, value any, detail bool) error {
 			return errors.New("invalid required task string")
 		}
 	}
-	return decode(raw, value, required, []string{"skill_tags"})
+	return decode(raw, value, append(append([]string{}, required...), strings...), []string{"skill_tags"})
 }
