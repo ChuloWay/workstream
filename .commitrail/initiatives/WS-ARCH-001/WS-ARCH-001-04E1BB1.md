@@ -25,7 +25,7 @@ claim live routing, automated acceptance or complete receipt custody.
 
 - `backend/app/modules/checkers/api/execution.py` and
   `checkers/execution_coordination.py`: required typed consumer-owned TASK lock
-  port on the existing coordinator, invoked before CHECKERS reservation locks.
+  port on the existing coordinator, invoked before CHECKERS reservation and current-result locks.
 - `backend/app/modules/tasks/post_submit_routing/evaluation_guard.py`:
   TASK-owned project-qualified locking and exact immutable Submission selection.
   Narrow existing repository methods only if the owner query needs them.
@@ -34,8 +34,14 @@ claim live routing, automated acceptance or complete receipt custody.
 - Existing coordinator callers in CHECKERS execution tests, TASK routing tests,
   AUTH routing support and review queue persistence tests; add focused
   `backend/tests/tasks/post_submit_routing/test_evaluation_guard.py` and
-  `test_evaluation_currentness.py`, with a cohesive helper if needed.
-- Exact ownership/lane registrations and their expectation tests. Preserve caps,
+  `test_evaluation_currentness.py` and `test_review_admission_currentness.py`,
+  with a cohesive helper if needed.
+- `backend/alembic/versions/0020_review_admission_lock_order.py`: replace the
+  existing review queue/admission INSERT guards to lock exact project-qualified
+  TASK before CHECKERS/FK custody; preserve update semantics and retained data.
+- Exact ownership/lane registrations and their expectation tests; update the
+  reviewed schema fingerprint in `backend/tests/conftest.py` for the two replaced
+  functions without weakening schema-reset validation. Preserve caps,
   complete collection, isolation, negative assertions and failure propagation.
 - This record, the parent 04E contract, affected current ARCH/AUTH/POL/REV/CON
   navigation, index, roadmap, README and canonical checker/TASK/review specs.
@@ -73,7 +79,7 @@ activate execution or add TASK status transitions.
 
 ## Prohibited changes
 
-No migration, public route, worker registration, AUTH allow/permission change,
+No unrelated migration, public route, worker registration, AUTH allow/permission change,
 false guide activation, source publication/current pointer, outbox event,
 contribution/award mutation, artifact I/O, generic accepted transition or
 compatibility path. Do not turn historical policy hashes into current-policy
@@ -99,7 +105,13 @@ Contributor leases/skip remain deferred.
 5. Remove the TASK lock or terminal guard independently and show the intended
    PostgreSQL regression detects the defect rather than failing fixture setup.
 6. Managed and raw savepoints cannot undermine reservation lock lifetime.
-7. Preserve existing review queue supersession and replay proof. All callers
+7. Current-result reads take TASK custody before CHECKERS, including callers
+   that later insert review queue/admission rows. PostgreSQL tests pause after
+   the read, observe a successor waiting, then finish admission without deadlock.
+   Direct INSERT guard tests observe TASK held while waiting on CHECKERS.
+   Successor-first current reads wait then reject before admission writes; valid
+   wrong-project INSERTs reject without waiting on another project's locked TASK.
+   Preserve existing review queue supersession and replay proof. All callers
    use the required owner seam; there is no executable old constructor path.
 8. Run focused PostgreSQL tests through the canonical isolated runner; Ruff,
    dependency/ownership/test-structure checks, stale wording, Markdown links and
@@ -118,6 +130,28 @@ not import TASK private implementation. The guard-removal lock probe uses
 `FOR NO KEY UPDATE NOWAIT` so a foreign-key KEY SHARE lock cannot mask a missing
 TASK lock. Terminal replay is exercised while CHECKERS advisory/fence/run locks
 are independently held, proving it neither locks nor rewrites those rows.
+
+## Admission lock-order repair
+
+External review reproduced a cycle missed by the original race tests: admission
+retained a CHECKERS fence from its current-result read, a successor held TASK
+while waiting for that fence, and the later queue INSERT waited for TASK during
+foreign-key validation. The old test started its contender only after insertion.
+
+The same required TASK guard must precede the coordinator's current-result reads,
+not just reservation. Share its root-transaction check and name the guard for
+both uses; no optional prelock call or fallback. Exact terminal reservation replay
+remains SELECT-only with respect to CHECKERS. The current-completion operation
+inherits ordering through the current-result reader.
+
+Queue/admission INSERT guards must also lock the exact project-qualified TASK
+before taking a checker fence or inserting foreign keys. Admission UPDATE must
+not introduce TASK locking after PostgreSQL has locked its admission row: its
+existing update-only path changes no TASK foreign key. Tests must distinguish
+these intermediate waits, rather than merely starting contenders after all
+writes. Arbitrary direct-SQL callers that manually acquire locks out of order
+are not an unconditional deadlock-freedom contract. Existing stored ownership,
+immutable identity, admissibility and caller-transaction behavior stay enforced.
 
 ## Evidence
 

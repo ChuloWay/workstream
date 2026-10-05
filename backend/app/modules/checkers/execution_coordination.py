@@ -51,21 +51,8 @@ class EvaluationCoordinator:
     ) -> EvaluationReservation:
         """Serialize initial creation, exact replay and the next current generation."""
         request = PostSubmissionEvaluationRequest.model_validate(request)
-        require_transaction(self._session)
-        connection = await self._session.connection()
-        if connection.in_nested_transaction():
-            raise CheckerExecutionUnavailable("checker_caller_transaction_required")
-        # PostgreSQL detects raw savepoints that SQLAlchemy cannot observe.
-        try:
-            await self._session.execute(text("SELECT pg_catalog.pg_export_snapshot()"))
-        except DBAPIError as exc:
-            if getattr(exc.orig, "sqlstate", None) != "25001":
-                raise
-            raise CheckerExecutionUnavailable("checker_caller_transaction_required") from exc
         with self._session.no_autoflush:
-            can_create = await self._tasks.lock_reservation_scope(request)
-            if type(can_create) is not bool:
-                raise CheckerExecutionUnavailable("checker_reservation_scope_unavailable")
+            can_create = await self._lock_task_scope(request)
             if not can_create:
                 replay = await self._replay(request)
                 if replay is None:
@@ -145,6 +132,24 @@ class EvaluationCoordinator:
             raise CheckerRequestConflict("checker_request_conflict") from None
         return reservation(run)
 
+    async def _lock_task_scope(self, request: PostSubmissionEvaluationRequest) -> bool:
+        """Retain root-transaction TASK custody before any coordination fence lock."""
+        require_transaction(self._session)
+        connection = await self._session.connection()
+        if connection.in_nested_transaction():
+            raise CheckerExecutionUnavailable("checker_caller_transaction_required")
+        # PostgreSQL detects raw savepoints that SQLAlchemy cannot observe.
+        try:
+            await self._session.execute(text("SELECT pg_catalog.pg_export_snapshot()"))
+        except DBAPIError as exc:
+            if getattr(exc.orig, "sqlstate", None) != "25001":
+                raise
+            raise CheckerExecutionUnavailable("checker_caller_transaction_required") from exc
+        can_create = await self._tasks.lock_evaluation_scope(request)
+        if type(can_create) is not bool:
+            raise CheckerExecutionUnavailable("checker_reservation_scope_unavailable")
+        return can_create
+
     async def _replay(self, request: PostSubmissionEvaluationRequest) -> CheckerRun | None:
         """Read an exact stored envelope; never repair or restore its current fence."""
         replay = await self._session.scalar(select(CheckerRun).where(
@@ -163,7 +168,9 @@ class EvaluationCoordinator:
     ) -> CompletedEvaluation:
         """Return only a locked completed result matching the entire current request."""
         request = PostSubmissionEvaluationRequest.model_validate(request)
-        run = await ExecutionRepository(self._session).lock_current(request)
+        with self._session.no_autoflush:
+            await self._lock_task_scope(request)
+            run = await ExecutionRepository(self._session).lock_current(request)
         if run.status != "completed":
             raise CheckerExecutionUnavailable("checker_current_result_unavailable")
         result = stored_result(run)

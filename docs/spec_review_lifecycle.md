@@ -648,7 +648,12 @@ zero applicable `human_review` dispositions, both at guide activation and
 again at acceptance. Such a disposition is not a failed executable check and
 cannot be silently relabeled `supported_post_submit` or ignored because all
 executable checks passed. Never read the project's newest policy to choose the branch.
-ARCH-04E1B-B1 now enforces TASK-before-CHECKERS reservation custody. Its
+ARCH-04E1B-B1 enforces TASK-before-CHECKERS custody for reservation and
+current-result reads. Review queue/admission INSERT guards acquire the exact
+project-qualified TASK before checker fences and foreign keys. Admission UPDATE
+does not acquire TASK after its own row lock; composite admission callers start
+with the guarded current-result read. PostgreSQL proof includes the intermediate
+wait between that read and queue insertion, not just completed admission. Its
 PostgreSQL controls prove that shared acceptance prevents a later generation,
 and a committed successor invalidates old routing preparation. The complete
 authorized routing/acceptance race remains 04E1B-B/04E2-B proof; these hidden

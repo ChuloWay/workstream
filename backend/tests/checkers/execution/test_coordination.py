@@ -86,5 +86,6 @@ async def test_current_result_conceals_foreign_lineage(tmp_path, isolated_databa
             async with first.factory() as session, session.begin():
                 valid = await evaluation_coordinator(session).read_current_result(first.request)
                 assert valid.reference.request_id == first.request.evaluation_request_id
-                with pytest.raises(CheckerExecutionUnavailable, match="current_request"):
+                error = "current_request" if field == "evaluation_request_id" else "reservation_scope"
+                with pytest.raises(CheckerExecutionUnavailable, match=error):
                     await evaluation_coordinator(session).read_current_result(bad)

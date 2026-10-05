@@ -16,7 +16,8 @@ commit a standalone allow. The first durable receipt must commit with its full
 governed consequence. Hidden handlers and activation follow as 04E1B-B/04E2-B,
 then live 04E3; true admission does not depend on CON/shared acceptance.
 
-ARCH-04E1B-B1 delivers the required TASK-before-CHECKERS reservation guard,
+ARCH-04E1B-B1 delivers TASK-before-CHECKERS reservation/current-read guards
+and ordered review admission INSERTs,
 including terminal read-only replay and both mechanical race controls. The
 remaining 04E1B-B handler work and full authorized currentness proof stay next;
 no handler or action is activated by this prerequisite.
@@ -80,7 +81,7 @@ checker-remediation boundary before public Submission cutover.
 | [ARCH-04E1A](../WS-ARCH-001-04E1A.md) | ARCH-04C/04D2 | Complete: route-neutral immutable TASK source schema/detached facts and source-neutral accepted-effects types; REV-04C uses a bounded exact-source verifier, with no general routing publication writer/reader, handlers, current pointer or routing authority |
 | ARCH-04E1B-A | ARCH-04E1A, AUTH-19A | Complete: TASK caller-session request/source-identity reservation; no source publication, handler or commit |
 | [ARCH-04E2-A](../WS-ARCH-001-04E2A.md) | ARCH-04E1B-A | Complete: strict AUTH-private resource/request/consequence matcher and nominal fixed-router adapter through canonical PREP; action stays planned/unavailable, with no handle, allow, receipt, source write or effect |
-| [ARCH-04E1B-B1](../WS-ARCH-001-04E1BB1.md) | REV-04C and existing CHECKERS coordinator | Complete: required TASK reservation guard, exact terminal replay and mechanical race proof; no handler or activation |
+| [ARCH-04E1B-B1](../WS-ARCH-001-04E1BB1.md) | REV-04C and existing CHECKERS coordinator | Complete: required TASK reservation/current-read guard, ordered admission INSERTs, exact terminal replay and mechanical race proof; no handler or activation |
 | ARCH-04E1B-B | ARCH-04E2-A and CON-02B; false additionally uses delivered REV-04C shared acceptance participation | Hidden TASK handlers plus TASK-before-CHECKERS currentness and both successor-generation race orders; durable receipt proof follows at exact activation |
 | Scoped XINT-003-08B controller activation | Existing REV-12A foundation, delivered REV-04C hidden participant and remaining real-writer observation proof | Existing Operator lifecycle-control action for the bounded shared manifest, not human runtime |
 | ARCH-04E2-B | ARCH-04E1B-B; scoped XINT-003-08B controller activation for false | Require the exact AUTH receipt on the same strict input; add database complete-set and audit/outbox closure; genuine allow commits with all governed effects |

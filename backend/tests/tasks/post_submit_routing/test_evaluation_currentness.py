@@ -96,13 +96,13 @@ async def test_acceptance_blocks_successor_and_retains_exact_replay(tmp_path, is
 
 
 async def test_terminal_guard_removal_is_detected(tmp_path, isolated_database_env, monkeypatch):
-    original = TaskEvaluationGuard.lock_reservation_scope
+    original = TaskEvaluationGuard.lock_evaluation_scope
 
     async def ignore_terminal(self, request):
         await original(self, request)
         return True
 
-    monkeypatch.setattr(TaskEvaluationGuard, "lock_reservation_scope", ignore_terminal)
+    monkeypatch.setattr(TaskEvaluationGuard, "lock_evaluation_scope", ignore_terminal)
     with pytest.raises(AssertionError, match="terminal reservation was not rejected"):
         await _acceptance_wins(tmp_path, isolated_database_env)
 

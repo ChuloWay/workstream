@@ -46,17 +46,18 @@ async def test_task_lock_removal_is_detected(tmp_path, isolated_database_env, mo
             await _require_task_lock(h)
 
 
-async def test_savepoints_cannot_release_reservation_locks(tmp_path, isolated_database_env):
+@pytest.mark.parametrize("operation", ["reserve_current_evaluation", "read_current_result"])
+async def test_savepoints_cannot_release_reservation_locks(tmp_path, isolated_database_env, operation):
     async with material_fixture(tmp_path, isolated_database_env) as h:
         async with h.factory() as session, session.begin():
             async with session.begin_nested():
                 with pytest.raises(CheckerExecutionUnavailable, match="caller_transaction_required"):
-                    await evaluation_coordinator(session).reserve_current_evaluation(h.request)
+                    await getattr(evaluation_coordinator(session), operation)(h.request)
         async with h.factory() as session:
             await session.begin()
             await session.execute(text("SAVEPOINT caller_scope"))
             with pytest.raises(CheckerExecutionUnavailable, match="caller_transaction_required"):
-                await evaluation_coordinator(session).reserve_current_evaluation(h.request)
+                await getattr(evaluation_coordinator(session), operation)(h.request)
             await session.rollback()
         async with h.factory() as session, session.begin():
             assert list(await session.scalars(select(CheckerRun.id))) == []

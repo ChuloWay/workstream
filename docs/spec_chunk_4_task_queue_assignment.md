@@ -142,9 +142,10 @@ accepted-effects Protocol. REV-04C supplies the hidden FinalAcceptance/TASK/CON
 participant and uses the bounded exact-source verifier, but no general routing
 publication writer/reader, handler, current pointer, routing authority or live
 TASK transition.
-ARCH-04E1B-B1 requires the existing CHECKERS reservation coordinator to acquire
-TASK-owned Task/Assignment/latest Submission locks before its advisory key and
-fence. Exact locked owner lineage is revalidated; terminal tasks permit only
+ARCH-04E1B-B1 requires the existing CHECKERS coordinator to acquire TASK-owned
+Task/Assignment/latest Submission locks before reservation or current-result
+fences. Review admission INSERTs also take the project-qualified TASK lock
+before checker fences and foreign-key custody. Exact locked owner lineage is revalidated; terminal tasks permit only
 SELECT-only exact reservation replay, never a new generation or fence change.
 The adapter supplies this required guard without a reverse module dependency.
 No TASK status transition or execution authority is added.

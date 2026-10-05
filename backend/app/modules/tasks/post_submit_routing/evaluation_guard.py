@@ -1,4 +1,4 @@
-"""TASK custody required before CHECKERS can reserve a new evaluation generation."""
+"""TASK custody required before evaluation reservations and current-result reads."""
 
 from dataclasses import asdict
 from uuid import UUID
@@ -19,7 +19,7 @@ class TaskEvaluationGuard:
         self._repository = TaskRepository(session)
         self._submitted = SubmittedBundleReader(session)
 
-    async def lock_reservation_scope(self, request: PostSubmissionEvaluationRequest) -> bool:
+    async def lock_evaluation_scope(self, request: PostSubmissionEvaluationRequest) -> bool:
         """Return new-generation eligibility after exact Task/Assignment/Submission locks."""
         task = await self._repository.lock_project_task(request.project_id, request.task_id)
         if task is None:

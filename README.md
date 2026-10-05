@@ -184,8 +184,9 @@ accepted/completed effects and the complete CON submitter outcome in the caller'
 transaction. It is not a complete authorized acceptance operation: its input has
 no exact AUTH decision-event receipt, and database complete-set enforcement,
 currentness race proof, shared audit/outbox and lifecycle activation remain.
-ARCH-04E1B-B1 now requires TASK locking before checker reservation and preserves
-read-only exact replay after acceptance. Hidden handlers still need complete
+ARCH-04E1B-B1 requires TASK locking before checker reservation, current-result
+reads and review admission INSERTs, preserving exact read-only reservation replay
+after acceptance. Hidden handlers still need complete
 authorized currentness proof. These prerequisites do not require live
 human review before the first automated acceptance path.
 
