@@ -46,9 +46,30 @@ port through composition and never imports TASK implementation or contracts.
 Lock the exact project/task before CHECKERS advisory key, fence and run. Check
 fresh scalar state under the task lock, not an identity-map value read earlier.
 Keep the caller transaction; reject root/savepoint misuse before locks can be
-released independently. Ordinary exact reservation replay remains read-only;
-its behavior after terminal acceptance must be explicit and tested. Neither
-replay nor a denied successor may change the current fence.
+released independently. The required CHECKERS-owned guard returns a strict boolean indicating whether
+new reservation is eligible after locking and verifying exact TASK custody.
+`False` permits only a SELECT-only exact stored reservation replay; a missing or
+changed request denies before the CHECKERS advisory/fence locks. There is no
+optional guard. Even terminal replay requires the latest exact submitted
+Submission and matching immutable owner lineage. Earlier evaluation-generation
+replay for that same Submission retains its original identity and never restores
+the current fence.
+
+TASK locks Task -> exact project/task Assignment -> latest Submission. Verify
+Submission status `submitted`, ID/version, assignment, contributor/assignment
+ownership, binding/content IDs, and every guide/source/effective/pre/post/review/
+revision field in request.expected_context against the existing immutable
+SubmittedBundleReader projection. Compare the frozen Submission, not today's
+project policy. ART continues to own digest/size and byte verification; this
+new guard does not read ART or claim those checks.
+
+Eligible TASK states are `in_progress`, `submitted`, `evaluation_pending`,
+`review_pending`, and `needs_revision`, with the same active assignment.
+`accepted`/`rejected` allow exact read-only replay only; all other states deny.
+Expose one concealed `CheckerExecutionUnavailable` scope error for absent,
+foreign, stale or inconsistent facts. Keep existing request-conflict errors
+for changed envelopes that have valid owner custody. This prerequisite does not
+activate execution or add TASK status transitions.
 
 ## Prohibited changes
 
