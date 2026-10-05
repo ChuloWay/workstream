@@ -51,6 +51,11 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         == modules_by_lane["project_lifecycle_b"]
         == modules_by_lane["project_lifecycle_c"]
         == {
+            "tests/reviews/acceptance/test_participant_contracts.py",
+            "tests/reviews/acceptance/test_participation.py",
+            "tests/reviews/acceptance/test_participation_transactions.py",
+            "tests/tasks/accepted_effects/test_contracts.py",
+            "tests/tasks/accepted_effects/test_postgresql.py",
             "tests/contributions/records/test_contracts.py",
             "tests/contributions/records/test_storage.py",
             "tests/contributions/records/test_migration.py",
@@ -776,3 +781,15 @@ def test_routing_authorization_proofs_run_once_on_task_a():
     for lane in LANES:
         assert set(lane.modules) & expected == (expected if lane.name == "task_lifecycle_a" else set())
     assert not expected & set(catalogue.PARTITION_LANES_BY_MODULE)
+
+
+def test_shared_acceptance_owner_proofs_are_in_partitioned_project_lanes():
+    expected = {
+        "tests/reviews/acceptance/test_participant_contracts.py",
+        "tests/reviews/acceptance/test_participation.py",
+        "tests/reviews/acceptance/test_participation_transactions.py",
+        "tests/tasks/accepted_effects/test_contracts.py",
+        "tests/tasks/accepted_effects/test_postgresql.py",
+    }
+    assert expected <= set(catalogue.PROJECT_MODULES)
+    assert all(catalogue.PARTITION_LANES_BY_MODULE[path] == catalogue.PARTITIONED_PROJECT_LANES for path in expected)

@@ -1,6 +1,6 @@
-"""Pure contract proof for detached routing source and accepted TASK effects."""
+"""Pure contract proof for the detached post-submit routing source."""
 
-from inspect import isclass, iscoroutinefunction
+from inspect import isclass
 
 import pytest
 from pydantic import ValidationError
@@ -9,33 +9,9 @@ from app.core.identifiers import new_record_id
 from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.catalogue import (ActionId, PermissionId, ActionAvailability, ACTION_BY_ID, SERVICE_ACTIONS_BY_IDENTITY, resolve_executable_action)
 from app.modules.tasks import api as task_api
-from app.modules.tasks.api import accepted_effects, post_submit_routing
-from app.modules.tasks.api.accepted_effects import (
-    TaskAcceptedEffectsPort,
-    TaskAcceptedEffectsRequest,
-    TaskAcceptedEffectsResult,
-    TaskAcceptedEffectsUnavailable,
-)
+from app.modules.tasks.api import post_submit_routing
 from app.modules.tasks.api.post_submit_routing import TaskPostSubmitManifestFacts
-from tests.tasks.post_submit_routing.contract_fixtures import SHA_A, _lineage, _source_values
-
-def _effects_values(**changes: object) -> dict[str, object]:
-    values: dict[str, object] = {
-        "project_id": new_record_id(),
-        "task_id": new_record_id(),
-        "assignment_id": new_record_id(),
-        "submission_id": new_record_id(),
-        "submission_version": 1,
-        "contributor_id": new_record_id(),
-        "contribution_policy_version_id": new_record_id(),
-        "content_id": new_record_id(),
-        "content_sha256": SHA_A,
-        "final_acceptance_id": new_record_id(),
-        "expected_task_status": "evaluation_pending",
-    }
-    values.update(changes)
-    return values
-
+from tests.tasks.post_submit_routing.contract_fixtures import _lineage, _source_values
 
 @pytest.mark.parametrize(
     ("field", "value"),
@@ -184,78 +160,13 @@ def test_false_source_value_is_transport_only() -> None:
     assert source.model_dump(mode="json")["human_review_required"] is False
 
 
-@pytest.mark.parametrize(
-    ("field", "value"),
-    (
-        ("project_id", str(new_record_id())),
-        ("submission_version", "1"),
-        ("submission_version", True),
-        ("content_sha256", "sha256:" + "A" * 64),
-        ("expected_task_status", "accepted"),
-        ("routing_manifest_id", new_record_id()),
-    ),
-)
-def test_accepted_effects_request_is_strict(field: str, value: object) -> None:
-    with pytest.raises(ValidationError):
-        TaskAcceptedEffectsRequest(**_effects_values(**{field: value}))
-
-
-def test_accepted_effects_contract_is_source_neutral() -> None:
-    request = TaskAcceptedEffectsRequest(**_effects_values())
-    review_request = TaskAcceptedEffectsRequest(
-        **_effects_values(expected_task_status="review_pending")
-    )
-    result = TaskAcceptedEffectsResult(
-        request=request,
-        task_status="accepted",
-        assignment_status="completed",
-    )
-
-    assert result.request == request
-    assert review_request.expected_task_status == "review_pending"
-    assert set(TaskAcceptedEffectsRequest.model_fields) == set(_effects_values())
-    assert set(TaskAcceptedEffectsResult.model_fields) == {
-        "request",
-        "task_status",
-        "assignment_status",
-    }
-    assert iscoroutinefunction(TaskAcceptedEffectsPort.apply_accepted_effects)
-    assert issubclass(TaskAcceptedEffectsUnavailable, RuntimeError)
-    with pytest.raises(ValidationError):
-        request.expected_task_status = "accepted"
-    with pytest.raises(ValidationError):
-        result.task_status = "review_pending"
-    for changes in (
-        {"task_status": "review_pending"},
-        {"assignment_status": "accepted"},
-        {"review_id": new_record_id()},
-    ):
-        values = {
-            "request": request,
-            "task_status": "accepted",
-            "assignment_status": "completed",
-        }
-        values.update(changes)
-        with pytest.raises(ValidationError):
-            TaskAcceptedEffectsResult(**values)
-
-
-def test_source_foundation_has_no_runtime_entry() -> None:
+def test_routing_source_foundation_has_no_runtime_entry() -> None:
     assert post_submit_routing.__all__ == (
         "TaskPostSubmitManifestFacts", "task_post_submit_source_digest",
         "TaskRoutingSelection", "TaskRoutingRequestFacts", "task_routing_request_digest",
     )
-    assert accepted_effects.__all__ == (
-        "TaskAcceptedEffectsPort",
-        "TaskAcceptedEffectsRequest",
-        "TaskAcceptedEffectsResult",
-        "TaskAcceptedEffectsUnavailable",
-    )
-    for name in post_submit_routing.__all__ + accepted_effects.__all__:
-        assert getattr(task_api, name) is getattr(
-            post_submit_routing if name in post_submit_routing.__all__ else accepted_effects,
-            name,
-        )
+    for name in post_submit_routing.__all__:
+        assert getattr(task_api, name) is getattr(post_submit_routing, name)
 
     assert {
         name
@@ -263,16 +174,6 @@ def test_source_foundation_has_no_runtime_entry() -> None:
         if isclass(value) and value.__module__ == post_submit_routing.__name__
     } == {"TaskPostSubmitManifestFacts", "TaskRoutingSelection", "TaskRoutingRequestFacts"}
     assert not hasattr(task_api, "TaskRoutingRequests")
-    assert {
-        name
-        for name, value in vars(accepted_effects).items()
-        if isclass(value) and value.__module__ == accepted_effects.__name__
-    } == {
-        "TaskAcceptedEffectsPort",
-        "TaskAcceptedEffectsRequest",
-        "TaskAcceptedEffectsResult",
-        "TaskAcceptedEffectsUnavailable",
-    }
     action = ActionId.TASK_POST_SUBMIT_ROUTE
     assert ACTION_BY_ID[action].permission_id is PermissionId.TASK_POST_SUBMIT_ROUTE
     assert ACTION_BY_ID[action].availability is ActionAvailability.PLANNED

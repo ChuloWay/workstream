@@ -1,15 +1,13 @@
 """Hidden submitter participation contract; construction grants no authority."""
 
-from typing import Annotated, Protocol
+from typing import Annotated, Literal, Protocol
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictInt, StrictStr
 
 from app.modules.compensation.api.awards import CompensationAwardFacts
 
-_STRICT_FROZEN = ConfigDict(
-    extra="forbid", frozen=True, strict=True, revalidate_instances="always"
-)
+_STRICT_FROZEN = ConfigDict(extra="forbid", frozen=True, strict=True, revalidate_instances="always")
 _Digest = Annotated[StrictStr, Field(pattern=r"^sha256:[0-9a-f]{64}$")]
 _Generation = Annotated[StrictInt, Field(ge=0, le=9_223_372_036_854_775_807)]
 
@@ -35,6 +33,7 @@ class SubmitterParticipationRequest(BaseModel):
 
     model_config = _STRICT_FROZEN
 
+    acceptance_disposition: Literal["new", "replay"]
     project_id: UUID
     task_id: UUID
     submission_id: UUID

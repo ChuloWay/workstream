@@ -1,1 +1,1 @@
-"""Shared acceptance storage foundation; no authorized acceptance operation."""
+"""Hidden shared acceptance storage and participation, without runtime authority."""

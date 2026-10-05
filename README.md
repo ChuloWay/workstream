@@ -166,7 +166,7 @@ submission packets, immutable artifact storage, pre-submit intake checks,
 and authorized retained submission/checker history. ARCH-04C implements hidden
 durable post-submit execution and unfinished-attempt recovery. ARCH-04D2 supplies
 exact service authority. ARCH-04E1A adds immutable route-neutral TASK source
-storage, detached source facts and a type-only accepted-effects Protocol;
+storage, detached source facts and accepted-effects contracts;
 automatic dispatch, routing and acceptance remain unavailable. Project-guide ingestion stores original documents,
 records immutable metadata and provides authorized exact-file reads to the
 unified setup agent. Guide metadata in PostgreSQL also holds at least one required
@@ -178,14 +178,18 @@ metadata-only reviewer packet types, not a resolver or byte-access capability.
 REV-03B persists immutable normalized packets using live guide ingest identities.
 REV-04A Review and REV-04B shared FinalAcceptance storage foundations are delivered; CON-03C contribution/award storage, REV-12A1's disabled controller/transaction
 fence, exact hidden AUTH preparation and CON-07 hidden source-neutral submitter
-participation with complete frozen award sets are delivered. Acceptance storage
-has no production writer or AUTH receipt; mandatory exact
-authority hardening precedes any runtime consumer. These prerequisites do not require live
+participation with complete frozen award sets are delivered. REV-04C adds one
+hidden source-neutral participant that stages FinalAcceptance, TASK
+accepted/completed effects and the complete CON submitter outcome in the caller's
+transaction. It is not a complete authorized acceptance operation: its input has
+no exact AUTH decision-event receipt, and database complete-set enforcement,
+currentness race proof, shared audit/outbox and lifecycle activation remain.
+These prerequisites do not require live
 human review before the first automated acceptance path.
 
 Active work is connecting those foundations into the remaining production
-lifecycle: the remaining artifact custody chain, review and revision,
-shared acceptance/TASK effects, reviewer participation and conditional fulfillment.
+lifecycle: hidden routing handlers, acceptance authority/evidence closure,
+review and revision, reviewer participation and conditional fulfillment.
 Contribution evidence remains the input for a separately implemented future
 reputation projection. Frontend product work follows stable and tested backend
 contracts for the surface it consumes.
@@ -602,8 +606,10 @@ pre-submit execution and completed replay use that service, with ART retaining
 canonical evidence ownership. The obsolete checker worker, manual execution and
 submission-finalize repair routes are removed. `evaluate_post_submission` now
 uses hidden durable execution with exact ARCH-04D2 service authority. ARCH-04E1A
-retains route-neutral source evidence without a writer, reader, handler or
-current pointer; automatic dispatch and routing remain ARCH-04E work.
+retains route-neutral source evidence. REV-04C uses its bounded exact-source
+verifier and hidden FinalAcceptance/TASK/CON participant, while no general
+routing publication writer/reader, handler or current pointer exists; automatic
+dispatch and routing remain ARCH-04E work.
 Submission and checker history use live exact-project Submitter authority for the
 original contributor. Separate `/projects/{project_id}` reads require a covering
 Project Manager grant and expose fixed management fields. Token roles confer no
@@ -708,11 +714,15 @@ nominal fixed-router adapter through canonical PREP. Because
 allow, receipt, source write, publication or effect is reachable. The true branch
 binds only the future TASK `evaluation_pending -> review_pending` manifest effect,
 without creating a REV queue dependency. The false branch binds exact
-`TaskAcceptedEffectsRequest` values for the future shared FinalAcceptance path,
+`TaskAcceptedEffectsRequest` values for the shared FinalAcceptance path,
 without fabricating a Review. CON-07 now supplies the hidden source-neutral
-submitter participant and complete frozen award-set staging/replay. Shared
-acceptance and TASK terminal effects remain next; actual receipt custody must
-commit with the governed consequence before production consumption.
+submitter participant and complete frozen award-set staging/replay. REV-04C now
+composes FinalAcceptance, TASK terminal effects and that CON participant in one
+hidden caller-owned transaction for either source. Hidden handlers are next.
+The mandatory exact AUTH receipt must become required on the same strict input,
+with no optional/default path, before production consumption; database
+FinalAcceptance/TASK/CON closure, TASK-before-CHECKERS race proof, shared
+audit/outbox, fulfillment-root ordinals and activation remain later gates.
 
 ## v0.1 Success Standard
 

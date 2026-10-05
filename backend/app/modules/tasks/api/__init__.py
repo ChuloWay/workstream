@@ -1,7 +1,9 @@
 """Dependency-safe public API for the TASKS business module."""
 
 from app.modules.tasks.api.accepted_effects import (
+    TaskAcceptedEffectsFence,
     TaskAcceptedEffectsPort,
+    TaskAcceptedPreparation,
     TaskAcceptedEffectsRequest,
     TaskAcceptedEffectsResult,
     TaskAcceptedEffectsUnavailable,
@@ -103,6 +105,8 @@ __all__ = (
     "OperationalTaskQueuePort",
     "OperationalTaskSummary",
     "TaskAcceptedEffectsPort",
+    "TaskAcceptedEffectsFence",
+    "TaskAcceptedPreparation",
     "TaskAcceptedEffectsRequest",
     "TaskAcceptedEffectsResult",
     "TaskAcceptedEffectsUnavailable",

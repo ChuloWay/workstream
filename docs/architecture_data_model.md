@@ -1758,10 +1758,11 @@ completion event and execute/finalize receipts, locked
 binding/content anchors and complete locked policy lineage; its sole
 recommendation is `allow_review`, which is evidence rather than permission.
 
-The table has no deployable writer or reader, current pointer, handler, routing
-authority, TASK transition or acceptance effect. `TaskAcceptedEffectsPort` is a
-source-neutral type-only Protocol for a later REV-owned shared acceptance
-operation; no adapter or participant exists yet. The valid storage graph is
+The table has no general routing publication writer/reader, current pointer,
+handler or routing authority. REV-04C uses its bounded exact-source verifier.
+`TaskAcceptedEffectsPort` is the source-neutral contract used
+by the REV-04C hidden FinalAcceptance/TASK/CON participant. That participant is
+not a complete authorized operation or live route. The valid storage graph is
 currently limited to true policy. False is proven only as a strict scalar DTO
 value because guide activation still rejects it.
 
@@ -1853,7 +1854,10 @@ mutation/deletion/truncation. Repository writes are caller-transaction operation
 creation checks the lease deadline against PostgreSQL time; exact replay retains
 the stored identity after expiry or closure. The detached identity is
 `packet_manifest_id`, matching AUTH. This storage is delivered; the resolver,
-claim authority and byte capability remain future work. REV-04A immutable Review source storage is delivered; shared FinalAcceptance persistence is next.
+claim authority and byte capability remain future work. REV-04A immutable Review source storage, REV-04B FinalAcceptance persistence and
+REV-04C hidden acceptance/TASK/CON participation are delivered. Hidden routing
+handlers are next; exact authority, complete-effect custody and activation
+remain required before production use.
 
 ## Review
 
@@ -2001,7 +2005,8 @@ direction, reason, and change summary.
 
 The [shared acceptance contract](spec_review_lifecycle.md#finalacceptance)
 defines both sources for this REV-owned fact. REV-04B delivers its immutable
-storage foundation; the shared authorized operation remains planned. One schema and operation serve human accept and authorized `task.post_submit.route` with the
+storage foundation; REV-04C supplies the hidden mechanical writer/participant,
+while the complete authorized operation remains planned. One schema and operation serve human accept and authorized `task.post_submit.route` with the
 exact current successful routing manifest, locked `human_review_required=false`
 policy and originating AUTH decision event. Required-check success or raw checker
 output alone cannot create FinalAcceptance. No separate automated decision entity
@@ -2024,9 +2029,10 @@ Fields:
 
 Purpose:
 
-The future canonical operation creates this immutable REV-owned fact inside either
-authorized trigger's shared transaction. Current raw storage has no production
-writer or authority receipt: it cannot be consumed as canonical acceptance.
+The REV-04C participant creates or exactly replays this immutable REV-owned fact
+inside either caller-owned transaction and composes TASK/CON effects. It has no
+authority receipt, routing handler or production consumer, so it cannot be
+consumed as canonical acceptance.
 Before runtime, a same-table hardening migration must add exact mandatory AUTH
 custody and refuse retained pre-authority rows without backfill or deletion. Existing `Submission` is already the version
 identity, so the stored FK is `submission_id`; no SubmissionVersion entity or
@@ -2047,8 +2053,9 @@ this record.
 
 CON-03C implements this immutable storage foundation. CON-07 adds the hidden
 submitter participant and complete frozen award staging/replay in the caller's
-transaction. Shared acceptance/TASK effects, source AUTH hardening and runtime
-composition remain unavailable; reviewer participation and fulfillment are
+transaction. REV-04C composes it with hidden FinalAcceptance/TASK effects.
+Source AUTH hardening, database complete-set enforcement, currentness proof and
+runtime composition remain unavailable; reviewer participation and fulfillment are
 separate future work.
 
 Fields:

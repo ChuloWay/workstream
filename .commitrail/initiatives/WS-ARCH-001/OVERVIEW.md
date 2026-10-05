@@ -7,8 +7,10 @@ resource/preparation matching and a nominal fixed-router adapter through canonic
 PREP. The action remains planned and unavailable, so it issues no handle, allow or
 receipt and writes no source or effect. The selected automated path now has
 CON-07 hidden submitter participation and complete frozen award-set staging/replay.
-Shared acceptance and TASK terminal effects are next. Mandatory source-receipt
-custody, fulfillment-root ordinal custody and scoped lifecycle activation remain
+[REV-04C](../WS-REV-001/WS-REV-001-04C.md) now composes FinalAcceptance, TASK terminal effects and CON participation
+inside one hidden caller-owned transaction. Mandatory exact AUTH receipt input,
+database complete-set enforcement, currentness race proof, shared audit/outbox,
+fulfillment-root ordinal custody and scoped lifecycle activation remain
 required before production consumption. Neither phase may
 commit a standalone allow. The first durable receipt must commit with its full
 governed consequence. Hidden handlers and activation follow as 04E1B-B/04E2-B,
@@ -25,7 +27,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
   metadata-only packet types. REV-03B packets, REV-04A Review storage, REV-04B
   FinalAcceptance storage, CON-03C contribution/award storage, REV-12A1 disabled
-  fencing, hidden AUTH preparation and CON-07 hidden submitter participation are
+  fencing, hidden AUTH preparation, CON-07 hidden submitter participation and
+  REV-04C hidden FinalAcceptance/TASK/CON composition are
   delivered. Mandatory persisted custody accompanies the first authorized atomic
   consequence at 04E2-B. No packet resolver or human runtime is live.
 
@@ -40,8 +43,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage boundary: hidden [ARCH-04B2 checker-output custody](WS-ARCH-001-04B2.md), following hidden input materialization (ARCH-04B). Typed store, byte-free recovery and flush-only verified binding exist; the CHECKERS zero-slot reservation reader is implemented; output write/bind authority remains unavailable.
 - Delivered source boundary: [ARCH-04E1A routing-source facts](WS-ARCH-001-04E1A.md)
   follow [ARCH-04D2](WS-ARCH-001-04D2.md) exact input, execute and finalize
-  authority. The source table has no writer, reader, handler, current pointer,
-  routing authority or acceptance effect implementation. False is proven only as
+  authority. The source table has no routing handler, current pointer or routing
+  authority. REV-04C supplies the hidden acceptance-effects participant. False is proven only as
   a scalar DTO value because activation still rejects it.
 - Delivered preparation boundary: [ARCH-04E2-A](WS-ARCH-001-04E2A.md) binds
   the reserved request, exact source and branch consequence through canonical
@@ -53,9 +56,10 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
   [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
   storage, without AUTH receipt custody or a production writer.
-- Next usable boundary: shared acceptance/TASK effects using the delivered
-  REV-12A1 fence and CON-07 participant, plus mandatory same-table acceptance authority hardening before shared
-  acceptance composition, then ARCH-04E1B/04E2/04E3 and ARCH-04F. Output-file
+- Next usable boundary: ARCH-04E1B-B hidden handlers using the delivered
+  REV-04C participant, then mandatory exact AUTH receipt input, database closure,
+  audit/outbox, TASK-before-CHECKERS currentness race proof and activation at
+  ARCH-04E2-B before 04E3 and ARCH-04F. Output-file
   authority remains unavailable for the zero-output catalogue.
   [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers public manager activation
   context and exact guide activation using the existing CP07 operation.
@@ -84,7 +88,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 
 Delivered [REV-12A1](../WS-REV-001/WS-REV-001-12A1.md) supplies only disabled
 generation-zero controller storage and transaction locking. Acceptance-source
-AUTH custody, shared acceptance/TASK effects and authorized activation remain
+AUTH custody, database closure, currentness proof and authorized activation remain
 separate work.
 
 This is delivery priority, not a prerequisite of true human admission. Both

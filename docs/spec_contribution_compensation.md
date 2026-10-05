@@ -275,7 +275,9 @@ depends on the binding.
 
 CON-03C delivers immutable source and award storage. CON-07 adds the hidden
 source-neutral accepted-submission participant and complete frozen award-set
-owner. No production source writer, reader, recognition route, reviewer
+owner. REV-04C composes that participant with hidden FinalAcceptance and TASK
+accepted/completed effects in one caller-owned transaction for either source.
+No production recognition route, authorized acceptance operation, reviewer
 participant or fulfillment consumer is registered. Before activation,
 originating Review/FinalAcceptance authority, mandatory source receipts and
 fulfillment-root ordinal custody must be installed; retained pre-authority
@@ -438,7 +440,9 @@ owns the single FinalAcceptance schema, exclusive human/checker-policy source
 shapes, same-chain constraints, actor/authority provenance, currentness and
 transaction sequence. Both triggers use the same CON submitter operation; no
 new contribution type, synthetic Review or automatic reviewer award is added.
-This is planned runtime behavior, not enabled false-policy activation.
+REV-04C delivers the hidden mechanical transaction participant. The authority,
+currentness, audit/outbox and activation behavior is still planned runtime
+behavior, not enabled false-policy activation.
 
 CON MUST create `accepted_submission` only from the supplied locked
 FinalAcceptance and exact TaskAssignment. It MUST NOT infer submitter acceptance
@@ -555,9 +559,12 @@ not ordinary review-claim selection.
 
 The target decision boundary has two ordered, operation-specific CON methods in
 the initiating command's caller-owned session. CON-07 delivers the source-neutral
-submitter port; the reviewer participant remains future human-lifecycle work.
-Human decision composition will use the reviewer method, while the shared
-acceptance operation uses the submitter method for either trigger. A combined
+submitter port, and REV-04C invokes it from the hidden source-neutral acceptance
+participant; the reviewer participant remains future human-lifecycle work.
+Human decision composition will use the reviewer method. Before either trigger
+uses the delivered participant, its same input/schema must evolve to require the
+verified AUTH event without an optional/default path, and the complete authorized
+shared acceptance operation must add shared audit/outbox staging. A combined
 request carrying nullable FinalAcceptance or both actors' source and policy
 facts is prohibited.
 
@@ -642,17 +649,19 @@ Reject MUST NOT change an actor grant, another task, or another assignment.
 
 ### Submitter operation
 
-Runtime composition invokes the submitter operation only after shared acceptance
-has created FinalAcceptance and applied accepted Task and completed
-TaskAssignment effects. The delivered hidden participant itself consumes exact
-stored lineage and neither creates nor authorizes those facts.
+The delivered REV-04C composition invokes the submitter operation only after it
+has created or exactly replayed FinalAcceptance and staged accepted Task and
+completed TaskAssignment effects. CON's delivered hidden participant consumes
+exact stored lineage and neither creates nor authorizes those enclosing facts.
 
 Its delivered typed input contains only immutable scalar IDs for project, task,
 Submission, FinalAcceptance, TaskAssignment, submitter and the assignment-frozen
 ContributionPolicyVersion, plus the stabilized artifact hash, caller correlation
 UUID and expected lifecycle generation. It carries no authorization decision,
-receipt-shaped value or caller-selected contribution/award ID; future shared
-acceptance owns authority and request idempotency.
+receipt-shaped value or caller-selected contribution/award ID. Before production
+consumption, the enclosing REV input must require the exact AUTH decision-event
+receipt with no optional/default path; the complete shared operation owns
+authority and request idempotency.
 
 It contains no direct Review or ReviewLease contribution-source fields. It
 creates or exactly replays one `accepted_submission`, evaluates only the frozen
@@ -1039,7 +1048,8 @@ REV-12A owns the only `JointLifecycleReleaseControl` and
 generation, or availability writer.
 REV-12A1 delivers its disabled generation-zero persistence and caller-root
 mutation fence. The [shared acceptance order](spec_review_lifecycle.md#implementation-order-and-required-proof)
-now includes delivered hidden AUTH preparation and CON-07 participation, while
+now includes delivered hidden AUTH preparation, CON-07 participation and REV-04C
+hidden FinalAcceptance/TASK/CON composition, while
 mandatory persisted receipt custody remains required before production
 composition or consumption. Actual CON root
 storage and ordinal allocation remain required before either trigger creates
@@ -1172,11 +1182,14 @@ governs the false branch: delivered TASK ARCH-04E1A source schema/detached facts
 precede the delivered REV-04B acceptance, CON-03C contribution/award storage and
 CON-07 flush-only submitter participation. REV-12A1 supplies the disabled
 controller/fence mechanics used through CON's consumer-owned acquisition
-Protocol; TASK request staging (04E1B-A) and hidden AUTH preparation (04E2-A)
-are also delivered. Shared acceptance and TASK terminal effects precede the
-04E1B-B handler. CON-07 isolated storage controls prove economic behavior, not
-acceptance authority. At 04E2-B, mandatory
-same-table receipt custody and exact activation prove the first genuine allow
+Protocol; TASK request staging (04E1B-A), hidden AUTH preparation (04E2-A) and
+REV-04C hidden shared composition are also delivered. Hidden handlers 04E1B-B
+are next; they must lock TASK before CHECKERS currentness and prove both
+acceptance/successor-generation race orders. These isolated controls prove
+mechanical behavior, not acceptance authority. At 04E2-B, make the exact AUTH
+decision-event receipt mandatory on the same strict input with no
+optional/default path; add database-enforced FinalAcceptance/TASK/CON
+complete-set closure, shared audit/outbox and exact activation to prove the first genuine allow
 with source, FinalAcceptance, TASK effects, CON rows and audit/outbox in one
 transaction. No standalone allow or fabricated authority fixture is permitted. Actual root ordinal custody and authorized lifecycle
 transition/drain proof precede live AUTH routing composition.
