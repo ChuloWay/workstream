@@ -5,9 +5,11 @@ planned router identity. ARCH-04E1B-A delivers caller-owned routing-request and
 future source-identity reservation. ARCH-04E2-A delivers strict hidden
 resource/preparation matching and a nominal fixed-router adapter through canonical
 PREP while the action remains planned/unavailable. CON-07 hidden submitter
-participation and complete frozen award-set staging/replay are delivered. Shared
-acceptance and TASK terminal effects are next. Mandatory source-receipt custody,
-fulfillment-root ordinal custody and scoped lifecycle activation remain required
+participation and complete frozen award-set staging/replay are delivered. REV-04C
+adds the hidden FinalAcceptance/TASK/CON participant. Hidden handlers 04E1B-B are
+next. Mandatory exact same-input AUTH receipt, database complete-set enforcement,
+TASK-before-CHECKERS race proof, shared audit/outbox, fulfillment-root ordinal
+custody and scoped lifecycle activation remain required
 before production consumption. Neither phase may
 commit a standalone allow. The first durable receipt must commit with its full
 governed consequence. Hidden handlers and activation follow as 04E1B-B/04E2-B,

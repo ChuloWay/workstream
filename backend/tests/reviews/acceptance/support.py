@@ -7,7 +7,7 @@ from sqlalchemy import insert, text
 
 from app.core.identifiers import new_record_id
 from app.modules.reviews.acceptance.models import FinalAcceptance
-from app.modules.reviews.acceptance.schemas import FinalAcceptanceInput
+from app.modules.reviews.api.acceptance import FinalAcceptanceInput
 from tests.reviews.decision.support import finding, insert_review, review_source
 
 

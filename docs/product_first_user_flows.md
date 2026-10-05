@@ -14,8 +14,10 @@ default in the existing versioned ReviewPolicy setting. False is a separately
 planned post-check TASK handoff to authorized FinalAcceptance and CON, without
 human queues, leases, Reviews or reviewer contributions. Required checks and
 exact immutable evidence still apply. The [shared acceptance contract](spec_review_lifecycle.md#finalacceptance)
-defines both triggers; runtime remains unavailable until its implementation
-and exact shared release proof land.
+defines both triggers. Runtime remains unavailable until the same participant
+input/schema requires verified authority/evidence and gains routing/currentness and exact
+shared release proof. REV-04C supplies only the hidden mechanical
+FinalAcceptance/TASK/CON participant.
 
 The first user flows prove that Workstream can run real work from intake to acceptance. These flows come before any advanced routing or settlement.
 

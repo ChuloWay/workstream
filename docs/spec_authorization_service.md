@@ -540,8 +540,9 @@ In particular, the XINT-06B grouping corresponds to runtime
 activation contract is ARCH-04D2. Exact post-submit input, execute and finalize
 authority is delivered; checker-output write/bind remains planned because the
 current catalogue produces no output files. ARCH-04E1A route-neutral source
-facts and type-only accepted-effects contracts are delivered without an action,
-handler, current pointer or runtime composition. This does not reopen XINT-06B as a parallel implementation lane. Likewise ARCH-02G/02H
+facts and accepted-effects contracts are delivered; REV-04C supplies the hidden
+FinalAcceptance/TASK/CON participant without an action, handler, current pointer
+or authorized runtime composition. This does not reopen XINT-06B as a parallel implementation lane. Likewise ARCH-02G/02H
 are replacement implementation boundaries, not automatic registry renames.
 Read exact runtime ownership from the typed catalogue. No planning-only
 change may promote or reassign an action.
@@ -692,7 +693,7 @@ a planning document does not grant a service permission.
 | `task.assignment.authority_reconcile` | `workstream.task.assignment_reconciler` | Committed exact AUTH invalidation event, project/actor/grant-or-link, active pre-submit assignment; no wrong-role or submitted-history mutation | ARCH-03B9 hidden handler/fence and ARCH-03C1 real feature authority/decision receipts complete; ARCH-03C2 atomic producer wiring and registration |
 | `checker.post_submit.execute` | `workstream.checker.post_submit` | Immutable Submission/request/generation, locked compiled policy, attempt and admitted service; exact pre-I/O authority | Implemented by ARCH-04C/04D2; no dispatcher registration |
 | `checker.post_submit.finalize` | `workstream.checker.post_submit` | Exact execution request/fence, accepted result digest, retained material and original execute receipt; fresh post-I/O authority and atomic evidence; current outputs are empty | Implemented by ARCH-04C/04D2; no dispatcher registration |
-| `task.post_submit.route` | `workstream.task.post_submit_router` | Committed completion event/claim, exact current CHECKER result/fence, immutable Submission, locked ReviewPolicy and TASK pre-review state; true permits only the TASK manifest transition to `review_pending`, false/pass binds exact accepted TASK effects for the future shared FinalAcceptance consequence; never a human review decision or generic CON write | AUTH-19A inert source/request commitments and planned identity, 04E1B-A request facts and 04E2-A strict hidden preparation are delivered. The nominal adapter uses canonical PREP, but planned denial prevents a handle, allow or receipt. CON-07 hidden submitter participation is delivered; shared acceptance/TASK effects still precede the false handler; 04E1B-B supplies handlers, 04E2-B enforces receipt custody and activates the first genuine atomic consequence, and 04E3 wires live composition |
+| `task.post_submit.route` | `workstream.task.post_submit_router` | Committed completion event/claim, exact current CHECKER result/fence, immutable Submission, locked ReviewPolicy and TASK pre-review state; true permits only the TASK manifest transition to `review_pending`, false/pass binds exact accepted TASK effects for the shared FinalAcceptance consequence; never a human review decision or generic CON write | AUTH-19A inert source/request commitments, 04E1B-A request facts, 04E2-A strict preparation and the REV-04C hidden FinalAcceptance/TASK/CON participant are delivered. Planned denial still prevents a handle, allow or receipt. 04E1B-B supplies hidden handlers/currentness race proof; 04E2-B requires the exact AUTH receipt on the same strict input, adds database/audit/outbox closure and activates the first genuine atomic consequence; 04E3 wires live composition |
 
 Each action maps to the identically named permission in this table and only
 its singleton fixed-service row. Humans, dispatchers and unrelated services
@@ -1661,9 +1662,9 @@ persist this new source commitment. ARCH-04E1B-A stages routing request facts;
 fixed-router adapter through canonical PREP. The action remains planned and the
 kernel rejects before handle issuance, so the adapter cannot return an allow or
 receipt and performs no source, publication or product write. CON-07 hidden
-submitter participation is delivered; shared acceptance/TASK effects remain
-next for the selected automated path. Mandatory
-persisted source/FinalAcceptance custody follows at 04E2-B,
+submitter participation and REV-04C hidden FinalAcceptance/TASK/CON composition
+are delivered; hidden handlers are next for the selected automated path.
+Mandatory exact same-input receipt and persisted source/FinalAcceptance custody follow at 04E2-B,
 with the first genuine allow and all governed effects in the same transaction,
 before production composition or consumption. No early standalone allow exists. The actor-vocabulary migration provisions
 nothing, and existing closed audit constraints still reject a route allow.

@@ -59,9 +59,11 @@ deterministic rules or supported model-based checkers; the stage does not
 promise deterministic judgments. Neither stage replaces required human Review
 or independently authorizes acceptance. The versioned `human_review_required: true`
 in the existing locked ReviewPolicy may be set false for authorized automated
-acceptance, without reviewer contribution. This is not live behavior; the
+acceptance, without reviewer contribution. REV-04C supplies the hidden
+FinalAcceptance/TASK/CON transaction participant, but this is not live behavior; the
 [bounded handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next)
-now provides configuration; activation of the shared acceptance/CON path remains pending.
+now provides configuration; exact authority/evidence, routing handlers,
+currentness proof and activation of the shared acceptance/CON path remain pending.
 See the [checker framework](architecture_checker_framework.md) and
 [current capability ledger](roadmap_status.md) for supported boundaries.
 

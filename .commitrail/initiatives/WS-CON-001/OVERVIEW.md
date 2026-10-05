@@ -5,9 +5,11 @@ planned router identity. TASK request and future source-ID reservation
 (ARCH-04E1B-A) and strict hidden AUTH preparation (ARCH-04E2-A) are delivered.
 The nominal fixed-router adapter still cannot obtain a handle, allow or receipt,
 and writes no source or effect while the action remains planned/unavailable.
-CON-07 now delivers hidden source-neutral submitter participation and complete
-frozen award-set staging/replay. Shared acceptance and TASK terminal effects are
-next. Mandatory source-receipt custody, fulfillment-root ordinal custody and
+CON-07 delivers hidden source-neutral submitter participation and complete
+frozen award-set staging/replay. [REV-04C](../WS-REV-001/WS-REV-001-04C.md) now composes it with FinalAcceptance and
+TASK terminal effects in one hidden caller-owned transaction. Mandatory exact
+AUTH receipt input, database complete-set enforcement, shared audit/outbox,
+currentness race proof, fulfillment-root ordinal custody and
 scoped lifecycle activation remain required before production consumption. Neither phase may
 commit a standalone allow. The first durable receipt must commit with its full
 governed consequence. Hidden handlers and activation follow as 04E1B-B/04E2-B,
@@ -20,8 +22,8 @@ and the [capability ledger](../../../docs/roadmap_status.md).
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
   metadata-only packet types. REV-03B packets, REV-04A Review source storage,
   REV-04B FinalAcceptance storage, CON-03C contribution/award storage, REV-12A1
-  disabled fencing, hidden AUTH preparation and CON-07 hidden submitter
-  participation are delivered. Mandatory persisted custody accompanies the
+  disabled fencing, hidden AUTH preparation, CON-07 hidden submitter
+  participation and REV-04C hidden FinalAcceptance/TASK/CON composition are delivered. Mandatory persisted custody accompanies the
   first authorized atomic consequence at 04E2-B. No packet resolver or human
   runtime is live.
 
@@ -63,9 +65,10 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [CON-07](WS-CON-001-07.md) adds hidden source-neutral submitter participation
   and complete frozen award-set staging/replay; no recognition route or
   fulfillment operation is live.
-- Next usable boundary: shared acceptance and TASK accepted/completed effects,
-  plus mandatory same-table acceptance authority hardening before one shared
-  operation serves both human and automatic triggers.
+- Next usable boundary: ARCH-04E1B-B hidden routing handlers using the shared
+  participant. The complete authorized operation still requires a mandatory
+  same-input AUTH receipt, database complete-set enforcement, audit/outbox and
+  currentness proof before either trigger can consume it in production.
 - Governing sources: `docs/spec_contribution_compensation.md`,
   [`CONFORMANCE.md`](CONFORMANCE.md), code, migrations, and tests.
 - Preserve: exact policy-version lineage, no claim-time drift, decimal-string
@@ -74,8 +77,9 @@ and the [capability ledger](../../../docs/roadmap_status.md).
 
 Delivered [REV-12A1](../WS-REV-001/WS-REV-001-12A1.md) supplies only disabled
 generation-zero controller storage and transaction locking. CON-07 consumes its
-canonical fence through a CON-owned Protocol, but acceptance-source AUTH custody,
-shared acceptance/TASK effects and authorized activation remain separate work.
+canonical fence through a CON-owned Protocol, and REV-04C composes the hidden
+mechanical participant. Acceptance-source AUTH custody, database closure,
+currentness proof and authorized activation remain separate work.
 
 This is delivery priority, not a prerequisite of true human admission. Both
 routing branches have delivered request reservation 04E1B-A → delivered AUTH preparation 04E2-A → hidden handlers 04E1B-B → activation 04E2-B → live 04E3; true routing

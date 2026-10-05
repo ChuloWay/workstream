@@ -2324,3 +2324,37 @@ def test_submitter_participation_has_exact_ownership_without_activation() -> Non
             ownership._validate_additive_partition_transition(
                 _partition(sorted({retained, *expected, neighbor})), trusted
             )
+
+
+def test_shared_acceptance_has_exact_ownership_without_activation() -> None:
+    expected = {
+        "backend/app/modules/reviews/api/acceptance.py",
+        "backend/app/modules/reviews/acceptance/repository.py",
+        "backend/app/modules/reviews/acceptance/participant.py",
+        "backend/app/modules/tasks/accepted_effects.py",
+    }
+    assert ownership.REV_04C_PARTICIPATION_TARGETS == expected
+    assert {ownership.group_for_target(path) for path in expected} == {"lifecycle"}
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *expected})), trusted
+    )
+    for neighbor in (
+        "backend/app/modules/reviews/acceptance/router.py",
+        "backend/app/modules/reviews/acceptance/activation.py",
+    ):
+        with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+            ownership._validate_additive_partition_transition(
+                _partition(sorted({retained, *expected, neighbor})), trusted
+            )
+
+
+def test_acceptance_contract_relocation_requires_public_replacement() -> None:
+    old = "backend/app/modules/reviews/acceptance/schemas.py"
+    new = "backend/app/modules/reviews/api/acceptance.py"
+    retained = "backend/app/core/config.py"
+    trusted = _partition(sorted({old, retained}))
+    ownership._validate_additive_partition_transition(_partition(sorted({new, retained})), trusted)
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(_partition([retained]), trusted)

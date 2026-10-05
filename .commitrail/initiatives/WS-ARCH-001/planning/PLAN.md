@@ -6,9 +6,11 @@ future source-identity reservation. ARCH-04E2-A delivers strict hidden
 resource/preparation matching and a nominal fixed-router adapter through canonical
 PREP. The action remains planned/unavailable, so no handle, allow, receipt,
 source write or product effect is reachable. CON-07 hidden submitter
-participation and complete frozen award-set staging/replay are delivered. Shared
-acceptance and TASK terminal effects are next. Mandatory source-receipt custody,
-fulfillment-root ordinal custody and scoped lifecycle activation remain required
+participation and complete frozen award-set staging/replay are delivered. REV-04C
+adds the hidden FinalAcceptance/TASK/CON participant. Hidden handlers 04E1B-B are
+next. Mandatory exact same-input AUTH receipt, database complete-set enforcement,
+TASK-before-CHECKERS race proof, shared audit/outbox, fulfillment-root ordinal
+custody and scoped lifecycle activation remain required
 before production consumption. Neither phase may
 commit a standalone allow. The first durable receipt must commit with its full
 governed consequence. Hidden handlers and activation follow as 04E1B-B/04E2-B,
@@ -70,12 +72,12 @@ checker-remediation boundary before public Submission cutover.
 | AUTH-OUTBOX-01 | Merged shared outbox persistence and AUTH service/PREP foundations | Complete: planned dispatcher identity/action/matrix and unavailable typed authority contract |
 | CON-02B | AUTH-OUTBOX-01 | Complete: shared hidden dispatcher/claim fencing, typed handlers and recovery |
 | AUTH-OUTBOX-02 | CON-02B exact hidden manifest | Exact dispatcher mechanics only; no feature authority |
-| [ARCH-04E1A](../WS-ARCH-001-04E1A.md) | ARCH-04C/04D2 | Complete: route-neutral immutable TASK source schema/detached facts and source-neutral accepted-effects types; no runtime writer/reader, handlers, current pointer, routing authority, acceptance implementation or REV dependency |
+| [ARCH-04E1A](../WS-ARCH-001-04E1A.md) | ARCH-04C/04D2 | Complete: route-neutral immutable TASK source schema/detached facts and source-neutral accepted-effects types; REV-04C uses a bounded exact-source verifier, with no general routing publication writer/reader, handlers, current pointer or routing authority |
 | ARCH-04E1B-A | ARCH-04E1A, AUTH-19A | Complete: TASK caller-session request/source-identity reservation; no source publication, handler or commit |
 | [ARCH-04E2-A](../WS-ARCH-001-04E2A.md) | ARCH-04E1B-A | Complete: strict AUTH-private resource/request/consequence matcher and nominal fixed-router adapter through canonical PREP; action stays planned/unavailable, with no handle, allow, receipt, source write or effect |
-| ARCH-04E1B-B | ARCH-04E2-A and CON-02B; false additionally shared acceptance/TASK effects using delivered CON-07 participation and fencing | Hidden TASK handlers; durable receipt proof follows at exact activation |
-| Scoped XINT-003-08B controller activation | Early existing REV-12A foundation and hidden shared acceptance/writer/observation proof | Existing Operator lifecycle-control action for the bounded shared manifest, not human runtime |
-| ARCH-04E2-B | ARCH-04E1B-B; scoped XINT-003-08B controller activation for false | AUTH exact consequence activation and mandatory receipt custody; genuine allow commits with all governed effects |
+| ARCH-04E1B-B | ARCH-04E2-A and CON-02B; false additionally uses delivered REV-04C shared acceptance participation | Hidden TASK handlers plus TASK-before-CHECKERS currentness and both successor-generation race orders; durable receipt proof follows at exact activation |
+| Scoped XINT-003-08B controller activation | Existing REV-12A foundation, delivered REV-04C hidden participant and remaining real-writer observation proof | Existing Operator lifecycle-control action for the bounded shared manifest, not human runtime |
+| ARCH-04E2-B | ARCH-04E1B-B; scoped XINT-003-08B controller activation for false | Require the exact AUTH receipt on the same strict input; add database complete-set and audit/outbox closure; genuine allow commits with all governed effects |
 | ARCH-04E3 | ARCH-04E2, ARCH-04D2, AUTH-OUTBOX-02; shared acceptance proof for false | TASK live dispatch/routing composition: true to allow_review, false/pass to shared acceptance when proven |
 | ARCH-04E | ARCH-04E3 | Completed coordination boundary consumed by downstream REV |
 | ARCH-04F (later public-cutover prerequisite) | ARCH-04E | CHECKER failure facts and TASK/ART remediation resubmission, not REV |
@@ -114,9 +116,10 @@ new permission requirement.
 Delivered supporting foundations are [ARCH-04B2](../WS-ARCH-001-04B2.md),
 [AUTH-OUTBOX-01/02](../../WS-AUTH-001/planning/PLAN.md#ws-auth-001-outbox-01--unavailable-dispatcher-contract),
 and [CON-02B](../../WS-CON-001/OVERVIEW.md#con-02b-current-dispatcher-contract).
-REV-12A1 delivers disabled controller/fence mechanics, and CON-07 delivers the
-hidden source-neutral submitter participant and complete frozen award-set owner.
-The current false-branch priority is shared acceptance and TASK terminal effects.
+REV-12A1 delivers disabled controller/fence mechanics, CON-07 delivers the
+hidden source-neutral submitter participant and complete frozen award-set owner,
+and REV-04C composes hidden FinalAcceptance/TASK/CON effects. The current
+false-branch priority is hidden routing handlers.
 Both branches have request reservation 04E1B-A and hidden AUTH preparation
 04E2-A delivered before handlers 04E1B-B, activation 04E2-B and live 04E3; true routing can proceed after its own prerequisites without CON or
 shared acceptance. False adds those participants and scoped lifecycle activation.

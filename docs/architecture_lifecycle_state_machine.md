@@ -6,7 +6,9 @@ These are target v0.1 states, not a claim of live route availability. The locked
 ReviewPolicy selects the success route: true requires human review; false
 uses the [same shared acceptance operation](spec_review_lifecycle.md#finalacceptance)
 after required post-submit checks pass. False activation remains unavailable
-until its shared acceptance/CON/AUTH proof lands.
+although the REV-04C hidden FinalAcceptance/TASK/CON participant is delivered;
+mandatory AUTH receipt, database closure, currentness race, audit/outbox and
+activation proof still must land.
 
 ```text
 DRAFT

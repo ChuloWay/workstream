@@ -68,8 +68,12 @@ use the fixed `workstream.checker.post_submit` identity and phase-specific recei
 
 [ART-07A1](../../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) delivers
 metadata-only packet types without authority or a resolver. REV-03B normalized
-packet storage and REV-04A immutable Review source storage are delivered; REV-04B shared FinalAcceptance storage is delivered; CON persistence and participation are next;
-hidden composition proof precedes exact activation.
+packet storage, REV-04A immutable Review source storage, REV-04B FinalAcceptance
+storage, CON-03C persistence, CON-07 participation and REV-04C hidden shared
+acceptance/TASK/CON composition are delivered. Hidden routing handlers
+ARCH-04E1B-B are next. Mandatory exact AUTH receipts, database complete-effect
+custody, shared audit/outbox and fulfillment-root custody, and both TASK-before-
+CHECKERS currentness races remain prerequisites of activation at ARCH-04E2-B.
 
 Runtime owner `WS-XINT-002-07` retains catalogue custody. The only approved
 v0.1 availability transition is 07A packet materialization. Evidence binding
