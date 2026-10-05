@@ -7,7 +7,7 @@
   TASK-owned locking before CHECKERS custody and cannot advance an accepted task.
   Routing handlers, publication and authority remain unavailable.
 
-## Intent and current-main discovery
+## Intent
 
 Main `a77e8bdc` delivers REV-04C's hidden shared acceptance participant.
 It locks TASK before staging acceptance and contribution effects. CHECKERS'
@@ -21,7 +21,7 @@ and source publication remain the subsequent bounded portion; this is not a
 second dispatcher, acceptance operation or new authorization action. Do not
 claim live routing, automated acceptance or complete receipt custody.
 
-## Allowed files and design
+## Bounded change
 
 - `backend/app/modules/checkers/api/execution.py` and
   `checkers/execution_coordination.py`: required typed consumer-owned TASK lock
@@ -80,7 +80,7 @@ compatibility path. Do not turn historical policy hashes into current-policy
 selection. Do not fabricate false-policy activation or AUTH receipts in tests.
 Contributor leases/skip remain deferred.
 
-## Acceptance and verification
+## Acceptance criteria
 
 1. Valid initial reservation, exact replay, later generation and rollback retain
    their existing identities and caller-owned transaction behavior.
@@ -105,7 +105,7 @@ Contributor leases/skip remain deferred.
    dependency/ownership/test-structure checks, stale wording, Markdown links and
    Commitrail checks; full hosted suite with zero skips/deselections.
 
-## Review and human focus
+## Risk and review routing
 
 Required plan and final tracks: architecture/reuse, security, QA/test-delta,
 CI integrity for registrations, documentation/product operations. Review the
@@ -119,7 +119,14 @@ not import TASK private implementation. The guard-removal lock probe uses
 TASK lock. Terminal replay is exercised while CHECKERS advisory/fence/run locks
 are independently held, proving it neither locks nor rewrites those rows.
 
-## Next boundary
+## Evidence
+
+Use the canonical isolated PostgreSQL runner for the two new guard/currentness
+modules and affected reservation/review-queue regressions. Run exact ownership,
+lane, module-boundary and authorization checks without changing their gates.
+The PR retains exact command results, hosted completeness and reviewer freshness.
+
+## Reconciliation
 
 Complete hidden request/completion handlers in the remaining 04E1B-B scope,
 then exact authority/evidence closure at 04E2-B and live composition at 04E3.
