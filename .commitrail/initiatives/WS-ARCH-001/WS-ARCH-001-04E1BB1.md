@@ -41,7 +41,9 @@ claim live routing, automated acceptance or complete receipt custody.
   TASK before CHECKERS/FK custody; preserve update semantics and retained data.
 - Exact ownership/lane registrations and their expectation tests; update the
   reviewed schema fingerprint in `backend/tests/conftest.py` for the two replaced
-  functions without weakening schema-reset validation, and retain every revision
+  functions without weakening schema-reset validation; register the new current
+  head in `backend/alembic/env.py` while preserving supported migration ancestors,
+  and retain every revision
   in `backend/tests/test_alembic.py`'s exact migration-chain assertion. Preserve caps,
   complete collection, isolation, negative assertions and failure propagation.
 - This record, the parent 04E contract, affected current ARCH/AUTH/POL/REV/CON
