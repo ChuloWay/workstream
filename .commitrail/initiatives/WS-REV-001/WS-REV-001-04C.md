@@ -171,6 +171,10 @@ reachable partial-state cases, stored-source verification and both future
 CHECKERS race orders. The public API boundary check required moving the existing
 source contract into REV's public API; the private schema and its imports were
 removed rather than retained as aliases.
+The no-insert mutation proof uses an unpaid source so an independent award
+replay guard cannot mask the removed contribution guard; paid partial-award
+proof remains separate. TASK tests retain moved public-contract assertions and
+exercise both mechanical prestates without claiming automated authority.
 
 ## Reconciliation
 

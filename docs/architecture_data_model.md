@@ -1854,7 +1854,10 @@ mutation/deletion/truncation. Repository writes are caller-transaction operation
 creation checks the lease deadline against PostgreSQL time; exact replay retains
 the stored identity after expiry or closure. The detached identity is
 `packet_manifest_id`, matching AUTH. This storage is delivered; the resolver,
-claim authority and byte capability remain future work. REV-04A immutable Review source storage is delivered; shared FinalAcceptance persistence is next.
+claim authority and byte capability remain future work. REV-04A immutable Review source storage, REV-04B FinalAcceptance persistence and
+REV-04C hidden acceptance/TASK/CON participation are delivered. Hidden routing
+handlers are next; exact authority, complete-effect custody and activation
+remain required before production use.
 
 ## Review
 

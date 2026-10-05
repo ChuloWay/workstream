@@ -319,7 +319,7 @@ async def test_removing_replay_no_insert_guard_exposes_partial_repair(
     tmp_path, isolated_database_env, monkeypatch
 ):
     async with contribution_source(
-        tmp_path, isolated_database_env, paid=True, persist_acceptance=False
+        tmp_path, isolated_database_env, paid=False, persist_acceptance=False
     ) as h:
         await prepare_review_pending(h)
         request = await request_for(h, correlation_id=new_record_id())
@@ -348,5 +348,9 @@ async def test_removing_replay_no_insert_guard_exposes_partial_repair(
                 with pytest.raises(FinalAcceptanceConflict):
                     await participant(session).participate(request)
             assert len(await rows(session, "contribution_records")) == 1
-            assert len(await rows(session, "compensation_awards")) == 2
+            assert await rows(session, "compensation_awards") == []
+            state = await stored_effects(session, request.task_effects.task_id)
+            assert state["task_status"] == "accepted"
+            assert state["assignment_status"] == "completed"
+            assert state["acceptances"] == 1
             await session.rollback()

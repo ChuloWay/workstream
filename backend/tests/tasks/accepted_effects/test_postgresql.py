@@ -12,10 +12,20 @@ from tests.tasks.post_submit_routing.support import insert_source
 from .support import accepted_effects_source, participant
 
 
+@pytest.mark.parametrize("prestate", ("review_pending", "evaluation_pending"))
 async def test_new_then_exact_replay_preserves_nonterminal_task_facts(
-    tmp_path, isolated_database_env
+    tmp_path, isolated_database_env, prestate
 ):
+    """Prove TASK mechanics for either prestate, without automated authority."""
     async with accepted_effects_source(tmp_path, isolated_database_env) as h:
+        h.effects_request = h.effects_request.model_copy(update={
+            "expected_task_status": prestate,
+        })
+        async with h.factory() as session, session.begin():
+            await session.execute(
+                text("UPDATE public.workstream_tasks SET status=:prestate WHERE id=:task_id"),
+                {"prestate": prestate, "task_id": h.effects_request.task_id},
+            )
         async with h.factory() as session:
             before = (
                 await session.execute(

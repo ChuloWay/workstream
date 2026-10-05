@@ -2,7 +2,7 @@
 
 ## Status
 
-Existing compensation records retain their owning implementation status. The
+Existing compensation records retain their owning implementation status.
 The REV-04C hidden participant stages FinalAcceptance, TASK effects and the CON
 submitter outcome in a caller-owned transaction. The authorized human/automatic
 triggers, reviewer and revision behavior, audit/outbox closure, fulfillment and
