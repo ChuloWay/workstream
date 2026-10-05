@@ -3,9 +3,11 @@
 ## Status
 
 Existing compensation records retain their owning implementation status. The
-Review-, FinalAcceptance-, and revision-sourced behavior below is planned and
-unavailable until its owning REV/CON chunks, exact AUTH activation, and REV-13
-joint release complete. Reputation behavior is deferred entirely.
+The REV-04C hidden participant stages FinalAcceptance, TASK effects and the CON
+submitter outcome in a caller-owned transaction. The authorized human/automatic
+triggers, reviewer and revision behavior, audit/outbox closure, fulfillment and
+joint release remain unavailable until their owning REV/CON/AUTH chunks complete.
+Reputation behavior is deferred entirely.
 
 ## Compensation Principle
 

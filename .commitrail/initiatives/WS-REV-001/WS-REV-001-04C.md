@@ -1,7 +1,7 @@
 # REV-04C — Hidden shared acceptance and TASK terminal participation
 
 - Initiative: `WS-REV-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: one hidden REV participant stages exact FinalAcceptance, TASK accepted/completed effects and complete submitter economic facts in a caller-owned transaction; live acceptance remains unavailable.
 
 ## Intent
@@ -30,8 +30,9 @@ fixtures are valid storage controls, not authority or a live human workflow.
 
 ### Allowed
 
+- Move the existing FinalAcceptanceInput from private `reviews/acceptance/schemas.py` into the public contract, updating every caller and removing the superseded file without an alias.
 - `backend/app/modules/reviews/api/{acceptance,__init__}.py` and `reviews/acceptance/{__init__,schemas,repository,participant}.py`: closed values, exact source identity recovery and one hidden flush-only shared participant.
-- `backend/app/modules/tasks/api/accepted_effects.py`, `tasks/accepted_effects.py` and narrowly necessary owner repository methods: exact TASK lineage/prestate locking, terminal mutation and read-only replay.
+- `backend/app/modules/tasks/api/accepted_effects.py`, `tasks/accepted_effects.py`, `tasks/api/__init__.py` exports and narrowly necessary owner repository methods: exact TASK lineage/prestate locking, terminal mutation and read-only replay.
 - `backend/app/modules/contributions/api/participation.py` and `contributions/records/{participant,repository}.py`: explicit enclosing acceptance disposition; reject missing replay records before insertion, without a compatibility default.
 - Focused tests in `backend/tests/reviews/acceptance/`, `tests/tasks/accepted_effects/`, `tests/contributions/participation/` and affected canonical source fixtures; retain distinct existing guard proof.
 - Exact ownership/lane registrations in `.ci/behavior-ownership/partition.v1.json`, `backend/scripts/{behavior_ownership,test_lane_catalogue}.py`, and their focused expectation tests; no changed gates, caps or partition algorithm.
@@ -152,9 +153,9 @@ locking. Never enable the generic ALLOWED_TASK_TRANSITIONS accepted transition.
 
 ## Evidence
 
-Plan review must settle source identity recovery, exact lock order, replay
-provenance, necessary database complete-set safeguards and fixture reachability
-before implementation. Focused real PostgreSQL tests exercise the owner ports
+Plan review settled source identity, the two-phase lock order, explicit replay
+provenance and reachable storage controls. Database complete-set hardening stays
+paired with mandatory AUTH custody before activation, as specified above. Focused real PostgreSQL tests exercise the owner ports
 and caller transaction; pure tests cover strict closed values. Run Ruff,
 module/authority/ownership checks, stale wording, links, Commitrail and the full
 unchanged hosted completeness gate. Exact target/results belong in the PR.
@@ -165,6 +166,11 @@ Discovery identified a partial-replay repair gap in the enclosing use of CON-07.
 Explicit acceptance-derived new/replay provenance and no-insert replay address
 that requirement without adding a second contribution implementation. The
 existing REV queue/lease files are active owners and are not obsolete scaffolding.
+Plan review required executable production-unreachability proof, individually
+reachable partial-state cases, stored-source verification and both future
+CHECKERS race orders. The public API boundary check required moving the existing
+source contract into REV's public API; the private schema and its imports were
+removed rather than retained as aliases.
 
 ## Reconciliation
 

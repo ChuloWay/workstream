@@ -164,6 +164,13 @@ AUTH_19A_SOURCE_CONTRACT_TARGETS = frozenset({
     "backend/app/modules/authorization/acceptance_source_contracts.py",
 })
 REV_12A1_FENCE_TARGETS = frozenset({"backend/app/modules/reviews/api/lifecycle.py", "backend/app/modules/reviews/lifecycle/models.py", "backend/app/modules/reviews/lifecycle/fence.py"})
+REV_04C_REMOVED_TARGETS = frozenset({"backend/app/modules/reviews/acceptance/schemas.py"})
+REV_04C_PARTICIPATION_TARGETS = frozenset({
+    "backend/app/modules/reviews/api/acceptance.py",
+    "backend/app/modules/reviews/acceptance/repository.py",
+    "backend/app/modules/reviews/acceptance/participant.py",
+    "backend/app/modules/tasks/accepted_effects.py",
+})
 REV_04B_ACCEPTANCE_TARGETS = frozenset({"backend/app/modules/reviews/acceptance/models.py", "backend/app/modules/reviews/acceptance/schemas.py"})
 REV_04A_SOURCE_TARGETS = frozenset({"backend/app/modules/reviews/decision/models.py", "backend/app/modules/reviews/decision/schemas.py"})
 REV_03B_PACKET_TARGETS = frozenset({'backend/app/modules/reviews/packet/models.py', 'backend/app/modules/reviews/packet/repository.py', 'backend/app/modules/reviews/packet/schemas.py'})
@@ -718,12 +725,16 @@ def _validate_additive_partition_transition(
     current_by_target = {item["target"]: item for item in current_assignments}
     _validate_policy_lineage_relocation(set(trusted_targets), set(current_by_target))
     removed = set(trusted_targets) - set(current_by_target)
+    if removed & REV_04C_REMOVED_TARGETS and (
+        "backend/app/modules/reviews/api/acceptance.py" not in current_by_target
+    ):
+        raise BehaviorOwnershipError("untrusted_partition_change")
     retained_trusted = [
         item for item in trusted_assignments if item["target"] not in removed
     ]
     if (
         trusted_targets != sorted(trusted_targets)
-        or removed - (ARCH_04D2_REMOVED_TARGETS | ARCH_03D_REMOVED_TARGETS | TASK_CHECKER_CLEANUP_REMOVED_TARGETS | ARCH_03C2_REMOVED_TARGETS | OUTBOX_IDENTITY_REMOVED_TARGETS | V01_BASELINE_REMOVED_TARGETS | POL_03B_REMOVED_TARGETS | POL_04B_REMOVED_TARGETS | POL_05A_REMOVED_TARGETS | ARCH_03A_GUIDE_CONTEXT_REMOVED_TARGETS | ARCH_04B_SEAM_REMOVED_TARGETS)
+        or removed - (REV_04C_REMOVED_TARGETS | ARCH_04D2_REMOVED_TARGETS | ARCH_03D_REMOVED_TARGETS | TASK_CHECKER_CLEANUP_REMOVED_TARGETS | ARCH_03C2_REMOVED_TARGETS | OUTBOX_IDENTITY_REMOVED_TARGETS | V01_BASELINE_REMOVED_TARGETS | POL_03B_REMOVED_TARGETS | POL_04B_REMOVED_TARGETS | POL_05A_REMOVED_TARGETS | ARCH_03A_GUIDE_CONTEXT_REMOVED_TARGETS | ARCH_04B_SEAM_REMOVED_TARGETS)
         or [current_by_target[item["target"]] for item in retained_trusted]
         != retained_trusted
     ):
@@ -773,6 +784,7 @@ def _validate_additive_partition_transition(
         | AUTH_19A_SOURCE_CONTRACT_TARGETS
         | ARCH_04E2A_ROUTING_AUTH_TARGETS
         | REV_12A1_FENCE_TARGETS
+        | REV_04C_PARTICIPATION_TARGETS
         | REV_04B_ACCEPTANCE_TARGETS
         | REV_04A_SOURCE_TARGETS
         | REV_03B_PACKET_TARGETS

@@ -48,8 +48,7 @@ class SubmitterContributionRepository:
                 select(ContributionRule.id, ContributionRule.compensation_mode)
                 .join(
                     ContributionPolicyVersion,
-                    ContributionPolicyVersion.id
-                    == ContributionRule.contribution_policy_version_id,
+                    ContributionPolicyVersion.id == ContributionRule.contribution_policy_version_id,
                 )
                 .where(
                     ContributionPolicyVersion.id == contribution_policy_version_id,
@@ -105,9 +104,7 @@ class SubmitterContributionRepository:
             ) from exc
 
         instruments = {item.instrument_type for item in definitions}
-        complete = (
-            rule.compensation_mode == "unpaid" and not definitions
-        ) or (
+        complete = (rule.compensation_mode == "unpaid" and not definitions) or (
             rule.compensation_mode == "compensated"
             and 1 <= len(definitions) <= 2
             and len(instruments) == len(definitions)
@@ -119,10 +116,16 @@ class SubmitterContributionRepository:
             definitions=definitions,
         )
 
-    async def insert_or_get(
+    async def apply_acceptance_disposition(
         self, request: SubmitterParticipationRequest
-    ) -> tuple[SubmitterContributionFacts, Literal["new", "replay"]]:
-        """Insert once by FinalAcceptance source, then compare the exact winner."""
+    ) -> SubmitterContributionFacts:
+        """Insert new work or read an exact replay without repairing either mode."""
+        if request.acceptance_disposition == "replay":
+            winner = await self._select_exact_source(request)
+            if winner is None or not self._matches(winner, request):
+                raise ContributionParticipationConflict("contribution_participation_conflict")
+            return self._facts(winner)
+
         candidate_id = new_record_id()
         inserted_id = await self._session.scalar(
             insert(ContributionRecord)
@@ -140,24 +143,41 @@ class SubmitterContributionRepository:
                 artifact_hash=request.artifact_hash,
                 contribution_policy_version_id=request.contribution_policy_version_id,
             )
-            .on_conflict_do_nothing(
-                index_elements=[ContributionRecord.source_final_acceptance_id]
-            )
+            .on_conflict_do_nothing(index_elements=[ContributionRecord.source_final_acceptance_id])
             .returning(ContributionRecord.id)
         )
+        if inserted_id != candidate_id:
+            raise ContributionParticipationConflict("contribution_participation_conflict")
         winner = await self._session.scalar(
             select(ContributionRecord)
             .where(
-                ContributionRecord.source_final_acceptance_id
-                == request.final_acceptance_id,
+                ContributionRecord.id == candidate_id,
                 ContributionRecord.project_id == str(request.project_id),
             )
             .execution_options(populate_existing=True)
         )
         if winner is None or not self._matches(winner, request):
             raise ContributionParticipationConflict("contribution_participation_conflict")
+        return self._facts(winner)
+
+    async def _select_exact_source(
+        self, request: SubmitterParticipationRequest
+    ) -> ContributionRecord | None:
+        """Read the source-unique replay candidate without staging a row."""
+        return await self._session.scalar(
+            select(ContributionRecord)
+            .where(
+                ContributionRecord.source_final_acceptance_id == request.final_acceptance_id,
+                ContributionRecord.project_id == str(request.project_id),
+            )
+            .execution_options(populate_existing=True)
+        )
+
+    @staticmethod
+    def _facts(winner: ContributionRecord) -> SubmitterContributionFacts:
+        """Validate stored scalar types before returning public immutable facts."""
         try:
-            facts = SubmitterContributionFacts(
+            return SubmitterContributionFacts(
                 id=winner.id,
                 project_id=UUID(winner.project_id),
                 task_id=UUID(winner.task_id),
@@ -170,15 +190,10 @@ class SubmitterContributionRepository:
                 created_at=winner.created_at,
             )
         except (TypeError, ValueError, ValidationError) as exc:
-            raise ContributionParticipationConflict(
-                "contribution_participation_conflict"
-            ) from exc
-        return facts, "new" if inserted_id == candidate_id else "replay"
+            raise ContributionParticipationConflict("contribution_participation_conflict") from exc
 
     @staticmethod
-    def _matches(
-        winner: ContributionRecord, request: SubmitterParticipationRequest
-    ) -> bool:
+    def _matches(winner: ContributionRecord, request: SubmitterParticipationRequest) -> bool:
         """Compare every caller-supplied immutable contribution source fact."""
         return (
             winner.project_id == str(request.project_id)
@@ -191,6 +206,5 @@ class SubmitterContributionRepository:
             and winner.source_final_acceptance_id == request.final_acceptance_id
             and winner.source_task_assignment_id == str(request.task_assignment_id)
             and winner.artifact_hash == request.artifact_hash
-            and winner.contribution_policy_version_id
-            == request.contribution_policy_version_id
+            and winner.contribution_policy_version_id == request.contribution_policy_version_id
         )

@@ -370,8 +370,9 @@ context without rewriting prior work.
 ## FinalAcceptance
 
 The internal immutable accept-only fact and sole source of a submitter's
-`accepted_submission` ContributionRecord. REV-04B delivers storage only; exact
-AUTH custody and the canonical shared operation remain required before runtime use. See [Final Acceptance](#final-acceptance)
+`accepted_submission` ContributionRecord. REV-04B delivers storage and REV-04C
+delivers its hidden FinalAcceptance/TASK/CON participant; exact AUTH custody and
+the complete canonical shared operation remain required before runtime use. See [Final Acceptance](#final-acceptance)
 for human and planned automated source boundaries.
 
 ## Revision Replay
@@ -442,8 +443,9 @@ It is not a v0.1 review-transaction side effect.
 
 CON-03C supplies immutable storage; CON-07 supplies hidden submitter
 participation with complete frozen award staging and exact replay in the
-caller's transaction. Live recognition still requires shared acceptance/TASK
-effects, source authority and runtime composition. Reviewer participation
+caller's transaction. REV-04C composes it with hidden FinalAcceptance/TASK
+effects. Live recognition still requires source authority, database closure,
+currentness proof, audit/outbox and runtime composition. Reviewer participation
 and fulfillment remain separate future work.
 
 The immutable, evidence-backed record of one completed contribution under locked
@@ -470,8 +472,10 @@ TASK routing after required checks pass, without a Review, ReviewLease or
 reviewer contribution. The [canonical shared contract](spec_review_lifecycle.md#finalacceptance)
 defines the exclusive Review/routing-manifest provenance and atomic CON effects.
 The source flag records which trigger was used, not a second acceptance system.
-False runtime activation remains unavailable until implementation proof lands;
-raw checker success is not authority.
+REV-04C supplies the hidden mechanical participant for both sources. False
+runtime activation remains unavailable until mandatory AUTH receipt, database
+closure, currentness race, audit/outbox and activation proof land; raw checker
+success is not authority.
 
 ## Human Owner
 

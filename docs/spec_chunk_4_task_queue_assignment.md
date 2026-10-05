@@ -138,8 +138,10 @@ policy-governed routing; it does not own final acceptance.
 
 ARCH-04E1A persists that successful evidence in one immutable route-neutral
 TASK source table and exposes detached source facts plus a source-neutral,
-type-only accepted-effects Protocol. It installs no writer, reader, handler,
-current pointer, routing authority, TASK transition or acceptance participant.
+accepted-effects Protocol. REV-04C supplies the hidden FinalAcceptance/TASK/CON
+participant and uses the bounded exact-source verifier, but no general routing
+publication writer/reader, handler, current pointer, routing authority or live
+TASK transition.
 Before either true human admission or false automatic acceptance is published,
 the remaining ARCH-04E work must harden the same table with mandatory exact
 routing and owner-receipt custody and reject retained pre-authority rows.

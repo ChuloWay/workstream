@@ -6,9 +6,12 @@ planned router identity. TASK request and future source-ID reservation
 The nominal fixed-router adapter still cannot obtain a handle, allow or receipt,
 and writes no source or effect while the action remains planned/unavailable.
 CON-07 hidden submitter participation and complete frozen award-set staging/replay
-are delivered. Shared acceptance and TASK terminal effects are next. Mandatory
-source-receipt custody, fulfillment-root ordinal custody and scoped lifecycle
-activation remain required before production consumption. Neither phase may
+are delivered. [REV-04C](WS-REV-001-04C.md) now composes FinalAcceptance, TASK terminal effects and
+that CON participant in one hidden caller-owned transaction for either source.
+It is not the complete authorized operation. Mandatory exact AUTH receipt input,
+database complete-set enforcement across FinalAcceptance/TASK/CON, shared
+audit/outbox, fulfillment-root ordinal custody and scoped lifecycle activation
+remain required before production consumption. Neither phase may
 commit a standalone allow. The first durable receipt must commit with its full
 governed consequence. Hidden handlers and activation follow as 04E1B-B/04E2-B,
 then live 04E3; true admission does not depend on CON/shared acceptance.
@@ -21,7 +24,8 @@ of review/revision behavior. The downstream owner contracts remain separate.
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
   metadata-only packet types. REV-03B packets, REV-04A Review storage, REV-04B
   FinalAcceptance storage, CON-03C contribution/award storage, REV-12A1 disabled
-  fencing, hidden AUTH preparation and CON-07 hidden submitter participation are
+  fencing, hidden AUTH preparation, CON-07 hidden submitter participation and
+  REV-04C hidden FinalAcceptance/TASK/CON composition are
   delivered. Mandatory persisted custody accompanies the first authorized atomic
   consequence at 04E2-B. No packet resolver or human runtime is live.
 
@@ -31,14 +35,16 @@ of review/revision behavior. The downstream owner contracts remain separate.
 - Intent: ensure the authorized reviewer evaluates the exact verified artifact
   under the locked policy version and produces attributable outcomes.
 - Delivered upstream boundary: ARCH-04E1A provides immutable route-neutral TASK
-  source storage, detached source facts and the type-only accepted-effects
-  Protocol. It provides no writer, reader, handler, routing authority, current
-  pointer or acceptance implementation.
+  source storage, detached source facts and accepted-effects contracts. REV-04C
+  supplies their hidden FinalAcceptance/TASK/CON participant and bounded stored-
+  source verifier; no general routing publication writer/reader, handler,
+  routing authority or current pointer exists.
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: shared acceptance/TASK effects using the delivered
-  REV-12A1 fence and CON-07 participant; human hidden behavior may continue independently behind exact AUTH,
+- Next usable boundary: ARCH-04E1B-B hidden routing handlers using the delivered
+  REV-04C participant. They must prove TASK-before-CHECKERS currentness and both
+  successor-generation race orders; human hidden behavior may continue independently behind exact AUTH,
   ART and CON prerequisites.
 - Governing sources: `docs/spec_review_lifecycle.md`,
   `docs/engineering/review_authorization_action_custody.md`, code, migrations,
@@ -48,7 +54,7 @@ of review/revision behavior. The downstream owner contracts remain separate.
 
 Delivered [REV-12A1](../WS-REV-001/WS-REV-001-12A1.md) supplies only disabled
 generation-zero controller storage and transaction locking. Acceptance-source
-AUTH custody, shared acceptance/TASK effects and authorized activation remain
+AUTH custody, database closure, currentness proof and authorized activation remain
 separate work.
 
 This is delivery priority, not a prerequisite of true human admission. Both
@@ -86,8 +92,10 @@ REV owns shared final-acceptance semantics for both paths. The automated path
 must have explicit AUTH service authority and exact TASK/CHECKERS evidence,
 without a fabricated Review, ReviewLease, human actor, or reviewer contribution.
 CON validates stored source ancestry through the delivered source-neutral
-submitter participant and complete frozen award-set owner. Shared acceptance,
-TASK effects and runtime composition remain planned.
+submitter participant and complete frozen award-set owner. REV-04C supplies the
+hidden source-neutral FinalAcceptance/TASK/CON participant, but no routing
+handler, exact AUTH decision-event receipt, audit/outbox consequence or live
+runtime composition.
 The human branch below continues to use `allow_review`; it is not an automatic
 acceptance signal.
 
@@ -104,7 +112,14 @@ proof. No adjudication setting or behavior is included.
 2. Continue hidden claim/revision behavior against canonical `allow_review`,
    copying the Submission policy version without a current-policy lookup.
 3. TASK's early 04E1A source schema/detached facts and source-neutral accepted-
-   effects types are delivered. After delivered REV-03B and REV-04A storage, REV-04B shared FinalAcceptance storage is also delivered. REV-12A1 disabled fencing, ARCH-04E2-A exact source preparation and CON-07 hidden participation are delivered; enforce mandatory receipt custody with the first genuinely authorized atomic composition before production consumption. This foundation
+   effects types are delivered. After delivered REV-03B and REV-04A storage,
+   REV-04B shared FinalAcceptance storage, REV-12A1 disabled fencing,
+   ARCH-04E2-A exact source preparation, CON-07 hidden participation and REV-04C
+   hidden FinalAcceptance/TASK/CON composition are delivered. Evolve the same
+   strict participant input to require the exact AUTH decision-event receipt,
+   with no optional/default path, before production consumption. 04E2-B also
+   owns database-enforced complete-set closure, shared audit/outbox,
+   fulfillment-root ordinal custody and scoped activation. This foundation
    can precede human runtime: ARCH-04E uses it for false/pass acceptance without
    live queues, leases or decisions. The delivered REV-12A1 disabled fence serves both triggers; actual root ordinal
    custody and authorized drain/operator work extend the same controller before

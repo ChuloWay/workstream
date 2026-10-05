@@ -7,8 +7,10 @@ resource/preparation matching and a nominal fixed-router adapter through canonic
 PREP. The action remains planned and unavailable, so it issues no handle, allow or
 receipt and writes no source or effect. The selected automated path now has
 CON-07 hidden submitter participation and complete frozen award-set staging/replay.
-Shared acceptance and TASK terminal effects are next. Mandatory source-receipt
-custody, fulfillment-root ordinal custody and scoped lifecycle activation remain
+[REV-04C](../WS-REV-001/WS-REV-001-04C.md) now composes FinalAcceptance, TASK terminal effects and CON participation
+inside one hidden caller-owned transaction. Mandatory exact AUTH receipt input,
+database complete-set enforcement, currentness race proof, shared audit/outbox,
+fulfillment-root ordinal custody and scoped lifecycle activation remain
 required before production consumption. Neither phase may
 commit a standalone allow. The first durable receipt must commit with its full
 governed consequence. Hidden handlers and activation follow as 04E1B-B/04E2-B,
@@ -27,7 +29,8 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered prerequisite: [ART-07A1](../WS-ART-001/WS-ART-001-07A1.md) supplies
   metadata-only packet types. REV-03B packets, REV-04A Review storage, REV-04B
   FinalAcceptance storage, CON-03C contribution/award storage, REV-12A1 disabled
-  fencing, hidden AUTH preparation and CON-07 hidden submitter participation are
+  fencing, hidden AUTH preparation, CON-07 hidden submitter participation and
+  REV-04C hidden FinalAcceptance/TASK/CON composition are
   delivered. Mandatory persisted custody accompanies the first authorized atomic
   consequence at 04E2-B. No packet resolver or human runtime is live.
 
@@ -45,10 +48,10 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Completed activation boundary: AUTH-12H exact-project manager authority for
   CP07 complete-guide activation/binding, with live-authority replay.
 - Delivered dependent boundary: ARCH-04E1A immutable route-neutral source facts
-  and type-only accepted-effects contracts follow
+  and accepted-effects contracts follow
   [ARCH-04D2](../WS-ARCH-001/WS-ARCH-001-04D2.md) exact input, execute and
-  finalize authority. They add no routing action, handler or deployable effects
-  participant. Output-file authority remains unavailable for the zero-output
+  finalize authority. REV-04C supplies the hidden effects participant, but no
+  routing action, handler or deployable authorized operation. Output-file authority remains unavailable for the zero-output
   catalogue. [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers
   public manager activation context and exact guide activation.
   [CP05A](../WS-ARCH-001/WS-ARCH-001-CP05A.md) delivers public Finance
@@ -73,8 +76,9 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: shared acceptance/TASK effects before hidden ARCH-04E1B-B;
-  ARCH-04E2 then owns exact routing activation before 04E3 live composition.
+- Next usable boundary: hidden ARCH-04E1B-B routing handlers using the REV-04C
+  participant; ARCH-04E2-B then owns mandatory same-input receipt custody,
+  database closure, audit/outbox and exact routing activation before 04E3 live composition.
 - Governing source: `docs/spec_authorization_service.md`, authorization code,
   migrations, and tests.
 - Preserve: Flow token verification only, no Workstream login/session system,
@@ -83,7 +87,7 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 
 Delivered [REV-12A1](../WS-REV-001/WS-REV-001-12A1.md) supplies only disabled
 generation-zero controller storage and transaction locking. Acceptance-source
-AUTH custody, shared acceptance/TASK effects and authorized activation remain
+AUTH custody, database closure, currentness proof and authorized activation remain
 separate work.
 
 This is delivery priority, not a prerequisite of true human admission. Both

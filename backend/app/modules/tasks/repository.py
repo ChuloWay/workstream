@@ -38,6 +38,7 @@ from app.modules.tasks.models import (
     TaskAssignment,
     WorkstreamTask,
 )
+from app.modules.tasks.post_submit_routing.models import TaskPostSubmitRoutingManifest
 
 
 def _unassigned_ready_task():
@@ -315,6 +316,44 @@ class TaskRepository:
                     WorkstreamTask.project_id == str(project_id),
                     WorkstreamTask.id == str(task_id),
                 ).with_for_update().execution_options(populate_existing=True)
+            )
+
+    async def lock_accepted_assignment(
+        self,
+        *,
+        project_id: UUID,
+        task_id: UUID,
+        assignment_id: UUID,
+    ) -> TaskAssignment | None:
+        """Lock only the requested project/task assignment after its Task lock."""
+        with self._session.no_autoflush:
+            return await self._session.scalar(
+                select(TaskAssignment).where(
+                    TaskAssignment.id == str(assignment_id),
+                    TaskAssignment.task_id == str(task_id),
+                    TaskAssignment.project_id == str(project_id),
+                ).with_for_update().execution_options(populate_existing=True)
+            )
+
+    async def read_routing_manifest(
+        self,
+        *,
+        manifest_id: UUID,
+        project_id: UUID,
+        task_id: UUID,
+        submission_id: UUID,
+    ) -> TaskPostSubmitRoutingManifest | None:
+        """Reload one immutable TASK routing source through exact owner scope."""
+        with self._session.no_autoflush:
+            return await self._session.scalar(
+                select(TaskPostSubmitRoutingManifest)
+                .where(
+                    TaskPostSubmitRoutingManifest.id == manifest_id,
+                    TaskPostSubmitRoutingManifest.project_id == str(project_id),
+                    TaskPostSubmitRoutingManifest.task_id == str(task_id),
+                    TaskPostSubmitRoutingManifest.submission_id == str(submission_id),
+                )
+                .execution_options(populate_existing=True)
             )
 
     async def add_assignment(self, assignment: TaskAssignment) -> TaskAssignment:

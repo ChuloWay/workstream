@@ -65,7 +65,9 @@ authorized automated FinalAcceptance and submitter contribution after required
 post-submit checks pass, without human admission, a synthetic Review or a
 reviewer contribution. Its source/authority/CON design is defined in the
 [shared acceptance contract](spec_review_lifecycle.md#finalacceptance);
-runtime implementation and activation remain pending.
+REV-04C supplies its hidden FinalAcceptance/TASK/CON transaction participant,
+while exact authority/evidence, routing handlers, currentness proof and activation
+remain pending.
 This amendment does not enable raw checker results to create acceptance or
 change the existing human branch's implementation contract.
 

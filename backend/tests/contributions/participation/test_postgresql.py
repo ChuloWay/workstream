@@ -2,7 +2,6 @@
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError
 
 from app.core.identifiers import new_record_id
 from app.modules.compensation.api import (
@@ -30,6 +29,7 @@ from tests.contributions.records.support import (
 
 from .support import participant, request_for
 
+
 @pytest.mark.parametrize(
     "instruments",
     [(), ("money",), ("project_points",), ("money", "project_points")],
@@ -41,22 +41,36 @@ async def test_create_and_exact_replay_all_frozen_award_shapes(
     async with contribution_source(
         tmp_path, isolated_database_env, contribution_awards=instruments
     ) as h:
-        request = request_for(h, correlation_id=new_record_id())
+        request = request_for(h, acceptance_disposition="new", correlation_id=new_record_id())
         async with h.factory() as session, session.begin():
             created = await participant(session).participate_submitter(request)
         async with h.factory() as session, session.begin():
-            replayed = await participant(session).participate_submitter(request)
+            replayed = await participant(session).participate_submitter(
+                request.model_copy(update={"acceptance_disposition": "replay"})
+            )
 
         assert replayed == created
         assert created.contribution.source_final_acceptance_id == h.acceptance.id
-        assert created.contribution.source_task_assignment_id == h.submitter_record.source_task_assignment_id
+        assert (
+            created.contribution.source_task_assignment_id
+            == h.submitter_record.source_task_assignment_id
+        )
         assert created.contribution.artifact_hash == h.submitter_record.artifact_hash
         assert {award.instrument_type.value for award in created.awards} == set(instruments)
         async with h.factory() as session:
-            record = (await session.execute(text("""
+            record = (
+                (
+                    await session.execute(
+                        text("""
                 SELECT * FROM public.contribution_records
                 WHERE id=:record_id
-            """), {"record_id": created.contribution.id})).mappings().one()
+            """),
+                        {"record_id": created.contribution.id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
             stored_contribution = SubmitterContributionFacts(
                 id=record["id"],
                 project_id=record["project_id"],
@@ -73,7 +87,10 @@ async def test_create_and_exact_replay_all_frozen_award_shapes(
             assert record["contribution_type"] == "accepted_submission"
             assert record["source_review_id"] is None
             assert record["source_review_lease_id"] is None
-            stored = (await session.execute(text("""
+            stored = (
+                (
+                    await session.execute(
+                        text("""
                 SELECT a.*, d.quantity AS definition_quantity,
                   d.unit_code AS definition_unit,
                   d.adapter_binding_id AS definition_binding,
@@ -85,7 +102,13 @@ async def test_create_and_exact_replay_all_frozen_award_shapes(
                 JOIN public.contribution_award_definitions d ON d.id=a.award_definition_id
                 WHERE a.contribution_record_id=:record_id
                 ORDER BY a.instrument_type
-            """), {"record_id": created.contribution.id})).mappings().all()
+            """),
+                        {"record_id": created.contribution.id},
+                    )
+                )
+                .mappings()
+                .all()
+            )
             assert len(stored) == len(instruments)
             stored_awards = tuple(
                 CompensationAwardFacts(
@@ -93,14 +116,10 @@ async def test_create_and_exact_replay_all_frozen_award_shapes(
                     project_id=award["project_id"],
                     contribution_record_id=award["contribution_record_id"],
                     contributor_id=award["contributor_id"],
-                    contribution_policy_version_id=award[
-                        "contribution_policy_version_id"
-                    ],
+                    contribution_policy_version_id=award["contribution_policy_version_id"],
                     award_definition_id=award["award_definition_id"],
                     adapter_binding_id=award["adapter_binding_id"],
-                    instrument_type=CompensationInstrumentType(
-                        award["instrument_type"]
-                    ),
+                    instrument_type=CompensationInstrumentType(award["instrument_type"]),
                     unit_code=award["unit_code"],
                     quantity=award["quantity"],
                     created_at=award["created_at"],
@@ -118,10 +137,50 @@ async def test_create_and_exact_replay_all_frozen_award_shapes(
                 assert award["instrument_type"] == award["definition_instrument"]
                 assert award["definition_type"] == "accepted_submission"
                 assert award["correlation_id"] == request.correlation_id
-            assert await session.scalar(text(
-                "SELECT count(*) FROM public.contribution_records "
-                "WHERE contribution_type='completed_review'"
-            )) == 0
+            assert (
+                await session.scalar(
+                    text(
+                        "SELECT count(*) FROM public.contribution_records "
+                        "WHERE contribution_type='completed_review'"
+                    )
+                )
+                == 0
+            )
+
+
+async def test_missing_replay_conflicts_and_outer_commit_leaves_no_economic_facts(
+    tmp_path, isolated_database_env
+):
+    async with contribution_source(tmp_path, isolated_database_env, paid=True) as h:
+        request = request_for(h, acceptance_disposition="replay", correlation_id=new_record_id())
+        async with h.factory() as session, session.begin():
+            with pytest.raises(ContributionParticipationConflict):
+                await participant(session).participate_submitter(request)
+
+        async with h.factory() as session:
+            assert await rows(session, "contribution_records") == []
+            assert await rows(session, "compensation_awards") == []
+
+
+async def test_new_against_existing_exact_facts_conflicts_without_replay(
+    tmp_path, isolated_database_env
+):
+    async with contribution_source(tmp_path, isolated_database_env, paid=True) as h:
+        request = request_for(h, acceptance_disposition="new", correlation_id=new_record_id())
+        async with h.factory() as session, session.begin():
+            created = await participant(session).participate_submitter(request)
+
+        async with h.factory() as session, session.begin():
+            with pytest.raises(ContributionParticipationConflict):
+                await participant(session).participate_submitter(request)
+
+        async with h.factory() as session:
+            stored_records = await rows(session, "contribution_records")
+            stored_awards = await rows(session, "compensation_awards")
+            assert [row["id"] for row in stored_records] == [str(created.contribution.id)]
+            assert {row["id"] for row in stored_awards} == {
+                str(award.id) for award in created.awards
+            }
 
 
 async def test_retired_policy_and_suspended_bindings_keep_frozen_awards_due(
@@ -131,7 +190,11 @@ async def test_retired_policy_and_suspended_bindings_keep_frozen_awards_due(
         await retire_policy_and_suspend_bindings(h)
         async with h.factory() as session, session.begin():
             result = await participant(session).participate_submitter(
-                request_for(h, correlation_id=new_record_id())
+                request_for(
+                    h,
+                    acceptance_disposition="new",
+                    correlation_id=new_record_id(),
+                )
             )
         assert {award.instrument_type.value for award in result.awards} == {
             "money",
@@ -150,10 +213,15 @@ async def test_exact_replay_rejects_each_changed_source_fact_and_real_foreign_so
             provision_services=False,
             storage_settings=h.settings,
         ) as foreign:
-            original = request_for(h, correlation_id=new_record_id())
-            foreign_request = request_for(foreign, correlation_id=original.correlation_id)
+            original = request_for(h, acceptance_disposition="new", correlation_id=new_record_id())
+            foreign_request = request_for(
+                foreign,
+                acceptance_disposition="replay",
+                correlation_id=original.correlation_id,
+            )
             async with h.factory() as session, session.begin():
                 created = await participant(session).participate_submitter(original)
+            replay = original.model_copy(update={"acceptance_disposition": "replay"})
 
             conflict_fields = (
                 "task_id",
@@ -162,42 +230,34 @@ async def test_exact_replay_rejects_each_changed_source_fact_and_real_foreign_so
                 "contributor_id",
             )
             for field in conflict_fields:
-                async with h.factory() as session:
-                    with pytest.raises(DBAPIError, match="contribution .* mismatch"):
-                        async with session.begin():
-                            await participant(session).participate_submitter(
-                                original.model_copy(
-                                    update={field: getattr(foreign_request, field)}
-                                )
-                            )
-                    await session.rollback()
+                async with h.factory() as session, session.begin():
+                    with pytest.raises(ContributionParticipationConflict):
+                        await participant(session).participate_submitter(
+                            replay.model_copy(update={field: getattr(foreign_request, field)})
+                        )
             changed_digest = "sha256:" + (
                 "0" * 64 if original.artifact_hash != "sha256:" + "0" * 64 else "1" * 64
             )
-            async with h.factory() as session:
-                with pytest.raises(DBAPIError, match="contribution .* mismatch"):
-                    async with session.begin():
-                        await participant(session).participate_submitter(
-                            original.model_copy(update={"artifact_hash": changed_digest})
-                        )
-                await session.rollback()
+            async with h.factory() as session, session.begin():
+                with pytest.raises(ContributionParticipationConflict):
+                    await participant(session).participate_submitter(
+                        replay.model_copy(update={"artifact_hash": changed_digest})
+                    )
             for field in ("project_id", "contribution_policy_version_id"):
                 async with h.factory() as session, session.begin():
-                    with pytest.raises(RuntimeError, match="contribution_participation_unavailable"):
+                    with pytest.raises(
+                        RuntimeError, match="contribution_participation_unavailable"
+                    ):
                         await participant(session).participate_submitter(
-                            original.model_copy(update={field: getattr(foreign_request, field)})
+                            replay.model_copy(update={field: getattr(foreign_request, field)})
                         )
-            async with h.factory() as session:
-                with pytest.raises(DBAPIError, match="contribution submitter source mismatch"):
-                    async with session.begin():
-                        await participant(session).participate_submitter(
-                            original.model_copy(
-                                update={
-                                    "final_acceptance_id": foreign_request.final_acceptance_id
-                                }
-                            )
+            async with h.factory() as session, session.begin():
+                with pytest.raises(ContributionParticipationConflict):
+                    await participant(session).participate_submitter(
+                        replay.model_copy(
+                            update={"final_acceptance_id": foreign_request.final_acceptance_id}
                         )
-                await session.rollback()
+                    )
                 assert len(await rows(session, "contribution_records")) == 1
                 assert len(await rows(session, "compensation_awards")) == 2
             assert created.contribution.id is not None
@@ -207,13 +267,20 @@ async def test_paid_correlation_conflicts_but_unpaid_replay_is_honest(
     tmp_path, isolated_database_env
 ):
     async with contribution_source(tmp_path / "paid", isolated_database_env, paid=True) as paid:
-        paid_request = request_for(paid, correlation_id=new_record_id())
+        paid_request = request_for(
+            paid, acceptance_disposition="new", correlation_id=new_record_id()
+        )
         async with paid.factory() as session, session.begin():
             created = await participant(session).participate_submitter(paid_request)
         async with paid.factory() as session, session.begin():
             with pytest.raises(ContributionParticipationConflict):
                 await participant(session).participate_submitter(
-                    paid_request.model_copy(update={"correlation_id": new_record_id()})
+                    paid_request.model_copy(
+                        update={
+                            "acceptance_disposition": "replay",
+                            "correlation_id": new_record_id(),
+                        }
+                    )
                 )
         async with paid.factory() as session:
             assert len(await rows(session, "compensation_awards")) == len(created.awards) == 2
@@ -224,12 +291,19 @@ async def test_paid_correlation_conflicts_but_unpaid_replay_is_honest(
         provision_services=False,
         storage_settings=paid.settings,
     ) as unpaid:
-        first_request = request_for(unpaid, correlation_id=new_record_id())
+        first_request = request_for(
+            unpaid, acceptance_disposition="new", correlation_id=new_record_id()
+        )
         async with unpaid.factory() as session, session.begin():
             first = await participant(session).participate_submitter(first_request)
         async with unpaid.factory() as session, session.begin():
             second = await participant(session).participate_submitter(
-                first_request.model_copy(update={"correlation_id": new_record_id()})
+                first_request.model_copy(
+                    update={
+                        "acceptance_disposition": "replay",
+                        "correlation_id": new_record_id(),
+                    }
+                )
             )
         assert second == first
         assert second.awards == ()
@@ -239,7 +313,7 @@ async def test_partial_same_transaction_replay_rejects_without_backfill(
     tmp_path, isolated_database_env, monkeypatch
 ):
     async with contribution_source(tmp_path, isolated_database_env, paid=True) as h:
-        request = request_for(h, correlation_id=new_record_id())
+        request = request_for(h, acceptance_disposition="replay", correlation_id=new_record_id())
         async with h.factory() as session:
             await session.begin()
             await PostgresJointLifecycleMutationFence(session).acquire(0)
@@ -263,9 +337,7 @@ async def test_partial_same_transaction_replay_rejects_without_backfill(
                         h.submitter_record.contribution_policy_version_id
                     ),
                     contribution_type="accepted_submission",
-                    instrument_type=CompensationInstrumentType(
-                        award["instrument_type"]
-                    ),
+                    instrument_type=CompensationInstrumentType(award["instrument_type"]),
                     unit_code=award["unit_code"],
                     quantity=award["quantity"],
                     adapter_binding_id=award["adapter_binding_id"],

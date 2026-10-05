@@ -54,17 +54,15 @@ class SubmitterContributionParticipant:
         rule = await self._repository.get_frozen_rule(
             checked.project_id, checked.contribution_policy_version_id
         )
-        contribution, disposition = await self._repository.insert_or_get(checked)
+        contribution = await self._repository.apply_acceptance_disposition(checked)
         award_request = CompleteAwardSetRequest(
-            disposition=disposition,
+            disposition=checked.acceptance_disposition,
             compensation_mode=rule.compensation_mode,
             contribution=AwardContributionFacts(
                 id=contribution.id,
                 project_id=contribution.project_id,
                 contributor_id=contribution.contributor_id,
-                contribution_policy_version_id=(
-                    contribution.contribution_policy_version_id
-                ),
+                contribution_policy_version_id=(contribution.contribution_policy_version_id),
                 contribution_type="accepted_submission",
             ),
             definitions=rule.definitions,
@@ -75,9 +73,7 @@ class SubmitterContributionParticipant:
                 await self._awards.complete_award_set(award_request)
             )
         except (CompensationAwardConflict, TypeError, ValueError, ValidationError) as exc:
-            raise ContributionParticipationConflict(
-                "contribution_participation_conflict"
-            ) from exc
+            raise ContributionParticipationConflict("contribution_participation_conflict") from exc
         self._require_exact_awards(checked, contribution, rule, award_result)
         return SubmitterParticipationResult(
             contribution=contribution,
@@ -109,8 +105,7 @@ def _award_matches(award, definition, contribution, correlation_id) -> bool:
         award.project_id == contribution.project_id
         and award.contribution_record_id == contribution.id
         and award.contributor_id == contribution.contributor_id
-        and award.contribution_policy_version_id
-        == contribution.contribution_policy_version_id
+        and award.contribution_policy_version_id == contribution.contribution_policy_version_id
         and award.award_definition_id == definition.id
         and award.adapter_binding_id == definition.adapter_binding_id
         and award.instrument_type == definition.instrument_type
