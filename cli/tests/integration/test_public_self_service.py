@@ -109,6 +109,9 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
                     "CLI route must remain public"
                 )
             assert "patch" in specification.json()["paths"]["/api/v1/actors/me"]
+            assert (
+                "get" in specification.json()["paths"]["/api/v1/projects/{project_id}"]
+            )
             profiles: dict[str, dict] = {}
             for name, token in tokens.items():
                 result = cli(origin, token, "whoami", "--output", "json")
@@ -234,6 +237,25 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
             assert project.status_code == 201, project.text
             project_id = project.json()["id"]
 
+            for selector in (project_id, project_id.replace("-", "")):
+                shown = cli(
+                    origin,
+                    tokens["cli-manager"],
+                    "project",
+                    "show",
+                    selector,
+                    "-o",
+                    "json",
+                )
+                direct_project = await direct.get(
+                    f"/api/v1/projects/{selector}", headers=manager_headers
+                )
+                assert direct_project.status_code == 200
+                assert shown.returncode == 0 and shown.stderr == ""
+                assert (
+                    json.loads(shown.stdout) == direct_project.json() == project.json()
+                )
+
             manager = cli(
                 origin,
                 tokens["cli-manager"],
@@ -297,6 +319,150 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
                 json.loads(outsider.stderr)["error"]["code"]
                 == direct_outsider.json()["error"]["code"]
             )
+            other_project = await direct.post(
+                "/api/v1/projects",
+                headers=manager_headers | {"Idempotency-Key": str(uuid4())},
+                json={"name": "Foreign project", "slug": f"cli-foreign-{uuid4().hex}"},
+            )
+            assert other_project.status_code == 201, other_project.text
+            shown = cli(
+                origin,
+                tokens["cli-outsider"],
+                "project",
+                "show",
+                project_id,
+                "-o",
+                "json",
+            )
+            assert shown.returncode == 1 and shown.stdout == ""
+            assert json.loads(shown.stderr)["error"]["status"] == 404
+
+            qualification = {
+                "skills_snapshot": {
+                    "availability": "available",
+                    "reference_ids": ["skill:cli-proof"],
+                    "unavailable_reason": None,
+                },
+                "reputation_snapshot": {
+                    "availability": "unavailable",
+                    "reference_ids": [],
+                    "unavailable_reason": "no_record",
+                },
+                "prior_project_work_refs": [],
+                "external_expertise_refs": [],
+            }
+            issued = await direct.post(
+                f"/api/v1/projects/{project_id}/role-grants",
+                headers=manager_headers | {"Idempotency-Key": str(uuid4())},
+                json={
+                    "target_actor_profile_id": profiles["cli-outsider"][
+                        "actor_profile_id"
+                    ],
+                    "role": "submitter",
+                    "qualification": qualification,
+                    "reason": "CLI exact project inspection proof",
+                },
+            )
+            assert issued.status_code == 201, issued.text
+            assert issued.json()["status"] == "active"
+            shown = cli(
+                origin,
+                tokens["cli-outsider"],
+                "project",
+                "show",
+                project_id,
+                "-o",
+                "json",
+            )
+            direct_project = await direct.get(
+                f"/api/v1/projects/{project_id}",
+                headers={"Authorization": f"Bearer {tokens['cli-outsider']}"},
+            )
+            assert direct_project.status_code == 200
+            assert shown.returncode == 0 and shown.stderr == ""
+            assert (
+                json.loads(shown.stdout)
+                == direct_project.json()
+                == {
+                    "id": project_id,
+                    "name": project.json()["name"],
+                    "status": project.json()["status"],
+                }
+            )
+            foreign = cli(
+                origin,
+                tokens["cli-outsider"],
+                "project",
+                "show",
+                other_project.json()["id"],
+                "-o",
+                "json",
+            )
+            assert foreign.returncode == 1 and foreign.stdout == ""
+            assert json.loads(foreign.stderr)["error"]["status"] == 404
+            revoked_project_grant = await direct.post(
+                f"/api/v1/projects/{project_id}/role-grants/{issued.json()['id']}/revoke",
+                headers=manager_headers | {"Idempotency-Key": str(uuid4())},
+                json={"reason": "CLI reads must observe project grant revocation"},
+            )
+            assert revoked_project_grant.status_code == 200, revoked_project_grant.text
+            assert revoked_project_grant.json()["status"] == "revoked"
+            shown = cli(
+                origin,
+                tokens["cli-outsider"],
+                "project",
+                "show",
+                project_id,
+                "-o",
+                "json",
+            )
+            assert shown.returncode == 1 and shown.stdout == ""
+            assert json.loads(shown.stderr)["error"]["status"] == 404
+            # Restore exact contributor authority, then suspend that same actor:
+            # denial must not pass merely because its grant was already revoked.
+            reissued = await direct.post(
+                f"/api/v1/projects/{project_id}/role-grants",
+                headers=manager_headers | {"Idempotency-Key": str(uuid4())},
+                json={
+                    "target_actor_profile_id": profiles["cli-outsider"][
+                        "actor_profile_id"
+                    ],
+                    "role": "reviewer",
+                    "qualification": qualification,
+                    "reason": "CLI lifecycle denial with active grant",
+                },
+            )
+            assert reissued.status_code == 201, reissued.text
+            shown = cli(
+                origin,
+                tokens["cli-outsider"],
+                "project",
+                "show",
+                project_id,
+                "-o",
+                "json",
+            )
+            assert shown.returncode == 0, shown.stderr
+            suspended_contributor = await direct.post(
+                f"/api/v1/actors/{profiles['cli-outsider']['actor_profile_id']}/suspend",
+                headers={
+                    "Authorization": f"Bearer {tokens['cli-admin']}",
+                    "Idempotency-Key": str(uuid4()),
+                },
+                json={"reason": "CLI project-read lifecycle denial"},
+            )
+            assert suspended_contributor.status_code == 200, suspended_contributor.text
+            shown = cli(
+                origin,
+                tokens["cli-outsider"],
+                "project",
+                "show",
+                project_id,
+                "-o",
+                "json",
+            )
+            assert shown.returncode == 1 and shown.stdout == ""
+            assert json.loads(shown.stderr)["error"]["status"] == 404
             revoked = await direct.post(
                 f"/api/v1/admin-role-grants/{grant.json()['resource_id']}/revoke",
                 headers={

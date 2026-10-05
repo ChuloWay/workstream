@@ -6,7 +6,8 @@
   lifecycle implementation.
 - Delivered boundary: [WS-CLI-001-01](WS-CLI-001-01.md), caller-owned profile and
   exact-project authorization context; [WS-CLI-001-02](WS-CLI-001-02.md), human
-  self-profile editing through the public REST API.
+  self-profile editing through the public REST API; [WS-CLI-001-03](WS-CLI-001-03.md),
+  exact-project inspection with server-owned full/minimal disclosure.
 
 ## Current boundary
 
@@ -18,7 +19,9 @@ those operations, but is not a certification of every public or hidden route.
 The independent [MCP adapter](../../../mcp_server/README.md) forwards caller
 bearers to the same API; it is not a CLI client library. The independent Go
 package under `cli/` implements `whoami`, `project access PROJECT_ID`, and
-`profile update` for caller-owned human display fields. All have text/JSON
+`profile update` for caller-owned human display fields. `project show PROJECT_ID`
+reads only the existing public project's server-selected disclosure shape.
+All have text/JSON
 output and built-binary integration proof. Mutations preserve omitted/null
 semantics and explicitly report uncertain outcomes without automatic retries.
 Further public workflows
@@ -55,11 +58,14 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
 2. **WS-CLI-001-02:** Human profile editing through the existing public PATCH,
    with explicit omission/null and uncertain-mutation behavior. It changes no
    identity, authority or backend policy.
-3. **Later governed-work commands:** Add project setup, task, submission,
+3. **WS-CLI-001-03:** Inspect a known project alongside its current authority,
+   through the public project read. Preserve administrative/contributor response
+   boundaries; do not invent a public project-list contract.
+4. **Later governed-work commands:** Add project setup, task, submission,
    review, revision, and contribution reads/writes only as their actual public
    contracts and authority boundaries become available. Split by user journey,
    not one PR per endpoint or one giant catalogue PR.
-4. **Optional TUI:** Add a focused public queue/evidence view after its API
+5. **Optional TUI:** Add a focused public queue/evidence view after its API
    workflow is complete. Never require a TUI for agents or scripts.
 
 ## Risks and proof
@@ -76,7 +82,7 @@ HTTP fixture for credential/destination safety, malformed responses and
 noninteractive output. The fixture is not a substitute for the real API.
 Avoid function-level tests, coverage targets and duplicated assertions for
 this CLI slice. Add a focused case only for a distinct observable contract or
-reproduced failure. The shipped CLI calls only the two named public API routes;
+reproduced failure. The shipped CLI calls only the named public API routes;
 test setup may use the documented local bootstrap to arrange authority but
 cannot create a private CLI dependency.
 
