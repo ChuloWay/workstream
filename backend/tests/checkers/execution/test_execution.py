@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import select, func
 
 from app.modules.checkers.api.execution import CheckerExecutionUnavailable, COMPLETION_EVENT
-from app.modules.checkers.execution_coordination import EvaluationCoordinator
+from app.adapters.checkers import evaluation_coordinator
 from app.modules.checkers.models import CheckerRun, CheckerResult
 from app.modules.outbox.models import OutboxEvent
 from tests.post_submit_materialization_helpers import material_fixture
@@ -60,7 +60,7 @@ async def test_verified_material_execution_and_replay(
         assert await executor.evaluate_post_submission(h.request) == result
         assert len(h.store.opens) == opened
         async with h.factory() as session, session.begin():
-            current = await EvaluationCoordinator(session).read_current_result(h.request)
+            current = await evaluation_coordinator(session).read_current_result(h.request)
             assert current.result == result
             run = await session.get(CheckerRun, str(result.attempt_id))
             assert run.material_custody == {
@@ -119,7 +119,7 @@ async def test_infrastructure_failure_is_terminal(tmp_path, isolated_database_en
                 == 0
             )
             with pytest.raises(CheckerExecutionUnavailable, match="current_result"):
-                await EvaluationCoordinator(session).read_current_result(h.request)
+                await evaluation_coordinator(session).read_current_result(h.request)
 
 
 @pytest.mark.parametrize("substitution", ["prepared", "receipt"])
@@ -367,7 +367,7 @@ async def test_unreadable_stored_bytes_terminalize_and_replay(
             assert await session.scalar(select(func.count()).select_from(CheckerResult)) == 0
             assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 0
             with pytest.raises(CheckerExecutionUnavailable, match="current_result"):
-                await EvaluationCoordinator(session).read_current_result(h.request)
+                await evaluation_coordinator(session).read_current_result(h.request)
 
 
 @pytest.mark.parametrize("failure", ["authority", "cancel", "unexpected", "scratch", "cleanup"])

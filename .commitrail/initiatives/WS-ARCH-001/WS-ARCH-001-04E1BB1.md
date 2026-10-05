@@ -1,7 +1,7 @@
 # ARCH-04E1B-B1 — TASK-before-CHECKERS reservation custody
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Risk class: L1 — cross-owner concurrency and immutable evaluation lineage.
 - Intended merge outcome: the existing evaluation reservation operation requires
   TASK-owned locking before CHECKERS custody and cannot advance an accepted task.
@@ -29,7 +29,7 @@ claim live routing, automated acceptance or complete receipt custody.
 - `backend/app/modules/tasks/post_submit_routing/evaluation_guard.py`:
   TASK-owned project-qualified locking and exact immutable Submission selection.
   Narrow existing repository methods only if the owner query needs them.
-- `backend/app/adapters/checkers/__init__.py`: explicit composition of the same
+- `backend/app/adapters/{checkers,tasks}/__init__.py`: explicit composition of the same
   coordinator and TASK guard. No optional guard or unguarded fallback constructor.
 - Existing coordinator callers in CHECKERS execution tests, TASK routing tests,
   AUTH routing support and review queue persistence tests; add focused
@@ -111,7 +111,13 @@ Required plan and final tracks: architecture/reuse, security, QA/test-delta,
 CI integrity for registrations, documentation/product operations. Review the
 actual lock order and both race controls, exact replay semantics, root transaction
 lifetime and the distinction between this prerequisite and activated routing.
-No implementation begins until the bounded plan review closes.
+Plan review required explicit exact-lineage predicates and terminal replay
+semantics before implementation. Both were resolved in this record. The
+architecture check required the CHECKERS adapter to consume the TASK adapter,
+not import TASK private implementation. The guard-removal lock probe uses
+`FOR NO KEY UPDATE NOWAIT` so a foreign-key KEY SHARE lock cannot mask a missing
+TASK lock. Terminal replay is exercised while CHECKERS advisory/fence/run locks
+are independently held, proving it neither locks nor rewrites those rows.
 
 ## Next boundary
 

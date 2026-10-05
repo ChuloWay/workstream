@@ -219,6 +219,14 @@ class CompletedEvaluation(PostSubmitValue):
     result: PostSubmissionEvaluationResult
 
 
+class EvaluationTaskGuard(Protocol):
+    """TASK locks exact reservation scope; the boolean is eligibility, not authority."""
+
+    async def lock_reservation_scope(self, request: PostSubmissionEvaluationRequest) -> bool:
+        """Hold TASK locks through commit; False allows only exact read-only replay."""
+        ...
+
+
 class EvaluationCoordinationPort(Protocol):
     """Reserve and read exact current evaluations in caller transactions."""
 

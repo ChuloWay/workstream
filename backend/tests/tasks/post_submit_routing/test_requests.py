@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import func, select, text
 
 from app.modules.checkers.api.execution import CheckerExecutionUnavailable
-from app.modules.checkers.execution_coordination import EvaluationCoordinator
+from app.adapters.checkers import evaluation_coordinator
 from app.modules.tasks.post_submit_routing.models import TaskRoutingRequest
 from app.modules.tasks.post_submit_routing.requests import TaskRoutingRequests, TaskRoutingRequestUnavailable
 from tests.checkers.execution.support import reserve
@@ -15,7 +15,7 @@ from .support import completed_source, completed_sibling_source, completion_for,
 
 
 async def stage(session, h, completion=None):
-    return await TaskRoutingRequests(session, EvaluationCoordinator(session)).stage(
+    return await TaskRoutingRequests(session, evaluation_coordinator(session)).stage(
         h.source["completion_event_id"], completion or completion_for(h)
     )
 
@@ -197,7 +197,7 @@ async def test_request_requires_database_root_transaction(isolated_database_env,
     event, completion = untrusted_completion()
     async def rejected(session):
         with pytest.raises(TaskRoutingRequestUnavailable, match="routing_request_caller_transaction_required"):
-            await TaskRoutingRequests(session, EvaluationCoordinator(session)).stage(event, completion)
+            await TaskRoutingRequests(session, evaluation_coordinator(session)).stage(event, completion)
     try:
         if kind.startswith("external_"):
             async with engine.connect() as connection:

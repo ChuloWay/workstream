@@ -22,6 +22,10 @@ AUTH-18 public manager activation/context and ARCH-03D hidden approved-guide int
 ARCH-04B hidden exact post-submit input and ARCH-04B2 output custody are delivered. ARCH-04C hidden durable execution, ARCH-04D1 canonical material custody, ARCH-04D2 exact input/execution/finalization authority and ARCH-04E1A source-only facts/types are delivered;
 public intake remains deferred to ARCH-02I.
 
+ARCH-04E1B-B1 delivers required TASK-before-CHECKERS reservation custody and
+terminal exact replay. The remaining hidden handlers and full authorized
+currentness proof stay within 04E1B-B, before activation and live composition.
+
 | Boundary | Owner outcome | Risk | Current dependency |
 |---|---|---|---|
 | [WS-ARCH-001-03B1](../WS-ARCH-001-03B1.md) | Detached TaskService project/guide display through the existing PROJECTS port | L1 | Complete; 03B2 ready queue facts delivered; projections through 03B8 complete; hidden invalidation delivered by 03B9; 03C1 exact feature authority complete; producer/registration complete in 03C2 |

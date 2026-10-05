@@ -54,6 +54,8 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/reviews/acceptance/test_participant_contracts.py",
             "tests/reviews/acceptance/test_participation.py",
             "tests/reviews/acceptance/test_participation_transactions.py",
+            "tests/tasks/post_submit_routing/test_evaluation_guard.py",
+            "tests/tasks/post_submit_routing/test_evaluation_currentness.py",
             "tests/tasks/accepted_effects/test_contracts.py",
             "tests/tasks/accepted_effects/test_postgresql.py",
             "tests/contributions/records/test_contracts.py",
@@ -790,6 +792,15 @@ def test_shared_acceptance_owner_proofs_are_in_partitioned_project_lanes():
         "tests/reviews/acceptance/test_participation_transactions.py",
         "tests/tasks/accepted_effects/test_contracts.py",
         "tests/tasks/accepted_effects/test_postgresql.py",
+    }
+    assert expected <= set(catalogue.PROJECT_MODULES)
+    assert all(catalogue.PARTITION_LANES_BY_MODULE[path] == catalogue.PARTITIONED_PROJECT_LANES for path in expected)
+
+
+def test_evaluation_custody_proofs_use_project_lane_headroom():
+    expected = {
+        "tests/tasks/post_submit_routing/test_evaluation_guard.py",
+        "tests/tasks/post_submit_routing/test_evaluation_currentness.py",
     }
     assert expected <= set(catalogue.PROJECT_MODULES)
     assert all(catalogue.PARTITION_LANES_BY_MODULE[path] == catalogue.PARTITIONED_PROJECT_LANES for path in expected)

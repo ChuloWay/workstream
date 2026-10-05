@@ -22,7 +22,7 @@ from app.modules.tasks.api.post_submit_routing import (
     task_routing_request_digest,
 )
 from app.modules.tasks.post_submit_routing.requests import TaskRoutingRequests
-from app.modules.checkers.execution_coordination import EvaluationCoordinator
+from app.adapters.checkers import evaluation_coordinator
 from tests.tasks.post_submit_routing.contract_fixtures import SHA_A, _source_values
 from tests.tasks.post_submit_routing.support import (
     completion_for,
@@ -130,7 +130,7 @@ def changed_request(
 async def stage_real_request(h) -> TaskRoutingRequestFacts:
     """Commit one request through TASK's genuine reservation operation."""
     async with h.factory() as session, session.begin():
-        return await TaskRoutingRequests(session, EvaluationCoordinator(session)).stage(
+        return await TaskRoutingRequests(session, evaluation_coordinator(session)).stage(
             h.source["completion_event_id"], completion_for(h)
         )
 

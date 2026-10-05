@@ -257,10 +257,10 @@ async def test_database_rejects_invalid_admission_state_and_commit(
         queue = await repository.add_queue_entry(queue_value)
         checker = await session.get(CheckerRun, submission["checker_run_id"])
         assert checker is not None
-        from app.modules.checkers.execution_coordination import EvaluationCoordinator
+        from app.adapters.checkers import evaluation_coordinator
         from app.modules.checkers.execution_repository import stored_request
         from tests.checkers.post_submit.support import change_request
-        await EvaluationCoordinator(session).reserve_current_evaluation(change_request(
+        await evaluation_coordinator(session).reserve_current_evaluation(change_request(
             stored_request(checker), evaluation_request_id=new_record_id(), evaluation_generation=2,
         ))
         with pytest.raises(DBAPIError, match="review admission checker is not admissible"):
@@ -560,7 +560,7 @@ async def test_review_currentness_serializes_with_successor(
     review_client, review_database_env, monkeypatch, boundary, admission_first,
 ):
     import asyncio
-    from app.modules.checkers.execution_coordination import EvaluationCoordinator
+    from app.adapters.checkers import evaluation_coordinator
     from app.modules.checkers.execution_repository import stored_request
     from tests.checkers.post_submit.support import change_request
     from tests.auth_concurrency_support import wait_for_named_database_lock
@@ -589,7 +589,7 @@ async def test_review_currentness_serializes_with_successor(
         async with factory() as session, session.begin():
             await session.execute(text("select set_config('application_name',:name,true)"),{"name":waiter_name})
             if admission_first:
-                await EvaluationCoordinator(session).reserve_current_evaluation(successor)
+                await evaluation_coordinator(session).reserve_current_evaluation(successor)
             else:
                 await admit(session)
 
@@ -600,7 +600,7 @@ async def test_review_currentness_serializes_with_successor(
             if admission_first:
                 await admit(session)
             else:
-                await EvaluationCoordinator(session).reserve_current_evaluation(successor)
+                await evaluation_coordinator(session).reserve_current_evaluation(successor)
             contender = asyncio.create_task(competing())
             # Observe a real independent-session lock wait before releasing the
             # winner, not a sleep that merely assumes the desired ordering.

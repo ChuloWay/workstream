@@ -54,10 +54,10 @@ def live_executor(h, *, registry=None, outbox=None):
 
 
 async def reserve(h, request=None):
-    from app.modules.checkers.execution_coordination import EvaluationCoordinator
+    from app.adapters.checkers import evaluation_coordinator
 
     async with h.factory() as session, session.begin():
-        return await EvaluationCoordinator(session).reserve_current_evaluation(
+        return await evaluation_coordinator(session).reserve_current_evaluation(
             request if request is not None else h.request,
         )
 

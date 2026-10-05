@@ -174,6 +174,7 @@ REV_04C_PARTICIPATION_TARGETS = frozenset({
 REV_04B_ACCEPTANCE_TARGETS = frozenset({"backend/app/modules/reviews/acceptance/models.py", "backend/app/modules/reviews/acceptance/schemas.py"})
 REV_04A_SOURCE_TARGETS = frozenset({"backend/app/modules/reviews/decision/models.py", "backend/app/modules/reviews/decision/schemas.py"})
 REV_03B_PACKET_TARGETS = frozenset({'backend/app/modules/reviews/packet/models.py', 'backend/app/modules/reviews/packet/repository.py', 'backend/app/modules/reviews/packet/schemas.py'})
+ARCH_04E1BB1_GUARD_TARGETS = frozenset({"backend/app/modules/tasks/post_submit_routing/evaluation_guard.py"})
 ARCH_04E1BA_REQUEST_TARGETS = frozenset({"backend/app/modules/tasks/post_submit_routing/requests.py"})
 OBSERVABILITY_FOUNDATION_TARGETS = frozenset(
     {
@@ -789,6 +790,7 @@ def _validate_additive_partition_transition(
         | REV_04A_SOURCE_TARGETS
         | REV_03B_PACKET_TARGETS
             | ARCH_04E1BA_REQUEST_TARGETS
+            | ARCH_04E1BB1_GUARD_TARGETS
             | OBSERVABILITY_FOUNDATION_TARGETS
         | ARCH_04E1A_SOURCE_TARGETS
         | ARCH_04D2_AUTHORITY_TARGETS
