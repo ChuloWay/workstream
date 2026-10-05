@@ -150,6 +150,30 @@ def test_manager_task_reads_preserve_fields_and_wire(cli):
                 "Source reference: —\nSource hash: —\nImport batch: —\nExternal task: —\n"
                 f"Created by: {ACTOR}\nAssigned to: —\n"
             )
+        nullable_summary = SUMMARY | {
+            "task_type": None,
+            "difficulty": None,
+            "estimated_time_minutes": None,
+            "deadline_at": None,
+        }
+        response["body"] = json.dumps(
+            {
+                "project_id": PROJECT,
+                "items": [nullable_summary],
+                "next_cursor": None,
+            }
+        ).encode()
+        result = cli(origin, TOKEN, "project", "tasks", PROJECT, "-o", "json")
+        assert result.returncode == 0 and result.stderr == ""
+        assert result.stdout.strip().encode() == response["body"]
+        text = cli(origin, TOKEN, "project", "tasks", PROJECT)
+        assert text.returncode == 0 and text.stderr == ""
+        assert text.stdout == (
+            f"Project: {PROJECT}\nTasks: 1\nTask: {TASK}\nProject: {PROJECT}\n"
+            "Title: Work é\\u000A\\u001B[31m\nStatus: draft\nType: —\nDifficulty: —\n"
+            "Skills: analysis, tag\\u000A\nEstimated minutes: —\nDeadline: —\n"
+            "Created: 2026-10-01T00:00:00Z\nUpdated: 2026-10-02T00:00:00Z\nNext cursor: —\n"
+        )
         response["body"] = json.dumps(
             {"project_id": PROJECT, "items": [], "next_cursor": None}
         ).encode()
@@ -158,7 +182,7 @@ def test_manager_task_reads_preserve_fields_and_wire(cli):
             result.returncode == 0
             and result.stdout == f"Project: {PROJECT}\nTasks: 0\nNext cursor: —\n"
         )
-        assert len(requests) == 12  # One call each, no preflight or automatic pages.
+        assert len(requests) == 14  # One call each, no preflight or automatic pages.
 
 
 def test_manager_task_reads_reject_malformed_or_substituted_success(cli):

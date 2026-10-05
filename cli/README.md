@@ -2,7 +2,7 @@
 
 An independent Go client for Workstream's public REST API, for humans and
 agents using the terminal. It provides human self-profile reads and editing,
-plus exact-project inspection and authority reads:
+plus exact-project inspection, authority reads and manager task browsing:
 
 | Command | Public API |
 |---|---|

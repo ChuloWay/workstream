@@ -136,9 +136,10 @@ fulfillment, operations and release proof complete v0.1.
 The [independent MCP package](../mcp_server/README.md) implements nine self-service
 and administrative read tools through WS-MCP-002-03. The
 [Go CLI](../cli/README.md) provides caller-profile and exact-project authorization
-reads plus human self-profile editing and exact-project inspection, with text/JSON
-output. Inspection preserves server-selected full/minimal fields; no public list
-route is invented. CLI write uncertainty is explicit and never automatically
+reads plus human self-profile editing, exact-project inspection and manager
+task queue/detail reads, with text/JSON output. Project inspection preserves
+server-selected full/minimal fields; no public project-list route is invented.
+CLI write uncertainty is explicit and never automatically
 retried. These source packages do not claim
 hosted deployment, published CLI binaries or the complete proposed workflow catalogue.
 
