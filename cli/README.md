@@ -2,7 +2,7 @@
 
 An independent Go client for Workstream's public REST API, for humans and
 agents using the terminal. It provides human self-profile reads and editing,
-plus exact-project inspection and authority reads:
+plus exact-project inspection, authority reads and manager task browsing:
 
 | Command | Public API |
 |---|---|
@@ -10,6 +10,8 @@ plus exact-project inspection and authority reads:
 | `workstream profile update` | `PATCH /api/v1/actors/me` |
 | `workstream project access PROJECT_ID` | `GET /api/v1/actors/me/authorization-context?project_id=PROJECT_ID` |
 | `workstream project show PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID` |
+| `workstream project tasks PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks` |
+| `workstream project task PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID` |
 
 Workstream verifies the caller's Flow bearer and owns identity resolution,
 authorization and lifecycle decisions. Reading a profile can admit a first-time
@@ -83,6 +85,40 @@ object; text escapes terminal controls. Foreign or revoked authority remains
 a server denial with empty stdout, not an empty successful project.
 This command does not list projects, edit setup, activate guides or claim tasks.
 
+## Browse tasks as a project manager
+
+```sh
+workstream project tasks PROJECT_ID --limit 10 --output json
+workstream project tasks PROJECT_ID --limit 10 --cursor PREVIOUS_NEXT_CURSOR --output json
+workstream project task PROJECT_ID TASK_ID --output json
+```
+
+These commands use the management queue and management detail routes; they
+require covering Project Manager authority, not a Submitter/Reviewer grant.
+Workstream reauthorizes each request, including continuation after revocation
+or suspension. No role preflight, local filtering or hidden operation is used.
+They inspect all task states, including drafts; they do not make work claimable,
+create tasks, claim assignments or complete unfinished submission integration.
+
+The list makes one request for one page. `--limit` defaults to 50 (range 1–100).
+Use the returned `next_cursor` unchanged with the same limit and project;
+Workstream binds it to the action, project and page size. A null cursor ends
+continuation. The cursor is neither authority nor a reservation, and live pages
+are not a frozen snapshot. The CLI never follows a returned URL or fetches all
+pages automatically. Supplied cursors must contain 1–512 valid UTF-8 characters.
+Both UUID selectors are escaped separately and responses must match their
+identity, regardless of supported spelling.
+
+JSON preserves the exact public response. Text shows every management summary
+field and the continuation, plus detail instructions, criteria, source and
+assignment fields for `project task`. Nullable detail fields may be omitted by
+the API and display as `—`; source identifiers are not treated as URLs to fetch.
+Required data, tag arrays, timestamps and identities are validated before
+output. Foreign items, duplicate identities, unknown/duplicate fields and
+malformed replies fail with empty stdout. The existing 64 KiB response bound
+applies to a whole page: an oversized response fails without partial output;
+request a smaller `--limit` if needed.
+
 ## Edit your profile
 
 ```sh
@@ -127,6 +163,12 @@ Project inspection adds full/minimal projection parity, encoded selectors and
 malformed/substituted response rejection at the process boundary. Real API
 proof creates two projects and an exact contributor grant through public APIs,
 then verifies foreign-project, revoked-grant and suspended-actor concealment.
+Manager task proof creates draft work in two stored projects through public
+POSTs, then compares real paginated and detail responses with direct REST reads.
+It separates signed-cursor substitution (authorized caller receives 422) from
+foreign authority denial, and proves a restored grant permits both reads before
+suspension denies them. Hostile HTTP process tests validate complete field
+output, one-request pagination, malformed/substituted replies and redirect refusal.
 Local Flow-compatible tokens are test fixtures, not deployed-provider proof.
 No coverage percentage or test-count target is used.
 

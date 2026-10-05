@@ -13,6 +13,8 @@ from uuid import uuid4
 import httpx
 import pytest
 
+from task_journey import exercise_manager_task_reads
+
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / "backend"
 sys.path.insert(0, str(BACKEND / "scripts"))
@@ -69,7 +71,7 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
         name: issue_flow_token(
             name, [], issuer=issuer, audience=audience, secret=secret
         )
-        for name in ("cli-admin", "cli-manager", "cli-outsider")
+        for name in ("cli-admin", "cli-manager", "cli-outsider", "cli-project-manager")
     }
     origin = f"http://127.0.0.1:{find_free_port()}"
     log = (tmp_path / "api.log").open("wb")
@@ -112,6 +114,11 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
             assert (
                 "get" in specification.json()["paths"]["/api/v1/projects/{project_id}"]
             )
+            for path in (
+                "/api/v1/projects/{project_id}/tasks",
+                "/api/v1/projects/{project_id}/tasks/{task_id}",
+            ):
+                assert "get" in specification.json()["paths"][path]
             profiles: dict[str, dict] = {}
             for name, token in tokens.items():
                 result = cli(origin, token, "whoami", "--output", "json")
@@ -132,7 +139,7 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
                     ) <= datetime.fromisoformat(expected[field])
                 profiles[name] = direct_response.json()
             assert (
-                len({profile["actor_profile_id"] for profile in profiles.values()}) == 3
+                len({profile["actor_profile_id"] for profile in profiles.values()}) == 4
             )
 
             manager_headers = {"Authorization": f"Bearer {tokens['cli-manager']}"}
@@ -325,6 +332,15 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
                 json={"name": "Foreign project", "slug": f"cli-foreign-{uuid4().hex}"},
             )
             assert other_project.status_code == 201, other_project.text
+            task_ids = await exercise_manager_task_reads(
+                direct,
+                cli,
+                origin,
+                tokens,
+                profiles,
+                project_id,
+                other_project.json()["id"],
+            )
             shown = cli(
                 origin,
                 tokens["cli-outsider"],
@@ -365,6 +381,15 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
             )
             assert issued.status_code == 201, issued.text
             assert issued.json()["status"] == "active"
+            for command in (("tasks", project_id), ("task", project_id, task_ids[0])):
+                denied_manager_read = cli(
+                    origin, tokens["cli-outsider"], "project", *command, "-o", "json"
+                )
+                assert (
+                    denied_manager_read.returncode == 1
+                    and denied_manager_read.stdout == ""
+                )
+                assert json.loads(denied_manager_read.stderr)["error"]["status"] == 404
             shown = cli(
                 origin,
                 tokens["cli-outsider"],
