@@ -2,13 +2,14 @@
 
 An independent Go client for Workstream's public REST API, for humans and
 agents using the terminal. It provides human self-profile reads and editing,
-plus one exact-project authority read:
+plus exact-project inspection and authority reads:
 
 | Command | Public API |
 |---|---|
 | `workstream whoami` | `GET /api/v1/actors/me` |
 | `workstream profile update` | `PATCH /api/v1/actors/me` |
 | `workstream project access PROJECT_ID` | `GET /api/v1/actors/me/authorization-context?project_id=PROJECT_ID` |
+| `workstream project show PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID` |
 
 Workstream verifies the caller's Flow bearer and owns identity resolution,
 authorization and lifecycle decisions. Reading a profile can admit a first-time
@@ -25,6 +26,7 @@ export WORKSTREAM_API_URL=https://your-workstream-api.example
 # Supply WORKSTREAM_TOKEN through your existing secret environment mechanism.
 /tmp/workstream-cli whoami
 /tmp/workstream-cli project access PROJECT_ID --output json
+/tmp/workstream-cli project show PROJECT_ID --output json
 ```
 
 `WORKSTREAM_API_URL` is the API origin, without `/api/v1`, credentials, query or
@@ -61,6 +63,25 @@ for invalid arguments or configuration. A request times out after 12 seconds;
 responses are bounded to 64 KiB and requests are not automatically retried.
 Use `--help`, `--version` and `completion bash|zsh|fish|powershell` without a
 credential or network connection.
+
+## Inspect a project
+
+Use `workstream project show PROJECT_ID` for a project whose ID you know.
+Workstream selects the response: an exact contributor grant receives only
+`id`, `name` and `status`; applicable administrative authority receives those
+fields plus `slug`, nullable `description`, `created_at` and `updated_at`.
+The CLI prints only the returned fields and never chooses a projection from
+cached roles. `project access` remains a separate snapshot, not a preflight
+or an authorization token for `project show`.
+
+Project selectors must be UUIDs of at most 100 bytes. Supported compact, brace and `urn:uuid:`
+spellings are sent as one escaped path segment and compared by UUID identity.
+Invalid selectors fail before any request. Success requires a complete public
+response shape, with no duplicate or unknown fields, null required strings,
+invalid timestamps or mismatched identity. JSON output preserves that API
+object; text escapes terminal controls. Foreign or revoked authority remains
+a server denial with empty stdout, not an empty successful project.
+This command does not list projects, edit setup, activate guides or claim tasks.
 
 ## Edit your profile
 
@@ -102,6 +123,10 @@ It also proves persisted profile edits, normalization, omission/null semantics,
 field limits, caller isolation and suspended denial. The HTTP fixture proves
 the exact PATCH body, invalid local input, redirect refusal and no-retry behavior
 when a response is lost after body receipt.
+Project inspection adds full/minimal projection parity, encoded selectors and
+malformed/substituted response rejection at the process boundary. Real API
+proof creates two projects and an exact contributor grant through public APIs,
+then verifies foreign-project, revoked-grant and suspended-actor concealment.
 Local Flow-compatible tokens are test fixtures, not deployed-provider proof.
 No coverage percentage or test-count target is used.
 

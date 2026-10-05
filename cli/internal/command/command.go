@@ -109,6 +109,35 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 
 	project := &cobra.Command{Use: "project", Short: "Project-scoped public operations"}
 	project.AddCommand(&cobra.Command{
+		Use:   "show PROJECT_ID",
+		Short: "Inspect the project fields your current authority permits",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			apiClient, err := client()
+			if err != nil {
+				return err
+			}
+			result, err := apiClient.Project(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if output == "json" {
+				return writeJSON(stdout, result.Raw)
+			}
+			p := result.Value
+			if _, err := fmt.Fprintf(stdout, "Project: %s\nName: %s\nStatus: %s\n",
+				safeText(p.ID), safeText(p.Name), safeText(p.Status)); err != nil {
+				return err
+			}
+			if p.Metadata != nil {
+				_, err = fmt.Fprintf(stdout, "Slug: %s\nDescription: %s\nCreated: %s\nUpdated: %s\n",
+					safeText(p.Metadata.Slug), optional(p.Metadata.Description),
+					safeText(p.Metadata.CreatedAt), safeText(p.Metadata.UpdatedAt))
+			}
+			return err
+		},
+	})
+	project.AddCommand(&cobra.Command{
 		Use:   "access PROJECT_ID",
 		Short: "Show your current authority for one project",
 		Args:  cobra.ExactArgs(1),

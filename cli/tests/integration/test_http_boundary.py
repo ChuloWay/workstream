@@ -98,6 +98,116 @@ def assert_failure(result, code, exit_code=1):
     assert json.loads(result.stderr)["error"]["code"] == code
 
 
+def test_project_show_preserves_projection_and_selector(cli):
+    minimal = {"id": PROJECT, "name": "Project é\n\x1b[31m", "status": "draft"}
+    full = minimal | {
+        "slug": "project-slug",
+        "description": "Details\n\x1b[32m",
+        "created_at": PROFILE["created_at"],
+        "updated_at": "2026-10-02T00:00:00Z",
+    }
+    with http_fixture() as (origin, response, requests):
+        for value in (minimal, full, full | {"description": None}):
+            response["body"] = json.dumps(value).encode()
+            for selector in (
+                PROJECT,
+                PROJECT.replace("-", ""),
+                "{" + PROJECT + "}",
+                "urn:uuid:" + PROJECT,
+            ):
+                result = cli(origin, TOKEN, "project", "show", selector, "-o", "json")
+                assert result.returncode == 0 and result.stderr == ""
+                assert result.stdout.strip().encode() == response["body"]
+                assert requests[-1] == (
+                    "GET",
+                    "/api/v1/projects/"
+                    + selector.replace("{", "%7B").replace("}", "%7D"),
+                    "Bearer " + TOKEN,
+                )
+            text = cli(origin, TOKEN, "project", "show", PROJECT)
+            assert text.returncode == 0 and text.stderr == ""
+            expected = f"Project: {PROJECT}\nName: Project é\\u000A\\u001B[31m\nStatus: draft\n"
+            if "slug" in value:
+                description = (
+                    "—" if value["description"] is None else "Details\\u000A\\u001B[32m"
+                )
+                expected += (
+                    f"Slug: project-slug\nDescription: {description}\n"
+                    "Created: 2026-10-01T00:00:00Z\nUpdated: 2026-10-02T00:00:00Z\n"
+                )
+            assert text.stdout == expected
+        assert len(requests) == 15  # Exactly one call per invocation; no preflight.
+
+
+def test_project_show_rejects_malformed_or_substituted_projection(cli):
+    minimal = {"id": PROJECT, "name": "Project", "status": "draft"}
+    full = minimal | {
+        "slug": "project-slug",
+        "description": None,
+        "created_at": PROFILE["created_at"],
+        "updated_at": PROFILE["updated_at"],
+    }
+    variants = [
+        json.dumps(minimal | {"id": ACTOR}),
+        json.dumps(minimal | {"id": "not-uuid"}),
+        json.dumps(minimal | {"name": None}),
+        json.dumps(minimal | {"status": None}),
+        json.dumps(minimal | {"slug": "partial"}),
+        json.dumps(full | {"slug": None}),
+        json.dumps(full | {"description": 12}),
+        json.dumps(full | {"created_at": "not-time"}),
+        json.dumps(full | {"updated_at": None}),
+        json.dumps(full | {"private_storage_path": "secret"}),
+        json.dumps({k: v for k, v in full.items() if k != "description"}),
+        '{"id":"' + PROJECT + '","name":"A","status":"draft","name":"B"}',
+        json.dumps({"ID": PROJECT, "name": "Project", "status": "draft"}),
+        "null",
+        "[]",
+    ]
+    with http_fixture() as (origin, response, requests):
+        for value in variants:
+            response["body"] = value.encode()
+            result = cli(origin, TOKEN, "project", "show", PROJECT, "-o", "json")
+            assert_failure(result, "invalid_api_response")
+        assert len(requests) == len(variants)
+
+
+def test_project_show_invalid_arguments_and_redirect_are_bounded(cli):
+    with http_fixture() as (origin, response, requests):
+        for args in (
+            (),
+            ("not-uuid",),
+            (PROJECT + "/guides",),
+            (PROJECT + "?token=" + TOKEN,),
+            (PROJECT + "#fragment",),
+            (PROJECT + "-" * 1000,),
+            (PROJECT, "extra"),
+            (PROJECT, "--actor-id", ACTOR),
+            (PROJECT, "--endpoint", "/private"),
+        ):
+            assert_failure(
+                cli(origin, TOKEN, "-o", "json", "project", "show", *args),
+                "invalid_arguments",
+                2,
+            )
+        assert requests == []
+        with http_fixture() as (sink, _, forwarded):
+            response.update(status=307, body=b"", headers={"Location": sink})
+            assert_failure(
+                cli(origin, TOKEN, "project", "show", PROJECT, "-o", "json"),
+                "redirect_refused",
+            )
+            assert len(requests) == 1 and forwarded == []
+        response.update(
+            status=404,
+            body=b'{"error":{"code":"project_authorization_resource_not_found"}}',
+        )
+        denied = cli(origin, TOKEN, "project", "show", PROJECT, "-o", "json")
+        assert_failure(denied, "project_authorization_resource_not_found")
+        assert "outcome_unknown" not in json.loads(denied.stderr)["error"]
+        assert len(requests) == 2
+
+
 def test_profile_update_sends_only_selected_fields(cli):
     with http_fixture() as (origin, response, requests):
         for flags, expected in (
