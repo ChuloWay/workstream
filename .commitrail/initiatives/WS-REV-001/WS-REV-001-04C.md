@@ -69,6 +69,18 @@ only after this decision. REV validates the human source digest against the
 stored Review, and automated source facts through the TASK public contract;
 TASK owns the content ID, not artifact bytes.
 
+The strict shared request contains FinalAcceptanceInput, TaskAcceptedEffectsRequest,
+expected generation and correlation. Common IDs must match; human uses
+review_pending, automated uses evaluation_pending. REV reloads the actual Review
+and compares source, policy, assignment, version, reviewer and artifact hash.
+The TASK public accepted-effects port also exposes require_routing_source(request,
+manifest_id): its owner reads the exact immutable stored routing manifest and
+compares project/task/submission/version/assignment/contributor/frozen policy,
+content hash and false human-review setting to the already-locked TASK facts.
+It never treats caller detached values as stored proof. Exact aggregate AUTH
+commitments/currentness remain mandatory at activation. Unpaid participation
+retains no correlation and makes no replay-correlation claim.
+
 The acceptance owner derives `new|replay` once. TASK and CON receive it as
 operation provenance, not caller authority or a new business policy. New work
 requires its valid prestate and absent effects. Replay requires already-complete,
@@ -77,8 +89,9 @@ prior set conflicts; catching the exception must not leave newly repaired rows.
 The existing compensation complete-set owner remains canonical.
 
 The participant returns exact immutable acceptance/TASK/contribution/award facts.
-It neither commits nor authorizes. Future complete operation composition adds
-mandatory source receipts and shared audit/outbox staging around this same core;
+It neither commits nor authorizes. Future complete operation composition evolves this same participant input and
+schema to require the verified AUTH event, without a compatibility default, and
+adds mandatory shared audit/outbox staging;
 it may not replace it with a second sequence or a no-op participant. Future TASK
 routing consumes a TASK-owned structural interface supplied by composition so
 REV -> TASK/CON remains acyclic; no reverse TASK -> REV dependency is introduced.
@@ -93,6 +106,9 @@ CHECKERS can currently reserve a later evaluation without the TASK lock. The
 that locks TASK before CHECKERS and rejects terminal tasks, and the source
 handler must revalidate currentness under those locks. This chunk does not
 claim acceptance-versus-evaluation-supersession safety or live acceptance.
+Before activation, prove both race orders: a successor generation first makes
+acceptance stale; acceptance first prevents a successor reservation after TASK
+locking. Never enable the generic ALLOWED_TASK_TRANSITIONS accepted transition.
 
 ## Acceptance criteria
 
@@ -101,8 +117,12 @@ claim acceptance-versus-evaluation-supersession safety or live acceptance.
 - Replay preserves every stored identity and scalar, performs no repair, and
   rejects independent valid foreign source/owner substitutions and changed
   correlation where retained.
-- Independently staged partial acceptance/TASK/CON/award sets reject before any
-  missing effect is inserted. A guard-removal probe reaches the intended replay
+- Named partial cases: FinalAcceptance only with pending TASK; terminal TASK and
+  assignment without acceptance; accepted/active and pending/completed mixed
+  states; exact acceptance plus terminal TASK without CON; exact contribution
+  with partial awards staged before the existing deferred completeness check.
+  Each rejects before any missing effect is inserted; catch and commit where the
+  existing database permits the partial fixture, otherwise inspect then roll back. A guard-removal probe reaches the intended replay
   assertion rather than a prior invalid-source guard.
 - Late real SQL failure and caller rollback discard every newly staged effect.
   No participant commits, creates reviewer work, or accesses artifact bytes.
@@ -115,6 +135,12 @@ claim acceptance-versus-evaluation-supersession safety or live acceptance.
 - False-source metadata and true-policy rejection remain covered without
   fabricating positive false activation. Automated positive authority/currentness
   and whole audit/outbox atomicity remain explicit activation obligations.
+- A named negative-structure test scans production imports, constructions,
+  routes, workers and registrations to prove the hidden participant is unreachable;
+  both review.decision and task.post_submit.route remain planned. No no-op
+  authority adapter or fallback is permitted.
+- Replace the direct-CON concurrent insert-or-replay proof with shared-owner
+  concurrent commit/rollback winner proof, retaining stored winner-ID assertions.
 - Full hosted suite completes with zero skips/deselections; no required proof,
   ownership guard or CI limit is weakened.
 
