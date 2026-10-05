@@ -108,6 +108,7 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 	root.AddCommand(profile)
 
 	project := &cobra.Command{Use: "project", Short: "Project-scoped public operations"}
+	addTaskReads(project, client, &output, stdout)
 	project.AddCommand(&cobra.Command{
 		Use:   "show PROJECT_ID",
 		Short: "Inspect the project fields your current authority permits",
