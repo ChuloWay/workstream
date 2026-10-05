@@ -2299,3 +2299,28 @@ def test_acceptance_source_contract_registration_excludes_execution() -> None:
     for neighbor in ("backend/app/modules/authorization/acceptance_source_authorization.py", "backend/app/modules/tasks/post_submit_routing/service.py"):
         with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
             ownership._validate_additive_partition_transition(_partition(sorted({retained, *expected, neighbor})), trusted)
+
+
+def test_submitter_participation_has_exact_ownership_without_activation() -> None:
+    expected = {
+        "backend/app/modules/contributions/api/participation.py",
+        "backend/app/modules/contributions/records/participant.py",
+        "backend/app/modules/contributions/records/repository.py",
+        "backend/app/modules/compensation/api/awards.py",
+        "backend/app/modules/compensation/awards/participant.py",
+    }
+    assert ownership.CON_07_PARTICIPATION_TARGETS == expected
+    assert {ownership.group_for_target(path) for path in expected} == {"lifecycle"}
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *expected})), trusted
+    )
+    for neighbor in (
+        "backend/app/modules/contributions/records/router.py",
+        "backend/app/modules/compensation/awards/delivery.py",
+    ):
+        with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+            ownership._validate_additive_partition_transition(
+                _partition(sorted({retained, *expected, neighbor})), trusted
+            )
