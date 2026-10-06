@@ -154,6 +154,12 @@ class SubmissionAdmissionConsumptionService:
             raise SubmissionAdmissionConsumptionError(
                 "submission_bundle_admission_unavailable"
             )
+        try:
+            SubmissionManifest.from_dict(
+                evidence.semantic_manifest_body, sha256=evidence.semantic_manifest_sha256,
+            )
+        except (TypeError, ValueError) as exc:
+            raise SubmissionAdmissionConsumptionError("submission_bundle_admission_unavailable") from exc
         if admission.status == "consumed":
             return await self._consumed_replay(admission, evidence, request)
         if not self._task_lineage_matches(admission, evidence, request):
@@ -272,12 +278,6 @@ class SubmissionAdmissionConsumptionService:
         evidence: PreSubmitEvidenceSet,
         content: ArtifactContent,
     ) -> bool:
-        try:
-            SubmissionManifest.from_dict(
-                evidence.semantic_manifest_body, sha256=evidence.semantic_manifest_sha256,
-            )
-        except (TypeError, ValueError):
-            return False
         return bool(
             evidence.id == admission.pre_submit_evidence_set_id
             and evidence.actor_profile_id == admission.actor_profile_id

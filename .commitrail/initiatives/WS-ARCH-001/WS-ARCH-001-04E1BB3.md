@@ -1,7 +1,7 @@
 # ARCH-04E1B-B3 — Retain verified ZIP metadata for initial dispatch
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: ART retains the canonical inspected submission manifest in immutable pre-submit evidence and returns exact detached file metadata through admission consumption, without another provider read.
 
 ## Intent
@@ -24,13 +24,13 @@ the first exact authorized atomic consequence at 04E2-B.
 
 ### Allowed
 
-ART `submission_manifest.py`, `pre_submit_evidence.py`, `pre_submit_attempts.py`,
+ART `submission_archive.py`, `submission_manifest.py`, `pre_submit_evidence.py`, `pre_submit_attempts.py`,
 `submission_materialization.py`, `submission_admission.py`, `submission_bindings.py`,
 `post_submit_selection.py`, `models.py`, `api/submission_admission.py` and affected
 exports/adapters; one Alembic migration after 0020, `backend/alembic/env.py` and
 `backend/tests/test_alembic.py`, canonical schema fingerprint in `backend/tests/conftest.py`, and explicit predecessor fixture helpers in `backend/tests/migration_fixtures.py`; directly affected evidence,
 admission, replay and migration tests/fixtures; exact lane/ownership registration;
-this record and affected ARCH navigation, README, roadmap and ART/TASK specifications.
+this record, parent 04E contract and affected ARCH navigation, README, roadmap and ART/TASK specifications.
 
 ### Not allowed
 
@@ -120,3 +120,11 @@ the single owner. Historical migration tests temporarily provide the new column
 only while current ART seeds real rows, then restore and assert the predecessor
 column set and retained IDs before testing any migration. Production has no
 schema-detection branch.
+
+Review refinement: recovered paths share ART's inspector rules, with SQL enforcing
+the same canonical segment/NFC constraints and the supported 4,096-byte/256-depth
+ceiling. New metadata is required by consumption and attempt replay. Existing
+post-submit material selection continues to validate its original exact immutable
+ART lineage and inspected bytes; it does not consume the new file projection and
+has no schema-specific branch or fallback. No old admission can create a new
+consumption result without the metadata.

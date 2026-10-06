@@ -1345,7 +1345,9 @@ admission references its identity and hash. Consumption validates that body and
 returns detached file metadata with archive commitments only for a consumed
 result or exact replay; stale results contain no material. Consumption performs
 no provider read. Older retained evidence without metadata stays unchanged and
-cannot supply current consumption. This storage guarantee does not activate
+cannot supply current consumption. Existing post-submit material selection keeps
+its exact immutable ART lineage and inspected-byte checks; it does not use this
+new consumption projection. This storage guarantee does not activate
 initial dispatch; its composition must reconcile ART and CHECKERS request limits.
 
 It records preparation actor/profile and identity-link provenance, project,

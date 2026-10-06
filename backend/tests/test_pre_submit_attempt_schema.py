@@ -179,15 +179,23 @@ async def test_manifest_metadata_is_hash_bound_on_insert_and_immutable(
                 assert await session.scalar(text(
                     "select public.submission_manifest_metadata_valid(cast(:body as jsonb),:digest)"
                 ), {"body": json.dumps(candidate), "digest": commitment}) is valid
-            for candidate in (None, malformed):
+            for path in ("../outside.txt", "/absolute.txt", "dir\\file.txt", "a//b", "a/./b", "a./b", "drive:c/file", "cafe\u0301.txt", "x" * 4097):
+                candidate = deepcopy(unicode_manifest.as_dict())
+                candidate["entries"] = [candidate["entries"][-1]]
+                candidate["entries"][0]["normalized_path"] = path
+                assert not await session.scalar(text(
+                    "select public.submission_manifest_metadata_valid(cast(:body as jsonb),:digest)"
+                ), {"body": json.dumps(candidate), "digest": canonical_json_hash(candidate)})
+            for candidate, commitment in ((None, digest), (malformed, digest), (body, "sha256:" + "f" * 64)):
                 with pytest.raises(DBAPIError, match="pre-submit manifest metadata invalid"):
                     async with session.begin_nested():
                         await session.execute(text(
                             "insert into pre_submit_evidence_sets select "
                             "(jsonb_populate_record(null::pre_submit_evidence_sets,to_jsonb(e)||"
-                            "jsonb_build_object('semantic_manifest_body',cast(:body as jsonb)))).* "
+                            "jsonb_build_object('semantic_manifest_body',cast(:body as jsonb),"
+                            "'semantic_manifest_sha256',cast(:digest as text),'created_at',transaction_timestamp()))).* "
                             "from pre_submit_evidence_sets e where e.id=:id"
-                        ), {"body": json.dumps(candidate), "id": evidence_id})
+                        ), {"body": json.dumps(candidate), "digest": commitment, "id": evidence_id})
             with pytest.raises(DBAPIError, match="immutable"):
                 async with session.begin_nested():
                     await session.execute(text(
@@ -250,3 +258,62 @@ async def test_manifest_upgrade_preserves_old_evidence_without_inventing_metadat
             assert calls == [1]
         finally:
             await harness.close()
+
+
+async def test_upgraded_consumed_admission_without_metadata_is_unavailable(
+    tmp_path, isolated_database_env, migration_lock, monkeypatch,
+):
+    """Real retained admission recovery denies without rewriting its consumed facts."""
+    import asyncio
+    import asyncpg
+    from alembic import command
+    from app.db import session as db_session
+    from app.modules.artifacts.api import SubmissionAdmissionConsumptionError
+    from app.modules.artifacts.submission_bindings import SubmissionAdmissionConsumptionService
+    from tests.migration_fixtures import (
+        _config, add_current_art_seed_column, restore_predecessor_evidence_schema,
+    )
+    from tests.post_submit_materialization_helpers import material_fixture
+    from tests.test_artifact_bindings import _Allow
+
+    consume = SubmissionAdmissionConsumptionService.consume
+    requests = []
+
+    async def capture(service, request):
+        requests.append(request)
+        return await consume(service, request)
+
+    monkeypatch.setattr(SubmissionAdmissionConsumptionService, "consume", capture)
+    with migration_lock():
+        await db_session.dispose_engine()
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        try:
+            await connection.execute("drop schema public cascade; create schema public")
+        finally:
+            await connection.close()
+        await asyncio.to_thread(command.upgrade, _config(), "0020_review_admission_lock_order")
+        original_columns = await add_current_art_seed_column(isolated_database_env)
+        async with material_fixture(tmp_path, isolated_database_env) as h:
+            assert len(requests) == 1
+            request = requests[0]
+            # Committed, real metadata reaches the successful replay branch first.
+            async with h.factory() as session, session.begin():
+                result = await consume(SubmissionAdmissionConsumptionService(session, _Allow()), request)
+                assert result.replayed and result.material is not None
+            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
+            async with h.factory() as session:
+                before = await session.scalar(text(
+                    "select to_jsonb(a) from submission_bundle_admissions a where id=:id"
+                ), {"id": str(request.admission_id)})
+                bindings = await session.scalar(text("select count(*) from artifact_bindings"))
+            await asyncio.to_thread(command.upgrade, _config(), "head")
+            authority = _Allow()
+            async with h.factory() as session, session.begin():
+                with pytest.raises(SubmissionAdmissionConsumptionError, match="submission_bundle_admission_unavailable"):
+                    await consume(SubmissionAdmissionConsumptionService(session, authority), request)
+                assert await session.scalar(text(
+                    "select to_jsonb(a) from submission_bundle_admissions a where id=:id"
+                ), {"id": str(request.admission_id)}) == before
+                assert await session.scalar(text("select count(*) from artifact_bindings")) == bindings
+            authority.consume.assert_not_awaited()
+            assert h.store.opens == []

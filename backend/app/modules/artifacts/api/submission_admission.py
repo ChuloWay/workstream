@@ -53,6 +53,7 @@ class SubmissionBundleFile:
     def __post_init__(self) -> None:
         if (
             type(self.normalized_path) is not str or not self.normalized_path
+            or len(self.normalized_path.encode("utf-8")) > 4096
             or type(self.sha256) is not str or not re.fullmatch(r"sha256:[0-9a-f]{64}", self.sha256)
             or type(self.byte_count) is not int or not 0 <= self.byte_count <= 512 * 1024 * 1024
         ):

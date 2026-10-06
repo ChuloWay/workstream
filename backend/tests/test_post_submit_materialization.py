@@ -322,16 +322,21 @@ async def test_consumption_retains_inspected_manifest_and_replays_without_provid
         with monkeypatch.context() as patch:
             patch.setattr(LocalStorageAdapter, "open", forbidden_read)
             first = await consume(service, request)
-            replay = await consume(service, request)
-        assert not first.replayed and replay.replayed
-        assert replay.material == first.material
-        observed.append(first)
+        assert not first.replayed
+        observed.append((request, first))
         return first
 
     monkeypatch.setattr(SubmissionAdmissionConsumptionService, "consume", capture)
     async with material_fixture(tmp_path, isolated_database_env) as h:
         assert len(observed) == 1
-        material = observed[0].material
+        request, first = observed[0]
+        material = first.material
+        from tests.test_artifact_bindings import _Allow
+        async with h.factory() as session, session.begin():
+            with monkeypatch.context() as patch:
+                patch.setattr(LocalStorageAdapter, "open", forbidden_read)
+                replay = await consume(SubmissionAdmissionConsumptionService(session, _Allow()), request)
+        assert replay.replayed and replay.material == material
         assert material.archive_sha256 == h.request.content_sha256
         assert material.archive_byte_count == len(h.data)
         assert material.semantic_manifest_sha256 == h.manifest.sha256

@@ -62,6 +62,23 @@ class SubmissionArchiveEntry:
     executable: bool | None
 
 
+def normalize_submission_archive_path(
+    path: str, *, maximum_path_bytes: int, maximum_path_depth: int,
+) -> str:
+    """Apply the same path rules to inspected and recovered manifest entries."""
+    parts = path.split("/")
+    normalized = unicodedata.normalize("NFC", path)
+    if (
+        not path or "\\" in path or path.startswith("/")
+        or any(ord(character) < 32 or ord(character) == 127 for character in path)
+        or any(part in {"", ".", ".."} or part.endswith((" ", ".")) for part in parts)
+        or ":" in parts[0] or len(parts) > maximum_path_depth
+        or max(len(path.encode("utf-8")), len(normalized.encode("utf-8"))) > maximum_path_bytes
+    ):
+        raise SubmissionArchiveRejectedError(SubmissionArchiveFailureCode.UNSAFE_ENTRY)
+    return normalized
+
+
 @dataclass(frozen=True, slots=True)
 class SubmissionArchiveInspectionResult:
     """Non-durable structural facts for the later semantic-manifest chunk."""
@@ -512,32 +529,14 @@ class SubmissionArchiveInspector:
         self, info: zipfile.ZipInfo
     ) -> tuple[str, SubmissionArchiveEntryType]:
         raw = info.filename
-        if (
-            not raw
-            or "\\" in raw
-            or "\x00" in raw
-            or raw.startswith("/")
-            or any(ord(character) < 32 or ord(character) == 127 for character in raw)
-        ):
-            self._reject(SubmissionArchiveFailureCode.UNSAFE_ENTRY)
         is_directory = info.is_dir()
         if is_directory and (info.file_size != 0 or info.compress_size != 0):
             self._reject(SubmissionArchiveFailureCode.UNSAFE_ENTRY)
         path = raw[:-1] if is_directory and raw.endswith("/") else raw
-        raw_parts = path.split("/")
-        pure = PurePosixPath(path)
-        parts = pure.parts
-        if (
-            not parts
-            or any(
-                part in {"", ".", ".."} or part.endswith((" ", "."))
-                for part in raw_parts
-            )
-            or ":" in parts[0]
-            or len(parts) > self._limits.maximum_path_depth
-            or len(path.encode("utf-8")) > self._limits.maximum_path_bytes
-        ):
-            self._reject(SubmissionArchiveFailureCode.UNSAFE_ENTRY)
+        path = normalize_submission_archive_path(
+            path, maximum_path_bytes=self._limits.maximum_path_bytes,
+            maximum_path_depth=self._limits.maximum_path_depth,
+        )
         mode = info.external_attr >> 16
         kind = stat.S_IFMT(mode)
         if kind not in {0, stat.S_IFREG, stat.S_IFDIR}:
@@ -546,7 +545,7 @@ class SubmissionArchiveInspector:
             self._reject(SubmissionArchiveFailureCode.UNSAFE_ENTRY)
         if info.flag_bits & 0x1:
             self._reject(SubmissionArchiveFailureCode.ENCRYPTED)
-        return unicodedata.normalize("NFC", path), (
+        return path, (
             SubmissionArchiveEntryType.DIRECTORY
             if is_directory
             else SubmissionArchiveEntryType.FILE

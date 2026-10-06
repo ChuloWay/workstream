@@ -158,3 +158,18 @@ def test_manifest_rejects_tampered_digest_and_aggregates() -> None:
         replace(manifest, sha256=f"sha256:{'0' * 64}")
     with pytest.raises(ValueError, match="aggregates are inconsistent"):
         replace(manifest, file_count=0)
+
+
+@pytest.mark.parametrize("path", ["../outside.txt", "/absolute.txt", "dir\\file.txt", "a//b", "a/./b", "a./b", "drive:c/file", "cafe\u0301.txt", "x" * 4097])
+def test_stored_manifest_rejects_noncanonical_paths_with_matching_hash(path):
+    body = _manifest(_archive([("safe.txt", b"data")])).as_dict()
+    body["entries"][0]["normalized_path"] = path
+    with pytest.raises(ValueError):
+        SubmissionManifest.from_dict(body, sha256=canonical_json_hash(body))
+
+
+def test_recovered_manifest_accepts_supported_configured_long_path():
+    body = _manifest(_archive([("safe.txt", b"data")])).as_dict()
+    body["entries"][0]["normalized_path"] = "x" * 1025
+    recovered = SubmissionManifest.from_dict(body, sha256=canonical_json_hash(body))
+    assert recovered.as_dict() == body

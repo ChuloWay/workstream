@@ -13,6 +13,7 @@ from app.modules.artifacts.submission_archive import (
     SubmissionArchiveEntry,
     SubmissionArchiveEntryType,
     SubmissionArchiveInspectionResult,
+    normalize_submission_archive_path,
 )
 
 
@@ -142,6 +143,10 @@ class SubmissionManifest:
             path = value.get("normalized_path")
             if set(value) != fields or type(path) is not str or not path or path in paths:
                 raise ValueError("submission manifest entry is invalid")
+            if normalize_submission_archive_path(
+                path, maximum_path_bytes=4096, maximum_path_depth=256,
+            ) != path:
+                raise ValueError("submission manifest path is not normalized")
             paths.add(path)
             size = value["byte_count"] if kind == "file" else 0
             if type(size) is not int or not 0 <= size <= 512 * 1024 * 1024:

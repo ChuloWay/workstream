@@ -23,6 +23,7 @@ DECLARE
     previous_path text;
     expanded numeric := 0;
     amount numeric;
+    segment text;
 BEGIN
     IF body IS NULL OR pg_catalog.jsonb_typeof(body) IS DISTINCT FROM 'object'
        OR body->>'schema_version' IS DISTINCT FROM 'workstream.submission_bundle_manifest.v1'
@@ -37,6 +38,17 @@ BEGIN
         path := item->>'normalized_path';
         IF path = '' OR (previous_path IS NOT NULL AND path COLLATE "C" <= previous_path COLLATE "C")
         THEN RETURN false; END IF;
+        IF pg_catalog.octet_length(path) > 4096
+           OR path <> pg_catalog.normalize(path, 'NFC')
+           OR pg_catalog.strpos(path, pg_catalog.chr(92)) > 0
+           OR path ~ ('[' || pg_catalog.chr(1) || '-' || pg_catalog.chr(31) || pg_catalog.chr(127) || ']')
+           OR pg_catalog.strpos(pg_catalog.split_part(path, '/', 1), ':') > 0
+           OR pg_catalog.cardinality(pg_catalog.string_to_array(path, '/')) > 256
+        THEN RETURN false; END IF;
+        FOREACH segment IN ARRAY pg_catalog.string_to_array(path, '/') LOOP
+            IF segment IN ('', '.', '..') OR pg_catalog.right(segment, 1) IN (' ', '.')
+            THEN RETURN false; END IF;
+        END LOOP;
         previous_path := path;
         IF item->>'entry_type' = 'directory' THEN
             IF item - ARRAY['normalized_path','entry_type'] IS DISTINCT FROM '{}'::jsonb
