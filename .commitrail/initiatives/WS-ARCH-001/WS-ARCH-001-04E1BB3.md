@@ -128,3 +128,8 @@ post-submit material selection continues to validate its original exact immutabl
 ART lineage and inspected bytes; it does not consume the new file projection and
 has no schema-specific branch or fallback. No old admission can create a new
 consumption result without the metadata.
+
+Historical seed consumers include the full chain from ART material through
+completed checker source, reviewer packet, Review, acceptance and contribution
+fixtures. Each predecessor migration test restores its original schema before
+its retained-owner snapshot; checking only direct ART fixture calls is incomplete.
