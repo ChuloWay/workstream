@@ -4,6 +4,7 @@ from copy import deepcopy
 import json
 from urllib.parse import quote
 
+from http2_fixture import goaway_fixture
 from test_http_boundary import (
     ACTOR,
     PROFILE,
@@ -298,6 +299,12 @@ def test_task_write_uncertainty_and_no_retry(cli):
             (403, canonical_error(), "application/json", False),
             (409, canonical_error("idempotency_mismatch"), "application/json", False),
             (422, canonical_error("validation_error"), "application/json", False),
+            (
+                403,
+                {"error": canonical_error()["error"] | {"details": None}},
+                "application/json",
+                True,
+            ),
             (408, {"error": {"code": "gateway_timeout"}}, "application/json", True),
             (403, canonical_error(), "text/html", True),
             (403, canonical_error() | {"unexpected": True}, "application/json", True),
@@ -352,3 +359,28 @@ def test_task_write_uncertainty_and_no_retry(cli):
             }
             response["drop"] = False
         assert len(requests) == len(response["commands"]) == 2 * (len(cases) + 2)
+
+
+def test_task_posts_are_not_replayed_after_http2_goaway(cli, tmp_path):
+    for action in ("claim", "start"):
+        with goaway_fixture(tmp_path) as (origin, env, bodies, connections):
+            result = cli(
+                origin,
+                TOKEN,
+                "-o",
+                "json",
+                "task",
+                action,
+                TASK,
+                "--idempotency-key",
+                KEY,
+                "--reason",
+                "Received before GOAWAY",
+                extra_env=env,
+            )
+            assert_failure(result, "service_unavailable")
+            assert json.loads(result.stderr)["error"]["outcome_unknown"] is True
+            assert connections == ["h2"]
+            assert [json.loads(value) for value in bodies] == [
+                {"reason": "Received before GOAWAY"}
+            ]
