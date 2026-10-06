@@ -57,7 +57,7 @@ def receive_request(connection):
         elif kind == 1:  # HEADERS: no HPACK decoding is needed to count requests.
             assert stream_id is None and stream > 0 and flags & 4
             stream_id = stream
-            assert not flags & 1  # The task POST must carry its nonempty JSON body.
+            assert not flags & 1  # These writes must carry their nonempty JSON body.
         elif kind == 0:
             assert stream == stream_id and not flags & 8  # No padded DATA.
             body.extend(payload)

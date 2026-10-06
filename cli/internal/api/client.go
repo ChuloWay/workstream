@@ -322,10 +322,10 @@ func (c *Client) requestWithKey(ctx context.Context, method, path, query string,
 	if err != nil {
 		return nil, &Failure{Code: "invalid_request"}
 	}
-	if method == http.MethodPost {
+	if mutation {
 		// NewRequest makes bytes.Reader bodies rewindable. Disable transport
 		// replay after HTTP/2 GOAWAY/REFUSED_STREAM (or HTTP/1 connection
-		// failure); task retries belong to the caller, even with a retry key.
+		// failure); write retries belong to the caller, even with a retry key.
 		req.GetBody = nil
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)

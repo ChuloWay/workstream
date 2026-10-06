@@ -9,6 +9,8 @@ from threading import Thread
 import time
 from urllib.parse import parse_qs, urlsplit
 
+from http2_fixture import goaway_fixture
+
 TOKEN = "caller.flow.token"
 ACTOR = "018f0ebc-7966-7e8d-bc4d-1cae1e000001"
 PROJECT = "018f0ebc-7966-7e8d-bc4d-1cae1e000002"
@@ -218,6 +220,27 @@ def test_project_show_invalid_arguments_and_redirect_are_bounded(cli):
         assert_failure(denied, "project_authorization_resource_not_found")
         assert "outcome_unknown" not in json.loads(denied.stderr)["error"]
         assert len(requests) == 2
+
+
+def test_profile_patch_is_not_replayed_after_http2_goaway(cli, tmp_path):
+    with goaway_fixture(tmp_path) as (origin, env, bodies, connections):
+        result = cli(
+            origin,
+            TOKEN,
+            "-o",
+            "json",
+            "profile",
+            "update",
+            "--display-name",
+            "Received before GOAWAY",
+            extra_env=env,
+        )
+        assert_failure(result, "service_unavailable")
+        assert json.loads(result.stderr)["error"]["outcome_unknown"] is True
+        assert [json.loads(value) for value in bodies] == [
+            {"display_name": "Received before GOAWAY"}
+        ]
+        assert connections == ["h2"]
 
 
 def test_profile_update_sends_only_selected_fields(cli):
