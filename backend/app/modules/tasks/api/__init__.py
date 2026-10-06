@@ -9,7 +9,8 @@ from app.modules.tasks.api.accepted_effects import (
     TaskAcceptedEffectsUnavailable,
 )
 from app.modules.tasks.api.post_submit_routing import (
-    TaskPostSubmitManifestFacts, task_post_submit_source_digest,
+    TaskPostSubmitManifestFacts, TaskPostSubmitSourceProposal, TaskRoutingSourcePreparation,
+    task_post_submit_source_digest,
     TaskRoutingSelection, TaskRoutingRequestFacts, task_routing_request_digest,
 )
 
@@ -111,7 +112,7 @@ __all__ = (
     "TaskAcceptedEffectsResult",
     "TaskAcceptedEffectsUnavailable",
     "TaskPolicyLineage",
-    "TaskPostSubmitManifestFacts",
+    "TaskPostSubmitManifestFacts", "TaskPostSubmitSourceProposal", "TaskRoutingSourcePreparation",
     "task_post_submit_source_digest",
     "TaskRoutingSelection",
     "TaskRoutingRequestFacts",

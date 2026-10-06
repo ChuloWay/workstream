@@ -22,13 +22,12 @@ _PositiveVersion = Annotated[StrictInt, Field(ge=1, le=2_147_483_647)]
 _ByteCount = Annotated[StrictInt, Field(ge=0, le=9_223_372_036_854_775_807)]
 
 
-class TaskPostSubmitManifestFacts(BaseModel):
-    """Immutable persisted and owner-joined source facts without routing authority."""
+class TaskPostSubmitSourceProposal(BaseModel):
+    """Detached semantic source proposal; neither stored evidence nor authority."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     id: UUID
-    created_at: AwareDatetime
     project_id: UUID
     task_id: UUID
     submission_id: UUID
@@ -87,6 +86,12 @@ class TaskPostSubmitManifestFacts(BaseModel):
         return self
 
 
+class TaskPostSubmitManifestFacts(TaskPostSubmitSourceProposal):
+    """Persisted source with its mandatory database-owned creation time."""
+
+    created_at: AwareDatetime
+
+
 def task_post_submit_source_digest(source: TaskPostSubmitManifestFacts) -> str:
     """Commit exact source facts except the database-assigned creation time."""
     if type(source) is not TaskPostSubmitManifestFacts:
@@ -98,8 +103,9 @@ def task_post_submit_source_digest(source: TaskPostSubmitManifestFacts) -> str:
     })
 
 
-__all__ = ("TaskPostSubmitManifestFacts", "task_post_submit_source_digest",
-           "TaskRoutingSelection", "TaskRoutingRequestFacts", "task_routing_request_digest")
+__all__ = ("TaskPostSubmitSourceProposal", "TaskPostSubmitManifestFacts", "task_post_submit_source_digest",
+           "TaskRoutingSelection", "TaskRoutingRequestFacts", "task_routing_request_digest",
+           "TaskRoutingSourcePreparation")
 
 
 class TaskRoutingSelection(BaseModel):
@@ -155,4 +161,24 @@ class TaskRoutingRequestFacts(TaskRoutingSelection):
             or self.route_request_digest == self.evaluation_request_digest
         ):
             raise ValueError("routing request digest differs")
+        return self
+
+
+class TaskRoutingSourcePreparation(BaseModel):
+    """Reserved request with matching proposed source; no publication or authority."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    request: TaskRoutingRequestFacts
+    source: TaskPostSubmitSourceProposal
+
+    @model_validator(mode="after")
+    def matching_source(self) -> Self:
+        request = TaskRoutingRequestFacts.model_validate(self.request.model_dump())
+        source = TaskPostSubmitSourceProposal.model_validate(self.source.model_dump())
+        if request.routing_manifest_id != source.id or request.evaluation_request_digest != source.request_digest:
+            raise ValueError("routing source identity differs")
+        for name in TaskRoutingSelection.model_fields:
+            if name != "evaluation_request_digest" and getattr(request, name) != getattr(source, name):
+                raise ValueError("routing source selection differs")
         return self

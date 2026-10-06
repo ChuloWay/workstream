@@ -7,7 +7,9 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.identifiers import new_record_id
-from app.modules.checkers.api.execution import EvaluationCompletion, EvaluationCoordinationPort
+from app.modules.checkers.api.execution import (
+    EvaluationCompletion, EvaluationCoordinationPort, VerifiedEvaluationCompletion,
+)
 from app.modules.tasks.api.post_submit_routing import (
     TaskRoutingRequestFacts,
     TaskRoutingSelection,
@@ -25,6 +27,24 @@ class TaskRoutingRequestUnavailable(RuntimeError):
     """Conceal unavailable or inconsistent request preparation."""
 
 
+async def require_routing_transaction(session: AsyncSession) -> None:
+    """Reject non-root custody before acquiring owner locks."""
+    transaction = session.get_transaction()
+    if transaction is None or not transaction.is_active or session.in_nested_transaction():
+        raise TaskRoutingRequestUnavailable("routing_request_caller_transaction_required")
+    connection = await session.connection()
+    if connection.in_nested_transaction():
+        raise TaskRoutingRequestUnavailable("routing_request_caller_transaction_required")
+    # PostgreSQL observes native savepoints which SQLAlchemy cannot see.
+    # Discard the snapshot token; caller transaction completion owns cleanup.
+    try:
+        await session.execute(text("SELECT pg_catalog.pg_export_snapshot()"))
+    except DBAPIError as exc:
+        if getattr(exc.orig, "sqlstate", None) != "25001":
+            raise
+        raise TaskRoutingRequestUnavailable("routing_request_caller_transaction_required") from exc
+
+
 class TaskRoutingRequests:
     """Reserve/recover one request inside a caller-owned transaction; never commit."""
 
@@ -36,20 +56,14 @@ class TaskRoutingRequests:
         self, event_id: UUID, completion: EvaluationCompletion
     ) -> TaskRoutingRequestFacts:
         """Revalidate latest Submission and current completion before reservation or replay."""
-        transaction = self._session.get_transaction()
-        if transaction is None or not transaction.is_active or self._session.in_nested_transaction():
-            raise TaskRoutingRequestUnavailable("routing_request_caller_transaction_required")
-        connection = await self._session.connection()
-        if connection.in_nested_transaction():
-            raise TaskRoutingRequestUnavailable("routing_request_caller_transaction_required")
-        # PostgreSQL observes native savepoints which SQLAlchemy cannot see.
-        # Discard the snapshot token; caller transaction completion owns cleanup.
-        try:
-            await self._session.execute(text("SELECT pg_catalog.pg_export_snapshot()"))
-        except DBAPIError as exc:
-            if getattr(exc.orig, "sqlstate", None) != "25001":
-                raise
-            raise TaskRoutingRequestUnavailable("routing_request_caller_transaction_required") from exc
+        request, _ = await self._stage(event_id, completion)
+        return request
+
+    async def _stage(
+        self, event_id: UUID, completion: EvaluationCompletion,
+    ) -> tuple[TaskRoutingRequestFacts, VerifiedEvaluationCompletion]:
+        """Share the checked completion with owner-local source preparation."""
+        await require_routing_transaction(self._session)
         completion = EvaluationCompletion.model_validate(completion)
         if not isinstance(event_id, UUID) or completion.routing_recommendation != "allow_review":
             raise TaskRoutingRequestUnavailable("routing_request_unavailable")
@@ -70,8 +84,8 @@ class TaskRoutingRequests:
         ).limit(1))
         if later is not None:
             raise TaskRoutingRequestUnavailable("routing_request_unavailable")
-        version = await self._evaluations.require_current_completion(event_id, completion)
-        if version != submission.version:
+        verified = await self._evaluations.require_current_completion(event_id, completion)
+        if verified.submission_version != submission.version:
             raise TaskRoutingRequestUnavailable("routing_request_unavailable")
         ref = completion.reference
         selection = TaskRoutingSelection(
@@ -107,4 +121,4 @@ class TaskRoutingRequests:
             or facts.model_dump(include=set(TaskRoutingSelection.model_fields)) != selection.model_dump()
         ):
             raise TaskRoutingRequestUnavailable("routing_request_conflict")
-        return facts
+        return facts, verified

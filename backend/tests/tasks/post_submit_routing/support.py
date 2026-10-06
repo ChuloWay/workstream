@@ -601,14 +601,58 @@ async def successor_submission(h):
         await session.execute(text("UPDATE public.workstream_tasks SET status='needs_revision' WHERE id=:id"),
                               {"id": h.request.task_id})
         context = _context(actor_profile_id=as_uuid(original.contributor_id), identity_link_id=as_uuid(identity_link_id))
+    successor = SimpleNamespace(**(vars(h) | {"data": revision_archive(h.data)}))
+    return await _create_submission(successor, context, h.request.task_id, h.request.assignment_id, h.request.submission_id)
+
+
+def revision_archive(data):
+    """Change one real ZIP member while preserving the governed packet."""
     from io import BytesIO
     from zipfile import ZipFile
     revised = BytesIO()
-    with ZipFile(BytesIO(h.data)) as source, ZipFile(revised, "w") as target:
+    with ZipFile(BytesIO(data)) as source, ZipFile(revised, "w") as target:
         for item in source.infolist():
-            data = source.read(item)
+            content = source.read(item)
             if item.filename == "notes.txt":
-                data += b"\nRevision: corrected the implementation.\n"
-            target.writestr(item, data)
-    successor = SimpleNamespace(**(vars(h) | {"data": revised.getvalue()}))
-    return await _create_submission(successor, context, h.request.task_id, h.request.assignment_id, h.request.submission_id)
+                content += b"\nRevision: corrected the implementation.\n"
+            target.writestr(item, content)
+    return revised.getvalue()
+
+
+async def completed_successor_source(h):
+    """Evaluate a real successor created through verified ZIP admission."""
+    from app.modules.checkers.api import PostSubmitManifestEntry
+    from tests.post_submit_materialization_helpers import _archive_facts
+
+    created = await successor_submission(h)
+    data = revision_archive(h.data)
+    _, manifest, _, digest = _archive_facts(data)
+    async with h.factory() as session:
+        facts = await submitted_bundle_port(session).read(SubmittedBundleRequest(
+            h.request.project_id, h.request.task_id, created.submission_id,
+        ))
+    context = asdict(facts.context)
+    request = change_request(
+        h.request, evaluation_request_id=new_record_id(), evaluation_generation=1,
+        submission_id=created.submission_id, submission_version=created.submission_version,
+        content_id=created.artifact_content_id, binding_id=created.artifact_binding_id,
+        content_sha256=digest, byte_count=len(data),
+        expected_context=ExpectedPostSubmitContext(**context),
+        structural_input=h.request.structural_input.model_copy(update={
+            "package_hash": digest,
+            "observed_context": ObservedPostSubmitContext(**context),
+            "manifest": tuple(PostSubmitManifestEntry(
+                artifact=e.normalized_path, hash=e.sha256, size_bytes=e.byte_count,
+            ) for e in manifest.entries if e.sha256 is not None),
+        }),
+    )
+    successor = SimpleNamespace(**(vars(h) | {"data": data, "request": request, "source": {}}))
+    await rebuild_real_request(successor)
+    await reserve(successor)
+    successor.result = await live_executor(successor).evaluate_post_submission(successor.request)
+    async with h.factory() as session:
+        run = await session.get(CheckerRun, str(successor.result.attempt_id))
+        assert run.status == "completed" and run.routing_recommendation == "allow_review"
+        successor.material = dict(run.material_custody)
+    successor.source = await source_values(successor)
+    return successor

@@ -1,4 +1,12 @@
 # WS-ARCH-001 — Current delivery plan through allow_review
+[ARCH-04E1B-B2](../WS-ARCH-001-04E1BB2.md) supplies exact source preparation through
+TASK, CHECKERS and historical PROJECTS policy facts. It stages only the existing
+routing request; proposed source facts have no fabricated creation timestamp.
+Remaining handlers, source publication, current pointers and authority/effect
+activation are still required. False composition must acquire its REV lifecycle
+fence before TASK and revalidate policy under TASK custody; true admission
+remains independent of that fence.
+
 
 [AUTH-19A](../../WS-AUTH-001/WS-AUTH-001-19A.md) delivers inert exact source/receipt contracts and the
 planned router identity. ARCH-04E1B-A delivers caller-owned routing-request and
@@ -82,6 +90,7 @@ checker-remediation boundary before public Submission cutover.
 | ARCH-04E1B-A | ARCH-04E1A, AUTH-19A | Complete: TASK caller-session request/source-identity reservation; no source publication, handler or commit |
 | [ARCH-04E2-A](../WS-ARCH-001-04E2A.md) | ARCH-04E1B-A | Complete: strict AUTH-private resource/request/consequence matcher and nominal fixed-router adapter through canonical PREP; action stays planned/unavailable, with no handle, allow, receipt, source write or effect |
 | [ARCH-04E1B-B1](../WS-ARCH-001-04E1BB1.md) | REV-04C and existing CHECKERS coordinator | Complete: required TASK reservation/current-read guard, ordered admission INSERTs, exact terminal replay and mechanical race proof; no handler or activation |
+| [ARCH-04E1B-B2](../WS-ARCH-001-04E1BB2.md) | 04E1B-B1, existing historical PROJECTS context | Complete: exact detached source preparation and reserved identity; no publication, authority or handler effect |
 | ARCH-04E1B-B | ARCH-04E2-A and CON-02B; false additionally uses delivered REV-04C shared acceptance participation | Hidden TASK handlers plus TASK-before-CHECKERS currentness and both successor-generation race orders; durable receipt proof follows at exact activation |
 | Scoped XINT-003-08B controller activation | Existing REV-12A foundation, delivered REV-04C hidden participant and remaining real-writer observation proof | Existing Operator lifecycle-control action for the bounded shared manifest, not human runtime |
 | ARCH-04E2-B | ARCH-04E1B-B; scoped XINT-003-08B controller activation for false | Require the exact AUTH receipt on the same strict input; add database complete-set and audit/outbox closure; genuine allow commits with all governed effects |

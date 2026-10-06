@@ -16,6 +16,7 @@ from app.modules.checkers.api.execution import (
     EvaluationCompletion,
     EvaluationTaskGuard,
     VerifiedMaterialFacts,
+    VerifiedEvaluationCompletion,
 )
 from app.modules.checkers.api.post_submit import (
     PostSubmissionEvaluationRequest,
@@ -188,7 +189,7 @@ class EvaluationCoordinator:
 
     async def require_current_completion(
         self, event_id: UUID, completion: EvaluationCompletion
-    ) -> int:
+    ) -> VerifiedEvaluationCompletion:
         """Verify caller completion against retained current custody without granting authority."""
         require_transaction(self._session)
         completion = EvaluationCompletion.model_validate(completion)
@@ -235,7 +236,9 @@ class EvaluationCoordinator:
             or material.byte_count != request.byte_count
         ):
             raise CheckerExecutionUnavailable("checker_current_completion_unavailable")
-        return run.submission_version
+        return VerifiedEvaluationCompletion(
+            completion=completion, submission_version=run.submission_version, material=material,
+        )
 
 
 class CurrentExecution:

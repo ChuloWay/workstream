@@ -57,6 +57,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/tasks/post_submit_routing/test_evaluation_guard.py",
             "tests/tasks/post_submit_routing/test_evaluation_currentness.py",
             "tests/tasks/post_submit_routing/test_review_admission_currentness.py",
+            "tests/tasks/post_submit_routing/test_source_preparation.py",
             "tests/tasks/accepted_effects/test_contracts.py",
             "tests/tasks/accepted_effects/test_postgresql.py",
             "tests/contributions/records/test_contracts.py",
@@ -803,6 +804,7 @@ def test_evaluation_custody_proofs_use_project_lane_headroom():
         "tests/tasks/post_submit_routing/test_evaluation_guard.py",
         "tests/tasks/post_submit_routing/test_evaluation_currentness.py",
         "tests/tasks/post_submit_routing/test_review_admission_currentness.py",
+            "tests/tasks/post_submit_routing/test_source_preparation.py",
     }
     assert expected <= set(catalogue.PROJECT_MODULES)
     assert all(catalogue.PARTITION_LANES_BY_MODULE[path] == catalogue.PARTITIONED_PROJECT_LANES for path in expected)

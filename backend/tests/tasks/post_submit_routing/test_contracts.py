@@ -162,8 +162,9 @@ def test_false_source_value_is_transport_only() -> None:
 
 def test_routing_source_foundation_has_no_runtime_entry() -> None:
     assert post_submit_routing.__all__ == (
-        "TaskPostSubmitManifestFacts", "task_post_submit_source_digest",
+        "TaskPostSubmitSourceProposal", "TaskPostSubmitManifestFacts", "task_post_submit_source_digest",
         "TaskRoutingSelection", "TaskRoutingRequestFacts", "task_routing_request_digest",
+        "TaskRoutingSourcePreparation",
     )
     for name in post_submit_routing.__all__:
         assert getattr(task_api, name) is getattr(post_submit_routing, name)
@@ -172,7 +173,7 @@ def test_routing_source_foundation_has_no_runtime_entry() -> None:
         name
         for name, value in vars(post_submit_routing).items()
         if isclass(value) and value.__module__ == post_submit_routing.__name__
-    } == {"TaskPostSubmitManifestFacts", "TaskRoutingSelection", "TaskRoutingRequestFacts"}
+    } == {"TaskPostSubmitSourceProposal", "TaskPostSubmitManifestFacts", "TaskRoutingSelection", "TaskRoutingRequestFacts", "TaskRoutingSourcePreparation"}
     assert not hasattr(task_api, "TaskRoutingRequests")
     action = ActionId.TASK_POST_SUBMIT_ROUTE
     assert ACTION_BY_ID[action].permission_id is PermissionId.TASK_POST_SUBMIT_ROUTE
@@ -180,3 +181,17 @@ def test_routing_source_foundation_has_no_runtime_entry() -> None:
     assert SERVICE_ACTIONS_BY_IDENTITY[ServiceIdentity.TASK_POST_SUBMIT_ROUTER] == {action}
     with pytest.raises(ValueError, match="authorization action is not active"):
         resolve_executable_action(action)
+
+
+@pytest.mark.parametrize("human_review_required", [True, False])
+def test_proposal_has_no_persisted_timestamp(human_review_required):
+    values = _source_values(human_review_required=human_review_required)
+    source = post_submit_routing.TaskPostSubmitSourceProposal(
+        **{key: value for key, value in values.items() if key != "created_at"}
+    )
+    assert source.human_review_required is human_review_required
+    assert "created_at" not in source.model_dump()
+    with pytest.raises(ValidationError, match="Extra inputs"):
+        post_submit_routing.TaskPostSubmitSourceProposal(**values)
+    with pytest.raises(ValidationError, match="created_at"):
+        TaskPostSubmitManifestFacts(**source.model_dump())

@@ -232,8 +232,8 @@ class EvaluationCoordinationPort(Protocol):
 
     async def require_current_completion(
         self, event_id: ResourceId, completion: "EvaluationCompletion"
-    ) -> int:
-        """Lock exact current allow-review completion; return its stored submission version."""
+    ) -> "VerifiedEvaluationCompletion":
+        """Lock exact current allow-review completion and return retained material facts."""
         ...
 
     async def reserve_current_evaluation(
@@ -260,3 +260,11 @@ class EvaluationCompletion(PostSubmitValue):
     output_binding_ids: tuple[ResourceId, ...] = Field(max_length=0)
     execute_evidence_id: ResourceId
     finalize_evidence_id: ResourceId
+
+
+class VerifiedEvaluationCompletion(PostSubmitValue):
+    """Current owner-verified completion and retained material, never routing authority."""
+
+    completion: EvaluationCompletion
+    submission_version: VersionNumber
+    material: VerifiedMaterialFacts

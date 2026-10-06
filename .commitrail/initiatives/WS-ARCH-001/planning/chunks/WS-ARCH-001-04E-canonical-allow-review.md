@@ -106,7 +106,12 @@ creating human admission, acceptance or contribution effects.
    [04E1B-B1](../../WS-ARCH-001-04E1BB1.md) installs mandatory TASK-before-CHECKERS
    reservation custody and exact terminal replay. Mechanical race proof covers
    acceptance-first reservation rejection and successor-first stale completion
-   rejection; the full authorized handler races remain required. After 04E1B-A/04E2-A and
+   rejection. [04E1B-B2](../../WS-ARCH-001-04E1BB2.md) supplies exact
+   semantic source preparation from current CHECKERS and historical PROJECTS
+   custody, without source publication or authority. The full authorized
+   handler races remain required. False composition must take the REV lifecycle
+   fence before TASK and revalidate the policy after locking; source preparation
+   does not acquire that fence or authorize later lock-order inversion. After 04E1B-A/04E2-A and
    CON-02B's handler/claim contract (plus delivered REV-04C acceptance foundations
    for false), TASK implements unavailable request/event
    production for its own evaluation-request event and the TASK consumer of

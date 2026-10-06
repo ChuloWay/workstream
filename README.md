@@ -186,7 +186,9 @@ no exact AUTH decision-event receipt, and database complete-set enforcement,
 currentness race proof, shared audit/outbox and lifecycle activation remain.
 ARCH-04E1B-B1 requires TASK locking before checker reservation, current-result
 reads and review admission INSERTs, preserving exact read-only reservation replay
-after acceptance. Hidden handlers still need complete
+after acceptance. ARCH-04E1B-B2 prepares exact source proposals from current
+CHECKERS custody and historical PROJECTS policy, without inserting a manifest
+or granting authority. Hidden handlers still need complete
 authorized currentness proof. These prerequisites do not require live
 human review before the first automated acceptance path.
 
