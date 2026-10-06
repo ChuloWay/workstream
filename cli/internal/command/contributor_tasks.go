@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func addContributorTaskReads(root *cobra.Command, client func() (*api.Client, error), output *string, stdout io.Writer) {
+func addContributorTasks(root *cobra.Command, client func() (*api.Client, error), output *string, stdout io.Writer) {
 	task := &cobra.Command{Use: "task", Short: "Discover and inspect contributor work"}
 	var limit int
 	var cursor string
@@ -75,5 +75,6 @@ func addContributorTaskReads(root *cobra.Command, client func() (*api.Client, er
 			return err
 		},
 	})
+	addContributorTaskWrites(task, client, output, stdout)
 	root.AddCommand(task)
 }

@@ -315,6 +315,9 @@ the caller's current authority, preserving contributor-minimal disclosure.
 provide a paginated manager list-to-detail journey through public reads.
 `workstream task ready PROJECT_ID` and `task show TASK_ID` provide contributor
 discovery and instructions, with live Submitter authority and no task claim.
+`workstream task claim TASK_ID --idempotency-key UUID` and `task start` add
+contributor writes through existing public APIs, with server-owned authority,
+explicit caller retry keys and uncertain-outcome reporting without automatic retries.
 All support human-readable and JSON output, using the caller's Flow token.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.

@@ -45,6 +45,7 @@ def http_fixture():
         "delay": 0,
         "drop": False,
         "updates": [],
+        "commands": [],
     }
 
     class Handler(BaseHTTPRequestHandler):
@@ -69,6 +70,17 @@ def http_fixture():
             body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
             response["updates"].append(
                 (self.headers.get("Content-Type"), json.loads(body))
+            )
+            self.do_GET()
+
+        def do_POST(self):  # noqa: N802 - standard HTTP handler interface
+            body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            response["commands"].append(
+                (
+                    self.headers.get("Content-Type"),
+                    self.headers.get_all("Idempotency-Key"),
+                    json.loads(body),
+                )
             )
             self.do_GET()
 

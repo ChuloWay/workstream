@@ -35,13 +35,18 @@ type Failure struct {
 	Status         int    `json:"status,omitempty"`
 	CorrelationID  string `json:"correlation_id,omitempty"`
 	OutcomeUnknown bool   `json:"outcome_unknown,omitempty"`
+	RecoveryHint   string `json:"-"`
 }
 
 func (f *Failure) Error() string {
 	if f.OutcomeUnknown {
 		known := *f
 		known.OutcomeUnknown = false
-		return known.Error() + "; update outcome unknown; read whoami before retrying"
+		hint := f.RecoveryHint
+		if hint == "" {
+			hint = "update outcome unknown; read whoami before retrying"
+		}
+		return known.Error() + "; " + hint
 	}
 	if f.CorrelationID != "" {
 		return fmt.Sprintf("%s (HTTP %d; correlation %s)", f.Code, f.Status, f.CorrelationID)
@@ -300,6 +305,11 @@ func (c *Client) safeMetadata(value string) bool {
 }
 
 func (c *Client) request(ctx context.Context, method, path, query string, body []byte) (json.RawMessage, error) {
+	return c.requestWithKey(ctx, method, path, query, body, "")
+}
+
+func (c *Client) requestWithKey(ctx context.Context, method, path, query string, body []byte, key string) (json.RawMessage, error) {
+	mutation := method == http.MethodPatch || method == http.MethodPost
 	target := c.origin + path
 	if query != "" {
 		target += "?" + query
@@ -315,17 +325,20 @@ func (c *Client) request(ctx context.Context, method, path, query string, body [
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Accept-Encoding", "identity")
+	if key != "" {
+		req.Header.Set("Idempotency-Key", key)
+	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	response, err := c.http.Do(req)
 	if err != nil {
-		return nil, &Failure{Code: "service_unavailable", OutcomeUnknown: method == http.MethodPatch}
+		return nil, &Failure{Code: "service_unavailable", OutcomeUnknown: mutation}
 	}
 	defer response.Body.Close()
 	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
 	if err != nil || len(responseBody) > maxResponseBytes {
-		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, OutcomeUnknown: method == http.MethodPatch}
+		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, OutcomeUnknown: mutation}
 	}
 	correlation := response.Header.Get("X-Correlation-ID")
 	if !safeCorrelation.MatchString(correlation) || !c.safeMetadata(correlation) {
@@ -350,14 +363,17 @@ func (c *Client) request(ctx context.Context, method, path, query string, body [
 				code = envelope.Error.Code
 			}
 		}
+		if method == http.MethodPost {
+			knownEnvelope = canonicalTaskError(responseBody, response.Header.Get("Content-Type"))
+		}
 		// A complete API 4xx envelope is a known denial, independent of code
 		// spelling/redaction. A gateway reply without it cannot prove rollback.
 		return nil, &Failure{Code: code, Status: response.StatusCode, CorrelationID: correlation,
-			OutcomeUnknown: method == http.MethodPatch && (response.StatusCode < 400 || response.StatusCode >= 500 || !knownEnvelope)}
+			OutcomeUnknown: mutation && (response.StatusCode < 400 || response.StatusCode >= 500 || !knownEnvelope)}
 	}
 	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" || !jsontext.Value(responseBody).IsValid() {
-		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, CorrelationID: correlation, OutcomeUnknown: method == http.MethodPatch}
+		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, CorrelationID: correlation, OutcomeUnknown: mutation}
 	}
 	return json.RawMessage(responseBody), nil
 }

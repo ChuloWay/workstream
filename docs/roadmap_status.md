@@ -137,7 +137,8 @@ The [independent MCP package](../mcp_server/README.md) implements nine self-serv
 and administrative read tools through WS-MCP-002-03. The
 [Go CLI](../cli/README.md) provides caller-profile and exact-project authorization
 reads plus human self-profile editing, exact-project inspection and manager
-task queue/detail reads and contributor ready-work/instruction reads, with
+task queue/detail reads, contributor ready-work/instruction reads and public
+claim/start commands with caller-supplied retry keys, with
 text/JSON output. Project inspection preserves
 server-selected full/minimal fields; no public project-list route is invented.
 CLI write uncertainty is explicit and never automatically
@@ -306,6 +307,9 @@ cannot be reused as post-submission review-gate evidence. See the
   [CLI contributor discovery](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-05.md)
   adds ready-task pages and contributor instructions through public reads,
   preserving Submitter scope and assignment visibility without claiming work.
+  [CLI contributor claim/start](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-06.md)
+  adds the existing public writes with explicit retry keys, server-owned
+  assignment/lineage, fresh-authority replay and uncertain-outcome handling.
   Built-binary HTTP
   integration and isolated real-API proof accompany
   the package. Further public commands, optional TUI and binary distribution
