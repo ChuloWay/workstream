@@ -135,3 +135,9 @@ Historical seed consumers include the full chain from ART material through
 completed checker source, reviewer packet, Review, acceptance and contribution
 fixtures. Each predecessor migration test restores its original schema before
 its retained-owner snapshot; checking only direct ART fixture calls is incomplete.
+
+The existing exclusive routing-authorization proof group moves from task lane A
+to task lane C after measured execution reached A's unchanged 1,200-second cap.
+Keep all nine lanes, exact-once inventory, assertions and timeout unchanged;
+verify complete hosted execution after redistribution. This is test scheduling,
+not reduced coverage or a product behavior change.
