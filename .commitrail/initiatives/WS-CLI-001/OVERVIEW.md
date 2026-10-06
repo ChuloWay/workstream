@@ -9,7 +9,8 @@
   self-profile editing through the public REST API; [WS-CLI-001-03](WS-CLI-001-03.md),
   exact-project inspection with server-owned full/minimal disclosure;
   [WS-CLI-001-04](WS-CLI-001-04.md), public manager task pagination and detail;
-  [WS-CLI-001-05](WS-CLI-001-05.md), contributor ready-task discovery and instructions.
+  [WS-CLI-001-05](WS-CLI-001-05.md), contributor ready-task discovery and instructions;
+  [WS-CLI-001-06](WS-CLI-001-06.md), public contributor claim/start with explicit retry keys.
 
 ## Current boundary
 
@@ -27,6 +28,9 @@ reads only the existing public project's server-selected disclosure shape.
 manager queue/detail journey with server-owned authority on each page.
 `task ready PROJECT_ID` and `task show TASK_ID` add the contributor projection
 with exact Submitter authority and server-owned assignment visibility.
+`task claim TASK_ID --idempotency-key UUID` and `task start` add the public
+contributor writes, with server-owned fresh authority, assignment and lineage.
+Exact caller keys support manual replay; uncertainty never triggers automatic retries.
 All have text/JSON
 output and built-binary integration proof. Mutations preserve omitted/null
 semantics and explicitly report uncertain outcomes without automatic retries.
@@ -71,11 +75,14 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
    detail, passing opaque continuation unchanged without automatic pagination.
 5. **WS-CLI-001-05:** Discover one ready-task page and inspect contributor
    instructions through public reads, without management metadata or task writes.
-6. **Later governed-work commands:** Add project setup, contributor task mutations, submission,
+6. **WS-CLI-001-06:** Claim ready work and start the caller's assignment through
+   public POSTs with caller-supplied keys, exact response validation and explicit
+   uncertain outcomes. No local authority decisions or operator override.
+7. **Later governed-work commands:** Add project setup, submission,
    review, revision, and contribution reads/writes only as their actual public
    contracts and authority boundaries become available. Split by user journey,
    not one PR per endpoint or one giant catalogue PR.
-7. **Optional TUI:** Add a focused public queue/evidence view after its API
+8. **Optional TUI:** Add a focused public queue/evidence view after its API
    workflow is complete. Never require a TUI for agents or scripts.
 
 ## Risks and proof
