@@ -188,9 +188,11 @@ paths and storage references are displayed only, never read, downloaded or execu
 JSON preserves the exact public response. Human output labels every root field
 and uses compact, terminal-safe JSON for complete nested rules and facts;
 nullable omissions display as null. The two reads are separate observations,
-not an atomic combined snapshot. Strict response validation rejects substituted
-task/project/guide identities, malformed nested members, null required fields,
-duplicate/unknown fields and management-only task metadata before success.
+not an atomic combined snapshot. Context rejects substituted task/project/guide
+identities; requirements bind the selected task identity and validate the returned
+project UUID shape, without independently resolving its project. Both reject
+malformed nested members, null required fields, duplicate/unknown fields and
+management-only task metadata before success.
 Optional null/omitted fields remain valid. The CLI checks public response
 shape, not business policy or contributor eligibility.
 
