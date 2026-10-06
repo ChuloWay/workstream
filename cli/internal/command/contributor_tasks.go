@@ -76,5 +76,6 @@ func addContributorTasks(root *cobra.Command, client func() (*api.Client, error)
 		},
 	})
 	addContributorTaskWrites(task, client, output, stdout)
+	addTaskContextReads(task, client, output, stdout)
 	root.AddCommand(task)
 }

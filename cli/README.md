@@ -3,7 +3,7 @@
 An independent Go client for Workstream's public REST API, for humans and
 agents using the terminal. It provides human self-profile reads and editing,
 plus exact-project inspection, authority reads, manager task browsing and
-contributor work discovery, claim and start:
+contributor work discovery, claim/start and governing context/intake requirements:
 
 | Command | Public API |
 |---|---|
@@ -17,6 +17,8 @@ contributor work discovery, claim and start:
 | `workstream task show TASK_ID` | `GET /api/v1/tasks/TASK_ID` |
 | `workstream task claim TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/claim` |
 | `workstream task start TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/start` |
+| `workstream task context TASK_ID` | `GET /api/v1/tasks/TASK_ID/work-context` |
+| `workstream task requirements TASK_ID` | `GET /api/v1/tasks/TASK_ID/submission-requirements` |
 
 Workstream verifies the caller's Flow bearer and owns identity resolution,
 authorization and lifecycle decisions. Reading a profile can admit a first-time
@@ -155,6 +157,42 @@ must revalidate current authority and state. Cursors are action/project/limit
 bound and cannot be reused as manager cursors; the CLI never decodes them or
 automatically fetches another page. These reads do not claim/start tasks,
 upload submissions or complete unfinished acceptance integration.
+
+## Inspect governing work and intake rules
+
+```sh
+workstream task context TASK_ID --output json
+workstream task requirements TASK_ID
+```
+
+Each command makes one existing public contributor GET, with the same selector,
+bearer, response bounds and safe errors as `task show`. Workstream checks current
+Submitter authority and assignment visibility on each read. Other roles alone,
+foreign-project or peer-owned work, revoked grants and suspension do not confer
+access. Denial statuses follow the individual API contract; a denied read is
+not an empty successful result.
+
+Context returns contributor instructions, project/guide display facts, exact
+review/revision policy identities and contribution-policy version, plus the
+server's current assignment/action hints. Hints are observations, not authority
+or a claimability guarantee. The CLI never recomputes them or automatically
+executes a hinted action. Claim/start independently authorize their requests.
+
+Requirements expose the task's locked guide and intake rules: packet fields,
+artifact/evidence requirements, forbidden patterns, attestation, hash/manifest
+requirements, storage-reference restrictions, size/entry limits and packaging.
+They are not a current-guide lookup, a checker verdict or permission to upload.
+Submission intake is still hidden; these commands do not expose it. Described
+paths and storage references are displayed only, never read, downloaded or executed.
+
+JSON preserves the exact public response. Human output labels every root field
+and uses compact, terminal-safe JSON for complete nested rules and facts;
+nullable omissions display as null. The two reads are separate observations,
+not an atomic combined snapshot. Strict response validation rejects substituted
+task/project/guide identities, malformed nested members, null required fields,
+duplicate/unknown fields and management-only task metadata before success.
+Optional null/omitted fields remain valid. The CLI checks public response
+shape, not business policy or contributor eligibility.
 
 ## Claim and start contributor work
 
