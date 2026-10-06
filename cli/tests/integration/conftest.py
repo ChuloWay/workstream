@@ -18,7 +18,10 @@ def cli(tmp_path: Path) -> Callable[..., subprocess.CompletedProcess[str]]:
     )
 
     def invoke(
-        origin: str, token: str, *args: str, extra_env: dict[str, str] | None = None
+        origin: str,
+        token: str,
+        *args: str | bytes,
+        extra_env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         env = {
             key: value

@@ -119,7 +119,16 @@ def test_task_writes_preserve_body_key_selector_and_json(cli):
                         [KEY.replace("-", "")],
                         expected,
                     )
-        assert len(requests) == len(response["commands"]) == 24
+            boundary = "é" * 1000
+            result = invoke(cli, origin, action, "--reason", boundary)
+            assert result.returncode == 0 and result.stderr == "", result.stderr
+            assert result.stdout.strip().encode() == response["body"]
+            assert response["commands"][-1] == (
+                "application/json",
+                [KEY],
+                {"reason": boundary},
+            )
+        assert len(requests) == len(response["commands"]) == 26
 
 
 def test_task_write_text_is_complete_and_escaped(cli):
@@ -182,6 +191,7 @@ def test_task_write_arguments_fail_before_network(cli):
                 (TASK, "", ()),
                 (TASK, "not-uuid", ()),
                 (TASK, KEY, ("--reason", "é" * 1001)),
+                (TASK, KEY, ("--reason", b"invalid-\xff")),
                 (TASK, KEY, ("--actor-id", ACTOR)),
                 (TASK, KEY, ("--project-id", PROJECT)),
                 (TASK, KEY, ("--endpoint", "/private")),
