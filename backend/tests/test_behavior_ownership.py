@@ -2358,3 +2358,16 @@ def test_acceptance_contract_relocation_requires_public_replacement() -> None:
     ownership._validate_additive_partition_transition(_partition(sorted({new, retained})), trusted)
     with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
         ownership._validate_additive_partition_transition(_partition([retained]), trusted)
+
+
+def test_evaluation_guard_ownership_does_not_allow_routing_activation():
+    target = "backend/app/modules/tasks/post_submit_routing/evaluation_guard.py"
+    assert ownership.ARCH_04E1BB1_GUARD_TARGETS == {target}
+    assert ownership.group_for_target(target) == "lifecycle"
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(_partition(sorted({retained, target})), trusted)
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(_partition(sorted({
+            retained, target, "backend/app/modules/tasks/post_submit_routing/activation.py",
+        })), trusted)

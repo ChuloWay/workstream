@@ -8,7 +8,7 @@ from sqlalchemy import select, text, func
 from sqlalchemy.exc import DBAPIError
 
 from app.core.identifiers import new_record_id
-from app.modules.checkers.execution_coordination import EvaluationCoordinator
+from app.adapters.checkers import evaluation_coordinator
 from app.modules.tasks.post_submit_routing.models import TaskRoutingRequest
 from .support import (
     completed_source, completed_sibling_source, request_values, rehash_request,
@@ -97,11 +97,11 @@ async def test_sql_insert_blocks_fence_advancement(tmp_path, isolated_database_e
                 await second.begin()
                 await second.execute(text("SET LOCAL lock_timeout = '250ms'"))
                 with pytest.raises(DBAPIError, match="lock timeout"):
-                    await EvaluationCoordinator(second).reserve_current_evaluation(successor)
+                    await evaluation_coordinator(second).reserve_current_evaluation(successor)
                 await second.rollback()
             await first.commit()
         async with h.factory() as second, second.begin():
-            result = await EvaluationCoordinator(second).reserve_current_evaluation(successor)
+            result = await evaluation_coordinator(second).reserve_current_evaluation(successor)
             assert result.evaluation_generation == 2
 
 
@@ -111,7 +111,7 @@ async def test_sql_advance_first_rejects_old_completion(tmp_path, isolated_datab
         successor = await next_request(h)
         async with h.factory() as first:
             await first.begin()
-            await EvaluationCoordinator(first).reserve_current_evaluation(successor)
+            await evaluation_coordinator(first).reserve_current_evaluation(successor)
             started = asyncio.Event()
             async def old_insert():
                 async with h.factory() as second, second.begin():

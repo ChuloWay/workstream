@@ -29,6 +29,13 @@ from app.modules.tasks.submission_composition import TaskSubmissionCreationServi
 from app.modules.tasks.assignment_invalidation import AssignmentInvalidationOperation
 from app.modules.tasks.api.assignment_invalidation import AssignmentInvalidationUnavailable
 from app.modules.outbox.api import HandlerOutcome
+from app.modules.checkers.api.execution import EvaluationTaskGuard
+
+
+def evaluation_task_guard(session: AsyncSession) -> EvaluationTaskGuard:
+    """Expose TASK-owned locking through the required CHECKERS consumer port."""
+    from app.modules.tasks.post_submit_routing.evaluation_guard import TaskEvaluationGuard
+    return TaskEvaluationGuard(session)
 
 
 class TransactionalAssignmentInvalidationHandler:

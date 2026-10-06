@@ -2,6 +2,7 @@
 
 import asyncio
 from app.modules.checkers.api.history import CheckerHistoryReadPort
+from app.modules.checkers.api.execution import EvaluationCoordinationPort
 from typing import Any, BinaryIO, Protocol
 from pathlib import Path
 
@@ -113,6 +114,14 @@ def checker_history_repository(session) -> CheckerHistoryReadPort:
     """Compose retained CHECKERS reads through TASK's public ownership port."""
     from app.modules.checkers.history import CheckerHistoryRepository
     return CheckerHistoryRepository(session)
+
+
+def evaluation_coordinator(session) -> EvaluationCoordinationPort:
+    """Compose required TASK locking before CHECKERS reservation custody."""
+    from app.modules.checkers.execution_coordination import EvaluationCoordinator
+    from app.adapters.tasks import evaluation_task_guard
+
+    return EvaluationCoordinator(session, tasks=evaluation_task_guard(session))
 
 
 def post_submission_executor(*, sessions, materialization):

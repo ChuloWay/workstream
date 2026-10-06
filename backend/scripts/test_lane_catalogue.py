@@ -254,6 +254,9 @@ PROJECT_MODULES = (
     "tests/reviews/acceptance/test_participant_contracts.py",
     "tests/reviews/acceptance/test_participation.py",
     "tests/reviews/acceptance/test_participation_transactions.py",
+    "tests/tasks/post_submit_routing/test_evaluation_guard.py",
+    "tests/tasks/post_submit_routing/test_evaluation_currentness.py",
+    "tests/tasks/post_submit_routing/test_review_admission_currentness.py",
     "tests/tasks/accepted_effects/test_contracts.py",
     "tests/tasks/accepted_effects/test_postgresql.py",
     # Frozen policy participation shares measured project capacity, not the full schema lane.

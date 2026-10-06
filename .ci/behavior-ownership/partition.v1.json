@@ -1486,6 +1486,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/post_submit_routing/evaluation_guard.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/post_submit_routing/models.py"
     },
     {
@@ -1661,7 +1665,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "aaa433056bbc7cdd2c85c6ff62c4fff12cfa7c5f4e90afc40487d702328495c3",
+  "authority_digest": "97f3bee29efd7d0d2214bf11cf1406172feb9375ab157287dc487163a1dfacd2",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

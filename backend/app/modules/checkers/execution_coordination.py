@@ -4,7 +4,7 @@ import json
 from uuid import UUID
 
 from sqlalchemy import select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.identifiers import new_record_id
@@ -14,6 +14,7 @@ from app.modules.checkers.api.execution import (
     CompletedEvaluation,
     EvaluationReservation,
     EvaluationCompletion,
+    EvaluationTaskGuard,
     VerifiedMaterialFacts,
 )
 from app.modules.checkers.api.post_submit import (
@@ -40,34 +41,30 @@ from app.modules.checkers.models import CheckerRun, CheckerSubmissionFence
 class EvaluationCoordinator:
     """Own exact request reservation and current-result reads in caller transactions."""
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, *, tasks: EvaluationTaskGuard):
         """Use the supplied session without taking ownership of its commit."""
         self._session = session
+        self._tasks = tasks
 
     async def reserve_current_evaluation(
         self, request: PostSubmissionEvaluationRequest
     ) -> EvaluationReservation:
         """Serialize initial creation, exact replay and the next current generation."""
         request = PostSubmissionEvaluationRequest.model_validate(request)
-        require_transaction(self._session)
-        # Serialize initial creation without taking a foreign TASK row lock. Every
-        # later coordinator locks this key before its existing fence and run.
+        with self._session.no_autoflush:
+            can_create = await self._lock_task_scope(request)
+            if not can_create:
+                replay = await self._replay(request)
+                if replay is None:
+                    raise CheckerExecutionUnavailable("checker_reservation_scope_unavailable")
+                return reservation(replay)
+        # Every new generation takes TASK custody before this key, fence and run.
         await self._session.execute(
             text("select pg_advisory_xact_lock(hashtextextended(:key, 0))"),
             {"key": "checkers:submission:" + str(request.submission_id)},
         )
-        replay = await self._session.scalar(
-            select(CheckerRun).where(
-                CheckerRun.evaluation_request_id == str(request.evaluation_request_id),
-                CheckerRun.phase == "post_submission",
-            )
-        )
+        replay = await self._replay(request)
         if replay is not None:
-            if (
-                replay.request_json != request_text(request)
-                or replay.request_digest != request.request_sha256
-            ):
-                raise CheckerRequestConflict("checker_request_conflict")
             return reservation(replay)
         fence = await self._session.scalar(
             select(CheckerSubmissionFence)
@@ -135,12 +132,45 @@ class EvaluationCoordinator:
             raise CheckerRequestConflict("checker_request_conflict") from None
         return reservation(run)
 
+    async def _lock_task_scope(self, request: PostSubmissionEvaluationRequest) -> bool:
+        """Retain root-transaction TASK custody before any coordination fence lock."""
+        require_transaction(self._session)
+        connection = await self._session.connection()
+        if connection.in_nested_transaction():
+            raise CheckerExecutionUnavailable("checker_caller_transaction_required")
+        # PostgreSQL detects raw savepoints that SQLAlchemy cannot observe.
+        try:
+            await self._session.execute(text("SELECT pg_catalog.pg_export_snapshot()"))
+        except DBAPIError as exc:
+            if getattr(exc.orig, "sqlstate", None) != "25001":
+                raise
+            raise CheckerExecutionUnavailable("checker_caller_transaction_required") from exc
+        can_create = await self._tasks.lock_evaluation_scope(request)
+        if type(can_create) is not bool:
+            raise CheckerExecutionUnavailable("checker_reservation_scope_unavailable")
+        return can_create
+
+    async def _replay(self, request: PostSubmissionEvaluationRequest) -> CheckerRun | None:
+        """Read an exact stored envelope; never repair or restore its current fence."""
+        replay = await self._session.scalar(select(CheckerRun).where(
+            CheckerRun.evaluation_request_id == str(request.evaluation_request_id),
+            CheckerRun.phase == "post_submission",
+        ).execution_options(populate_existing=True))
+        if replay is not None and (
+            replay.request_json != request_text(request)
+            or replay.request_digest != request.request_sha256
+        ):
+            raise CheckerRequestConflict("checker_request_conflict")
+        return replay
+
     async def read_current_result(
         self, request: PostSubmissionEvaluationRequest
     ) -> CompletedEvaluation:
         """Return only a locked completed result matching the entire current request."""
         request = PostSubmissionEvaluationRequest.model_validate(request)
-        run = await ExecutionRepository(self._session).lock_current(request)
+        with self._session.no_autoflush:
+            await self._lock_task_scope(request)
+            run = await ExecutionRepository(self._session).lock_current(request)
         if run.status != "completed":
             raise CheckerExecutionUnavailable("checker_current_result_unavailable")
         result = stored_result(run)
