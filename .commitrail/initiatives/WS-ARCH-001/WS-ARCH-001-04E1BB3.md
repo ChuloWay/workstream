@@ -101,7 +101,9 @@ claiming that every admitted ZIP can be scheduled; no silent truncation.
 
 ## Reconciliation
 
-Current main `c7f91ac2` includes B2 and CLI-05. CLI-06 is independently open.
+Planning started from `c7f91ac2` with B2 and CLI-05 delivered. The final
+change incorporates merged CLI-06 claim/start commands and preserves their
+current navigation alongside B3.
 Next: initial submission/dispatch transaction using these facts and exact
 creation/binding receipt custody, then remaining routing handlers, exact AUTH
 and database/effect closure, live composition, remediation and public intake.
