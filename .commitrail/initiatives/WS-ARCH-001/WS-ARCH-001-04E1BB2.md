@@ -4,7 +4,11 @@
 - Durable disposition: `Complete`
 - Intended merge outcome: hidden TASK source preparation joins the existing reserved routing identity to exact current CHECKERS material and historical PROJECTS policy, without publishing a source or applying effects.
 
-## Intent and current behavior
+## Intent
+
+Prepare exact, owner-verified facts for the governed post-submit route.
+
+## Current behavior
 
 After 04E1B-B1, reservation and current reads retain TASK-before-CHECKERS custody.
 `TaskRoutingRequests.stage` reserves a future manifest identity but receives only
@@ -17,6 +21,8 @@ This is the next bounded part of 04E1B-B, not completion of its handlers.
 
 ## Bounded change
 
+### Allowed
+
 Allowed files: CHECKERS `api/execution.py`, `execution_coordination.py`;
 TASK `api/post_submit_routing.py`, `api/__init__.py`,
 `post_submit_routing/requests.py`, `post_submit_routing/source.py`;
@@ -25,12 +31,14 @@ PostgreSQL tests, their existing fixture helpers, lane/ownership registrations;
 this record, current ARCH overview/plan/chunk map/parent 04E contract, INDEX,
 README, roadmap and canonical checker/TASK specifications where claims change.
 
+### Not allowed
+
 Prohibited: migrations, AUTH action activation or synthetic allows, new source
 storage or INSERT, routing pointers/status changes, REV/CON effects, outbox
 registration/publication, live workers/routes, guide activation changes,
 compatibility aliases, retained-data deletion or weakened tests/checks.
 
-## Design
+## Design and decisions
 
 1. Replace the version-only completion return with closed detached verified
    completion facts; update all affected callers. CHECKERS retains the same
@@ -54,7 +62,7 @@ acceptance for the first time after holding TASK/CHECKERS. True admission stays
 independent of the shared acceptance fence. Full handler/receipt/publication
 composition remains separately required by 04E1B-B/04E2-B/04E3.
 
-## Acceptance criteria and proof
+## Acceptance criteria
 
 - Real PostgreSQL completed-source fixture returns the exact reserved identity,
   Submission/predecessor/contributor, locked policies, checker references/phase
@@ -83,7 +91,7 @@ no premature runtime/authority claim. The plan review identified absent REV
 admission and initial dispatch composition plus the false-handler fence order;
 this bounded preparation does not fabricate those dependencies.
 
-## Evidence and reconciliation
+## Evidence
 
 Run affected pure contracts, real PostgreSQL source preparation/currentness,
 module boundaries, Ruff, lane inventory, stale wording, links and Commitrail;
@@ -91,12 +99,17 @@ then full hosted CI and exact-head internal review. The four new PostgreSQL prep
 comparison, replay/rollback, historical guide preservation, mixed valid source
 rejection and retained locks followed by stale-generation rejection. Expanded
 root-transaction and cross-project probes and full hosted evidence are tracked
-in the PR. Main reconciled at `31ac857b`; #476 supplies lock repair.
+in the PR. 
+## Reconciliation
+
+Main reconciled at `31ac857b`; #476 supplies lock repair.
 No local spreadsheet export has yet been assumed present.
 
 Next usable boundary: remaining hidden request/completion handlers, mandatory
 AUTH receipt/database/audit/outbox closure, then live composition and remediation.
 
+
+## Review findings
 
 The final ownership inventory admits only the new source module and rejects
 an adjacent activation module. No migration or database schema changed. Local
