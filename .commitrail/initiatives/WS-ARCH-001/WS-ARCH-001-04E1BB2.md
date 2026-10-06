@@ -116,3 +116,10 @@ an adjacent activation module. No migration or database schema changed. Local
 spreadsheet exports are absent. Plan review retained evaluation_pending and
 accepted-assignment guards; older ART-only fixture setup is explicitly arranged
 in these new mechanical tests rather than relaxing the production requirements.
+
+Review corrections: isolate the task-state denial from the missing claim timestamp,
+prepare a fully eligible sibling before selector substitution, and prove version-2
+predecessor lookup through a genuinely admitted and evaluated successor ZIP.
+The independent-session lock probes establish retained custody; shared B1 race
+cases cover the overlapping admission/currentness sequence. Reconcile B2 in the
+roadmap trace links and current ARCH dependency tables, not only their summaries.

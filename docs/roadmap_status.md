@@ -816,6 +816,7 @@ remaining trace sequence is:
   and [ARCH-04D2 exact service authority](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04D2.md)
   lead to delivered
   [ARCH-04E1A source facts](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E1A.md).
+  [ARCH-04E1B-B2](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E1BB2.md) adds exact source preparation without publication or authority.
   Delivered [ART-07A1 packet types](../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md), [REV-03B packet persistence](../.commitrail/initiatives/WS-REV-001/WS-REV-001-03B.md),
   [REV-04A Review source storage](../.commitrail/initiatives/WS-REV-001/WS-REV-001-04A.md)
   and [REV-04B acceptance storage](../.commitrail/initiatives/WS-REV-001/WS-REV-001-04B.md),
