@@ -99,7 +99,7 @@ then full hosted CI and exact-head internal review. The four new PostgreSQL prep
 comparison, replay/rollback, historical guide preservation, mixed valid source
 rejection and retained locks followed by stale-generation rejection. Expanded
 root-transaction and cross-project probes and full hosted evidence are tracked
-in the PR. 
+in the PR.
 ## Reconciliation
 
 Main reconciled at `31ac857b`; #476 supplies lock repair.
